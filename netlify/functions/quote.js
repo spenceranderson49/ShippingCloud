@@ -1,11 +1,11 @@
 /* ════════════════════════════════════════════════════════════════════════
    POST /.netlify/functions/quote   —   live England (FedEx/UPS) rates
    ------------------------------------------------------------------------
-   Rock Solid / eCommerce Webship API:
-     • Auth:  Authorization: RSIS <apiKey>
-     • POST /restapi/v1/customers/:customerId/quote   (carrierCode required)
-   Requests FedEx + UPS, merges, and folds England's real error message into
-   the response so it's visible no matter the app version. Always HTTP 200.
+   Rock Solid / eCommerce Webship API. Sends the FULL documented quote body
+   (so no required field is missing), auth via "Authorization: RSIS <key>",
+   requests FedEx + UPS, merges, and surfaces England's real error if any.
+   Auto-retries the signatureOptionCode value so an enum mismatch can't fail.
+   Always returns HTTP 200 with JSON.
    ════════════════════════════════════════════════════════════════════════ */
 
 const J = (obj) => ({ statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) });
@@ -41,19 +41,28 @@ exports.handler = async (event) => {
     if (!apiKey || !customerId) return J({ live: false, error: "Missing England API key or customer ID.", rates: [] });
 
     const pieces = (Array.isArray(body.pieces) && body.pieces.length ? body.pieces : [{ weight: body.weight || 1, L: body.L || 12, W: body.W || 9, H: body.H || 4 }])
-      .map((p) => ({ weight: S(+p.weight || 1), length: S(+p.length || +p.L || 1), width: S(+p.width || +p.W || 1), height: S(+p.height || +p.H || 1) }));
+      .map((p) => ({
+        weight: S(+p.weight || 1),
+        length: S(+p.length || +p.L || 1),
+        width: S(+p.width || +p.W || 1),
+        height: S(+p.height || +p.H || 1),
+        insuranceAmount: S(+p.insuranceAmount || 0),
+        declaredValue: null,
+      }));
 
     const receiver = { country: body.toCountry || "US", zip: String(body.toZip || "").trim() };
     if (body.toCity) receiver.city = body.toCity;
     if (body.toState) receiver.state = body.toState;
 
-    const mkBody = (cc) => ({
+    // Full documented quote body. signatureOptionCode filled per-attempt.
+    const mkBody = (cc, sig) => ({
       carrierCode: cc,
       serviceCode: "",
       packageTypeCode: "",
       sender: { country: body.fromCountry || "US", zip: String(body.fromZip || "").trim() },
       receiver,
       residential: !!body.residential,
+      signatureOptionCode: sig,
       contentDescription: "Merchandise",
       weightUnit: "lb",
       dimUnit: "in",
@@ -61,6 +70,7 @@ exports.handler = async (event) => {
       customsCurrency: "USD",
       pieces,
       billing: { party: "sender" },
+      providerAccountId: null,
     });
 
     const url = base + "/restapi/v1/customers/" + encodeURIComponent(customerId) + "/quote";
@@ -79,28 +89,37 @@ exports.handler = async (event) => {
       } finally { clearTimeout(timer); }
     }
 
+    // candidate "no signature" values; if England rejects one as invalid, try the next
+    const sigCandidates = body.signature ? ["direct", "DIRECT", "adult"] : ["none", "NONE", "no_signature_required", ""];
+    async function quoteCarrier(cc) {
+      let last = null;
+      for (const sig of sigCandidates) {
+        const res = await call(mkBody(cc, sig));
+        if (res.ok) return { ok: true, data: res.data };
+        const detail = (res.data && (res.data.error || res.data.message || res.data.errorMessage)) || (res.text || "").slice(0, 300);
+        last = { status: res.status, detail };
+        // only keep trying other signature values if THIS error is about signatureOptionCode
+        if (!/signatureOption/i.test(detail || "")) break;
+      }
+      return { ok: false, err: last };
+    }
+
     const carriers = (acct.carriers || process.env.ENGLAND_CARRIERS || "fedex,ups").split(",").map((s) => s.trim()).filter(Boolean);
     let all = [];
     const tried = [];
     let firstErr = null;
     for (const cc of carriers) {
-      const res = await call(mkBody(cc));
-      const detail = (res.data && (res.data.error || res.data.message || res.data.errorMessage)) || (res.text || "").slice(0, 300);
-      tried.push(cc + " → HTTP " + res.status + (res.ok ? "" : (detail ? (": " + detail) : "")));
-      if (res.ok) all = all.concat(mapQuotes(res.data));
-      else if (!firstErr) firstErr = { status: res.status, detail };
+      const res = await quoteCarrier(cc);
+      if (res.ok) { const r = mapQuotes(res.data); all = all.concat(r); tried.push(cc + " → OK (" + r.length + ")"); }
+      else { tried.push(cc + " → HTTP " + (res.err && res.err.status) + (res.err && res.err.detail ? (": " + res.err.detail) : "")); if (!firstErr) firstErr = res.err; }
     }
 
-    // de-dupe (carrier+service), cheapest wins, sort
     const seen = {};
     for (const r of all) { const k = r.carrier + "|" + r.key; if (!seen[k] || r.cost < seen[k].cost) seen[k] = r; }
     const rates = Object.values(seen).sort((a, b) => a.cost - b.cost);
 
     if (rates.length) return J({ live: true, rates });
-    if (firstErr) {
-      const msg = "England HTTP " + firstErr.status + (firstErr.detail ? (": " + firstErr.detail) : "");
-      return J({ live: false, error: msg, england_status: firstErr.status, england_response: firstErr.detail, tried, rates: [] });
-    }
+    if (firstErr) return J({ live: false, error: "England HTTP " + firstErr.status + (firstErr.detail ? (": " + firstErr.detail) : ""), england_status: firstErr.status, england_response: firstErr.detail, tried, rates: [] });
     return J({ live: false, error: "England returned no rates for this shipment.", tried, rates: [] });
   } catch (e) {
     return J({ live: false, error: "Function error: " + (e && e.message ? e.message : String(e)), rates: [] });

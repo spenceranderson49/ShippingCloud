@@ -1,12 +1,9 @@
-[build]
-  command = "npm run build"
-  publish = "dist"
-  functions = "netlify/functions"
+# Let serverless functions through, THEN do SPA fallback
+[[redirects]]
+  from = "/.netlify/functions/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
 
-[functions]
-  node_bundler = "esbuild"
-
-# SPA fallback so client routing works
 [[redirects]]
   from = "/*"
   to = "/index.html"

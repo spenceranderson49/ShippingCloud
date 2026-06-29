@@ -23,7 +23,8 @@ function mapQuotes(data) {
     const code = (q.serviceCode || desc).toString().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
     const days = num(q.transitDays, q.deliveryDays, q.businessDaysInTransit);
     const surcharges = Array.isArray(q.surcharges) ? q.surcharges.map((s) => ({ label: s.description || s.name || "Surcharge", amount: num(s.amount) || 0 })) : [];
-    return { key: code || ("svc_" + i), carrier: carrierName(q.carrierCode || q.carrier), label: desc, cost: Math.round(amount * 100) / 100, base: num(q.baseAmount) || null, surcharges, minDays: days, maxDays: days, zone: q.zone };
+    const qwType = S(q.quotedWeightType || q.weightType || "").toLowerCase();
+    return { key: code || ("svc_" + i), carrier: carrierName(q.carrierCode || q.carrier), label: desc, cost: Math.round(amount * 100) / 100, base: num(q.baseAmount) || null, surcharges, minDays: days, maxDays: days, zone: q.zone, quotedWeight: num(q.quotedWeight) || null, dimWeight: qwType.indexOf("dim") >= 0 };
   }).filter((x) => x.cost > 0);
 }
 

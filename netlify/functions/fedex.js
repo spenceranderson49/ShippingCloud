@@ -80,6 +80,45 @@ async function transit(c, body, tk) {
   return { ok: true, services };
 }
 
+// Reliable residential/commercial detection via the Rate API:
+// rate the address with NO residential flag; FedEx returns GROUND_HOME_DELIVERY for residences,
+// FEDEX_GROUND for businesses, and adds a residential surcharge when residential.
+async function classifyByRate(c, body, tk) {
+  const a = body.address || {};
+  if (!body.fromZip || !c.account) return null;
+  const payload = {
+    accountNumber: { value: c.account },
+    requestedShipment: {
+      shipper: { address: { postalCode: S(body.fromZip), countryCode: "US" } },
+      recipient: { address: { streetLines: [a.address1].filter(Boolean).map(S), city: S(a.city), stateOrProvinceCode: S(a.state), postalCode: S(a.zip), countryCode: a.country || "US" } },
+      pickupType: "DROPOFF_AT_FEDEX_LOCATION",
+      rateRequestType: ["ACCOUNT"],
+      requestedPackageLineItems: [{ weight: { units: "LB", value: 1 } }],
+    },
+  };
+  let r, text, d = null;
+  try {
+    r = await fetch(c.base + "/rate/v1/rates/quotes", { method: "POST", headers: { "Authorization": "Bearer " + tk, "Content-Type": "application/json", "X-locale": "en_US" }, body: JSON.stringify(payload) });
+    text = await r.text(); try { d = JSON.parse(text); } catch {}
+  } catch (e) { return null; }
+  if (!r.ok) return null;
+  const details = (d && d.output && d.output.rateReplyDetails) || [];
+  let resi = false, comm = false;
+  for (const s of details) {
+    const st = String(s.serviceType || "");
+    if (st === "GROUND_HOME_DELIVERY") resi = true;
+    if (st === "FEDEX_GROUND") comm = true;
+    const rsd = (s.ratedShipmentDetails && s.ratedShipmentDetails[0]) || {};
+    const sd = rsd.shipmentRateDetail || {};
+    const surs = sd.surCharges || sd.surcharges || [];
+    for (const su of surs) { if (/residential/i.test(String(su.type || su.description || ""))) resi = true; }
+  }
+  try { console.log("FEDEX classifyByRate services=" + details.map((s) => s.serviceType).join(",") + " resi=" + resi + " comm=" + comm); } catch (e) {}
+  if (resi) return "RESIDENTIAL";
+  if (comm) return "BUSINESS";
+  return null;
+}
+
 async function address(c, body, tk) {
   const a = body.address || {};
   const lines = [a.address1, a.address2].filter(Boolean).map(S);
@@ -93,19 +132,22 @@ async function address(c, body, tk) {
   let d = null; try { d = JSON.parse(text); } catch {}
   if (!r.ok) return { ok: false, error: "FedEx address HTTP " + r.status + (d && d.errors ? ": " + (d.errors[0] && d.errors[0].message || JSON.stringify(d.errors)) : (text ? ": " + text.slice(0, 250) : "")) };
   const res = (d && d.output && d.output.resolvedAddresses && d.output.resolvedAddresses[0]) || null;
-  if (!res) return { ok: true, classification: "UNKNOWN", resolved: null };
-  try { console.log("FEDEX address classification=" + res.classification + " attrs=" + JSON.stringify(res.attributes || {}).slice(0, 400)); } catch (e) {}
-  let cls = (res.classification || (res.attributes && res.attributes.Classification) || "UNKNOWN").toUpperCase();
-  const attrs = res.attributes || {};
+  const attrs = (res && res.attributes) || {};
+  try { console.log("FEDEX address validation classification=" + (res && res.classification) + " attrs=" + JSON.stringify(attrs).slice(0, 300)); } catch (e) {}
+  let cls = ((res && (res.classification || attrs.Classification)) || "UNKNOWN").toUpperCase();
+  let source = "validation";
+  // Address Validation classification is unreliable — when it's not definitive, ask the Rate API.
+  if (cls !== "RESIDENTIAL" && cls !== "BUSINESS") {
+    const byRate = await classifyByRate(c, body, tk);
+    if (byRate) { cls = byRate; source = "rate"; }
+  }
   return {
     ok: true,
     classification: cls,                 // RESIDENTIAL | BUSINESS | MIXED | UNKNOWN
     residential: cls === "RESIDENTIAL",
-    deliverable: attrs.Resolved === "true" || attrs.DPV === "true" || res.customerMessages == null,
-    resolved: {
-      streetLines: res.streetLinesToken || res.streetLines || null,
-      city: res.city, state: res.stateOrProvinceCode, zip: res.postalCode, country: res.countryCode,
-    },
+    source,
+    deliverable: attrs.Resolved === "true" || attrs.DPV === "true" || !res || res.customerMessages == null,
+    resolved: res ? { streetLines: res.streetLinesToken || res.streetLines || null, city: res.city, state: res.stateOrProvinceCode, zip: res.postalCode, country: res.countryCode } : null,
     attributes: attrs,
   };
 }

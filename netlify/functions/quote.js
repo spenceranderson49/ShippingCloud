@@ -22,7 +22,8 @@ function mapQuotes(data) {
     const desc = q.serviceDescription || q.serviceName || q.serviceCode || "Service";
     const code = (q.serviceCode || desc).toString().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
     const days = num(q.transitDays, q.deliveryDays, q.businessDaysInTransit);
-    return { key: code || ("svc_" + i), carrier: carrierName(q.carrierCode || q.carrier), label: desc, cost: Math.round(amount * 100) / 100, minDays: days, maxDays: days, zone: q.zone };
+    const surcharges = Array.isArray(q.surcharges) ? q.surcharges.map((s) => ({ label: s.description || s.name || "Surcharge", amount: num(s.amount) || 0 })) : [];
+    return { key: code || ("svc_" + i), carrier: carrierName(q.carrierCode || q.carrier), label: desc, cost: Math.round(amount * 100) / 100, base: num(q.baseAmount) || null, surcharges, minDays: days, maxDays: days, zone: q.zone };
   }).filter((x) => x.cost > 0);
 }
 
@@ -89,8 +90,9 @@ exports.handler = async (event) => {
       } finally { clearTimeout(timer); }
     }
 
-    // candidate "no signature" values; if England rejects one as invalid, try the next
-    const sigCandidates = body.signature ? ["direct", "DIRECT", "adult"] : ["none", "NONE", "no_signature_required", ""];
+    // signature: use the app's chosen option; otherwise try "no signature" values
+    const sigPick = body.signatureOption && body.signatureOption !== "none" ? String(body.signatureOption) : null;
+    const sigCandidates = sigPick ? [sigPick, sigPick.toUpperCase(), "direct"] : ["none", "NONE", "no_signature_required", ""];
     async function quoteCarrier(cc) {
       let last = null;
       for (const sig of sigCandidates) {
@@ -104,7 +106,7 @@ exports.handler = async (event) => {
       return { ok: false, err: last };
     }
 
-    const carriers = (acct.carriers || process.env.ENGLAND_CARRIERS || "fedex,ups").split(",").map((s) => s.trim()).filter(Boolean);
+    const carriers = (acct.carriers || process.env.ENGLAND_CARRIERS || "fedex,dhl").split(",").map((s) => s.trim()).filter(Boolean);
     let all = [];
     const tried = [];
     let firstErr = null;

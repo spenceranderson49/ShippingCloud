@@ -79,7 +79,7 @@ async function transit(c, body, tk) {
     const deliveryDate = fmtDate(dd.dayCxsFormat || dd.date || op.deliveryDate || op.commitDate || commit.commitTimestamp);
     return { serviceType: s.serviceType, serviceName: s.serviceName || s.serviceType, transitDays: days, transitLabel: transitEnum ? String(transitEnum).replace(/_/g, " ").toLowerCase() : null, deliveryDate, deliveryDay: dd.dayOfWeek || op.deliveryDay || null };
   }).filter((x) => x.serviceType);
-  return { ok: true, _fn: "addr-v10", services, _sample: details[0] || null };
+  return { ok: true, _fn: "addr-v11", services, _sample: details[0] || null };
 }
 
 /* ════════════════════════════════════════════════════════════════
@@ -113,25 +113,33 @@ async function rateClassify(c, a, fromZip, tk) {
     if (!r.ok) return { error: "rate HTTP " + r.status + (d && d.errors && d.errors[0] ? ": " + d.errors[0].message : ""), services: [] };
     const det = (d && d.output && d.output.rateReplyDetails) || [];
     const services = det.map((x) => x.serviceType);
-    let resi = services.includes("GROUND_HOME_DELIVERY");
-    const comm = services.includes("FEDEX_GROUND");
+    let groundType = null, residentialSurcharge = false, surcharges = [];
     for (const s of det) {
-      const rsd = (s.ratedShipmentDetails && s.ratedShipmentDetails[0]) || {};
-      const surs = (rsd.shipmentRateDetail && (rsd.shipmentRateDetail.surCharges || rsd.shipmentRateDetail.surcharges)) || [];
-      if (surs.some((su) => /residential/i.test(String(su.type || su.description || "")))) resi = true;
+      const st = String(s.serviceType || "");
+      if (st === "GROUND_HOME_DELIVERY" || st === "FEDEX_GROUND") {
+        groundType = st;
+        const rsd = (s.ratedShipmentDetails && s.ratedShipmentDetails[0]) || {};
+        const surs = (rsd.shipmentRateDetail && (rsd.shipmentRateDetail.surCharges || rsd.shipmentRateDetail.surcharges)) || [];
+        surs.forEach((su) => surcharges.push(String(su.type || su.description || "")));
+        if (surs.some((su) => /residential/i.test(String(su.type || su.description || "")))) residentialSurcharge = true;
+      }
     }
-    return { resi, comm, services };
+    return { groundType, residentialSurcharge, services, surcharges };
   };
   // full street address first (most accurate), then postal-only fallback if FedEx rejects it
   let p = await probe({ streetLines: [a.address1].filter(Boolean).map(S), city: S(a.city), stateOrProvinceCode: S(a.state), postalCode: S(a.zip), countryCode: a.country || "US" });
-  if (p.error || (!p.resi && !p.comm)) {
+  if (p.error || !p.groundType) {
     const p2 = await probe({ postalCode: S(a.zip), countryCode: a.country || "US" });
-    if (!p2.error && (p2.resi || p2.comm)) p = p2;
+    if (!p2.error && p2.groundType) p = p2;
     else if (p.error && !p2.error) p = p2;
   }
-  const classification = p.resi ? "RESIDENTIAL" : (p.comm ? "BUSINESS" : "UNKNOWN");
-  try { console.log("FEDEX rateClassify=" + classification + " services=" + (p.services || []).join(",") + (p.error ? " err=" + p.error : "")); } catch (e) {}
-  return { classification, services: p.services || [], error: p.error || null };
+  // Residential surcharge is the most reliable signal; commercial ground product = business.
+  let classification = "UNKNOWN";
+  if (p.residentialSurcharge) classification = "RESIDENTIAL";
+  else if (p.groundType === "FEDEX_GROUND") classification = "BUSINESS";
+  else if (p.groundType === "GROUND_HOME_DELIVERY") classification = "RESIDENTIAL";
+  try { console.log("FEDEX rateClassify=" + classification + " ground=" + p.groundType + " resiSur=" + p.residentialSurcharge + " services=" + (p.services || []).join(",")); } catch (e) {}
+  return { classification, services: p.services || [], groundType: p.groundType || null, residentialSurcharge: !!p.residentialSurcharge, surcharges: p.surcharges || [], error: p.error || null };
 }
 
 // Address Validation API → deliverability + normalized address.
@@ -147,8 +155,9 @@ async function validateDeliverability(c, a, tk) {
   const ra = (d && d.output && d.output.resolvedAddresses && d.output.resolvedAddresses[0]) || null;
   const attrs = (ra && ra.attributes) || {};
   const deliverable = attrs.DPV === "true" || attrs.Resolved === "true";
+  const classification = ((ra && ra.classification) || "UNKNOWN").toUpperCase();
   const normalized = ra ? { streetLines: ra.streetLinesToken || ra.streetLines || null, city: ra.city, state: ra.stateOrProvinceCode, zip: ra.postalCode, country: ra.countryCode } : null;
-  return { deliverable, normalized, attrs, error: null };
+  return { deliverable, classification, normalized, attrs, error: null };
 }
 
 async function address(c, body, tk) {
@@ -167,15 +176,28 @@ async function address(c, body, tk) {
     else if (attrs.CityStateValidated === "true") issues.push("Street not found at this ZIP");
     else issues.push("Address not found by FedEx");
   }
+  // Address Validation classification wins when it's definitive; otherwise use the rate-probe signal.
+  const vc = (val.classification || "UNKNOWN").toUpperCase();
+  const classification = (vc === "BUSINESS" || vc === "RESIDENTIAL") ? vc : cls.classification;
   return {
     ok: true,
-    _fn: "addr-v10",
+    _fn: "addr-v11",
     deliverable: val.deliverable,                       // true / false / null(=couldn't check)
-    classification: cls.classification,                 // RESIDENTIAL | BUSINESS | UNKNOWN
-    residential: cls.classification === "RESIDENTIAL",
+    classification,                                     // RESIDENTIAL | BUSINESS | UNKNOWN
+    residential: classification === "RESIDENTIAL",
+    source: (vc === "BUSINESS" || vc === "RESIDENTIAL") ? "validation" : "rate",
     normalized: val.normalized,
     issues: issues.length ? issues : null,
-    debug: { services: cls.services, classifyError: cls.error, deliverError: val.error, attrs },
+    debug: {
+      validationClassification: vc,
+      rateClassification: cls.classification,
+      groundType: cls.groundType,
+      residentialSurcharge: cls.residentialSurcharge,
+      surcharges: cls.surcharges,
+      services: cls.services,
+      classifyError: cls.error,
+      deliverError: val.error,
+    },
   };
 }
 

@@ -12,6 +12,8 @@
 
 const J = (o) => ({ statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify(o) });
 const S = (v) => (v == null ? "" : String(v));
+
+function CC(c){if(!c)return "US";const t=String(c).trim();if(t.length===2)return t.toUpperCase();const m={"united states":"US","united states of america":"US","usa":"US","canada":"CA","mexico":"MX","united kingdom":"GB","puerto rico":"PR"};return m[t.toLowerCase()]||"US";}
 const DAYS = { ZERO_DAYS:0, ONE_DAY:1, TWO_DAYS:2, THREE_DAYS:3, FOUR_DAYS:4, FIVE_DAYS:5, SIX_DAYS:6, SEVEN_DAYS:7, EIGHT_DAYS:8, NINE_DAYS:9, TEN_DAYS:10, ELEVEN_DAYS:11, TWELVE_DAYS:12 };
 
 let _tok = null; // { token, exp }  in-memory cache across warm invocations
@@ -79,7 +81,7 @@ async function transit(c, body, tk) {
     const deliveryDate = fmtDate(dd.dayCxsFormat || dd.date || op.deliveryDate || op.commitDate || commit.commitTimestamp);
     return { serviceType: s.serviceType, serviceName: s.serviceName || s.serviceType, transitDays: days, transitLabel: transitEnum ? String(transitEnum).replace(/_/g, " ").toLowerCase() : null, deliveryDate, deliveryDay: dd.dayOfWeek || op.deliveryDay || null };
   }).filter((x) => x.serviceType);
-  return { ok: true, _fn: "addr-v18", services, _sample: details[0] || null };
+  return { ok: true, _fn: "addr-v21", services, _sample: details[0] || null };
 }
 
 /* ════════════════════════════════════════════════════════════════
@@ -127,7 +129,7 @@ async function rateClassify(c, a, fromZip, tk) {
     return { groundType, residentialSurcharge, services, surcharges };
   };
   // single full-address probe (kept to one rate call so the function stays well under Netlify's 10s limit)
-  const p = await probe({ streetLines: [a.address1].filter(Boolean).map(S), city: S(a.city), stateOrProvinceCode: S(a.state), postalCode: S(a.zip), countryCode: a.country || "US" });
+  const p = await probe({ streetLines: [a.address1].filter(Boolean).map(S), city: S(a.city), stateOrProvinceCode: S(a.state), postalCode: S(a.zip), countryCode: CC(a.country) });
   // Residential surcharge is the most reliable signal; commercial ground product = business.
   let classification = "UNKNOWN";
   if (p.residentialSurcharge) classification = "RESIDENTIAL";
@@ -140,7 +142,7 @@ async function rateClassify(c, a, fromZip, tk) {
 // Address Validation API → deliverability + normalized address.
 async function validateDeliverability(c, a, tk) {
   const lines = [a.address1, a.address2].filter(Boolean).map(S);
-  const payload = { addressesToValidate: [{ address: { streetLines: lines.length ? lines : [""], city: S(a.city), stateOrProvinceCode: S(a.state), postalCode: S(a.zip), countryCode: a.country || "US" } }] };
+  const payload = { addressesToValidate: [{ address: { streetLines: lines.length ? lines : [""], city: S(a.city), stateOrProvinceCode: S(a.state), postalCode: S(a.zip), countryCode: CC(a.country) } }] };
   let r, t, d = null;
   const doFetch = async () => {
     const rr = await fetch(c.base + "/address/v1/addresses/resolve", { method: "POST", headers: { "Authorization": "Bearer " + tk, "Content-Type": "application/json", "X-locale": "en_US" }, body: JSON.stringify(payload) });
@@ -182,7 +184,7 @@ async function address(c, body, tk) {
   const classification = (vc === "BUSINESS" || vc === "RESIDENTIAL") ? vc : cls.classification;
   return {
     ok: true,
-    _fn: "addr-v18",
+    _fn: "addr-v21",
     deliverable: val.deliverable,                       // true / false / null(=couldn't check)
     classification,                                     // RESIDENTIAL | BUSINESS | UNKNOWN
     residential: classification === "RESIDENTIAL",

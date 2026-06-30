@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v19";
+const BUILD_TAG="addr-v20";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -771,9 +771,9 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
         const cls=res.classification;
         const type=cls==="RESIDENTIAL"?"Residential":(cls==="BUSINESS"?"Commercial":null);
         if(type&&!resTouched) setRes(type==="Residential");
-        setVerify({loading:false,deliverable:res.deliverable,type,issues:res.issues,normalized:res.normalized});
+        setVerify({loading:false,deliverable:res.deliverable,type,issues:res.issues,normalized:res.normalized,raw:cls,fromZip});
       } else {
-        setVerify({loading:false,deliverable:null,type:null,issues:null,error:(res&&res.error)||"Couldn’t reach FedEx"});
+        setVerify({loading:false,deliverable:null,type:null,issues:null,error:(res&&res.error)||"Couldn’t reach FedEx",fromZip});
       }
     },600);
     return ()=>{cancel=true;clearTimeout(t);};
@@ -892,7 +892,7 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
               {/* residential / commercial — the primary signal */}
               {verify.type
                 ?<span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium border ${verify.type==="Residential"?"text-[#006FBF] bg-[#E6F4FF] border-[#99D6FF]":"text-stone-700 bg-stone-100 border-stone-200"}`} title={"FedEx classifies this as a "+verify.type.toLowerCase()+" address"}>{verify.type==="Residential"?<Home className="w-3.5 h-3.5"/>:<Building2 className="w-3.5 h-3.5"/>}{verify.type}</span>
-                :<span className="flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium border text-stone-400 bg-stone-50 border-stone-200" title="FedEx didn’t return a residential/commercial classification for this address">Type not classified by FedEx</span>}
+                :<span className="flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium border text-stone-400 bg-stone-50 border-stone-200" title="FedEx didn’t return a residential/commercial classification for this address">FedEx returned “{verify.raw||"?"}” · origin {verify.fromZip||"—"}</span>}
               {/* deliverability */}
               {verify.deliverable===true&&<span className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1 font-medium" title={verify.normalized&&verify.normalized.city?"FedEx confirms a deliverable address — "+(Array.isArray(verify.normalized.streetLines)?verify.normalized.streetLines.join(" "):"")+" "+verify.normalized.city+", "+verify.normalized.state+" "+verify.normalized.zip:"FedEx confirms this is a deliverable address"}><CheckCircle2 className="w-3.5 h-3.5"/>Deliverable</span>}
               {verify.deliverable===false&&<span className="flex items-center gap-1.5 text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1 font-medium" title={verify.issues?verify.issues.join(" · "):"FedEx couldn’t confirm this address"}><AlertTriangle className="w-3.5 h-3.5"/>{verify.issues?verify.issues.join(" · "):"Address not found"}</span>}

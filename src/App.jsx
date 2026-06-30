@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v24";
+const BUILD_TAG="addr-v26";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -729,7 +729,7 @@ export default function App(){
 function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDrafts,prefill,clearPrefill,onShipped,logEmail,onQuickQuote}){
   const empty={country:"United States",name:"",company:"",zip:"",state:"",city:"",address1:"",address2:"",address3:"",phone:"",email:""};
   const [sender,setSender]=useState({country:"United States",...settings.sender,address2:"STE A",address3:""});
-  const [receiver,setReceiver]=useState({...empty,zip:"90210"});
+  const [receiver,setReceiver]=useState(empty);
   const [reference,setReference]=useState("");
   const [invoiceNo,setInvoiceNo]=useState("");
   const [poNo,setPoNo]=useState("");
@@ -747,6 +747,7 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
   const [bought,setBought]=useState(null);
   const [shipStatus,setShipStatus]=useState(null);
   const [labelPreview,setLabelPreview]=useState(null); // {pdf, tracking, service, carrier}
+  const [recErrors,setRecErrors]=useState([]);
   const [selectedOrder,setSelectedOrder]=useState(null);
   const [verify,setVerify]=useState(null);
   const [verifyNonce,setVerifyNonce]=useState(0);
@@ -768,7 +769,17 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
   const delLine=(i)=>setCustoms(c=>({...c,lines:c.lines.length>1?c.lines.filter((_,j)=>j!==i):c.lines}));
   const customsTotal=customs.lines.reduce((a,l)=>a+(+l.qty||0)*(+l.value||0),0);
 
-  /* auto-verify receiver address: deliverability + residential/commercial via FedEx */
+  /* default the receiver's phone + email from the shipper when blank (editable; address-book values win) */
+  useEffect(()=>{
+    setReceiver(r=>{
+      if(!(r.name||r.company||r.address1))return r;
+      const next={...r};
+      if(!String(next.phone||"").trim()&&sender.phone)next.phone=sender.phone;
+      if(!String(next.email||"").trim()&&sender.email)next.email=sender.email;
+      return (next.phone===r.phone&&next.email===r.email)?r:next;
+    });
+  },[receiver.name,receiver.company,receiver.address1,sender.phone,sender.email]);
+  useEffect(()=>{ if(recErrors.length) setRecErrors([]); },[receiver.name,receiver.address1,receiver.zip,receiver.city,receiver.state,receiver.phone,receiver.email]);
   useEffect(()=>{
     const core=receiver.address1&&/^\d{5}/.test(receiver.zip||"")&&receiver.city&&receiver.state;
     if(!core){setVerify(null);return;}
@@ -856,6 +867,23 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
     const carrier=carrierOf(q.label);
     const eng=settings.england;
     const canBook=eng&&eng.enabled&&eng.integrationId;
+    const need=[];
+    if(!receiver.name&&!receiver.company)need.push("name");
+    if(!receiver.address1)need.push("address1");
+    if(!/^\d{5}/.test(receiver.zip||""))need.push("zip");
+    if(!receiver.city)need.push("city");
+    if(!receiver.state)need.push("state");
+    if(canBook){
+      if(String(receiver.phone||"").replace(/\D/g,"").length<10)need.push("phone");
+      if(!receiver.email)need.push("email");
+    }
+    if(need.length){
+      setRecErrors(need);
+      const labelMap={name:"name",address1:"address",zip:"ZIP",city:"city",state:"state",phone:"a 10-digit phone",email:"email"};
+      setShipStatus({state:"error",key:q.key,msg:"Receiver needs: "+need.map(k=>labelMap[k]).join(", ")});
+      setTimeout(()=>setShipStatus(null),4000);return;
+    }
+    setRecErrors([]);
     if(!canBook){
       onShipped(buildRec(q,carrier),selectedOrder);
       setBought(q.key);setTimeout(()=>setBought(null),1800);
@@ -916,7 +944,7 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
         <div className="relative grid lg:grid-cols-2 gap-4">
           <AddressCard title="Sender" data={sender} set={setSender} addresses={settings.addresses}/>
           <button onClick={swap} title="Swap" className="hidden lg:flex absolute left-1/2 top-6 -translate-x-1/2 z-10 w-9 h-9 items-center justify-center rounded-full bg-stone-200 border border-stone-300 hover:bg-stone-300 text-stone-700"><ArrowLeftRight className="w-4 h-4"/></button>
-          <AddressCard title="Receiver" data={receiver} set={setReceiver} required addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }}/>
+          <AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} contactFallback={{phone:sender.phone,email:sender.email}} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }}/>
         </div>
         {billTo==="third"&&thirdAcct&&<div className="flex flex-wrap items-center gap-2 text-xs -mt-1">
           <span className="flex items-center gap-1.5 text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-1.5"><CreditCard className="w-3.5 h-3.5"/>Auto-billing to third-party account <b className="font-mono">{thirdAcct}</b><button onClick={()=>{setBillTo("sender");setThirdAcct("");}} className="ml-1 text-[#0086E0] hover:text-[#006FBF] underline">bill sender instead</button></span>
@@ -2413,7 +2441,7 @@ function Clients({clients,setClients}){
 }
 
 /* ════════ PRIMITIVES ════════ */
-function AddressCard({title,data,set,required,residential,setResidential,addresses,onPick,onSave}){
+function AddressCard({title,data,set,required,residential,setResidential,addresses,onPick,onSave,errorFields=[],contactFallback}){
   const f=(k,v)=>set({...data,[k]:v});
   const [q,setQ]=useState("");
   const [open,setOpen]=useState(false);
@@ -2469,11 +2497,11 @@ function AddressCard({title,data,set,required,residential,setResidential,address
     return ()=>{cancel=true;clearTimeout(t);};
   },[data.zip]);
   const matches=(addresses||[]).filter(a=>!q.trim()||[a.name,a.company,a.city,a.zip,a.address1].filter(Boolean).some(v=>String(v).toLowerCase().includes(q.toLowerCase()))).slice(0,12);
-  const pick=(a)=>{set({...data,name:a.name||"",company:a.company||"",address1:a.address1||"",address2:a.address2||"",city:a.city||"",state:a.state||"",zip:a.zip||"",country:a.country||data.country||"United States",phone:a.phone||"",email:a.email||data.email||""});setQ("");setOpen(false);onPick&&onPick(a);};
+  const pick=(a)=>{const cf=contactFallback||{};set({...data,name:a.name||"",company:a.company||"",address1:a.address1||"",address2:a.address2||"",city:a.city||"",state:a.state||"",zip:a.zip||"",country:a.country||data.country||"United States",phone:a.phone||cf.phone||"",email:a.email||cf.email||""});setQ("");setOpen(false);onPick&&onPick(a);};
   // cell() is a plain render helper (NOT a component) so inputs never remount → focus is kept while typing
   const cell=(label,k,span,req)=>(
-    <div key={k} className={`px-2 py-1.5 ${req&&!data[k]?"bg-[#E6F4FF]":"bg-white"} ${span||""} ${k==="address1"?"relative":""}`}>
-      <div className={`text-[9px] uppercase tracking-wide ${req&&!data[k]?"text-[#0086E0]":"text-stone-400"} flex items-center gap-1`}>{label}{k==="address1"&&acBusy&&<Loader2 className="w-2.5 h-2.5 animate-spin text-stone-400"/>}</div>
+    <div key={k} className={`px-2 py-1.5 ${errorFields.includes(k)?"bg-rose-50 ring-1 ring-rose-300":(req&&!data[k]?"bg-[#E6F4FF]":"bg-white")} ${span||""} ${k==="address1"?"relative":""}`}>
+      <div className={`text-[9px] uppercase tracking-wide ${errorFields.includes(k)?"text-rose-600 font-semibold":(req&&!data[k]?"text-[#0086E0]":"text-stone-400")} flex items-center gap-1`}>{label}{errorFields.includes(k)?" • required":""}{k==="address1"&&acBusy&&<Loader2 className="w-2.5 h-2.5 animate-spin text-stone-400"/>}</div>
       {k==="country"
         ? <select value={data.country||"United States"} onChange={e=>f("country",e.target.value)} className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
         : <input value={data[k]||""} onChange={e=>f(k,e.target.value)} onFocus={k==="address1"?()=>{acFocusRef.current=true;if(acSug.length)setAcOpen(true);}:undefined} onBlur={k==="address1"?()=>setTimeout(()=>{acFocusRef.current=false;setAcOpen(false);},150):undefined} autoComplete="off" className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5 placeholder-stone-300"/>}
@@ -2507,7 +2535,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
       </div>
     )}
     <div className="grid grid-cols-6 gap-px bg-stone-200 border border-stone-200 rounded-lg overflow-hidden">
-      {cell("Country","country","col-span-6")}{cell("Name","name","col-span-3",required)}{cell("Company","company","col-span-3")}{cell("Address 1","address1","col-span-6",required)}{cell("Zip","zip","col-span-2",required)}{cell("State","state","col-span-2",required)}{cell("City","city","col-span-2",required)}{cell("Address 2","address2","col-span-3")}{cell("Address 3","address3","col-span-3")}{cell("Phone","phone","col-span-3")}{cell("Email","email","col-span-3")}
+      {cell("Country","country","col-span-6")}{cell("Name","name","col-span-3",required)}{cell("Company","company","col-span-3")}{cell("Address 1","address1","col-span-6",required)}{cell("Zip","zip","col-span-2",required)}{cell("State","state","col-span-2",required)}{cell("City","city","col-span-2",required)}{cell("Address 2","address2","col-span-3")}{cell("Address 3","address3","col-span-3")}{cell("Phone","phone","col-span-3",required)}{cell("Email","email","col-span-3",required)}
     </div>
   </div>);
 }

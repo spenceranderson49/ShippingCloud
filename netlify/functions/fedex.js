@@ -159,15 +159,30 @@ async function address(c, body, tk) {
     rateDebug = { services: byRate.services, error: byRate.error };
     if (byRate.cls) { cls = byRate.cls; source = "rate"; }
   }
+  // Deliverability comes from real USPS/FedEx validation flags (DPV = Delivery Point Validation = a real, deliverable point)
+  const dpv = attrs.DPV === "true";
+  const resolvedOk = attrs.Resolved === "true";
+  const matched = attrs.Matched === "true";
+  const deliverable = dpv || resolvedOk;
+  const issues = [];
+  if (!deliverable) {
+    if (attrs.SuiteRequiredButMissing === "true") issues.push("Apartment/suite number required");
+    else if (attrs.InvalidSuiteNumber === "true") issues.push("Invalid apartment/suite number");
+    else if (attrs.MultipleMatches === "true") issues.push("Ambiguous — multiple matches");
+    else if (attrs.CityStateValidated === "true" && !matched) issues.push("Street not found at this ZIP");
+    else issues.push("Address not recognized by FedEx");
+  }
   return {
     ok: true,
-    classification: cls,                 // RESIDENTIAL | BUSINESS | UNKNOWN
+    deliverable,                          // TRUE = FedEx/USPS confirms a real deliverable address
+    verified: deliverable,
+    issues: issues.length ? issues : null,
+    classification: cls,                  // RESIDENTIAL | BUSINESS | UNKNOWN  (from rate-probe; Address API never returns this)
     residential: cls === "RESIDENTIAL",
-    source,
+    source,                               // "rate" when classified, "validation" when unknown
     validationClassification: (res && res.classification) || null,
     rateDebug,
-    deliverable: attrs.Resolved === "true" || attrs.DPV === "true" || !res || res.customerMessages == null,
-    resolved: res ? { streetLines: res.streetLinesToken || res.streetLines || null, city: res.city, state: res.stateOrProvinceCode, zip: res.postalCode, country: res.countryCode } : null,
+    normalized: res ? { streetLines: res.streetLinesToken || res.streetLines || null, city: res.city, state: res.stateOrProvinceCode, zip: res.postalCode, country: res.countryCode } : null,
     attributes: attrs,
   };
 }

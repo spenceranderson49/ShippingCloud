@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v22";
+const BUILD_TAG="addr-v23";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -2346,9 +2346,11 @@ function AddressCard({title,data,set,required,residential,setResidential,address
   const [acBusy,setAcBusy]=useState(false);
   const sessionRef=React.useRef(Math.random().toString(36).slice(2));
   const acSkip=React.useRef(false); // skip the autocomplete fetch right after we fill from a pick
+  const acFocusRef=React.useRef(false); // only show suggestions while the user is actively in the field
   useEffect(()=>{
     const v=String(data.address1||"").trim();
     if(acSkip.current){acSkip.current=false;return;}
+    if(!acFocusRef.current){setAcOpen(false);return;}   // don't auto-open on page load / programmatic fills
     if(v.length<3){setAcSug([]);setAcOpen(false);return;}
     let cancel=false;
     const t=setTimeout(async()=>{
@@ -2356,13 +2358,13 @@ function AddressCard({title,data,set,required,residential,setResidential,address
       const r=await placesCall({action:"autocomplete",input:v,session:sessionRef.current});
       if(cancel)return;
       setAcBusy(false);
-      if(r&&r.ok&&r.predictions&&r.predictions.length){setAcSug(r.predictions);setAcOpen(true);}
+      if(r&&r.ok&&r.predictions&&r.predictions.length&&acFocusRef.current){setAcSug(r.predictions);setAcOpen(true);}
       else {setAcSug([]);setAcOpen(false);}
     },300);
     return ()=>{cancel=true;clearTimeout(t);};
   },[data.address1]);
   const pickPlace=async(p)=>{
-    setAcOpen(false);setAcBusy(true);
+    acFocusRef.current=false;setAcOpen(false);setAcSug([]);setAcBusy(true);   // hard-close the dropdown immediately
     const r=await placesCall({action:"details",placeId:p.placeId,session:sessionRef.current});
     setAcBusy(false);
     sessionRef.current=Math.random().toString(36).slice(2);
@@ -2396,7 +2398,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
       <div className={`text-[9px] uppercase tracking-wide ${req&&!data[k]?"text-[#0086E0]":"text-stone-400"} flex items-center gap-1`}>{label}{k==="address1"&&acBusy&&<Loader2 className="w-2.5 h-2.5 animate-spin text-stone-400"/>}</div>
       {k==="country"
         ? <select value={data.country||"United States"} onChange={e=>f("country",e.target.value)} className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
-        : <input value={data[k]||""} onChange={e=>f(k,e.target.value)} onFocus={k==="address1"?()=>{if(acSug.length)setAcOpen(true);}:undefined} onBlur={k==="address1"?()=>setTimeout(()=>setAcOpen(false),150):undefined} autoComplete="off" className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5 placeholder-stone-300"/>}
+        : <input value={data[k]||""} onChange={e=>f(k,e.target.value)} onFocus={k==="address1"?()=>{acFocusRef.current=true;if(acSug.length)setAcOpen(true);}:undefined} onBlur={k==="address1"?()=>setTimeout(()=>{acFocusRef.current=false;setAcOpen(false);},150):undefined} autoComplete="off" className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5 placeholder-stone-300"/>}
       {k==="address1"&&acOpen&&acSug.length>0&&<div className="absolute z-40 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-60 overflow-auto">
         <div className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50 border-b border-stone-100 flex items-center gap-1"><MapPin className="w-3 h-3"/>Google Maps suggestions</div>
         <div className="divide-y divide-stone-100">

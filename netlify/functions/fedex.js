@@ -79,7 +79,7 @@ async function transit(c, body, tk) {
     const deliveryDate = fmtDate(dd.dayCxsFormat || dd.date || op.deliveryDate || op.commitDate || commit.commitTimestamp);
     return { serviceType: s.serviceType, serviceName: s.serviceName || s.serviceType, transitDays: days, transitLabel: transitEnum ? String(transitEnum).replace(/_/g, " ").toLowerCase() : null, deliveryDate, deliveryDay: dd.dayOfWeek || op.deliveryDay || null };
   }).filter((x) => x.serviceType);
-  return { ok: true, services, _sample: details[0] || null };
+  return { ok: true, _fn: "addr-v9", services, _sample: details[0] || null };
 }
 
 // Reliable residential/commercial detection via the Rate API:
@@ -174,6 +174,7 @@ async function address(c, body, tk) {
   }
   return {
     ok: true,
+    _fn: "addr-v9",
     deliverable,                          // TRUE = FedEx/USPS confirms a real deliverable address
     verified: deliverable,
     issues: issues.length ? issues : null,

@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v9";
+const BUILD_TAG="addr-v10";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -746,7 +746,7 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
   const delLine=(i)=>setCustoms(c=>({...c,lines:c.lines.length>1?c.lines.filter((_,j)=>j!==i):c.lines}));
   const customsTotal=customs.lines.reduce((a,l)=>a+(+l.qty||0)*(+l.value||0),0);
 
-  /* auto-verify receiver address + classify commercial vs residential via FedEx */
+  /* auto-verify receiver address: deliverability + residential/commercial via FedEx */
   useEffect(()=>{
     const core=receiver.address1&&/^\d{5}/.test(receiver.zip||"")&&receiver.city&&receiver.state;
     if(!core){setVerify(null);return;}
@@ -756,14 +756,14 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
       const res=await fedexValidateAddress(receiver, sender.zip||client.origin);
       if(cancel)return;
       if(res&&res.ok){
-        const type=res.classification==="RESIDENTIAL"?"Residential":(res.classification==="BUSINESS"?"Commercial":null);
+        const cls=res.classification;
+        const type=cls==="RESIDENTIAL"?"Residential":(cls==="BUSINESS"?"Commercial":null);
         if(type&&!resTouched) setRes(type==="Residential");
-        setVerify({ok:res.deliverable,deliverable:res.deliverable,issues:res.issues,type,source:res.source,normalized:res.normalized});
+        setVerify({loading:false,deliverable:res.deliverable,type,issues:res.issues,normalized:res.normalized});
       } else {
-        const r=validateAddress(receiver);
-        setVerify({ok:r.ok,deliverable:null,issues:r.issues,type:null,error:true});
+        setVerify({loading:false,deliverable:null,type:null,issues:null,error:(res&&res.error)||"Couldn’t reach FedEx"});
       }
-    },700);
+    },600);
     return ()=>{cancel=true;clearTimeout(t);};
   },[receiver.address1,receiver.zip,receiver.city,receiver.state,verifyNonce]);
 
@@ -873,15 +873,20 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
           <span className="flex items-center gap-1.5 text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-1.5"><CreditCard className="w-3.5 h-3.5"/>Auto-billing to third-party account <b className="font-mono">{thirdAcct}</b><button onClick={()=>{setBillTo("sender");setThirdAcct("");}} className="ml-1 text-[#0086E0] hover:text-[#006FBF] underline">bill sender instead</button></span>
         </div>}
         {intl&&<div className="flex items-center gap-2 text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2"><MapPin className="w-4 h-4"/>International shipment to <b>{receiver.country}</b> — FedEx &amp; DHL rates shown, customs info required below.</div>}
-        <div className="flex flex-wrap items-center gap-3 text-xs">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
           {!verify||verify.loading
-            ?<span className="flex items-center gap-1.5 text-stone-400" title="Checking this address with FedEx"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Checking address with FedEx…</span>
-            :(verify.deliverable
-              ?<span className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1 font-medium" title={"FedEx confirms this is a deliverable address"+(verify.normalized&&verify.normalized.city?" — "+(Array.isArray(verify.normalized.streetLines)?verify.normalized.streetLines.join(" "):"")+" "+verify.normalized.city+", "+verify.normalized.state+" "+verify.normalized.zip:"")}><CheckCircle2 className="w-3.5 h-3.5"/>FedEx-verified address</span>
-              :<span className="flex items-center gap-1.5 text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1 font-medium" title={verify.issues?verify.issues.join(" · "):"FedEx could not verify this address as deliverable"}><AlertTriangle className="w-3.5 h-3.5"/>{verify.issues?verify.issues.join(" · "):"FedEx couldn’t verify this address"}</span>)}
-          {verify&&!verify.loading&&verify.type&&<span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium border ${verify.type==="Residential"?"text-[#006FBF] bg-[#E6F4FF] border-[#99D6FF]":"text-stone-700 bg-stone-100 border-stone-200"}`} title={"FedEx classified this address as "+verify.type}>{verify.type==="Residential"?<Home className="w-3.5 h-3.5"/>:<Building2 className="w-3.5 h-3.5"/>}{verify.type} · FedEx</span>}
-          {verify&&!verify.loading&&!verify.type&&verify.deliverable&&<span className="flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium border text-stone-500 bg-stone-50 border-stone-200" title="FedEx didn’t return a residential/commercial classification for this address — set it with the toggle on the receiver card">{residential?<Home className="w-3.5 h-3.5"/>:<Building2 className="w-3.5 h-3.5"/>}{residential?"Residential":"Commercial"} · set below</span>}
-          {receiver.address1&&/^\d{5}/.test(receiver.zip||"")&&<button onClick={()=>setVerifyNonce(n=>n+1)} className="flex items-center gap-1 text-stone-400 hover:text-[#0086E0] underline" title="Re-check this address with FedEx"><ShieldCheck className="w-3.5 h-3.5"/>Re-check</button>}
+            ?<span className="flex items-center gap-1.5 text-stone-400"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Checking address with FedEx…</span>
+            :<>
+              {/* residential / commercial — the primary signal */}
+              {verify.type
+                ?<span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium border ${verify.type==="Residential"?"text-[#006FBF] bg-[#E6F4FF] border-[#99D6FF]":"text-stone-700 bg-stone-100 border-stone-200"}`} title={"FedEx classifies this as a "+verify.type.toLowerCase()+" address"}>{verify.type==="Residential"?<Home className="w-3.5 h-3.5"/>:<Building2 className="w-3.5 h-3.5"/>}{verify.type}</span>
+                :<span className="flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium border text-stone-500 bg-stone-50 border-stone-200" title="FedEx didn’t return a residential/commercial classification — set it with the toggle on the receiver card">{residential?<Home className="w-3.5 h-3.5"/>:<Building2 className="w-3.5 h-3.5"/>}{residential?"Residential":"Commercial"} · set below</span>}
+              {/* deliverability */}
+              {verify.deliverable===true&&<span className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1 font-medium" title={verify.normalized&&verify.normalized.city?"FedEx confirms a deliverable address — "+(Array.isArray(verify.normalized.streetLines)?verify.normalized.streetLines.join(" "):"")+" "+verify.normalized.city+", "+verify.normalized.state+" "+verify.normalized.zip:"FedEx confirms this is a deliverable address"}><CheckCircle2 className="w-3.5 h-3.5"/>Deliverable</span>}
+              {verify.deliverable===false&&<span className="flex items-center gap-1.5 text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1 font-medium" title={verify.issues?verify.issues.join(" · "):"FedEx couldn’t confirm this address"}><AlertTriangle className="w-3.5 h-3.5"/>{verify.issues?verify.issues.join(" · "):"Address not found"}</span>}
+              {verify.deliverable==null&&verify.error&&<span className="flex items-center gap-1.5 text-stone-400" title={verify.error}><AlertTriangle className="w-3.5 h-3.5"/>FedEx check unavailable</span>}
+            </>}
+          {receiver.address1&&/^\d{5}/.test(receiver.zip||"")&&<button onClick={()=>setVerifyNonce(n=>n+1)} className="flex items-center gap-1 text-stone-400 hover:text-[#0086E0] underline ml-1" title="Re-check this address with FedEx"><ShieldCheck className="w-3.5 h-3.5"/>Re-check</button>}
         </div>
 
         <div className="bg-stone-100 border border-stone-200 rounded-lg p-3 space-y-2">

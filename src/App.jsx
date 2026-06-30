@@ -177,6 +177,11 @@ function countryCode(c){
 async function fedexValidateAddress(addr,fromZip){
   return await fedexCall({action:"address",fromZip:fromZip||"",address:{address1:addr.address1,address2:addr.address2,city:addr.city,state:addr.state,zip:addr.zip,country:countryCode(addr.country)}},25000);
 }
+async function fedexSchedulePickup(p){
+  return await fedexCall({action:"pickup",
+    address:{name:p.name,company:p.company,phone:p.phone,address1:p.address1,address2:p.address2,city:p.city,state:p.state,zip:p.zip,country:countryCode(p.country)},
+    date:p.date,readyTime:p.readyTime,closeTime:p.closeTime,packageCount:p.packageCount,totalWeight:p.totalWeight,carrierCode:p.carrierCode,packageLocation:p.packageLocation,residential:p.residential,remarks:p.remarks},25000);
+}
 
 /* ════════ SEED ════════ */
 const SEED_CLIENTS=[
@@ -652,7 +657,7 @@ export default function App(){
   };
 
   const isAdmin=currentUser&&currentUser.role==="admin";
-  const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["batch","Batch",Layers],["scan","Scan",ScanLine],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["invoices","Invoices",Receipt],["ledger","Ledger",Wallet],["addresses","Address Book",BookUser],["dashboard","Dashboard",BarChart3],["admin","Admin",ShieldCheck],["settings","Settings",Cog]];
+  const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["ledger","Ledger",Wallet],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["admin","Admin",ShieldCheck],["settings","Settings",Cog]];
   const CUSTOMER_TABS=new Set(["ship","orders","shipments","drafts","returns","dashboard"]);
   const TABS=isAdmin?ALL_TABS:ALL_TABS.filter(t=>t[0]!=="admin");
   const unfulfilled=orders.filter(o=>o.status==="unfulfilled").length;
@@ -667,7 +672,6 @@ export default function App(){
           <BrandCloud className="h-10 sm:h-11 w-auto" color={brand.primary}/>
           <span className="font-extrabold tracking-tight text-[20px] sm:text-[26px]" style={{color:brand.dark}}>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></span>
           {brand.showLogo&&brand.logo&&<span className="hidden sm:flex items-center gap-1.5 text-stone-400 text-xs"><span className="w-px h-5 bg-stone-200"/>{brand.partnerLabel}<img src={brand.logo} alt="partner" className="h-3 w-auto object-contain"/></span>}
-          <span className="hidden sm:inline text-[9px] font-mono text-stone-300 ml-1" title="deployed build">{BUILD_TAG}</span>
           <div className="flex-1"/>
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="text-right leading-tight hidden sm:block"><div className="text-sm font-medium text-stone-800">{currentUser.name}</div><div className="text-[11px] text-stone-400">{currentUser.role==="admin"?"Administrator":(clients.find(c=>c.id===currentUser.clientId)||{}).name||"Customer"}</div></div>
@@ -755,7 +759,7 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
 
   const intl=!!receiver.country&&receiver.country!=="United States";
   const setPiece=(i,patch)=>setPieces(ps=>ps.map((p,j)=>j===i?{...p,...patch}:p));
-  const addPiece=()=>setPieces(ps=>[...ps,{weight:"",L:"",W:"",H:""}]);
+  const addPiece=()=>setPieces(ps=>[...ps,{...(ps[ps.length-1]||{weight:"",L:"",W:"",H:""})}]);
   const delPiece=(i)=>setPieces(ps=>ps.length>1?ps.filter((_,j)=>j!==i):ps);
   const totalWeight=pieces.reduce((a,p)=>a+(+p.weight||0),0);
   const setLine=(i,patch)=>setCustoms(c=>({...c,lines:c.lines.map((l,j)=>j===i?{...l,...patch}:l)}));
@@ -801,7 +805,17 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
   const swap=()=>{const s=sender;setSender(receiver);setReceiver(s);};
   const ready=/^\d{5}/.test(receiver.zip||"")&&totalWeight>0;
   const shipment={fromZip:sender.zip||client.origin,toZip:receiver.zip,pieces,residential,signature,signatureOption:sigOption,saturdayDelivery:saturday,intl};
-  const localQuotes=()=>quoteRates(shipment).filter(q=>intl?true:(residential?q.key!=="fedex_ground":q.key!=="fedex_home"));
+  // Front screen shows FedEx only (until a USPS/UPS/DAP deal is added). Blank-price skeleton before rates load.
+  const FEDEX_SKELETON=[
+    {key:"fedex_ground",carrier:"FedEx",label:"FedEx Ground®",cost:null},
+    {key:"fedex_home",carrier:"FedEx",label:"FedEx Home Delivery®",cost:null},
+    {key:"fedex_saver",carrier:"FedEx",label:"FedEx Express Saver®",cost:null},
+    {key:"fedex_2day",carrier:"FedEx",label:"FedEx 2Day®",cost:null},
+    {key:"fedex_std",carrier:"FedEx",label:"FedEx Standard Overnight®",cost:null},
+    {key:"fedex_prio",carrier:"FedEx",label:"FedEx Priority Overnight®",cost:null},
+    {key:"fedex_first",carrier:"FedEx",label:"FedEx First Overnight®",cost:null},
+  ];
+  const localQuotes=()=>quoteRates(shipment).filter(q=>q.carrier==="FedEx");
   const [rateSrc,setRateSrc]=useState({rates:[],live:false,loading:false,error:null});
   const [fxTransit,setFxTransit]=useState({});
   useEffect(()=>{
@@ -812,7 +826,7 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
   },[receiver.zip,sender.zip,residential,JSON.stringify(pieces)]);
   useEffect(()=>{
     let cancel=false;
-    if(!ready){setRateSrc({rates:localQuotes(),live:false,loading:false,error:null});return;}
+    if(!ready){setRateSrc({rates:[],live:false,loading:false,error:null});return;}
     const eng=settings.england;
     if(eng&&eng.enabled&&eng.apiKey&&eng.customerId){
       setRateSrc(s=>({...s,loading:true,error:null}));
@@ -823,8 +837,18 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
     } else setRateSrc({rates:localQuotes(),live:false,loading:false,error:null});
     return ()=>{cancel=true;};
   },[JSON.stringify(pieces),receiver.zip,sender.zip,residential,signature,intl,settings.england]);
-  const quotes=useMemo(()=>rateSrc.rates.filter(q=>{const k=canonSvc(q.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;}).map(q=>{const m=fxTransit[canonSvc(q.label)];return {...q,sell:Math.round(q.cost*(1+client.markup/100)*100)/100,fxDays:m?m.days:undefined,fxDate:m?m.date:undefined};}).sort((a,b)=>a.sell-b.sell),[rateSrc,client.markup,fxTransit,residential]);
-  const best=quotes[0]?.key;
+  // address classified yet? only then do we hide the non-matching ground product
+  const addrClassified=!!(resTouched||(verify&&verify.type));
+  const quotes=useMemo(()=>{
+    let rates=(rateSrc.rates||[]).filter(q=>q.carrier==="FedEx");
+    let list=rates.length?rates:FEDEX_SKELETON.slice();   // skeleton (blank prices) until live rates arrive
+    if(addrClassified){
+      list=list.filter(q=>{const k=canonSvc(q.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;});
+    }
+    return list.map(q=>{const m=fxTransit[canonSvc(q.label)];const cost=q.cost;return {...q,sell:cost!=null?Math.round(cost*(1+client.markup/100)*100)/100:null,fxDays:m?m.days:undefined,fxDate:m?m.date:undefined};})
+      .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
+  },[rateSrc,client.markup,fxTransit,residential,addrClassified]);
+  const best=(rateSrc.live&&quotes.length&&quotes[0].sell!=null)?quotes[0].key:null;
 
   const buildRec=(q,carrier,extra)=>({id:Date.now(),date:new Date().toLocaleDateString(),tracking:(extra&&extra.tracking)||newTracking(carrier),carrier,service:q.label,recipient:{...receiver},sender:{...sender},fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,pieces:pieces.map(p=>({...p})),dims:pieces[0],insurance,cost:q.cost,sell:q.sell,billTo,thirdAcct,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference,invoiceNo,poNo,residential,intl,bookNumber:extra&&extra.bookNumber,customs:intl?{...customs,total:customsTotal,ci:"CI-"+rnd(5)}:null});
   const print=async(q)=>{
@@ -873,7 +897,6 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
             <div className="text-[11px] text-stone-400 truncate">{o.items}</div>
           </button>
         ))}
-        <div className="text-[11px] text-stone-400 pt-2">Saved drafts now live in the <b>Drafts</b> tab.</div>
       </aside>
       <div className="flex-1 min-w-0 space-y-4">
         <div className="flex items-center justify-between">
@@ -1082,19 +1105,20 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
       comps=[{label:"Base rate",amount:sell*0.72},{label:"Fuel surcharge",amount:sell*0.16},{label:"Handling & surcharges",amount:sell*0.12}];
     }
     const live=!!(q.surcharges&&q.surcharges.length);
+    const hasPrice=sell!=null;
     return (
       <div key={q.key} className={`border rounded-lg ${q.key===best&&ready?"border-[#99D6FF] bg-[#E6F4FF]":"border-stone-200 bg-white"}`}>
-        <div className="px-3 py-2.5 flex items-center gap-3">
-          <button onClick={()=>setOpen(isOpen?null:q.key)} className="text-stone-400 shrink-0" title="Charge breakdown"><ChevronRight className={`w-4 h-4 transition-transform ${isOpen?"rotate-90":""}`}/></button>
+        <div onClick={()=>setOpen(isOpen?null:q.key)} className="px-3 py-2.5 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
+          <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isOpen?"rotate-90":""}`}/>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">{view==="cheapest"&&<span className={`text-[10px] font-bold w-10 shrink-0 ${CARRIER_TINT[q.carrier]}`}>{q.carrier}</span>}<span className="text-sm truncate">{q.label}</span>{q.key===best&&ready&&<span className="text-[10px] uppercase text-[#0086E0] border border-[#99D6FF] rounded px-1">best value</span>}</div>
-            <div className="text-[11px] text-stone-500">{ready&&(days||eta)?(<span className="flex items-center gap-1"><Calendar className="w-3 h-3"/>{days?`${days} business day${days>1?"s":""}`:""}{eta?`${days?" · ":""}arrives ${fmtDeliv(eta)}`:""}{fxLive?<span className="text-[#0086E0] font-medium ml-1">FedEx</span>:""}</span>):""}</div>
+            <div className="text-[11px] text-stone-500 flex items-center gap-1"><Calendar className="w-3 h-3"/>Transit Time: {days?(<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}{fxLive&&days?<span className="text-[#0086E0] font-medium ml-1">FedEx</span>:""}</div>
           </div>
-          {showCost&&<div className="text-right font-mono hidden sm:block"><div className="text-[10px] uppercase tracking-widest text-stone-400">cost</div><div className="text-sm text-stone-500">{ready?money(q.cost):"—"}</div></div>}
-          <div className="text-right font-mono"><div className="text-base font-semibold text-stone-900">{ready?money(sell):"—"}</div></div>
-          {action&&<button onClick={()=>action(q)} disabled={!ready} className={`shrink-0 w-32 text-sm rounded px-3 py-2 font-medium flex items-center justify-center gap-1.5 disabled:opacity-40 ${bought===q.key?"bg-[#0086E0] text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{bought===q.key?<><Check className="w-4 h-4"/>{doneLabel}</>:<><Printer className="w-4 h-4"/>{label}</>}</button>}
+          {showCost&&<div className="text-right font-mono hidden sm:block"><div className="text-[10px] uppercase tracking-widest text-stone-400">cost</div><div className="text-sm text-stone-500">{ready&&q.cost!=null?money(q.cost):"—"}</div></div>}
+          <div className="text-right font-mono"><div className="text-base font-semibold text-stone-900">{ready&&hasPrice?money(sell):<span className="text-stone-300">—</span>}</div></div>
+          {action&&<button onClick={(e)=>{e.stopPropagation();action(q);}} disabled={!ready||!hasPrice} className={`shrink-0 w-32 text-sm rounded px-3 py-2 font-medium flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed ${bought===q.key?"bg-[#0086E0] text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{bought===q.key?<><Check className="w-4 h-4"/>{doneLabel}</>:<><Printer className="w-4 h-4"/>{label}</>}</button>}
         </div>
-        {isOpen&&ready&&<div className="px-4 pb-3 pt-1 border-t border-stone-100">
+        {isOpen&&ready&&hasPrice&&<div className="px-4 pb-3 pt-1 border-t border-stone-100">
           <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Rate breakdown{live?"":" · estimated"}</div>
           <div className="space-y-1">
             {comps.map((c,i)=><div key={i} className="flex justify-between text-[13px]"><span className="text-stone-600">{c.label}</span><span className="font-mono text-stone-700">{money(c.amount)}</span></div>)}
@@ -1311,25 +1335,44 @@ function Shipments({shipments,setShipments,goShip}){
 
 /* ════════ PICKUPS ════════ */
 function Pickups({pickups,setPickups,settings}){
-  const [f,setF]=useState({carrier:"FedEx",date:"",ready:"09:00",close:"17:00",count:1,location:"Front desk"});
-  const add=()=>{ if(!f.date)return; setPickups(p=>[{id:Date.now(),conf:"PU"+rnd(7),...f},...p]); };
+  const [f,setF]=useState({carrierCode:"FDXE",date:"",ready:"10:00",close:"17:00",count:1,weight:5,location:"FRONT"});
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState(null);
+  const s=settings.sender||{};
+  const PKG_LOC=[["FRONT","Front"],["NONE","None"],["REAR","Rear"],["SIDE","Side"]];
+  const add=async()=>{
+    if(!f.date){setErr("Pick a date");return;}
+    setErr(null);setBusy(true);
+    const res=await fedexSchedulePickup({
+      name:s.name,company:s.company,phone:s.phone,address1:s.address1,address2:s.address2,city:s.city,state:s.state,zip:s.zip,country:s.country,
+      date:f.date,readyTime:f.ready+":00",closeTime:f.close+":00",packageCount:+f.count||1,totalWeight:+f.weight||1,carrierCode:f.carrierCode,packageLocation:f.location,residential:false,remarks:""
+    });
+    setBusy(false);
+    if(res&&res.ok){
+      setPickups(p=>[{id:Date.now(),conf:res.confirmationCode||"PENDING",carrier:"FedEx",carrierCode:f.carrierCode,date:f.date,count:f.count,ready:f.ready,close:f.close,location:f.location,live:!!res.confirmationCode},...p]);
+    } else {
+      setErr((res&&res.error)||"FedEx pickup failed");
+    }
+  };
+  const addrReady=s.address1&&s.city&&s.state&&s.zip;
   return (
     <div className="grid lg:grid-cols-2 gap-6 max-w-4xl">
-      <Panel title="Schedule a pickup">
-        <Field label="Carrier"><Select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})}><option>FedEx</option><option>UPS</option><option>USPS</option></Select></Field>
+      <Panel title="Schedule a FedEx pickup">
+        <Field label="Service"><Select value={f.carrierCode} onChange={e=>setF({...f,carrierCode:e.target.value})}><option value="FDXE">FedEx Express</option><option value="FDXG">FedEx Ground</option></Select></Field>
         <div className="grid grid-cols-2 gap-3"><Field label="Date"><Input type="date" value={f.date} onChange={e=>setF({...f,date:e.target.value})}/></Field><Field label="Packages"><Input type="number" value={f.count} onChange={e=>setF({...f,count:+e.target.value})}/></Field></div>
         <div className="grid grid-cols-2 gap-3"><Field label="Ready time"><Input type="time" value={f.ready} onChange={e=>setF({...f,ready:e.target.value})}/></Field><Field label="Close time"><Input type="time" value={f.close} onChange={e=>setF({...f,close:e.target.value})}/></Field></div>
-        <Field label="Package location"><Input value={f.location} onChange={e=>setF({...f,location:e.target.value})}/></Field>
-        <div className="text-[11px] text-stone-400 flex items-center gap-1"><MapPin className="w-3.5 h-3.5"/>{settings.sender.address1}, {settings.sender.city} {settings.sender.zip}</div>
-        <button onClick={add} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium hover:bg-stone-800">Schedule pickup</button>
+        <div className="grid grid-cols-2 gap-3"><Field label="Total weight (lb)"><Input type="number" value={f.weight} onChange={e=>setF({...f,weight:+e.target.value})}/></Field><Field label="Package location"><Select value={f.location} onChange={e=>setF({...f,location:e.target.value})}>{PKG_LOC.map(([v,l])=><option key={v} value={v}>{l}</option>)}</Select></Field></div>
+        <div className="text-[11px] text-stone-400 flex items-center gap-1"><MapPin className="w-3.5 h-3.5"/>{addrReady?`${s.address1}, ${s.city} ${s.state} ${s.zip}`:"Set your pickup address in Settings → Company"}</div>
+        {err&&<div className="text-[12px] text-rose-600 bg-rose-50 border border-rose-200 rounded px-2 py-1.5 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>{err}</div>}
+        <button onClick={add} disabled={busy||!addrReady} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Scheduling with FedEx…</>:<><Calendar className="w-4 h-4"/>Schedule pickup</>}</button>
       </Panel>
       <div className="space-y-2">
         <div className="text-xs font-semibold uppercase tracking-widest text-stone-500">Scheduled</div>
-        {pickups.length===0?<Empty icon={Calendar} title="No pickups" body="Schedule one and it shows here."/>:pickups.map(p=>(
+        {pickups.length===0?<Empty icon={Calendar} title="No pickups" body="Schedule one and it shows here with FedEx's confirmation code."/>:pickups.map(p=>(
           <div key={p.id} className="border border-stone-200 rounded-lg bg-white p-3 flex items-center gap-3">
-            <div className={`text-xs font-bold ${CARRIER_TINT[p.carrier]}`}>{p.carrier}</div>
-            <div className="flex-1"><div className="text-sm text-stone-800">{p.date} · {p.count} pkg</div><div className="text-[11px] text-stone-400">{p.ready}–{p.close} · {p.location}</div></div>
-            <div className="font-mono text-[11px] text-stone-400">{p.conf}</div>
+            <div className={`text-xs font-bold ${CARRIER_TINT[p.carrier]||"text-[#0086E0]"}`}>{p.carrier}</div>
+            <div className="flex-1"><div className="text-sm text-stone-800">{p.date} · {p.count} pkg{p.carrierCode==="FDXG"?" · Ground":" · Express"}</div><div className="text-[11px] text-stone-400">{p.ready}–{p.close} · {p.location}</div></div>
+            <div className="text-right"><div className="font-mono text-[11px] text-stone-600">{p.conf}</div>{p.live&&<div className="text-[9px] uppercase tracking-wide text-emerald-600">confirmed</div>}</div>
             <button onClick={()=>setPickups(x=>x.filter(y=>y.id!==p.id))} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>
           </div>
         ))}
@@ -2411,7 +2454,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
     <div className="flex items-center justify-between mb-1.5">
       <span className="text-[#0086E0] font-semibold text-sm">{title}</span>
       <div className="flex items-center gap-2">
-        {onSave&&<button type="button" onClick={saveToBook} disabled={!data.name&&!data.company} className={`flex items-center gap-1 text-[11px] rounded px-2 py-1 border ${savedOk?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-white border-stone-200 text-stone-500 hover:text-[#0086E0] hover:border-[#99D6FF] disabled:opacity-40"}`} title="Save this address to your address book">{savedOk?<><Check className="w-3.5 h-3.5"/>Saved</>:<><Plus className="w-3.5 h-3.5"/>Save to book</>}</button>}
+        {onSave&&<button type="button" onClick={saveToBook} disabled={!data.name&&!data.company} className={`flex items-center gap-1 text-[11px] rounded px-2 py-1 border ${savedOk?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-white border-stone-200 text-stone-500 hover:text-[#0086E0] hover:border-[#99D6FF] disabled:opacity-40"}`} title="Save this address to your address book">{savedOk?<><Check className="w-3.5 h-3.5"/>Saved</>:<><Plus className="w-3.5 h-3.5"/>Save to Address Book</>}</button>}
         {setResidential&&<label className="flex items-center gap-1.5 text-[11px] cursor-pointer"><input type="checkbox" checked={residential} onChange={e=>setResidential(e.target.checked)} className="accent-[#0086E0]"/>{residential?<span className="flex items-center gap-1 text-[#006FBF]"><Home className="w-3.5 h-3.5"/>Residential</span>:<span className="flex items-center gap-1 text-stone-600"><Building2 className="w-3.5 h-3.5"/>Commercial</span>}</label>}
       </div>
     </div>

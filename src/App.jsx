@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v13";
+const BUILD_TAG="addr-v18";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -126,6 +126,16 @@ async function pollLabel(england,orderId,onUpdate){
 
 /* ════════ FEDEX (transit times + address validation) ════════ */
 const FEDEX_ENDPOINT="/.netlify/functions/fedex";
+const PLACES_ENDPOINT="/.netlify/functions/places";
+async function placesCall(payload,timeout=8000){
+  const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),timeout);
+  try{
+    const r=await fetch(PLACES_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload),signal:ctrl.signal});
+    let d=null;try{d=await r.json();}catch(e){d={ok:false,error:"Bad response"};}
+    return d||{ok:false,error:"Empty"};
+  }catch(e){return {ok:false,error:(e&&e.message)||"Network error"};}
+  finally{clearTimeout(t);}
+}
 async function fedexCall(payload,timeout=15000){
   const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),timeout);
   try{
@@ -867,7 +877,7 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
         <div className="relative grid lg:grid-cols-2 gap-4">
           <AddressCard title="Sender" data={sender} set={setSender} addresses={settings.addresses}/>
           <button onClick={swap} title="Swap" className="hidden lg:flex absolute left-1/2 top-6 -translate-x-1/2 z-10 w-9 h-9 items-center justify-center rounded-full bg-stone-200 border border-stone-300 hover:bg-stone-300 text-stone-700"><ArrowLeftRight className="w-4 h-4"/></button>
-          <AddressCard title="Receiver" data={receiver} set={setReceiver} required addresses={settings.addresses} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }}/>
+          <AddressCard title="Receiver" data={receiver} set={setReceiver} required addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }}/>
         </div>
         {billTo==="third"&&thirdAcct&&<div className="flex flex-wrap items-center gap-2 text-xs -mt-1">
           <span className="flex items-center gap-1.5 text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-1.5"><CreditCard className="w-3.5 h-3.5"/>Auto-billing to third-party account <b className="font-mono">{thirdAcct}</b><button onClick={()=>{setBillTo("sender");setThirdAcct("");}} className="ml-1 text-[#0086E0] hover:text-[#006FBF] underline">bill sender instead</button></span>
@@ -2300,10 +2310,43 @@ function Clients({clients,setClients}){
 }
 
 /* ════════ PRIMITIVES ════════ */
-function AddressCard({title,data,set,required,residential,setResidential,addresses,onPick}){
+function AddressCard({title,data,set,required,residential,setResidential,addresses,onPick,onSave}){
   const f=(k,v)=>set({...data,[k]:v});
   const [q,setQ]=useState("");
   const [open,setOpen]=useState(false);
+  const [savedOk,setSavedOk]=useState(false);
+  // Google Places autocomplete on Address 1
+  const [acSug,setAcSug]=useState([]);
+  const [acOpen,setAcOpen]=useState(false);
+  const [acBusy,setAcBusy]=useState(false);
+  const sessionRef=React.useRef(Math.random().toString(36).slice(2));
+  const acSkip=React.useRef(false); // skip the autocomplete fetch right after we fill from a pick
+  useEffect(()=>{
+    const v=String(data.address1||"").trim();
+    if(acSkip.current){acSkip.current=false;return;}
+    if(v.length<3){setAcSug([]);setAcOpen(false);return;}
+    let cancel=false;
+    const t=setTimeout(async()=>{
+      setAcBusy(true);
+      const r=await placesCall({action:"autocomplete",input:v,session:sessionRef.current});
+      if(cancel)return;
+      setAcBusy(false);
+      if(r&&r.ok&&r.predictions&&r.predictions.length){setAcSug(r.predictions);setAcOpen(true);}
+      else {setAcSug([]);setAcOpen(false);}
+    },300);
+    return ()=>{cancel=true;clearTimeout(t);};
+  },[data.address1]);
+  const pickPlace=async(p)=>{
+    setAcOpen(false);setAcBusy(true);
+    const r=await placesCall({action:"details",placeId:p.placeId,session:sessionRef.current});
+    setAcBusy(false);
+    sessionRef.current=Math.random().toString(36).slice(2);
+    if(r&&r.ok&&r.address){
+      const a=r.address;acSkip.current=true;
+      set(prev=>({...prev,address1:a.address1||prev.address1,city:a.city||prev.city,state:a.state||prev.state,zip:a.zip||prev.zip,country:a.country||prev.country||"United States"}));
+    }
+  };
+  const saveToBook=()=>{ if(onSave){onSave(data);setSavedOk(true);setTimeout(()=>setSavedOk(false),1600);} };
   // Auto-fill city + state when a 5-digit ZIP is entered
   const lastZip=React.useRef("");
   useEffect(()=>{
@@ -2320,33 +2363,46 @@ function AddressCard({title,data,set,required,residential,setResidential,address
     },400);
     return ()=>{cancel=true;clearTimeout(t);};
   },[data.zip]);
-  const matches=(addresses||[]).filter(a=>q.trim()&&[a.name,a.company,a.city,a.zip,a.address1].filter(Boolean).some(v=>String(v).toLowerCase().includes(q.toLowerCase()))).slice(0,6);
-  const pick=(a)=>{set({...data,name:a.name||"",company:a.company||"",address1:a.address1||"",city:a.city||"",state:a.state||"",zip:a.zip||"",phone:a.phone||"",email:a.email||data.email||""});setQ("");setOpen(false);onPick&&onPick(a);};
+  const matches=(addresses||[]).filter(a=>!q.trim()||[a.name,a.company,a.city,a.zip,a.address1].filter(Boolean).some(v=>String(v).toLowerCase().includes(q.toLowerCase()))).slice(0,12);
+  const pick=(a)=>{set({...data,name:a.name||"",company:a.company||"",address1:a.address1||"",address2:a.address2||"",city:a.city||"",state:a.state||"",zip:a.zip||"",country:a.country||data.country||"United States",phone:a.phone||"",email:a.email||data.email||""});setQ("");setOpen(false);onPick&&onPick(a);};
   // cell() is a plain render helper (NOT a component) so inputs never remount → focus is kept while typing
   const cell=(label,k,span,req)=>(
-    <div key={k} className={`px-2 py-1.5 ${req&&!data[k]?"bg-[#E6F4FF]":"bg-white"} ${span||""}`}>
-      <div className={`text-[9px] uppercase tracking-wide ${req&&!data[k]?"text-[#0086E0]":"text-stone-400"}`}>{label}</div>
+    <div key={k} className={`px-2 py-1.5 ${req&&!data[k]?"bg-[#E6F4FF]":"bg-white"} ${span||""} ${k==="address1"?"relative":""}`}>
+      <div className={`text-[9px] uppercase tracking-wide ${req&&!data[k]?"text-[#0086E0]":"text-stone-400"} flex items-center gap-1`}>{label}{k==="address1"&&acBusy&&<Loader2 className="w-2.5 h-2.5 animate-spin text-stone-400"/>}</div>
       {k==="country"
         ? <select value={data.country||"United States"} onChange={e=>f("country",e.target.value)} className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
-        : <input value={data[k]||""} onChange={e=>f(k,e.target.value)} className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5 placeholder-stone-300"/>}
+        : <input value={data[k]||""} onChange={e=>f(k,e.target.value)} onFocus={k==="address1"?()=>{if(acSug.length)setAcOpen(true);}:undefined} onBlur={k==="address1"?()=>setTimeout(()=>setAcOpen(false),150):undefined} autoComplete="off" className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5 placeholder-stone-300"/>}
+      {k==="address1"&&acOpen&&acSug.length>0&&<div className="absolute z-40 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-60 overflow-auto">
+        <div className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50 border-b border-stone-100 flex items-center gap-1"><MapPin className="w-3 h-3"/>Google Maps suggestions</div>
+        <div className="divide-y divide-stone-100">
+        {acSug.map(p=><button key={p.placeId} onMouseDown={(e)=>{e.preventDefault();pickPlace(p);}} className="w-full text-left px-3 py-2 hover:bg-[#E6F4FF] text-[13px] text-stone-700">{p.description}</button>)}
+        </div>
+      </div>}
     </div>
   );
   return (<div className="relative">
     <div className="flex items-center justify-between mb-1.5">
       <span className="text-[#0086E0] font-semibold text-sm">{title}</span>
-      {setResidential&&<label className="flex items-center gap-1.5 text-[11px] cursor-pointer"><input type="checkbox" checked={residential} onChange={e=>setResidential(e.target.checked)} className="accent-[#0086E0]"/>{residential?<span className="flex items-center gap-1 text-[#006FBF]"><Home className="w-3.5 h-3.5"/>Residential</span>:<span className="flex items-center gap-1 text-stone-600"><Building2 className="w-3.5 h-3.5"/>Commercial</span>}</label>}
+      <div className="flex items-center gap-2">
+        {onSave&&<button type="button" onClick={saveToBook} disabled={!data.name&&!data.company} className={`flex items-center gap-1 text-[11px] rounded px-2 py-1 border ${savedOk?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-white border-stone-200 text-stone-500 hover:text-[#0086E0] hover:border-[#99D6FF] disabled:opacity-40"}`} title="Save this address to your address book">{savedOk?<><Check className="w-3.5 h-3.5"/>Saved</>:<><Plus className="w-3.5 h-3.5"/>Save to book</>}</button>}
+        {setResidential&&<label className="flex items-center gap-1.5 text-[11px] cursor-pointer"><input type="checkbox" checked={residential} onChange={e=>setResidential(e.target.checked)} className="accent-[#0086E0]"/>{residential?<span className="flex items-center gap-1 text-[#006FBF]"><Home className="w-3.5 h-3.5"/>Residential</span>:<span className="flex items-center gap-1 text-stone-600"><Building2 className="w-3.5 h-3.5"/>Commercial</span>}</label>}
+      </div>
     </div>
     {addresses&&addresses.length>0&&(
       <div className="relative mb-1.5">
         <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400"/>
-        <input value={q} onChange={e=>{setQ(e.target.value);setOpen(true);}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder="Quick-fill from address book…" className="w-full bg-white border border-stone-200 rounded pl-8 pr-2 py-1.5 text-[13px] outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-        {open&&matches.length>0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-56 overflow-auto divide-y divide-stone-100">
-          {matches.map(a=><button key={a.id} onMouseDown={()=>pick(a)} className="w-full text-left px-3 py-2 hover:bg-[#E6F4FF]"><div className="text-sm font-medium text-stone-800">{a.name}{a.company?` · ${a.company}`:""}</div><div className="text-[11px] text-stone-400">{a.address1}{a.address1?", ":""}{a.city} {a.state} {a.zip}</div></button>)}
+        <input value={q} onChange={e=>{setQ(e.target.value);setOpen(true);}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder={`Address book — ${addresses.length} saved (click to choose)…`} className="w-full bg-white border border-stone-200 rounded pl-8 pr-8 py-1.5 text-[13px] outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+        <button type="button" onMouseDown={(e)=>{e.preventDefault();setOpen(o=>!o);}} className="absolute right-2 top-1.5 text-stone-400 hover:text-[#0086E0]" title="Show all saved addresses"><ChevronDown className={`w-4 h-4 transition-transform ${open?"rotate-180":""}`}/></button>
+        {open&&matches.length>0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-64 overflow-auto">
+          <div className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50 border-b border-stone-100 sticky top-0">{q.trim()?`${matches.length} match${matches.length===1?"":"es"}`:`${addresses.length} saved address${addresses.length===1?"":"es"}`}</div>
+          <div className="divide-y divide-stone-100">
+          {matches.map(a=><button key={a.id} onMouseDown={()=>pick(a)} className="w-full text-left px-3 py-2 hover:bg-[#E6F4FF]"><div className="text-sm font-medium text-stone-800">{a.name}{a.company?` · ${a.company}`:""}</div><div className="text-[11px] text-stone-400">{a.address1}{a.address1?", ":""}{a.city} {a.state} {a.zip}{a.acctNum?` · bill ${a.acctCarrier||""} ${a.acctNum}`:""}</div></button>)}
+          </div>
         </div>}
       </div>
     )}
     <div className="grid grid-cols-6 gap-px bg-stone-200 border border-stone-200 rounded-lg overflow-hidden">
-      {cell("Country","country","col-span-6")}{cell("Name","name","col-span-3",required)}{cell("Company","company","col-span-3")}{cell("Zip","zip","col-span-2",required)}{cell("State","state","col-span-2",required)}{cell("City","city","col-span-2",required)}{cell("Address 1","address1","col-span-6",required)}{cell("Address 2","address2","col-span-3")}{cell("Address 3","address3","col-span-3")}{cell("Phone","phone","col-span-3")}{cell("Email","email","col-span-3")}
+      {cell("Country","country","col-span-6")}{cell("Name","name","col-span-3",required)}{cell("Company","company","col-span-3")}{cell("Address 1","address1","col-span-6",required)}{cell("Zip","zip","col-span-2",required)}{cell("State","state","col-span-2",required)}{cell("City","city","col-span-2",required)}{cell("Address 2","address2","col-span-3")}{cell("Address 3","address3","col-span-3")}{cell("Phone","phone","col-span-3")}{cell("Email","email","col-span-3")}
     </div>
   </div>);
 }

@@ -21,6 +21,10 @@ const S = (v) => (v == null ? "" : String(v));
 const two = (v) => S(v).trim().slice(0, 2).toUpperCase();
 const today = () => new Date().toISOString().slice(0, 10);
 const plusDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+const digits = (v) => S(v).replace(/\D/g, "");
+const phoneOrNull = (v) => { const d = digits(v); return d.length >= 10 ? d : null; };
+const strOrNull = (v) => { const s = S(v).trim(); return s.length ? s : null; };
+const nameOr = (v, fb) => { const s = S(v).trim(); return s.length ? s : (S(fb).trim() || "Recipient"); };
 
 function creds(acct) {
   return {
@@ -86,59 +90,63 @@ exports.handler = async (event) => {
       return J({ ok: true, booked: true, bookNumber: found.bookNumber, tracking: found.tracking, carrierCode: found.carrierCode, serviceCode: found.serviceCode, labelPdfBase64: label.pdf || null, labelError: label.error || null });
     }
 
-    /* ---- action: ship (Put Order then a quick look) ---- */
-    if (!c.integrationId) return J({ ok: false, error: "Missing England integration ID. Create a Rest API Integration in Webship (Settings → eCommerce Integrations → Add → Rest API) and paste the integration ID into ShippingCloud → Settings → Carrier accounts." });
+    /* ---- action: ship — book a label directly (synchronous, v1 Book Shipment) ---- */
     const o = body.order || {};
     if (!o.receiver || !o.receiver.zip) return J({ ok: false, error: "Receiver address is incomplete." });
     if (!o.sender || !o.sender.zip) return J({ ok: false, error: "Sender (ship-from) address is incomplete." });
+    if (!o.carrierCode || !o.serviceCode) return J({ ok: false, error: "Missing carrier/service code for this rate — re-quote the shipment and try again." });
 
-    const orderId = S(o.orderId || ("SC" + Date.now()));
+    const CC = (v) => { const s = S(v).trim(); if (!s) return "US"; const m = { "united states": "US", "usa": "US", "u.s.": "US", "u.s.a.": "US", "canada": "CA", "mexico": "MX", "united kingdom": "GB", "great britain": "GB", "uk": "GB" }; const k = s.toLowerCase(); return m[k] || s.slice(0, 2).toUpperCase(); };
+    const intl = CC(o.receiver.country || "US") !== "US";
     const pieces = (Array.isArray(o.pieces) && o.pieces.length ? o.pieces : [{ weight: o.weight || 1, length: 12, width: 9, height: 4 }]);
-    const payload = {
-      orderId,
-      orderDate: o.orderDate || today(),
-      orderNumber: S(o.orderNumber || o.reference || orderId),
-      fulfillmentStatus: "pending",
-      shippingService: S(o.shippingService || "Standard"),
-      shipperReference: S(o.reference || orderId),
+
+    const shipBody = {
+      carrierCode: S(o.carrierCode),
+      serviceCode: S(o.serviceCode),
+      packageTypeCode: S(o.packageTypeCode) || (S(o.carrierCode).toLowerCase() + "_custom_package"),
+      shipmentDate: o.shipmentDate || today(),
+      shipmentReference: S(o.reference || o.orderNumber || ("SC" + Date.now())),
+      orderNumber: S(o.orderNumber || o.reference || ""),
       contentDescription: S(o.contentDescription || "Merchandise"),
-      shippingTotal: S(o.shippingTotal || "0.00"),
-      weightUnit: "lb", dimUnit: "in",
-      dueByDate: o.dueByDate || plusDays(2),
-      orderGroup: "ShippingCloud",
       sender: {
-        name: S(o.sender.name), company: S(o.sender.company), address1: S(o.sender.address1), address2: S(o.sender.address2),
-        city: S(o.sender.city), state: two(o.sender.state), zip: S(o.sender.zip), country: two(o.sender.country || "US"),
-        phone: S(o.sender.phone), email: S(o.sender.email),
+        name: nameOr(o.sender.name, o.sender.company), company: S(o.sender.company) || nameOr(o.sender.name, "Shipper"),
+        address1: S(o.sender.address1), address2: S(o.sender.address2), city: S(o.sender.city),
+        state: two(o.sender.state), zip: S(o.sender.zip), country: CC(o.sender.country || "US"),
+        phone: phoneOrNull(o.sender.phone) || "0000000000", email: strOrNull(o.sender.email),
       },
       receiver: {
-        name: S(o.receiver.name), company: S(o.receiver.company), address1: S(o.receiver.address1), address2: S(o.receiver.address2),
-        city: S(o.receiver.city), state: two(o.receiver.state), zip: S(o.receiver.zip), country: two(o.receiver.country || "US"),
-        phone: S(o.receiver.phone), email: S(o.receiver.email),
+        name: nameOr(o.receiver.name, o.receiver.company), company: S(o.receiver.company),
+        address1: S(o.receiver.address1), address2: S(o.receiver.address2), city: S(o.receiver.city),
+        state: two(o.receiver.state), zip: S(o.receiver.zip), country: CC(o.receiver.country || "US"),
+        phone: phoneOrNull(o.receiver.phone) || "0000000000", email: strOrNull(o.receiver.email),
       },
-      items: (Array.isArray(o.items) && o.items.length && o.items.every((it) => it && it.productId && it.sku && it.lineId)) ? o.items : null,
-      packages: pieces.map((p) => ({ weight: S(+p.weight || 1), length: S(+p.length || +p.L || 12), width: S(+p.width || +p.W || 9), height: S(+p.height || +p.H || 4), insuranceAmount: o.insuranceAmount ? Number(o.insuranceAmount) : null, declaredValue: null })),
+      residential: !!o.residential,
+      signatureOptionCode: (o.signatureOption && o.signatureOption !== "none") ? String(o.signatureOption) : null,
+      saturdayDelivery: !!o.saturdayDelivery,
+      weightUnit: "lb", dimUnit: "in", currency: "USD", customsCurrency: "USD",
+      labelImageFormat: "PDF",
+      pieces: pieces.map((p) => ({
+        weight: S(+p.weight || 1), length: S(+p.length || +p.L || 12), width: S(+p.width || +p.W || 9), height: S(+p.height || +p.H || 4),
+        insuranceAmount: o.insuranceAmount ? String(o.insuranceAmount) : null,
+        declaredValue: (intl && (p.declaredValue || p.value)) ? String(p.declaredValue || p.value) : null,
+      })),
+      billing: { party: S(o.billingParty || "sender"), account: strOrNull(o.billingAccount), country: o.billingZip ? CC(o.billingCountry || "US") : null, zip: strOrNull(o.billingZip) },
+      providerAccountId: o.providerAccountId || null,
+      approvePrepayRecharge: o.approvePrepayRecharge !== false,
     };
-    if (o.signatureOption && o.signatureOption !== "none") payload.signatureOptionCode = String(o.signatureOption);
+    if (!intl) shipBody.pieces.forEach((p) => { p.declaredValue = null; });
 
-    const putUrl = c.base + "/restapi/v1/customers/" + encodeURIComponent(c.customerId) + "/integrations/" + encodeURIComponent(c.integrationId) + "/orders/" + encodeURIComponent(orderId);
-    let put, putText;
-    try { put = await req(putUrl, { method: "PUT", headers: authHeaders(c.apiKey), body: JSON.stringify(payload) }); putText = await put.text(); }
-    catch (e) { return J({ ok: false, error: "Put Order failed: " + (e.name === "AbortError" ? "timeout" : e.message) }); }
-    if (!put.ok) {
-      let d = null; try { d = JSON.parse(putText); } catch {}
-      return J({ ok: false, error: "England HTTP " + put.status + ((d && (d.error || d.message)) ? ": " + (d.error || d.message) : (putText ? ": " + putText.slice(0, 250) : "")), orderId });
-    }
-
-    // quick look — booked already? (auto-ship). One short wait + one search to stay within timeout.
-    await new Promise((res) => setTimeout(res, 2500));
-    let found = await findShipment(c, orderId);
-    if (found && !found.error && found.bookNumber) {
-      const label = await fetchLabel(c, found.bookNumber);
-      return J({ ok: true, orderId, pushed: true, booked: true, bookNumber: found.bookNumber, tracking: found.tracking, carrierCode: found.carrierCode, serviceCode: found.serviceCode, labelPdfBase64: label.pdf || null, labelError: label.error || null });
-    }
-    // pushed but not booked yet — app should poll action:"status"
-    return J({ ok: true, orderId, pushed: true, booked: false, message: "Order pushed to your England account. If auto-ship is on in Webship it will book in a moment — otherwise ship it in Webship and the label/tracking will appear here." });
+    const url = c.base + "/restapi/v1/customers/" + encodeURIComponent(c.customerId) + "/shipments";
+    let r, t;
+    try { r = await req(url, { method: "POST", headers: authHeaders(c.apiKey), body: JSON.stringify(shipBody) }); t = await r.text(); }
+    catch (e) { return J({ ok: false, error: "Book Shipment failed: " + (e.name === "AbortError" ? "timeout" : e.message) }); }
+    let d = null; try { d = JSON.parse(t); } catch {}
+    if (!r.ok) return J({ ok: false, error: "England HTTP " + r.status + ((d && (d.error || d.message)) ? ": " + (d.error || d.message) : (t ? ": " + t.slice(0, 300) : "")) });
+    const bookNumber = S(d && d.bookNumber);
+    const tracking = S(d && d.trackingNumber);
+    if (!bookNumber) return J({ ok: false, error: "Booked but no bookNumber returned: " + (t ? t.slice(0, 200) : "") });
+    const label = await fetchLabel(c, bookNumber);
+    return J({ ok: true, booked: true, bookNumber, tracking, zone: d && d.zone, prepayBalance: d && d.prepayBalance, labelPdfBase64: label.pdf || null, labelError: label.error || null });
   } catch (e) {
     return J({ ok: false, error: "Function error: " + (e && e.message ? e.message : String(e)) });
   }

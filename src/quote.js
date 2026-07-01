@@ -1,120 +1,131 @@
 /* ════════════════════════════════════════════════════════════════════════
-   POST /.netlify/functions/quote
+   POST /.netlify/functions/quote   —   live England (FedEx/UPS) rates
    ------------------------------------------------------------------------
-   Live carrier rates for the ShippingCloud app (Ship tab + Quick quote).
-   Proxies to the England Logistics (Rock Solid) eCommerce API so your real
-   negotiated FedEx/UPS rates come back to the browser. Your API key never
-   leaves the server when you store it as a Netlify env var.
-
-   Credentials are read from (in order):
-     1. the request body  { account: { apiKey, customerId, base } }   ← lets you
-        test by typing them into Settings → Carrier accounts
-     2. Netlify env vars  ENGLAND_API_KEY / ENGLAND_CUSTOMER_ID / ENGLAND_API_BASE
-        ← recommended for production (key stays secret, server-side)
-
-   Returns the app's native rate shape:
-     { live:true, rates:[ { key, carrier, label, cost, minDays, maxDays } ] }
-   On any problem it returns 200 with { live:false, error, rates:[] } so the
-   app cleanly falls back to estimated rates instead of breaking.
+   Rock Solid / eCommerce Webship API. Sends the FULL documented quote body
+   (so no required field is missing), auth via "Authorization: RSIS <key>",
+   requests FedEx + UPS, merges, and surfaces England's real error if any.
+   Auto-retries the signatureOptionCode value so an enum mismatch can't fail.
+   Always returns HTTP 200 with JSON.
    ════════════════════════════════════════════════════════════════════════ */
 
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "Content-Type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-const json = (statusCode, body) => ({
-  statusCode,
-  headers: { "Content-Type": "application/json", ...CORS },
-  body: JSON.stringify(body),
-});
+const J = (obj) => ({ statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) });
+const CARRIER_NAME = { FEDEX: "FedEx", UPS: "UPS", USPS: "USPS", DHL: "DHL" };
+const carrierName = (c) => { const k = String(c || "").toUpperCase(); return CARRIER_NAME[k] || (k ? k[0] + k.slice(1).toLowerCase() : "FedEx"); };
+const num = (...v) => { for (const x of v) { const n = Number(x); if (!isNaN(n) && n > 0) return n; } return undefined; };
+const S = (n) => String(n);
 
-// England carrierCode → the display names the app already styles
-const CARRIER_NAME = { FEDEX: "FedEx", FDX: "FedEx", FXSP: "FedEx", UPS: "UPS", USPS: "USPS", DHL: "DHL" };
-function carrierName(code) {
-  const c = String(code || "").toUpperCase();
-  return CARRIER_NAME[c] || (c ? c.charAt(0) + c.slice(1).toLowerCase() : "FedEx");
-}
-function firstNum(...vals) {
-  for (const v of vals) { const n = Number(v); if (!isNaN(n) && n > 0) return n; }
-  return undefined;
+function mapQuotes(data) {
+  const quotes = (data && (data.quotes || data.rates)) || [];
+  if (!Array.isArray(quotes)) return [];
+  return quotes.map((q, i) => {
+    const amount = num(q.totalAmount, q.total, q.amount, q.baseAmount) || 0;
+    const desc = q.serviceDescription || q.serviceName || q.serviceCode || "Service";
+    const code = (q.serviceCode || desc).toString().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+    const days = num(q.transitDays, q.deliveryDays, q.businessDaysInTransit);
+    const surcharges = Array.isArray(q.surcharges) ? q.surcharges.map((s) => ({ label: s.description || s.name || "Surcharge", amount: num(s.amount) || 0 })) : [];
+    const qwType = S(q.quotedWeightType || q.weightType || "").toLowerCase();
+    const pkgCode = q.packageTypeCode || q.packageType || ((q.carrierCode || q.carrier) ? String(q.carrierCode || q.carrier).toLowerCase() + "_custom_package" : "");
+    return { key: code || ("svc_" + i), carrier: carrierName(q.carrierCode || q.carrier), carrierCode: q.carrierCode || "", serviceCode: q.serviceCode || "", packageTypeCode: pkgCode, label: desc, cost: Math.round(amount * 100) / 100, base: num(q.baseAmount) || null, surcharges, minDays: days, maxDays: days, zone: q.zone, quotedWeight: num(q.quotedWeight) || null, dimWeight: qwType.indexOf("dim") >= 0 };
+  }).filter((x) => x.cost > 0);
 }
 
 exports.handler = async (event) => {
-  if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers: CORS, body: "" };
-  if (event.httpMethod !== "POST") return json(405, { live: false, error: "Use POST", rates: [] });
-
-  let body;
-  try { body = JSON.parse(event.body || "{}"); }
-  catch { return json(200, { live: false, error: "Bad JSON body", rates: [] }); }
-
-  const acct = body.account || {};
-  const base = (acct.base || process.env.ENGLAND_API_BASE || "https://englandship.rocksolidinternet.com").replace(/\/+$/, "");
-  const apiKey = acct.apiKey || process.env.ENGLAND_API_KEY || "";
-  const customerId = acct.customerId || process.env.ENGLAND_CUSTOMER_ID || "";
-
-  if (!apiKey || !customerId) {
-    return json(200, { live: false, error: "Missing England API key or customer ID.", rates: [] });
-  }
-
-  const pieces = Array.isArray(body.pieces) && body.pieces.length
-    ? body.pieces
-    : [{ weight: body.weight || 1, length: body.L || 12, width: body.W || 9, height: body.H || 4 }];
-
-  const payload = {
-    sender:   { country: body.fromCountry || "US", zip: String(body.fromZip || "").trim() },
-    receiver: { country: body.toCountry   || "US", zip: String(body.toZip   || "").trim() },
-    residential: !!body.residential,
-    pieces: pieces.map(p => ({
-      weight: +p.weight || +p.wt || 1,
-      length: +p.length || +p.L || 1,
-      width:  +p.width  || +p.W || 1,
-      height: +p.height || +p.H || 1,
-    })),
-  };
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), parseInt(process.env.RATE_FETCH_TIMEOUT_MS || "9000", 10));
   try {
-    const r = await fetch(`${base}/restapi/v1/customers/${encodeURIComponent(customerId)}/quote`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": apiKey },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
+    if (event.httpMethod === "OPTIONS") return { statusCode: 204, body: "" };
+    if (event.httpMethod !== "POST") return J({ live: false, error: "Use POST", rates: [] });
+
+    let body = {};
+    try { body = JSON.parse(event.body || "{}"); } catch { return J({ live: false, error: "Bad JSON body", rates: [] }); }
+
+    const acct = body.account || {};
+    const base = (acct.base || process.env.ENGLAND_API_BASE || "https://englandship.rocksolidinternet.com").replace(/\/+$/, "");
+    const apiKey = (acct.apiKey || process.env.ENGLAND_API_KEY || "").trim();
+    const customerId = (acct.customerId || process.env.ENGLAND_CUSTOMER_ID || "").trim();
+    if (!apiKey || !customerId) return J({ live: false, error: "Missing England API key or customer ID.", rates: [] });
+
+    const pieces = (Array.isArray(body.pieces) && body.pieces.length ? body.pieces : [{ weight: body.weight || 1, L: body.L || 12, W: body.W || 9, H: body.H || 4 }])
+      .map((p) => ({
+        weight: S(+p.weight || 1),
+        length: S(+p.length || +p.L || 1),
+        width: S(+p.width || +p.W || 1),
+        height: S(+p.height || +p.H || 1),
+        insuranceAmount: S(+p.insuranceAmount || 0),
+        declaredValue: null,
+      }));
+
+    const receiver = { country: body.toCountry || "US", zip: String(body.toZip || "").trim() };
+    if (body.toCity) receiver.city = body.toCity;
+    if (body.toState) receiver.state = body.toState;
+
+    // Full documented quote body. signatureOptionCode filled per-attempt.
+    const mkBody = (cc, sig) => ({
+      carrierCode: cc,
+      serviceCode: "",
+      packageTypeCode: "",
+      sender: { country: body.fromCountry || "US", zip: String(body.fromZip || "").trim() },
+      receiver,
+      residential: !!body.residential,
+      signatureOptionCode: sig,
+      contentDescription: "Merchandise",
+      weightUnit: "lb",
+      dimUnit: "in",
+      currency: "USD",
+      customsCurrency: "USD",
+      pieces,
+      billing: { party: "sender" },
+      providerAccountId: null,
     });
-    const text = await r.text();
-    let data; try { data = JSON.parse(text); } catch { data = null; }
 
-    if (!r.ok) {
-      const msg = (data && (data.message || data.error)) || `England API returned ${r.status}`;
-      return json(200, { live: false, error: msg, rates: [] });
+    const url = base + "/restapi/v1/customers/" + encodeURIComponent(customerId) + "/quote";
+    const headers = { "Content-Type": "application/json", "Authorization": "RSIS " + apiKey };
+
+    async function call(reqBody) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 9000);
+      try {
+        const r = await fetch(url, { method: "POST", headers, body: JSON.stringify(reqBody), signal: ctrl.signal });
+        const text = await r.text();
+        let data = null; try { data = JSON.parse(text); } catch {}
+        return { ok: r.ok, status: r.status, data, text };
+      } catch (e) {
+        return { ok: false, status: 0, text: e.name === "AbortError" ? "timeout" : (e.message || "network error") };
+      } finally { clearTimeout(timer); }
     }
 
-    const quotes = (data && (data.quotes || data.rates || data.Quotes)) || [];
-    if (!Array.isArray(quotes) || quotes.length === 0) {
-      return json(200, { live: false, error: "No rates returned for this shipment.", rates: [], raw: data });
+    // signature: use the app's chosen option; otherwise try "no signature" values
+    const sigPick = body.signatureOption && body.signatureOption !== "none" ? String(body.signatureOption) : null;
+    const sigCandidates = sigPick ? [sigPick, sigPick.toUpperCase(), "direct"] : ["none", "NONE", "no_signature_required", ""];
+    async function quoteCarrier(cc) {
+      let last = null;
+      for (const sig of sigCandidates) {
+        const res = await call(mkBody(cc, sig));
+        if (res.ok) return { ok: true, data: res.data };
+        const detail = (res.data && (res.data.error || res.data.message || res.data.errorMessage)) || (res.text || "").slice(0, 300);
+        last = { status: res.status, detail };
+        // only keep trying other signature values if THIS error is about signatureOptionCode
+        if (!/signatureOption/i.test(detail || "")) break;
+      }
+      return { ok: false, err: last };
     }
 
-    const rates = quotes.map((q, i) => {
-      const amount = firstNum(q.totalAmount, q.total, q.amount, q.rate, q.price) || 0;
-      const desc = q.serviceDescription || q.serviceName || q.service || q.serviceCode || "Service";
-      const code = (q.serviceCode || desc).toString().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
-      const days = firstNum(q.transitDays, q.deliveryDays, q.estimatedDeliveryDays, q.commitDays, q.businessDaysInTransit);
-      return {
-        key: code || `svc_${i}`,
-        carrier: carrierName(q.carrierCode || q.carrier),
-        label: desc,
-        cost: Math.round(amount * 100) / 100,
-        minDays: days, maxDays: days,
-      };
-    }).filter(x => x.cost > 0).sort((a, b) => a.cost - b.cost);
+    const carriers = (acct.carriers || process.env.ENGLAND_CARRIERS || "fedex,dhl").split(",").map((s) => s.trim()).filter(Boolean);
+    let all = [];
+    const tried = [];
+    let firstErr = null;
+    for (const cc of carriers) {
+      const res = await quoteCarrier(cc);
+      if (res.ok) { const r = mapQuotes(res.data); all = all.concat(r); tried.push(cc + " → OK (" + r.length + ")"); }
+      else { tried.push(cc + " → HTTP " + (res.err && res.err.status) + (res.err && res.err.detail ? (": " + res.err.detail) : "")); if (!firstErr) firstErr = res.err; }
+    }
 
-    if (!rates.length) return json(200, { live: false, error: "Rates came back empty/zero.", rates: [], raw: data });
-    return json(200, { live: true, rates });
+    const seen = {};
+    for (const r of all) { const k = r.carrier + "|" + r.key; if (!seen[k] || r.cost < seen[k].cost) seen[k] = r; }
+    const rates = Object.values(seen).sort((a, b) => a.cost - b.cost);
+
+    if (rates.length) return J({ live: true, rates });
+    if (firstErr) return J({ live: false, error: "England HTTP " + firstErr.status + (firstErr.detail ? (": " + firstErr.detail) : ""), england_status: firstErr.status, england_response: firstErr.detail, tried, rates: [] });
+    return J({ live: false, error: "England returned no rates for this shipment.", tried, rates: [] });
   } catch (e) {
-    const msg = e.name === "AbortError" ? "England API timed out." : (e.message || "England request failed.");
-    return json(200, { live: false, error: msg, rates: [] });
-  } finally {
-    clearTimeout(timer);
+    return J({ live: false, error: "Function error: " + (e && e.message ? e.message : String(e)), rates: [] });
   }
 };

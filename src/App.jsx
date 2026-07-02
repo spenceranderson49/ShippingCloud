@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v45";
+const BUILD_TAG="addr-v46";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -1489,7 +1489,7 @@ function Orders({orders,setOrders,goShip,client,settings,onShipped}){
   const [open,setOpen]=useState(null);
   const [sort,setSort]=useState("date");
   const [adding,setAdding]=useState(false);
-  const SOURCE_TONE={Shopify:"green",Amazon:"amber",eBay:"blue",Manual:"stone"};
+  const SOURCE_TONE={Shopify:"green",Amazon:"amber",eBay:"blue",Etsy:"amber",Walmart:"blue",Magento:"amber",Square:"stone",Wix:"blue",Squarespace:"stone",BigCommerce:"stone",WooCommerce:"rose",ShipStation:"blue",ShipBob:"blue",Ordoro:"green",Manual:"stone"};
   const filtered=orders.filter(o=>(filter==="all"||o.status===filter)&&(o.name+o.customer+o.city+(o.source||"")).toLowerCase().includes(q.toLowerCase()));
   const sorted=[...filtered].sort((a,b)=>{
     if(sort==="total")return parseFloat(b.total||0)-parseFloat(a.total||0);
@@ -1502,17 +1502,35 @@ function Orders({orders,setOrders,goShip,client,settings,onShipped}){
   const ship=(o)=>goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},weight:o.weight,reference:o.name,fromOrderId:o.id});
   const [syncing,setSyncing]=useState(false);
   const [syncMsg,setSyncMsg]=useState(null);
-  const syncShopify=async()=>{
-    if(!shopifyConnected(settings))return; setSyncing(true);setSyncMsg(null);
-    const res=await shopifySyncOrders(settings.shopifyConn);
+  // Every connected platform that can supply orders (Shopify + token/OAuth connectors flagged orders:true)
+  const orderSources=[
+    ...(shopifyConnected(settings)?[{kind:"shopify",name:"Shopify"}]:[]),
+    ...CONNECTORS.filter(c=>c.orders&&connConnected(settings,c)).map(c=>({kind:"connector",c,name:c.name})),
+  ];
+  const syncLabel=orderSources.length===1?`Sync ${orderSources[0].name}`:`Sync all (${orderSources.length})`;
+  const syncAll=async()=>{
+    if(!orderSources.length)return; setSyncing(true);setSyncMsg(null);
+    const haveId=new Set(orders.map(o=>o.id));
+    const haveShop=new Set(orders.map(o=>o.shopifyId).filter(Boolean));
+    const collected=[];const errs=[];
+    for(const src of orderSources){
+      const res=src.kind==="shopify"
+        ? await shopifySyncOrders(settings.shopifyConn)
+        : await connectorSyncOrders(src.c,(settings.conn||{})[src.c.id]||{});
+      if(res&&res.ok){
+        for(const o of (res.orders||[])){
+          if(haveId.has(o.id))continue;
+          if(o.shopifyId&&haveShop.has(o.shopifyId))continue;
+          haveId.add(o.id);if(o.shopifyId)haveShop.add(o.shopifyId);
+          collected.push(o);
+        }
+      } else errs.push(`${src.name}: ${(res&&res.error)||"failed"}`);
+    }
+    if(collected.length)setOrders(p=>[...collected,...p]);
     setSyncing(false);
-    if(res&&res.ok){
-      const have=new Set(orders.map(o=>o.shopifyId).filter(Boolean));
-      const fresh=(res.orders||[]).filter(o=>!have.has(o.shopifyId));
-      if(fresh.length)setOrders(p=>[...fresh,...p]);
-      setSyncMsg({ok:`${fresh.length} new order${fresh.length===1?"":"s"} pulled`});
-    } else setSyncMsg({err:(res&&res.error)||"Sync failed"});
-    setTimeout(()=>setSyncMsg(null),4000);
+    if(errs.length)setSyncMsg({err:errs.join(" · ")});
+    else setSyncMsg({ok:`${collected.length} new order${collected.length===1?"":"s"} pulled${orderSources.length>1?` across ${orderSources.length} platforms`:""}`});
+    setTimeout(()=>setSyncMsg(null),5000);
   };
   return (
     <div className="space-y-3">
@@ -1520,7 +1538,7 @@ function Orders({orders,setOrders,goShip,client,settings,onShipped}){
         <div className="flex bg-stone-100 rounded-lg p-0.5 text-sm">{["all","unfulfilled","fulfilled"].map(f=><button key={f} onClick={()=>setFilter(f)} className={`px-3 py-1.5 rounded-md capitalize ${filter===f?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{f}</button>)}</div>
         <div className="flex-1 relative min-w-0"><Search className="w-4 h-4 absolute left-2.5 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search orders" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-3 py-2 text-sm outline-none focus:border-[#0099FF]"/></div>
         <div className="flex items-center gap-1.5 text-sm"><span className="text-stone-500">Sort</span><select value={sort} onChange={e=>setSort(e.target.value)} className="bg-white border border-stone-200 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="total">Order total</option><option value="customer">Customer</option><option value="state">Dest. state</option><option value="weight">Weight</option><option value="source">Source</option></select></div>
-        {shopifyConnected(settings)&&<button onClick={syncShopify} disabled={syncing} className="flex items-center gap-1.5 text-sm border border-[#95BF47]/40 bg-[#95BF47]/10 text-[#5E8E3E] rounded px-3 py-2 font-medium hover:bg-[#95BF47]/20 disabled:opacity-40">{syncing?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><ShoppingBag className="w-4 h-4"/>Sync Shopify</>}</button>}
+        {orderSources.length>0&&<button onClick={syncAll} disabled={syncing} title={orderSources.length>1?`Syncs: ${orderSources.map(s=>s.name).join(", ")}`:undefined} className="flex items-center gap-1.5 text-sm border border-[#0086E0]/30 bg-[#E6F4FF] text-[#006FBF] rounded px-3 py-2 font-medium hover:bg-[#CDE9FF] disabled:opacity-40">{syncing?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>{syncLabel}</>}</button>}
         <button onClick={()=>setAdding(true)} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded px-3 py-2 font-medium hover:bg-stone-800"><Plus className="w-4 h-4"/>New order</button>
       </div>
       {syncMsg&&<div className={`text-[12px] rounded px-3 py-2 flex items-center gap-1.5 ${syncMsg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{syncMsg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{syncMsg.err||syncMsg.ok}</div>}
@@ -1569,7 +1587,7 @@ function NewOrderForm({onClose,onCreate}){
         <Field label="Weight (lb)"><Input type="number" value={f.weight} onChange={e=>set("weight",e.target.value)}/></Field>
         <div className="col-span-2"><Field label="Items"><Input value={f.items} onChange={e=>set("items",e.target.value)}/></Field></div>
         <Field label="Order total $"><Input value={f.total} onChange={e=>set("total",e.target.value)}/></Field>
-        <Field label="Source"><Select value={f.source} onChange={e=>set("source",e.target.value)}><option>Manual</option><option>Shopify</option><option>Amazon</option><option>eBay</option></Select></Field>
+        <Field label="Source"><Select value={f.source} onChange={e=>set("source",e.target.value)}>{["Manual","Shopify",...CONNECTORS.filter(c=>c.orders).map(c=>c.name)].map(s=><option key={s}>{s}</option>)}</Select></Field>
       </div>
       <button onClick={create} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium hover:bg-stone-800">Create order</button>
     </div>

@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v64";
+const BUILD_TAG="addr-v67";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -343,16 +343,13 @@ function oneRateBoxFor(L,W,H,lbs){
   for(const b of ONERATE_BOXES){ if(vol<=b.maxVol && w<=b.maxLbs) return b; }
   return null;
 }
-/* FedEx One Rate is a FLAT, zone-independent price by box, 2Day only. England's rate call does NOT return
-   One Rate — it prices the branded box at standard rates. Only include boxes whose flat One Rate price you've
-   actually confirmed; no guesses. Medium Box confirmed at $19.25. Add others here once you confirm them. */
-const ONERATE_2DAY={fedex_medium_box:19.25};
-function oneRateQuotes(box, markup){
+/* Show the One Rate box the shipment qualifies for, but with NO price. England's rate call doesn't return
+   One Rate pricing, so the price stays blank unless England itself returns a One Rate service for this shipment.
+   No hardcoded/flat values. */
+function oneRateQuotes(box){
   if(!box) return [];
-  const flat=ONERATE_2DAY[box.code]; if(flat==null) return [];
   const short=box.name.replace(/FedEx\s*One Rate®?\s*/i,"");
-  const sell=Math.round(flat*(1+(+markup||0)/100)*100)/100;
-  return [{key:"or_2day_"+box.code, carrier:"FedEx", carrierCode:"FEDEX", serviceCode:"fedex_2_day", label:"FedEx 2Day One Rate · "+short, cost:flat, sell, _oneRate:true, _flat:true, packageTypeCode:box.code, minDays:2, maxDays:2}];
+  return [{key:"or_2day_"+box.code, carrier:"FedEx", carrierCode:"FEDEX", serviceCode:"fedex_2_day_one_rate", label:"FedEx 2Day One Rate · "+short, cost:null, sell:null, _oneRate:true, packageTypeCode:box.code, minDays:2, maxDays:2}];
 }
 /* Optional accessorials are fixed published fees — England's rate call does not return them, so we add the
    flat amounts here so they actually change the price. Tune to your exact England fees. */
@@ -361,6 +358,7 @@ const SAT_FEE=16.00;
 function insuranceFee(declared){ const d=+declared||0; if(d<=100)return 0; const units=Math.ceil((d-100)/100); return Math.round(Math.max(3.45,units*1.15)*100)/100; }
 function applyAccessorials(q, opts){
   if(!opts||q==null) return q;
+  if(q.sell==null&&q.cost==null) return q;   // no base price (e.g. blank One Rate placeholder) → nothing to add to
   const add=[];
   const so=opts.signatureOption;
   if(so&&so!=="none") add.push({label:(so.charAt(0).toUpperCase()+so.slice(1))+" signature",amount:SIG_FEE[so]||6.55});
@@ -1123,7 +1121,15 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
   ];
   const localQuotes=()=>quoteRates(shipment).filter(q=>q.carrier==="FedEx");
   const [rateSrc,setRateSrc]=useState({rates:[],live:false,loading:false,error:null});
-  // FedEx One Rate 2Day — flat, zone-independent (not from the rate call; see ONERATE_2DAY).
+  // FedEx transit times (committed days/dates) via the FedEx API
+  const [fxTransit,setFxTransit]=useState({});
+  useEffect(()=>{
+    let cancel=false;
+    if(!ready){setFxTransit({});return;}
+    fedexTransit(shipment).then(m=>{ if(!cancel) setFxTransit(m||{}); });
+    return ()=>{cancel=true;};
+  },[receiver.zip,sender.zip,residential,JSON.stringify(pieces)]);
+  // FedEx One Rate box the shipment qualifies for — shown as a placeholder with a blank price (see oneRateQuotes).
   const orRates=useMemo(()=>orBox?oneRateQuotes(orBox,client.markup):[],[orBox&&orBox.code,client.markup]);
   useEffect(()=>{
     let cancel=false;
@@ -1148,9 +1154,9 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
     if(addrClassified){
       list=list.filter(q=>{const k=canonSvc(q.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;});
     }
-    return list.map(q=>{const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:(cost!=null?Math.round(cost*(1+client.markup/100)*100)/100:null)},{signatureOption:sigOption,saturday,insurance});})
+    return list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&m.days!=null);const days=real?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:(cost!=null?Math.round(cost*(1+client.markup/100)*100)/100:null),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:sigOption,saturday,insurance});})
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
-  },[rateSrc,orRates,client.markup,residential,addrClassified,sigOption,saturday,insurance]);
+  },[rateSrc,orRates,client.markup,fxTransit,residential,addrClassified,sigOption,saturday,insurance]);
   const best=null;
 
   const buildRec=(q,carrier,extra)=>({id:Date.now(),date:new Date().toLocaleDateString(),tracking:(extra&&extra.tracking)||newTracking(carrier),carrier,service:q.label,recipient:{...receiver},sender:{...sender},fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,pieces:pieces.map(p=>({...p})),dims:pieces[0],insurance,cost:q.cost,sell:q.sell,billTo,thirdAcct,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference,invoiceNo,poNo,residential,intl,bookNumber:extra&&extra.bookNumber,customs:intl?{...customs,total:customsTotal,ci:"CI-"+rnd(5)}:null});
@@ -1495,8 +1501,10 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
   const [open,setOpen]=useState(null);
   const Row=(q)=>{
     const isOpen=open===q.key;
-    const days=(q.maxDays||q.minDays);
-    const eta=ready&&days?addBizDays(days):null;
+    const fxDate=q.fxDate?new Date(q.fxDate+"T00:00:00"):null;
+    const days=(q.fxDays!=null?q.fxDays:(q.maxDays||q.minDays));
+    const eta=ready?(fxDate||(days?addBizDays(days):null)):null;
+    const fxLive=q.fxLive===true;
     const sell=q.sell??q.cost;
     const acc=q.accessorials||[];
     const accTotal=Math.round(acc.reduce((a,e)=>a+(e.amount||0),0)*100)/100;
@@ -1508,7 +1516,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
       const factor=(q.cost&&baseSell)?baseSell/q.cost:1;
       comps=[{label:"Base rate",amount:baseRaw*factor},...q.surcharges.map(s=>({label:s.label,amount:(s.amount||0)*factor}))];
     } else {
-      comps=[{label:q._oneRate?"One Rate (flat)":"Rate",amount:baseSell}];
+      comps=[{label:q._oneRate?"One Rate":"Rate",amount:baseSell}];
     }
     comps=[...comps,...acc.map(a=>({label:a.label,amount:a.amount}))];
     const hasPrice=sell!=null;
@@ -1518,7 +1526,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
           <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isOpen?"rotate-90":""}`}/>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2"><span className="text-sm truncate">{q.label}</span></div>
-            <div className="text-[11px] text-stone-500 flex items-center gap-1"><Calendar className="w-3 h-3"/>Transit Time: {days?(<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}</div>
+            <div className="text-[11px] text-stone-500 flex items-center gap-1"><Calendar className="w-3 h-3"/>Transit Time: {days?(<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}{fxLive&&days?<span className="text-[#0086E0] font-medium ml-1">FedEx</span>:""}</div>
           </div>
           <div className="text-right font-mono"><div className="text-base font-semibold text-stone-900">{ready&&hasPrice?money(sell):<span className="text-stone-300">—</span>}</div></div>
           {action&&<button onClick={(e)=>{e.stopPropagation();action(q);}} disabled={!ready||!hasPrice} className={`shrink-0 w-32 text-sm rounded px-3 py-2 font-medium flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed ${bought===q.key?"bg-[#0086E0] text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{bought===q.key?<><Check className="w-4 h-4"/>{doneLabel}</>:<><Printer className="w-4 h-4"/>{label}</>}</button>}
@@ -1530,7 +1538,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
             <div className="flex justify-between text-[13px] border-t border-stone-200 pt-1 mt-1 font-semibold"><span>Total</span><span className="font-mono">{money(sell)}</span></div>
           </div>
           {q.dimWeight&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-2 flex items-center gap-1.5"><AlertTriangle className="w-3 h-3 shrink-0"/>Billed at <b>{q.quotedWeight?`${q.quotedWeight} lb `:""}dimensional weight</b>.</div>}
-          {eta&&<div className="text-[11px] text-stone-400 mt-2 flex items-center gap-1"><Calendar className="w-3 h-3"/>Arrives {fmtDeliv(eta)}{days?` · ${days} business day${days>1?"s":""} in transit`:""}</div>}
+          {eta&&<div className="text-[11px] text-stone-400 mt-2 flex items-center gap-1"><Calendar className="w-3 h-3"/>{fxLive?"FedEx delivery":"Estimated delivery"} {fmtDeliv(eta)}{days?` · ${days} business day${days>1?"s":""} in transit`:""}</div>}
         </div>}
       </div>
     );
@@ -1874,12 +1882,20 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
     } else setRateSrc({rates:localOrderQuotes(),live:false,loading:false});
     return ()=>{cancel=true;};
   },[rcv.zip,totalWeight,box.L,box.W,box.H,residential,eng,sigOption,sat,insurance]);
+  // FedEx transit times via the FedEx API
+  useEffect(()=>{
+    let cancel=false;
+    if(!ready){setFxTransit({});return;}
+    fedexTransit({fromZip,toZip:rcv.zip,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],residential}).then(m=>{if(!cancel)setFxTransit(m||{});});
+    return ()=>{cancel=true;};
+  },[rcv.zip,fromZip,residential,totalWeight,box.L,box.W,box.H]);
   // FedEx One Rate 2Day — flat, zone-independent.
   const orRates=useMemo(()=>selectedOrBox?oneRateQuotes(selectedOrBox,client?.markup||0):[],[selectedOrBox&&selectedOrBox.code,client]);
   const baseQuotes=useMemo(()=>(rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!/first\s*overnight/i.test(qq.label||"")).filter(qq=>{if(!addrClassified)return true;const k=canonSvc(qq.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;}).map(qq=>({...qq,sell:Math.round((qq.cost||0)*(1+(client?.markup||0)/100)*100)/100})),[rateSrc,residential,client,addrClassified]);
   const quotes=useMemo(()=>{
-    return [...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday:sat,insurance})).sort((a,b)=>(a.sell||0)-(b.sell||0));
-  },[baseQuotes,orRates,sigOption,sat,insurance]);
+    const withTransit=(list)=>list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&m.days!=null);return {...q,fxDays:real?m.days:null,fxDate:real?m.date:undefined,fxLive:real};});
+    return withTransit([...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday:sat,insurance}))).sort((a,b)=>(a.sell||0)-(b.sell||0));
+  },[baseQuotes,orRates,fxTransit,sigOption,sat,insurance]);
   const best=null;
   const applyORBox=(code)=>{const b=FEDEX_ONERATE.find(x=>x.code===code);if(!b)return;if(b.dims){setDims({L:b.dims.L,W:b.dims.W,H:b.dims.H});}setBoxIdx(-1);setOrPkg(code);const val="FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,"");const f=settings?.orBoxField||"invoice";const fill=(set)=>set(prev=>prev&&prev.trim()?prev:val);if(f==="invoice")fill(setInvoiceNo);else if(f==="po")fill(setPoNo);else if(f==="reference")fill(setReference);};
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
@@ -2156,26 +2172,37 @@ function QuickQuote({onClose,client,england}){
   const delPiece=(i)=>setPieces(ps=>ps.filter((_,j)=>j!==i));
   const totalWeight=Math.round(pieces.reduce((a,p)=>a+pw(p),0)*100)/100;
   const ready=/^\d{5}/.test(toZip||"")&&/^\d{5}/.test(fromZip||"")&&pieces.every(p=>pw(p)>0&&+p.L>0&&+p.W>0&&+p.H>0);
-  const [rateSrc,setRateSrc]=useState({rates:[],raw:null,tried:null,live:false,loading:false,error:null});
+  const [rateSrc,setRateSrc]=useState({rates:[],live:false,loading:false,error:null});
   const shipPieces=pieces.map(p=>({weight:pw(p),L:+p.L||12,W:+p.W||9,H:+p.H||4}));
+  const [fxTransit,setFxTransit]=useState({});
   useEffect(()=>{
     let cancel=false;
-    if(!ready){setRateSrc({rates:[],raw:null,tried:null,live:false,loading:false,error:null});return;}
-    if(!(england&&england.enabled&&england.apiKey&&england.customerId)){ setRateSrc({rates:[],raw:null,tried:null,live:false,loading:false,error:"Turn on live England rates in Settings to run this experiment."}); return; }
-    const ship={carriers:"fedex,dhl,ups",fromZip,toZip,pieces:shipPieces,residential,signature:sigOption!=="none",signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null};
-    setRateSrc(p=>({...p,loading:true,error:null}));
-    getLiveRates(ship,england).then(res=>{ if(cancel)return;
-      if(res&&res.live&&Array.isArray(res.rates)) setRateSrc({rates:res.rates,raw:res.raw||null,tried:res.tried||null,live:true,loading:false,error:null});
-      else setRateSrc({rates:[],raw:(res&&res.england_response)||null,tried:(res&&res.tried)||null,live:false,loading:false,error:(res&&res.error)||"No rates returned"});
-    });
+    if(!ready){setFxTransit({});return;}
+    fedexTransit({fromZip,toZip,pieces:shipPieces,residential}).then(m=>{if(!cancel)setFxTransit(m||{});});
+    return ()=>{cancel=true;};
+  },[fromZip,toZip,residential,JSON.stringify(pieces)]);
+  useEffect(()=>{
+    let cancel=false;
+    if(!ready){setRateSrc({rates:[],live:false,loading:false,error:null});return;}
+    const ship={fromZip,toZip,pieces:shipPieces,residential,signature:sigOption!=="none",signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null};
+    if(england&&england.enabled&&england.apiKey&&england.customerId){
+      setRateSrc(p=>({...p,loading:true}));
+      getLiveRates(ship,england).then(res=>{ if(cancel)return;
+        if(res&&res.live&&res.rates&&res.rates.length) setRateSrc({rates:res.rates,live:true,loading:false,error:null});
+        else setRateSrc({rates:quoteRates(ship),live:false,loading:false,error:(res&&res.error)||null});
+      });
+    } else setRateSrc({rates:quoteRates(ship),live:false,loading:false,error:null});
     return ()=>{cancel=true;};
   },[fromZip,toZip,residential,JSON.stringify(pieces),sigOption,saturday,insurance,england]);
-  const rawRates=rateSrc.rates||[];
+  const qqOrBox=oneRateBoxFor(pieces[0]&&pieces[0].L,pieces[0]&&pieces[0].W,pieces[0]&&pieces[0].H,totalWeight);
+  const qqOrRates=useMemo(()=>qqOrBox?oneRateQuotes(qqOrBox):[],[qqOrBox&&qqOrBox.code]);
+  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:Math.round(q.cost*(1+(client?.markup||0)/100)*100)/100})),...qqOrRates].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&m.days!=null);return {...q,fxDays:real?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday,insurance})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,client,fxTransit,qqOrRates,sigOption,saturday,insurance]);
+  const hasExpress=quotes.some(q=>{const l=String(q.label||"").toLowerCase();return /(overnight|2\s?day|express saver)/.test(l);});
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-8 bg-stone-900/40 backdrop-blur-sm overflow-auto" onClick={onClose}>
       <div className="bg-stone-50 rounded-xl border border-stone-200 shadow-xl w-full max-w-3xl" onClick={e=>e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 h-14 border-b border-stone-200">
-          <div className="flex items-center gap-2 font-semibold"><Calculator className="w-4 h-4 text-[#0086E0]"/>Quick quote <span className="text-stone-400 font-normal text-sm">· raw England rates, exactly as returned</span></div>
+          <div className="flex items-center gap-2 font-semibold"><Calculator className="w-4 h-4 text-[#0086E0]"/>Quick quote <span className="text-stone-400 font-normal text-sm">· ZIP to ZIP, no addresses</span></div>
           <button onClick={onClose} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button>
         </div>
         <div className="p-5 flex flex-col lg:flex-row gap-5">
@@ -2199,38 +2226,11 @@ function QuickQuote({onClose,client,england}){
             </div>
             <Field label="Signature"><Select value={sigOption} onChange={e=>setSigOption(e.target.value)}><option value="none">None</option><option value="direct">Direct signature</option><option value="indirect">Indirect signature</option><option value="adult">Adult signature</option></Select></Field>
             <Field label="Insurance $"><Input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0"/></Field>
-            <label className="flex items-center gap-1.5 text-sm text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSaturday(e.target.checked)} className="accent-[#0086E0]"/>Saturday delivery <span className="text-stone-400 text-xs">(sent to England)</span></label>
+            {hasExpress&&<label className="flex items-center gap-1.5 text-sm text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSaturday(e.target.checked)} className="accent-[#0086E0]"/>Saturday delivery <span className="text-stone-400 text-xs">(Express only)</span></label>}
             <div className="grid grid-cols-2 gap-px bg-stone-200 border border-stone-200 rounded overflow-hidden font-mono text-center"><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">zone</div><div className="font-semibold">{zoneEst(fromZip,toZip)}</div></div><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">billable</div><div className="font-semibold">{billable(pieces[0].L,pieces[0].W,pieces[0].H,totalWeight)} lb</div></div></div>
             {ready&&<div className={`text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700":"bg-[#E6F4FF] text-[#006FBF]"}`}>{rateSrc.loading?<><Loader2 className="w-3 h-3 animate-spin"/>Fetching…</>:rateSrc.live?<><Wifi className="w-3 h-3"/>Live rates</>:<><Calculator className="w-3 h-3"/>Estimated</>}</div>}
           </Panel></div>
-          <div className="flex-1 min-w-0 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-sm font-semibold text-stone-800">Raw England response</div>
-              {rateSrc.live&&<Badge tone="green">{rawRates.length} service{rawRates.length!==1?"s":""}</Badge>}
-            </div>
-            <p className="text-[12px] text-stone-500">Every service England's API returns for this shipment, exactly as sent — no markup, no filtering, no One Rate, no added fees. Toggle signature/insurance/Saturday to see whether England changes the numbers.</p>
-            {!ready&&<div className="text-sm text-stone-400 py-6 text-center border border-dashed border-stone-200 rounded-lg">Enter From/To ZIP and each package's dims + weight.</div>}
-            {ready&&rateSrc.loading&&<div className="text-sm text-stone-500 py-6 text-center flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>Querying England…</div>}
-            {ready&&!rateSrc.loading&&rateSrc.error&&<div className="text-[13px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-3 font-mono">{rateSrc.error}</div>}
-            {ready&&!rateSrc.loading&&rawRates.map((q,i)=>(
-              <div key={i} className="border border-stone-200 rounded-lg bg-white p-3">
-                <div className="flex items-baseline justify-between gap-2">
-                  <div className="min-w-0"><div className="text-sm font-medium truncate">{q.label}</div><div className="text-[11px] text-stone-400 font-mono">{q.carrier} · {q.serviceCode||"—"}</div></div>
-                  <div className="text-right font-mono shrink-0"><div className="text-base font-semibold">{money(q.cost)}</div><div className="text-[9px] uppercase tracking-widest text-stone-400">totalAmount</div></div>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2 text-[12px] font-mono">
-                  <div><div className="text-[9px] uppercase text-stone-400">base</div>{q.base!=null?money(q.base):"—"}</div>
-                  <div><div className="text-[9px] uppercase text-stone-400">zone</div>{q.zone!=null&&q.zone!==""?q.zone:"—"}</div>
-                  <div><div className="text-[9px] uppercase text-stone-400">quoted wt</div>{q.quotedWeight!=null?q.quotedWeight+" lb":"—"}{q.dimWeight?" dim":""}</div>
-                  <div><div className="text-[9px] uppercase text-stone-400">transit</div>{q.minDays!=null?q.minDays+" day"+(q.minDays>1?"s":""):<span className="text-stone-300">none</span>}</div>
-                </div>
-                {q.surcharges&&q.surcharges.length>0&&<div className="mt-2 border-t border-stone-100 pt-2"><div className="text-[9px] uppercase tracking-widest text-stone-400 mb-1">surcharges</div>{q.surcharges.map((s,j)=><div key={j} className="flex justify-between text-[12px] font-mono"><span className="text-stone-600">{s.label}</span><span>{money(s.amount)}</span></div>)}</div>}
-              </div>
-            ))}
-            {ready&&!rateSrc.loading&&rateSrc.live&&rawRates.length===0&&<div className="text-sm text-stone-500 py-6 text-center">England returned 0 services for this shipment.</div>}
-            {rateSrc.tried&&<div className="text-[11px] text-stone-400 font-mono break-words">carriers: {Array.isArray(rateSrc.tried)?rateSrc.tried.join(" · "):String(rateSrc.tried)}</div>}
-            {rateSrc.raw&&<details className="text-[11px]"><summary className="cursor-pointer text-stone-500 hover:text-stone-700 select-none">Raw JSON from England</summary><pre className="mt-2 bg-stone-900 text-stone-100 rounded p-3 overflow-auto max-h-80 text-[11px] leading-relaxed whitespace-pre-wrap">{JSON.stringify(rateSrc.raw,null,2)}</pre></details>}
-          </div>
+          <div className="flex-1 min-w-0"><ServiceList quotes={quotes} ready={ready}/></div>
         </div>
       </div>
     </div>

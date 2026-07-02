@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v61";
+const BUILD_TAG="addr-v62";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -3892,151 +3892,235 @@ function parseCSVText(text){
   if(cur!==""||row.length){row.push(cur);rows.push(row);}
   return rows.filter(r=>r.some(c=>String(c).trim()!==""));
 }
+// Load pdf.js on demand from CDN so a customer can drop in a PDF invoice with no build dependency.
+let _pdfjsPromise=null;
+function loadPdfjs(){
+  if(_pdfjsPromise) return _pdfjsPromise;
+  const WK="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  _pdfjsPromise=new Promise((resolve,reject)=>{
+    if(window.pdfjsLib){ try{window.pdfjsLib.GlobalWorkerOptions.workerSrc=WK;}catch(e){} return resolve(window.pdfjsLib); }
+    const s=document.createElement("script"); s.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+    s.onload=()=>{ try{ window.pdfjsLib.GlobalWorkerOptions.workerSrc=WK; resolve(window.pdfjsLib); }catch(e){ reject(e); } };
+    s.onerror=()=>reject(new Error("Couldn't load the PDF reader."));
+    document.head.appendChild(s);
+  });
+  return _pdfjsPromise;
+}
+async function extractPdfLines(file){
+  const lib=await loadPdfjs();
+  const buf=await file.arrayBuffer();
+  const pdf=await lib.getDocument({data:buf}).promise;
+  const lines=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p); const tc=await page.getTextContent();
+    const rows={};
+    tc.items.forEach(it=>{ const y=Math.round(it.transform[5]); (rows[y]=rows[y]||[]).push({x:it.transform[4],s:it.str}); });
+    Object.keys(rows).map(Number).sort((a,b)=>b-a).forEach(y=>{ const ln=rows[y].sort((a,b)=>a.x-b.x).map(i=>i.s).join(" ").replace(/\s+/g," ").trim(); if(ln)lines.push(ln); });
+  }
+  return lines;
+}
+const TRACK_RE=/\b(1Z[0-9A-Z]{16}|\d{20,22}|\d{15}|\d{12})\b/;
+const MONEY_RE=/-?\$?\s?\d{1,3}(?:,\d{3})+(?:\.\d{2})|-?\$?\s?\d+\.\d{2}/g;
+function moneyVal(str){ const n=parseFloat(String(str).replace(/[^0-9.\-]/g,"")); return isNaN(n)?0:n; }
+// Best-effort PDF invoice parse: group text into per-tracking blocks and pull amount / weight / dims / charge lines.
+function parsePdfInvoice(lines){
+  const idxs=[]; lines.forEach((ln,i)=>{ const m=ln.match(TRACK_RE); if(m)idxs.push({i,tracking:m[1]}); });
+  const groups={};
+  for(let k=0;k<idxs.length;k++){
+    const start=idxs[k].i, tracking=idxs[k].tracking;
+    const end=k+1<idxs.length?idxs[k+1].i:Math.min(lines.length,start+12);
+    const blockLines=lines.slice(start,end); const block=blockLines.join("  ");
+    const key=tracking.replace(/\s+/g,"").toUpperCase();
+    if(!groups[key])groups[key]={tracking,billed:0,weight:null,dimL:null,dimW:null,dimH:null,charges:[]};
+    let amt=null;
+    const nc=block.match(/(?:net charge|total charge|amount due|net amount)[^0-9\-$]*(-?\$?\s?\d[\d,]*\.\d{2})/i);
+    if(nc)amt=moneyVal(nc[1]);
+    if(amt==null){ const monies=(block.match(MONEY_RE)||[]).map(moneyVal).filter(n=>n!==0); if(monies.length)amt=Math.max(...monies); }
+    if(amt!=null)groups[key].billed=Math.round((groups[key].billed+amt)*100)/100;
+    const wm=block.match(/(?:billed|rated|actual)\s*weight[^0-9]*(\d+(?:\.\d+)?)/i)||block.match(/(\d+(?:\.\d+)?)\s*lbs?\b/i);
+    if(wm&&groups[key].weight==null){ const w=parseFloat(wm[1]); if(w>0)groups[key].weight=w; }
+    const dm=block.match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/i);
+    if(dm&&groups[key].dimL==null){ groups[key].dimL=+dm[1]; groups[key].dimW=+dm[2]; groups[key].dimH=+dm[3]; }
+    const KWTXT=/(additional handling|address correction|residential|delivery area|dimensional|dim weight|oversize|unauthorized|adjustment|correction|peak|fuel|reweigh|signature|saturday)/i;
+    blockLines.forEach(ln=>{ if(KWTXT.test(ln)){ const mm=ln.match(MONEY_RE); groups[key].charges.push({desc:ln.replace(MONEY_RE,"").replace(/\s+/g," ").trim().slice(0,70),amount:mm?moneyVal(mm[mm.length-1]):0}); } });
+  }
+  return groups;
+}
 const AUDIT_CANDS={
   tracking:["tracking number","tracking id","tracking","track id","air waybill","express or ground tracking","ground tracking"],
   amount:["net charge amount","net charge","net amount","billed charge","total charge amount","total charge","net","amount"],
   weight:["billed weight","rated weight","bill weight","original weight","actual weight","weight"],
   desc:["tracking id charge description","charge description","charge category detail","charge category","charge classification","description"],
+  dimL:["dim length","length","dim l"],
+  dimW:["dim width","width","dim w"],
+  dimH:["dim height","height","dim h"],
 };
 function auditFindCol(headers,cands){ for(const cand of cands){ const i=headers.findIndex(h=>String(h||"").toLowerCase().trim().includes(cand)); if(i>=0)return i; } return -1; }
-function CarrierAudit({shipments}){
-  const [parsed,setParsed]=useState(null);   // {headers, data, name}
-  const [map,setMap]=useState({tracking:-1,amount:-1,weight:-1,desc:-1});
-  const [open,setOpen]=useState(null);
-  const [err,setErr]=useState("");
-  const onFile=(e)=>{
-    const f=e.target.files&&e.target.files[0]; if(!f)return; setErr("");
-    const r=new FileReader();
-    r.onload=()=>{ try{
-      const rows=parseCSVText(r.result); if(rows.length<2){setErr("That file has no data rows.");return;}
-      const headers=rows[0].map(h=>String(h||"").trim()); const data=rows.slice(1);
-      setParsed({headers,data,name:f.name});
-      setMap({tracking:auditFindCol(headers,AUDIT_CANDS.tracking),amount:auditFindCol(headers,AUDIT_CANDS.amount),weight:auditFindCol(headers,AUDIT_CANDS.weight),desc:auditFindCol(headers,AUDIT_CANDS.desc)});
-      setOpen(null);
-    }catch(x){ setErr("Couldn't read that file — make sure it's a CSV export."); } };
-    r.onerror=()=>setErr("Couldn't read that file.");
-    r.readAsText(f);
-  };
+function buildCsvGroups(data,map){
+  const {tracking:tc,amount:ac,weight:wc,desc:dc,dimL:lc,dimW:wcc,dimH:hc}=map;
+  const numOf=v=>{const n=parseFloat(String(v==null?"":v).replace(/[^0-9.\-]/g,""));return isNaN(n)?0:n;};
   const norm=t=>String(t||"").replace(/\s+/g,"").toUpperCase();
-  const recon=useMemo(()=>{
-    if(!parsed) return null;
-    const {data}=parsed; const {tracking:tc,amount:ac,weight:wc,desc:dc}=map;
-    if(tc<0||ac<0) return {need:true};
-    const numOf=v=>{const n=parseFloat(String(v==null?"":v).replace(/[^0-9.\-]/g,""));return isNaN(n)?0:n;};
-    const groups={};
-    for(const rrow of data){ const t=norm(rrow[tc]); if(!t)continue;
-      if(!groups[t])groups[t]={tracking:String(rrow[tc]).trim(),billed:0,weight:null,charges:[]};
-      const amt=Math.round(numOf(rrow[ac])*100)/100; groups[t].billed+=amt;
-      if(wc>=0&&groups[t].weight==null){ const w=numOf(rrow[wc]); if(w>0)groups[t].weight=w; }
-      if(dc>=0){ const d=String(rrow[dc]||"").trim(); if(d)groups[t].charges.push({desc:d,amount:amt}); }
+  const groups={};
+  for(const r of data){ const t=norm(r[tc]); if(!t)continue;
+    if(!groups[t])groups[t]={tracking:String(r[tc]).trim(),billed:0,weight:null,dimL:null,dimW:null,dimH:null,charges:[]};
+    const amt=Math.round(numOf(r[ac])*100)/100; groups[t].billed=Math.round((groups[t].billed+amt)*100)/100;
+    if(wc>=0&&groups[t].weight==null){ const w=numOf(r[wc]); if(w>0)groups[t].weight=w; }
+    if(lc>=0&&groups[t].dimL==null){ const L=numOf(r[lc]),W=wcc>=0?numOf(r[wcc]):0,H=hc>=0?numOf(r[hc]):0; if(L>0){groups[t].dimL=L;groups[t].dimW=W;groups[t].dimH=H;} }
+    if(dc>=0){ const d=String(r[dc]||"").trim(); if(d)groups[t].charges.push({desc:d,amount:amt}); }
+  }
+  return groups;
+}
+function CarrierAudit({shipments}){
+  const [groups,setGroups]=useState(null);
+  const [source,setSource]=useState("");
+  const [name,setName]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState("");
+  const [note,setNote]=useState("");
+  const [csv,setCsv]=useState(null);
+  const [map,setMap]=useState({tracking:-1,amount:-1,weight:-1,desc:-1,dimL:-1,dimW:-1,dimH:-1});
+  const [open,setOpen]=useState(null);
+  const [overrides,setOverrides]=useState({});
+  const norm=t=>String(t||"").replace(/\s+/g,"").toUpperCase();
+  const onFile=async(e)=>{
+    const f=e.target.files&&e.target.files[0]; if(!f)return; setErr("");setNote("");setOverrides({});setOpen(null);setName(f.name);
+    const isPdf=/\.pdf$/i.test(f.name)||f.type==="application/pdf";
+    if(isPdf){
+      setBusy(true);setSource("pdf");setCsv(null);
+      try{ const lines=await extractPdfLines(f); const g=parsePdfInvoice(lines);
+        if(!Object.keys(g).length){ setErr("Couldn't find tracking numbers in that PDF. If it's a scanned image, download a CSV from your carrier's billing site instead."); setGroups(null); }
+        else { setGroups(g); setNote("Read from PDF automatically — please double-check the billed amounts below and correct any that look off."); }
+      }catch(x){ setErr("Couldn't read that PDF. Try the CSV export from FedEx Billing Online or the UPS Billing Center."); setGroups(null); }
+      setBusy(false);
+    } else {
+      setSource("csv");
+      const r=new FileReader();
+      r.onload=()=>{ try{
+        const rows=parseCSVText(r.result); if(rows.length<2){setErr("That file has no data rows.");return;}
+        const headers=rows[0].map(h=>String(h||"").trim()); const data=rows.slice(1);
+        const m={tracking:auditFindCol(headers,AUDIT_CANDS.tracking),amount:auditFindCol(headers,AUDIT_CANDS.amount),weight:auditFindCol(headers,AUDIT_CANDS.weight),desc:auditFindCol(headers,AUDIT_CANDS.desc),dimL:auditFindCol(headers,AUDIT_CANDS.dimL),dimW:auditFindCol(headers,AUDIT_CANDS.dimW),dimH:auditFindCol(headers,AUDIT_CANDS.dimH)};
+        setCsv({headers,data}); setMap(m);
+        if(m.tracking<0||m.amount<0){ setGroups(null); setNote("Pick which columns hold the tracking # and amount below."); }
+        else { setGroups(buildCsvGroups(data,m)); setNote(""); }
+      }catch(x){ setErr("Couldn't read that file — make sure it's a CSV or PDF export."); } };
+      r.onerror=()=>setErr("Couldn't read that file.");
+      r.readAsText(f);
     }
-    const byTrack={}; for(const s of shipments){ if(s.tracking)byTrack[norm(s.tracking)]=s; }
-    const KW=[["additional handling","Additional handling"],["address correction","Address correction"],["residential","Residential surcharge"],["delivery area","Delivery-area surcharge"],["das","Delivery-area surcharge"],["dim","Dimensional weight"],["oversize","Oversize"],["unauthorized","Unauthorized package"],["adjustment","Adjustment"],["correction","Correction"],["peak","Peak surcharge"],["fuel","Fuel surcharge"]];
-    const entries=Object.keys(groups).map(k=>{
-      const g=groups[k]; const s=byTrack[k]; const billed=Math.round(g.billed*100)/100;
-      const quotedCost=s?Math.round((s.cost||0)*100)/100:null;
-      const quotedSell=s?Math.round((s.sell||0)*100)/100:null;
-      const qWeight=s?(+s.weight||null):null;
-      const variance=quotedCost!=null?Math.round((billed-quotedCost)*100)/100:null;
-      const reasons=[];
-      if(g.weight!=null&&qWeight!=null&&g.weight>qWeight+0.01) reasons.push(`Reweighed ${qWeight}→${g.weight} lb`);
-      const cl=g.charges.map(c=>String(c.desc).toLowerCase()).join("  ");
-      for(const [k2,label] of KW){ if(cl.includes(k2)&&!reasons.some(r=>r.includes(label))) reasons.push(label); }
-      return {key:k,tracking:g.tracking,ship:s,matched:!!s,billed,billedWeight:g.weight,quotedCost,quotedSell,qWeight,variance,
-        variancePct:quotedCost?Math.round((billed-quotedCost)/quotedCost*1000)/10:null,charges:g.charges,reasons};
-    }).sort((a,b)=>Math.abs(b.variance||0)-Math.abs(a.variance||0));
-    const matched=entries.filter(e=>e.matched);
-    const sum={
-      lines:entries.length, matched:matched.length, unmatched:entries.length-matched.length,
-      quoted:Math.round(matched.reduce((a,e)=>a+(e.quotedCost||0),0)*100)/100,
-      billed:Math.round(entries.reduce((a,e)=>a+e.billed,0)*100)/100,
-      variance:Math.round(matched.reduce((a,e)=>a+(e.variance||0),0)*100)/100,
-      overbilled:matched.filter(e=>(e.variance||0)>0.01).length,
-      reweighed:matched.filter(e=>e.billedWeight!=null&&e.qWeight!=null&&e.billedWeight>e.qWeight+0.01).length,
-    };
-    const inSet=new Set(Object.keys(groups));
-    const notBilled=shipments.filter(s=>s.tracking&&!inSet.has(norm(s.tracking))&&s.status!=="Voided");
-    return {entries,sum,notBilled};
-  },[parsed,map,shipments]);
-  const exportReport=()=>{
-    if(!recon||!recon.entries)return;
-    const rows=[["Tracking","Service","Recipient","Ship date","Quoted weight (lb)","Billed weight (lb)","Quoted cost","Billed cost","Variance $","Variance %","Customer price","Margin after billed","Flags"]];
-    recon.entries.forEach(e=>{ const s=e.ship||{}; rows.push([e.tracking,s.service||"",(s.recipient&&s.recipient.name)||"",s.date||"",e.qWeight==null?"":e.qWeight,e.billedWeight==null?"":e.billedWeight,e.quotedCost==null?"":e.quotedCost,e.billed,e.variance==null?"":e.variance,e.variancePct!=null?e.variancePct+"%":"",e.quotedSell==null?"":e.quotedSell,e.quotedSell!=null?Math.round((e.quotedSell-e.billed)*100)/100:"",e.reasons.join("; ")||(e.matched?"On-quote":"No matching shipment")]); });
-    downloadCSV("carrier-invoice-audit.csv",rows);
   };
-  const colSel=(field,label)=>parsed?(
-    <div className="flex items-center gap-1.5"><span className="text-[11px] uppercase tracking-widest text-stone-400 w-16">{label}</span>
+  useEffect(()=>{ if(source==="csv"&&csv&&map.tracking>=0&&map.amount>=0){ setGroups(buildCsvGroups(csv.data,map)); setNote(""); } },[map,csv,source]);
+  const recon=useMemo(()=>{
+    if(!groups) return null;
+    const byTrack={}; for(const s of shipments){ if(s.tracking)byTrack[norm(s.tracking)]=s; }
+    const KW=[["additional handling","Additional handling fee"],["address correction","Address correction"],["residential","Residential surcharge"],["delivery area","Delivery-area surcharge"],["dimensional","Dimensional weight applied"],["dim weight","Dimensional weight applied"],["oversize","Oversize package"],["unauthorized","Unauthorized package"],["peak","Peak-season surcharge"],["adjustment","Carrier adjustment"],["correction","Carrier correction"],["signature","Signature fee"],["saturday","Saturday surcharge"]];
+    const entries=Object.keys(groups).map(k=>{
+      const g=groups[k]; const s=byTrack[k]; const ov=overrides[k]||{};
+      const billed=ov.billed!=null?Math.round(ov.billed*100)/100:Math.round(g.billed*100)/100;
+      const quoted=s?Math.round((s.sell||0)*100)/100:null;
+      const diff=quoted!=null?Math.round((billed-quoted)*100)/100:null;
+      const qWeight=s?(+s.weight||null):null;
+      const sd=s?(s.dims||(s.pieces&&s.pieces[0])||{}):{}; const qL=+sd.L||null,qW=+sd.W||null,qH=+sd.H||null;
+      const reasons=[];
+      if(g.weight!=null&&qWeight!=null&&g.weight>qWeight+0.01) reasons.push({t:"reweigh",label:`Reweighed by carrier: ${qWeight} → ${g.weight} lb`});
+      if(g.dimL!=null&&qL!=null&&(g.dimL>qL+0.5||g.dimW>qW+0.5||g.dimH>qH+0.5)) reasons.push({t:"dim",label:`Larger size billed: ${qL}×${qW}×${qH} → ${g.dimL}×${g.dimW}×${g.dimH} in`});
+      const cl=g.charges.map(c=>String(c.desc).toLowerCase()).join("  ");
+      for(const [k2,label] of KW){ if(cl.includes(k2)&&!reasons.some(r=>r.label===label)) reasons.push({t:"fee",label}); }
+      if(!reasons.length&&diff!=null&&diff>0.01) reasons.push({t:"other",label:"Billed higher than quoted — reason not itemized on invoice"});
+      return {key:k,tracking:g.tracking,ship:s,matched:!!s,billed,billedWeight:g.weight,quoted,qWeight,diff,
+        diffPct:quoted?Math.round((billed-quoted)/quoted*1000)/10:null,charges:g.charges,reasons,status:ov.status||"new"};
+    }).sort((a,b)=>Math.abs(b.diff||0)-Math.abs(a.diff||0));
+    const matched=entries.filter(e=>e.matched);
+    const sum={ lines:entries.length, matched:matched.length, unmatched:entries.length-matched.length,
+      quoted:Math.round(matched.reduce((a,e)=>a+(e.quoted||0),0)*100)/100,
+      billed:Math.round(entries.reduce((a,e)=>a+e.billed,0)*100)/100,
+      diff:Math.round(matched.reduce((a,e)=>a+(e.diff||0),0)*100)/100,
+      higher:matched.filter(e=>(e.diff||0)>0.01).length,
+      disputed:entries.filter(e=>e.status==="disputed").length };
+    return {entries,sum};
+  },[groups,overrides,shipments]);
+  const setBilled=(k,v)=>setOverrides(o=>({...o,[k]:{...o[k],billed:v===""?null:(+v||0)}}));
+  const setStatus=(k,st)=>setOverrides(o=>({...o,[k]:{...o[k],status:(o[k]&&o[k].status)===st?"new":st}}));
+  const exportReport=()=>{
+    if(!recon)return;
+    const rows=[["Tracking","Service","Recipient","Ship date","You were quoted","Invoice billed","Difference","Difference %","Quoted weight","Billed weight","Why it differs","Your status"]];
+    recon.entries.forEach(e=>{ const s=e.ship||{}; rows.push([e.tracking,s.service||"",(s.recipient&&s.recipient.name)||"",s.date||"",e.quoted==null?"":e.quoted,e.billed,e.diff==null?"":e.diff,e.diffPct!=null?e.diffPct+"%":"",e.qWeight==null?"":e.qWeight,e.billedWeight==null?"":e.billedWeight,e.reasons.map(r=>r.label).join("; ")||(e.matched?"Matches your quote":"No matching shipment found"),e.status]); });
+    downloadCSV("shipping-cost-audit.csv",rows);
+  };
+  const colSel=(field,label)=>csv?(
+    <div className="flex items-center gap-1.5"><span className="text-[11px] uppercase tracking-widest text-stone-400">{label}</span>
       <select value={map[field]} onChange={e=>setMap(m=>({...m,[field]:+e.target.value}))} className="bg-white border border-stone-300 rounded px-2 py-1 text-[13px] outline-none focus:border-[#0099FF]">
-        <option value={-1}>— none —</option>
-        {parsed.headers.map((h,i)=><option key={i} value={i}>{h||("Column "+(i+1))}</option>)}
+        <option value={-1}>—</option>
+        {csv.headers.map((h,i)=><option key={i} value={i}>{h||("Column "+(i+1))}</option>)}
       </select>
     </div>
   ):null;
-  const vTone=(v)=>v==null?"text-stone-400":v>0.01?"text-rose-600":v<-0.01?"text-emerald-600":"text-stone-500";
+  const dTone=(v)=>v==null?"text-stone-400":v>0.01?"text-rose-600":v<-0.01?"text-emerald-600":"text-stone-500";
   return (<div className="space-y-4">
     <div>
-      <h2 className="text-base font-semibold text-stone-800 flex items-center gap-2"><ScanLine className="w-4 h-4"/>Carrier invoice audit</h2>
-      <p className="text-sm text-stone-500 mt-1">Upload the carrier invoice (CSV) and ShippingCloud matches every tracking number to what you quoted, then shows exactly where the billed amount differs — reweighs, dim weight, address corrections, surcharges — so a re-rate never eats your margin silently. FedEx bills whatever they re-measure; this is how you catch it.</p>
+      <h2 className="text-base font-semibold text-stone-800 flex items-center gap-2"><ScanLine className="w-4 h-4"/>Shipping cost audit</h2>
+      <p className="text-sm text-stone-500 mt-1">Paid one price when you booked, but the carrier billed something different? Upload your carrier invoice (PDF or CSV) and we'll match every tracking number back to what you were quoted, then show exactly what changed — a reweigh, larger dimensions, an address correction, additional handling — and by how much.</p>
     </div>
     <div className="border-2 border-dashed border-stone-300 rounded-xl bg-white p-6 text-center">
-      <Upload className="w-6 h-6 text-stone-400 mx-auto mb-2"/>
+      {busy?<Loader2 className="w-6 h-6 text-[#0086E0] mx-auto mb-2 animate-spin"/>:<Upload className="w-6 h-6 text-stone-400 mx-auto mb-2"/>}
       <label className="inline-block cursor-pointer text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#0072BE]">
-        {parsed?"Choose a different file":"Upload carrier invoice (CSV)"}
-        <input type="file" accept=".csv,text/csv" onChange={onFile} className="hidden"/>
+        {groups?"Choose a different invoice":"Upload invoice (PDF or CSV)"}
+        <input type="file" accept=".csv,.pdf,text/csv,application/pdf" onChange={onFile} className="hidden"/>
       </label>
-      {parsed&&<div className="text-[13px] text-stone-500 mt-2 flex items-center justify-center gap-1.5"><FileText className="w-3.5 h-3.5"/>{parsed.name} · {parsed.data.length} rows</div>}
+      {name&&<div className="text-[13px] text-stone-500 mt-2 flex items-center justify-center gap-1.5"><FileText className="w-3.5 h-3.5"/>{name}{source==="pdf"?" · PDF":""}</div>}
+      {busy&&<div className="text-[13px] text-stone-500 mt-2">Reading the PDF…</div>}
       {err&&<div className="text-[13px] text-rose-600 mt-2">{err}</div>}
-      <div className="text-[12px] text-stone-400 mt-2">Works with FedEx &amp; UPS billing exports. Tip: in FedEx Billing Online or the UPS Billing Center, download the invoice as CSV.</div>
+      {note&&!err&&<div className="text-[13px] text-amber-700 mt-2">{note}</div>}
+      <div className="text-[12px] text-stone-400 mt-2">CSV is the most accurate — FedEx Billing Online and the UPS Billing Center both let you download the invoice as CSV. PDF works too and is read automatically.</div>
     </div>
-    {parsed&&(<div className="bg-white border border-stone-200 rounded-lg p-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-      <span className="text-[11px] uppercase tracking-widest text-stone-500 font-medium">Column mapping</span>
-      {colSel("tracking","Tracking")}{colSel("amount","Amount")}{colSel("weight","Weight")}{colSel("desc","Charge")}
+    {csv&&(<div className="bg-white border border-stone-200 rounded-lg p-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+      <span className="text-[11px] uppercase tracking-widest text-stone-500 font-medium">Columns</span>
+      {colSel("tracking","Tracking")}{colSel("amount","Amount")}{colSel("weight","Weight")}{colSel("dimL","Length")}{colSel("dimW","Width")}{colSel("dimH","Height")}{colSel("desc","Charge")}
     </div>)}
-    {recon&&recon.need&&<div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-2"><AlertTriangle className="w-4 h-4"/>Pick which columns hold the <b>Tracking #</b> and <b>Amount</b> to run the audit.</div>}
-    {recon&&recon.entries&&(<>
+    {recon&&recon.entries&&recon.entries.length>0&&(<>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Stat2 label="Tracking #s billed" v={recon.sum.lines}/>
-        <Stat2 label="Net variance" v={(recon.sum.variance>=0?"+":"−")+money(Math.abs(recon.sum.variance)).slice(1)} tone={recon.sum.variance>0.01?"text-rose-600":recon.sum.variance<-0.01?"text-emerald-600":""}/>
-        <Stat2 label="Overbilled" v={recon.sum.overbilled} tone={recon.sum.overbilled?"text-rose-600":""}/>
-        <Stat2 label="Reweighed" v={recon.sum.reweighed} tone={recon.sum.reweighed?"text-amber-600":""}/>
+        <Stat2 label="Shipments on invoice" v={recon.sum.lines}/>
+        <Stat2 label="Total difference" v={(recon.sum.diff>=0?"+":"−")+money(Math.abs(recon.sum.diff)).slice(1)} tone={recon.sum.diff>0.01?"text-rose-600":recon.sum.diff<-0.01?"text-emerald-600":""}/>
+        <Stat2 label="Billed higher" v={recon.sum.higher} tone={recon.sum.higher?"text-rose-600":""}/>
+        <Stat2 label="Flagged to dispute" v={recon.sum.disputed} tone={recon.sum.disputed?"text-amber-600":""}/>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <div className="text-[13px] text-stone-500">Quoted <b className="text-stone-700 font-mono">{money(recon.sum.quoted)}</b> · Billed <b className="text-stone-700 font-mono">{money(recon.sum.billed)}</b>{recon.sum.unmatched>0?<> · <span className="text-stone-400">{recon.sum.unmatched} not matched to a shipment</span></>:null}</div>
+        <div className="text-[13px] text-stone-500">You were quoted <b className="text-stone-700 font-mono">{money(recon.sum.quoted)}</b> · Invoice billed <b className="text-stone-700 font-mono">{money(recon.sum.billed)}</b>{recon.sum.unmatched>0?<> · <span className="text-stone-400">{recon.sum.unmatched} not found in your shipments</span></>:null}</div>
         <div className="flex-1"/>
         <button onClick={exportReport} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded px-3 py-1.5 font-medium hover:bg-stone-800"><Download className="w-4 h-4"/>Export report</button>
       </div>
       <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
-        <div className="flex items-center gap-3 px-3 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400"><div className="w-4"/><div className="flex-1">Tracking / recipient</div><div className="w-24 text-right">Weight</div><div className="w-20 text-right">Quoted</div><div className="w-20 text-right">Billed</div><div className="w-24 text-right">Variance</div></div>
+        <div className="flex items-center gap-3 px-3 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400"><div className="w-4"/><div className="flex-1">Tracking / shipment</div><div className="w-24 text-right">Weight</div><div className="w-24 text-right">You paid</div><div className="w-24 text-right">Billed</div><div className="w-24 text-right">Difference</div></div>
         {recon.entries.map(e=>{ const isO=open===e.key; return (
-          <div key={e.key} className="border-t border-stone-100">
+          <div key={e.key} className={`border-t border-stone-100 ${e.status==="disputed"?"bg-amber-50/40":e.status==="accepted"?"bg-emerald-50/30":""}`}>
             <div onClick={()=>setOpen(isO?null:e.key)} className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-stone-50">
               <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isO?"rotate-90":""}`}/>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-mono truncate flex items-center gap-2 flex-wrap">{e.tracking}{!e.matched&&<Badge tone="stone">no shipment</Badge>}{e.reasons.map((r,i)=><Badge key={i} tone={r.startsWith("Reweigh")?"amber":"rose"}>{r}</Badge>)}</div>
-                <div className="text-[12px] text-stone-500 truncate">{e.matched?`${(e.ship.recipient&&e.ship.recipient.name)||"—"} · ${e.ship.service||""}`:"Not found in your shipments"}</div>
+                <div className="text-sm font-mono truncate flex items-center gap-2 flex-wrap">{e.tracking}{!e.matched&&<Badge tone="stone">no shipment</Badge>}{e.status==="disputed"&&<Badge tone="amber">disputing</Badge>}{e.status==="accepted"&&<Badge tone="green">accepted</Badge>}{e.reasons.map((r,i)=><Badge key={i} tone={r.t==="reweigh"||r.t==="dim"?"amber":r.t==="other"?"stone":"rose"}>{r.label}</Badge>)}</div>
+                <div className="text-[12px] text-stone-500 truncate">{e.matched?`${(e.ship.recipient&&e.ship.recipient.name)||"—"} · ${e.ship.service||""} · ${e.ship.date||""}`:"Not found in your shipment history"}</div>
               </div>
               <div className="w-24 text-right font-mono text-[13px] text-stone-500">{e.billedWeight!=null?(e.qWeight!=null&&e.billedWeight>e.qWeight+0.01?<span className="text-amber-600">{e.qWeight}→{e.billedWeight}</span>:e.billedWeight)+" lb":<span className="text-stone-300">—</span>}</div>
-              <div className="w-20 text-right font-mono text-[13px] text-stone-600">{e.quotedCost!=null?money(e.quotedCost):<span className="text-stone-300">—</span>}</div>
-              <div className="w-20 text-right font-mono text-[13px] text-stone-800">{money(e.billed)}</div>
-              <div className={`w-24 text-right font-mono text-sm font-semibold ${vTone(e.variance)}`}>{e.variance==null?"—":(e.variance>0?"+":e.variance<0?"−":"")+money(Math.abs(e.variance)).slice(1)}{e.variancePct!=null?<span className="block text-[10px] font-normal opacity-70">{e.variancePct>0?"+":""}{e.variancePct}%</span>:null}</div>
+              <div className="w-24 text-right font-mono text-[13px] text-stone-600">{e.quoted!=null?money(e.quoted):<span className="text-stone-300">—</span>}</div>
+              <div className="w-24 text-right" onClick={ev=>ev.stopPropagation()}><input value={(overrides[e.key]&&overrides[e.key].billed!=null)?overrides[e.key].billed:e.billed} onChange={ev=>setBilled(e.key,ev.target.value)} className="w-20 text-right font-mono text-[13px] text-stone-800 bg-transparent border border-transparent hover:border-stone-200 focus:border-[#0099FF] rounded px-1 py-0.5 outline-none"/></div>
+              <div className={`w-24 text-right font-mono text-sm font-semibold ${dTone(e.diff)}`}>{e.diff==null?"—":(e.diff>0?"+":e.diff<0?"−":"")+money(Math.abs(e.diff)).slice(1)}{e.diffPct!=null?<span className="block text-[10px] font-normal opacity-70">{e.diffPct>0?"+":""}{e.diffPct}%</span>:null}</div>
             </div>
-            {isO&&(<div className="px-10 pb-3 pt-1 space-y-1.5 bg-stone-50/50">
-              {e.matched&&<div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[13px] max-w-md">
-                <div className="text-stone-500">Customer was charged</div><div className="font-mono text-right">{e.quotedSell!=null?money(e.quotedSell):"—"}</div>
-                <div className="text-stone-500">Your cost billed</div><div className="font-mono text-right">{money(e.billed)}</div>
-                <div className="text-stone-500 font-medium">Margin after billing</div><div className={`font-mono text-right font-semibold ${e.quotedSell!=null&&(e.quotedSell-e.billed)<0?"text-rose-600":"text-emerald-600"}`}>{e.quotedSell!=null?(e.quotedSell-e.billed>=0?"":"−")+money(Math.abs(e.quotedSell-e.billed)).slice(1):"—"}</div>
+            {isO&&(<div className="px-10 pb-3 pt-1 space-y-2 bg-stone-50/50">
+              {e.matched?<div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[13px] max-w-sm">
+                <div className="text-stone-500">You were quoted</div><div className="font-mono text-right">{e.quoted!=null?money(e.quoted):"—"}</div>
+                <div className="text-stone-500">Carrier billed</div><div className="font-mono text-right">{money(e.billed)}</div>
+                <div className="text-stone-500 font-medium">Difference</div><div className={`font-mono text-right font-semibold ${dTone(e.diff)}`}>{e.diff==null?"—":(e.diff>0?"+":e.diff<0?"−":"")+money(Math.abs(e.diff)).slice(1)}</div>
+              </div>:<div className="text-[13px] text-stone-500 max-w-md">This tracking number isn't in your shipment history, so there's nothing to compare it against.</div>}
+              {e.reasons.length>0&&<div className="pt-1"><div className="text-[11px] uppercase tracking-widest text-stone-400 mb-1">Why it's different</div>{e.reasons.map((r,i)=><div key={i} className="text-[13px] text-stone-700">• {r.label}</div>)}</div>}
+              {e.charges.length>0&&<div className="pt-1"><div className="text-[11px] uppercase tracking-widest text-stone-400 mb-1">Billed charge lines</div>{e.charges.map((c,i)=><div key={i} className="flex justify-between text-[13px] text-stone-600 max-w-md"><span className="truncate pr-3">{c.desc}</span><span className="font-mono shrink-0">{c.amount?money(c.amount):""}</span></div>)}</div>}
+              {e.matched&&<div className="flex items-center gap-2 pt-1">
+                <button onClick={()=>setStatus(e.key,"accepted")} className={`text-[13px] rounded px-3 py-1 font-medium border ${e.status==="accepted"?"bg-emerald-600 text-white border-emerald-600":"bg-white text-stone-600 border-stone-300 hover:bg-stone-50"}`}>Looks right</button>
+                <button onClick={()=>setStatus(e.key,"disputed")} className={`text-[13px] rounded px-3 py-1 font-medium border ${e.status==="disputed"?"bg-amber-500 text-white border-amber-500":"bg-white text-stone-600 border-stone-300 hover:bg-stone-50"}`}>Flag to dispute</button>
+                <span className="text-[12px] text-stone-400">Edit the billed amount above if the invoice reads differently.</span>
               </div>}
-              {e.charges.length>0&&<div className="pt-1">
-                <div className="text-[11px] uppercase tracking-widest text-stone-400 mb-1">Billed charge lines</div>
-                {e.charges.map((c,i)=><div key={i} className="flex justify-between text-[13px] text-stone-600 max-w-md"><span className="truncate pr-3">{c.desc}</span><span className="font-mono shrink-0">{money(c.amount)}</span></div>)}
-              </div>}
-              {!e.matched&&<div className="text-[13px] text-stone-500">This tracking number isn't in your shipments — it may be from another account, a manual label, or before you started using ShippingCloud.</div>}
             </div>)}
           </div>
         );})}
       </div>
-      {recon.notBilled.length>0&&<div className="text-[12px] text-stone-400">{recon.notBilled.length} shipped label{recon.notBilled.length!==1?"s":""} in ShippingCloud {recon.notBilled.length!==1?"aren't":"isn't"} on this invoice yet.</div>}
     </>)}
+    {recon&&recon.entries&&recon.entries.length===0&&<div className="text-sm text-stone-500 bg-stone-50 border border-stone-200 rounded-lg p-4">No tracking numbers found to compare. If this is a CSV, check the column mapping above.</div>}
   </div>);
 }
 

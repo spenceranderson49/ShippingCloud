@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v58";
+const BUILD_TAG="addr-v60";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -343,37 +343,26 @@ function oneRateBoxFor(L,W,H,lbs){
   for(const b of ONERATE_BOXES){ if(vol<=b.maxVol && w<=b.maxLbs) return b; }
   return null;
 }
-/* FedEx One Rate is a FLAT, zone-independent price by box + service tier. England's quote endpoint returns
-   base transportation only (not One Rate), so we price One Rate from FedEx's published 2Day flat table.
-   These are easy to tune to the exact England/FedEx numbers once confirmed. */
-const ONERATE_2DAY_FLAT={fedex_envelope:11.70,fedex_pak:13.50,fedex_extra_small_box:15.70,fedex_small_box:15.70,fedex_medium_box:17.90,fedex_large_box:25.00,fedex_extra_large_box:33.00,fedex_tube:25.00};
-function oneRateQuotes(boxCode,markup){
-  const b=FEDEX_ONERATE.find(x=>x.code===boxCode); if(!b) return [];
-  const flat=ONERATE_2DAY_FLAT[boxCode]; if(flat==null) return [];
-  const short=b.name.replace(/FedEx\s*One Rate®?\s*/i,"");
-  const sell=Math.round(flat*(1+(+markup||0)/100)*100)/100;
-  return [{key:"or_2day_"+boxCode,carrier:"FedEx",carrierCode:"FEDEX",serviceCode:"fedex_2_day",label:"FedEx 2Day One Rate · "+short,cost:flat,sell,_oneRate:true,_flat:true,packageTypeCode:boxCode,minDays:2,maxDays:2}];
+/* FedEx One Rate is priced by England for real: we request a quote using the FedEx-branded packaging type
+   (mapped to FEDEX_*_BOX in quote.js). England returns the actual One Rate price in totalAmount for each
+   eligible express service. No flat table, no estimate — the number is whatever England charges. */
+const ONERATE_SVC_RE=/(2\s?day|express saver|standard overnight|priority overnight)/i;
+async function oneRateLiveQuotes(s, box, england, markup){
+  if(!box||!england||!england.enabled) return [];
+  const res=await getLiveRates({...s, carriers:"fedex", packageTypeCode:box.code}, england);
+  if(!res||!res.live||!Array.isArray(res.rates)) return [];
+  const short=box.name.replace(/FedEx\s*One Rate®?\s*/i,"");
+  return res.rates
+    .filter(q=>q.carrier==="FedEx" && ONERATE_SVC_RE.test(q.label||"") && !/first\s*overnight/i.test(q.label||""))
+    .map(q=>{
+      const svc=String(q.label||"").replace(/[®™]/g,"").trim();
+      const sell=Math.round((q.cost||0)*(1+(+markup||0)/100)*100)/100;
+      return {...q, key:"or_"+box.code+"_"+(q.key||q.serviceCode||"svc"), label:svc+" One Rate · "+short, sell, _oneRate:true, packageTypeCode:box.code};
+    });
 }
-/* Estimated FedEx accessorial surcharges. England's quote endpoint returns base transportation only, so
-   signature / Saturday / declared-value charges are layered on client-side and shown as line items. */
-function estAccessorials(label,opts){
-  const out=[]; if(!opts) return out;
-  const so=opts.signatureOption;
-  if(so&&so!=="none"){ const amt=so==="adult"?8.05:6.55; out.push({label:so.charAt(0).toUpperCase()+so.slice(1)+" signature",amount:amt}); }
-  const express=/(overnight|2\s?day|express saver|one rate)/i.test(label||"");
-  if(opts.saturday&&express) out.push({label:"Saturday delivery",amount:16});
-  const ins=+opts.insurance||0;
-  if(ins>100){ const units=Math.ceil((ins-100)/100); out.push({label:"Declared value coverage",amount:Math.round(Math.max(3.45,units*1.15)*100)/100}); }
-  return out;
-}
-function withAccessorials(q,opts){
-  const extras=estAccessorials(q.label,opts);
-  if(!extras.length) return q;
-  const add=Math.round(extras.reduce((a,e)=>a+(e.amount||0),0)*100)/100;
-  const baseSell=q.sell!=null?q.sell:(q.cost||0);
-  const baseCost=q.cost!=null?q.cost:null;
-  return {...q, baseSell, baseCost, sell:Math.round((baseSell+add)*100)/100, cost:baseCost!=null?Math.round((baseCost+add)*100)/100:q.cost, extras};
-}
+/* NOTE: Signature / Saturday / declared-value costs are NOT estimated in the app. They are requested from
+   England on every quote (signatureOptionCode / saturdayDelivery / insuranceAmount) and returned as real
+   surcharge line items inside each quote's totalAmount. The breakdown shows England's actual surcharges. */
 const CART_ITEMS=[
   {name:"Ruffle Leggings",l:8,w:6,h:1,wt:0.4,price:24},
   {name:"Tutu Set",l:10,w:8,h:3,wt:0.9,price:38},
@@ -1128,8 +1117,15 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
     fedexTransit(shipment).then(m=>{ if(!cancel) setFxTransit(m||{}); });
     return ()=>{cancel=true;};
   },[receiver.zip,sender.zip,residential,JSON.stringify(pieces)]);
-  // FedEx One Rate is a flat, zone-independent price — computed client-side (England quote returns base transport only).
-  const orRates=useMemo(()=>orBox?oneRateQuotes(orBox.code,client.markup):[],[orBox&&orBox.code,client.markup]);
+  // FedEx One Rate is priced by England for real — request the FedEx-branded box and use the returned total.
+  const [orRates,setOrRates]=useState([]);
+  useEffect(()=>{
+    let cancel=false;
+    const eng=settings.england;
+    if(!orBox||!ready||!(eng&&eng.enabled&&eng.apiKey&&eng.customerId)){ setOrRates([]); return; }
+    oneRateLiveQuotes(shipment, orBox, eng, client.markup).then(r=>{ if(!cancel) setOrRates(r); });
+    return ()=>{cancel=true;};
+  },[orBox&&orBox.code,ready,receiver.zip,sender.zip,JSON.stringify(pieces),residential,client.markup,settings.england]);
   useEffect(()=>{
     let cancel=false;
     if(!ready){setRateSrc({rates:[],live:false,loading:false,error:null});return;}
@@ -1142,7 +1138,7 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
       });
     } else setRateSrc({rates:localQuotes(),live:false,loading:false,error:null});
     return ()=>{cancel=true;};
-  },[JSON.stringify(pieces),receiver.zip,sender.zip,residential,signature,saturday,insurance,intl,settings.england]);
+  },[JSON.stringify(pieces),receiver.zip,sender.zip,residential,signature,sigOption,saturday,insurance,intl,settings.england]);
   // address classified yet? only then do we hide the non-matching ground product
   const addrClassified=!!(resTouched||(verify&&verify.type));
   const quotes=useMemo(()=>{
@@ -1154,7 +1150,6 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
       list=list.filter(q=>{const k=canonSvc(q.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;});
     }
     return list.map(q=>{const m=fxTransit[canonSvc(q.label)];const cost=q.cost;const real=!!(m&&m.days!=null);const days=real?m.days:(ready?estTransitDays(q.label,q.zone):null);return {...q,sell:q.sell!=null?q.sell:(cost!=null?Math.round(cost*(1+client.markup/100)*100)/100:null),fxDays:days,fxDate:real?m.date:undefined,fxLive:real};})
-      .map(q=>withAccessorials(q,{signatureOption:sigOption,saturday,insurance}))
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
   },[rateSrc,orRates,client.markup,fxTransit,residential,addrClassified,sigOption,saturday,insurance]);
   const best=(rateSrc.live&&quotes.length&&quotes[0].sell!=null)?quotes[0].key:null;
@@ -1515,9 +1510,11 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
     if(q.surcharges&&q.surcharges.length){
       const surTotal=q.surcharges.reduce((a,s)=>a+(s.amount||0),0);
       const baseRaw=q.base!=null?q.base:Math.max(0,baseCost-surTotal);
-      comps=[{label:"Base rate",amount:baseRaw*factor},...q.surcharges.map(s=>({label:s.label,amount:(s.amount||0)*factor})),...extras.map(e=>({label:e.label+" · est.",amount:e.amount}))];
+      comps=[{label:"Base rate",amount:baseRaw*factor},...q.surcharges.map(s=>({label:s.label,amount:(s.amount||0)*factor}))];
+    } else if(q.base!=null&&q.base>0&&q.base<baseCost){
+      comps=[{label:"Base rate",amount:q.base*factor},{label:"Surcharges",amount:(baseCost-q.base)*factor}];
     } else {
-      comps=[{label:"Base rate",amount:baseSell*0.72},{label:"Fuel surcharge",amount:baseSell*0.16},{label:"Handling & surcharges",amount:baseSell*0.12},...extras.map(e=>({label:e.label+" · est.",amount:e.amount}))];
+      comps=[{label:"Carrier rate",amount:sell}];
     }
     const live=!!(q.surcharges&&q.surcharges.length);
     const hasPrice=sell!=null;
@@ -1890,12 +1887,19 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
     } else setRateSrc({rates:localOrderQuotes(),live:false,loading:false});
     return ()=>{cancel=true;};
   },[rcv.zip,totalWeight,box.L,box.W,box.H,residential,eng,sigOption,sat,insurance]);
-  // FedEx One Rate is a flat, zone-independent price — computed client-side (England quote returns base transport only).
-  const orRates=useMemo(()=>selectedOrBox?oneRateQuotes(selectedOrBox.code,client?.markup||0):[],[selectedOrBox&&selectedOrBox.code,client]);
+  // FedEx One Rate priced by England for real (request the FedEx-branded box; use the returned total).
+  const [orRates,setOrRates]=useState([]);
+  useEffect(()=>{
+    let cancel=false;
+    if(!selectedOrBox||!ready||!canBook){ setOrRates([]); return; }
+    const s={carriers:"fedex",fromZip,toZip:rcv.zip,toCountry:rcv.country||"US",residential,signatureOption:sigOption,saturdayDelivery:sat,insuranceAmount:insurance||null,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}]};
+    oneRateLiveQuotes(s, selectedOrBox, eng, client?.markup||0).then(r=>{ if(!cancel) setOrRates(r); });
+    return ()=>{cancel=true;};
+  },[selectedOrBox&&selectedOrBox.code,ready,canBook,fromZip,rcv.zip,residential,sigOption,sat,insurance,totalWeight,box.L,box.W,box.H,eng,client]);
   const baseQuotes=useMemo(()=>(rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!/first\s*overnight/i.test(qq.label||"")).filter(qq=>{if(!addrClassified)return true;const k=canonSvc(qq.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;}).map(qq=>({...qq,sell:Math.round((qq.cost||0)*(1+(client?.markup||0)/100)*100)/100})),[rateSrc,residential,client,addrClassified]);
   const quotes=useMemo(()=>{
     const withTransit=(list)=>list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&m.days!=null);const days=real?m.days:(ready?estTransitDays(q.label,q.zone):null);return {...q,fxDays:days,fxDate:real?m.date:undefined,fxLive:real};});
-    return withTransit([...baseQuotes,...(orRates||[])]).map(q=>withAccessorials(q,{signatureOption:sigOption,saturday:sat,insurance})).sort((a,b)=>(a.sell||0)-(b.sell||0));
+    return withTransit([...baseQuotes,...(orRates||[])]).sort((a,b)=>(a.sell||0)-(b.sell||0));
   },[baseQuotes,orRates,fxTransit,ready,sigOption,sat,insurance]);
   const best=(rateSrc.live&&quotes[0])?quotes[0].key:null;
   const applyORBox=(code)=>{const b=FEDEX_ONERATE.find(x=>x.code===code);if(!b)return;if(b.dims){setDims({L:b.dims.L,W:b.dims.W,H:b.dims.H});}setBoxIdx(-1);setOrPkg(code);const val="FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,"");const f=settings?.orBoxField||"invoice";const fill=(set)=>set(prev=>prev&&prev.trim()?prev:val);if(f==="invoice")fill(setInvoiceNo);else if(f==="po")fill(setPoNo);else if(f==="reference")fill(setReference);};
@@ -2191,8 +2195,15 @@ function QuickQuote({onClose,client,england}){
     return ()=>{cancel=true;};
   },[fromZip,toZip,residential,JSON.stringify(pieces),sigOption,saturday,insurance,england]);
   const qqOrBox=oneRateBoxFor(pieces[0]&&pieces[0].L,pieces[0]&&pieces[0].W,pieces[0]&&pieces[0].H,totalWeight);
-  const qqOrRates=useMemo(()=>qqOrBox?oneRateQuotes(qqOrBox.code,client?.markup||0):[],[qqOrBox&&qqOrBox.code,client]);
-  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:Math.round(q.cost*(1+(client?.markup||0)/100)*100)/100})),...qqOrRates].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&m.days!=null);const days=real?m.days:(ready?estTransitDays(q.label,q.zone):null);return {...q,fxDays:days,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>withAccessorials(q,{signatureOption:sigOption,saturday,insurance})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,client,fxTransit,ready,qqOrRates,sigOption,saturday,insurance]);
+  const [qqOrRates,setQqOrRates]=useState([]);
+  useEffect(()=>{
+    let cancel=false;
+    if(!qqOrBox||!ready||!(england&&england.enabled&&england.apiKey&&england.customerId)){ setQqOrRates([]); return; }
+    const s={carriers:"fedex",fromZip,toZip,residential,signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null,pieces:shipPieces};
+    oneRateLiveQuotes(s, qqOrBox, england, client?.markup||0).then(r=>{ if(!cancel) setQqOrRates(r); });
+    return ()=>{cancel=true;};
+  },[qqOrBox&&qqOrBox.code,ready,fromZip,toZip,residential,JSON.stringify(pieces),sigOption,saturday,insurance,england,client]);
+  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:Math.round(q.cost*(1+(client?.markup||0)/100)*100)/100})),...qqOrRates].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&m.days!=null);const days=real?m.days:(ready?estTransitDays(q.label,q.zone):null);return {...q,fxDays:days,fxDate:real?m.date:undefined,fxLive:real};}).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,client,fxTransit,ready,qqOrRates,sigOption,saturday,insurance]);
   const hasExpress=quotes.some(q=>{const l=String(q.label||"").toLowerCase();return /(overnight|2\s?day|express saver)/.test(l);});
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-8 bg-stone-900/40 backdrop-blur-sm overflow-auto" onClick={onClose}>

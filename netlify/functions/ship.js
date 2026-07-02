@@ -141,12 +141,17 @@ exports.handler = async (event) => {
       }
     }
 
+    // RockSolid/XPS exposes only ONE reference field (shipmentReference) — no separate PO/invoice fields —
+    // so pack order ref + PO + invoice into it, trimmed to FedEx's ~40-char reference limit.
+    const refBits = [S(o.reference || o.orderNumber), o.poNo ? ("PO " + S(o.poNo)) : "", o.invoiceNo ? ("INV " + S(o.invoiceNo)) : ""].filter(Boolean);
+    const shipmentReference = (refBits.join("  ") || ("SC" + Date.now())).slice(0, 40);
+
     const shipBody = {
       carrierCode: S(o.carrierCode),
       serviceCode: S(o.serviceCode),
       packageTypeCode: normPkg(o.packageTypeCode) || (S(o.carrierCode).toLowerCase() + "_custom_package"),
       shipmentDate: o.shipmentDate || today(),
-      shipmentReference: S(o.reference || o.orderNumber || ("SC" + Date.now())),
+      shipmentReference: shipmentReference,
       orderNumber: S(o.orderNumber || o.reference || ""),
       contentDescription: S(o.contentDescription || "Merchandise"),
       sender: {

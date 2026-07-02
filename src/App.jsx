@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock } from "lucide-react";
+import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse } from "lucide-react";
 const FW_BLUE="#0099FF";
 const FW_DARK="#111418";
 function BrandCloud({className,color}){return (
@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v55";
+const BUILD_TAG="addr-v58";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -812,9 +812,22 @@ export default function App(){
   const [qq,setQQ]=useState(false);
   const [navOpen,setNavOpen]=useState(false);
   const [prefill,setPrefill]=useState(null);
-  const [settings,setSettings]=usePersist("settings",{company:"Freightwire",sender:{name:"Matt Goeckeritz",company:"Riley Blake Designs",zip:"84003",state:"UT",city:"Lehi",address1:"4060 W 2100 N",phone:"801-816-0540",email:"spencertesttes@test.com"},defaultBillTo:"sender",thirdPartyAccts:[{id:"tp1",carrier:"FedEx",account:"20601652",label:"England FedEx"}],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,checkout:CHECKOUT_DEFAULTS,platforms:PLATFORM_DEFAULTS,plan:"starter",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:"20601652"},addresses:[],brand:DEFAULT_BRAND,domains:[]});
+  const [settings,setSettings]=usePersist("settings",{company:"Freightwire",sender:{name:"Matt Goeckeritz",company:"Riley Blake Designs",zip:"84003",state:"UT",city:"Lehi",address1:"4060 W 2100 N",phone:"801-816-0540",email:"spencertesttes@test.com"},defaultBillTo:"sender",thirdPartyAccts:[{id:"tp1",carrier:"FedEx",account:"20601652",label:"England FedEx"}],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,checkout:CHECKOUT_DEFAULTS,platforms:PLATFORM_DEFAULTS,plan:"starter",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:"20601652"},addresses:[],warehouses:[{name:"Main Warehouse",company:"Riley Blake Designs",address:"4060 W 2100 N",city:"Lehi",state:"UT",zip:"84003",phone:"801-816-0540"}],autoRunRules:false,brand:DEFAULT_BRAND,domains:[]});
 
   useEffect(()=>{ if(currentUser&&currentUser.role==="customer"&&currentUser.clientId) setClientId(currentUser.clientId); },[currentUser]);
+  // Auto-run rules on newly imported/synced orders (any import path) when the toggle is on.
+  // Orders are marked _ruled so they aren't reprocessed; the manual "Apply" button ignores this flag.
+  useEffect(()=>{
+    if(!settings.autoRunRules) return;
+    const enabled=(ruleset||[]).filter(r=>r.enabled); if(!enabled.length) return;
+    const done=s=>{ s=String(s||"").toLowerCase(); return s==="fulfilled"||s==="shipped"||s==="cancelled"||s==="canceled"; };
+    const candidates=(orders||[]).filter(o=>!o._ruled&&!done(o.status));
+    if(!candidates.length) return;
+    const originZip=(settings.sender&&settings.sender.zip)||"84003";
+    const patches=rulePatchesFor(runRuleEngine(ruleset||[],candidates,originZip));
+    const ids=new Set(candidates.map(o=>o.id));
+    setOrders(os=>os.map(o=>ids.has(o.id)?{...o,...(patches[o.id]||{}),_ruled:true}:o));
+  },[orders,ruleset,settings.autoRunRules]);
   // Capture the Shopify connection handed back by the OAuth function (#shop=…&token=…)
   useEffect(()=>{
     try{
@@ -982,7 +995,7 @@ export default function App(){
           {tab==="returns"&&<Returns returns={returns} setReturns={setReturns} orders={orders} settings={settings} logEmail={logEmail}/>}
           {tab==="pickups"&&<Pickups pickups={pickups} setPickups={setPickups} settings={settings}/>}
           {tab==="invoices"&&<Invoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>}
-          {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders}/>}
+          {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings}/>}
           {tab==="ledger"&&<Ledger ledger={ledger} addLedger={addLedger}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
           {tab==="admin"&&isAdmin&&<AdminPortal clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand}/>}
@@ -1662,7 +1675,7 @@ function Orders({orders,setOrders,goShip,client,settings,onShipped}){
                       <td className="px-3 py-2.5 text-stone-500 whitespace-nowrap">{o.shippingService||"—"}</td>
                       <td className="px-3 py-2.5 text-right text-stone-600">{o.itemCount||"—"}</td>
                       <td className="px-3 py-2.5 text-right font-mono text-stone-800 whitespace-nowrap">${o.total}</td>
-                      <td className="px-3 py-2.5"><Badge tone={o.status==="fulfilled"?"green":"amber"}>{o.status==="fulfilled"?"Shipped":"Awaiting"}</Badge></td>
+                      <td className="px-3 py-2.5"><div className="flex items-center gap-1 flex-wrap"><Badge tone={o.status==="fulfilled"?"green":"amber"}>{o.status==="fulfilled"?"Shipped":"Awaiting"}</Badge>{o.hold&&<span title={o.hold}><Badge tone="rose">Held</Badge></span>}{o.gift&&<span title={o.giftMessage||"Gift"}><Badge tone="blue">Gift</Badge></span>}{o.assignee&&<span title={"Assigned to "+o.assignee}><Badge tone="stone">{o.assignee}</Badge></span>}</div></td>
                       <td className="px-3 py-2.5 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button onClick={(e)=>{e.stopPropagation();setOpen(o);}} className={`text-sm rounded px-3 py-1.5 font-medium ${o.status==="fulfilled"?"bg-stone-100 text-stone-600 hover:bg-stone-200":"bg-stone-900 text-white hover:bg-stone-800"}`}>{o.status==="fulfilled"?"View":"Ship"}</button>
@@ -1814,9 +1827,9 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
   const [dims,setDims]=useState({L:12,W:9,H:4});
   const [residential,setRes]=useState(!commercial);
   const [resTouched,setResTouched]=useState(false);
-  const [sat,setSat]=useState(false);
-  const [insurance,setInsurance]=useState("");
-  const [sigOption,setSigOption]=useState("none");
+  const [sat,setSat]=useState(!!o.saturday);
+  const [insurance,setInsurance]=useState(o.insurance!=null&&+o.insurance>0?String(o.insurance):"");
+  const [sigOption,setSigOption]=useState(o.signatureOption||"none");
   const [bought,setBought]=useState(null);
   const [status,setStatus]=useState(null);
   const [labelPreview,setLabelPreview]=useState(null);
@@ -2755,12 +2768,13 @@ function CheckoutRates({settings,setSettings,client}){
 /* ════════ SETTINGS ════════ */
 function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client}){
   const [sec,setSec]=useState("carriers");
-  const secs=[["carriers","Carrier accounts",Plug],["boxes","Package sizes",Boxes],["boxlogic","Box logic",Package],["reference","Reference fields",Receipt],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["integrations","Integrations",Layers],["subscription","Subscription",Star],["company","Company",Building2]];
+  const secs=[["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package sizes",Boxes],["boxlogic","Box logic",Package],["reference","Reference fields",Receipt],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["integrations","Integrations",Layers],["subscription","Subscription",Star],["company","Company",Building2]];
   return (
     <div className="flex flex-col md:flex-row gap-6">
       <aside className="md:w-56 shrink-0 space-y-1">{secs.map(([id,l,Icon])=><button key={id} onClick={()=>setSec(id)} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}</button>)}</aside>
       <div className="flex-1 min-w-0">
         {sec==="carriers"&&<CarrierAccounts accounts={accounts} setAccounts={setAccounts} settings={settings} setSettings={setSettings}/>}
+        {sec==="warehouses"&&<Warehouses settings={settings} setSettings={setSettings}/>}
         {sec==="boxes"&&<BoxesSettings settings={settings} setSettings={setSettings}/>}
         {sec==="boxlogic"&&<BoxLogic settings={settings} setSettings={setSettings}/>}
         {sec==="reference"&&<ReferenceFields settings={settings} setSettings={setSettings}/>}
@@ -2807,6 +2821,44 @@ function ReferenceFields({settings,setSettings}){
       ))}
     </div>
     <div className="text-[12px] text-stone-400 flex items-start gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5"/>Only fills when the field is empty — anything you’ve already typed is left untouched.</div>
+  </div>);
+}
+function Warehouses({settings,setSettings}){
+  const list=settings.warehouses||[];
+  const [n,setN]=useState({name:"",company:"",address:"",city:"",state:"",zip:"",phone:""});
+  const inC="bg-white border border-stone-300 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] w-full";
+  const add=()=>{ if(!n.name||!n.zip)return; setSettings({...settings,warehouses:[...list,{...n}]}); setN({name:"",company:"",address:"",city:"",state:"",zip:"",phone:""}); };
+  const del=(name)=>setSettings({...settings,warehouses:list.filter(w=>w.name!==name)});
+  return (<div className="max-w-3xl space-y-4">
+    <div>
+      <h2 className="text-base font-semibold text-stone-800">Warehouses / ship-from locations</h2>
+      <p className="text-sm text-stone-500 mt-1">Save the places you ship from. Rules can route orders to a warehouse with the <b>“Set From Address”</b> action, and you can pick one as the ship-from when creating a label. The ZIP here also feeds the estimated <b>zone</b> used by your rules.</p>
+    </div>
+    <div className="bg-white border border-stone-200 rounded-lg divide-y divide-stone-100">
+      {list.length===0&&<div className="px-4 py-6 text-center text-sm text-stone-400">No warehouses yet — add your first below.</div>}
+      {list.map(w=>(
+        <div key={w.name} className="flex items-center justify-between px-4 py-3">
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-stone-800 flex items-center gap-1.5"><Warehouse className="w-3.5 h-3.5 text-stone-400"/>{w.name}</div>
+            <div className="text-[13px] text-stone-500 truncate">{[w.company,w.address,[w.city,w.state].filter(Boolean).join(", "),w.zip].filter(Boolean).join(" · ")}{w.phone?` · ${w.phone}`:""}</div>
+          </div>
+          <button onClick={()=>del(w.name)} className="text-stone-400 hover:text-rose-500 shrink-0 ml-3" title="Remove"><Trash2 className="w-4 h-4"/></button>
+        </div>
+      ))}
+    </div>
+    <div className="bg-white border border-stone-200 rounded-lg p-4 space-y-2">
+      <div className="text-sm font-medium text-stone-700">Add a warehouse</div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        <input value={n.name} onChange={e=>setN({...n,name:e.target.value})} placeholder="Name (e.g. West Coast DC)" className={inC}/>
+        <input value={n.company} onChange={e=>setN({...n,company:e.target.value})} placeholder="Company" className={inC}/>
+        <input value={n.phone} onChange={e=>setN({...n,phone:e.target.value})} placeholder="Phone" className={inC}/>
+        <input value={n.address} onChange={e=>setN({...n,address:e.target.value})} placeholder="Street address" className={inC+" col-span-2"}/>
+        <input value={n.city} onChange={e=>setN({...n,city:e.target.value})} placeholder="City" className={inC}/>
+        <input value={n.state} onChange={e=>setN({...n,state:e.target.value})} placeholder="State" className={inC}/>
+        <input value={n.zip} onChange={e=>setN({...n,zip:e.target.value})} placeholder="ZIP" className={inC+" font-mono"}/>
+      </div>
+      <button onClick={add} disabled={!n.name||!n.zip} className="text-sm bg-[#0086E0] text-white rounded px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5"><Plus className="w-4 h-4"/>Add warehouse</button>
+    </div>
   </div>);
 }
 function BoxesSettings({settings,setSettings}){
@@ -2973,43 +3025,94 @@ const RULE_PROPERTIES={
   "To State":{key:"state",type:"text"},
   "To Country":{key:"country",type:"text"},
   "To City":{key:"city",type:"text"},
+  "Recipient Name":{key:"_customer",type:"text"},
+  "Zone":{key:"zone",type:"number"},
   "Item Count":{key:"itemCount",type:"number"},
   "Item SKUs":{key:"_skus",type:"list"},
+  "Item Name":{key:"_itemNames",type:"list"},
+  "Item Weight (oz)":{key:"itemWeightOz",type:"number"},
   "Order Value":{key:"total",type:"number"},
   "Package Weight":{key:"weight",type:"number"},
+  "Cubic Volume":{key:"cubicVolume",type:"number"},
   "Requested Service":{key:"shippingService",type:"text"},
   "Store / Source":{key:"source",type:"text"},
   "Tag Names":{key:"_tags",type:"list"},
+  "Is Gift":{key:"_gift",type:"text"},
+  "Custom Field 1":{key:"custom1",type:"text"},
+  "Custom Field 2":{key:"custom2",type:"text"},
+  "Custom Field 3":{key:"custom3",type:"text"},
+  "Order Note":{key:"note",type:"text"},
   "Status":{key:"status",type:"text"},
   "Created":{key:"date",type:"date"},
 };
 const RULE_PROP_NAMES=Object.keys(RULE_PROPERTIES);
 const RULE_OPERATORS={text:["IN","NOT IN","=","!="],list:["IN","NOT IN","=","!="],number:["=","!=",">","<",">=","<="],date:["=","!=",">","<"]};
-const RULE_ACTION_TYPES=["Set Service","Set Package","Request Signature","Set Insurance","Saturday Delivery","Add Order Tag","Set Weight","Assign Hold","Set From Address"];
+const RULE_ACTION_TYPES=["Set Service","Set Package","Set One Rate Box","Request Signature","Set Insurance","Saturday Delivery","Add Order Tag","Add Note","Assign To","Set Weight","Set Custom Field","Mark as Gift","Split Packages","Assign Hold","Set From Address"];
 const RULE_SERVICES=["ANY - Cheapest","ANY - Cheapest Ground","ANY - Cheapest 2 Day","ANY - Fastest","FedEx - Ground","FedEx - Home Delivery","FedEx - Express Saver","FedEx - 2Day","FedEx - 2Day One Rate","FedEx - Standard Overnight","FedEx - Priority Overnight","DHL - Express Worldwide"];
 const RULE_PACKAGES=["Custom","FedEx Envelope","FedEx Small Box","FedEx Medium Box","FedEx Large Box","FedEx Extra Large Box"];
 const RULE_SIG=["direct","indirect","adult"];
 const SEED_RULESET=[
-  {id:"rs1",name:"High-value → signature + insurance",enabled:true,stop:false,conditions:[{id:"c1",property:"Order Value",operator:">",value:"500"}],actions:[{id:"a1",type:"Request Signature",sig:"adult"},{id:"a2",type:"Set Insurance",amount:"500"},{id:"a3",type:"Add Order Tag",tag:"insured"}]},
-  {id:"rs2",name:"International → DHL",enabled:true,stop:false,conditions:[{id:"c2",property:"To Country",operator:"NOT IN",value:"US"}],actions:[{id:"a4",type:"Set Service",service:"DHL - Express Worldwide"},{id:"a5",type:"Add Order Tag",tag:"international"}]},
-  {id:"rs3",name:"Overweight → hold for review",enabled:true,stop:true,conditions:[{id:"c3",property:"Package Weight",operator:">",value:"70"}],actions:[{id:"a6",type:"Assign Hold",hold:"Manual review — overweight"}]},
+  {id:"rs1",name:"High-value → signature + insurance",enabled:true,stop:false,match:"all",conditions:[{id:"c1",property:"Order Value",operator:">",value:"500"}],actions:[{id:"a1",type:"Request Signature",sig:"adult"},{id:"a2",type:"Set Insurance",amount:"500"},{id:"a3",type:"Add Order Tag",tag:"insured"}]},
+  {id:"rs2",name:"International → DHL",enabled:true,stop:false,match:"all",conditions:[{id:"c2",property:"To Country",operator:"NOT IN",value:"US"}],actions:[{id:"a4",type:"Set Service",service:"DHL - Express Worldwide"},{id:"a5",type:"Add Order Tag",tag:"international"}]},
+  {id:"rs4",name:"Nearby (zone ≤ 3) → cheapest ground",enabled:true,stop:false,match:"all",conditions:[{id:"c4",property:"Zone",operator:"<=",value:"3"}],actions:[{id:"a7",type:"Set Service",service:"ANY - Cheapest Ground"}]},
+  {id:"rs5",name:"Small parcel → One Rate box (auto by cubic)",enabled:false,stop:false,match:"all",conditions:[{id:"c5",property:"Cubic Volume",operator:"<",value:"650"}],actions:[{id:"a8",type:"Set One Rate Box",box:"auto"}]},
+  {id:"rs3",name:"Overweight → hold for review",enabled:true,stop:true,match:"all",conditions:[{id:"c3",property:"Package Weight",operator:">",value:"70"}],actions:[{id:"a6",type:"Assign Hold",hold:"Manual review — overweight"}]},
 ];
-function ruleOrderView(o){
+/* Estimated FedEx/UPS zone from origin→destination ZIP. Uses a 2-digit ZIP-prefix centroid table
+   (state/metro resolution) + FedEx-style distance bands. Official zones are origin-specific ZIP3 charts;
+   this is a close distance-based estimate and is labeled as estimated in the UI. */
+const ZIP2_CENTROID={
+  "00":[18.4,-66.1],"01":[42.2,-72.0],"02":[42.0,-71.3],"03":[43.2,-71.5],"04":[44.5,-69.8],"05":[44.3,-72.6],"06":[41.6,-72.7],"07":[40.8,-74.2],"08":[40.0,-74.7],"09":[40.7,-74.0],
+  "10":[41.0,-73.9],"11":[40.7,-73.6],"12":[42.7,-73.9],"13":[43.0,-76.1],"14":[42.9,-78.7],"15":[40.4,-79.9],"16":[41.2,-79.4],"17":[40.3,-76.9],"18":[41.0,-75.7],"19":[40.0,-75.4],
+  "20":[38.9,-77.0],"21":[39.3,-76.6],"22":[38.8,-77.3],"23":[37.4,-77.5],"24":[37.3,-79.9],"25":[38.3,-81.6],"26":[39.3,-80.2],"27":[35.9,-79.0],"28":[35.3,-80.8],"29":[34.0,-81.0],
+  "30":[33.7,-84.4],"31":[32.2,-82.9],"32":[29.2,-81.4],"33":[26.6,-80.4],"34":[27.3,-82.4],"35":[33.5,-86.8],"36":[32.0,-86.3],"37":[36.0,-86.0],"38":[35.3,-89.9],"39":[32.3,-90.2],
+  "40":[38.2,-85.7],"41":[38.2,-84.5],"42":[37.0,-86.5],"43":[40.0,-82.9],"44":[41.4,-81.7],"45":[39.6,-84.2],"46":[39.8,-86.2],"47":[39.0,-86.5],"48":[42.6,-83.5],"49":[43.0,-85.7],
+  "50":[41.6,-93.6],"51":[41.5,-95.5],"52":[42.0,-91.6],"53":[43.3,-88.0],"54":[44.5,-89.5],"55":[45.0,-93.3],"56":[45.5,-95.0],"57":[44.0,-99.5],"58":[47.5,-100.5],"59":[46.6,-111.5],
+  "60":[41.9,-88.0],"61":[41.0,-89.5],"62":[39.2,-89.6],"63":[38.6,-90.4],"64":[39.1,-94.6],"65":[37.2,-92.5],"66":[39.0,-95.7],"67":[37.7,-97.5],"68":[41.2,-96.5],"69":[41.5,-101.5],
+  "70":[30.2,-90.9],"71":[32.4,-93.2],"72":[34.7,-92.4],"73":[35.5,-97.5],"74":[36.1,-95.9],"75":[32.8,-96.8],"76":[32.7,-97.4],"77":[29.8,-95.4],"78":[29.9,-98.2],"79":[31.9,-102.3],
+  "80":[39.7,-104.9],"81":[38.5,-107.5],"82":[42.8,-106.3],"83":[43.6,-114.5],"84":[40.5,-111.9],"85":[33.4,-112.0],"86":[35.2,-111.6],"87":[35.1,-106.6],"88":[32.3,-106.5],"89":[38.5,-116.5],
+  "90":[34.0,-118.2],"91":[34.1,-117.9],"92":[33.2,-117.0],"93":[35.4,-119.5],"94":[37.7,-122.2],"95":[38.6,-121.5],"96":[40.5,-122.3],"97":[44.5,-122.8],"98":[47.5,-122.3],"99":[55.0,-140.0],
+};
+const ZIP_REGION_CENTROID={0:[42.3,-71.8],1:[41.5,-75.5],2:[38.5,-77.5],3:[31.0,-82.5],4:[39.5,-84.5],5:[44.5,-93.5],6:[38.5,-94.5],7:[32.0,-96.5],8:[39.0,-111.5],9:[37.5,-120.5]};
+function haversineMi(a,b){const R=3959;const dLat=(b[0]-a[0])*Math.PI/180;const dLon=(b[1]-a[1])*Math.PI/180;const la1=a[0]*Math.PI/180,la2=b[0]*Math.PI/180;const h=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(h));}
+function estimateZone(fromZip,toZip){
+  const f=String(fromZip||"").replace(/\D/g,""),t=String(toZip||"").replace(/\D/g,"");
+  if(f.length<3||t.length<3)return null;
+  const fa=ZIP2_CENTROID[f.slice(0,2)]||ZIP_REGION_CENTROID[+f[0]];
+  const ta=ZIP2_CENTROID[t.slice(0,2)]||ZIP_REGION_CENTROID[+t[0]];
+  if(!fa||!ta)return null;
+  if(f.slice(0,3)===t.slice(0,3))return 2;
+  const mi=haversineMi(fa,ta);
+  return mi<150?2:mi<300?3:mi<600?4:mi<1000?5:mi<1400?6:mi<1800?7:8;
+}
+// Smallest FedEx One Rate box whose cubic-inch capacity fits the volume (≤168 XS, ≤420 Small, ≤650 Medium, ≤1100 Large, ≤2200 XL)
+function oneRateBoxByVolume(vol){ const v=+vol||0; if(!v)return null; for(const b of ONERATE_BOXES){ if(v<=b.maxVol) return b; } return null; }
+function ruleOrderView(o,originZip){
+  const dims=o.dims||{}; const L=+o.length||+dims.L||0, W=+o.width||+dims.W||0, H=+o.height||+dims.H||0;
+  const cubicVolume=(L>0&&W>0&&H>0)?Math.round(L*W*H):null;
+  const li=Array.isArray(o.lineItems)?o.lineItems:[];
+  const grams=li.reduce((a,x)=>a+((+x.grams||0)*(+x.quantity||1)),0);
+  const itemWeightOz=grams>0?Math.round(grams/28.3495*10)/10:null;
   return {
-    _id:o.id, _name:o.name, _customer:o.customer,
+    _id:o.id, _name:o.name, _customer:o.customer||"",
     zip:o.zip||"", state:o.state||"", country:o.country||"US", city:o.city||"",
-    itemCount:o.itemCount!=null?o.itemCount:(Array.isArray(o.lineItems)?o.lineItems.reduce((a,li)=>a+(+li.quantity||1),0):0),
-    _skus:Array.isArray(o.lineItems)?o.lineItems.map(li=>li.sku).filter(Boolean):[],
-    total:parseFloat(o.total)||0, weight:+o.weight||0,
+    zone:estimateZone(originZip,o.zip),
+    itemCount:o.itemCount!=null?o.itemCount:(li.length?li.reduce((a,x)=>a+(+x.quantity||1),0):0),
+    _skus:li.map(x=>x.sku).filter(Boolean),
+    _itemNames:li.map(x=>x.title||x.name).filter(Boolean),
+    itemWeightOz,
+    total:parseFloat(o.total)||0, weight:+o.weight||0, cubicVolume,
     shippingService:o.shippingService||"", source:o.source||"Manual",
-    _tags:Array.isArray(o.tags)?o.tags.slice():[], status:o.status||"", date:o.date||"",
-    selectedService:"", selectedPackage:"", signature:false, insurance:0, saturday:false, hold:null, fromAddress:"", _newTags:[],
+    _tags:Array.isArray(o.tags)?o.tags.slice():[], note:o.note||"", status:o.status||"", date:o.date||"",
+    _gift:o.gift?"yes":"no", custom1:o.custom1||"", custom2:o.custom2||"", custom3:o.custom3||"",
+    selectedService:"", selectedPackage:"", signature:false, insurance:0, saturday:false, hold:null, fromAddress:"", assignee:"", gift:!!o.gift, giftMessage:o.giftMessage||"", packageCount:1, _newTags:[],
   };
 }
 function ruleParseList(v){ return String(v==null?"":v).split(",").map(s=>s.trim()).filter(Boolean); }
 function ruleEval(cond,ov){
   const meta=RULE_PROPERTIES[cond.property]; if(!meta) return false;
   const actual=ov[meta.key]; const vals=ruleParseList(cond.value); const op=cond.operator;
+  if(meta.type!=="list"&&(actual==null||actual==="")) return false;
   if(meta.type==="list"){
     const arr=(actual||[]).map(a=>String(a).toLowerCase());
     const hit=vals.some(v=>arr.some(a=>a.includes(v.toLowerCase())));
@@ -3032,26 +3135,37 @@ function ruleApply(act,ov,changed){
   switch(act.type){
     case "Set Service": ov.selectedService=act.service||"";mark("service"); return `service → ${act.service||"—"}`;
     case "Set Package": ov.selectedPackage=act.pkg||"Custom";mark("package"); return `package → ${act.pkg||"Custom"}`;
+    case "Set One Rate Box":{
+      let b=null, note="";
+      if(act.box&&act.box!=="auto"){ b=FEDEX_ONERATE.find(x=>x.name===act.box||x.code===act.box); }
+      else { b=ov.cubicVolume!=null?oneRateBoxByVolume(ov.cubicVolume):null; if(!b)note=" (needs dimensions)"; }
+      if(b){ ov.selectedPackage=b.name; if(b.dims){ov.length=b.dims.L;ov.width=b.dims.W;ov.height=b.dims.H;} mark("package"); return `One Rate box → ${b.name.replace(/FedEx\s*One Rate®?\s*/i,"FedEx ")}`; }
+      return `One Rate box${note}`;
+    }
+    case "Add Note": ov.note=(ov.note?ov.note+" · ":"")+(act.note||"");mark("note"); return `note "${act.note||""}"`;
+    case "Assign To": ov.assignee=act.assignee||"";mark("assignee"); return `assigned → ${act.assignee||""}`;
     case "Request Signature": ov.signature=true;ov.sig=act.sig||"direct";mark("signature"); return `${(act.sig||"direct")} signature`;
     case "Set Insurance": ov.insurance=Number(act.amount)||0;mark("insurance"); return `insure $${act.amount||0}`;
     case "Saturday Delivery": ov.saturday=true;mark("saturday"); return `Saturday delivery`;
     case "Add Order Tag": if(act.tag&&!ov._tags.includes(act.tag)){ov._tags.push(act.tag);ov._newTags.push(act.tag);mark("tags");} return `tag "${act.tag||""}"`;
     case "Set Weight": ov.weight=Number(act.weight)||ov.weight;mark("weight"); return `weight → ${act.weight||""} lb`;
+    case "Set Custom Field":{ const n=String(act.field||"1"); ov["custom"+n]=act.value||""; mark("custom"+n); return `custom field ${n} → "${act.value||""}"`; }
+    case "Mark as Gift": ov.gift=true; if(act.giftMessage)ov.giftMessage=act.giftMessage; mark("gift"); return `marked as gift${act.giftMessage?` — "${act.giftMessage}"`:""}`;
+    case "Split Packages": ov.packageCount=Math.max(1,Number(act.count)||2); mark("packageCount"); return `split → ${ov.packageCount} packages`;
     case "Assign Hold": ov.hold=act.hold||"Hold";mark("hold"); return `HOLD — ${act.hold||""}`;
     case "Set From Address": ov.fromAddress=act.fromAddress||"";mark("fromAddress"); return `ship-from → ${act.fromAddress||""}`;
     default: return act.type;
   }
 }
-function runRuleEngine(rules,orders){
-  const active=rules.filter(r=>r.enabled);
+function runRuleEngine(rules,orders,originZip){
   const firedRuleIds=new Set();
   const results=orders.map(src=>{
-    const ov=ruleOrderView(src);
+    const ov=ruleOrderView(src,originZip);
     const changed=new Set(); const fires=[]; let halted=false;
     for(const rule of rules){
       if(!rule.enabled)continue;
       const conds=rule.conditions||[];
-      const matched=conds.length===0||conds.every(c=>ruleEval(c,ov));
+      const matched=conds.length===0||(rule.match==="any"?conds.some(c=>ruleEval(c,ov)):conds.every(c=>ruleEval(c,ov)));
       if(matched){
         firedRuleIds.add(rule.id);
         const effects=(rule.actions||[]).map(a=>ruleApply(a,ov,changed));
@@ -3072,12 +3186,38 @@ function runRuleEngine(rules,orders){
 }
 function ruleSummaryText(r){
   const cs=(r.conditions||[]);
-  const cond=cs.length===0?"all orders":cs.map(c=>`${c.property} ${c.operator} ${c.value||"…"}`).join(" AND ");
-  const acts=(r.actions||[]).map(a=>a.type+(a.service?`: ${a.service}`:a.pkg?`: ${a.pkg}`:a.tag?`: ${a.tag}`:a.amount?`: $${a.amount}`:a.hold?`: ${a.hold}`:a.weight?`: ${a.weight}lb`:"")).join(" · ")||"no actions";
+  const join=r.match==="any"?" OR ":" AND ";
+  const cond=cs.length===0?"all orders":cs.map(c=>`${c.property} ${c.operator} ${c.value||"…"}`).join(join);
+  const acts=(r.actions||[]).map(a=>a.type+(a.service?`: ${a.service}`:a.pkg?`: ${a.pkg}`:a.box?`: ${a.box}`:a.tag?`: ${a.tag}`:a.note?`: ${a.note}`:a.assignee?`: ${a.assignee}`:a.value?`: ${a.value}`:a.amount?`: $${a.amount}`:a.hold?`: ${a.hold}`:a.weight?`: ${a.weight}lb`:"")).join(" · ")||"no actions";
   return {cond,acts};
 }
+// Build {orderId: patch} from an engine run — shared by the manual Apply button and auto-run-on-import.
+function rulePatchesFor(run){
+  const patchById={};
+  run.results.filter(r=>r.fires.length&&r.changed.length).forEach(r=>{
+    const v=r.view; const ch=new Set(r.changed); const p={};
+    if(ch.has("service"))p.ruleService=v.selectedService;
+    if(ch.has("package"))p.rulePackage=v.selectedPackage;
+    if(ch.has("signature")){p.signature=true;p.signatureOption=v.sig||"direct";}
+    if(ch.has("insurance"))p.insurance=v.insurance;
+    if(ch.has("saturday"))p.saturday=true;
+    if(ch.has("weight"))p.weight=v.weight;
+    if(ch.has("hold"))p.hold=v.hold;
+    if(ch.has("note"))p.note=v.note;
+    if(ch.has("assignee"))p.assignee=v.assignee;
+    if(ch.has("fromAddress"))p.fromAddress=v.fromAddress;
+    if(ch.has("gift")){p.gift=true; if(v.giftMessage)p.giftMessage=v.giftMessage;}
+    if(ch.has("packageCount"))p.packageCount=v.packageCount;
+    if(ch.has("custom1"))p.custom1=v.custom1;
+    if(ch.has("custom2"))p.custom2=v.custom2;
+    if(ch.has("custom3"))p.custom3=v.custom3;
+    if(ch.has("tags"))p.tags=v._tags;
+    patchById[r.order.id]=p;
+  });
+  return patchById;
+}
 
-function RuleEditorModal({rule,onSave,onClose,onDelete}){
+function RuleEditorModal({rule,onSave,onClose,onDelete,warehouses}){
   const [r,setR]=useState(()=>JSON.parse(JSON.stringify(rule)));
   const upd=(patch)=>setR(p=>({...p,...patch}));
   const addCond=()=>setR(p=>({...p,conditions:[...(p.conditions||[]),{id:"c"+Date.now()+Math.random().toString(36).slice(2,5),property:"To State",operator:"IN",value:""}]}));
@@ -3091,12 +3231,20 @@ function RuleEditorModal({rule,onSave,onClose,onDelete}){
     switch(a.type){
       case "Set Service": return <select value={a.service||""} onChange={e=>setAct(i,{service:e.target.value})} className={inC+" flex-1 min-w-0"}>{RULE_SERVICES.map(s=><option key={s}>{s}</option>)}</select>;
       case "Set Package": return <select value={a.pkg||""} onChange={e=>setAct(i,{pkg:e.target.value})} className={inC+" flex-1 min-w-0"}>{RULE_PACKAGES.map(s=><option key={s}>{s}</option>)}</select>;
+      case "Set One Rate Box": return <select value={a.box||"auto"} onChange={e=>setAct(i,{box:e.target.value})} className={inC+" flex-1 min-w-0"}><option value="auto">Auto — smallest by cubic size</option>{FEDEX_ONERATE.map(b=><option key={b.code} value={b.name}>{b.name.replace(/FedEx\s*One Rate®?\s*/i,"FedEx ")}</option>)}</select>;
+      case "Add Note": return <input value={a.note||""} onChange={e=>setAct(i,{note:e.target.value})} placeholder="note text" className={inC+" flex-1 min-w-0"}/>;
+      case "Assign To": return <input value={a.assignee||""} onChange={e=>setAct(i,{assignee:e.target.value})} placeholder="teammate / warehouse" className={inC+" flex-1 min-w-0"}/>;
       case "Request Signature": return <select value={a.sig||"direct"} onChange={e=>setAct(i,{sig:e.target.value})} className={inC+" flex-1 min-w-0"}>{RULE_SIG.map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)} signature</option>)}</select>;
       case "Set Insurance": return <input value={a.amount||""} onChange={e=>setAct(i,{amount:e.target.value})} placeholder="Declared value $" className={inC+" flex-1 min-w-0 font-mono"}/>;
       case "Add Order Tag": return <input value={a.tag||""} onChange={e=>setAct(i,{tag:e.target.value})} placeholder="tag name" className={inC+" flex-1 min-w-0"}/>;
       case "Set Weight": return <input value={a.weight||""} onChange={e=>setAct(i,{weight:e.target.value})} placeholder="lb" className={inC+" flex-1 min-w-0 font-mono"}/>;
+      case "Set Custom Field": return <div className="flex-1 flex gap-1.5 min-w-0"><select value={a.field||"1"} onChange={e=>setAct(i,{field:e.target.value})} className={inC+" shrink-0"}>{["1","2","3"].map(n=><option key={n} value={n}>Field {n}</option>)}</select><input value={a.value||""} onChange={e=>setAct(i,{value:e.target.value})} placeholder="value" className={inC+" flex-1 min-w-0"}/></div>;
+      case "Mark as Gift": return <input value={a.giftMessage||""} onChange={e=>setAct(i,{giftMessage:e.target.value})} placeholder="gift message (optional)" className={inC+" flex-1 min-w-0"}/>;
+      case "Split Packages": return <input type="number" min="2" value={a.count||"2"} onChange={e=>setAct(i,{count:e.target.value})} placeholder="# packages" className={inC+" flex-1 min-w-0 font-mono"}/>;
       case "Assign Hold": return <input value={a.hold||""} onChange={e=>setAct(i,{hold:e.target.value})} placeholder="hold reason" className={inC+" flex-1 min-w-0"}/>;
-      case "Set From Address": return <input value={a.fromAddress||""} onChange={e=>setAct(i,{fromAddress:e.target.value})} placeholder="ship-from label / address" className={inC+" flex-1 min-w-0"}/>;
+      case "Set From Address": return (warehouses&&warehouses.length)
+        ? <select value={a.fromAddress||""} onChange={e=>setAct(i,{fromAddress:e.target.value})} className={inC+" flex-1 min-w-0"}><option value="">— pick warehouse —</option>{warehouses.map(w=><option key={w.name} value={w.name}>{w.name}</option>)}</select>
+        : <input value={a.fromAddress||""} onChange={e=>setAct(i,{fromAddress:e.target.value})} placeholder="ship-from label / address" className={inC+" flex-1 min-w-0"}/>;
       default: return <div className="flex-1 text-[13px] text-stone-400 italic">no options</div>;
     }
   };
@@ -3114,7 +3262,7 @@ function RuleEditorModal({rule,onSave,onClose,onDelete}){
           </div>
 
           <div className="bg-white border border-stone-200 rounded-lg p-3">
-            <div className="flex items-center justify-between mb-2"><div className="text-sm font-semibold text-stone-800">When <span className="text-stone-400 font-normal">· all conditions must match</span></div><button onClick={addCond} className="text-[13px] text-[#0086E0] font-medium flex items-center gap-1 hover:underline"><Plus className="w-3.5 h-3.5"/>Add condition</button></div>
+            <div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2 text-sm font-semibold text-stone-800">When{(r.conditions||[]).length>1&&<div className="flex bg-stone-100 rounded-lg p-0.5 text-[11px] font-normal">{[["all","Match ALL"],["any","Match ANY"]].map(([v,l])=><button key={v} onClick={()=>upd({match:v})} className={`px-2 py-0.5 rounded-md ${(r.match||"all")===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}</div>}{(r.conditions||[]).length<=1&&<span className="text-stone-400 font-normal text-[13px]">· conditions</span>}</div><button onClick={addCond} className="text-[13px] text-[#0086E0] font-medium flex items-center gap-1 hover:underline"><Plus className="w-3.5 h-3.5"/>Add condition</button></div>
             {(r.conditions||[]).length===0&&<div className="text-[13px] text-stone-400 border border-dashed border-stone-200 rounded px-3 py-2">No conditions — this rule runs on <b>every order</b>.</div>}
             <div className="space-y-2">
               {(r.conditions||[]).map((c,i)=>{
@@ -3161,15 +3309,27 @@ function RuleEditorModal({rule,onSave,onClose,onDelete}){
   );
 }
 
-function RulesTab({rules,setRules,orders}){
+function RulesTab({rules,setRules,orders,setOrders,settings,setSettings}){
   const [editing,setEditing]=useState(null);
   const [view,setView]=useState("all");
+  const [applied,setApplied]=useState(null);
   const ords=orders||[];
-  const run=useMemo(()=>runRuleEngine(rules||[],ords),[rules,ords]);
+  const originZip=(settings&&settings.sender&&settings.sender.zip)||"84003";
+  const warehouses=(settings&&settings.warehouses)||[];
+  const autoRun=!!(settings&&settings.autoRunRules);
+  const run=useMemo(()=>runRuleEngine(rules||[],ords,originZip),[rules,ords,originZip]);
   const matchCount=(id)=>run.results.filter(r=>r.fires.some(f=>f.ruleId===id)).length;
   const active=rules.filter(r=>r.enabled).length;
-  const newRule=()=>setEditing({_isNew:true,id:"r"+Date.now(),name:"",enabled:true,stop:false,conditions:[],actions:[{id:"a"+Date.now(),type:"Set Service",service:"ANY - Cheapest"}]});
-  const saveRule=(r)=>{ const clean={id:r.id,name:r.name,enabled:r.enabled,stop:r.stop,conditions:r.conditions,actions:r.actions};
+  const applyToOrders=()=>{
+    const patchById=rulePatchesFor(run); const n=Object.keys(patchById).length;
+    if(!n){ setApplied({n:0}); setTimeout(()=>setApplied(null),5000); return; }
+    if(!window.confirm(`Apply rule outcomes to ${n} order${n!==1?"s":""}? This writes service, package, tags, notes, signature, insurance, Saturday, weight, custom fields, gift, assignee, ship-from and holds onto those orders.`))return;
+    setOrders(os=>os.map(o=>patchById[o.id]?{...o,...patchById[o.id],_ruled:true}:o));
+    setApplied({n});
+    setTimeout(()=>setApplied(null),6000);
+  };
+  const newRule=()=>setEditing({_isNew:true,id:"r"+Date.now(),name:"",enabled:true,stop:false,match:"all",conditions:[],actions:[{id:"a"+Date.now(),type:"Set Service",service:"ANY - Cheapest"}]});
+  const saveRule=(r)=>{ const clean={id:r.id,name:r.name,enabled:r.enabled,stop:r.stop,match:r.match||"all",conditions:r.conditions,actions:r.actions};
     setRules(rs=>{ const i=rs.findIndex(x=>x.id===r.id); if(i>=0){const c=[...rs];c[i]=clean;return c;} return [...rs,clean]; });
     setEditing(null);
   };
@@ -3188,10 +3348,14 @@ function RulesTab({rules,setRules,orders}){
         <p className="text-sm text-stone-500 mt-0.5">Automation pipeline — rules run top to bottom on every order. Add conditions and actions, drag order with the arrows, and see a live simulation on your real orders.</p>
       </div>
       <div className="flex items-center gap-2">
+        {setSettings&&<button onClick={()=>setSettings(s=>({...s,autoRunRules:!autoRun}))} title="When on, newly imported/synced orders are run through enabled rules automatically" className={`text-sm rounded-lg px-3 py-2 font-medium flex items-center gap-1.5 border ${autoRun?"bg-emerald-50 border-emerald-300 text-emerald-800":"bg-white border-stone-200 text-stone-600 hover:bg-stone-100"}`}><span className={`w-8 h-4 rounded-full relative transition ${autoRun?"bg-emerald-500":"bg-stone-300"}`}><span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${autoRun?"left-4":"left-0.5"}`}/></span>Auto-run on import</button>}
         <button onClick={exportJSON} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-100 flex items-center gap-1.5"><Download className="w-4 h-4"/>Export JSON</button>
+        <button onClick={applyToOrders} disabled={run.summary.touched===0} title="Write these rule outcomes onto the matching orders" className="text-sm bg-emerald-600 text-white rounded-lg px-3 py-2 font-medium hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-1.5"><Check className="w-4 h-4"/>Apply to {run.summary.touched} order{run.summary.touched!==1?"s":""}</button>
         <button onClick={newRule} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium flex items-center gap-1.5 hover:bg-[#0072BE]"><Plus className="w-4 h-4"/>New rule</button>
       </div>
     </div>
+
+    {applied&&<div className="text-[12px] rounded px-3 py-2 flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200"><CheckCircle2 className="w-3.5 h-3.5"/>{applied.n?`Applied to ${applied.n} order${applied.n!==1?"s":""} — service preference, tags, holds and shipping options written onto those orders.`:"No matching orders to apply right now."}</div>}
 
     <div className="flex items-center gap-2 text-[11px]">
       <Badge tone="blue">{rules.length} rule{rules.length!==1?"s":""}</Badge>
@@ -3220,7 +3384,7 @@ function RulesTab({rules,setRules,orders}){
               </div>
               <button onClick={()=>toggle(r.id)} title="Enable / disable" className="shrink-0"><span className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${r.enabled?"bg-[#0086E0] justify-end":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></span></button>
               <div className="flex-1 min-w-0 cursor-pointer" onClick={()=>setEditing({...JSON.parse(JSON.stringify(r))})}>
-                <div className="font-medium text-sm text-stone-900 flex items-center gap-1.5"><span className="text-[10px] text-stone-400 font-mono">#{i+1}</span><span className="truncate">{r.name||"Untitled rule"}</span>{r.stop&&<span title="Stops further rules" className="shrink-0"><Badge tone="rose">stop</Badge></span>}</div>
+                <div className="font-medium text-sm text-stone-900 flex items-center gap-1.5"><span className="text-[10px] text-stone-400 font-mono">#{i+1}</span><span className="truncate">{r.name||"Untitled rule"}</span>{r.match==="any"&&(r.conditions||[]).length>1&&<span title="Matches ANY condition" className="shrink-0"><Badge tone="stone">any</Badge></span>}{r.stop&&<span title="Stops further rules" className="shrink-0"><Badge tone="rose">stop</Badge></span>}</div>
                 <div className="text-[11px] text-stone-500 truncate"><span className="text-stone-400">if</span> {cond}</div>
                 <div className="text-[11px] text-[#0072BE] truncate">→ {acts}</div>
               </div>
@@ -3249,7 +3413,7 @@ function RulesTab({rules,setRules,orders}){
                 <span className="font-semibold text-sm text-stone-800">{o.name}</span>
                 <span className="text-[11px] text-stone-400 truncate">{o.customer} · {o.city}{o.state?", "+o.state:""} {o.country&&o.country!=="US"?`(${o.country})`:""}</span>
                 <div className="flex-1"/>
-                <span className="text-[11px] font-mono text-stone-500">${o.total} · {o.weight||"?"}lb</span>
+                <span className="text-[11px] font-mono text-stone-500">${o.total} · {o.weight||"?"}lb{res.view.zone?` · zone ${res.view.zone}`:""}</span>
               </div>
               {res.fires.length===0
                 ? <div className="text-[12px] text-stone-400">No rules matched — passes through untouched.</div>
@@ -3269,7 +3433,7 @@ function RulesTab({rules,setRules,orders}){
       </div>
     </div>
 
-    {editing&&<RuleEditorModal rule={editing} onSave={saveRule} onClose={()=>setEditing(null)} onDelete={delRule}/>}
+    {editing&&<RuleEditorModal rule={editing} onSave={saveRule} onClose={()=>setEditing(null)} onDelete={delRule} warehouses={warehouses}/>}
   </div>);
 }
 function AddressBook({settings,setSettings}){

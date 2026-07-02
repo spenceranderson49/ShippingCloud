@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v60";
+const BUILD_TAG="addr-v61";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -3835,6 +3835,17 @@ function Drafts({drafts,setDrafts,goShip}){
 
 /* ════════ INVOICES ════════ */
 function Invoices({invoices,setInvoices,shipments,client}){
+  const [view,setView]=useState("client");
+  return (<div className="max-w-5xl space-y-4">
+    <div className="flex bg-stone-100 rounded-lg p-0.5 w-fit text-sm">
+      {[["client","Client invoices"],["audit","Carrier audit"]].map(([v,l])=>(
+        <button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md font-medium ${view===v?"bg-white shadow-sm text-stone-900":"text-stone-500 hover:text-stone-700"}`}>{l}</button>
+      ))}
+    </div>
+    {view==="client"?<ClientInvoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>:<CarrierAudit shipments={shipments}/>}
+  </div>);
+}
+function ClientInvoices({invoices,setInvoices,shipments,client}){
   const live=shipments.filter(s=>s.status!=="Voided");
   const uninvoicedTotal=live.reduce((a,s)=>a+s.sell,0);
   const generate=()=>{if(!live.length)return;const num="INV-"+(1003+invoices.length);setInvoices(p=>[{id:"inv"+Date.now(),number:num,client:client.name,date:new Date().toLocaleDateString(),labels:live.length,amount:Math.round(uninvoicedTotal*100)/100,status:"Open"},...p]);};
@@ -3865,6 +3876,167 @@ function Invoices({invoices,setInvoices,shipments,client}){
         <div className="w-16 text-right">{i.status==="Open"&&<button onClick={()=>markPaid(i.id)} className="text-xs text-[#0086E0] hover:underline">Mark paid</button>}</div>
       </div>))}
     </div>
+  </div>);
+}
+// Minimal RFC-4180 CSV parser (handles quotes, embedded commas/newlines)
+function parseCSVText(text){
+  const s=String(text||"").replace(/\r\n/g,"\n").replace(/\r/g,"\n");
+  const rows=[]; let row=[],cur="",q=false;
+  for(let i=0;i<s.length;i++){ const c=s[i];
+    if(q){ if(c==='"'){ if(s[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else if(c==='"')q=true;
+    else if(c===","){row.push(cur);cur="";}
+    else if(c==="\n"){row.push(cur);rows.push(row);row=[];cur="";}
+    else cur+=c;
+  }
+  if(cur!==""||row.length){row.push(cur);rows.push(row);}
+  return rows.filter(r=>r.some(c=>String(c).trim()!==""));
+}
+const AUDIT_CANDS={
+  tracking:["tracking number","tracking id","tracking","track id","air waybill","express or ground tracking","ground tracking"],
+  amount:["net charge amount","net charge","net amount","billed charge","total charge amount","total charge","net","amount"],
+  weight:["billed weight","rated weight","bill weight","original weight","actual weight","weight"],
+  desc:["tracking id charge description","charge description","charge category detail","charge category","charge classification","description"],
+};
+function auditFindCol(headers,cands){ for(const cand of cands){ const i=headers.findIndex(h=>String(h||"").toLowerCase().trim().includes(cand)); if(i>=0)return i; } return -1; }
+function CarrierAudit({shipments}){
+  const [parsed,setParsed]=useState(null);   // {headers, data, name}
+  const [map,setMap]=useState({tracking:-1,amount:-1,weight:-1,desc:-1});
+  const [open,setOpen]=useState(null);
+  const [err,setErr]=useState("");
+  const onFile=(e)=>{
+    const f=e.target.files&&e.target.files[0]; if(!f)return; setErr("");
+    const r=new FileReader();
+    r.onload=()=>{ try{
+      const rows=parseCSVText(r.result); if(rows.length<2){setErr("That file has no data rows.");return;}
+      const headers=rows[0].map(h=>String(h||"").trim()); const data=rows.slice(1);
+      setParsed({headers,data,name:f.name});
+      setMap({tracking:auditFindCol(headers,AUDIT_CANDS.tracking),amount:auditFindCol(headers,AUDIT_CANDS.amount),weight:auditFindCol(headers,AUDIT_CANDS.weight),desc:auditFindCol(headers,AUDIT_CANDS.desc)});
+      setOpen(null);
+    }catch(x){ setErr("Couldn't read that file — make sure it's a CSV export."); } };
+    r.onerror=()=>setErr("Couldn't read that file.");
+    r.readAsText(f);
+  };
+  const norm=t=>String(t||"").replace(/\s+/g,"").toUpperCase();
+  const recon=useMemo(()=>{
+    if(!parsed) return null;
+    const {data}=parsed; const {tracking:tc,amount:ac,weight:wc,desc:dc}=map;
+    if(tc<0||ac<0) return {need:true};
+    const numOf=v=>{const n=parseFloat(String(v==null?"":v).replace(/[^0-9.\-]/g,""));return isNaN(n)?0:n;};
+    const groups={};
+    for(const rrow of data){ const t=norm(rrow[tc]); if(!t)continue;
+      if(!groups[t])groups[t]={tracking:String(rrow[tc]).trim(),billed:0,weight:null,charges:[]};
+      const amt=Math.round(numOf(rrow[ac])*100)/100; groups[t].billed+=amt;
+      if(wc>=0&&groups[t].weight==null){ const w=numOf(rrow[wc]); if(w>0)groups[t].weight=w; }
+      if(dc>=0){ const d=String(rrow[dc]||"").trim(); if(d)groups[t].charges.push({desc:d,amount:amt}); }
+    }
+    const byTrack={}; for(const s of shipments){ if(s.tracking)byTrack[norm(s.tracking)]=s; }
+    const KW=[["additional handling","Additional handling"],["address correction","Address correction"],["residential","Residential surcharge"],["delivery area","Delivery-area surcharge"],["das","Delivery-area surcharge"],["dim","Dimensional weight"],["oversize","Oversize"],["unauthorized","Unauthorized package"],["adjustment","Adjustment"],["correction","Correction"],["peak","Peak surcharge"],["fuel","Fuel surcharge"]];
+    const entries=Object.keys(groups).map(k=>{
+      const g=groups[k]; const s=byTrack[k]; const billed=Math.round(g.billed*100)/100;
+      const quotedCost=s?Math.round((s.cost||0)*100)/100:null;
+      const quotedSell=s?Math.round((s.sell||0)*100)/100:null;
+      const qWeight=s?(+s.weight||null):null;
+      const variance=quotedCost!=null?Math.round((billed-quotedCost)*100)/100:null;
+      const reasons=[];
+      if(g.weight!=null&&qWeight!=null&&g.weight>qWeight+0.01) reasons.push(`Reweighed ${qWeight}→${g.weight} lb`);
+      const cl=g.charges.map(c=>String(c.desc).toLowerCase()).join("  ");
+      for(const [k2,label] of KW){ if(cl.includes(k2)&&!reasons.some(r=>r.includes(label))) reasons.push(label); }
+      return {key:k,tracking:g.tracking,ship:s,matched:!!s,billed,billedWeight:g.weight,quotedCost,quotedSell,qWeight,variance,
+        variancePct:quotedCost?Math.round((billed-quotedCost)/quotedCost*1000)/10:null,charges:g.charges,reasons};
+    }).sort((a,b)=>Math.abs(b.variance||0)-Math.abs(a.variance||0));
+    const matched=entries.filter(e=>e.matched);
+    const sum={
+      lines:entries.length, matched:matched.length, unmatched:entries.length-matched.length,
+      quoted:Math.round(matched.reduce((a,e)=>a+(e.quotedCost||0),0)*100)/100,
+      billed:Math.round(entries.reduce((a,e)=>a+e.billed,0)*100)/100,
+      variance:Math.round(matched.reduce((a,e)=>a+(e.variance||0),0)*100)/100,
+      overbilled:matched.filter(e=>(e.variance||0)>0.01).length,
+      reweighed:matched.filter(e=>e.billedWeight!=null&&e.qWeight!=null&&e.billedWeight>e.qWeight+0.01).length,
+    };
+    const inSet=new Set(Object.keys(groups));
+    const notBilled=shipments.filter(s=>s.tracking&&!inSet.has(norm(s.tracking))&&s.status!=="Voided");
+    return {entries,sum,notBilled};
+  },[parsed,map,shipments]);
+  const exportReport=()=>{
+    if(!recon||!recon.entries)return;
+    const rows=[["Tracking","Service","Recipient","Ship date","Quoted weight (lb)","Billed weight (lb)","Quoted cost","Billed cost","Variance $","Variance %","Customer price","Margin after billed","Flags"]];
+    recon.entries.forEach(e=>{ const s=e.ship||{}; rows.push([e.tracking,s.service||"",(s.recipient&&s.recipient.name)||"",s.date||"",e.qWeight==null?"":e.qWeight,e.billedWeight==null?"":e.billedWeight,e.quotedCost==null?"":e.quotedCost,e.billed,e.variance==null?"":e.variance,e.variancePct!=null?e.variancePct+"%":"",e.quotedSell==null?"":e.quotedSell,e.quotedSell!=null?Math.round((e.quotedSell-e.billed)*100)/100:"",e.reasons.join("; ")||(e.matched?"On-quote":"No matching shipment")]); });
+    downloadCSV("carrier-invoice-audit.csv",rows);
+  };
+  const colSel=(field,label)=>parsed?(
+    <div className="flex items-center gap-1.5"><span className="text-[11px] uppercase tracking-widest text-stone-400 w-16">{label}</span>
+      <select value={map[field]} onChange={e=>setMap(m=>({...m,[field]:+e.target.value}))} className="bg-white border border-stone-300 rounded px-2 py-1 text-[13px] outline-none focus:border-[#0099FF]">
+        <option value={-1}>— none —</option>
+        {parsed.headers.map((h,i)=><option key={i} value={i}>{h||("Column "+(i+1))}</option>)}
+      </select>
+    </div>
+  ):null;
+  const vTone=(v)=>v==null?"text-stone-400":v>0.01?"text-rose-600":v<-0.01?"text-emerald-600":"text-stone-500";
+  return (<div className="space-y-4">
+    <div>
+      <h2 className="text-base font-semibold text-stone-800 flex items-center gap-2"><ScanLine className="w-4 h-4"/>Carrier invoice audit</h2>
+      <p className="text-sm text-stone-500 mt-1">Upload the carrier invoice (CSV) and ShippingCloud matches every tracking number to what you quoted, then shows exactly where the billed amount differs — reweighs, dim weight, address corrections, surcharges — so a re-rate never eats your margin silently. FedEx bills whatever they re-measure; this is how you catch it.</p>
+    </div>
+    <div className="border-2 border-dashed border-stone-300 rounded-xl bg-white p-6 text-center">
+      <Upload className="w-6 h-6 text-stone-400 mx-auto mb-2"/>
+      <label className="inline-block cursor-pointer text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#0072BE]">
+        {parsed?"Choose a different file":"Upload carrier invoice (CSV)"}
+        <input type="file" accept=".csv,text/csv" onChange={onFile} className="hidden"/>
+      </label>
+      {parsed&&<div className="text-[13px] text-stone-500 mt-2 flex items-center justify-center gap-1.5"><FileText className="w-3.5 h-3.5"/>{parsed.name} · {parsed.data.length} rows</div>}
+      {err&&<div className="text-[13px] text-rose-600 mt-2">{err}</div>}
+      <div className="text-[12px] text-stone-400 mt-2">Works with FedEx &amp; UPS billing exports. Tip: in FedEx Billing Online or the UPS Billing Center, download the invoice as CSV.</div>
+    </div>
+    {parsed&&(<div className="bg-white border border-stone-200 rounded-lg p-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+      <span className="text-[11px] uppercase tracking-widest text-stone-500 font-medium">Column mapping</span>
+      {colSel("tracking","Tracking")}{colSel("amount","Amount")}{colSel("weight","Weight")}{colSel("desc","Charge")}
+    </div>)}
+    {recon&&recon.need&&<div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-2"><AlertTriangle className="w-4 h-4"/>Pick which columns hold the <b>Tracking #</b> and <b>Amount</b> to run the audit.</div>}
+    {recon&&recon.entries&&(<>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Stat2 label="Tracking #s billed" v={recon.sum.lines}/>
+        <Stat2 label="Net variance" v={(recon.sum.variance>=0?"+":"−")+money(Math.abs(recon.sum.variance)).slice(1)} tone={recon.sum.variance>0.01?"text-rose-600":recon.sum.variance<-0.01?"text-emerald-600":""}/>
+        <Stat2 label="Overbilled" v={recon.sum.overbilled} tone={recon.sum.overbilled?"text-rose-600":""}/>
+        <Stat2 label="Reweighed" v={recon.sum.reweighed} tone={recon.sum.reweighed?"text-amber-600":""}/>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="text-[13px] text-stone-500">Quoted <b className="text-stone-700 font-mono">{money(recon.sum.quoted)}</b> · Billed <b className="text-stone-700 font-mono">{money(recon.sum.billed)}</b>{recon.sum.unmatched>0?<> · <span className="text-stone-400">{recon.sum.unmatched} not matched to a shipment</span></>:null}</div>
+        <div className="flex-1"/>
+        <button onClick={exportReport} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded px-3 py-1.5 font-medium hover:bg-stone-800"><Download className="w-4 h-4"/>Export report</button>
+      </div>
+      <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+        <div className="flex items-center gap-3 px-3 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400"><div className="w-4"/><div className="flex-1">Tracking / recipient</div><div className="w-24 text-right">Weight</div><div className="w-20 text-right">Quoted</div><div className="w-20 text-right">Billed</div><div className="w-24 text-right">Variance</div></div>
+        {recon.entries.map(e=>{ const isO=open===e.key; return (
+          <div key={e.key} className="border-t border-stone-100">
+            <div onClick={()=>setOpen(isO?null:e.key)} className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-stone-50">
+              <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isO?"rotate-90":""}`}/>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-mono truncate flex items-center gap-2 flex-wrap">{e.tracking}{!e.matched&&<Badge tone="stone">no shipment</Badge>}{e.reasons.map((r,i)=><Badge key={i} tone={r.startsWith("Reweigh")?"amber":"rose"}>{r}</Badge>)}</div>
+                <div className="text-[12px] text-stone-500 truncate">{e.matched?`${(e.ship.recipient&&e.ship.recipient.name)||"—"} · ${e.ship.service||""}`:"Not found in your shipments"}</div>
+              </div>
+              <div className="w-24 text-right font-mono text-[13px] text-stone-500">{e.billedWeight!=null?(e.qWeight!=null&&e.billedWeight>e.qWeight+0.01?<span className="text-amber-600">{e.qWeight}→{e.billedWeight}</span>:e.billedWeight)+" lb":<span className="text-stone-300">—</span>}</div>
+              <div className="w-20 text-right font-mono text-[13px] text-stone-600">{e.quotedCost!=null?money(e.quotedCost):<span className="text-stone-300">—</span>}</div>
+              <div className="w-20 text-right font-mono text-[13px] text-stone-800">{money(e.billed)}</div>
+              <div className={`w-24 text-right font-mono text-sm font-semibold ${vTone(e.variance)}`}>{e.variance==null?"—":(e.variance>0?"+":e.variance<0?"−":"")+money(Math.abs(e.variance)).slice(1)}{e.variancePct!=null?<span className="block text-[10px] font-normal opacity-70">{e.variancePct>0?"+":""}{e.variancePct}%</span>:null}</div>
+            </div>
+            {isO&&(<div className="px-10 pb-3 pt-1 space-y-1.5 bg-stone-50/50">
+              {e.matched&&<div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[13px] max-w-md">
+                <div className="text-stone-500">Customer was charged</div><div className="font-mono text-right">{e.quotedSell!=null?money(e.quotedSell):"—"}</div>
+                <div className="text-stone-500">Your cost billed</div><div className="font-mono text-right">{money(e.billed)}</div>
+                <div className="text-stone-500 font-medium">Margin after billing</div><div className={`font-mono text-right font-semibold ${e.quotedSell!=null&&(e.quotedSell-e.billed)<0?"text-rose-600":"text-emerald-600"}`}>{e.quotedSell!=null?(e.quotedSell-e.billed>=0?"":"−")+money(Math.abs(e.quotedSell-e.billed)).slice(1):"—"}</div>
+              </div>}
+              {e.charges.length>0&&<div className="pt-1">
+                <div className="text-[11px] uppercase tracking-widest text-stone-400 mb-1">Billed charge lines</div>
+                {e.charges.map((c,i)=><div key={i} className="flex justify-between text-[13px] text-stone-600 max-w-md"><span className="truncate pr-3">{c.desc}</span><span className="font-mono shrink-0">{money(c.amount)}</span></div>)}
+              </div>}
+              {!e.matched&&<div className="text-[13px] text-stone-500">This tracking number isn't in your shipments — it may be from another account, a manual label, or before you started using ShippingCloud.</div>}
+            </div>)}
+          </div>
+        );})}
+      </div>
+      {recon.notBilled.length>0&&<div className="text-[12px] text-stone-400">{recon.notBilled.length} shipped label{recon.notBilled.length!==1?"s":""} in ShippingCloud {recon.notBilled.length!==1?"aren't":"isn't"} on this invoice yet.</div>}
+    </>)}
   </div>);
 }
 

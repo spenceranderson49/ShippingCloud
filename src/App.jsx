@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v71";
+const BUILD_TAG="addr-v72";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -3740,9 +3740,10 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings}){
           <Field label="England API key"><Input type="password" value={eng.apiKey} onChange={e=>setEng({apiKey:e.target.value})} placeholder="paste your key"/></Field>
           <Field label="England customer ID"><Input value={eng.customerId} onChange={e=>setEng({customerId:e.target.value})} placeholder="e.g. 20602362"/></Field>
           <Field label="Integration ID (for printing labels)"><Input value={eng.integrationId||""} onChange={e=>setEng({integrationId:e.target.value})} placeholder="e.g. 3214"/></Field>
+          <Field label="Provider account ID (for booking)"><Input value={eng.providerAccountId||""} onChange={e=>setEng({providerAccountId:e.target.value})} placeholder="auto-filled by Check booking access"/></Field>
           <Field label="API base URL"><Input value={eng.base} onChange={e=>setEng({base:e.target.value})}/></Field>
         </div>
-        <p className="text-[11px] text-stone-400 -mt-1">The Integration ID enables real label printing. In Webship: gear/settings → eCommerce Integrations → Add → Rest API → Save New Integration → copy the ID. Turn on auto-ship for that integration so labels book automatically.</p>
+        <p className="text-[11px] text-stone-400 -mt-1">The Integration ID enables real label printing. In Webship: gear/settings → eCommerce Integrations → Add → Rest API → Save New Integration → copy the ID. Turn on auto-ship for that integration so labels book automatically. The Provider account ID tells England which carrier account to ship on — click <b>Check booking access</b> to auto-fill it, or paste it manually if England hasn't opened that endpoint on your key.</p>
         <div className="flex flex-wrap items-center gap-3">
           <button onClick={runTest} disabled={!eng.apiKey||!eng.customerId} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{test&&test.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Testing…</>:<><ShieldCheck className="w-4 h-4"/>Test connection</>}</button>
           <button onClick={runDiag} disabled={!eng.apiKey||!eng.customerId} className="text-sm border border-stone-300 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5">{diag&&diag.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Checking…</>:<><Truck className="w-4 h-4"/>Check booking access</>}</button>

@@ -15,6 +15,15 @@ function transform(o) {
   const a = o.shipping_address || o.billing_address || {};
   const weightG = (o.line_items || []).reduce((s, li) => s + (Number(li.grams) || 0) * (Number(li.quantity) || 1), 0);
   const itemsTxt = (o.line_items || []).map((li) => `${li.quantity}× ${li.title}`).join(", ");
+  const lineItems = (o.line_items || []).map((li) => ({
+    id: S(li.id),
+    title: S(li.title),
+    variant: S(li.variant_title),
+    sku: S(li.sku),
+    quantity: Number(li.quantity) || 1,
+    price: S(li.price),
+    grams: Number(li.grams) || 0,
+  }));
   return {
     id: "shp_" + o.id,
     shopifyId: o.id,
@@ -27,8 +36,14 @@ function transform(o) {
     phone: S(a.phone || o.phone || (o.customer && o.customer.phone)),
     email: S(o.email || (o.customer && o.customer.email)),
     total: S(o.total_price),
+    subtotal: S(o.subtotal_price),
+    shippingPaid: S(o.total_shipping_price_set && o.total_shipping_price_set.shop_money && o.total_shipping_price_set.shop_money.amount),
+    tax: S(o.total_tax),
+    currency: S(o.currency || "USD"),
+    financialStatus: S(o.financial_status),
     weight: gramsToLb(weightG) || 1,
     items: itemsTxt,
+    lineItems: lineItems,
     itemCount: (o.line_items || []).reduce((s, li) => s + (Number(li.quantity) || 0), 0),
     source: "Shopify",
     shippingService: S((o.shipping_lines && o.shipping_lines[0] && o.shipping_lines[0].title) || "Standard"),

@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v54";
+const BUILD_TAG="addr-v55";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -804,6 +804,7 @@ export default function App(){
   const [returns,setReturns]=usePersist("returns",SEED_RETURNS);
   const [manifests,setManifests]=usePersist("manifests",[]);
   const [rules,setRules]=usePersist("rules",SEED_RULES);
+  const [ruleset,setRuleset]=usePersist("ruleset",SEED_RULESET);
   const [drafts,setDrafts]=usePersist("drafts",[]);
   const [emails,setEmails]=usePersist("emails",SEED_EMAILS);
   const [ledger,setLedger]=usePersist("ledger",SEED_LEDGER);
@@ -981,7 +982,7 @@ export default function App(){
           {tab==="returns"&&<Returns returns={returns} setReturns={setReturns} orders={orders} settings={settings} logEmail={logEmail}/>}
           {tab==="pickups"&&<Pickups pickups={pickups} setPickups={setPickups} settings={settings}/>}
           {tab==="invoices"&&<Invoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>}
-          {tab==="rules"&&<RulesTab rules={rules} setRules={setRules} orders={orders}/>}
+          {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders}/>}
           {tab==="ledger"&&<Ledger ledger={ledger} addLedger={addLedger}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
           {tab==="admin"&&isAdmin&&<AdminPortal clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand}/>}
@@ -2754,7 +2755,7 @@ function CheckoutRates({settings,setSettings,client}){
 /* ════════ SETTINGS ════════ */
 function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client}){
   const [sec,setSec]=useState("carriers");
-  const secs=[["carriers","Carrier accounts",Plug],["boxes","Package sizes",Boxes],["boxlogic","Box logic",Package],["reference","Reference fields",Receipt],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["automation","Automation rules",Zap],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["integrations","Integrations",Layers],["subscription","Subscription",Star],["company","Company",Building2]];
+  const secs=[["carriers","Carrier accounts",Plug],["boxes","Package sizes",Boxes],["boxlogic","Box logic",Package],["reference","Reference fields",Receipt],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["integrations","Integrations",Layers],["subscription","Subscription",Star],["company","Company",Building2]];
   return (
     <div className="flex flex-col md:flex-row gap-6">
       <aside className="md:w-56 shrink-0 space-y-1">{secs.map(([id,l,Icon])=><button key={id} onClick={()=>setSec(id)} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}</button>)}</aside>
@@ -2767,7 +2768,6 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="checkout"&&<CheckoutRates settings={settings} setSettings={setSettings} client={client}/>}
         {sec==="manifests"&&<Manifests shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests}/>}
         {sec==="reports"&&<Reports shipments={shipments}/>}
-        {sec==="automation"&&<AutomationRules rules={rules} setRules={setRules}/>}
         {sec==="notifications"&&<Notifications settings={settings} setSettings={setSettings} emails={emails}/>}
         {sec==="clients"&&<Clients clients={clients} setClients={setClients}/>}
         {sec==="billing"&&<Billing settings={settings} setSettings={setSettings}/>}
@@ -2964,129 +2964,312 @@ function AutomationRules({rules,setRules}){
     </Panel>
   </div>);
 }
-/* ════════ RULES TAB — top-level automation surface (same schema as Settings → Automation) ════════ */
-const RULE_FIELD_LABEL={weight:"Weight (lb)",value:"Order value ($)",state:"Dest. state",zip:"Dest. ZIP"};
-const RULE_ACTION_LABEL={service:"Set service",signature:"Require signature",insure:"Auto-insure",flag:"Flag for review"};
-const ruleNum=v=>{const n=parseFloat(String(v==null?"":v).replace(/[^0-9.\-]/g,""));return isNaN(n)?null:n;};
-function ruleOrderField(o,field){
-  if(!o) return null;
-  if(field==="weight") return ruleNum(o.weight!=null?o.weight:(o.totalWeight!=null?o.totalWeight:(Array.isArray(o.pieces)?o.pieces.reduce((a,p)=>a+(+p.weight||0),0):null)));
-  if(field==="value")  return ruleNum(o.value!=null?o.value:(o.total!=null?o.total:(o.orderValue!=null?o.orderValue:o.amount)));
-  if(field==="state")  return String((o.state||(o.recipient&&o.recipient.state)||(o.shipTo&&o.shipTo.state)||(o.ship&&o.ship.state)||"")).trim();
-  if(field==="zip")    return String((o.zip||(o.recipient&&o.recipient.zip)||(o.shipTo&&o.shipTo.zip)||(o.ship&&o.ship.zip)||"")).trim();
-  return null;
-}
-function ruleMatches(r,o){
-  const a=ruleOrderField(o,r.field);
-  if(a===null||a==="") return false;
-  if(r.field==="state"||r.field==="zip"){
-    const A=String(a).toLowerCase(), V=String(r.value||"").toLowerCase();
-    if(!V) return false;
-    if(r.op==="=") return A===V;
-    if(r.op===">") return A>V;
-    if(r.op==="<") return A<V;
-    return false;
-  }
-  const A=ruleNum(a), V=ruleNum(r.value);
-  if(A===null||V===null) return false;
-  if(r.op===">") return A>V;
-  if(r.op==="<") return A<V;
-  if(r.op==="=") return A===V;
-  return false;
-}
-function RulesTab({rules,setRules,orders}){
-  const blank={name:"",field:"weight",op:">",value:"",action:"service",actionValue:""};
-  const [f,setF]=useState(blank);
-  const [open,setOpen]=useState(false);
-  const editing=!!f.id;
-  const active=rules.filter(r=>r.enabled).length;
-  const ords=orders||[];
-  const startNew=()=>{setF(blank);setOpen(true);};
-  const startEdit=(r)=>{setF({...r});setOpen(true);};
-  const cancel=()=>{setF(blank);setOpen(false);};
-  const save=()=>{ if(!f.name)return;
-    if(f.id){ setRules(rs=>rs.map(x=>x.id===f.id?{...x,...f}:x)); }
-    else { setRules(rs=>[...rs,{id:"r"+Date.now(),enabled:true,...f}]); }
-    cancel();
+/* ════════════════════════════════════════════════════════════════════
+   RULES ENGINE — conditions + actions pipeline, run-order, stop, live sim
+   Ported to run against real ShippingCloud orders.
+   ════════════════════════════════════════════════════════════════════ */
+const RULE_PROPERTIES={
+  "To Postal":{key:"zip",type:"text"},
+  "To State":{key:"state",type:"text"},
+  "To Country":{key:"country",type:"text"},
+  "To City":{key:"city",type:"text"},
+  "Item Count":{key:"itemCount",type:"number"},
+  "Item SKUs":{key:"_skus",type:"list"},
+  "Order Value":{key:"total",type:"number"},
+  "Package Weight":{key:"weight",type:"number"},
+  "Requested Service":{key:"shippingService",type:"text"},
+  "Store / Source":{key:"source",type:"text"},
+  "Tag Names":{key:"_tags",type:"list"},
+  "Status":{key:"status",type:"text"},
+  "Created":{key:"date",type:"date"},
+};
+const RULE_PROP_NAMES=Object.keys(RULE_PROPERTIES);
+const RULE_OPERATORS={text:["IN","NOT IN","=","!="],list:["IN","NOT IN","=","!="],number:["=","!=",">","<",">=","<="],date:["=","!=",">","<"]};
+const RULE_ACTION_TYPES=["Set Service","Set Package","Request Signature","Set Insurance","Saturday Delivery","Add Order Tag","Set Weight","Assign Hold","Set From Address"];
+const RULE_SERVICES=["ANY - Cheapest","ANY - Cheapest Ground","ANY - Cheapest 2 Day","ANY - Fastest","FedEx - Ground","FedEx - Home Delivery","FedEx - Express Saver","FedEx - 2Day","FedEx - 2Day One Rate","FedEx - Standard Overnight","FedEx - Priority Overnight","DHL - Express Worldwide"];
+const RULE_PACKAGES=["Custom","FedEx Envelope","FedEx Small Box","FedEx Medium Box","FedEx Large Box","FedEx Extra Large Box"];
+const RULE_SIG=["direct","indirect","adult"];
+const SEED_RULESET=[
+  {id:"rs1",name:"High-value → signature + insurance",enabled:true,stop:false,conditions:[{id:"c1",property:"Order Value",operator:">",value:"500"}],actions:[{id:"a1",type:"Request Signature",sig:"adult"},{id:"a2",type:"Set Insurance",amount:"500"},{id:"a3",type:"Add Order Tag",tag:"insured"}]},
+  {id:"rs2",name:"International → DHL",enabled:true,stop:false,conditions:[{id:"c2",property:"To Country",operator:"NOT IN",value:"US"}],actions:[{id:"a4",type:"Set Service",service:"DHL - Express Worldwide"},{id:"a5",type:"Add Order Tag",tag:"international"}]},
+  {id:"rs3",name:"Overweight → hold for review",enabled:true,stop:true,conditions:[{id:"c3",property:"Package Weight",operator:">",value:"70"}],actions:[{id:"a6",type:"Assign Hold",hold:"Manual review — overweight"}]},
+];
+function ruleOrderView(o){
+  return {
+    _id:o.id, _name:o.name, _customer:o.customer,
+    zip:o.zip||"", state:o.state||"", country:o.country||"US", city:o.city||"",
+    itemCount:o.itemCount!=null?o.itemCount:(Array.isArray(o.lineItems)?o.lineItems.reduce((a,li)=>a+(+li.quantity||1),0):0),
+    _skus:Array.isArray(o.lineItems)?o.lineItems.map(li=>li.sku).filter(Boolean):[],
+    total:parseFloat(o.total)||0, weight:+o.weight||0,
+    shippingService:o.shippingService||"", source:o.source||"Manual",
+    _tags:Array.isArray(o.tags)?o.tags.slice():[], status:o.status||"", date:o.date||"",
+    selectedService:"", selectedPackage:"", signature:false, insurance:0, saturday:false, hold:null, fromAddress:"", _newTags:[],
   };
+}
+function ruleParseList(v){ return String(v==null?"":v).split(",").map(s=>s.trim()).filter(Boolean); }
+function ruleEval(cond,ov){
+  const meta=RULE_PROPERTIES[cond.property]; if(!meta) return false;
+  const actual=ov[meta.key]; const vals=ruleParseList(cond.value); const op=cond.operator;
+  if(meta.type==="list"){
+    const arr=(actual||[]).map(a=>String(a).toLowerCase());
+    const hit=vals.some(v=>arr.some(a=>a.includes(v.toLowerCase())));
+    if(op==="IN"||op==="=")return hit; if(op==="NOT IN"||op==="!=")return !hit; return false;
+  }
+  if(meta.type==="number"){
+    const a=Number(actual); const b=Number(vals[0]);
+    switch(op){case "=":return a===b;case "!=":return a!==b;case ">":return a>b;case "<":return a<b;case ">=":return a>=b;case "<=":return a<=b;} return false;
+  }
+  if(meta.type==="date"){
+    const a=new Date(actual).getTime(),b=new Date(vals[0]).getTime();
+    switch(op){case "=":return a===b;case "!=":return a!==b;case ">":return a>b;case "<":return a<b;} return false;
+  }
+  const A=String(actual==null?"":actual).toLowerCase(); const set=vals.map(v=>v.toLowerCase());
+  if(op==="IN")return set.includes(A); if(op==="NOT IN")return !set.includes(A);
+  if(op==="=")return A===(set[0]||""); if(op==="!=")return A!==(set[0]||""); return false;
+}
+function ruleApply(act,ov,changed){
+  const mark=k=>changed.add(k);
+  switch(act.type){
+    case "Set Service": ov.selectedService=act.service||"";mark("service"); return `service → ${act.service||"—"}`;
+    case "Set Package": ov.selectedPackage=act.pkg||"Custom";mark("package"); return `package → ${act.pkg||"Custom"}`;
+    case "Request Signature": ov.signature=true;ov.sig=act.sig||"direct";mark("signature"); return `${(act.sig||"direct")} signature`;
+    case "Set Insurance": ov.insurance=Number(act.amount)||0;mark("insurance"); return `insure $${act.amount||0}`;
+    case "Saturday Delivery": ov.saturday=true;mark("saturday"); return `Saturday delivery`;
+    case "Add Order Tag": if(act.tag&&!ov._tags.includes(act.tag)){ov._tags.push(act.tag);ov._newTags.push(act.tag);mark("tags");} return `tag "${act.tag||""}"`;
+    case "Set Weight": ov.weight=Number(act.weight)||ov.weight;mark("weight"); return `weight → ${act.weight||""} lb`;
+    case "Assign Hold": ov.hold=act.hold||"Hold";mark("hold"); return `HOLD — ${act.hold||""}`;
+    case "Set From Address": ov.fromAddress=act.fromAddress||"";mark("fromAddress"); return `ship-from → ${act.fromAddress||""}`;
+    default: return act.type;
+  }
+}
+function runRuleEngine(rules,orders){
+  const active=rules.filter(r=>r.enabled);
+  const firedRuleIds=new Set();
+  const results=orders.map(src=>{
+    const ov=ruleOrderView(src);
+    const changed=new Set(); const fires=[]; let halted=false;
+    for(const rule of rules){
+      if(!rule.enabled)continue;
+      const conds=rule.conditions||[];
+      const matched=conds.length===0||conds.every(c=>ruleEval(c,ov));
+      if(matched){
+        firedRuleIds.add(rule.id);
+        const effects=(rule.actions||[]).map(a=>ruleApply(a,ov,changed));
+        fires.push({ruleId:rule.id,ruleName:rule.name||"Untitled rule",effects,stop:!!rule.stop});
+        if(rule.stop){ halted=true; break; }
+      }
+    }
+    return {order:src,view:ov,changed:[...changed],fires,halted};
+  });
+  const summary={
+    orders:results.length,
+    firedRules:firedRuleIds.size,
+    actions:results.reduce((n,r)=>n+r.fires.reduce((m,f)=>m+f.effects.length,0),0),
+    held:results.filter(r=>r.view.hold).length,
+    touched:results.filter(r=>r.fires.length).length,
+  };
+  return {results,summary,firedRuleIds};
+}
+function ruleSummaryText(r){
+  const cs=(r.conditions||[]);
+  const cond=cs.length===0?"all orders":cs.map(c=>`${c.property} ${c.operator} ${c.value||"…"}`).join(" AND ");
+  const acts=(r.actions||[]).map(a=>a.type+(a.service?`: ${a.service}`:a.pkg?`: ${a.pkg}`:a.tag?`: ${a.tag}`:a.amount?`: $${a.amount}`:a.hold?`: ${a.hold}`:a.weight?`: ${a.weight}lb`:"")).join(" · ")||"no actions";
+  return {cond,acts};
+}
+
+function RuleEditorModal({rule,onSave,onClose,onDelete}){
+  const [r,setR]=useState(()=>JSON.parse(JSON.stringify(rule)));
+  const upd=(patch)=>setR(p=>({...p,...patch}));
+  const addCond=()=>setR(p=>({...p,conditions:[...(p.conditions||[]),{id:"c"+Date.now()+Math.random().toString(36).slice(2,5),property:"To State",operator:"IN",value:""}]}));
+  const setCond=(i,patch)=>setR(p=>({...p,conditions:p.conditions.map((c,j)=>j===i?{...c,...patch}:c)}));
+  const delCond=(i)=>setR(p=>({...p,conditions:p.conditions.filter((_,j)=>j!==i)}));
+  const addAct=()=>setR(p=>({...p,actions:[...(p.actions||[]),{id:"a"+Date.now()+Math.random().toString(36).slice(2,5),type:"Set Service",service:"ANY - Cheapest"}]}));
+  const setAct=(i,patch)=>setR(p=>({...p,actions:p.actions.map((a,j)=>j===i?{...a,...patch}:a)}));
+  const delAct=(i)=>setR(p=>({...p,actions:p.actions.filter((_,j)=>j!==i)}));
+  const inC="bg-white border border-stone-300 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]";
+  const actFields=(a,i)=>{
+    switch(a.type){
+      case "Set Service": return <select value={a.service||""} onChange={e=>setAct(i,{service:e.target.value})} className={inC+" flex-1 min-w-0"}>{RULE_SERVICES.map(s=><option key={s}>{s}</option>)}</select>;
+      case "Set Package": return <select value={a.pkg||""} onChange={e=>setAct(i,{pkg:e.target.value})} className={inC+" flex-1 min-w-0"}>{RULE_PACKAGES.map(s=><option key={s}>{s}</option>)}</select>;
+      case "Request Signature": return <select value={a.sig||"direct"} onChange={e=>setAct(i,{sig:e.target.value})} className={inC+" flex-1 min-w-0"}>{RULE_SIG.map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)} signature</option>)}</select>;
+      case "Set Insurance": return <input value={a.amount||""} onChange={e=>setAct(i,{amount:e.target.value})} placeholder="Declared value $" className={inC+" flex-1 min-w-0 font-mono"}/>;
+      case "Add Order Tag": return <input value={a.tag||""} onChange={e=>setAct(i,{tag:e.target.value})} placeholder="tag name" className={inC+" flex-1 min-w-0"}/>;
+      case "Set Weight": return <input value={a.weight||""} onChange={e=>setAct(i,{weight:e.target.value})} placeholder="lb" className={inC+" flex-1 min-w-0 font-mono"}/>;
+      case "Assign Hold": return <input value={a.hold||""} onChange={e=>setAct(i,{hold:e.target.value})} placeholder="hold reason" className={inC+" flex-1 min-w-0"}/>;
+      case "Set From Address": return <input value={a.fromAddress||""} onChange={e=>setAct(i,{fromAddress:e.target.value})} placeholder="ship-from label / address" className={inC+" flex-1 min-w-0"}/>;
+      default: return <div className="flex-1 text-[13px] text-stone-400 italic">no options</div>;
+    }
+  };
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-stretch sm:items-center justify-center sm:p-4" onClick={onClose}>
+      <div className="bg-stone-50 w-full max-w-2xl sm:h-auto sm:max-h-[92vh] h-full sm:rounded-xl overflow-hidden shadow-2xl flex flex-col" onClick={e=>e.stopPropagation()}>
+        <div className="bg-white border-b border-stone-200 px-4 py-3 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2 font-semibold text-stone-800"><Zap className="w-4 h-4 text-[#0086E0]"/>{rule._isNew?"New rule":"Edit rule"}</div>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-700 p-1"><X className="w-5 h-5"/></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">Rule name</div>
+            <input value={r.name} onChange={e=>upd({name:e.target.value})} placeholder="e.g. West coast → Ground" className={inC+" w-full"}/>
+          </div>
+
+          <div className="bg-white border border-stone-200 rounded-lg p-3">
+            <div className="flex items-center justify-between mb-2"><div className="text-sm font-semibold text-stone-800">When <span className="text-stone-400 font-normal">· all conditions must match</span></div><button onClick={addCond} className="text-[13px] text-[#0086E0] font-medium flex items-center gap-1 hover:underline"><Plus className="w-3.5 h-3.5"/>Add condition</button></div>
+            {(r.conditions||[]).length===0&&<div className="text-[13px] text-stone-400 border border-dashed border-stone-200 rounded px-3 py-2">No conditions — this rule runs on <b>every order</b>.</div>}
+            <div className="space-y-2">
+              {(r.conditions||[]).map((c,i)=>{
+                const meta=RULE_PROPERTIES[c.property]||{type:"text"};
+                const ops=RULE_OPERATORS[meta.type];
+                return (<div key={c.id} className="flex items-center gap-2">
+                  <select value={c.property} onChange={e=>{const np=e.target.value;const m=RULE_PROPERTIES[np];const o2=RULE_OPERATORS[m.type];setCond(i,{property:np,operator:o2.includes(c.operator)?c.operator:o2[0]});}} className={inC+" w-40 shrink-0"}>{RULE_PROP_NAMES.map(p=><option key={p}>{p}</option>)}</select>
+                  <select value={c.operator} onChange={e=>setCond(i,{operator:e.target.value})} className={inC+" w-24 shrink-0"}>{ops.map(op=><option key={op}>{op}</option>)}</select>
+                  <input value={c.value} onChange={e=>setCond(i,{value:e.target.value})} placeholder={meta.type==="list"?"a, b, c":meta.type==="number"?"10":meta.type==="date"?"2026-01-01":"value"} className={inC+" flex-1 min-w-0"}/>
+                  <button onClick={()=>delCond(i)} className="text-stone-300 hover:text-rose-500 shrink-0"><Trash2 className="w-4 h-4"/></button>
+                </div>);
+              })}
+            </div>
+          </div>
+
+          <div className="bg-white border border-stone-200 rounded-lg p-3">
+            <div className="flex items-center justify-between mb-2"><div className="text-sm font-semibold text-stone-800">Then <span className="text-stone-400 font-normal">· do these</span></div><button onClick={addAct} className="text-[13px] text-[#0086E0] font-medium flex items-center gap-1 hover:underline"><Plus className="w-3.5 h-3.5"/>Add action</button></div>
+            {(r.actions||[]).length===0&&<div className="text-[13px] text-stone-400 border border-dashed border-stone-200 rounded px-3 py-2">No actions — nothing happens when this matches.</div>}
+            <div className="space-y-2">
+              {(r.actions||[]).map((a,i)=>(
+                <div key={a.id} className="flex items-center gap-2">
+                  <select value={a.type} onChange={e=>setAct(i,{type:e.target.value,service:undefined,pkg:undefined,tag:undefined,amount:undefined,hold:undefined,weight:undefined,fromAddress:undefined,sig:undefined})} className={inC+" w-44 shrink-0"}>{RULE_ACTION_TYPES.map(t=><option key={t}>{t}</option>)}</select>
+                  {actFields(a,i)}
+                  <button onClick={()=>delAct(i)} className="text-stone-300 hover:text-rose-500 shrink-0"><Trash2 className="w-4 h-4"/></button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <label className="flex items-center justify-between bg-white border border-stone-200 rounded-lg p-3 cursor-pointer">
+            <div><div className="text-sm font-medium text-stone-800">Stop processing further rules</div><div className="text-[13px] text-stone-500">When this matches, skip every rule below it.</div></div>
+            <input type="checkbox" checked={!!r.stop} onChange={e=>upd({stop:e.target.checked})} className="accent-[#0086E0] w-4 h-4"/>
+          </label>
+        </div>
+        <div className="bg-white border-t border-stone-200 px-4 py-3 flex items-center justify-between shrink-0">
+          {!rule._isNew?<button onClick={()=>onDelete(r.id)} className="text-sm text-rose-600 hover:bg-rose-50 rounded px-3 py-2 font-medium">Delete</button>:<span/>}
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="text-sm text-stone-500 rounded px-3 py-2 hover:bg-stone-100">Cancel</button>
+            <button onClick={()=>onSave(r)} disabled={!r.name} className="text-sm bg-[#0086E0] text-white rounded px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40">Save rule</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RulesTab({rules,setRules,orders}){
+  const [editing,setEditing]=useState(null);
+  const [view,setView]=useState("all");
+  const ords=orders||[];
+  const run=useMemo(()=>runRuleEngine(rules||[],ords),[rules,ords]);
+  const matchCount=(id)=>run.results.filter(r=>r.fires.some(f=>f.ruleId===id)).length;
+  const active=rules.filter(r=>r.enabled).length;
+  const newRule=()=>setEditing({_isNew:true,id:"r"+Date.now(),name:"",enabled:true,stop:false,conditions:[],actions:[{id:"a"+Date.now(),type:"Set Service",service:"ANY - Cheapest"}]});
+  const saveRule=(r)=>{ const clean={id:r.id,name:r.name,enabled:r.enabled,stop:r.stop,conditions:r.conditions,actions:r.actions};
+    setRules(rs=>{ const i=rs.findIndex(x=>x.id===r.id); if(i>=0){const c=[...rs];c[i]=clean;return c;} return [...rs,clean]; });
+    setEditing(null);
+  };
+  const delRule=(id)=>{ setRules(rs=>rs.filter(x=>x.id!==id)); setEditing(null); };
   const toggle=(id)=>setRules(rs=>rs.map(x=>x.id===id?{...x,enabled:!x.enabled}:x));
-  const del=(id)=>setRules(rs=>rs.filter(x=>x.id!==id));
-  const dupe=(r)=>setRules(rs=>[...rs,{...r,id:"r"+Date.now(),name:(r.name||"Rule")+" (copy)"}]);
+  const dupe=(r)=>setRules(rs=>{const i=rs.findIndex(x=>x.id===r.id);const copy={...JSON.parse(JSON.stringify(r)),id:"r"+Date.now(),name:(r.name||"Rule")+" (copy)"};const c=[...rs];c.splice(i+1,0,copy);return c;});
   const move=(id,dir)=>setRules(rs=>{const i=rs.findIndex(x=>x.id===id);if(i<0)return rs;const j=i+dir;if(j<0||j>=rs.length)return rs;const c=[...rs];const t=c[i];c[i]=c[j];c[j]=t;return c;});
-  const labelFor=r=>`If ${RULE_FIELD_LABEL[r.field]||r.field} ${r.op} ${r.value||"…"} → ${RULE_ACTION_LABEL[r.action]||r.action}${r.actionValue?`: ${r.actionValue}`:""}`;
-  return (<div className="max-w-4xl space-y-4">
-    <div className="flex items-center justify-between">
+  const exportJSON=()=>{ try{ const blob=new Blob([JSON.stringify(rules,null,2)],{type:"application/json"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="shippingcloud-rules.json"; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); }catch(e){} };
+  const viewResults=run.results.filter(r=>view==="all"?true:view==="matched"?r.fires.length>0:view==="held"?r.view.hold:view==="untouched"?r.fires.length===0:true);
+  const chgTone={service:"blue",package:"blue",signature:"amber",insurance:"green",saturday:"amber",tags:"stone",weight:"stone",hold:"rose",fromAddress:"stone"};
+
+  return (<div className="space-y-4">
+    <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Zap className="w-5 h-5 text-[#0086E0]"/>Rules</h2>
-        <p className="text-sm text-stone-500 mt-0.5">Run automatically on imported orders and in Batch — top rules run first; later rules win when they touch the same thing.</p>
+        <p className="text-sm text-stone-500 mt-0.5">Automation pipeline — rules run top to bottom on every order. Add conditions and actions, drag order with the arrows, and see a live simulation on your real orders.</p>
       </div>
-      <button onClick={startNew} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium flex items-center gap-1.5 hover:bg-[#0074c4]"><Plus className="w-4 h-4"/>New rule</button>
+      <div className="flex items-center gap-2">
+        <button onClick={exportJSON} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-100 flex items-center gap-1.5"><Download className="w-4 h-4"/>Export JSON</button>
+        <button onClick={newRule} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium flex items-center gap-1.5 hover:bg-[#0072BE]"><Plus className="w-4 h-4"/>New rule</button>
+      </div>
     </div>
 
-    <div className="flex items-center gap-2 text-[11px] text-stone-500">
+    <div className="flex items-center gap-2 text-[11px]">
       <Badge tone="blue">{rules.length} rule{rules.length!==1?"s":""}</Badge>
       <Badge tone="green">{active} active</Badge>
       <Badge tone="stone">{ords.length} orders on floor</Badge>
+      <Badge tone={run.summary.touched?"blue":"stone"}>{run.summary.touched} affected</Badge>
+      {run.summary.held>0&&<Badge tone="rose">{run.summary.held} held</Badge>}
     </div>
 
-    {open&&<Panel title={editing?"Edit rule":"New rule"}>
-      <Field label="Rule name"><Input value={f.name} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. West coast → Ground"/></Field>
-      <div className="grid grid-cols-3 gap-2 items-end">
-        <Field label="When"><Select value={f.field} onChange={e=>setF({...f,field:e.target.value})}><option value="weight">Weight (lb)</option><option value="value">Order value ($)</option><option value="state">Dest. state</option><option value="zip">Dest. ZIP</option></Select></Field>
-        <Field label="Is"><Select value={f.op} onChange={e=>setF({...f,op:e.target.value})}><option>{">"}</option><option>{"<"}</option><option>{"="}</option></Select></Field>
-        <Field label="Value"><Input value={f.value} onChange={e=>setF({...f,value:e.target.value})} placeholder={f.field==="state"?"CA":f.field==="zip"?"90001":"10"}/></Field>
-      </div>
-      <div className="grid grid-cols-2 gap-2 items-end">
-        <Field label="Then"><Select value={f.action} onChange={e=>setF({...f,action:e.target.value})}><option value="service">Set service</option><option value="signature">Require signature</option><option value="insure">Auto-insure</option><option value="flag">Flag for review</option></Select></Field>
-        <Field label="Detail"><Input value={f.actionValue} onChange={e=>setF({...f,actionValue:e.target.value})} placeholder="e.g. Cheapest Ground"/></Field>
-      </div>
-      <div className="flex items-center gap-2">
-        <button onClick={save} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium hover:bg-stone-800">{editing?"Save rule":"Add rule"}</button>
-        <button onClick={cancel} className="text-sm text-stone-500 rounded px-3 py-2 hover:bg-stone-100">Cancel</button>
-      </div>
-    </Panel>}
-
-    {rules.length===0&&!open&&<div className="border border-dashed border-stone-300 rounded-lg bg-white p-8 text-center">
-      <div className="text-stone-800 font-medium">No rules yet</div>
-      <div className="text-sm text-stone-500 mt-1">Rules auto-pick services, force signature, auto-insure, and flag orders for review.</div>
-      <button onClick={startNew} className="mt-3 text-sm text-[#006FBF] font-medium">＋ Add your first rule</button>
-    </div>}
-
-    <div className="space-y-2">
-      {rules.map((r,i)=>{
-        const hits=ords.filter(o=>ruleMatches(r,o)).length;
-        return (<div key={r.id} className={`border rounded-lg bg-white p-3 flex items-center gap-3 ${r.enabled?"border-stone-200":"border-stone-200 opacity-60"}`}>
-          <div className="flex flex-col">
-            <button onClick={()=>move(r.id,-1)} disabled={i===0} className="text-stone-300 hover:text-stone-600 disabled:opacity-30"><ChevronDown className="w-4 h-4 rotate-180"/></button>
-            <button onClick={()=>move(r.id,1)} disabled={i===rules.length-1} className="text-stone-300 hover:text-stone-600 disabled:opacity-30"><ChevronDown className="w-4 h-4"/></button>
-          </div>
-          <button onClick={()=>toggle(r.id)} title="Enable / disable"><span className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${r.enabled?"bg-[#0086E0] justify-end":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></span></button>
-          <div className="flex-1 min-w-0">
-            <div className="font-medium text-sm flex items-center gap-1.5 text-stone-900"><Zap className="w-3.5 h-3.5 text-[#0086E0] shrink-0"/><span className="truncate">{r.name||"Untitled rule"}</span></div>
-            <div className="text-[11px] text-stone-400 font-mono truncate">{labelFor(r)}</div>
-          </div>
-          {r.enabled&&ords.length>0&&<Badge tone={hits>0?"blue":"stone"}>{hits} match{hits!==1?"es":""}</Badge>}
-          <button onClick={()=>startEdit(r)} className="text-stone-300 hover:text-[#0086E0]" title="Edit"><Edit3 className="w-4 h-4"/></button>
-          <button onClick={()=>dupe(r)} className="text-[11px] text-stone-400 hover:text-stone-700 font-medium" title="Duplicate">Copy</button>
-          <button onClick={()=>del(r.id)} className="text-stone-300 hover:text-rose-500" title="Delete"><Trash2 className="w-4 h-4"/></button>
-        </div>);
-      })}
-    </div>
-
-    {ords.length>0&&rules.some(r=>r.enabled)&&<Panel title="Live preview · current orders">
-      <p className="text-[11px] text-stone-400 -mt-1">How your active rules would act on the {ords.length} order{ords.length!==1?"s":""} currently on the floor. Evaluated where destination / weight / value data is present.</p>
-      <div className="space-y-1">
-        {rules.filter(r=>r.enabled).map(r=>{
-          const hit=ords.filter(o=>ruleMatches(r,o));
-          return (<div key={r.id} className="flex items-center gap-2 text-[13px] py-1 border-b border-stone-100 last:border-0">
-            <Zap className="w-3.5 h-3.5 text-[#0086E0] shrink-0"/>
-            <span className="font-medium text-stone-800">{r.name}</span>
-            <span className="text-stone-400 font-mono text-[11px] truncate flex-1">→ {RULE_ACTION_LABEL[r.action]}{r.actionValue?`: ${r.actionValue}`:""}</span>
-            <Badge tone={hit.length>0?"green":"stone"}>{hit.length} of {ords.length}</Badge>
+    <div className="grid lg:grid-cols-2 gap-4">
+      {/* pipeline */}
+      <div className="space-y-2">
+        <div className="text-[11px] uppercase tracking-widest text-stone-400 flex items-center justify-between"><span>Rules pipeline</span><span>{rules.length}</span></div>
+        {rules.length===0&&<div className="border border-dashed border-stone-300 rounded-lg bg-white p-8 text-center">
+          <div className="text-stone-800 font-medium">No rules yet</div>
+          <div className="text-sm text-stone-500 mt-1">Build conditions and actions to auto-route, tag, insure, and hold orders.</div>
+          <button onClick={newRule} className="mt-3 text-sm text-[#006FBF] font-medium">＋ Add your first rule</button>
+        </div>}
+        {rules.map((r,i)=>{
+          const {cond,acts}=ruleSummaryText(r); const hits=matchCount(r.id);
+          return (<div key={r.id} className={`border rounded-lg bg-white p-3 ${r.enabled?"border-stone-200":"border-stone-200 opacity-60"}`}>
+            <div className="flex items-center gap-2.5">
+              <div className="flex flex-col text-stone-300">
+                <button onClick={()=>move(r.id,-1)} disabled={i===0} className="hover:text-stone-600 disabled:opacity-30 leading-none"><ChevronDown className="w-4 h-4 rotate-180"/></button>
+                <button onClick={()=>move(r.id,1)} disabled={i===rules.length-1} className="hover:text-stone-600 disabled:opacity-30 leading-none"><ChevronDown className="w-4 h-4"/></button>
+              </div>
+              <button onClick={()=>toggle(r.id)} title="Enable / disable" className="shrink-0"><span className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${r.enabled?"bg-[#0086E0] justify-end":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></span></button>
+              <div className="flex-1 min-w-0 cursor-pointer" onClick={()=>setEditing({...JSON.parse(JSON.stringify(r))})}>
+                <div className="font-medium text-sm text-stone-900 flex items-center gap-1.5"><span className="text-[10px] text-stone-400 font-mono">#{i+1}</span><span className="truncate">{r.name||"Untitled rule"}</span>{r.stop&&<span title="Stops further rules" className="shrink-0"><Badge tone="rose">stop</Badge></span>}</div>
+                <div className="text-[11px] text-stone-500 truncate"><span className="text-stone-400">if</span> {cond}</div>
+                <div className="text-[11px] text-[#0072BE] truncate">→ {acts}</div>
+              </div>
+              {r.enabled&&ords.length>0&&<Badge tone={hits>0?"blue":"stone"}>{hits}</Badge>}
+              <button onClick={()=>setEditing({...JSON.parse(JSON.stringify(r))})} className="text-stone-300 hover:text-[#0086E0] shrink-0" title="Edit"><Edit3 className="w-4 h-4"/></button>
+              <button onClick={()=>dupe(r)} className="text-stone-300 hover:text-stone-700 shrink-0" title="Duplicate"><Layers className="w-4 h-4"/></button>
+              <button onClick={()=>delRule(r.id)} className="text-stone-300 hover:text-rose-500 shrink-0" title="Delete"><Trash2 className="w-4 h-4"/></button>
+            </div>
           </div>);
         })}
       </div>
-    </Panel>}
+
+      {/* live floor */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="text-[11px] uppercase tracking-widest text-stone-400">Live simulation · your orders</div>
+          <div className="flex bg-stone-100 rounded-lg p-0.5 text-[11px]">{[["all","All"],["matched","Affected"],["held","Held"],["untouched","Untouched"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-2 py-1 rounded-md ${view===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}</div>
+        </div>
+        {ords.length===0&&<div className="border border-dashed border-stone-300 rounded-lg bg-white p-8 text-center text-sm text-stone-400">No orders on the floor. Sync or add orders to see rules act on them.</div>}
+        {ords.length>0&&viewResults.length===0&&<div className="border border-dashed border-stone-200 rounded-lg bg-white p-6 text-center text-sm text-stone-400">Nothing matches this view.</div>}
+        <div className="space-y-2">
+          {viewResults.map(res=>{
+            const o=res.order;
+            return (<div key={o.id} className={`border rounded-lg bg-white p-3 ${res.view.hold?"border-rose-200":"border-stone-200"}`}>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="font-semibold text-sm text-stone-800">{o.name}</span>
+                <span className="text-[11px] text-stone-400 truncate">{o.customer} · {o.city}{o.state?", "+o.state:""} {o.country&&o.country!=="US"?`(${o.country})`:""}</span>
+                <div className="flex-1"/>
+                <span className="text-[11px] font-mono text-stone-500">${o.total} · {o.weight||"?"}lb</span>
+              </div>
+              {res.fires.length===0
+                ? <div className="text-[12px] text-stone-400">No rules matched — passes through untouched.</div>
+                : <div className="space-y-1">
+                    {res.fires.map((f,fi)=>(<div key={fi} className="flex items-start gap-2 text-[12px]">
+                      <Zap className="w-3.5 h-3.5 text-[#0086E0] shrink-0 mt-0.5"/>
+                      <span className="font-medium text-stone-700 shrink-0">{f.ruleName}</span>
+                      <span className="text-stone-400">→</span>
+                      <span className="text-stone-600 flex-1">{f.effects.join(" · ")}{f.stop?" · then stop":""}</span>
+                    </div>))}
+                    {res.changed.length>0&&<div className="flex flex-wrap gap-1 pt-1">{res.changed.map(c=><Badge key={c} tone={chgTone[c]||"stone"}>{c}</Badge>)}</div>}
+                    {res.view.hold&&<div className="text-[12px] text-rose-600 flex items-center gap-1.5 mt-1"><AlertTriangle className="w-3.5 h-3.5"/>Held: {res.view.hold}</div>}
+                  </div>}
+            </div>);
+          })}
+        </div>
+      </div>
+    </div>
+
+    {editing&&<RuleEditorModal rule={editing} onSave={saveRule} onClose={()=>setEditing(null)} onDelete={delRule}/>}
   </div>);
 }
 function AddressBook({settings,setSettings}){

@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v63";
+const BUILD_TAG="addr-v64";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -343,11 +343,10 @@ function oneRateBoxFor(L,W,H,lbs){
   for(const b of ONERATE_BOXES){ if(vol<=b.maxVol && w<=b.maxLbs) return b; }
   return null;
 }
-/* FedEx One Rate is a FLAT, zone-independent price by box — and ONLY 2Day is offered here.
-   England's rate call prices the branded box at STANDARD 2Day rates (base + fuel + residential), which is
-   NOT One Rate — so One Rate can't come from that call. These are the flat published One Rate 2Day prices;
-   tune them to your exact England One Rate card. Medium Box confirmed at $19.25. */
-const ONERATE_2DAY={fedex_envelope:16.20,fedex_pak:16.20,fedex_extra_small_box:18.20,fedex_small_box:18.20,fedex_medium_box:19.25,fedex_large_box:26.75,fedex_extra_large_box:37.00,fedex_tube:26.75};
+/* FedEx One Rate is a FLAT, zone-independent price by box, 2Day only. England's rate call does NOT return
+   One Rate — it prices the branded box at standard rates. Only include boxes whose flat One Rate price you've
+   actually confirmed; no guesses. Medium Box confirmed at $19.25. Add others here once you confirm them. */
+const ONERATE_2DAY={fedex_medium_box:19.25};
 function oneRateQuotes(box, markup){
   if(!box) return [];
   const flat=ONERATE_2DAY[box.code]; if(flat==null) return [];
@@ -2157,32 +2156,26 @@ function QuickQuote({onClose,client,england}){
   const delPiece=(i)=>setPieces(ps=>ps.filter((_,j)=>j!==i));
   const totalWeight=Math.round(pieces.reduce((a,p)=>a+pw(p),0)*100)/100;
   const ready=/^\d{5}/.test(toZip||"")&&/^\d{5}/.test(fromZip||"")&&pieces.every(p=>pw(p)>0&&+p.L>0&&+p.W>0&&+p.H>0);
-  const [rateSrc,setRateSrc]=useState({rates:[],live:false,loading:false,error:null});
+  const [rateSrc,setRateSrc]=useState({rates:[],raw:null,tried:null,live:false,loading:false,error:null});
   const shipPieces=pieces.map(p=>({weight:pw(p),L:+p.L||12,W:+p.W||9,H:+p.H||4}));
-  const [fxTransit,setFxTransit]=useState({});
-  useEffect(()=>{ let cancel=false; return ()=>{cancel=true;}; },[fromZip,toZip,residential,JSON.stringify(pieces)]);
   useEffect(()=>{
     let cancel=false;
-    if(!ready){setRateSrc({rates:[],live:false,loading:false,error:null});return;}
-    const ship={fromZip,toZip,pieces:shipPieces,residential,signature:sigOption!=="none",signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null};
-    if(england&&england.enabled&&england.apiKey&&england.customerId){
-      setRateSrc(p=>({...p,loading:true}));
-      getLiveRates(ship,england).then(res=>{ if(cancel)return;
-        if(res&&res.live&&res.rates&&res.rates.length) setRateSrc({rates:res.rates,live:true,loading:false,error:null});
-        else setRateSrc({rates:quoteRates(ship),live:false,loading:false,error:(res&&res.error)||null});
-      });
-    } else setRateSrc({rates:quoteRates(ship),live:false,loading:false,error:null});
+    if(!ready){setRateSrc({rates:[],raw:null,tried:null,live:false,loading:false,error:null});return;}
+    if(!(england&&england.enabled&&england.apiKey&&england.customerId)){ setRateSrc({rates:[],raw:null,tried:null,live:false,loading:false,error:"Turn on live England rates in Settings to run this experiment."}); return; }
+    const ship={carriers:"fedex,dhl,ups",fromZip,toZip,pieces:shipPieces,residential,signature:sigOption!=="none",signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null};
+    setRateSrc(p=>({...p,loading:true,error:null}));
+    getLiveRates(ship,england).then(res=>{ if(cancel)return;
+      if(res&&res.live&&Array.isArray(res.rates)) setRateSrc({rates:res.rates,raw:res.raw||null,tried:res.tried||null,live:true,loading:false,error:null});
+      else setRateSrc({rates:[],raw:(res&&res.england_response)||null,tried:(res&&res.tried)||null,live:false,loading:false,error:(res&&res.error)||"No rates returned"});
+    });
     return ()=>{cancel=true;};
   },[fromZip,toZip,residential,JSON.stringify(pieces),sigOption,saturday,insurance,england]);
-  const qqOrBox=oneRateBoxFor(pieces[0]&&pieces[0].L,pieces[0]&&pieces[0].W,pieces[0]&&pieces[0].H,totalWeight);
-  const qqOrRates=useMemo(()=>qqOrBox?oneRateQuotes(qqOrBox,client?.markup||0):[],[qqOrBox&&qqOrBox.code,client]);
-  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:Math.round(q.cost*(1+(client?.markup||0)/100)*100)/100})),...qqOrRates].map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday,insurance})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,client,qqOrRates,sigOption,saturday,insurance]);
-  const hasExpress=quotes.some(q=>{const l=String(q.label||"").toLowerCase();return /(overnight|2\s?day|express saver)/.test(l);});
+  const rawRates=rateSrc.rates||[];
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-8 bg-stone-900/40 backdrop-blur-sm overflow-auto" onClick={onClose}>
       <div className="bg-stone-50 rounded-xl border border-stone-200 shadow-xl w-full max-w-3xl" onClick={e=>e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 h-14 border-b border-stone-200">
-          <div className="flex items-center gap-2 font-semibold"><Calculator className="w-4 h-4 text-[#0086E0]"/>Quick quote <span className="text-stone-400 font-normal text-sm">· ZIP to ZIP, no addresses</span></div>
+          <div className="flex items-center gap-2 font-semibold"><Calculator className="w-4 h-4 text-[#0086E0]"/>Quick quote <span className="text-stone-400 font-normal text-sm">· raw England rates, exactly as returned</span></div>
           <button onClick={onClose} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button>
         </div>
         <div className="p-5 flex flex-col lg:flex-row gap-5">
@@ -2206,11 +2199,38 @@ function QuickQuote({onClose,client,england}){
             </div>
             <Field label="Signature"><Select value={sigOption} onChange={e=>setSigOption(e.target.value)}><option value="none">None</option><option value="direct">Direct signature</option><option value="indirect">Indirect signature</option><option value="adult">Adult signature</option></Select></Field>
             <Field label="Insurance $"><Input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0"/></Field>
-            {hasExpress&&<label className="flex items-center gap-1.5 text-sm text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSaturday(e.target.checked)} className="accent-[#0086E0]"/>Saturday delivery <span className="text-stone-400 text-xs">(Express only)</span></label>}
+            <label className="flex items-center gap-1.5 text-sm text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSaturday(e.target.checked)} className="accent-[#0086E0]"/>Saturday delivery <span className="text-stone-400 text-xs">(sent to England)</span></label>
             <div className="grid grid-cols-2 gap-px bg-stone-200 border border-stone-200 rounded overflow-hidden font-mono text-center"><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">zone</div><div className="font-semibold">{zoneEst(fromZip,toZip)}</div></div><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">billable</div><div className="font-semibold">{billable(pieces[0].L,pieces[0].W,pieces[0].H,totalWeight)} lb</div></div></div>
             {ready&&<div className={`text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700":"bg-[#E6F4FF] text-[#006FBF]"}`}>{rateSrc.loading?<><Loader2 className="w-3 h-3 animate-spin"/>Fetching…</>:rateSrc.live?<><Wifi className="w-3 h-3"/>Live rates</>:<><Calculator className="w-3 h-3"/>Estimated</>}</div>}
           </Panel></div>
-          <div className="flex-1 min-w-0"><ServiceList quotes={quotes} ready={ready}/></div>
+          <div className="flex-1 min-w-0 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-sm font-semibold text-stone-800">Raw England response</div>
+              {rateSrc.live&&<Badge tone="green">{rawRates.length} service{rawRates.length!==1?"s":""}</Badge>}
+            </div>
+            <p className="text-[12px] text-stone-500">Every service England's API returns for this shipment, exactly as sent — no markup, no filtering, no One Rate, no added fees. Toggle signature/insurance/Saturday to see whether England changes the numbers.</p>
+            {!ready&&<div className="text-sm text-stone-400 py-6 text-center border border-dashed border-stone-200 rounded-lg">Enter From/To ZIP and each package's dims + weight.</div>}
+            {ready&&rateSrc.loading&&<div className="text-sm text-stone-500 py-6 text-center flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>Querying England…</div>}
+            {ready&&!rateSrc.loading&&rateSrc.error&&<div className="text-[13px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-3 font-mono">{rateSrc.error}</div>}
+            {ready&&!rateSrc.loading&&rawRates.map((q,i)=>(
+              <div key={i} className="border border-stone-200 rounded-lg bg-white p-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <div className="min-w-0"><div className="text-sm font-medium truncate">{q.label}</div><div className="text-[11px] text-stone-400 font-mono">{q.carrier} · {q.serviceCode||"—"}</div></div>
+                  <div className="text-right font-mono shrink-0"><div className="text-base font-semibold">{money(q.cost)}</div><div className="text-[9px] uppercase tracking-widest text-stone-400">totalAmount</div></div>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2 text-[12px] font-mono">
+                  <div><div className="text-[9px] uppercase text-stone-400">base</div>{q.base!=null?money(q.base):"—"}</div>
+                  <div><div className="text-[9px] uppercase text-stone-400">zone</div>{q.zone!=null&&q.zone!==""?q.zone:"—"}</div>
+                  <div><div className="text-[9px] uppercase text-stone-400">quoted wt</div>{q.quotedWeight!=null?q.quotedWeight+" lb":"—"}{q.dimWeight?" dim":""}</div>
+                  <div><div className="text-[9px] uppercase text-stone-400">transit</div>{q.minDays!=null?q.minDays+" day"+(q.minDays>1?"s":""):<span className="text-stone-300">none</span>}</div>
+                </div>
+                {q.surcharges&&q.surcharges.length>0&&<div className="mt-2 border-t border-stone-100 pt-2"><div className="text-[9px] uppercase tracking-widest text-stone-400 mb-1">surcharges</div>{q.surcharges.map((s,j)=><div key={j} className="flex justify-between text-[12px] font-mono"><span className="text-stone-600">{s.label}</span><span>{money(s.amount)}</span></div>)}</div>}
+              </div>
+            ))}
+            {ready&&!rateSrc.loading&&rateSrc.live&&rawRates.length===0&&<div className="text-sm text-stone-500 py-6 text-center">England returned 0 services for this shipment.</div>}
+            {rateSrc.tried&&<div className="text-[11px] text-stone-400 font-mono break-words">carriers: {Array.isArray(rateSrc.tried)?rateSrc.tried.join(" · "):String(rateSrc.tried)}</div>}
+            {rateSrc.raw&&<details className="text-[11px]"><summary className="cursor-pointer text-stone-500 hover:text-stone-700 select-none">Raw JSON from England</summary><pre className="mt-2 bg-stone-900 text-stone-100 rounded p-3 overflow-auto max-h-80 text-[11px] leading-relaxed whitespace-pre-wrap">{JSON.stringify(rateSrc.raw,null,2)}</pre></details>}
+          </div>
         </div>
       </div>
     </div>

@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v68";
+const BUILD_TAG="addr-v69";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -4155,8 +4155,67 @@ function Clients({clients,setClients}){
 }
 
 /* ════════ PRIMITIVES ════════ */
+// Smart paste: turn a pasted contact/address blob into structured fields.
+const US_STATE_ABBRS=new Set(["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC","PR"]);
+const STATE_NAME_TO_ABBR={"alabama":"AL","alaska":"AK","arizona":"AZ","arkansas":"AR","california":"CA","colorado":"CO","connecticut":"CT","delaware":"DE","florida":"FL","georgia":"GA","hawaii":"HI","idaho":"ID","illinois":"IL","indiana":"IN","iowa":"IA","kansas":"KS","kentucky":"KY","louisiana":"LA","maine":"ME","maryland":"MD","massachusetts":"MA","michigan":"MI","minnesota":"MN","mississippi":"MS","missouri":"MO","montana":"MT","nebraska":"NE","nevada":"NV","new hampshire":"NH","new jersey":"NJ","new mexico":"NM","new york":"NY","north carolina":"NC","north dakota":"ND","ohio":"OH","oklahoma":"OK","oregon":"OR","pennsylvania":"PA","rhode island":"RI","south carolina":"SC","south dakota":"SD","tennessee":"TN","texas":"TX","utah":"UT","vermont":"VT","virginia":"VA","washington":"WA","west virginia":"WV","wisconsin":"WI","wyoming":"WY","district of columbia":"DC","puerto rico":"PR"};
+function parseCSZ(seg){
+  const out={}; seg=String(seg||"").trim();
+  const zip=seg.match(/\b(\d{5})(?:-\d{4})?\b/);
+  if(zip){ out.zip=zip[1]; seg=(seg.slice(0,zip.index)+" "+seg.slice(zip.index+zip[0].length)).trim(); }
+  seg=seg.replace(/[,\s]+$/,"").trim();
+  const ab=seg.match(/(?:^|[\s,])([A-Za-z]{2})$/);
+  if(ab&&US_STATE_ABBRS.has(ab[1].toUpperCase())){ out.state=ab[1].toUpperCase(); seg=seg.slice(0,seg.length-ab[1].length).replace(/[,\s]+$/,"").trim(); }
+  else { const fn=Object.keys(STATE_NAME_TO_ABBR).sort((a,b)=>b.length-a.length).find(n=>new RegExp("(?:^|[\\s,])"+n+"$","i").test(seg)); if(fn){ out.state=STATE_NAME_TO_ABBR[fn]; seg=seg.replace(new RegExp(fn+"$","i"),"").replace(/[,\s]+$/,"").trim(); } }
+  seg=seg.replace(/[,\s]+$/,"").trim();
+  if(seg) out.city=seg.replace(/,/g,"").trim();
+  return out;
+}
+function parseAddressBlob(raw){
+  const out={};
+  let text=String(raw||"").replace(/\r/g,"").trim();
+  if(!text) return out;
+  const em=text.match(/[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}/i);
+  if(em){ out.email=em[0]; text=text.replace(em[0]," "); }
+  const ph=text.match(/(\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}(?!\d)/);
+  if(ph&&ph[0].replace(/\D/g,"").length>=10){ out.phone=ph[0].replace(/\s+/g," ").trim(); text=text.replace(ph[0]," "); }
+  const ctry=text.match(/\b(United States of America|United States|U\.?S\.?A\.?|USA|Canada|Mexico)\b/i);
+  if(ctry){ const c=ctry[0].toLowerCase(); out.country=/can/.test(c)?"Canada":(/mex/.test(c)?"Mexico":"United States"); text=text.replace(ctry[0]," "); }
+  let lines=text.split(/\n+/).map(s=>s.replace(/[ \t]+/g," ").trim()).filter(Boolean);
+  if(lines.length===1&&lines[0].includes(",")) lines=lines[0].split(",").map(s=>s.trim()).filter(Boolean);
+  let cszIdx=lines.findIndex(l=>/\b\d{5}(-\d{4})?\b/.test(l));
+  if(cszIdx>=0){
+    let csz=parseCSZ(lines[cszIdx]);
+    if(!csz.city&&cszIdx>0&&!/^\s*\d/.test(lines[cszIdx-1])){ const merged=parseCSZ(lines[cszIdx-1]+" "+lines[cszIdx]); if(merged.city){ csz=merged; lines.splice(cszIdx-1,1); cszIdx--; } }
+    if(csz.zip)out.zip=csz.zip; if(csz.state)out.state=csz.state; if(csz.city)out.city=csz.city;
+    lines.splice(cszIdx,1);
+  }
+  const stRe=/^\s*(\d+[-\w]*|(?:po|p\.o\.)\s*box)\s+\S/i;
+  const aptRe=/\b(apt|apartment|suite|ste|unit|bldg|building|floor|fl|rm|room|dept)\b\.?\s*\S|#\s*\w/i;
+  const addrIdx=lines.findIndex(l=>stRe.test(l));
+  if(addrIdx>=0){ out.address1=lines[addrIdx]; lines.splice(addrIdx,1); }
+  const aptIdx=lines.findIndex(l=>aptRe.test(l));
+  if(aptIdx>=0){ out.address2=lines[aptIdx]; lines.splice(aptIdx,1); }
+  const compRe=/\b(inc|llc|corp|corporation|company|co|ltd|limited|lp|llp|plc|group|holdings|enterprises|services|logistics|industries|systems|solutions|associates|partners|freight|shipping|warehouse|distribution)\b\.?/i;
+  const rem=lines.filter(Boolean);
+  if(rem.length){
+    let ci=rem.findIndex(l=>compRe.test(l));
+    if(ci>=0){ out.company=rem[ci]; rem.splice(ci,1); }
+    if(rem.length){ out.name=rem[0]; rem.splice(0,1); }
+    if(rem.length&&!out.company){ out.company=rem[0]; }
+  }
+  return out;
+}
 function AddressCard({title,data,set,required,residential,setResidential,addresses,onPick,onSave,errorFields=[],contactFallback}){
   const f=(k,v)=>set({...data,[k]:v});
+  // Smart paste: if the pasted text parses into 2+ fields, distribute it across the whole form instead of one field
+  const onSmartPaste=(e)=>{
+    const txt=((e.clipboardData||window.clipboardData)&&(e.clipboardData||window.clipboardData).getData("text"))||"";
+    const parsed=parseAddressBlob(txt);
+    const keys=Object.keys(parsed).filter(k=>parsed[k]);
+    if(keys.length<2) return;   // single value → let the normal paste land in this field
+    e.preventDefault();
+    set(prev=>{ const next={...prev}; for(const k of keys) next[k]=parsed[k]; return next; });
+  };
   const [q,setQ]=useState("");
   const [open,setOpen]=useState(false);
   const [savedOk,setSavedOk]=useState(false);
@@ -4218,7 +4277,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
       <div className={`text-[9px] uppercase tracking-wide ${errorFields.includes(k)?"text-rose-600 font-semibold":(req&&!data[k]?"text-[#0086E0]":"text-stone-400")} flex items-center gap-1`}>{label}{errorFields.includes(k)?" • required":""}{k==="address1"&&acBusy&&<Loader2 className="w-2.5 h-2.5 animate-spin text-stone-400"/>}</div>
       {k==="country"
         ? <select value={data.country||"United States"} onChange={e=>f("country",e.target.value)} className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
-        : <input value={data[k]||""} onChange={e=>f(k,e.target.value)} onFocus={k==="address1"?()=>{acFocusRef.current=true;if(acSug.length)setAcOpen(true);}:undefined} onBlur={k==="address1"?()=>setTimeout(()=>{acFocusRef.current=false;setAcOpen(false);},150):undefined} autoComplete="off" className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5 placeholder-stone-300"/>}
+        : <input value={data[k]||""} onChange={e=>f(k,e.target.value)} onPaste={onSmartPaste} onFocus={k==="address1"?()=>{acFocusRef.current=true;if(acSug.length)setAcOpen(true);}:undefined} onBlur={k==="address1"?()=>setTimeout(()=>{acFocusRef.current=false;setAcOpen(false);},150):undefined} autoComplete="off" className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5 placeholder-stone-300"/>}
       {k==="address1"&&acOpen&&acSug.length>0&&<div className="absolute z-40 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-60 overflow-auto">
         <div className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50 border-b border-stone-100 flex items-center gap-1"><MapPin className="w-3 h-3"/>Google Maps suggestions</div>
         <div className="divide-y divide-stone-100">

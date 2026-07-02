@@ -14,6 +14,11 @@ const carrierName = (c) => { const k = String(c || "").toUpperCase(); return CAR
 const num = (...v) => { for (const x of v) { const n = Number(x); if (!isNaN(n) && n > 0) return n; } return undefined; };
 const S = (n) => String(n);
 
+// Map the app's internal One Rate box codes to FedEx's canonical packaging type codes.
+// FedEx One Rate pricing is only returned when a FedEx-branded packaging type is requested.
+const PKG_MAP = { fedex_envelope:"FEDEX_ENVELOPE", fedex_pak:"FEDEX_PAK", fedex_extra_small_box:"FEDEX_SMALL_BOX", fedex_small_box:"FEDEX_SMALL_BOX", fedex_medium_box:"FEDEX_MEDIUM_BOX", fedex_large_box:"FEDEX_LARGE_BOX", fedex_extra_large_box:"FEDEX_EXTRA_LARGE_BOX", fedex_tube:"FEDEX_TUBE" };
+const normPkg = (c) => { const k = String(c || "").toLowerCase(); return PKG_MAP[k] || (c || ""); };
+
 function svcCodeFromName(name) {
   const n = String(name || "").toLowerCase().replace(/[®™]/g, "").replace(/\(.*?\)/g, "").replace(/[^a-z0-9]+/g, " ").trim();
   const map = [
@@ -76,7 +81,7 @@ exports.handler = async (event) => {
     const mkBody = (cc, sig) => ({
       carrierCode: cc,
       serviceCode: "",
-      packageTypeCode: body.packageTypeCode || "",
+      packageTypeCode: normPkg(body.packageTypeCode),
       sender: { country: body.fromCountry || "US", zip: String(body.fromZip || "").trim() },
       receiver,
       residential: !!body.residential,
@@ -128,9 +133,10 @@ exports.handler = async (event) => {
     let all = [];
     const tried = [];
     let firstErr = null;
+    const raw = {};
     const results = await Promise.all(carriers.map(async (cc) => ({ cc, res: await quoteCarrier(cc) })));
     for (const { cc, res } of results) {
-      if (res.ok) { const r = mapQuotes(res.data, cc); all = all.concat(r); tried.push(cc + " → OK (" + r.length + ")"); }
+      if (res.ok) { raw[cc] = res.data; const r = mapQuotes(res.data, cc); all = all.concat(r); tried.push(cc + " → OK (" + r.length + ")"); }
       else { tried.push(cc + " → HTTP " + (res.err && res.err.status) + (res.err && res.err.detail ? (": " + res.err.detail) : "")); if (!firstErr) firstErr = res.err; }
     }
 
@@ -138,7 +144,7 @@ exports.handler = async (event) => {
     for (const r of all) { const k = r.carrier + "|" + r.key; if (!seen[k] || r.cost < seen[k].cost) seen[k] = r; }
     const rates = Object.values(seen).sort((a, b) => a.cost - b.cost);
 
-    if (rates.length) return J({ live: true, rates });
+    if (rates.length) return J({ live: true, rates, raw, tried });
     if (firstErr) return J({ live: false, error: "England HTTP " + firstErr.status + (firstErr.detail ? (": " + firstErr.detail) : ""), england_status: firstErr.status, england_response: firstErr.detail, tried, rates: [] });
     return J({ live: false, error: "England returned no rates for this shipment.", tried, rates: [] });
   } catch (e) {

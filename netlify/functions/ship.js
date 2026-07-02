@@ -18,6 +18,8 @@
 
 const J = (o) => ({ statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify(o) });
 const S = (v) => (v == null ? "" : String(v));
+const PKG_MAP = { fedex_envelope:"FEDEX_ENVELOPE", fedex_pak:"FEDEX_PAK", fedex_extra_small_box:"FEDEX_SMALL_BOX", fedex_small_box:"FEDEX_SMALL_BOX", fedex_medium_box:"FEDEX_MEDIUM_BOX", fedex_large_box:"FEDEX_LARGE_BOX", fedex_extra_large_box:"FEDEX_EXTRA_LARGE_BOX", fedex_tube:"FEDEX_TUBE" };
+const normPkg = (c) => { const k = String(c || "").toLowerCase(); return PKG_MAP[k] || (c || ""); };
 const two = (v) => S(v).trim().slice(0, 2).toUpperCase();
 const today = () => new Date().toISOString().slice(0, 10);
 const plusDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
@@ -118,13 +120,36 @@ exports.handler = async (event) => {
     const intl = CC(o.receiver.country || "US") !== "US";
     const pieces = (Array.isArray(o.pieces) && o.pieces.length ? o.pieces : [{ weight: o.weight || 1, length: 12, width: 9, height: 4 }]);
 
+    // England requires providerAccountId (a string) identifying which carrier account to ship on.
+    // Use an explicit override if given, otherwise look it up from /provider-accounts by carrier.
+    let providerAccountId = strOrNull(o.providerAccountId);
+    if (!providerAccountId) {
+      try {
+        const pr = await req(c.base + "/restapi/v1/customers/" + encodeURIComponent(c.customerId) + "/provider-accounts", { headers: authHeaders(c.apiKey) });
+        const pt = await pr.text(); let pd = null; try { pd = JSON.parse(pt); } catch {}
+        const accts = (pd && (pd.providerAccounts || pd.data)) || [];
+        const want = S(o.carrierCode).toLowerCase();
+        const match = accts.find((a) => S(a.providerCode).toLowerCase() === want) || (accts.length === 1 ? accts[0] : null);
+        if (match && match.id != null) providerAccountId = String(match.id);
+        if (!providerAccountId) {
+          return J({ ok: false, error: accts.length
+            ? ("No England carrier account matches '" + S(o.carrierCode) + "'. England has: " + accts.map((a) => a.providerCode).join(", ") + ". Enter the provider account ID in Settings → England.")
+            : ("England returned no carrier accounts to ship on (HTTP " + pr.status + "). Ask England to enable booking/provider-accounts on your key, or enter your provider account ID in Settings → England.") });
+        }
+      } catch (e) {
+        return J({ ok: false, error: "Couldn't look up your England carrier account: " + (e.name === "AbortError" ? "timeout" : e.message) + ". Enter your provider account ID in Settings → England." });
+      }
+    }
+
     const shipBody = {
       carrierCode: S(o.carrierCode),
       serviceCode: S(o.serviceCode),
-      packageTypeCode: S(o.packageTypeCode) || (S(o.carrierCode).toLowerCase() + "_custom_package"),
+      packageTypeCode: normPkg(o.packageTypeCode) || (S(o.carrierCode).toLowerCase() + "_custom_package"),
       shipmentDate: o.shipmentDate || today(),
       shipmentReference: S(o.reference || o.orderNumber || ("SC" + Date.now())),
       orderNumber: S(o.orderNumber || o.reference || ""),
+      invoiceNumber: S(o.invoiceNo || ""),
+      poNumber: S(o.poNo || ""),
       contentDescription: S(o.contentDescription || "Merchandise"),
       sender: {
         name: nameOr(o.sender.name, o.sender.company), company: S(o.sender.company) || nameOr(o.sender.name, "Shipper"),
@@ -149,7 +174,7 @@ exports.handler = async (event) => {
         declaredValue: (intl && (p.declaredValue || p.value)) ? String(p.declaredValue || p.value) : null,
       })),
       billing: { party: S(o.billingParty || "sender"), account: strOrNull(o.billingAccount), country: o.billingZip ? CC(o.billingCountry || "US") : null, zip: strOrNull(o.billingZip) },
-      providerAccountId: o.providerAccountId || null,
+      providerAccountId: providerAccountId,
       approvePrepayRecharge: o.approvePrepayRecharge !== false,
     };
     if (!intl) shipBody.pieces.forEach((p) => { p.declaredValue = null; });

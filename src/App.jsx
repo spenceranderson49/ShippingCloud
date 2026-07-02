@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v70";
+const BUILD_TAG="addr-v71";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -4178,10 +4178,18 @@ function parseCSZ(seg){
   if(seg) out.city=seg.replace(/,/g,"").trim();
   return out;
 }
+function stripTrailingCity(addr,city){
+  if(!addr||!city) return addr;
+  const esc=String(city).trim().replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+  const out=String(addr).replace(new RegExp("[\\s,]*"+esc+"\\s*,?\\s*$","i"),"").replace(/[\s,]+$/,"").trim();
+  return out||addr;
+}
 function parseAddressBlob(raw){
   const out={};
   let text=String(raw||"").replace(/\r/g,"").trim();
   if(!text) return out;
+  // un-glue a lost line break like "960 SAmerican Fork" → "960 S American Fork"
+  text=text.replace(/\b([NSEW])([A-Z][a-z])/g,"$1 $2");
   const em=text.match(/[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}/i);
   if(em){ out.email=em[0]; text=text.replace(em[0]," "); }
   const ph=text.match(/(\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}(?!\d)/);
@@ -4211,6 +4219,7 @@ function parseAddressBlob(raw){
     if(rem.length){ out.name=rem[0]; rem.splice(0,1); }
     if(rem.length&&!out.company){ out.company=rem[0]; }
   }
+  if(out.address1&&out.city) out.address1=stripTrailingCity(out.address1,out.city);
   return out;
 }
 function AddressCard({title,data,set,required,residential,setResidential,addresses,onPick,onSave,errorFields=[],contactFallback}){
@@ -4272,7 +4281,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
       fetch("https://api.zippopotam.us/us/"+zip).then(r=>r.ok?r.json():null).then(d=>{
         if(cancel||!d||!d.places||!d.places[0])return;
         const p=d.places[0];
-        set(prev=>({...prev,city:p["place name"]||prev.city,state:p["state abbreviation"]||prev.state}));
+        set(prev=>{ const city=p["place name"]||prev.city; const a1=stripTrailingCity(prev.address1||"", p["place name"]); return {...prev,city,state:p["state abbreviation"]||prev.state,address1:a1}; });
       }).catch(()=>{});
     },400);
     return ()=>{cancel=true;clearTimeout(t);};

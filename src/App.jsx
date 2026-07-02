@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v69";
+const BUILD_TAG="addr-v70";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -1816,6 +1816,14 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
   const commercial=!!(o.company&&o.company.trim());
   const [rcv,setRcv]=useState({name:o.customer||"",company:o.company||"",address1:o.address1||"",address2:o.address2||"",city:o.city||"",state:o.state||"",zip:o.zip||"",country:o.country||"US",phone:o.phone||"",email:o.email||""});
   const rset=(k,v)=>setRcv(p=>({...p,[k]:v}));
+  const rcvSmartPaste=(e)=>{
+    const txt=((e.clipboardData||window.clipboardData)&&(e.clipboardData||window.clipboardData).getData("text"))||"";
+    const parsed=parseAddressBlob(txt);
+    const keys=Object.keys(parsed).filter(k=>parsed[k]);
+    if(keys.length<2) return;
+    e.preventDefault();
+    setRcv(prev=>{ const next={...prev}; for(const k of keys) next[k]=parsed[k]; return next; });
+  };
   const [reference,setReference]=useState(o.name||"");
   const [poNo,setPoNo]=useState("");
   const [invoiceNo,setInvoiceNo]=useState("");
@@ -1951,10 +1959,10 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
                     <div>
                       {lbl("Ship to")}
                       <div className="space-y-1.5">
-                        <div className="grid grid-cols-2 gap-1.5"><input value={rcv.name} onChange={e=>rset("name",e.target.value)} placeholder="Name" className={inC}/><input value={rcv.company} onChange={e=>rset("company",e.target.value)} placeholder="Company" className={inC}/></div>
-                        <input value={rcv.address1} onChange={e=>rset("address1",e.target.value)} placeholder="Address" className={inC+" w-full"}/>
-                        <div className="grid grid-cols-3 gap-1.5"><input value={rcv.city} onChange={e=>rset("city",e.target.value)} placeholder="City" className={inC}/><input value={rcv.state} onChange={e=>rset("state",e.target.value)} placeholder="State" className={inC}/><input value={rcv.zip} onChange={e=>rset("zip",e.target.value)} placeholder="ZIP" className={inC}/></div>
-                        <div className="grid grid-cols-2 gap-1.5"><input value={rcv.phone} onChange={e=>rset("phone",e.target.value)} placeholder="Phone" className={inC}/><input value={rcv.email} onChange={e=>rset("email",e.target.value)} placeholder="Email" className={inC}/></div>
+                        <div className="grid grid-cols-2 gap-1.5"><input value={rcv.name} onChange={e=>rset("name",e.target.value)} onPaste={rcvSmartPaste} placeholder="Name" className={inC}/><input value={rcv.company} onChange={e=>rset("company",e.target.value)} onPaste={rcvSmartPaste} placeholder="Company" className={inC}/></div>
+                        <input value={rcv.address1} onChange={e=>rset("address1",e.target.value)} onPaste={rcvSmartPaste} placeholder="Address" className={inC+" w-full"}/>
+                        <div className="grid grid-cols-3 gap-1.5"><input value={rcv.city} onChange={e=>rset("city",e.target.value)} onPaste={rcvSmartPaste} placeholder="City" className={inC}/><input value={rcv.state} onChange={e=>rset("state",e.target.value)} onPaste={rcvSmartPaste} placeholder="State" className={inC}/><input value={rcv.zip} onChange={e=>rset("zip",e.target.value)} onPaste={rcvSmartPaste} placeholder="ZIP" className={inC}/></div>
+                        <div className="grid grid-cols-2 gap-1.5"><input value={rcv.phone} onChange={e=>rset("phone",e.target.value)} onPaste={rcvSmartPaste} placeholder="Phone" className={inC}/><input value={rcv.email} onChange={e=>rset("email",e.target.value)} onPaste={rcvSmartPaste} placeholder="Email" className={inC}/></div>
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5 text-[11px] mt-2">
                         {verify&&verify.loading&&<span className="text-stone-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin"/>Checking with FedEx…</span>}

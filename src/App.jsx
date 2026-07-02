@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v50";
+const BUILD_TAG="addr-v52";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -97,7 +97,7 @@ function orderToEngland(o,opts,sender,eng){
   const wt=opts.weightLb||o.weight||1;
   const q=opts.quote||{};
   return {
-    reference:o.name||"",orderNumber:o.name||"",shipmentDate:opts.shipDate||new Date().toISOString().slice(0,10),
+    reference:opts.reference||o.name||"",orderNumber:o.name||"",invoiceNo:opts.invoiceNo||"",poNo:opts.poNo||"",shipmentDate:opts.shipDate||new Date().toISOString().slice(0,10),
     carrierCode:q.carrierCode,serviceCode:q.serviceCode,packageTypeCode:opts.packageTypeCode||q.packageTypeCode||"",
     shippingService:q.label,contentDescription:o.items||"Merchandise",
     residential:!!opts.residential,signatureOption:opts.signatureOption||"none",
@@ -326,14 +326,14 @@ function pickBox(items,boxes,slack=1.30){
 }
 /* FedEx One Rate packaging (flat-rate by box size; volume in cubic inches, weight in lb) */
 const FEDEX_ONERATE=[
-  {code:"fedex_envelope",name:"FedEx One Rate® Envelope",maxVol:300,maxLbs:10,kind:"flat"},
-  {code:"fedex_pak",name:"FedEx One Rate® Pak",maxVol:650,maxLbs:50,kind:"flat"},
-  {code:"fedex_extra_small_box",name:"FedEx One Rate® Extra Small Box",maxVol:168,maxLbs:50,kind:"box",dims:{L:11,W:9,H:2}},
-  {code:"fedex_small_box",name:"FedEx One Rate® Small Box",maxVol:420,maxLbs:50,kind:"box",dims:{L:13,W:11,H:2}},
-  {code:"fedex_medium_box",name:"FedEx One Rate® Medium Box",maxVol:650,maxLbs:50,kind:"box",dims:{L:13,W:11,H:3}},
-  {code:"fedex_large_box",name:"FedEx One Rate® Large Box",maxVol:1100,maxLbs:50,kind:"box",dims:{L:18,W:12,H:3}},
-  {code:"fedex_extra_large_box",name:"FedEx One Rate® Extra Large Box",maxVol:2200,maxLbs:50,kind:"box",dims:{L:12,W:11,H:11}},
-  {code:"fedex_tube",name:"FedEx One Rate® Tube",maxVol:2200,maxLbs:50,kind:"tube"},
+  {code:"fedex_envelope",fedexCode:"FEDEX_ENVELOPE",name:"FedEx One Rate® Envelope",maxVol:300,maxLbs:10,kind:"flat"},
+  {code:"fedex_pak",fedexCode:"FEDEX_PAK",name:"FedEx One Rate® Pak",maxVol:650,maxLbs:50,kind:"flat"},
+  {code:"fedex_extra_small_box",fedexCode:"FEDEX_SMALL_BOX",name:"FedEx One Rate® Extra Small Box",maxVol:168,maxLbs:50,kind:"box",dims:{L:11,W:9,H:2}},
+  {code:"fedex_small_box",fedexCode:"FEDEX_SMALL_BOX",name:"FedEx One Rate® Small Box",maxVol:420,maxLbs:50,kind:"box",dims:{L:13,W:11,H:2}},
+  {code:"fedex_medium_box",fedexCode:"FEDEX_MEDIUM_BOX",name:"FedEx One Rate® Medium Box",maxVol:650,maxLbs:50,kind:"box",dims:{L:13,W:11,H:3}},
+  {code:"fedex_large_box",fedexCode:"FEDEX_LARGE_BOX",name:"FedEx One Rate® Large Box",maxVol:1100,maxLbs:50,kind:"box",dims:{L:18,W:12,H:3}},
+  {code:"fedex_extra_large_box",fedexCode:"FEDEX_EXTRA_LARGE_BOX",name:"FedEx One Rate® Extra Large Box",maxVol:2200,maxLbs:50,kind:"box",dims:{L:12,W:11,H:11}},
+  {code:"fedex_tube",fedexCode:"FEDEX_TUBE",name:"FedEx One Rate® Tube",maxVol:2200,maxLbs:50,kind:"tube"},
 ];
 const ONERATE_BOXES=FEDEX_ONERATE.filter(b=>b.kind==="box").sort((a,b)=>a.maxVol-b.maxVol);
 // pick the smallest One Rate box the item's dims + weight qualify for; null if it exceeds One Rate limits
@@ -1008,7 +1008,7 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
   const addPiece=()=>setPieces(ps=>[...ps,{...(ps[ps.length-1]||{weight:"",L:"",W:"",H:""})}]);
   const delPiece=(i)=>setPieces(ps=>ps.length>1?ps.filter((_,j)=>j!==i):ps);
   // When a One Rate service is chosen, set package #1 to the matching FedEx One Rate box size.
-  const applyOneRateBox=(code)=>{ const b=FEDEX_ONERATE.find(x=>x.code===code); if(!b||!b.dims)return; setPieces(ps=>ps.map((p,j)=>j===0?{...p,L:b.dims.L,W:b.dims.W,H:b.dims.H,boxIdx:-1,orBox:b.name.replace(/FedEx\s*One Rate®?\s*/i,"")}:p)); };
+  const applyOneRateBox=(code)=>{ const b=FEDEX_ONERATE.find(x=>x.code===code); if(!b||!b.dims)return; setPieces(ps=>ps.map((p,j)=>j===0?{...p,L:b.dims.L,W:b.dims.W,H:b.dims.H,boxIdx:-1,orBox:b.name.replace(/FedEx\s*One Rate®?\s*/i,"")}:p)); const val="FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,""); const f=settings?.orBoxField||"invoice"; const fill=(set)=>set(prev=>prev&&prev.trim()?prev:val); if(f==="invoice")fill(setInvoiceNo); else if(f==="po")fill(setPoNo); else if(f==="reference")fill(setReference); };
   const pw=(p)=>Math.round(((+p.weight||0)+(+p.oz||0)/16)*1000)/1000;
   const totalWeight=Math.round(pieces.reduce((a,p)=>a+pw(p),0)*100)/100;
   const setLine=(i,patch)=>setCustoms(c=>({...c,lines:c.lines.map((l,j)=>j===i?{...l,...patch}:l)}));
@@ -1090,7 +1090,7 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
     if(!ready||!orBox||!(eng&&eng.enabled&&eng.apiKey&&eng.customerId))return;
     getLiveRates({...shipment,packageTypeCode:orBox.code},eng).then(res=>{ if(cancel)return;
       if(res&&res.live&&res.rates&&res.rates.length){
-        setOrRates(res.rates.filter(q=>q.carrier==="FedEx"&&/2\s?day/i.test(q.label||"")&&!/a\.?m\.?/i.test(q.label||"")).map(q=>({...q,key:"or_"+q.key,label:q.label.replace(/®?$/,"")+" · One Rate",_oneRate:true,packageTypeCode:orBox.code})));
+        setOrRates(res.rates.filter(q=>q.carrier==="FedEx"&&/2\s?day/i.test(q.label||"")&&!/a\.?m\.?/i.test(q.label||"")).map(q=>({...q,key:"or_"+q.key,label:q.label.replace(/®?$/,"").trim()+" One Rate · "+orBox.name.replace(/FedEx\s*One Rate®?\s*/i,""),_oneRate:true,packageTypeCode:orBox.code})));
       }
     });
     return ()=>{cancel=true;};
@@ -1152,7 +1152,7 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
     }
     setBought(q.key);setShipStatus({state:"booking",key:q.key});
     if(!q.serviceCode||!q.carrierCode){setShipStatus({state:"error",key:q.key,msg:"Enter the shipment details so live rates load, then print (need the carrier/service from the rate)."});setBought(null);return;}
-    const order={reference:reference||invoiceNo||"",orderNumber:invoiceNo||reference||"",shipmentDate:shipDate,
+    const order={reference:reference||invoiceNo||"",orderNumber:invoiceNo||reference||"",invoiceNo,poNo,shipmentDate:shipDate,
       carrierCode:q.carrierCode,serviceCode:q.serviceCode,packageTypeCode:q.packageTypeCode||"",
       shippingService:q.label,shippingTotal:String(q.sell??q.cost??"0.00"),contentDescription:"Merchandise",
       signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null,residential,
@@ -1499,7 +1499,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
             {comps.map((c,i)=><div key={i} className="flex justify-between text-[13px]"><span className="text-stone-600">{c.label}</span><span className="font-mono text-stone-700">{money(c.amount)}</span></div>)}
             <div className="flex justify-between text-[13px] border-t border-stone-200 pt-1 mt-1 font-semibold"><span>Total</span><span className="font-mono">{money(sell)}</span></div>
           </div>
-          {q.dimWeight&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-2 flex items-center gap-1.5"><AlertTriangle className="w-3 h-3 shrink-0"/>Billed on <b>dimensional weight</b>{q.quotedWeight?` (${q.quotedWeight} lb)`:""}, not actual weight — the box is large for its weight.</div>}
+          {q.dimWeight&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-2 flex items-center gap-1.5"><AlertTriangle className="w-3 h-3 shrink-0"/>Billed at <b>{q.quotedWeight?`${q.quotedWeight} lb `:""}dimensional weight</b>.</div>}
           {eta&&<div className="text-[11px] text-stone-400 mt-2 flex items-center gap-1"><Calendar className="w-3 h-3"/>{fxLive?"FedEx delivery":"Estimated delivery"} {fmtDeliv(eta)}{days?` · ${days} business day${days>1?"s":""} in transit`:""}</div>}
         </div>}
       </div>
@@ -1797,6 +1797,8 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
   const [verify,setVerify]=useState(null);
   const [verifyNonce,setVerifyNonce]=useState(0);
   const [fxTransit,setFxTransit]=useState({});
+  const [orRates,setOrRates]=useState([]);
+  const [orPkg,setOrPkg]=useState("");
   const boxes=settings?.boxes||SEED_BOXES;
   const eng=settings?.england;
   const canBook=eng&&eng.enabled&&eng.apiKey&&eng.customerId;
@@ -1805,6 +1807,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
   const totalWeight=Math.round(((+weight||0)+(+oz||0)/16)*100)/100;
   const ready=/^\d{5}/.test(rcv.zip||"")&&totalWeight>0;
   const orBox=oneRateBoxFor(box.L,box.W,box.H,totalWeight);
+  const selectedOrBox=orPkg?FEDEX_ONERATE.find(b=>b.code===orPkg):orBox;
   const dest={...o,customer:rcv.name,company:rcv.company,address1:rcv.address1,address2:rcv.address2,city:rcv.city,state:rcv.state,zip:rcv.zip,country:rcv.country,phone:rcv.phone,email:rcv.email};
   const localOrderQuotes=()=>quoteRates({fromZip,toZip:rcv.zip,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],residential,intl:false}).filter(qq=>qq.carrier==="FedEx");
   // FedEx address verification + residential/commercial classification (parity with the Ship page)
@@ -1848,15 +1851,25 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
     } else setRateSrc({rates:localOrderQuotes(),live:false,loading:false});
     return ()=>{cancel=true;};
   },[rcv.zip,totalWeight,box.L,box.W,box.H,residential,eng]);
+  // Real FedEx One Rate pricing: separate live call with the One Rate packaging code (not a clone of 2Day)
+  useEffect(()=>{
+    let cancel=false; setOrRates([]);
+    if(!ready||!selectedOrBox||!canBook)return;
+    ratesForOrder(dest,{residential,box,weightLb:totalWeight,fromZip,sender:settings.sender,packageTypeCode:selectedOrBox.fedexCode||selectedOrBox.code},eng).then(res=>{ if(cancel)return;
+      if(res&&res.live&&res.rates&&res.rates.length){
+        const short=selectedOrBox.name.replace(/FedEx\s*One Rate®?\s*/i,"");
+        setOrRates(res.rates.filter(q=>q.carrier==="FedEx"&&/2\s?day/i.test(q.label||"")&&!/a\.?m\.?/i.test(q.label||"")).map(q=>({...q,key:"or_"+q.key,label:q.label.replace(/®?$/,"").trim()+" One Rate · "+short,_oneRate:true,packageTypeCode:selectedOrBox.code,sell:Math.round((q.cost||0)*(1+(client?.markup||0)/100)*100)/100})));
+      }
+    });
+    return ()=>{cancel=true;};
+  },[rcv.zip,totalWeight,box.L,box.W,box.H,residential,eng,selectedOrBox&&selectedOrBox.code]);
   const baseQuotes=useMemo(()=>(rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!/first\s*overnight/i.test(qq.label||"")).filter(qq=>{if(!addrClassified)return true;const k=canonSvc(qq.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;}).map(qq=>({...qq,sell:Math.round((qq.cost||0)*(1+(client?.markup||0)/100)*100)/100})),[rateSrc,residential,client,addrClassified]);
   const quotes=useMemo(()=>{
     const withTransit=(list)=>list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&m.days!=null);const days=real?m.days:(ready?estTransitDays(q.label,q.zone):null);return {...q,fxDays:days,fxDate:real?m.date:undefined,fxLive:real};});
-    if(!orBox)return withTransit([...baseQuotes]).sort((a,b)=>a.sell-b.sell);
-    const or=baseQuotes.filter(q=>/2\s?day/i.test(q.label||"")&&!/a\.?m\.?/i.test(q.label||"")).map(q=>({...q,key:"or_"+q.key,label:q.label.replace(/®?$/,"").trim()+" · One Rate",_oneRate:true,packageTypeCode:orBox.code}));
-    return withTransit([...baseQuotes,...or]).sort((a,b)=>a.sell-b.sell);
-  },[baseQuotes,orBox,fxTransit,ready]);
+    return withTransit([...baseQuotes,...(orRates||[])]).sort((a,b)=>a.sell-b.sell);
+  },[baseQuotes,orRates,fxTransit,ready]);
   const best=(rateSrc.live&&quotes[0])?quotes[0].key:null;
-  const applyORBox=(code)=>{const b=FEDEX_ONERATE.find(x=>x.code===code);if(b&&b.dims){setDims({L:b.dims.L,W:b.dims.W,H:b.dims.H});setBoxIdx(-1);}};
+  const applyORBox=(code)=>{const b=FEDEX_ONERATE.find(x=>x.code===code);if(!b)return;if(b.dims){setDims({L:b.dims.L,W:b.dims.W,H:b.dims.H});}setBoxIdx(-1);setOrPkg(code);const val="FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,"");const f=settings?.orBoxField||"invoice";const fill=(set)=>set(prev=>prev&&prev.trim()?prev:val);if(f==="invoice")fill(setInvoiceNo);else if(f==="po")fill(setPoNo);else if(f==="reference")fill(setReference);};
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
   const pickBox=(j)=>{ setBoxIdx(j); if(j>=0){const b=boxes[j];setDims({L:b.L,W:b.W,H:b.H});} };
   const printHere=async(qq)=>{
@@ -1870,7 +1883,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
     const need=[]; if(!rcv.name&&!rcv.company)need.push("name"); if(String(rcv.phone||"").replace(/\D/g,"").length<10)need.push("10-digit phone"); if(!rcv.email)need.push("email");
     if(need.length){ setStatus({state:"error",msg:"England needs the receiver's "+need.join(", ")+"."}); return; }
     setBought(qq.key); setStatus({state:"booking",msg:"Booking with England…"});
-    const res=await bookOrderLabel(dest,{quote:qq,box,weightLb:totalWeight,residential,packageTypeCode:qq.packageTypeCode||"",sender:settings.sender},eng,settings.sender);
+    const res=await bookOrderLabel(dest,{quote:qq,box,weightLb:totalWeight,residential,packageTypeCode:qq.packageTypeCode||"",sender:settings.sender,reference:reference||o.name,invoiceNo,poNo},eng,settings.sender);
     if(!res||!res.ok){ setStatus({state:"error",msg:(res&&res.error)||"Booking failed"}); setBought(null); return; }
     const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,...baseRec,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,bookNumber:res.bookNumber};
     onShipped(rec,o.id);
@@ -1976,9 +1989,9 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
                     <div className="grid grid-cols-3 gap-2">
                       <div>{lbl("Weight (lb)")}<input type="number" value={weight} onChange={e=>{setWeight(e.target.value);upd({weight:+e.target.value});}} className={inC+" w-full font-mono"}/></div>
                       <div>{lbl("oz")}<input type="number" value={oz} onChange={e=>setOz(e.target.value)} placeholder="0" className={inC+" w-full font-mono"}/></div>
-                      <div>{lbl("Package")}<select value={boxIdx} onChange={e=>pickBox(+e.target.value)} className={inC+" w-full"}><option value="-1">Custom</option>{boxes.map((b,j)=><option key={b.id} value={j}>{b.name}</option>)}</select></div>
+                      <div>{lbl("Package")}<select value={orPkg?("or_"+orPkg):String(boxIdx)} onChange={e=>{const v=e.target.value;if(v.indexOf("or_")===0){applyORBox(v.slice(3));}else{setOrPkg("");pickBox(+v);}}} className={inC+" w-full"}><option value="-1">Custom</option>{boxes.map((b,j)=><option key={b.id} value={j}>{b.name}</option>)}<optgroup label="FedEx One Rate">{ONERATE_BOXES.map(b=><option key={b.code} value={"or_"+b.code}>{b.name.replace(/FedEx\s*One Rate®?\s*/i,"")}</option>)}</optgroup></select></div>
                     </div>
-                    <div>{lbl("Size (in)")}<div className="grid grid-cols-3 gap-2">{["L","W","H"].map(d=><input key={d} type="number" value={dims[d]} onChange={e=>{setDims(v=>({...v,[d]:e.target.value}));setBoxIdx(-1);}} placeholder={d} className={inC+" w-full font-mono"}/>)}</div></div>
+                    <div>{lbl("Size (in)")}<div className="grid grid-cols-3 gap-2">{["L","W","H"].map(d=><input key={d} type="number" value={dims[d]} onChange={e=>{setDims(v=>({...v,[d]:e.target.value}));setBoxIdx(-1);setOrPkg("");}} placeholder={d} className={inC+" w-full font-mono"}/>)}</div></div>
                     <div className="flex flex-wrap items-center gap-3">
                       <label className="flex items-center gap-1.5 text-[13px] text-stone-600"><input type="checkbox" checked={residential} onChange={e=>{setRes(e.target.checked);setResTouched(true);}} className="accent-[#0086E0]"/>Residential</label>
                       <label className="flex items-center gap-1.5 text-[13px] text-stone-600"><input type="checkbox" checked={sat} onChange={e=>setSat(e.target.checked)} className="accent-[#0086E0]"/>Saturday delivery</label>
@@ -2724,7 +2737,7 @@ function CheckoutRates({settings,setSettings,client}){
 /* ════════ SETTINGS ════════ */
 function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client}){
   const [sec,setSec]=useState("carriers");
-  const secs=[["carriers","Carrier accounts",Plug],["boxes","Package sizes",Boxes],["boxlogic","Box logic",Package],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["automation","Automation rules",Zap],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["integrations","Integrations",Layers],["subscription","Subscription",Star],["company","Company",Building2]];
+  const secs=[["carriers","Carrier accounts",Plug],["boxes","Package sizes",Boxes],["boxlogic","Box logic",Package],["reference","Reference fields",Receipt],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["automation","Automation rules",Zap],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["integrations","Integrations",Layers],["subscription","Subscription",Star],["company","Company",Building2]];
   return (
     <div className="flex flex-col md:flex-row gap-6">
       <aside className="md:w-56 shrink-0 space-y-1">{secs.map(([id,l,Icon])=><button key={id} onClick={()=>setSec(id)} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}</button>)}</aside>
@@ -2732,6 +2745,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="carriers"&&<CarrierAccounts accounts={accounts} setAccounts={setAccounts} settings={settings} setSettings={setSettings}/>}
         {sec==="boxes"&&<BoxesSettings settings={settings} setSettings={setSettings}/>}
         {sec==="boxlogic"&&<BoxLogic settings={settings} setSettings={setSettings}/>}
+        {sec==="reference"&&<ReferenceFields settings={settings} setSettings={setSettings}/>}
         {sec==="printer"&&<PrinterSettings settings={settings} setSettings={setSettings}/>}
         {sec==="checkout"&&<CheckoutRates settings={settings} setSettings={setSettings} client={client}/>}
         {sec==="manifests"&&<Manifests shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests}/>}
@@ -2746,6 +2760,37 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
       </div>
     </div>
   );
+}
+function ReferenceFields({settings,setSettings}){
+  const field=settings.orBoxField||"invoice";
+  const set=(v)=>setSettings({...settings,orBoxField:v});
+  const on=field!=="off";
+  const fieldName=field==="po"?"PO #":field==="reference"?"Reference":"Invoice #";
+  const opts=[
+    ["invoice","Invoice # field","Writes the FedEx box (e.g. “FedEx Medium Box”) into the Invoice # field."],
+    ["po","PO # field","Writes the FedEx box into the PO # field instead."],
+    ["reference","Reference field","Writes the FedEx box into the Reference field instead."],
+    ["off","Don’t auto-fill","Never auto-fills the box — you’ll enter your own references."],
+  ];
+  return (<div className="max-w-2xl space-y-4">
+    <div>
+      <h2 className="text-base font-semibold text-stone-800">Reference fields</h2>
+      <p className="text-sm text-stone-500 mt-1">When you pick a <b>FedEx One Rate</b> service, ShippingCloud can auto-fill the chosen box name into a reference field so it prints on the label and your team knows which box to grab. Pick where it goes — or turn it off.</p>
+    </div>
+    <div className="bg-white border border-stone-200 rounded-lg p-4 flex items-center justify-between">
+      <div><div className="text-sm font-medium text-stone-800">Auto-fill One Rate box name</div><div className="text-[13px] text-stone-500">{on?`Currently filling the ${fieldName} field.`:"Currently off."}</div></div>
+      <button onClick={()=>set(on?"off":"invoice")} className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${on?"bg-[#0086E0]":"bg-stone-300"}`} title="Toggle auto-fill"><span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${on?"translate-x-5":""}`}/></button>
+    </div>
+    <div className={`bg-white border border-stone-200 rounded-lg divide-y divide-stone-100 ${on?"":"opacity-50 pointer-events-none"}`}>
+      {opts.filter(([v])=>v!=="off").map(([v,l,d])=>(
+        <label key={v} className={`flex items-start gap-3 px-4 py-3 cursor-pointer ${field===v?"bg-[#F5FAFF]":"hover:bg-stone-50"}`}>
+          <input type="radio" name="orBoxField" checked={field===v} onChange={()=>set(v)} className="mt-1 accent-[#0086E0]"/>
+          <div><div className="text-sm font-medium text-stone-800">{l}</div><div className="text-[13px] text-stone-500">{d}</div></div>
+        </label>
+      ))}
+    </div>
+    <div className="text-[12px] text-stone-400 flex items-start gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5"/>Only fills when the field is empty — anything you’ve already typed is left untouched.</div>
+  </div>);
 }
 function BoxesSettings({settings,setSettings}){
   const boxes=settings.boxes||SEED_BOXES;

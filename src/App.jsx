@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v49";
+const BUILD_TAG="addr-v50";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -1282,14 +1282,14 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
               <div className="text-[11px] uppercase tracking-widest text-stone-600 font-semibold">Packages · {pieces.length}</div>
               <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Ship date</span><input type="date" value={shipDate} onChange={e=>setShipDate(e.target.value)} className="text-sm font-mono text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-[#0099FF]"/></div>
               <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Ref #</span><input value={reference} onChange={e=>setReference(e.target.value)} placeholder="order / ref" className="w-28 bg-white border border-stone-300 rounded px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
+              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Invoice #</span><input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} placeholder="INV-…" className="w-24 bg-white border border-stone-300 rounded px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
+              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">PO #</span><input value={poNo} onChange={e=>setPoNo(e.target.value)} placeholder="PO-…" className="w-24 bg-white border border-stone-300 rounded px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
             </div>
             <div className="flex flex-wrap items-center gap-4">
               <span className="text-[11px] text-stone-400 font-mono">total {totalWeight} lb</span>
               <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Insure $</span><input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0" className="w-16 bg-white border border-stone-300 rounded px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
               <div className="flex items-center gap-1.5"><span className="text-[10px] uppercase tracking-widest text-stone-500">Signature</span><select value={sigOption} onChange={e=>{setSigOption(e.target.value);setSig(e.target.value!=="none");}} className="bg-white border border-stone-300 rounded px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="none">None</option><option value="direct">Direct signature</option><option value="indirect">Indirect signature</option><option value="adult">Adult signature</option></select></div>
               {quotes.some(q=>{const l=String(q.label||"").toLowerCase();return l.includes("fedex")&&/(overnight|2\s?day|express saver)/.test(l);})&&<label className="flex items-center gap-1.5 text-[11px] text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSat(e.target.checked)} className="accent-[#0086E0]"/><span className="uppercase tracking-widest text-stone-500">Saturday delivery <span className="normal-case text-stone-400">(Express only)</span></span></label>}
-              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Invoice #</span><input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} placeholder="INV-…" className="w-24 bg-white border border-stone-300 rounded px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
-              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">PO #</span><input value={poNo} onChange={e=>setPoNo(e.target.value)} placeholder="PO-…" className="w-24 bg-white border border-stone-300 rounded px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
             </div>
           </div>
           {pieces.map((p,i)=>(
@@ -1776,11 +1776,17 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
 /* ════════ ORDER · ShipStation-style detail + ship page (modal overlay) ════════ */
 function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
   const commercial=!!(o.company&&o.company.trim());
+  const [rcv,setRcv]=useState({name:o.customer||"",company:o.company||"",address1:o.address1||"",address2:o.address2||"",city:o.city||"",state:o.state||"",zip:o.zip||"",country:o.country||"US",phone:o.phone||"",email:o.email||""});
+  const rset=(k,v)=>setRcv(p=>({...p,[k]:v}));
+  const [reference,setReference]=useState(o.name||"");
+  const [poNo,setPoNo]=useState("");
+  const [invoiceNo,setInvoiceNo]=useState("");
   const [weight,setWeight]=useState(o.weight||1);
   const [oz,setOz]=useState("");
   const [boxIdx,setBoxIdx]=useState(-1);
   const [dims,setDims]=useState({L:12,W:9,H:4});
   const [residential,setRes]=useState(!commercial);
+  const [resTouched,setResTouched]=useState(false);
   const [sat,setSat]=useState(false);
   const [insurance,setInsurance]=useState("");
   const [sigOption,setSigOption]=useState("none");
@@ -1788,34 +1794,67 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
   const [status,setStatus]=useState(null);
   const [labelPreview,setLabelPreview]=useState(null);
   const [rateSrc,setRateSrc]=useState({rates:[],live:false,loading:false});
+  const [verify,setVerify]=useState(null);
+  const [verifyNonce,setVerifyNonce]=useState(0);
+  const [fxTransit,setFxTransit]=useState({});
   const boxes=settings?.boxes||SEED_BOXES;
   const eng=settings?.england;
   const canBook=eng&&eng.enabled&&eng.apiKey&&eng.customerId;
   const fromZip=settings?.sender?.zip||client?.origin||"84003";
   const box={L:+dims.L||12,W:+dims.W||9,H:+dims.H||4};
   const totalWeight=Math.round(((+weight||0)+(+oz||0)/16)*100)/100;
-  const ready=/^\d{5}/.test(o.zip||"")&&totalWeight>0;
+  const ready=/^\d{5}/.test(rcv.zip||"")&&totalWeight>0;
   const orBox=oneRateBoxFor(box.L,box.W,box.H,totalWeight);
-  const localOrderQuotes=()=>quoteRates({fromZip,toZip:o.zip,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],residential,intl:false}).filter(qq=>qq.carrier==="FedEx");
+  const dest={...o,customer:rcv.name,company:rcv.company,address1:rcv.address1,address2:rcv.address2,city:rcv.city,state:rcv.state,zip:rcv.zip,country:rcv.country,phone:rcv.phone,email:rcv.email};
+  const localOrderQuotes=()=>quoteRates({fromZip,toZip:rcv.zip,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],residential,intl:false}).filter(qq=>qq.carrier==="FedEx");
+  // FedEx address verification + residential/commercial classification (parity with the Ship page)
+  useEffect(()=>{
+    const core=rcv.address1&&/^\d{5}/.test(rcv.zip||"")&&rcv.city&&rcv.state;
+    if(!core){setVerify(null);return;}
+    let cancel=false; setVerify({loading:true});
+    const t=setTimeout(async()=>{
+      const res=await fedexValidateAddress(rcv,fromZip);
+      if(cancel)return;
+      if(res&&res.ok){
+        const type=res.classification==="RESIDENTIAL"?"Residential":(res.classification==="BUSINESS"?"Commercial":null);
+        if(type&&!resTouched)setRes(type==="Residential");
+        setVerify({loading:false,deliverable:res.deliverable,type,issues:res.issues,normalized:res.normalized});
+      } else setVerify({loading:false,deliverable:null,type:null,issues:null,error:(res&&res.error)||"Couldn't reach FedEx"});
+    },600);
+    return ()=>{cancel=true;clearTimeout(t);};
+  },[rcv.address1,rcv.zip,rcv.city,rcv.state,verifyNonce]);
+  const normLine=(n)=> n? [Array.isArray(n.streetLines)?n.streetLines.join(" "):n.streetLines,n.city,[n.state,n.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ") : "";
+  const curLine=[rcv.address1,rcv.city,[rcv.state,rcv.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  const suggestion=(verify&&verify.normalized&&normLine(verify.normalized))||"";
+  const suggestDiffers=suggestion && suggestion.replace(/\s+/g," ").toUpperCase()!==curLine.replace(/\s+/g," ").toUpperCase();
+  const applySuggestion=()=>{const n=verify&&verify.normalized;if(!n)return;setRcv(p=>({...p,address1:Array.isArray(n.streetLines)?n.streetLines.join(" "):(n.streetLines||p.address1),city:n.city||p.city,state:n.state||p.state,zip:n.zip||p.zip}));};
+  const setOverride=(on)=>{ setResTouched(on); if(!on)setVerifyNonce(x=>x+1); };
+  const addrClassified=!!(resTouched||(verify&&verify.type));
+  useEffect(()=>{
+    let cancel=false;
+    if(!ready){setFxTransit({});return;}
+    fedexTransit({fromZip,toZip:rcv.zip,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],residential}).then(m=>{if(!cancel)setFxTransit(m||{});});
+    return ()=>{cancel=true;};
+  },[rcv.zip,fromZip,residential,totalWeight,box.L,box.W,box.H]);
   useEffect(()=>{
     let cancel=false;
     if(!ready){setRateSrc({rates:[],live:false,loading:false});return;}
     if(canBook){
       setRateSrc(s=>({...s,loading:true}));
-      ratesForOrder(o,{residential,box,weightLb:totalWeight,fromZip,sender:settings.sender,packageTypeCode:""},eng).then(res=>{ if(cancel)return;
+      ratesForOrder(dest,{residential,box,weightLb:totalWeight,fromZip,sender:settings.sender,packageTypeCode:""},eng).then(res=>{ if(cancel)return;
         if(res&&res.live&&res.rates&&res.rates.length)setRateSrc({rates:res.rates,live:true,loading:false});
         else setRateSrc({rates:localOrderQuotes(),live:false,loading:false});
       });
     } else setRateSrc({rates:localOrderQuotes(),live:false,loading:false});
     return ()=>{cancel=true;};
-  },[o.zip,totalWeight,box.L,box.W,box.H,residential,eng]);
-  const baseQuotes=useMemo(()=>(rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!/first\s*overnight/i.test(qq.label||"")).filter(qq=>{const k=canonSvc(qq.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;}).map(qq=>({...qq,sell:Math.round((qq.cost||0)*(1+(client?.markup||0)/100)*100)/100})),[rateSrc,residential,client]);
-  // Fold FedEx One Rate services into the list whenever the box qualifies — no separate checkbox.
+  },[rcv.zip,totalWeight,box.L,box.W,box.H,residential,eng]);
+  const baseQuotes=useMemo(()=>(rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!/first\s*overnight/i.test(qq.label||"")).filter(qq=>{if(!addrClassified)return true;const k=canonSvc(qq.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;}).map(qq=>({...qq,sell:Math.round((qq.cost||0)*(1+(client?.markup||0)/100)*100)/100})),[rateSrc,residential,client,addrClassified]);
   const quotes=useMemo(()=>{
-    if(!orBox)return [...baseQuotes].sort((a,b)=>a.sell-b.sell);
+    const withTransit=(list)=>list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&m.days!=null);const days=real?m.days:(ready?estTransitDays(q.label,q.zone):null);return {...q,fxDays:days,fxDate:real?m.date:undefined,fxLive:real};});
+    if(!orBox)return withTransit([...baseQuotes]).sort((a,b)=>a.sell-b.sell);
     const or=baseQuotes.filter(q=>/2\s?day/i.test(q.label||"")&&!/a\.?m\.?/i.test(q.label||"")).map(q=>({...q,key:"or_"+q.key,label:q.label.replace(/®?$/,"").trim()+" · One Rate",_oneRate:true,packageTypeCode:orBox.code}));
-    return [...baseQuotes,...or].sort((a,b)=>a.sell-b.sell);
-  },[baseQuotes,orBox]);
+    return withTransit([...baseQuotes,...or]).sort((a,b)=>a.sell-b.sell);
+  },[baseQuotes,orBox,fxTransit,ready]);
   const best=(rateSrc.live&&quotes[0])?quotes[0].key:null;
   const applyORBox=(code)=>{const b=FEDEX_ONERATE.find(x=>x.code===code);if(b&&b.dims){setDims({L:b.dims.L,W:b.dims.W,H:b.dims.H});setBoxIdx(-1);}};
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
@@ -1823,15 +1862,15 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
   const printHere=async(qq)=>{
     if(!qq)return;
     const carrier=carrierOf(qq.label);
-    const baseRec={service:qq.label,recipient:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings?.sender||{})},fromZip,toZip:o.zip,weight:totalWeight,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",insurance:insurance||null,signature:sigOption!=="none",signatureOption:sigOption,saturdayDelivery:sat,reference:o.name};
+    const baseRec={service:qq.label,recipient:{name:rcv.name,company:rcv.company,zip:rcv.zip,state:rcv.state,city:rcv.city,address1:rcv.address1,phone:rcv.phone,email:rcv.email},sender:{...(settings?.sender||{})},fromZip,toZip:rcv.zip,weight:totalWeight,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",insurance:insurance||null,signature:sigOption!=="none",signatureOption:sigOption,saturdayDelivery:sat,reference:reference||o.name,poNo,invoiceNo};
     if(!canBook){
       const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:newTracking(carrier),carrier,...baseRec,status:"Label created",lastScan:"Label created",eta:"—",onTime:true};
       onShipped(rec,o.id); setBought(qq.key); setStatus({state:"demo",msg:"Recorded (demo — connect England to book real labels)."}); return;
     }
-    const need=[]; if(!o.customer&&!o.company)need.push("name"); if(String(o.phone||"").replace(/\D/g,"").length<10)need.push("10-digit phone"); if(!o.email)need.push("email");
-    if(need.length){ setStatus({state:"error",msg:"England needs the receiver's "+need.join(", ")+". Edit the order or open in Ship tab."}); return; }
+    const need=[]; if(!rcv.name&&!rcv.company)need.push("name"); if(String(rcv.phone||"").replace(/\D/g,"").length<10)need.push("10-digit phone"); if(!rcv.email)need.push("email");
+    if(need.length){ setStatus({state:"error",msg:"England needs the receiver's "+need.join(", ")+"."}); return; }
     setBought(qq.key); setStatus({state:"booking",msg:"Booking with England…"});
-    const res=await bookOrderLabel(o,{quote:qq,box,weightLb:totalWeight,residential,packageTypeCode:qq.packageTypeCode||"",sender:settings.sender},eng,settings.sender);
+    const res=await bookOrderLabel(dest,{quote:qq,box,weightLb:totalWeight,residential,packageTypeCode:qq.packageTypeCode||"",sender:settings.sender},eng,settings.sender);
     if(!res||!res.ok){ setStatus({state:"error",msg:(res&&res.error)||"Booking failed"}); setBought(null); return; }
     const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,...baseRec,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,bookNumber:res.bookNumber};
     onShipped(rec,o.id);
@@ -1844,6 +1883,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
   const shipped=o.status==="fulfilled";
   const Row2=({k,v,strong})=>(<div className="flex items-center justify-between text-sm py-0.5"><span className="text-stone-500">{k}</span><span className={strong?"font-semibold text-stone-900":"text-stone-700 font-mono"}>{v}</span></div>);
   const lbl=(t)=>(<div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">{t}</div>);
+  const inC="bg-white border border-stone-300 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300";
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-stretch sm:items-center justify-center sm:p-4" onClick={onClose}>
       <div className="bg-stone-50 w-full max-w-6xl sm:h-[92vh] h-full sm:rounded-xl overflow-hidden shadow-2xl flex flex-col" onClick={e=>e.stopPropagation()}>
@@ -1869,13 +1909,25 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
                   <div className="grid sm:grid-cols-2 gap-4">
                     <div>
                       {lbl("Ship to")}
-                      <div className="text-sm text-stone-800 font-medium">{o.customer||"—"}</div>
-                      {o.company&&<div className="text-sm text-stone-600">{o.company}</div>}
-                      <div className="text-sm text-stone-600">{o.address1}{o.address2?`, ${o.address2}`:""}</div>
-                      <div className="text-sm text-stone-600">{o.city}, {o.state} {o.zip}</div>
-                      <div className="text-sm text-stone-600">{o.country||"US"}</div>
-                      <div className="text-[13px] text-stone-500 mt-1">{o.phone||"—"}</div>
-                      <div className="text-[13px] text-stone-500 break-all">{o.email||"—"}</div>
+                      <div className="space-y-1.5">
+                        <div className="grid grid-cols-2 gap-1.5"><input value={rcv.name} onChange={e=>rset("name",e.target.value)} placeholder="Name" className={inC}/><input value={rcv.company} onChange={e=>rset("company",e.target.value)} placeholder="Company" className={inC}/></div>
+                        <input value={rcv.address1} onChange={e=>rset("address1",e.target.value)} placeholder="Address" className={inC+" w-full"}/>
+                        <div className="grid grid-cols-3 gap-1.5"><input value={rcv.city} onChange={e=>rset("city",e.target.value)} placeholder="City" className={inC}/><input value={rcv.state} onChange={e=>rset("state",e.target.value)} placeholder="State" className={inC}/><input value={rcv.zip} onChange={e=>rset("zip",e.target.value)} placeholder="ZIP" className={inC}/></div>
+                        <div className="grid grid-cols-2 gap-1.5"><input value={rcv.phone} onChange={e=>rset("phone",e.target.value)} placeholder="Phone" className={inC}/><input value={rcv.email} onChange={e=>rset("email",e.target.value)} placeholder="Email" className={inC}/></div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px] mt-2">
+                        {verify&&verify.loading&&<span className="text-stone-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin"/>Checking with FedEx…</span>}
+                        {verify&&!verify.loading&&<>
+                          {(resTouched||verify.type)&&<span className={`flex items-center gap-1 rounded-full px-2 py-0.5 font-medium border ${residential?"text-[#006FBF] bg-[#E6F4FF] border-[#99D6FF]":"text-stone-700 bg-stone-100 border-stone-200"}`}>{residential?<Home className="w-3 h-3"/>:<Building2 className="w-3 h-3"/>}{residential?"Residential":"Commercial"}{resTouched?" · manual":""}</span>}
+                          {verify.deliverable===true&&<span className="flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5 font-medium"><CheckCircle2 className="w-3 h-3"/>Verified</span>}
+                          {verify.deliverable===false&&<span className="flex items-center gap-1 text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 font-medium"><AlertTriangle className="w-3 h-3"/>Not verified</span>}
+                          {verify.error&&<span className="flex items-center gap-1 text-rose-600 bg-rose-50 border border-rose-200 rounded-full px-2 py-0.5 font-medium"><AlertTriangle className="w-3 h-3"/>{String(verify.error).slice(0,40)}</span>}
+                          {suggestDiffers&&<button onClick={applySuggestion} className="flex items-center gap-1 text-[#0086E0] bg-[#E6F4FF] border border-[#99D6FF] rounded-full px-2 py-0.5 font-medium hover:bg-[#CCEAFF]"><MapPin className="w-3 h-3"/>Use: {suggestion}</button>}
+                        </>}
+                        <label className="flex items-center gap-1 text-stone-500 cursor-pointer"><input type="checkbox" checked={resTouched} onChange={e=>setOverride(e.target.checked)} className="accent-[#0086E0]"/>Override</label>
+                        {resTouched&&<div className="flex rounded-full border border-stone-200 overflow-hidden"><button onClick={()=>setRes(true)} className={`px-2 py-0.5 ${residential?"bg-[#E6F4FF] text-[#006FBF] font-medium":"bg-white text-stone-500"}`}>Res</button><button onClick={()=>setRes(false)} className={`px-2 py-0.5 border-l border-stone-200 ${!residential?"bg-stone-100 text-stone-800 font-medium":"bg-white text-stone-500"}`}>Com</button></div>}
+                        {rcv.address1&&/^\d{5}/.test(rcv.zip||"")&&<button onClick={()=>setVerifyNonce(n=>n+1)} className="flex items-center gap-1 text-stone-400 hover:text-[#0086E0] underline"><ShieldCheck className="w-3 h-3"/>Re-check</button>}
+                      </div>
                     </div>
                     <div>
                       {lbl("Cost summary")}
@@ -1917,26 +1969,30 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
                   ):(<>
                     <div>{lbl("Ship from")}<div className="text-[13px] text-stone-600">{settings?.sender?.company||settings?.sender?.name||"Your address"} · {settings?.sender?.city} {settings?.sender?.state} {settings?.sender?.zip}</div></div>
                     <div className="grid grid-cols-3 gap-2">
-                      <div>{lbl("Weight (lb)")}<input type="number" value={weight} onChange={e=>{setWeight(e.target.value);upd({weight:+e.target.value});}} className="w-full bg-white border border-stone-300 rounded px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/></div>
-                      <div>{lbl("oz")}<input type="number" value={oz} onChange={e=>setOz(e.target.value)} placeholder="0" className="w-full bg-white border border-stone-300 rounded px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
-                      <div>{lbl("Package")}<select value={boxIdx} onChange={e=>pickBox(+e.target.value)} className="w-full bg-white border border-stone-300 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"><option value="-1">Custom</option>{boxes.map((b,j)=><option key={b.id} value={j}>{b.name}</option>)}</select></div>
+                      <div>{lbl("Reference")}<input value={reference} onChange={e=>setReference(e.target.value)} placeholder="order / ref" className={inC+" w-full"}/></div>
+                      <div>{lbl("PO #")}<input value={poNo} onChange={e=>setPoNo(e.target.value)} placeholder="PO-…" className={inC+" w-full"}/></div>
+                      <div>{lbl("Invoice #")}<input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} placeholder="INV-…" className={inC+" w-full"}/></div>
                     </div>
-                    <div>{lbl("Size (in)")}<div className="grid grid-cols-3 gap-2">{["L","W","H"].map(d=><input key={d} type="number" value={dims[d]} onChange={e=>{setDims(v=>({...v,[d]:e.target.value}));setBoxIdx(-1);}} placeholder={d} className="w-full bg-white border border-stone-300 rounded px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>)}</div></div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>{lbl("Weight (lb)")}<input type="number" value={weight} onChange={e=>{setWeight(e.target.value);upd({weight:+e.target.value});}} className={inC+" w-full font-mono"}/></div>
+                      <div>{lbl("oz")}<input type="number" value={oz} onChange={e=>setOz(e.target.value)} placeholder="0" className={inC+" w-full font-mono"}/></div>
+                      <div>{lbl("Package")}<select value={boxIdx} onChange={e=>pickBox(+e.target.value)} className={inC+" w-full"}><option value="-1">Custom</option>{boxes.map((b,j)=><option key={b.id} value={j}>{b.name}</option>)}</select></div>
+                    </div>
+                    <div>{lbl("Size (in)")}<div className="grid grid-cols-3 gap-2">{["L","W","H"].map(d=><input key={d} type="number" value={dims[d]} onChange={e=>{setDims(v=>({...v,[d]:e.target.value}));setBoxIdx(-1);}} placeholder={d} className={inC+" w-full font-mono"}/>)}</div></div>
                     <div className="flex flex-wrap items-center gap-3">
-                      <label className="flex items-center gap-1.5 text-[13px] text-stone-600"><input type="checkbox" checked={residential} onChange={e=>setRes(e.target.checked)} className="accent-[#0086E0]"/>Residential</label>
+                      <label className="flex items-center gap-1.5 text-[13px] text-stone-600"><input type="checkbox" checked={residential} onChange={e=>{setRes(e.target.checked);setResTouched(true);}} className="accent-[#0086E0]"/>Residential</label>
                       <label className="flex items-center gap-1.5 text-[13px] text-stone-600"><input type="checkbox" checked={sat} onChange={e=>setSat(e.target.checked)} className="accent-[#0086E0]"/>Saturday delivery</label>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      <div>{lbl("Signature")}<select value={sigOption} onChange={e=>setSigOption(e.target.value)} className="w-full bg-white border border-stone-300 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"><option value="none">None</option><option value="direct">Direct</option><option value="indirect">Indirect</option><option value="adult">Adult</option></select></div>
-                      <div>{lbl("Insurance $")}<input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0" className="w-full bg-white border border-stone-300 rounded px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
+                      <div>{lbl("Signature")}<select value={sigOption} onChange={e=>setSigOption(e.target.value)} className={inC+" w-full"}><option value="none">None</option><option value="direct">Direct</option><option value="indirect">Indirect</option><option value="adult">Adult</option></select></div>
+                      <div>{lbl("Insurance $")}<input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0" className={inC+" w-full font-mono"}/></div>
                     </div>
-                    {orBox&&<div className="text-[12px] rounded px-3 py-2 flex items-center gap-2 bg-[#E6F4FF] text-[#0072BE] border border-[#99D6FF]"><Boxes className="w-4 h-4 shrink-0"/><span>One Rate available — see <b>{orBox.name.replace(/FedEx\s*One Rate®?\s*/i,"")}</b> in the services below.</span></div>}
                   </>)}
                 </div>
               </div>
             </div>
             {!shipped&&<div className="bg-white border border-stone-200 rounded-lg p-4">
-              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Create + Print" doneLabel="Printed" ready={ready} showCost onOneRate={applyORBox}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services and rates.</div>}
+              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Create + Print" doneLabel="Printed" ready={ready} showCost onOneRate={applyORBox}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
               {ready&&rateSrc.loading&&<div className="text-[12px] text-stone-400 flex items-center gap-1.5 mt-2"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Loading rates…</div>}
               {status&&<div className={`mt-2 text-[12px] rounded px-2 py-1.5 flex items-center gap-1.5 ${status.state==="error"?"text-rose-600 bg-rose-50 border border-rose-200":status.state==="booking"?"text-stone-600 bg-stone-50 border border-stone-200":"text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF]"}`}>{status.state==="error"?<AlertTriangle className="w-3.5 h-3.5"/>:status.state==="booking"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{status.msg}</div>}
             </div>}
@@ -2077,6 +2133,8 @@ function QuickQuote({onClose,client,england}){
   const ready=/^\d{5}/.test(toZip||"")&&/^\d{5}/.test(fromZip||"")&&pieces.every(p=>pw(p)>0&&+p.L>0&&+p.W>0&&+p.H>0);
   const [rateSrc,setRateSrc]=useState({rates:[],live:false,loading:false,error:null});
   const shipPieces=pieces.map(p=>({weight:pw(p),L:+p.L||12,W:+p.W||9,H:+p.H||4}));
+  const [fxTransit,setFxTransit]=useState({});
+  useEffect(()=>{ let cancel=false; if(!ready){setFxTransit({});return;} fedexTransit({fromZip,toZip,pieces:shipPieces,residential}).then(m=>{if(!cancel)setFxTransit(m||{});}); return ()=>{cancel=true;}; },[fromZip,toZip,residential,JSON.stringify(pieces)]);
   useEffect(()=>{
     let cancel=false;
     if(!ready){setRateSrc({rates:[],live:false,loading:false,error:null});return;}
@@ -2090,7 +2148,7 @@ function QuickQuote({onClose,client,england}){
     } else setRateSrc({rates:quoteRates(ship),live:false,loading:false,error:null});
     return ()=>{cancel=true;};
   },[fromZip,toZip,residential,JSON.stringify(pieces),sigOption,saturday,insurance,england]);
-  const quotes=useMemo(()=>rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:Math.round(q.cost*(1+(client?.markup||0)/100)*100)/100})).sort((a,b)=>a.sell-b.sell),[rateSrc,client]);
+  const quotes=useMemo(()=>rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&m.days!=null);const days=real?m.days:(ready?estTransitDays(q.label,q.zone):null);return {...q,sell:Math.round(q.cost*(1+(client?.markup||0)/100)*100)/100,fxDays:days,fxDate:real?m.date:undefined,fxLive:real};}).sort((a,b)=>a.sell-b.sell),[rateSrc,client,fxTransit,ready]);
   const hasExpress=quotes.some(q=>{const l=String(q.label||"").toLowerCase();return /(overnight|2\s?day|express saver)/.test(l);});
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-8 bg-stone-900/40 backdrop-blur-sm overflow-auto" onClick={onClose}>

@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v52";
+const BUILD_TAG="addr-v53";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -90,7 +90,7 @@ function acctOf(england){return {base:england.base,apiKey:england.apiKey,custome
 /* ── shared per-order shipping helpers (used by Orders individual ship + Batch) ── */
 async function ratesForOrder(o,opts,eng){
   const box=opts.box||{L:12,W:9,H:4};
-  return getLiveRates({carriers:"fedex",fromZip:(opts.sender&&opts.sender.zip)||opts.fromZip,toZip:o.zip,toCountry:o.country||"US",residential:!!opts.residential,packageTypeCode:opts.packageTypeCode||"",pieces:[{weight:opts.weightLb||o.weight||1,L:box.L,W:box.W,H:box.H}]},eng);
+  return getLiveRates({carriers:"fedex",fromZip:(opts.sender&&opts.sender.zip)||opts.fromZip,toZip:o.zip,toCountry:o.country||"US",residential:!!opts.residential,signature:opts.signatureOption?opts.signatureOption!=="none":!!opts.signature,signatureOption:opts.signatureOption||"none",saturdayDelivery:!!opts.saturdayDelivery,insuranceAmount:opts.insuranceAmount||null,packageTypeCode:opts.packageTypeCode||"",pieces:[{weight:opts.weightLb||o.weight||1,L:box.L,W:box.W,H:box.H}]},eng);
 }
 function orderToEngland(o,opts,sender,eng){
   const box=opts.box||{L:12,W:9,H:4};
@@ -1844,25 +1844,25 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
     if(!ready){setRateSrc({rates:[],live:false,loading:false});return;}
     if(canBook){
       setRateSrc(s=>({...s,loading:true}));
-      ratesForOrder(dest,{residential,box,weightLb:totalWeight,fromZip,sender:settings.sender,packageTypeCode:""},eng).then(res=>{ if(cancel)return;
+      ratesForOrder(dest,{residential,box,weightLb:totalWeight,fromZip,sender:settings.sender,packageTypeCode:"",signatureOption:sigOption,saturdayDelivery:sat,insuranceAmount:insurance||null},eng).then(res=>{ if(cancel)return;
         if(res&&res.live&&res.rates&&res.rates.length)setRateSrc({rates:res.rates,live:true,loading:false});
         else setRateSrc({rates:localOrderQuotes(),live:false,loading:false});
       });
     } else setRateSrc({rates:localOrderQuotes(),live:false,loading:false});
     return ()=>{cancel=true;};
-  },[rcv.zip,totalWeight,box.L,box.W,box.H,residential,eng]);
+  },[rcv.zip,totalWeight,box.L,box.W,box.H,residential,eng,sigOption,sat,insurance]);
   // Real FedEx One Rate pricing: separate live call with the One Rate packaging code (not a clone of 2Day)
   useEffect(()=>{
     let cancel=false; setOrRates([]);
     if(!ready||!selectedOrBox||!canBook)return;
-    ratesForOrder(dest,{residential,box,weightLb:totalWeight,fromZip,sender:settings.sender,packageTypeCode:selectedOrBox.fedexCode||selectedOrBox.code},eng).then(res=>{ if(cancel)return;
+    ratesForOrder(dest,{residential,box,weightLb:totalWeight,fromZip,sender:settings.sender,packageTypeCode:selectedOrBox.fedexCode||selectedOrBox.code,signatureOption:sigOption,saturdayDelivery:sat,insuranceAmount:insurance||null},eng).then(res=>{ if(cancel)return;
       if(res&&res.live&&res.rates&&res.rates.length){
         const short=selectedOrBox.name.replace(/FedEx\s*One Rate®?\s*/i,"");
         setOrRates(res.rates.filter(q=>q.carrier==="FedEx"&&/2\s?day/i.test(q.label||"")&&!/a\.?m\.?/i.test(q.label||"")).map(q=>({...q,key:"or_"+q.key,label:q.label.replace(/®?$/,"").trim()+" One Rate · "+short,_oneRate:true,packageTypeCode:selectedOrBox.code,sell:Math.round((q.cost||0)*(1+(client?.markup||0)/100)*100)/100})));
       }
     });
     return ()=>{cancel=true;};
-  },[rcv.zip,totalWeight,box.L,box.W,box.H,residential,eng,selectedOrBox&&selectedOrBox.code]);
+  },[rcv.zip,totalWeight,box.L,box.W,box.H,residential,eng,selectedOrBox&&selectedOrBox.code,sigOption,sat,insurance]);
   const baseQuotes=useMemo(()=>(rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!/first\s*overnight/i.test(qq.label||"")).filter(qq=>{if(!addrClassified)return true;const k=canonSvc(qq.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;}).map(qq=>({...qq,sell:Math.round((qq.cost||0)*(1+(client?.markup||0)/100)*100)/100})),[rateSrc,residential,client,addrClassified]);
   const quotes=useMemo(()=>{
     const withTransit=(list)=>list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&m.days!=null);const days=real?m.days:(ready?estTransitDays(q.label,q.zone):null);return {...q,fxDays:days,fxDate:real?m.date:undefined,fxLive:real};});

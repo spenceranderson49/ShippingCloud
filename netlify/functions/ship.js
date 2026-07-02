@@ -148,8 +148,6 @@ exports.handler = async (event) => {
       shipmentDate: o.shipmentDate || today(),
       shipmentReference: S(o.reference || o.orderNumber || ("SC" + Date.now())),
       orderNumber: S(o.orderNumber || o.reference || ""),
-      invoiceNumber: S(o.invoiceNo || ""),
-      poNumber: S(o.poNo || ""),
       contentDescription: S(o.contentDescription || "Merchandise"),
       sender: {
         name: nameOr(o.sender.name, o.sender.company), company: S(o.sender.company) || nameOr(o.sender.name, "Shipper"),

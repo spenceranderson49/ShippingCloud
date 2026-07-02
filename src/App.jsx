@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v67";
+const BUILD_TAG="addr-v68";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -1154,7 +1154,7 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
     if(addrClassified){
       list=list.filter(q=>{const k=canonSvc(q.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;});
     }
-    return list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&m.days!=null);const days=real?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:(cost!=null?Math.round(cost*(1+client.markup/100)*100)/100:null),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:sigOption,saturday,insurance});})
+    return list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:(cost!=null?Math.round(cost*(1+client.markup/100)*100)/100:null),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:sigOption,saturday,insurance});})
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
   },[rateSrc,orRates,client.markup,fxTransit,residential,addrClassified,sigOption,saturday,insurance]);
   const best=null;
@@ -1893,7 +1893,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
   const orRates=useMemo(()=>selectedOrBox?oneRateQuotes(selectedOrBox,client?.markup||0):[],[selectedOrBox&&selectedOrBox.code,client]);
   const baseQuotes=useMemo(()=>(rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!/first\s*overnight/i.test(qq.label||"")).filter(qq=>{if(!addrClassified)return true;const k=canonSvc(qq.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;}).map(qq=>({...qq,sell:Math.round((qq.cost||0)*(1+(client?.markup||0)/100)*100)/100})),[rateSrc,residential,client,addrClassified]);
   const quotes=useMemo(()=>{
-    const withTransit=(list)=>list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&m.days!=null);return {...q,fxDays:real?m.days:null,fxDate:real?m.date:undefined,fxLive:real};});
+    const withTransit=(list)=>list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};});
     return withTransit([...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday:sat,insurance}))).sort((a,b)=>(a.sell||0)-(b.sell||0));
   },[baseQuotes,orRates,fxTransit,sigOption,sat,insurance]);
   const best=null;
@@ -2196,7 +2196,7 @@ function QuickQuote({onClose,client,england}){
   },[fromZip,toZip,residential,JSON.stringify(pieces),sigOption,saturday,insurance,england]);
   const qqOrBox=oneRateBoxFor(pieces[0]&&pieces[0].L,pieces[0]&&pieces[0].W,pieces[0]&&pieces[0].H,totalWeight);
   const qqOrRates=useMemo(()=>qqOrBox?oneRateQuotes(qqOrBox):[],[qqOrBox&&qqOrBox.code]);
-  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:Math.round(q.cost*(1+(client?.markup||0)/100)*100)/100})),...qqOrRates].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&m.days!=null);return {...q,fxDays:real?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday,insurance})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,client,fxTransit,qqOrRates,sigOption,saturday,insurance]);
+  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:Math.round(q.cost*(1+(client?.markup||0)/100)*100)/100})),...qqOrRates].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday,insurance})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,client,fxTransit,qqOrRates,sigOption,saturday,insurance]);
   const hasExpress=quotes.some(q=>{const l=String(q.label||"").toLowerCase();return /(overnight|2\s?day|express saver)/.test(l);});
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-8 bg-stone-900/40 backdrop-blur-sm overflow-auto" onClick={onClose}>

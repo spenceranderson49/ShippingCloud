@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v53";
+const BUILD_TAG="addr-v54";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -342,6 +342,37 @@ function oneRateBoxFor(L,W,H,lbs){
   if(!vol) return null;
   for(const b of ONERATE_BOXES){ if(vol<=b.maxVol && w<=b.maxLbs) return b; }
   return null;
+}
+/* FedEx One Rate is a FLAT, zone-independent price by box + service tier. England's quote endpoint returns
+   base transportation only (not One Rate), so we price One Rate from FedEx's published 2Day flat table.
+   These are easy to tune to the exact England/FedEx numbers once confirmed. */
+const ONERATE_2DAY_FLAT={fedex_envelope:11.70,fedex_pak:13.50,fedex_extra_small_box:15.70,fedex_small_box:15.70,fedex_medium_box:17.90,fedex_large_box:25.00,fedex_extra_large_box:33.00,fedex_tube:25.00};
+function oneRateQuotes(boxCode,markup){
+  const b=FEDEX_ONERATE.find(x=>x.code===boxCode); if(!b) return [];
+  const flat=ONERATE_2DAY_FLAT[boxCode]; if(flat==null) return [];
+  const short=b.name.replace(/FedEx\s*One Rate®?\s*/i,"");
+  const sell=Math.round(flat*(1+(+markup||0)/100)*100)/100;
+  return [{key:"or_2day_"+boxCode,carrier:"FedEx",carrierCode:"FEDEX",serviceCode:"fedex_2_day",label:"FedEx 2Day One Rate · "+short,cost:flat,sell,_oneRate:true,_flat:true,packageTypeCode:boxCode,minDays:2,maxDays:2}];
+}
+/* Estimated FedEx accessorial surcharges. England's quote endpoint returns base transportation only, so
+   signature / Saturday / declared-value charges are layered on client-side and shown as line items. */
+function estAccessorials(label,opts){
+  const out=[]; if(!opts) return out;
+  const so=opts.signatureOption;
+  if(so&&so!=="none"){ const amt=so==="adult"?8.05:6.55; out.push({label:so.charAt(0).toUpperCase()+so.slice(1)+" signature",amount:amt}); }
+  const express=/(overnight|2\s?day|express saver|one rate)/i.test(label||"");
+  if(opts.saturday&&express) out.push({label:"Saturday delivery",amount:16});
+  const ins=+opts.insurance||0;
+  if(ins>100){ const units=Math.ceil((ins-100)/100); out.push({label:"Declared value coverage",amount:Math.round(Math.max(3.45,units*1.15)*100)/100}); }
+  return out;
+}
+function withAccessorials(q,opts){
+  const extras=estAccessorials(q.label,opts);
+  if(!extras.length) return q;
+  const add=Math.round(extras.reduce((a,e)=>a+(e.amount||0),0)*100)/100;
+  const baseSell=q.sell!=null?q.sell:(q.cost||0);
+  const baseCost=q.cost!=null?q.cost:null;
+  return {...q, baseSell, baseCost, sell:Math.round((baseSell+add)*100)/100, cost:baseCost!=null?Math.round((baseCost+add)*100)/100:q.cost, extras};
 }
 const CART_ITEMS=[
   {name:"Ruffle Leggings",l:8,w:6,h:1,wt:0.4,price:24},
@@ -891,7 +922,7 @@ export default function App(){
   };
 
   const isAdmin=currentUser&&currentUser.role==="admin";
-  const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["ledger","Ledger",Wallet],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["admin","Admin",ShieldCheck],["settings","Settings",Cog]];
+  const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Rules",Zap],["ledger","Ledger",Wallet],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["admin","Admin",ShieldCheck],["settings","Settings",Cog]];
   const CUSTOMER_TABS=new Set(["ship","orders","shipments","drafts","returns","dashboard"]);
   const TABS=isAdmin?ALL_TABS:ALL_TABS.filter(t=>t[0]!=="admin");
   const unfulfilled=orders.filter(o=>o.status==="unfulfilled").length;
@@ -950,6 +981,7 @@ export default function App(){
           {tab==="returns"&&<Returns returns={returns} setReturns={setReturns} orders={orders} settings={settings} logEmail={logEmail}/>}
           {tab==="pickups"&&<Pickups pickups={pickups} setPickups={setPickups} settings={settings}/>}
           {tab==="invoices"&&<Invoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>}
+          {tab==="rules"&&<RulesTab rules={rules} setRules={setRules} orders={orders}/>}
           {tab==="ledger"&&<Ledger ledger={ledger} addLedger={addLedger}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
           {tab==="admin"&&isAdmin&&<AdminPortal clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand}/>}
@@ -1075,7 +1107,6 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
   ];
   const localQuotes=()=>quoteRates(shipment).filter(q=>q.carrier==="FedEx");
   const [rateSrc,setRateSrc]=useState({rates:[],live:false,loading:false,error:null});
-  const [orRates,setOrRates]=useState([]);
   const [fxTransit,setFxTransit]=useState({});
   useEffect(()=>{
     let cancel=false;
@@ -1083,18 +1114,8 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
     fedexTransit(shipment).then(m=>{ if(!cancel) setFxTransit(m||{}); });
     return ()=>{cancel=true;};
   },[receiver.zip,sender.zip,residential,JSON.stringify(pieces)]);
-  // One Rate services: automatically fetch flat-rate pricing for the qualifying box and show them alongside regular services
-  useEffect(()=>{
-    let cancel=false; setOrRates([]);
-    const eng=settings.england;
-    if(!ready||!orBox||!(eng&&eng.enabled&&eng.apiKey&&eng.customerId))return;
-    getLiveRates({...shipment,packageTypeCode:orBox.code},eng).then(res=>{ if(cancel)return;
-      if(res&&res.live&&res.rates&&res.rates.length){
-        setOrRates(res.rates.filter(q=>q.carrier==="FedEx"&&/2\s?day/i.test(q.label||"")&&!/a\.?m\.?/i.test(q.label||"")).map(q=>({...q,key:"or_"+q.key,label:q.label.replace(/®?$/,"").trim()+" One Rate · "+orBox.name.replace(/FedEx\s*One Rate®?\s*/i,""),_oneRate:true,packageTypeCode:orBox.code})));
-      }
-    });
-    return ()=>{cancel=true;};
-  },[JSON.stringify(pieces),receiver.zip,sender.zip,residential,settings.england,orBox&&orBox.code]);
+  // FedEx One Rate is a flat, zone-independent price — computed client-side (England quote returns base transport only).
+  const orRates=useMemo(()=>orBox?oneRateQuotes(orBox.code,client.markup):[],[orBox&&orBox.code,client.markup]);
   useEffect(()=>{
     let cancel=false;
     if(!ready){setRateSrc({rates:[],live:false,loading:false,error:null});return;}
@@ -1118,9 +1139,10 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
     if(addrClassified){
       list=list.filter(q=>{const k=canonSvc(q.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;});
     }
-    return list.map(q=>{const m=fxTransit[canonSvc(q.label)];const cost=q.cost;const real=!!(m&&m.days!=null);const days=real?m.days:(ready?estTransitDays(q.label,q.zone):null);return {...q,sell:cost!=null?Math.round(cost*(1+client.markup/100)*100)/100:null,fxDays:days,fxDate:real?m.date:undefined,fxLive:real};})
+    return list.map(q=>{const m=fxTransit[canonSvc(q.label)];const cost=q.cost;const real=!!(m&&m.days!=null);const days=real?m.days:(ready?estTransitDays(q.label,q.zone):null);return {...q,sell:q.sell!=null?q.sell:(cost!=null?Math.round(cost*(1+client.markup/100)*100)/100:null),fxDays:days,fxDate:real?m.date:undefined,fxLive:real};})
+      .map(q=>withAccessorials(q,{signatureOption:sigOption,saturday,insurance}))
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
-  },[rateSrc,orRates,client.markup,fxTransit,residential,addrClassified]);
+  },[rateSrc,orRates,client.markup,fxTransit,residential,addrClassified,sigOption,saturday,insurance]);
   const best=(rateSrc.live&&quotes.length&&quotes[0].sell!=null)?quotes[0].key:null;
 
   const buildRec=(q,carrier,extra)=>({id:Date.now(),date:new Date().toLocaleDateString(),tracking:(extra&&extra.tracking)||newTracking(carrier),carrier,service:q.label,recipient:{...receiver},sender:{...sender},fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,pieces:pieces.map(p=>({...p})),dims:pieces[0],insurance,cost:q.cost,sell:q.sell,billTo,thirdAcct,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference,invoiceNo,poNo,residential,intl,bookNumber:extra&&extra.bookNumber,customs:intl?{...customs,total:customsTotal,ci:"CI-"+rnd(5)}:null});
@@ -1470,14 +1492,18 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
     const eta=ready?(fxDate||(days?addBizDays(days):null)):null;
     const fxLive=q.fxLive===true;
     const sell=q.sell??q.cost;
-    const factor=q.cost?sell/q.cost:1;
+    const extras=q.extras||[];
+    const extrasTotal=extras.reduce((a,e)=>a+(e.amount||0),0);
+    const baseSell=q.baseSell!=null?q.baseSell:(sell-extrasTotal);
+    const baseCost=q.baseCost!=null?q.baseCost:q.cost;
+    const factor=baseCost?baseSell/baseCost:1;
     let comps;
     if(q.surcharges&&q.surcharges.length){
       const surTotal=q.surcharges.reduce((a,s)=>a+(s.amount||0),0);
-      const baseRaw=q.base!=null?q.base:Math.max(0,q.cost-surTotal);
-      comps=[{label:"Base rate",amount:baseRaw*factor},...q.surcharges.map(s=>({label:s.label,amount:(s.amount||0)*factor}))];
+      const baseRaw=q.base!=null?q.base:Math.max(0,baseCost-surTotal);
+      comps=[{label:"Base rate",amount:baseRaw*factor},...q.surcharges.map(s=>({label:s.label,amount:(s.amount||0)*factor})),...extras.map(e=>({label:e.label+" · est.",amount:e.amount}))];
     } else {
-      comps=[{label:"Base rate",amount:sell*0.72},{label:"Fuel surcharge",amount:sell*0.16},{label:"Handling & surcharges",amount:sell*0.12}];
+      comps=[{label:"Base rate",amount:baseSell*0.72},{label:"Fuel surcharge",amount:baseSell*0.16},{label:"Handling & surcharges",amount:baseSell*0.12},...extras.map(e=>({label:e.label+" · est.",amount:e.amount}))];
     }
     const live=!!(q.surcharges&&q.surcharges.length);
     const hasPrice=sell!=null;
@@ -1797,7 +1823,6 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
   const [verify,setVerify]=useState(null);
   const [verifyNonce,setVerifyNonce]=useState(0);
   const [fxTransit,setFxTransit]=useState({});
-  const [orRates,setOrRates]=useState([]);
   const [orPkg,setOrPkg]=useState("");
   const boxes=settings?.boxes||SEED_BOXES;
   const eng=settings?.england;
@@ -1851,23 +1876,13 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
     } else setRateSrc({rates:localOrderQuotes(),live:false,loading:false});
     return ()=>{cancel=true;};
   },[rcv.zip,totalWeight,box.L,box.W,box.H,residential,eng,sigOption,sat,insurance]);
-  // Real FedEx One Rate pricing: separate live call with the One Rate packaging code (not a clone of 2Day)
-  useEffect(()=>{
-    let cancel=false; setOrRates([]);
-    if(!ready||!selectedOrBox||!canBook)return;
-    ratesForOrder(dest,{residential,box,weightLb:totalWeight,fromZip,sender:settings.sender,packageTypeCode:selectedOrBox.fedexCode||selectedOrBox.code,signatureOption:sigOption,saturdayDelivery:sat,insuranceAmount:insurance||null},eng).then(res=>{ if(cancel)return;
-      if(res&&res.live&&res.rates&&res.rates.length){
-        const short=selectedOrBox.name.replace(/FedEx\s*One Rate®?\s*/i,"");
-        setOrRates(res.rates.filter(q=>q.carrier==="FedEx"&&/2\s?day/i.test(q.label||"")&&!/a\.?m\.?/i.test(q.label||"")).map(q=>({...q,key:"or_"+q.key,label:q.label.replace(/®?$/,"").trim()+" One Rate · "+short,_oneRate:true,packageTypeCode:selectedOrBox.code,sell:Math.round((q.cost||0)*(1+(client?.markup||0)/100)*100)/100})));
-      }
-    });
-    return ()=>{cancel=true;};
-  },[rcv.zip,totalWeight,box.L,box.W,box.H,residential,eng,selectedOrBox&&selectedOrBox.code,sigOption,sat,insurance]);
+  // FedEx One Rate is a flat, zone-independent price — computed client-side (England quote returns base transport only).
+  const orRates=useMemo(()=>selectedOrBox?oneRateQuotes(selectedOrBox.code,client?.markup||0):[],[selectedOrBox&&selectedOrBox.code,client]);
   const baseQuotes=useMemo(()=>(rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!/first\s*overnight/i.test(qq.label||"")).filter(qq=>{if(!addrClassified)return true;const k=canonSvc(qq.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;}).map(qq=>({...qq,sell:Math.round((qq.cost||0)*(1+(client?.markup||0)/100)*100)/100})),[rateSrc,residential,client,addrClassified]);
   const quotes=useMemo(()=>{
     const withTransit=(list)=>list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&m.days!=null);const days=real?m.days:(ready?estTransitDays(q.label,q.zone):null);return {...q,fxDays:days,fxDate:real?m.date:undefined,fxLive:real};});
-    return withTransit([...baseQuotes,...(orRates||[])]).sort((a,b)=>a.sell-b.sell);
-  },[baseQuotes,orRates,fxTransit,ready]);
+    return withTransit([...baseQuotes,...(orRates||[])]).map(q=>withAccessorials(q,{signatureOption:sigOption,saturday:sat,insurance})).sort((a,b)=>(a.sell||0)-(b.sell||0));
+  },[baseQuotes,orRates,fxTransit,ready,sigOption,sat,insurance]);
   const best=(rateSrc.live&&quotes[0])?quotes[0].key:null;
   const applyORBox=(code)=>{const b=FEDEX_ONERATE.find(x=>x.code===code);if(!b)return;if(b.dims){setDims({L:b.dims.L,W:b.dims.W,H:b.dims.H});}setBoxIdx(-1);setOrPkg(code);const val="FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,"");const f=settings?.orBoxField||"invoice";const fill=(set)=>set(prev=>prev&&prev.trim()?prev:val);if(f==="invoice")fill(setInvoiceNo);else if(f==="po")fill(setPoNo);else if(f==="reference")fill(setReference);};
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
@@ -1989,7 +2004,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
                     <div className="grid grid-cols-3 gap-2">
                       <div>{lbl("Weight (lb)")}<input type="number" value={weight} onChange={e=>{setWeight(e.target.value);upd({weight:+e.target.value});}} className={inC+" w-full font-mono"}/></div>
                       <div>{lbl("oz")}<input type="number" value={oz} onChange={e=>setOz(e.target.value)} placeholder="0" className={inC+" w-full font-mono"}/></div>
-                      <div>{lbl("Package")}<select value={orPkg?("or_"+orPkg):String(boxIdx)} onChange={e=>{const v=e.target.value;if(v.indexOf("or_")===0){applyORBox(v.slice(3));}else{setOrPkg("");pickBox(+v);}}} className={inC+" w-full"}><option value="-1">Custom</option>{boxes.map((b,j)=><option key={b.id} value={j}>{b.name}</option>)}<optgroup label="FedEx One Rate">{ONERATE_BOXES.map(b=><option key={b.code} value={"or_"+b.code}>{b.name.replace(/FedEx\s*One Rate®?\s*/i,"")}</option>)}</optgroup></select></div>
+                      <div>{lbl("Package")}<select value={orPkg?("or_"+orPkg):String(boxIdx)} onChange={e=>{const v=e.target.value;if(v.indexOf("or_")===0){applyORBox(v.slice(3));}else{setOrPkg("");pickBox(+v);}}} className={inC+" w-full"}><option value="-1">Custom</option>{boxes.map((b,j)=><option key={b.id} value={j}>{b.name}</option>)}<optgroup label="FedEx One Rate">{ONERATE_BOXES.map(b=><option key={b.code} value={"or_"+b.code}>{"FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,"")}</option>)}</optgroup></select></div>
                     </div>
                     <div>{lbl("Size (in)")}<div className="grid grid-cols-3 gap-2">{["L","W","H"].map(d=><input key={d} type="number" value={dims[d]} onChange={e=>{setDims(v=>({...v,[d]:e.target.value}));setBoxIdx(-1);setOrPkg("");}} placeholder={d} className={inC+" w-full font-mono"}/>)}</div></div>
                     <div className="flex flex-wrap items-center gap-3">
@@ -2161,7 +2176,9 @@ function QuickQuote({onClose,client,england}){
     } else setRateSrc({rates:quoteRates(ship),live:false,loading:false,error:null});
     return ()=>{cancel=true;};
   },[fromZip,toZip,residential,JSON.stringify(pieces),sigOption,saturday,insurance,england]);
-  const quotes=useMemo(()=>rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&m.days!=null);const days=real?m.days:(ready?estTransitDays(q.label,q.zone):null);return {...q,sell:Math.round(q.cost*(1+(client?.markup||0)/100)*100)/100,fxDays:days,fxDate:real?m.date:undefined,fxLive:real};}).sort((a,b)=>a.sell-b.sell),[rateSrc,client,fxTransit,ready]);
+  const qqOrBox=oneRateBoxFor(pieces[0]&&pieces[0].L,pieces[0]&&pieces[0].W,pieces[0]&&pieces[0].H,totalWeight);
+  const qqOrRates=useMemo(()=>qqOrBox?oneRateQuotes(qqOrBox.code,client?.markup||0):[],[qqOrBox&&qqOrBox.code,client]);
+  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:Math.round(q.cost*(1+(client?.markup||0)/100)*100)/100})),...qqOrRates].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&m.days!=null);const days=real?m.days:(ready?estTransitDays(q.label,q.zone):null);return {...q,fxDays:days,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>withAccessorials(q,{signatureOption:sigOption,saturday,insurance})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,client,fxTransit,ready,qqOrRates,sigOption,saturday,insurance]);
   const hasExpress=quotes.some(q=>{const l=String(q.label||"").toLowerCase();return /(overnight|2\s?day|express saver)/.test(l);});
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-8 bg-stone-900/40 backdrop-blur-sm overflow-auto" onClick={onClose}>
@@ -2945,6 +2962,131 @@ function AutomationRules({rules,setRules}){
       </div>
       <button onClick={add} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium">Add rule</button>
     </Panel>
+  </div>);
+}
+/* ════════ RULES TAB — top-level automation surface (same schema as Settings → Automation) ════════ */
+const RULE_FIELD_LABEL={weight:"Weight (lb)",value:"Order value ($)",state:"Dest. state",zip:"Dest. ZIP"};
+const RULE_ACTION_LABEL={service:"Set service",signature:"Require signature",insure:"Auto-insure",flag:"Flag for review"};
+const ruleNum=v=>{const n=parseFloat(String(v==null?"":v).replace(/[^0-9.\-]/g,""));return isNaN(n)?null:n;};
+function ruleOrderField(o,field){
+  if(!o) return null;
+  if(field==="weight") return ruleNum(o.weight!=null?o.weight:(o.totalWeight!=null?o.totalWeight:(Array.isArray(o.pieces)?o.pieces.reduce((a,p)=>a+(+p.weight||0),0):null)));
+  if(field==="value")  return ruleNum(o.value!=null?o.value:(o.total!=null?o.total:(o.orderValue!=null?o.orderValue:o.amount)));
+  if(field==="state")  return String((o.state||(o.recipient&&o.recipient.state)||(o.shipTo&&o.shipTo.state)||(o.ship&&o.ship.state)||"")).trim();
+  if(field==="zip")    return String((o.zip||(o.recipient&&o.recipient.zip)||(o.shipTo&&o.shipTo.zip)||(o.ship&&o.ship.zip)||"")).trim();
+  return null;
+}
+function ruleMatches(r,o){
+  const a=ruleOrderField(o,r.field);
+  if(a===null||a==="") return false;
+  if(r.field==="state"||r.field==="zip"){
+    const A=String(a).toLowerCase(), V=String(r.value||"").toLowerCase();
+    if(!V) return false;
+    if(r.op==="=") return A===V;
+    if(r.op===">") return A>V;
+    if(r.op==="<") return A<V;
+    return false;
+  }
+  const A=ruleNum(a), V=ruleNum(r.value);
+  if(A===null||V===null) return false;
+  if(r.op===">") return A>V;
+  if(r.op==="<") return A<V;
+  if(r.op==="=") return A===V;
+  return false;
+}
+function RulesTab({rules,setRules,orders}){
+  const blank={name:"",field:"weight",op:">",value:"",action:"service",actionValue:""};
+  const [f,setF]=useState(blank);
+  const [open,setOpen]=useState(false);
+  const editing=!!f.id;
+  const active=rules.filter(r=>r.enabled).length;
+  const ords=orders||[];
+  const startNew=()=>{setF(blank);setOpen(true);};
+  const startEdit=(r)=>{setF({...r});setOpen(true);};
+  const cancel=()=>{setF(blank);setOpen(false);};
+  const save=()=>{ if(!f.name)return;
+    if(f.id){ setRules(rs=>rs.map(x=>x.id===f.id?{...x,...f}:x)); }
+    else { setRules(rs=>[...rs,{id:"r"+Date.now(),enabled:true,...f}]); }
+    cancel();
+  };
+  const toggle=(id)=>setRules(rs=>rs.map(x=>x.id===id?{...x,enabled:!x.enabled}:x));
+  const del=(id)=>setRules(rs=>rs.filter(x=>x.id!==id));
+  const dupe=(r)=>setRules(rs=>[...rs,{...r,id:"r"+Date.now(),name:(r.name||"Rule")+" (copy)"}]);
+  const move=(id,dir)=>setRules(rs=>{const i=rs.findIndex(x=>x.id===id);if(i<0)return rs;const j=i+dir;if(j<0||j>=rs.length)return rs;const c=[...rs];const t=c[i];c[i]=c[j];c[j]=t;return c;});
+  const labelFor=r=>`If ${RULE_FIELD_LABEL[r.field]||r.field} ${r.op} ${r.value||"…"} → ${RULE_ACTION_LABEL[r.action]||r.action}${r.actionValue?`: ${r.actionValue}`:""}`;
+  return (<div className="max-w-4xl space-y-4">
+    <div className="flex items-center justify-between">
+      <div>
+        <h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Zap className="w-5 h-5 text-[#0086E0]"/>Rules</h2>
+        <p className="text-sm text-stone-500 mt-0.5">Run automatically on imported orders and in Batch — top rules run first; later rules win when they touch the same thing.</p>
+      </div>
+      <button onClick={startNew} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium flex items-center gap-1.5 hover:bg-[#0074c4]"><Plus className="w-4 h-4"/>New rule</button>
+    </div>
+
+    <div className="flex items-center gap-2 text-[11px] text-stone-500">
+      <Badge tone="blue">{rules.length} rule{rules.length!==1?"s":""}</Badge>
+      <Badge tone="green">{active} active</Badge>
+      <Badge tone="stone">{ords.length} orders on floor</Badge>
+    </div>
+
+    {open&&<Panel title={editing?"Edit rule":"New rule"}>
+      <Field label="Rule name"><Input value={f.name} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. West coast → Ground"/></Field>
+      <div className="grid grid-cols-3 gap-2 items-end">
+        <Field label="When"><Select value={f.field} onChange={e=>setF({...f,field:e.target.value})}><option value="weight">Weight (lb)</option><option value="value">Order value ($)</option><option value="state">Dest. state</option><option value="zip">Dest. ZIP</option></Select></Field>
+        <Field label="Is"><Select value={f.op} onChange={e=>setF({...f,op:e.target.value})}><option>{">"}</option><option>{"<"}</option><option>{"="}</option></Select></Field>
+        <Field label="Value"><Input value={f.value} onChange={e=>setF({...f,value:e.target.value})} placeholder={f.field==="state"?"CA":f.field==="zip"?"90001":"10"}/></Field>
+      </div>
+      <div className="grid grid-cols-2 gap-2 items-end">
+        <Field label="Then"><Select value={f.action} onChange={e=>setF({...f,action:e.target.value})}><option value="service">Set service</option><option value="signature">Require signature</option><option value="insure">Auto-insure</option><option value="flag">Flag for review</option></Select></Field>
+        <Field label="Detail"><Input value={f.actionValue} onChange={e=>setF({...f,actionValue:e.target.value})} placeholder="e.g. Cheapest Ground"/></Field>
+      </div>
+      <div className="flex items-center gap-2">
+        <button onClick={save} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium hover:bg-stone-800">{editing?"Save rule":"Add rule"}</button>
+        <button onClick={cancel} className="text-sm text-stone-500 rounded px-3 py-2 hover:bg-stone-100">Cancel</button>
+      </div>
+    </Panel>}
+
+    {rules.length===0&&!open&&<div className="border border-dashed border-stone-300 rounded-lg bg-white p-8 text-center">
+      <div className="text-stone-800 font-medium">No rules yet</div>
+      <div className="text-sm text-stone-500 mt-1">Rules auto-pick services, force signature, auto-insure, and flag orders for review.</div>
+      <button onClick={startNew} className="mt-3 text-sm text-[#006FBF] font-medium">＋ Add your first rule</button>
+    </div>}
+
+    <div className="space-y-2">
+      {rules.map((r,i)=>{
+        const hits=ords.filter(o=>ruleMatches(r,o)).length;
+        return (<div key={r.id} className={`border rounded-lg bg-white p-3 flex items-center gap-3 ${r.enabled?"border-stone-200":"border-stone-200 opacity-60"}`}>
+          <div className="flex flex-col">
+            <button onClick={()=>move(r.id,-1)} disabled={i===0} className="text-stone-300 hover:text-stone-600 disabled:opacity-30"><ChevronDown className="w-4 h-4 rotate-180"/></button>
+            <button onClick={()=>move(r.id,1)} disabled={i===rules.length-1} className="text-stone-300 hover:text-stone-600 disabled:opacity-30"><ChevronDown className="w-4 h-4"/></button>
+          </div>
+          <button onClick={()=>toggle(r.id)} title="Enable / disable"><span className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${r.enabled?"bg-[#0086E0] justify-end":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></span></button>
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-sm flex items-center gap-1.5 text-stone-900"><Zap className="w-3.5 h-3.5 text-[#0086E0] shrink-0"/><span className="truncate">{r.name||"Untitled rule"}</span></div>
+            <div className="text-[11px] text-stone-400 font-mono truncate">{labelFor(r)}</div>
+          </div>
+          {r.enabled&&ords.length>0&&<Badge tone={hits>0?"blue":"stone"}>{hits} match{hits!==1?"es":""}</Badge>}
+          <button onClick={()=>startEdit(r)} className="text-stone-300 hover:text-[#0086E0]" title="Edit"><Edit3 className="w-4 h-4"/></button>
+          <button onClick={()=>dupe(r)} className="text-[11px] text-stone-400 hover:text-stone-700 font-medium" title="Duplicate">Copy</button>
+          <button onClick={()=>del(r.id)} className="text-stone-300 hover:text-rose-500" title="Delete"><Trash2 className="w-4 h-4"/></button>
+        </div>);
+      })}
+    </div>
+
+    {ords.length>0&&rules.some(r=>r.enabled)&&<Panel title="Live preview · current orders">
+      <p className="text-[11px] text-stone-400 -mt-1">How your active rules would act on the {ords.length} order{ords.length!==1?"s":""} currently on the floor. Evaluated where destination / weight / value data is present.</p>
+      <div className="space-y-1">
+        {rules.filter(r=>r.enabled).map(r=>{
+          const hit=ords.filter(o=>ruleMatches(r,o));
+          return (<div key={r.id} className="flex items-center gap-2 text-[13px] py-1 border-b border-stone-100 last:border-0">
+            <Zap className="w-3.5 h-3.5 text-[#0086E0] shrink-0"/>
+            <span className="font-medium text-stone-800">{r.name}</span>
+            <span className="text-stone-400 font-mono text-[11px] truncate flex-1">→ {RULE_ACTION_LABEL[r.action]}{r.actionValue?`: ${r.actionValue}`:""}</span>
+            <Badge tone={hit.length>0?"green":"stone"}>{hit.length} of {ords.length}</Badge>
+          </div>);
+        })}
+      </div>
+    </Panel>}
   </div>);
 }
 function AddressBook({settings,setSettings}){

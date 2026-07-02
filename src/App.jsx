@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v62";
+const BUILD_TAG="addr-v63";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -343,22 +343,36 @@ function oneRateBoxFor(L,W,H,lbs){
   for(const b of ONERATE_BOXES){ if(vol<=b.maxVol && w<=b.maxLbs) return b; }
   return null;
 }
-/* FedEx One Rate is priced by England for real: we request a quote using the FedEx-branded packaging type
-   (mapped to FEDEX_*_BOX in quote.js). England returns the actual One Rate price in totalAmount for each
-   eligible express service. No flat table, no estimate — the number is whatever England charges. */
-const ONERATE_SVC_RE=/(2\s?day|express saver|standard overnight|priority overnight)/i;
-async function oneRateLiveQuotes(s, box, england, markup){
-  if(!box||!england||!england.enabled) return [];
-  const res=await getLiveRates({...s, carriers:"fedex", packageTypeCode:box.code}, england);
-  if(!res||!res.live||!Array.isArray(res.rates)) return [];
+/* FedEx One Rate is a FLAT, zone-independent price by box — and ONLY 2Day is offered here.
+   England's rate call prices the branded box at STANDARD 2Day rates (base + fuel + residential), which is
+   NOT One Rate — so One Rate can't come from that call. These are the flat published One Rate 2Day prices;
+   tune them to your exact England One Rate card. Medium Box confirmed at $19.25. */
+const ONERATE_2DAY={fedex_envelope:16.20,fedex_pak:16.20,fedex_extra_small_box:18.20,fedex_small_box:18.20,fedex_medium_box:19.25,fedex_large_box:26.75,fedex_extra_large_box:37.00,fedex_tube:26.75};
+function oneRateQuotes(box, markup){
+  if(!box) return [];
+  const flat=ONERATE_2DAY[box.code]; if(flat==null) return [];
   const short=box.name.replace(/FedEx\s*One Rate®?\s*/i,"");
-  return res.rates
-    .filter(q=>q.carrier==="FedEx" && ONERATE_SVC_RE.test(q.label||"") && !/first\s*overnight/i.test(q.label||""))
-    .map(q=>{
-      const svc=String(q.label||"").replace(/[®™]/g,"").trim();
-      const sell=Math.round((q.cost||0)*(1+(+markup||0)/100)*100)/100;
-      return {...q, key:"or_"+box.code+"_"+(q.key||q.serviceCode||"svc"), label:svc+" One Rate · "+short, sell, _oneRate:true, packageTypeCode:box.code};
-    });
+  const sell=Math.round(flat*(1+(+markup||0)/100)*100)/100;
+  return [{key:"or_2day_"+box.code, carrier:"FedEx", carrierCode:"FEDEX", serviceCode:"fedex_2_day", label:"FedEx 2Day One Rate · "+short, cost:flat, sell, _oneRate:true, _flat:true, packageTypeCode:box.code, minDays:2, maxDays:2}];
+}
+/* Optional accessorials are fixed published fees — England's rate call does not return them, so we add the
+   flat amounts here so they actually change the price. Tune to your exact England fees. */
+const SIG_FEE={direct:6.55,indirect:6.55,adult:8.05};
+const SAT_FEE=16.00;
+function insuranceFee(declared){ const d=+declared||0; if(d<=100)return 0; const units=Math.ceil((d-100)/100); return Math.round(Math.max(3.45,units*1.15)*100)/100; }
+function applyAccessorials(q, opts){
+  if(!opts||q==null) return q;
+  const add=[];
+  const so=opts.signatureOption;
+  if(so&&so!=="none") add.push({label:(so.charAt(0).toUpperCase()+so.slice(1))+" signature",amount:SIG_FEE[so]||6.55});
+  const express=/(overnight|2\s?day|express saver|one rate)/i.test(q.label||"");
+  if(opts.saturday&&express) add.push({label:"Saturday delivery",amount:SAT_FEE});
+  const ins=insuranceFee(opts.insurance);
+  if(ins>0) add.push({label:"Declared value coverage",amount:ins});
+  if(!add.length) return q;
+  const addTotal=Math.round(add.reduce((a,e)=>a+e.amount,0)*100)/100;
+  const sell=q.sell!=null?q.sell:(q.cost||0);
+  return {...q, sell:Math.round((sell+addTotal)*100)/100, accessorials:add};
 }
 /* NOTE: Signature / Saturday / declared-value costs are NOT estimated in the app. They are requested from
    England on every quote (signatureOptionCode / saturdayDelivery / insuranceAmount) and returned as real
@@ -1110,22 +1124,8 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
   ];
   const localQuotes=()=>quoteRates(shipment).filter(q=>q.carrier==="FedEx");
   const [rateSrc,setRateSrc]=useState({rates:[],live:false,loading:false,error:null});
-  const [fxTransit,setFxTransit]=useState({});
-  useEffect(()=>{
-    let cancel=false;
-    if(!ready){setFxTransit({});return;}
-    fedexTransit(shipment).then(m=>{ if(!cancel) setFxTransit(m||{}); });
-    return ()=>{cancel=true;};
-  },[receiver.zip,sender.zip,residential,JSON.stringify(pieces)]);
-  // FedEx One Rate is priced by England for real — request the FedEx-branded box and use the returned total.
-  const [orRates,setOrRates]=useState([]);
-  useEffect(()=>{
-    let cancel=false;
-    const eng=settings.england;
-    if(!orBox||!ready||!(eng&&eng.enabled&&eng.apiKey&&eng.customerId)){ setOrRates([]); return; }
-    oneRateLiveQuotes(shipment, orBox, eng, client.markup).then(r=>{ if(!cancel) setOrRates(r); });
-    return ()=>{cancel=true;};
-  },[orBox&&orBox.code,ready,receiver.zip,sender.zip,JSON.stringify(pieces),residential,client.markup,settings.england]);
+  // FedEx One Rate 2Day — flat, zone-independent (not from the rate call; see ONERATE_2DAY).
+  const orRates=useMemo(()=>orBox?oneRateQuotes(orBox,client.markup):[],[orBox&&orBox.code,client.markup]);
   useEffect(()=>{
     let cancel=false;
     if(!ready){setRateSrc({rates:[],live:false,loading:false,error:null});return;}
@@ -1149,10 +1149,10 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
     if(addrClassified){
       list=list.filter(q=>{const k=canonSvc(q.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;});
     }
-    return list.map(q=>{const m=fxTransit[canonSvc(q.label)];const cost=q.cost;const real=!!(m&&m.days!=null);const days=real?m.days:(ready?estTransitDays(q.label,q.zone):null);return {...q,sell:q.sell!=null?q.sell:(cost!=null?Math.round(cost*(1+client.markup/100)*100)/100:null),fxDays:days,fxDate:real?m.date:undefined,fxLive:real};})
+    return list.map(q=>{const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:(cost!=null?Math.round(cost*(1+client.markup/100)*100)/100:null)},{signatureOption:sigOption,saturday,insurance});})
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
-  },[rateSrc,orRates,client.markup,fxTransit,residential,addrClassified,sigOption,saturday,insurance]);
-  const best=(rateSrc.live&&quotes.length&&quotes[0].sell!=null)?quotes[0].key:null;
+  },[rateSrc,orRates,client.markup,residential,addrClassified,sigOption,saturday,insurance]);
+  const best=null;
 
   const buildRec=(q,carrier,extra)=>({id:Date.now(),date:new Date().toLocaleDateString(),tracking:(extra&&extra.tracking)||newTracking(carrier),carrier,service:q.label,recipient:{...receiver},sender:{...sender},fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,pieces:pieces.map(p=>({...p})),dims:pieces[0],insurance,cost:q.cost,sell:q.sell,billTo,thirdAcct,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference,invoiceNo,poNo,residential,intl,bookNumber:extra&&extra.bookNumber,customs:intl?{...customs,total:customsTotal,ci:"CI-"+rnd(5)}:null});
   const print=async(q)=>{
@@ -1496,48 +1496,42 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
   const [open,setOpen]=useState(null);
   const Row=(q)=>{
     const isOpen=open===q.key;
-    const fxDate=q.fxDate?new Date(q.fxDate+"T00:00:00"):null;
-    const days=(q.fxDays!=null?q.fxDays:(q.maxDays||q.minDays));
-    const eta=ready?(fxDate||(days?addBizDays(days):null)):null;
-    const fxLive=q.fxLive===true;
+    const days=(q.maxDays||q.minDays);
+    const eta=ready&&days?addBizDays(days):null;
     const sell=q.sell??q.cost;
-    const extras=q.extras||[];
-    const extrasTotal=extras.reduce((a,e)=>a+(e.amount||0),0);
-    const baseSell=q.baseSell!=null?q.baseSell:(sell-extrasTotal);
-    const baseCost=q.baseCost!=null?q.baseCost:q.cost;
-    const factor=baseCost?baseSell/baseCost:1;
+    const acc=q.accessorials||[];
+    const accTotal=Math.round(acc.reduce((a,e)=>a+(e.amount||0),0)*100)/100;
+    const baseSell=Math.round((sell-accTotal)*100)/100;
     let comps;
     if(q.surcharges&&q.surcharges.length){
       const surTotal=q.surcharges.reduce((a,s)=>a+(s.amount||0),0);
-      const baseRaw=q.base!=null?q.base:Math.max(0,baseCost-surTotal);
+      const baseRaw=q.base!=null?q.base:Math.max(0,(q.cost||0)-surTotal);
+      const factor=(q.cost&&baseSell)?baseSell/q.cost:1;
       comps=[{label:"Base rate",amount:baseRaw*factor},...q.surcharges.map(s=>({label:s.label,amount:(s.amount||0)*factor}))];
-    } else if(q.base!=null&&q.base>0&&q.base<baseCost){
-      comps=[{label:"Base rate",amount:q.base*factor},{label:"Surcharges",amount:(baseCost-q.base)*factor}];
     } else {
-      comps=[{label:"Carrier rate",amount:sell}];
+      comps=[{label:q._oneRate?"One Rate (flat)":"Rate",amount:baseSell}];
     }
-    const live=!!(q.surcharges&&q.surcharges.length);
+    comps=[...comps,...acc.map(a=>({label:a.label,amount:a.amount}))];
     const hasPrice=sell!=null;
     return (
-      <div key={q.key} className={`border rounded-lg ${q.key===best&&ready?"border-[#99D6FF] bg-[#E6F4FF]":"border-stone-200 bg-white"}`}>
+      <div key={q.key} className="border rounded-lg border-stone-200 bg-white">
         <div onClick={()=>{setOpen(isOpen?null:q.key); if(q._oneRate&&q.packageTypeCode&&onOneRate)onOneRate(q.packageTypeCode);}} className="px-3 py-2.5 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
           <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isOpen?"rotate-90":""}`}/>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2"><span className="text-sm truncate">{q.label}</span>{q.key===best&&ready&&<span className="text-[10px] uppercase text-[#0086E0] border border-[#99D6FF] rounded px-1">best value</span>}</div>
-            <div className="text-[11px] text-stone-500 flex items-center gap-1"><Calendar className="w-3 h-3"/>Transit Time: {days?(<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}{fxLive&&days?<span className="text-[#0086E0] font-medium ml-1">FedEx</span>:""}</div>
+            <div className="flex items-center gap-2"><span className="text-sm truncate">{q.label}</span></div>
+            <div className="text-[11px] text-stone-500 flex items-center gap-1"><Calendar className="w-3 h-3"/>Transit Time: {days?(<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}</div>
           </div>
-          {showCost&&<div className="text-right font-mono hidden sm:block"><div className="text-[10px] uppercase tracking-widest text-stone-400">cost</div><div className="text-sm text-stone-500">{ready&&q.cost!=null?money(q.cost):"—"}</div></div>}
           <div className="text-right font-mono"><div className="text-base font-semibold text-stone-900">{ready&&hasPrice?money(sell):<span className="text-stone-300">—</span>}</div></div>
           {action&&<button onClick={(e)=>{e.stopPropagation();action(q);}} disabled={!ready||!hasPrice} className={`shrink-0 w-32 text-sm rounded px-3 py-2 font-medium flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed ${bought===q.key?"bg-[#0086E0] text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{bought===q.key?<><Check className="w-4 h-4"/>{doneLabel}</>:<><Printer className="w-4 h-4"/>{label}</>}</button>}
         </div>
         {isOpen&&ready&&hasPrice&&<div className="px-4 pb-3 pt-1 border-t border-stone-100">
-          <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Rate breakdown{live?"":" · estimated"}</div>
+          <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Rate breakdown</div>
           <div className="space-y-1">
             {comps.map((c,i)=><div key={i} className="flex justify-between text-[13px]"><span className="text-stone-600">{c.label}</span><span className="font-mono text-stone-700">{money(c.amount)}</span></div>)}
             <div className="flex justify-between text-[13px] border-t border-stone-200 pt-1 mt-1 font-semibold"><span>Total</span><span className="font-mono">{money(sell)}</span></div>
           </div>
           {q.dimWeight&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-2 flex items-center gap-1.5"><AlertTriangle className="w-3 h-3 shrink-0"/>Billed at <b>{q.quotedWeight?`${q.quotedWeight} lb `:""}dimensional weight</b>.</div>}
-          {eta&&<div className="text-[11px] text-stone-400 mt-2 flex items-center gap-1"><Calendar className="w-3 h-3"/>{fxLive?"FedEx delivery":"Estimated delivery"} {fmtDeliv(eta)}{days?` · ${days} business day${days>1?"s":""} in transit`:""}</div>}
+          {eta&&<div className="text-[11px] text-stone-400 mt-2 flex items-center gap-1"><Calendar className="w-3 h-3"/>Arrives {fmtDeliv(eta)}{days?` · ${days} business day${days>1?"s":""} in transit`:""}</div>}
         </div>}
       </div>
     );
@@ -1871,12 +1865,6 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
   const addrClassified=!!(resTouched||(verify&&verify.type));
   useEffect(()=>{
     let cancel=false;
-    if(!ready){setFxTransit({});return;}
-    fedexTransit({fromZip,toZip:rcv.zip,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],residential}).then(m=>{if(!cancel)setFxTransit(m||{});});
-    return ()=>{cancel=true;};
-  },[rcv.zip,fromZip,residential,totalWeight,box.L,box.W,box.H]);
-  useEffect(()=>{
-    let cancel=false;
     if(!ready){setRateSrc({rates:[],live:false,loading:false});return;}
     if(canBook){
       setRateSrc(s=>({...s,loading:true}));
@@ -1887,21 +1875,13 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
     } else setRateSrc({rates:localOrderQuotes(),live:false,loading:false});
     return ()=>{cancel=true;};
   },[rcv.zip,totalWeight,box.L,box.W,box.H,residential,eng,sigOption,sat,insurance]);
-  // FedEx One Rate priced by England for real (request the FedEx-branded box; use the returned total).
-  const [orRates,setOrRates]=useState([]);
-  useEffect(()=>{
-    let cancel=false;
-    if(!selectedOrBox||!ready||!canBook){ setOrRates([]); return; }
-    const s={carriers:"fedex",fromZip,toZip:rcv.zip,toCountry:rcv.country||"US",residential,signatureOption:sigOption,saturdayDelivery:sat,insuranceAmount:insurance||null,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}]};
-    oneRateLiveQuotes(s, selectedOrBox, eng, client?.markup||0).then(r=>{ if(!cancel) setOrRates(r); });
-    return ()=>{cancel=true;};
-  },[selectedOrBox&&selectedOrBox.code,ready,canBook,fromZip,rcv.zip,residential,sigOption,sat,insurance,totalWeight,box.L,box.W,box.H,eng,client]);
+  // FedEx One Rate 2Day — flat, zone-independent.
+  const orRates=useMemo(()=>selectedOrBox?oneRateQuotes(selectedOrBox,client?.markup||0):[],[selectedOrBox&&selectedOrBox.code,client]);
   const baseQuotes=useMemo(()=>(rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!/first\s*overnight/i.test(qq.label||"")).filter(qq=>{if(!addrClassified)return true;const k=canonSvc(qq.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;}).map(qq=>({...qq,sell:Math.round((qq.cost||0)*(1+(client?.markup||0)/100)*100)/100})),[rateSrc,residential,client,addrClassified]);
   const quotes=useMemo(()=>{
-    const withTransit=(list)=>list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&m.days!=null);const days=real?m.days:(ready?estTransitDays(q.label,q.zone):null);return {...q,fxDays:days,fxDate:real?m.date:undefined,fxLive:real};});
-    return withTransit([...baseQuotes,...(orRates||[])]).sort((a,b)=>(a.sell||0)-(b.sell||0));
-  },[baseQuotes,orRates,fxTransit,ready,sigOption,sat,insurance]);
-  const best=(rateSrc.live&&quotes[0])?quotes[0].key:null;
+    return [...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday:sat,insurance})).sort((a,b)=>(a.sell||0)-(b.sell||0));
+  },[baseQuotes,orRates,sigOption,sat,insurance]);
+  const best=null;
   const applyORBox=(code)=>{const b=FEDEX_ONERATE.find(x=>x.code===code);if(!b)return;if(b.dims){setDims({L:b.dims.L,W:b.dims.W,H:b.dims.H});}setBoxIdx(-1);setOrPkg(code);const val="FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,"");const f=settings?.orBoxField||"invoice";const fill=(set)=>set(prev=>prev&&prev.trim()?prev:val);if(f==="invoice")fill(setInvoiceNo);else if(f==="po")fill(setPoNo);else if(f==="reference")fill(setReference);};
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
   const pickBox=(j)=>{ setBoxIdx(j); if(j>=0){const b=boxes[j];setDims({L:b.L,W:b.W,H:b.H});} };
@@ -2038,7 +2018,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
               </div>
             </div>
             {!shipped&&<div className="bg-white border border-stone-200 rounded-lg p-4">
-              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Create + Print" doneLabel="Printed" ready={ready} showCost onOneRate={applyORBox}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
+              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} onOneRate={applyORBox}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
               {ready&&rateSrc.loading&&<div className="text-[12px] text-stone-400 flex items-center gap-1.5 mt-2"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Loading rates…</div>}
               {status&&<div className={`mt-2 text-[12px] rounded px-2 py-1.5 flex items-center gap-1.5 ${status.state==="error"?"text-rose-600 bg-rose-50 border border-rose-200":status.state==="booking"?"text-stone-600 bg-stone-50 border border-stone-200":"text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF]"}`}>{status.state==="error"?<AlertTriangle className="w-3.5 h-3.5"/>:status.state==="booking"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{status.msg}</div>}
             </div>}
@@ -2180,7 +2160,7 @@ function QuickQuote({onClose,client,england}){
   const [rateSrc,setRateSrc]=useState({rates:[],live:false,loading:false,error:null});
   const shipPieces=pieces.map(p=>({weight:pw(p),L:+p.L||12,W:+p.W||9,H:+p.H||4}));
   const [fxTransit,setFxTransit]=useState({});
-  useEffect(()=>{ let cancel=false; if(!ready){setFxTransit({});return;} fedexTransit({fromZip,toZip,pieces:shipPieces,residential}).then(m=>{if(!cancel)setFxTransit(m||{});}); return ()=>{cancel=true;}; },[fromZip,toZip,residential,JSON.stringify(pieces)]);
+  useEffect(()=>{ let cancel=false; return ()=>{cancel=true;}; },[fromZip,toZip,residential,JSON.stringify(pieces)]);
   useEffect(()=>{
     let cancel=false;
     if(!ready){setRateSrc({rates:[],live:false,loading:false,error:null});return;}
@@ -2195,15 +2175,8 @@ function QuickQuote({onClose,client,england}){
     return ()=>{cancel=true;};
   },[fromZip,toZip,residential,JSON.stringify(pieces),sigOption,saturday,insurance,england]);
   const qqOrBox=oneRateBoxFor(pieces[0]&&pieces[0].L,pieces[0]&&pieces[0].W,pieces[0]&&pieces[0].H,totalWeight);
-  const [qqOrRates,setQqOrRates]=useState([]);
-  useEffect(()=>{
-    let cancel=false;
-    if(!qqOrBox||!ready||!(england&&england.enabled&&england.apiKey&&england.customerId)){ setQqOrRates([]); return; }
-    const s={carriers:"fedex",fromZip,toZip,residential,signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null,pieces:shipPieces};
-    oneRateLiveQuotes(s, qqOrBox, england, client?.markup||0).then(r=>{ if(!cancel) setQqOrRates(r); });
-    return ()=>{cancel=true;};
-  },[qqOrBox&&qqOrBox.code,ready,fromZip,toZip,residential,JSON.stringify(pieces),sigOption,saturday,insurance,england,client]);
-  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:Math.round(q.cost*(1+(client?.markup||0)/100)*100)/100})),...qqOrRates].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&m.days!=null);const days=real?m.days:(ready?estTransitDays(q.label,q.zone):null);return {...q,fxDays:days,fxDate:real?m.date:undefined,fxLive:real};}).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,client,fxTransit,ready,qqOrRates,sigOption,saturday,insurance]);
+  const qqOrRates=useMemo(()=>qqOrBox?oneRateQuotes(qqOrBox,client?.markup||0):[],[qqOrBox&&qqOrBox.code,client]);
+  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:Math.round(q.cost*(1+(client?.markup||0)/100)*100)/100})),...qqOrRates].map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday,insurance})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,client,qqOrRates,sigOption,saturday,insurance]);
   const hasExpress=quotes.some(q=>{const l=String(q.label||"").toLowerCase();return /(overnight|2\s?day|express saver)/.test(l);});
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-8 bg-stone-900/40 backdrop-blur-sm overflow-auto" onClick={onClose}>

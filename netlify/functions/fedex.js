@@ -43,6 +43,14 @@ async function token(c) {
 }
 
 function fmtDate(s) { if (!s) return null; const d = new Date(s.length <= 10 ? s + "T00:00:00" : s); return isNaN(d) ? null : d.toISOString().slice(0, 10); }
+function bizDaysBetween(fromISO, toISO) {
+  if (!fromISO || !toISO) return null;
+  const a = new Date(fromISO + "T00:00:00"), b = new Date(toISO + "T00:00:00");
+  if (isNaN(a) || isNaN(b) || b < a) return null;
+  let d = 0; const cur = new Date(a);
+  while (cur < b) { cur.setDate(cur.getDate() + 1); const dow = cur.getDay(); if (dow !== 0 && dow !== 6) d++; }
+  return d;
+}
 
 async function transit(c, body, tk) {
   const today = new Date().toISOString().slice(0, 10);
@@ -76,12 +84,15 @@ async function transit(c, body, tk) {
     const td = commit.transitDays || {};
     // FedEx puts the transit enum at commit.transitTime (sometimes operationalDetail.transitTime)
     const transitEnum = commit.transitTime || op.transitTime || td.description || td.minimumTransitTime || null;
-    const days = transitEnum && DAYS[transitEnum] != null ? DAYS[transitEnum] : null;
     // and the delivery date at commit.dateDetail.dayCxsFormat (sometimes .date / operationalDetail.deliveryDate)
     const deliveryDate = fmtDate(dd.dayCxsFormat || dd.date || op.deliveryDate || op.commitDate || commit.commitTimestamp);
+    // Ground gives a day-count enum; express services (2Day/Overnight/Saver) usually give only a delivery DATE,
+    // so fall back to computing business days from ship date → delivery date so ALL services get a transit count.
+    let days = transitEnum && DAYS[transitEnum] != null ? DAYS[transitEnum] : null;
+    if (days == null && deliveryDate) days = bizDaysBetween(body.shipDate || today, deliveryDate);
     return { serviceType: s.serviceType, serviceName: s.serviceName || s.serviceType, transitDays: days, transitLabel: transitEnum ? String(transitEnum).replace(/_/g, " ").toLowerCase() : null, deliveryDate, deliveryDay: dd.dayOfWeek || op.deliveryDay || null };
   }).filter((x) => x.serviceType);
-  return { ok: true, _fn: "addr-v21", services, _sample: details[0] || null };
+  return { ok: true, _fn: "addr-v22", services, _sample: details[0] || null };
 }
 
 /* ════════════════════════════════════════════════════════════════

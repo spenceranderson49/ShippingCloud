@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v46";
+const BUILD_TAG="addr-v47";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -328,11 +328,11 @@ function pickBox(items,boxes,slack=1.30){
 const FEDEX_ONERATE=[
   {code:"fedex_envelope",name:"FedEx One Rate® Envelope",maxVol:300,maxLbs:10,kind:"flat"},
   {code:"fedex_pak",name:"FedEx One Rate® Pak",maxVol:650,maxLbs:50,kind:"flat"},
-  {code:"fedex_extra_small_box",name:"FedEx One Rate® Extra Small Box",maxVol:168,maxLbs:50,kind:"box"},
-  {code:"fedex_small_box",name:"FedEx One Rate® Small Box",maxVol:420,maxLbs:50,kind:"box"},
-  {code:"fedex_medium_box",name:"FedEx One Rate® Medium Box",maxVol:650,maxLbs:50,kind:"box"},
-  {code:"fedex_large_box",name:"FedEx One Rate® Large Box",maxVol:1100,maxLbs:50,kind:"box"},
-  {code:"fedex_extra_large_box",name:"FedEx One Rate® Extra Large Box",maxVol:2200,maxLbs:50,kind:"box"},
+  {code:"fedex_extra_small_box",name:"FedEx One Rate® Extra Small Box",maxVol:168,maxLbs:50,kind:"box",dims:{L:11,W:9,H:2}},
+  {code:"fedex_small_box",name:"FedEx One Rate® Small Box",maxVol:420,maxLbs:50,kind:"box",dims:{L:13,W:11,H:2}},
+  {code:"fedex_medium_box",name:"FedEx One Rate® Medium Box",maxVol:650,maxLbs:50,kind:"box",dims:{L:13,W:11,H:3}},
+  {code:"fedex_large_box",name:"FedEx One Rate® Large Box",maxVol:1100,maxLbs:50,kind:"box",dims:{L:18,W:12,H:3}},
+  {code:"fedex_extra_large_box",name:"FedEx One Rate® Extra Large Box",maxVol:2200,maxLbs:50,kind:"box",dims:{L:12,W:11,H:11}},
   {code:"fedex_tube",name:"FedEx One Rate® Tube",maxVol:2200,maxLbs:50,kind:"tube"},
 ];
 const ONERATE_BOXES=FEDEX_ONERATE.filter(b=>b.kind==="box").sort((a,b)=>a.maxVol-b.maxVol);
@@ -592,11 +592,12 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
     <div className="space-y-4">
       <div className="flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-[#0086E0]"/><h1 className="text-lg font-semibold text-stone-800">Admin portal</h1></div>
       <div className="flex flex-wrap bg-stone-100 rounded-lg p-0.5 text-sm w-fit">
-        {[["overview","Overview"],["customers","Customers"],["users","Users & logins"],["branding","Branding"],["domains","Domains"]].map(([v,l])=><button key={v} onClick={()=>setSec(v)} className={`px-3 py-1.5 rounded-md ${sec===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}
+        {[["overview","Overview"],["customers","Customers"],["users","Users & logins"],["platforms","Platform accounts"],["branding","Branding"],["domains","Domains"]].map(([v,l])=><button key={v} onClick={()=>setSec(v)} className={`px-3 py-1.5 rounded-md ${sec===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}
       </div>
 
       {sec==="branding"&&<Branding settings={settings} setSettings={setSettings} brand={brand}/>}
       {sec==="domains"&&<Domains settings={settings} setSettings={setSettings} clients={clients}/>}
+      {sec==="platforms"&&<PlatformAccountsAdmin settings={settings} setSettings={setSettings}/>}
 
       {sec==="overview"&&<div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat2 label="Customers" value={clients.length}/>
@@ -620,6 +621,24 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
       {sec==="users"&&<UsersAdmin users={users} setUsers={setUsers} clients={clients} currentUser={currentUser}/>}
     </div>
   );
+}
+function PlatformAccountsAdmin({settings,setSettings}){
+  const plat=settings.platforms||PLATFORM_DEFAULTS;
+  const togglePlat=(id)=>setSettings({...settings,platforms:{...plat,[id]:!plat[id]}});
+  return (<div className="max-w-2xl space-y-3">
+    <h2 className="text-sm font-semibold text-stone-700">Platform (reseller) carrier accounts</h2>
+    <p className="text-sm text-stone-500">Carrier accounts you resell to customers — no carrier contract needed on their end. Toggle the ones you want live; your markup still applies. When you get your own reseller accounts, they'll plug in here.</p>
+    <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
+      {PLATFORM_CARRIERS.map(c=>(
+        <div key={c.id} className="flex items-center gap-3 px-4 py-3">
+          <div className={`w-12 text-xs font-bold ${c.tint}`}>{c.name}</div>
+          <div className="flex-1 min-w-0"><div className="text-sm font-medium">{c.blurb}</div><div className="text-[11px] text-stone-400">ShippingCloud account · instant</div></div>
+          {plat[c.id]&&<Badge tone="green">on</Badge>}
+          <button onClick={()=>togglePlat(c.id)}><span className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${plat[c.id]?"bg-[#0086E0] justify-end":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></span></button>
+        </div>
+      ))}
+    </div>
+  </div>);
 }
 function CustomersAdmin({clients,setClients,statsFor,openC,setOpenC}){
   const [adding,setAdding]=useState(false);
@@ -705,9 +724,30 @@ function UsersAdmin({users,setUsers,clients,currentUser}){
 const LS_OK=(()=>{try{const k="__sc_t";window.localStorage.setItem(k,"1");window.localStorage.removeItem(k);return true;}catch(e){return false;}})();
 const lsGet=(k,fb)=>{ if(!LS_OK)return fb; try{const v=window.localStorage.getItem("sc_"+k);return v==null?fb:JSON.parse(v);}catch(e){return fb;} };
 const lsSet=(k,v)=>{ if(!LS_OK)return; try{window.localStorage.setItem("sc_"+k,JSON.stringify(v));}catch(e){} };
+const lsRaw=(k)=>{ if(!LS_OK)return null; try{return window.localStorage.getItem("sc_"+k);}catch(e){return null;} };
+const lsDel=(k)=>{ if(!LS_OK)return; try{window.localStorage.removeItem("sc_"+k);}catch(e){} };
+// Which login is active. Every non-global key is stored under this account so each login keeps its OWN settings/data.
+const activeUid=()=>{ try{const s=lsGet("session",null); const id=s&&(s.id||s.email); return id?String(id):"guest"; }catch(e){return "guest";} };
+// Shared across all logins (never namespaced): the accounts list + who is signed in.
+const GLOBAL_KEYS={session:1,users:1};
+// Scratch = the in-progress shipment. Per-login, but starts blank on each login (never migrated/inherited).
+const isScratch=(key)=>String(key).indexOf("ship.")===0;
+// Scratch keys wiped on login so the receiver + package dims are always blank for a fresh session.
+const SCRATCH_KEYS=["ship.receiver","ship.pieces","ship.reference","ship.invoiceNo","ship.poNo","ship.insurance","ship.residential"];
+const clearScratchFor=(uid)=>SCRATCH_KEYS.forEach(k=>lsDel("u/"+uid+"/"+k));
 function usePersist(key,initial){
-  const [val,setVal]=useState(()=>lsGet(key,initial));
-  useEffect(()=>{lsSet(key,val);},[key,val]);
+  const nsKey=GLOBAL_KEYS[key]?key:("u/"+activeUid()+"/"+key);
+  const [val,setVal]=useState(()=>{
+    const raw=lsRaw(nsKey);
+    if(raw!=null){ try{return JSON.parse(raw);}catch(e){} }
+    // one-time migration: carry any pre-login global value into this account (never for scratch keys)
+    if(!GLOBAL_KEYS[key]&&!isScratch(key)){
+      const legacy=lsRaw(key);
+      if(legacy!=null){ try{ const v=JSON.parse(legacy); lsSet(nsKey,v); return v; }catch(e){} }
+    }
+    return initial;
+  });
+  useEffect(()=>{lsSet(nsKey,val);},[nsKey,val]);
   return [val,setVal];
 }
 export default function App(){
@@ -829,7 +869,7 @@ export default function App(){
     return ()=>clearInterval(id);
   },[settings.shopifyConn&&settings.shopifyConn.shop,settings.shopifyConn&&settings.shopifyConn.token]);
   // blank the receiver on a fresh page load / login (stays filled across tab switches within a session)
-  useEffect(()=>{ try{ localStorage.removeItem("ship.receiver"); }catch(e){} },[]);
+  /* receiver + package dims are cleared on login (clearScratchFor) so a fresh session always starts blank */
   // re-check England for any staged orders that have since booked; pull label + tracking into Shipments
   const checkPendingLabels=async()=>{
     const eng=settings.england;
@@ -856,7 +896,7 @@ export default function App(){
   const TABS=isAdmin?ALL_TABS:ALL_TABS.filter(t=>t[0]!=="admin");
   const unfulfilled=orders.filter(o=>o.status==="unfulfilled").length;
 
-  if(!currentUser) return <Login users={users} brand={{...DEFAULT_BRAND,...(settings.brand||{})}} onLogin={(u)=>{setCurrentUser(u);setTab("ship");if(u.role==="customer"&&u.clientId)setClientId(u.clientId);}}/>;
+  if(!currentUser) return <Login users={users} brand={{...DEFAULT_BRAND,...(settings.brand||{})}} onLogin={(u)=>{ const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }}/>;
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-800" style={{fontFamily:"ui-sans-serif,system-ui,sans-serif"}}>
@@ -870,7 +910,7 @@ export default function App(){
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="text-right leading-tight hidden sm:block"><div className="text-sm font-medium text-stone-800">{currentUser.name}</div><div className="text-[11px] text-stone-400">{currentUser.role==="admin"?"Administrator":(clients.find(c=>c.id===currentUser.clientId)||{}).name||"Customer"}</div></div>
             <span className="w-8 h-8 rounded-full bg-[#CCEAFF] text-[#006FBF] flex items-center justify-center text-sm font-semibold shrink-0">{(currentUser.name||"?").slice(0,1).toUpperCase()}</span>
-            <button onClick={()=>{setCurrentUser(null);setTab("ship");}} className="text-xs sm:text-sm text-stone-500 hover:text-stone-800 border border-stone-200 rounded px-2 sm:px-2.5 py-1.5">Sign out</button>
+            <button onClick={()=>{ lsSet("session",null); window.location.reload(); }} className="text-xs sm:text-sm text-stone-500 hover:text-stone-800 border border-stone-200 rounded px-2 sm:px-2.5 py-1.5">Sign out</button>
           </div>
         </div>
       </header>
@@ -924,11 +964,12 @@ export default function App(){
 function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDrafts,prefill,clearPrefill,onShipped,onPending,logEmail,onQuickQuote,onRefresh,syncing}){
   const empty={country:"United States",name:"",company:"",zip:"",state:"",city:"",address1:"",address2:"",address3:"",phone:"",email:""};
   const [sender,setSender]=useState({country:"United States",...settings.sender,address2:"",address3:""});
+  // Persist any sender edits made here back into saved settings, so the ship-from sticks across reloads/logins (no more reverting to the seed).
+  useEffect(()=>{ setSettings&&setSettings(s=>({...s,sender:{name:sender.name||"",company:sender.company||"",address1:sender.address1||"",city:sender.city||"",state:sender.state||"",zip:sender.zip||"",phone:sender.phone||"",email:sender.email||""}})); },[sender.name,sender.company,sender.address1,sender.city,sender.state,sender.zip,sender.phone,sender.email]);
   const [receiver,setReceiver]=usePersist("ship.receiver",empty);
   const [reference,setReference]=usePersist("ship.reference","");
   const [invoiceNo,setInvoiceNo]=usePersist("ship.invoiceNo","");
   const [poNo,setPoNo]=usePersist("ship.poNo","");
-  const [returnDiff,setReturnDiff]=useState(false);
   const [pieces,setPieces]=usePersist("ship.pieces",[{weight:"",L:"",W:"",H:""}]);
   const [insurance,setInsurance]=usePersist("ship.insurance","");
   const [residential,setRes]=usePersist("ship.residential",true);
@@ -966,6 +1007,8 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
   const setPiece=(i,patch)=>setPieces(ps=>ps.map((p,j)=>j===i?{...p,...patch}:p));
   const addPiece=()=>setPieces(ps=>[...ps,{...(ps[ps.length-1]||{weight:"",L:"",W:"",H:""})}]);
   const delPiece=(i)=>setPieces(ps=>ps.length>1?ps.filter((_,j)=>j!==i):ps);
+  // When a One Rate service is chosen, set package #1 to the matching FedEx One Rate box size.
+  const applyOneRateBox=(code)=>{ const b=FEDEX_ONERATE.find(x=>x.code===code); if(!b||!b.dims)return; setPieces(ps=>ps.map((p,j)=>j===0?{...p,L:b.dims.L,W:b.dims.W,H:b.dims.H,boxIdx:-1,orBox:b.name.replace(/FedEx\s*One Rate®?\s*/i,"")}:p)); };
   const pw=(p)=>Math.round(((+p.weight||0)+(+p.oz||0)/16)*1000)/1000;
   const totalWeight=Math.round(pieces.reduce((a,p)=>a+pw(p),0)*100)/100;
   const setLine=(i,patch)=>setCustoms(c=>({...c,lines:c.lines.map((l,j)=>j===i?{...l,...patch}:l)}));
@@ -1152,7 +1195,7 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
   const [draftName,setDraftName]=useState("");
   const commitDraft=(title)=>{const d={id:Date.now(),label:title||reference||receiver.name||receiver.city||"Untitled",when:new Date().toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}),to:`${receiver.city||""}${receiver.state?", "+receiver.state:""}`,snap:{sender,receiver,reference,invoiceNo,poNo,pieces,residential,signature,billTo,thirdAcct,insurance,selectedOrder,customs}};setDrafts(p=>[d,...p]);setNaming(false);setDraftName("");setSaved(true);setTimeout(()=>setSaved(false),1600);};
   const saveDraft=()=>{setDraftName(reference||receiver.name||receiver.city||"");setNaming(true);};
-  const newShipment=()=>{setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setRes(true);setResTouched(false);setSig(false);setSigOption("none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");setReturnDiff(false);};
+  const newShipment=()=>{setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setRes(true);setResTouched(false);setSig(false);setSigOption("none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");};
   return (
     <div className="flex flex-row gap-4 items-start">
       {ordersOpen?(
@@ -1206,7 +1249,7 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
         </div>
         <div className="relative grid lg:grid-cols-2 gap-4">
           <AddressCard title="Sender" data={sender} set={setSender} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }}/>
-          <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-1/2 top-1 -translate-x-1/2 z-10 w-6 h-6 items-center justify-center rounded-full bg-white border border-stone-300 hover:bg-stone-100 text-stone-600 shadow-sm"><ArrowLeftRight className="w-3 h-3"/></button>
+          <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-1/2 top-11 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-4 h-4"/></button>
           <AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} contactFallback={{phone:sender.phone,email:sender.email}} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }}/>
         </div>
         {billTo==="third"&&thirdAcct&&<div className="flex flex-wrap items-center gap-2 text-xs -mt-1">
@@ -1249,11 +1292,10 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
               {quotes.some(q=>{const l=String(q.label||"").toLowerCase();return l.includes("fedex")&&/(overnight|2\s?day|express saver)/.test(l);})&&<label className="flex items-center gap-1.5 text-[11px] text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSat(e.target.checked)} className="accent-[#0086E0]"/><span className="uppercase tracking-widest text-stone-500">Saturday delivery <span className="normal-case text-stone-400">(Express only)</span></span></label>}
             </div>
           </div>
-          {orBox&&<div className="text-[12px] rounded px-3 py-2 flex items-center gap-2 bg-[#E6F4FF] text-[#0072BE] border border-[#99D6FF]"><Boxes className="w-4 h-4 shrink-0"/><span>Qualifies for FedEx One Rate — <b>{orBox.name.replace(/FedEx\s*One Rate®?\s*/i,"")}</b></span></div>}
           {pieces.map((p,i)=>(
             <div key={i} className="flex flex-wrap items-end gap-2 bg-white border border-stone-200 rounded px-2 py-2">
               <div className="text-[11px] text-stone-400 font-mono w-6">#{i+1}</div>
-              <div><div className="text-[10px] uppercase tracking-widest text-stone-500">Box</div><select onChange={e=>{const pr=(settings.boxes||SEED_BOXES)[+e.target.value];if(pr)setPiece(i,{L:pr.L,W:pr.W,H:pr.H,weight:p.weight});}} className="bg-white border border-stone-300 rounded px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="-1">Custom</option>{(settings.boxes||SEED_BOXES).map((pr,j)=><option key={pr.id} value={j}>{pr.name}</option>)}</select></div>
+              <div><div className="text-[10px] uppercase tracking-widest text-stone-500">Box</div><select value={p.boxIdx??-1} onChange={e=>{const j=+e.target.value;const pr=(settings.boxes||SEED_BOXES)[j];if(pr)setPiece(i,{L:pr.L,W:pr.W,H:pr.H,boxIdx:j,orBox:""});else setPiece(i,{boxIdx:-1});}} className="bg-white border border-stone-300 rounded px-2 py-1 text-sm outline-none focus:border-[#0099FF]">{p.orBox?<option value="-1">{p.orBox}</option>:<option value="-1">Custom</option>}{(settings.boxes||SEED_BOXES).map((pr,j)=><option key={pr.id} value={j}>{pr.name}</option>)}</select></div>
               <PkgInput label="L" req value={p.L} onChange={e=>setPiece(i,{L:e.target.value})}/>
               <PkgInput label="W" req value={p.W} onChange={e=>setPiece(i,{W:e.target.value})}/>
               <PkgInput label="H" req value={p.H} onChange={e=>setPiece(i,{H:e.target.value})}/>
@@ -1316,7 +1358,6 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
         <div className="border border-stone-200 rounded-lg bg-white p-3 space-y-3">
           <div className="text-[11px] uppercase tracking-widest text-stone-600 font-semibold">Billing &amp; third-party</div>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-            <label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={returnDiff} onChange={e=>setReturnDiff(e.target.checked)} className="accent-[#0086E0]"/>Return address differs from sender</label>
             <div className="flex items-center gap-2 text-sm">
               <span className="text-stone-500 flex items-center gap-1"><CreditCard className="w-3.5 h-3.5"/>Bill to</span>
               <select value={billTo} onChange={e=>setBillTo(e.target.value)} className="bg-white border border-stone-200 rounded px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="sender">Sender (you)</option><option value="receiver">Receiver</option><option value="third">Third-party acct</option></select>
@@ -1442,7 +1483,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
     const hasPrice=sell!=null;
     return (
       <div key={q.key} className={`border rounded-lg ${q.key===best&&ready?"border-[#99D6FF] bg-[#E6F4FF]":"border-stone-200 bg-white"}`}>
-        <div onClick={()=>setOpen(isOpen?null:q.key)} className="px-3 py-2.5 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
+        <div onClick={()=>{setOpen(isOpen?null:q.key); if(q._oneRate&&q.packageTypeCode)applyOneRateBox(q.packageTypeCode);}} className="px-3 py-2.5 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
           <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isOpen?"rotate-90":""}`}/>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2"><span className="text-sm truncate">{q.label}</span>{q.key===best&&ready&&<span className="text-[10px] uppercase text-[#0086E0] border border-[#99D6FF] rounded px-1">best value</span>}</div>
@@ -2846,6 +2887,19 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings}){
     if(res&&res.live&&res.rates&&res.rates.length) setTest({ok:true,msg:`Connected — ${res.rates.length} live services returned (cheapest ${money(res.rates[0].cost)}).`});
     else setTest({ok:false,msg:(res&&res.error)||"No live rates returned.",detail:res&&(res.england_response||res.detail)});
   };
+  // Your own direct UPS account (real UPS OAuth via /.netlify/functions/ups)
+  const ups=settings.ups||{enabled:false,clientId:"",clientSecret:"",account:"",env:""};
+  const setUps=(patch)=>setSettings({...settings,ups:{...ups,...patch}});
+  const [upsTest,setUpsTest]=useState(null);
+  const runUpsTest=async()=>{
+    setUpsTest({loading:true});
+    try{
+      const r=await fetch("/.netlify/functions/ups",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"test",account:{clientId:ups.clientId,clientSecret:ups.clientSecret,account:ups.account,env:ups.env}})});
+      const res=await r.json();
+      if(res&&res.ok) setUpsTest({ok:true,msg:res.msg||"UPS connected"});
+      else setUpsTest({ok:false,msg:(res&&res.error)||"Could not connect to UPS."});
+    }catch(e){ setUpsTest({ok:false,msg:(e&&e.message)||"Network error"}); }
+  };
   return (<div className="max-w-2xl space-y-5">
     <div>
       <h3 className="text-sm font-semibold text-stone-700 mb-1 flex items-center gap-2"><Wifi className="w-4 h-4 text-emerald-600"/>England Logistics — live FedEx &amp; UPS rates</h3>
@@ -2873,17 +2927,24 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings}){
       </div>
     </div>
     <div>
-      <h3 className="text-sm font-semibold text-stone-700 mb-1">ShippingCloud platform accounts</h3>
-      <p className="text-sm text-stone-500 mb-3">Ship on ShippingCloud's negotiated accounts — no carrier contract needed. Toggle on the ones you want to offer; your markup still applies.</p>
-      <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
-        {PLATFORM_CARRIERS.map(c=>(
-          <div key={c.id} className="flex items-center gap-3 px-4 py-3">
-            <div className={`w-12 text-xs font-bold ${c.tint}`}>{c.name}</div>
-            <div className="flex-1 min-w-0"><div className="text-sm font-medium">{c.blurb}</div><div className="text-[11px] text-stone-400">ShippingCloud account · instant</div></div>
-            {plat[c.id]&&<Badge tone="green">on</Badge>}
-            <button onClick={()=>togglePlat(c.id)}><span className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${plat[c.id]?"bg-[#0086E0] justify-end":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></span></button>
-          </div>
-        ))}
+      <h3 className="text-sm font-semibold text-stone-700 mb-1 flex items-center gap-2"><Truck className="w-4 h-4 text-[#351C15]"/>UPS — connect your own account</h3>
+      <p className="text-sm text-stone-500 mb-3">Connect a real UPS account for live UPS rates on your own negotiated pricing. Create a UPS developer app at <span className="font-mono">developer.ups.com</span> (add the Rating + OAuth products) to get a Client ID and Client Secret, then paste them with your 6-character UPS account number.</p>
+      <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
+        <label className="flex items-center justify-between gap-3">
+          <span className="text-sm font-medium flex items-center gap-2">Use live UPS rates {ups.enabled&&<Badge tone="green">on</Badge>}</span>
+          <button onClick={()=>setUps({enabled:!ups.enabled})}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${ups.enabled?"bg-[#0086E0] justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full"/></span></button>
+        </label>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field label="UPS Client ID"><Input value={ups.clientId} onChange={e=>setUps({clientId:e.target.value})} placeholder="from your UPS app"/></Field>
+          <Field label="UPS Client Secret"><Input type="password" value={ups.clientSecret} onChange={e=>setUps({clientSecret:e.target.value})} placeholder="from your UPS app"/></Field>
+          <Field label="UPS account number"><Input value={ups.account} onChange={e=>setUps({account:e.target.value})} placeholder="6-character account #"/></Field>
+          <Field label="Environment"><Select value={ups.env||"production"} onChange={e=>setUps({env:e.target.value})}><option value="production">Production</option><option value="test">Test (CIE sandbox)</option></Select></Field>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <button onClick={runUpsTest} disabled={!ups.clientId||!ups.clientSecret} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{upsTest&&upsTest.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Testing…</>:<><ShieldCheck className="w-4 h-4"/>Test connection</>}</button>
+          {upsTest&&!upsTest.loading&&<span className={`text-xs flex items-center gap-1.5 ${upsTest.ok?"text-emerald-700":"text-[#0086E0]"}`}>{upsTest.ok?<CheckCircle2 className="w-4 h-4"/>:<AlertTriangle className="w-4 h-4"/>}{upsTest.msg}</span>}
+        </div>
+        <p className="text-[11px] text-stone-400">For production, store these as Netlify env vars (<span className="font-mono">UPS_CLIENT_ID</span>, <span className="font-mono">UPS_CLIENT_SECRET</span>, <span className="font-mono">UPS_ACCOUNT</span>) instead of here, so secrets never ship to the browser.</p>
       </div>
     </div>
     <div>

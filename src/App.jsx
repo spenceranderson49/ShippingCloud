@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v74";
+const BUILD_TAG="addr-v75";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -750,21 +750,22 @@ function UsersAdmin({users,setUsers,clients,currentUser}){
       <button onClick={create} className={`text-sm rounded px-4 py-2 font-medium flex items-center gap-1.5 ${added?"bg-emerald-600 text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{added?<><Check className="w-4 h-4"/>Created</>:<><Plus className="w-4 h-4"/>Create login</>}</button>
     </div>
     <div className="border border-stone-200 rounded-lg bg-white overflow-hidden divide-y divide-stone-100">
-      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400"><div className="flex-1">User</div><div className="w-24">Role</div><div className="w-32 hidden sm:block">Customer</div><div className="w-20">Last login</div><div className="w-24 text-right">Actions</div></div>
+      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400"><div className="flex-1">User</div><div className="w-24">Role</div><div className="w-32 hidden sm:block">Customer</div><div className="w-20">Last login</div><div className="w-32 text-right">Actions</div></div>
       {users.map(u=>(
         <div key={u.id} className="flex items-center gap-3 px-4 py-3 text-sm">
           <div className="flex-1 min-w-0"><div className="font-medium truncate">{u.name}</div><div className="text-[11px] text-stone-400 truncate">{u.email}</div></div>
           <div className="w-24"><Badge tone={u.role==="admin"?"blue":"stone"}>{u.role}</Badge></div>
           <div className="w-32 hidden sm:block text-xs text-stone-500 truncate">{u.role==="admin"?"— all —":(clients.find(c=>c.id===u.clientId)||{}).name||"—"}</div>
           <div className="w-20 text-xs text-stone-400">{u.lastLogin||"—"}</div>
-          <div className="w-24 flex items-center justify-end gap-1.5">
+          <div className="w-32 flex items-center justify-end gap-1.5">
+            {CLOUD.mode==="cloud"&&<button onClick={async()=>{const np=window.prompt("New password for "+u.email+" (min 4 characters):");if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});window.alert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}} title="Reset password" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">pw</button>}
             <button onClick={()=>toggle(u.id)} title={u.status==="active"?"Deactivate":"Activate"} className={`text-[11px] rounded px-2 py-1 ${u.status==="active"?"bg-emerald-50 text-emerald-700":"bg-stone-100 text-stone-500"}`}>{u.status==="active"?"active":"off"}</button>
             {u.id!==currentUser.id&&<button onClick={()=>del(u.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
           </div>
         </div>
       ))}
     </div>
-    <p className="text-[11px] text-stone-400">Passwords here are stored in app state for the prototype. Before exposing customer logins publicly, move authentication to a real provider so passwords are hashed and sessions are secure.</p>
+    <p className="text-[11px] text-stone-400">{CLOUD.mode==="cloud"?"Cloud accounts: passwords are hashed on the server and never stored or shown here. New logins get the temp password you set; change any password with the pw button.":"Local mode: passwords are stored in this browser only. Set up the cloud database to get hashed passwords and real multi-device logins."}</p>
   </div>);
 }
 
@@ -786,6 +787,7 @@ const clearScratchFor=(uid)=>SCRATCH_KEYS.forEach(k=>lsDel("u/"+uid+"/"+k));
 function usePersist(key,initial){
   const nsKey=GLOBAL_KEYS[key]?key:("u/"+activeUid()+"/"+key);
   const [val,setVal]=useState(()=>{
+    if(CLOUD.snapshot&&(nsKey in CLOUD.snapshot))return CLOUD.snapshot[nsKey];
     const raw=lsRaw(nsKey);
     if(raw!=null){ try{return JSON.parse(raw);}catch(e){} }
     // one-time migration: carry any pre-login global value into this account (never for scratch keys)
@@ -795,10 +797,105 @@ function usePersist(key,initial){
     }
     return initial;
   });
-  useEffect(()=>{lsSet(nsKey,val);},[nsKey,val]);
+  useEffect(()=>{lsSet(nsKey,val);cloudQueue(nsKey,val);},[nsKey,val]);
   return [val,setVal];
 }
+
+/* ════════ CLOUD SYNC (Supabase via /.netlify/functions/db) ════════
+   The browser talks ONLY to our db function — no database keys here.
+   Mirrors the existing per-login localStorage namespaces into Postgres:
+   localStorage stays as the instant-load offline cache; the cloud is the
+   source of truth. If the cloud isn't configured, the app runs in local
+   mode exactly as before. */
+const DB_ENDPOINT="/.netlify/functions/db";
+const CLOUD={mode:"unknown",token:lsGet("cloud.token",null),user:null,snapshot:null,baseline:{},queue:{},timer:null,offline:false};
+async function cloudCall(payload){
+  try{
+    const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),15000);
+    const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload),signal:ctrl.signal});
+    clearTimeout(t);
+    return await r.json();
+  }catch(e){ return {ok:false,network:true,error:(e&&e.message)||"Network error"}; }
+}
+const cloudSyncable=(key)=>CLOUD.mode==="cloud"&&!!CLOUD.token&&key!=="session"&&!isScratch(String(key).replace(/^u\/[^/]+\//,""))&&key!=="cloud.token";
+function cloudQueue(key,val){
+  if(!cloudSyncable(key))return;
+  const j=JSON.stringify(val===undefined?null:val);
+  if(CLOUD.baseline[key]===j)return;
+  CLOUD.queue[key]=val; CLOUD.baseline[key]=j;
+  if(CLOUD.timer)clearTimeout(CLOUD.timer);
+  CLOUD.timer=setTimeout(cloudFlush,800);
+}
+async function cloudFlush(){
+  CLOUD.timer=null;
+  const stores=CLOUD.queue; if(!Object.keys(stores).length)return;
+  CLOUD.queue={};
+  const res=await cloudCall({action:"putMany",token:CLOUD.token,stores});
+  if(res&&res.ok){ CLOUD.offline=false; return; }
+  if(res&&res.authFailed){ lsDel("cloud.token"); window.location.reload(); return; }
+  CLOUD.offline=true;
+  CLOUD.queue={...stores,...CLOUD.queue};
+  for(const k in stores) delete CLOUD.baseline[k];
+  if(!CLOUD.timer)CLOUD.timer=setTimeout(cloudFlush,10000);
+}
+async function cloudLoadAll(){
+  const res=await cloudCall({action:"getAll",token:CLOUD.token});
+  if(res&&res.ok&&res.stores){
+    CLOUD.snapshot=res.stores;
+    CLOUD.baseline={}; for(const k in res.stores)CLOUD.baseline[k]=JSON.stringify(res.stores[k]);
+    for(const k in res.stores)lsSet(k,res.stores[k]);
+    return {ok:true};
+  }
+  return res||{ok:false,error:"No response"};
+}
+function CloudLogin({onDone}){
+  const [email,setEmail]=useState("");const [pw,setPw]=useState("");const [err,setErr]=useState("");const [busy,setBusy]=useState(false);
+  const go=async()=>{
+    if(busy)return; setBusy(true);setErr("");
+    const res=await cloudCall({action:"login",email,password:pw});
+    setBusy(false);
+    if(!res||!res.ok){setErr((res&&res.error)||"Could not reach the server.");return;}
+    CLOUD.token=res.token; lsSet("cloud.token",res.token);
+    const uid=String(res.user.id||res.user.email); clearScratchFor(uid);
+    lsSet("session",res.user);
+    onDone(res.bootstrap===true);
+  };
+  return (<div className="min-h-screen bg-neutral-950 flex items-center justify-center p-4">
+    <div className="w-full max-w-sm bg-white rounded-xl p-6 space-y-4 shadow-2xl">
+      <div className="text-lg font-semibold text-stone-800">Sign in</div>
+      <p className="text-xs text-stone-500 -mt-2">Cloud accounts — your data follows your login on any device. First-ever sign-in creates the admin account with the password you enter.</p>
+      <div className="space-y-2">
+        <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="Email" className="w-full border border-stone-300 rounded px-3 py-2 text-sm" autoFocus/>
+        <input value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()} placeholder="Password" type="password" className="w-full border border-stone-300 rounded px-3 py-2 text-sm"/>
+      </div>
+      {err&&<div className="text-xs text-red-600">{err}</div>}
+      <button onClick={go} disabled={busy} className="w-full bg-stone-900 text-white rounded px-4 py-2 text-sm font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"Signing in…":"Sign in"}</button>
+    </div>
+  </div>);
+}
 export default function App(){
+  const [phase,setPhase]=useState("boot");
+  const [bootMsg,setBootMsg]=useState("");
+  const start=async()=>{
+    const ping=await cloudCall({action:"ping"});
+    if(!ping||ping.network||!ping.configured){ CLOUD.mode="local"; setPhase("local"); return; }
+    CLOUD.mode="cloud";
+    if(!CLOUD.token){ setPhase("login"); return; }
+    setPhase("loading");
+    const res=await cloudLoadAll();
+    if(res.ok){ setPhase("ready"); return; }
+    if(res.authFailed){ lsDel("cloud.token"); CLOUD.token=null; setPhase("login"); return; }
+    CLOUD.offline=true; setPhase("ready"); setBootMsg("Offline — showing this device\u2019s saved data; changes sync when the connection returns.");
+  };
+  useEffect(()=>{start();},[]);
+  if(phase==="boot"||phase==="loading") return <div className="min-h-screen bg-neutral-950 flex items-center justify-center"><div className="text-stone-400 text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>Loading your workspace…</div></div>;
+  if(phase==="login") return <CloudLogin onDone={async()=>{ setPhase("loading"); const r=await cloudLoadAll(); setPhase("ready"); if(!r.ok)setBootMsg("Signed in — first sync will complete in the background."); }}/>;
+  return (<>
+    {bootMsg&&<div className="bg-amber-50 border-b border-amber-200 text-amber-800 text-xs px-4 py-2 text-center">{bootMsg}</div>}
+    <AppInner/>
+  </>);
+}
+function AppInner(){
   const [tab,setTab]=useState("ship");
   useEffect(()=>{ try{
     if(localStorage.getItem("scPurge")!=="2"){
@@ -972,7 +1069,7 @@ export default function App(){
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="text-right leading-tight hidden sm:block"><div className="text-sm font-medium text-stone-800">{currentUser.name}</div><div className="text-[11px] text-stone-400">{currentUser.role==="admin"?"Administrator":(clients.find(c=>c.id===currentUser.clientId)||{}).name||"Customer"}</div></div>
             <span className="w-8 h-8 rounded-full bg-[#CCEAFF] text-[#006FBF] flex items-center justify-center text-sm font-semibold shrink-0">{(currentUser.name||"?").slice(0,1).toUpperCase()}</span>
-            <button onClick={()=>{ lsSet("session",null); window.location.reload(); }} className="text-xs sm:text-sm text-stone-500 hover:text-stone-800 border border-stone-200 rounded px-2 sm:px-2.5 py-1.5">Sign out</button>
+            <button onClick={()=>{ lsSet("session",null); lsDel("cloud.token"); window.location.reload(); }} className="text-xs sm:text-sm text-stone-500 hover:text-stone-800 border border-stone-200 rounded px-2 sm:px-2.5 py-1.5">Sign out</button>
           </div>
         </div>
       </header>

@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v76";
+const BUILD_TAG="addr-v78";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -755,7 +755,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
         <button disabled={busyReq===r.email} onClick={()=>{const sel=document.getElementById("reqclient-"+(r.id||r.email));decide(r.email,true,sel?sel.value:null);}} className="text-xs bg-emerald-600 text-white rounded px-3 py-1.5 font-medium hover:bg-emerald-700 disabled:opacity-50">{busyReq===r.email?"…":"Approve"}</button>
         <button disabled={busyReq===r.email} onClick={()=>decide(r.email,false)} className="text-xs border border-stone-300 text-stone-600 rounded px-3 py-1.5 hover:bg-stone-50 disabled:opacity-50">Deny</button>
       </div>))}
-      <p className="text-[11px] text-stone-400">Approving creates their login instantly with the password they chose at signup. Assign a customer account to give them that customer\u2019s pricing, or leave unassigned and set it later.</p>
+      <p className="text-[11px] text-stone-400">Approving creates their login instantly with the password they chose at signup. Assign a customer account to give them that customer’s pricing, or leave unassigned and set it later.</p>
     </div>}
     <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
       <div className="text-sm font-semibold text-stone-700">New login</div>
@@ -893,7 +893,7 @@ function CloudAuth({onDone,initialMode}){
     {mode==="requested"?(<div className="text-center space-y-3 py-4">
       <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto"/>
       <div className="text-lg font-semibold text-stone-800">Request received</div>
-      <p className="text-sm text-stone-500">We review every account personally. You\u2019ll be able to sign in with the email and password you chose as soon as you\u2019re approved.</p>
+      <p className="text-sm text-stone-500">We review every account personally. You’ll be able to sign in with the email and password you chose as soon as you’re approved.</p>
       <button onClick={()=>setMode("signin")} className="text-sm text-[#0086E0] font-medium">Back to sign in</button>
     </div>):(<>
       <div className="grid grid-cols-2 bg-stone-100 rounded-lg p-1 text-sm font-medium">
@@ -907,8 +907,8 @@ function CloudAuth({onDone,initialMode}){
         <input value={f.pw} onChange={e=>setF({...f,pw:e.target.value})} onKeyDown={e=>e.key==="Enter"&&(mode==="signin"?signin():request())} placeholder={mode==="request"?"Choose a password":"Password"} type="password" className={inp}/>
       </div>
       {err&&<div className="text-xs text-red-600">{err}</div>}
-      <button onClick={mode==="signin"?signin:request} disabled={busy} className="w-full bg-stone-900 text-white rounded px-4 py-2 text-sm font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"One moment\u2026":(mode==="signin"?"Sign in":"Request access")}</button>
-      {mode==="request"&&<p className="text-[11px] text-stone-400 text-center">Accounts are approved personally \u2014 no bots, no spam, usually same-day.</p>}
+      <button onClick={mode==="signin"?signin:request} disabled={busy} className="w-full bg-stone-900 text-white rounded px-4 py-2 text-sm font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"One moment…":(mode==="signin"?"Sign in":"Create account")}</button>
+      {mode==="request"&&<p className="text-[11px] text-stone-400 text-center">Accounts are approved personally — no bots, no spam, usually same-day.</p>}
     </>)}
   </div>);
 }
@@ -930,45 +930,46 @@ function Landing({onAuth}){
       <div className="flex items-center gap-2 text-white font-bold text-lg"><Cloud className="w-6 h-6 text-[#38b6ff]"/>Shipping<span className="text-[#38b6ff]">Cloud</span><span className="hidden sm:inline text-[10px] font-medium text-stone-500 mt-1.5 ml-1">by FREIGHTWIRE</span></div>
       <div className="flex items-center gap-3">
         <button onClick={()=>onAuth("signin")} className="text-sm text-stone-300 hover:text-white px-3 py-2">Sign in</button>
-        <button onClick={()=>onAuth("request")} className="text-sm bg-[#0086E0] hover:bg-[#0a76c2] text-white font-medium rounded-lg px-4 py-2">Get started</button>
+        <button onClick={()=>onAuth("request")} className="text-sm bg-[#0086E0] hover:bg-[#0a76c2] text-white font-medium rounded-lg px-4 py-2">Create account</button>
       </div>
     </div>
     {/* hero */}
     <div className="max-w-6xl mx-auto px-5 pt-14 pb-16 grid lg:grid-cols-2 gap-12 items-center">
       <div>
         <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-widest text-[#38b6ff] bg-[#0086E0]/10 border border-[#0086E0]/25 rounded-full px-3 py-1 mb-5"><Zap className="w-3.5 h-3.5"/>Multi-carrier shipping platform</div>
-        <h1 className="text-4xl sm:text-5xl font-bold text-white leading-tight">Enterprise FedEx & DHL pricing.<br/><span className="text-[#38b6ff]">Without the enterprise volume.</span></h1>
-        <p className="mt-5 text-lg text-stone-400 leading-relaxed">Ship on deeply discounted contract rates from day one \u2014 quote in milliseconds, print labels, automate your workflow, and audit every carrier invoice. One login runs your whole shipping operation.</p>
+        <h1 className="text-4xl sm:text-5xl font-bold text-white leading-tight">Your shipping,<br/><span className="text-[#38b6ff]">on autopilot.</span></h1>
+        <p className="mt-5 text-lg text-stone-400 leading-relaxed">Enterprise FedEx & DHL pricing without the enterprise volume. Rate shop instantly, print labels, automate your workflow, and audit every carrier invoice — one login runs your whole shipping operation.</p>
         <div className="mt-7 flex flex-wrap gap-3">
-          <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0a76c2] text-white font-semibold rounded-lg px-6 py-3">Request access</button>
-          <button onClick={()=>onAuth("signin")} className="border border-white/15 hover:bg-white/5 text-white font-medium rounded-lg px-6 py-3">Sign in</button>
+          <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0a76c2] text-white font-semibold rounded-lg px-6 py-3">Create ShippingCloud account</button>
+          <button onClick={()=>onAuth("request")} className="border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#38b6ff] font-semibold rounded-lg px-6 py-3 flex items-center gap-2"><Truck className="w-4 h-4"/>Get your own FedEx account</button>
         </div>
+        <p className="mt-3 text-[13px] text-stone-500">Your own account number — pre-loaded with enterprise contract pricing. No negotiating.</p>
         <div className="mt-6 flex items-center gap-5 text-[12px] text-stone-500"><span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-500"/>No monthly minimums</span><span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-500"/>No setup fees</span><span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-500"/>Approved same-day</span></div>
       </div>
       {/* hero graphic: mock rate card */}
       <div className="relative hidden lg:block">
         <div className="absolute -inset-8 bg-[#0086E0]/20 blur-3xl rounded-full"/>
         <div className="relative bg-neutral-900 border border-white/10 rounded-2xl p-5 shadow-2xl">
-          <div className="text-[11px] uppercase tracking-widest text-stone-500 mb-3 flex items-center justify-between"><span>Live rates \u00b7 5 lb \u00b7 SLC \u2192 Los Angeles</span><span className="text-emerald-400 flex items-center gap-1"><Zap className="w-3 h-3"/>0.2s</span></div>
-          {[["FedEx Ground\u00ae","2 days","$9.41"],["FedEx 2Day\u00ae","2 days","$18.73"],["FedEx Priority Overnight\u00ae","next day","$42.10"],["DHL Express","2 days","$21.66"]].map((r,i)=>(
+          <div className="text-[11px] uppercase tracking-widest text-stone-500 mb-3 flex items-center justify-between"><span>Live rates · 5 lb · SLC → Los Angeles</span><span className="text-emerald-400 flex items-center gap-1"><Zap className="w-3 h-3"/>instant</span></div>
+          {[["FedEx Ground®","2 days","$9.41"],["FedEx One Rate® · 2Day","flat-rate box · 2 days","$14.95"],["FedEx Priority Overnight®","next day","$42.10"],["DHL Express","2 days","$21.66"]].map((r,i)=>(
             <div key={i} className={`flex items-center justify-between rounded-lg px-3 py-2.5 mb-1.5 ${i===0?"bg-[#0086E0]/15 border border-[#0086E0]/40":"bg-white/[0.03] border border-white/5"}`}>
               <div className="flex items-center gap-3"><Truck className={`w-4 h-4 ${i===0?"text-[#38b6ff]":"text-stone-500"}`}/><div><div className="text-sm text-white font-medium">{r[0]}</div><div className="text-[11px] text-stone-500">{r[1]}</div></div></div>
               <div className={`font-mono text-sm ${i===0?"text-[#38b6ff] font-bold":"text-stone-300"}`}>{r[2]}</div>
             </div>))}
-          <div className="text-[10px] text-stone-600 mt-2">Illustrative example \u2014 your rates are quoted live for every shipment.</div>
+          <div className="text-[10px] text-stone-600 mt-2">Illustrative example — your rates are quoted live for every shipment.</div>
         </div>
       </div>
     </div>
     {/* features */}
     <div className="max-w-6xl mx-auto px-5 pb-16">
-      <div className="text-center mb-10"><h2 className="text-2xl sm:text-3xl font-bold text-white">Everything your shipping desk does \u2014 in one place</h2><p className="text-stone-400 mt-2">Built by freight people, for businesses that actually ship.</p></div>
+      <div className="text-center mb-10"><h2 className="text-2xl sm:text-3xl font-bold text-white">Everything your shipping desk does — in one place</h2><p className="text-stone-400 mt-2">Built by freight people, for businesses that actually ship.</p></div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <F icon={DollarSign} title="Contract rates, instantly">Quote every service across carriers in milliseconds \u2014 discounted contract pricing with fuel and residential surcharges already included. No list-rate surprises.</F>
-        <F icon={Zap} title="Autopilot rules">Set it once: \u201cUnder 1 lb \u2192 cheapest ground. West coast \u2192 2Day. Marked fragile \u2192 add signature.\u201d Orders come in already rated, boxed, and ready to print.</F>
-        <F icon={Receipt} title="Invoice audit">Upload your carrier invoice and instantly see every shipment where billed didn\u2019t match quoted \u2014 reweighs, dimension bumps, address corrections \u2014 with accept/dispute in one click.</F>
-        <F icon={ShoppingBag} title="Orders in, labels out">Bring in orders, batch-rate hundreds at a time, and print labels one by one or all at once. Drafts, returns, pickups, and manifests included.</F>
-        <F icon={BookUser} title="Smart address book">Paste a messy address blob from any email \u2014 name, street, suite, city, phone \u2014 and watch it land in the right fields, validated. Every contact saved for next time.</F>
-        <F icon={Cloud} title="Your data, everywhere">Cloud accounts with hashed passwords and per-login workspaces. Sign in from the warehouse, the office, or your phone \u2014 your history follows you.</F>
+        <F icon={Search} title="Rate shop instantly">Every service, every carrier, side by side the moment you type an address — cheapest highlighted, fuel and residential surcharges already baked in. No tabs, no waiting.</F>
+        <F icon={Zap} title="Autopilot rules">Set it once: "Under 1 lb → cheapest ground. West coast → 2Day. Marked fragile → add signature." Orders arrive already rated, boxed, and ready to print.</F>
+        <F icon={DollarSign} title="Industry-leading FedEx rates">Your own account on enterprise contract tiers from day one — pricing normally reserved for shippers moving thousands of packages a month.</F>
+        <F icon={Receipt} title="Automated invoice auditing">Upload a carrier invoice and instantly see every shipment where billed didn't match quoted — reweighs, dimension bumps, address corrections — with accept/dispute in one click.</F>
+        <F icon={Cog} title="Built around your workflow">Your rules, your presets, your branding, your per-login workspaces. This platform bends to how you ship — you don't conform to it.</F>
+        <F icon={TrendingUp} title="Always getting smarter">The big legacy platforms have looked the same for years. ShippingCloud ships improvements every week — the tool you use gets better while you sleep.</F>
       </div>
     </div>
     {/* how it works */}
@@ -976,13 +977,13 @@ function Landing({onAuth}){
       <div className="max-w-6xl mx-auto px-5 py-14 grid lg:grid-cols-2 gap-10 items-center">
         <div className="space-y-6">
           <h2 className="text-2xl sm:text-3xl font-bold text-white">Shipping in three steps</h2>
-          <Step n="1" title="Request access">Tell us who you are. A real person approves your account \u2014 usually the same day.</Step>
-          <Step n="2" title="Get your pricing">Your login is provisioned with discounted contract rates matched to your volume. Nothing to negotiate, nothing to install.</Step>
+          <Step n="1" title="Request access">Tell us who you are. A real person approves your account — usually the same day.</Step>
+          <Step n="2" title="Get your account">We provision your own FedEx account, pre-loaded with discounted enterprise contract rates. Nothing to negotiate, nothing to install.</Step>
           <Step n="3" title="Ship">Quote, print, automate, audit. Your first label takes about two minutes.</Step>
         </div>
         <div className="bg-neutral-900 border border-white/10 rounded-2xl p-6">
           <div className="text-[11px] uppercase tracking-widest text-stone-500 mb-4">Why businesses switch</div>
-          {[["Rate quotes","2\u20133 seconds elsewhere","instant here"],["Carrier invoices","spot-checked, maybe","audited line by line"],["Shipping rules","tribal knowledge","Autopilot, written down once"],["Your rates","retail counter pricing","enterprise contract tiers"]].map((r,i)=>(
+          {[["Rate quotes","2–3 seconds elsewhere","instant here"],["Carrier invoices","spot-checked, maybe","audited line by line"],["Shipping rules","tribal knowledge","Autopilot, written down once"],["Your rates","retail counter pricing","enterprise contract tiers"]].map((r,i)=>(
             <div key={i} className="flex items-center justify-between py-2.5 border-b border-white/5 last:border-0 text-sm gap-3">
               <span className="text-stone-400 w-28 shrink-0">{r[0]}</span><span className="text-stone-600 line-through text-[13px]">{r[1]}</span><span className="text-emerald-400 font-medium text-right">{r[2]}</span>
             </div>))}
@@ -992,11 +993,11 @@ function Landing({onAuth}){
     {/* CTA + footer */}
     <div className="max-w-6xl mx-auto px-5 py-16 text-center">
       <h2 className="text-2xl sm:text-3xl font-bold text-white">Ready to stop overpaying at the counter?</h2>
-      <p className="text-stone-400 mt-2">Request access now \u2014 approval is personal and usually same-day.</p>
-      <button onClick={()=>onAuth("request")} className="mt-6 bg-[#0086E0] hover:bg-[#0a76c2] text-white font-semibold rounded-lg px-8 py-3">Get started</button>
+      <p className="text-stone-400 mt-2">Request access now — approval is personal and usually same-day.</p>
+      <button onClick={()=>onAuth("request")} className="mt-6 bg-[#0086E0] hover:bg-[#0a76c2] text-white font-semibold rounded-lg px-8 py-3">Get your own FedEx account</button>
       <div className="mt-14 pt-6 border-t border-white/10 text-[12px] text-stone-600 flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
-        <span>\u00a9 {new Date().getFullYear()} ShippingCloud by Freightwire.</span>
-        <span>FedEx\u00ae and DHL\u00ae are trademarks of their respective owners; shipping is provided under partner carrier agreements.</span>
+        <span>© {new Date().getFullYear()} ShippingCloud by Freightwire.</span>
+        <span>FedEx® and DHL® are trademarks of their respective owners; shipping is provided under partner carrier agreements.</span>
       </div>
     </div>
   </div>);
@@ -1022,7 +1023,7 @@ export default function App(){
     const res=await cloudLoadAll();
     if(res.ok){ setPhase("ready"); return; }
     if(res.authFailed){ lsDel("cloud.token"); CLOUD.token=null; setPhase("login"); return; }
-    CLOUD.offline=true; setPhase("ready"); setBootMsg("Offline — showing this device\u2019s saved data; changes sync when the connection returns.");
+    CLOUD.offline=true; setPhase("ready"); setBootMsg("Offline — showing this device’s saved data; changes sync when the connection returns.");
   };
   useEffect(()=>{start();},[]);
   if(phase==="boot"||phase==="loading") return <div className="min-h-screen bg-neutral-950 flex items-center justify-center"><div className="text-stone-400 text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>Loading your workspace…</div></div>;

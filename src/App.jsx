@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse } from "lucide-react";
+import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw } from "lucide-react";
 const FW_BLUE="#0099FF";
 const FW_DARK="#111418";
 function BrandCloud({className,color}){return (
@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v72";
+const BUILD_TAG="addr-v73";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -3714,6 +3714,18 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings}){
     if(res&&res.live&&res.rates&&res.rates.length) setTest({ok:true,msg:`Connected — ${res.rates.length} live services returned (cheapest ${money(res.rates[0].cost)}).`});
     else setTest({ok:false,msg:(res&&res.error)||"No live rates returned.",detail:res&&(res.england_response||res.detail)});
   };
+  const [flush,setFlush]=useState(null); // {loading} | {ok,msg}
+  const runFlush=async()=>{
+    setFlush({loading:true});
+    try{
+      const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),12000);
+      const r=await fetch(RATES_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"flushCache",account:{base:eng.base,apiKey:eng.apiKey,customerId:eng.customerId}}),signal:ctrl.signal});
+      clearTimeout(t);
+      const res=await r.json().catch(()=>null);
+      if(res&&res.ok) setFlush({ok:true,msg:`Rates refreshed at ${new Date(res.flushedAt).toLocaleTimeString()} — every quote now pulls fresh from England (customer ${eng.customerId||"default"}).`});
+      else setFlush({ok:false,msg:(res&&res.error)||"Refresh failed — quotes will still auto-refresh on their normal timer."});
+    }catch(e){ setFlush({ok:false,msg:((e&&e.message)||"Network error")+" — quotes will still auto-refresh on their normal timer."}); }
+  };
   // Your own direct UPS account (real UPS OAuth via /.netlify/functions/ups)
   const ups=settings.ups||{enabled:false,clientId:"",clientSecret:"",account:"",env:""};
   const setUps=(patch)=>setSettings({...settings,ups:{...ups,...patch}});
@@ -3747,8 +3759,10 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings}){
         <div className="flex flex-wrap items-center gap-3">
           <button onClick={runTest} disabled={!eng.apiKey||!eng.customerId} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{test&&test.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Testing…</>:<><ShieldCheck className="w-4 h-4"/>Test connection</>}</button>
           <button onClick={runDiag} disabled={!eng.apiKey||!eng.customerId} className="text-sm border border-stone-300 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5">{diag&&diag.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Checking…</>:<><Truck className="w-4 h-4"/>Check booking access</>}</button>
+          <button onClick={runFlush} disabled={flush&&flush.loading} className="text-sm border border-stone-300 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5" title="Clear saved quotes so every rate pulls fresh from England — use after changing pricing in England's backend">{flush&&flush.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Refreshing…</>:<><RefreshCw className="w-4 h-4"/>Refresh rates</>}</button>
           {test&&!test.loading&&<span className={`text-xs flex items-center gap-1.5 ${test.ok?"text-emerald-700":"text-[#0086E0]"}`}>{test.ok?<CheckCircle2 className="w-4 h-4"/>:<AlertTriangle className="w-4 h-4"/>}{test.msg}</span>}
         </div>
+        {flush&&!flush.loading&&<div className={`text-[12px] rounded px-3 py-2 flex items-start gap-1.5 ${flush.ok?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-amber-50 text-amber-800 border border-amber-200"}`}>{flush.ok?<CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5"/>:<AlertTriangle className="w-4 h-4 shrink-0 mt-0.5"/>}<span>{flush.msg}</span></div>}
         {diag&&!diag.loading&&<div className={`text-[12px] rounded px-3 py-2 flex items-start gap-1.5 ${diag.ok?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-amber-50 text-amber-800 border border-amber-200"}`}>{diag.ok?<CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5"/>:<AlertTriangle className="w-4 h-4 shrink-0 mt-0.5"/>}<span>{diag.msg}</span></div>}
         {test&&!test.loading&&!test.ok&&test.detail&&<div className="text-[11px] text-stone-500 font-mono bg-stone-100 border border-stone-200 rounded p-2 break-words whitespace-pre-wrap">England said: {typeof test.detail==="string"?test.detail:JSON.stringify(test.detail)}</div>}
         <p className="text-[11px] text-stone-400">For production, store the API key as a Netlify env var (<span className="font-mono">ENGLAND_API_KEY</span>, <span className="font-mono">ENGLAND_CUSTOMER_ID</span>) instead of here, so it never ships to the browser. England authenticates with the API key + customer ID; if you only have the FedEx account number, try it as the customer ID or confirm the key with your England rep.</p>

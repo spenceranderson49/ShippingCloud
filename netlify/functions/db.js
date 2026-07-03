@@ -214,7 +214,7 @@ exports.handler = async (event) => {
         const w = await putStores({ signupRequests: remaining });
         return w.ok ? J({ ok: true, requests: stripUsers(remaining) }) : J({ ok: false, error: "Save failed." });
       }
-      const newUser = { id: "u" + Date.now(), name: req.name, email: req.email, company: req.company || "", role: String(body.role || "customer") === "admin" ? "admin" : "customer", clientId: body.clientId || null, status: "active", password: "", passHash: req.passHash, lastLogin: "\u2014" };
+      const newUser = { id: "u" + Date.now(), name: req.name, email: req.email, company: req.company || "", role: String(body.role || "customer") === "admin" ? "admin" : "customer", clientId: body.clientId || null, status: "active", password: "", passHash: req.passHash, lastLogin: "—" };
       const w = await putStores({ users: [...users, newUser], signupRequests: remaining });
       if (!w.ok) return J({ ok: false, error: "Save failed." });
       return J({ ok: true, users: stripUsers([...users, newUser]), requests: stripUsers(remaining) });

@@ -134,6 +134,25 @@ exports.handler = async (event) => {
       return J({ ok: true, token: makeToken(u), user: { ...u, password: "", passHash: undefined } });
     }
 
+    /* ── request access (no auth): stores a pending signup for admin approval ── */
+    if (action === "requestAccess") {
+      const name = String(body.name || "").trim().slice(0, 80);
+      const email = String(body.email || "").trim().toLowerCase().slice(0, 120);
+      const company = String(body.company || "").trim().slice(0, 120);
+      const password = String(body.password || "");
+      if (!name || !/.+@.+\..+/.test(email) || password.length < 4) return J({ ok: false, error: "Enter your name, a valid email, and a password (4+ characters)." });
+      const [curU, curR] = await Promise.all([getStore("users"), getStore("signupRequests")]);
+      const users = (curU.ok && Array.isArray(curU.value)) ? curU.value : [];
+      if (users.some((u) => u && String(u.email || "").toLowerCase() === email)) return J({ ok: false, error: "That email already has a login. Try signing in." });
+      let reqs = (curR.ok && Array.isArray(curR.value)) ? curR.value : [];
+      reqs = reqs.filter((r) => r && String(r.email || "").toLowerCase() !== email);   // resubmission replaces
+      if (reqs.length >= 100) return J({ ok: false, error: "Too many pending requests right now — please try again later." });
+      reqs.push({ id: "req" + Date.now(), name, email, company, passHash: hashPw(password), requestedAt: new Date().toISOString() });
+      const w = await putStores({ signupRequests: reqs });
+      if (!w.ok) return J({ ok: false, error: "Could not save your request — try again." });
+      return J({ ok: true, pending: true });
+    }
+
     /* ── everything below requires a valid session ── */
     const auth = verifyToken(body.token);
     if (!auth) return J({ ok: false, authFailed: true, error: "Session expired — sign in again." });
@@ -145,7 +164,7 @@ exports.handler = async (event) => {
       for (const row of (Array.isArray(r.data) ? r.data : [])) {
         if (!row || row.key == null) continue;
         if (auth.role !== "admin" && !String(row.key).startsWith(userScope(auth))) continue;
-        stores[row.key] = row.key === "users" ? stripUsers(row.value) : row.value;
+        stores[row.key] = (row.key === "users" || row.key === "signupRequests") ? stripUsers(row.value) : row.value;
       }
       if (auth.role !== "admin") delete stores.users;
       return J({ ok: true, stores });
@@ -180,6 +199,25 @@ exports.handler = async (event) => {
       const w = await putStores({ users });
       if (!w.ok) return J({ ok: false, error: "Save failed." });
       return J({ ok: true });
+    }
+
+    if (action === "approveSignup" || action === "denySignup") {
+      if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
+      const email = String(body.email || "").trim().toLowerCase();
+      const [curU, curR] = await Promise.all([getStore("users"), getStore("signupRequests")]);
+      const users = (curU.ok && Array.isArray(curU.value)) ? curU.value : [];
+      const reqs = (curR.ok && Array.isArray(curR.value)) ? curR.value : [];
+      const req = reqs.find((r) => r && String(r.email || "").toLowerCase() === email);
+      if (!req) return J({ ok: false, error: "Request not found (it may have been handled already)." });
+      const remaining = reqs.filter((r) => r !== req);
+      if (action === "denySignup") {
+        const w = await putStores({ signupRequests: remaining });
+        return w.ok ? J({ ok: true, requests: stripUsers(remaining) }) : J({ ok: false, error: "Save failed." });
+      }
+      const newUser = { id: "u" + Date.now(), name: req.name, email: req.email, company: req.company || "", role: String(body.role || "customer") === "admin" ? "admin" : "customer", clientId: body.clientId || null, status: "active", password: "", passHash: req.passHash, lastLogin: "\u2014" };
+      const w = await putStores({ users: [...users, newUser], signupRequests: remaining });
+      if (!w.ok) return J({ ok: false, error: "Save failed." });
+      return J({ ok: true, users: stripUsers([...users, newUser]), requests: stripUsers(remaining) });
     }
 
     return J({ ok: false, error: "Unknown action." });

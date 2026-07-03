@@ -1,0 +1,189 @@
+/* ════════════════════════════════════════════════════════════════════════
+   POST /.netlify/functions/db — ShippingCloud cloud database + auth
+   ------------------------------------------------------------------------
+   The ONLY thing that talks to the database. The browser never sees a
+   database key. Backed by Supabase Postgres via its REST API (plain fetch,
+   zero dependencies), table `app_stores` (tenant, key, value jsonb).
+
+   Env vars (Netlify): SUPABASE_URL, SUPABASE_SERVICE_KEY, SESSION_SECRET
+   (SESSION_SECRET optional — derived from the service key if unset).
+
+   Actions:
+   • ping                          → { configured }
+   • login {email,password}        → { token, user }  (first-ever login
+                                     bootstraps that email as the admin)
+   • getAll {token}                → { stores }  admin: everything;
+                                     others: only their own u/<uid>/ keys.
+                                     Password hashes NEVER leave the server.
+   • putMany {token, stores}       → { ok, saved } namespace-enforced writes
+   • setPassword {token,email,newPassword} → admin (anyone) / self only
+
+   Security model: scrypt password hashes; HMAC-SHA256 session tokens
+   (30-day expiry, timing-safe verification); per-user namespace walls
+   enforced HERE, not in the browser; users store is admin-write-only and
+   served with hashes stripped. Always returns HTTP 200 JSON.
+   ════════════════════════════════════════════════════════════════════════ */
+const crypto = require("crypto");
+
+const J = (obj) => ({ statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) });
+const CFG = () => ({
+  url: (process.env.SUPABASE_URL || "").trim().replace(/\/+$/, ""),
+  key: (process.env.SUPABASE_SERVICE_KEY || "").trim(),
+});
+const configured = () => { const c = CFG(); return !!(c.url && c.key); };
+const secret = () => (process.env.SESSION_SECRET || "").trim() || crypto.createHash("sha256").update("sc1|" + CFG().key).digest("hex");
+
+/* ── Supabase PostgREST (service role) ── */
+async function pg(path, opts = {}) {
+  const c = CFG();
+  const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const r = await fetch(c.url + "/rest/v1/" + path, { ...opts, headers: { apikey: c.key, Authorization: "Bearer " + c.key, "Content-Type": "application/json", ...(opts.headers || {}) }, signal: ctrl.signal });
+    const text = await r.text();
+    let data = null; try { data = text ? JSON.parse(text) : null; } catch {}
+    return { ok: r.ok, status: r.status, data, text };
+  } catch (e) { return { ok: false, status: 0, text: (e && e.message) || "network error" }; }
+  finally { clearTimeout(t); }
+}
+const getStore = async (key) => {
+  const r = await pg("app_stores?tenant=eq.main&key=eq." + encodeURIComponent(key) + "&select=value");
+  if (!r.ok) return { ok: false, err: r };
+  return { ok: true, value: Array.isArray(r.data) && r.data[0] ? r.data[0].value : undefined };
+};
+const putStores = async (map) => {
+  const rows = Object.keys(map).map((k) => ({ tenant: "main", key: k, value: map[k], updated_at: new Date().toISOString() }));
+  if (!rows.length) return { ok: true };
+  const r = await pg("app_stores?on_conflict=tenant,key", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(rows) });
+  return { ok: r.ok, err: r.ok ? null : r };
+};
+
+/* ── passwords (scrypt) + tokens (HMAC) ── */
+const hashPw = (pw) => { const salt = crypto.randomBytes(16).toString("hex"); return "scrypt$" + salt + "$" + crypto.scryptSync(String(pw), salt, 64).toString("hex"); };
+const checkPw = (pw, stored) => {
+  try {
+    const [scheme, salt, hex] = String(stored || "").split("$");
+    if (scheme !== "scrypt" || !salt || !hex) return false;
+    const calc = crypto.scryptSync(String(pw), salt, 64);
+    const want = Buffer.from(hex, "hex");
+    return calc.length === want.length && crypto.timingSafeEqual(calc, want);
+  } catch { return false; }
+};
+const b64u = (s) => Buffer.from(s).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const unb64u = (s) => Buffer.from(String(s).replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+const sign = (p) => crypto.createHmac("sha256", secret()).update(p).digest("hex");
+const makeToken = (user) => { const p = b64u(JSON.stringify({ uid: String(user.id), email: user.email, role: user.role || "customer", clientId: user.clientId || null, exp: Date.now() + 30 * 24 * 3600 * 1000 })); return p + "." + sign(p); };
+function verifyToken(token) {
+  try {
+    const [p, sig] = String(token || "").split(".");
+    if (!p || !sig) return null;
+    const want = Buffer.from(sign(p), "hex"); const got = Buffer.from(sig, "hex");
+    if (want.length !== got.length || !crypto.timingSafeEqual(want, got)) return null;
+    const payload = JSON.parse(unb64u(p));
+    if (!payload || !payload.uid || !payload.exp || Date.now() > payload.exp) return null;
+    return payload;
+  } catch { return null; }
+}
+
+/* ── users store hygiene: hashes never leave; plaintext never stored ── */
+const stripUsers = (arr) => (Array.isArray(arr) ? arr : []).map((u) => ({ ...u, password: "", passHash: undefined }));
+function mergeUsersForWrite(incoming, current) {
+  const cur = Array.isArray(current) ? current : [];
+  const byEmail = {}; for (const u of cur) if (u && u.email) byEmail[String(u.email).toLowerCase()] = u;
+  return (Array.isArray(incoming) ? incoming : []).map((u) => {
+    if (!u) return u;
+    const existing = u.email ? byEmail[String(u.email).toLowerCase()] : null;
+    const out = { ...u, password: "" };
+    if (existing && existing.passHash) out.passHash = existing.passHash;      // NEVER change an existing password via a store write
+    else if (u.password) out.passHash = hashPw(u.password);                    // brand-new user: hash their initial password
+    return out;
+  });
+}
+
+const userScope = (auth) => "u/" + auth.uid + "/";
+const canWriteKey = (auth, key) => auth.role === "admin" ? key !== "session" : String(key).startsWith(userScope(auth));
+const SYNC_BLOCK = { session: 1 }; // never stored server-side
+
+exports.handler = async (event) => {
+  try {
+    if (event.httpMethod === "OPTIONS") return { statusCode: 204, body: "" };
+    if (event.httpMethod !== "POST") return J({ ok: false, error: "Use POST" });
+    let body = {}; try { body = JSON.parse(event.body || "{}"); } catch { return J({ ok: false, error: "Bad JSON body" }); }
+    const action = body.action || "";
+
+    if (action === "ping") return J({ ok: true, configured: configured() });
+    if (!configured()) return J({ ok: false, notConfigured: true, error: "Cloud database isn't configured yet (SUPABASE_URL / SUPABASE_SERVICE_KEY env vars)." });
+
+    /* ── login (+ first-ever bootstrap) ── */
+    if (action === "login") {
+      const email = String(body.email || "").trim().toLowerCase();
+      const password = String(body.password || "");
+      if (!email || !password) return J({ ok: false, error: "Enter your email and password." });
+      const cur = await getStore("users");
+      if (!cur.ok) return J({ ok: false, error: "Database error: " + ((cur.err && cur.err.text) || cur.err && cur.err.status || "unreachable") + ". Check the SQL setup step and env vars." });
+      let users = Array.isArray(cur.value) ? cur.value : [];
+      if (!users.length) {
+        // BOOTSTRAP: very first login creates the admin account with this email + password.
+        const admin = { id: "u1", name: email.split("@")[0], email, role: "admin", clientId: null, status: "active", password: "", passHash: hashPw(password), lastLogin: new Date().toLocaleDateString() };
+        const w = await putStores({ users: [admin] });
+        if (!w.ok) return J({ ok: false, error: "Could not create the admin account: " + ((w.err && w.err.text) || "").slice(0, 200) });
+        return J({ ok: true, bootstrap: true, token: makeToken(admin), user: { ...admin, passHash: undefined } });
+      }
+      const u = users.find((x) => x && String(x.email || "").toLowerCase() === email);
+      if (!u || !checkPw(password, u.passHash)) return J({ ok: false, error: "Incorrect email or password." });
+      if (u.status && u.status !== "active") return J({ ok: false, error: "This account is inactive. Contact your administrator." });
+      return J({ ok: true, token: makeToken(u), user: { ...u, password: "", passHash: undefined } });
+    }
+
+    /* ── everything below requires a valid session ── */
+    const auth = verifyToken(body.token);
+    if (!auth) return J({ ok: false, authFailed: true, error: "Session expired — sign in again." });
+
+    if (action === "getAll") {
+      const r = await pg("app_stores?tenant=eq.main&select=key,value");
+      if (!r.ok) return J({ ok: false, error: "Database error " + r.status });
+      const stores = {};
+      for (const row of (Array.isArray(r.data) ? r.data : [])) {
+        if (!row || row.key == null) continue;
+        if (auth.role !== "admin" && !String(row.key).startsWith(userScope(auth))) continue;
+        stores[row.key] = row.key === "users" ? stripUsers(row.value) : row.value;
+      }
+      if (auth.role !== "admin") delete stores.users;
+      return J({ ok: true, stores });
+    }
+
+    if (action === "putMany") {
+      const incoming = (body.stores && typeof body.stores === "object") ? body.stores : {};
+      const toWrite = {}; const rejected = [];
+      for (const key of Object.keys(incoming)) {
+        if (SYNC_BLOCK[key] || !canWriteKey(auth, key)) { rejected.push(key); continue; }
+        toWrite[key] = incoming[key];
+      }
+      if ("users" in toWrite) {
+        const cur = await getStore("users");
+        toWrite.users = mergeUsersForWrite(toWrite.users, cur.ok ? cur.value : []);
+      }
+      const w = await putStores(toWrite);
+      if (!w.ok) return J({ ok: false, error: "Save failed: " + ((w.err && w.err.text) || "").slice(0, 200) });
+      return J({ ok: true, saved: Object.keys(toWrite), rejected });
+    }
+
+    if (action === "setPassword") {
+      const email = String(body.email || "").trim().toLowerCase();
+      const newPassword = String(body.newPassword || "");
+      if (!email || newPassword.length < 4) return J({ ok: false, error: "Password must be at least 4 characters." });
+      if (auth.role !== "admin" && String(auth.email || "").toLowerCase() !== email) return J({ ok: false, error: "You can only change your own password." });
+      const cur = await getStore("users");
+      const users = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+      const idx = users.findIndex((x) => x && String(x.email || "").toLowerCase() === email);
+      if (idx < 0) return J({ ok: false, error: "No user with that email." });
+      users[idx] = { ...users[idx], password: "", passHash: hashPw(newPassword) };
+      const w = await putStores({ users });
+      if (!w.ok) return J({ ok: false, error: "Save failed." });
+      return J({ ok: true });
+    }
+
+    return J({ ok: false, error: "Unknown action." });
+  } catch (e) {
+    return J({ ok: false, error: "Function error: " + ((e && e.message) || String(e)) });
+  }
+};

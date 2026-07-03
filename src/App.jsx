@@ -9,7 +9,7 @@ const FW_LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfIAAAAsCAYAAACe0jo
 
 
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:true};
-const BUILD_TAG="addr-v73";
+const BUILD_TAG="addr-v74";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -87,6 +87,11 @@ async function getLiveRates(s,england){
 }
 const SHIP_ENDPOINT="/.netlify/functions/ship";
 function acctOf(england){return {base:england.base,apiKey:england.apiKey,customerId:england.customerId,integrationId:england.integrationId};}
+/* Per-client England accounts: if the client has their own England customer ID + API key
+   (England bakes their markup into that account's rates), quotes and bookings run on THEIR
+   account. Otherwise they fall back to the main account in Settings. The global "Use live
+   England rates" toggle stays the master switch; base URL is inherited unless overridden. */
+function englandFor(client,settings){const g=(settings&&settings.england)||{};const c=client&&client.england;if(c&&c.customerId&&c.apiKey)return {...g,...c,enabled:!!g.enabled};return g;}
 /* ── shared per-order shipping helpers (used by Orders individual ship + Batch) ── */
 async function ratesForOrder(o,opts,eng){
   const box=opts.box||{L:12,W:9,H:4};
@@ -676,6 +681,7 @@ function CustomersAdmin({clients,setClients,statsFor,openC,setOpenC}){
   const [f,setF]=useState({name:"",contact:"",email:"",phone:"",origin:"",markup:15});
   const create=()=>{if(!f.name)return;setClients(p=>[...p,{id:"c"+Date.now(),name:f.name,contact:f.contact,email:f.email,phone:f.phone,origin:f.origin,markup:+f.markup||0,status:"active",since:new Date().toISOString().slice(0,7),plan:"Standard"}]);setF({name:"",contact:"",email:"",phone:"",origin:"",markup:15});setAdding(false);};
   const setMarkup=(id,v)=>setClients(cs=>cs.map(c=>c.id===id?{...c,markup:+v||0}:c));
+  const setClientEng=(id,patch)=>setClients(cs=>cs.map(c=>c.id===id?{...c,england:{...(c.england||{}),...patch}}:c));
   const setStatus=(id,v)=>setClients(cs=>cs.map(c=>c.id===id?{...c,status:v}:c));
   return (<div className="space-y-3">
     <div className="flex justify-between items-center"><div className="text-sm text-stone-500">Your shipping customers — markup, origin, and activity.</div><button onClick={()=>setAdding(a=>!a)} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded px-3 py-2 font-medium hover:bg-stone-800"><Plus className="w-4 h-4"/>New customer</button></div>
@@ -707,6 +713,17 @@ function CustomersAdmin({clients,setClients,statsFor,openC,setOpenC}){
             <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Plan</div><div className="text-sm">{c.plan||"Standard"}</div></div>
             <Field label="Markup %"><Input type="number" value={c.markup} onChange={e=>setMarkup(c.id,e.target.value)}/></Field>
             <Field label="Status"><Select value={c.status||"active"} onChange={e=>setStatus(c.id,e.target.value)}><option value="active">active</option><option value="inactive">inactive</option></Select></Field>
+            <div className="col-span-2 sm:col-span-4 border-t border-stone-200 pt-3 mt-1">
+              <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2 flex items-center gap-2">England account — this client's own rates{(c.england&&c.england.customerId&&c.england.apiKey)?<Badge tone="green">own account</Badge>:<Badge tone="stone">using main account</Badge>}</div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <Field label="England customer ID"><Input value={(c.england&&c.england.customerId)||""} onChange={e=>setClientEng(c.id,{customerId:e.target.value.trim()})} placeholder="e.g. 20605511"/></Field>
+                <Field label="England API key"><Input type="password" value={(c.england&&c.england.apiKey)||""} onChange={e=>setClientEng(c.id,{apiKey:e.target.value.trim()})} placeholder="this client's key"/></Field>
+                <Field label="Integration ID (labels)"><Input value={(c.england&&c.england.integrationId)||""} onChange={e=>setClientEng(c.id,{integrationId:e.target.value.trim()})} placeholder="optional"/></Field>
+                <Field label="Provider account ID"><Input value={(c.england&&c.england.providerAccountId)||""} onChange={e=>setClientEng(c.id,{providerAccountId:e.target.value.trim()})} placeholder="optional · auto-resolves"/></Field>
+              </div>
+              {c.england&&c.england.customerId&&c.england.apiKey&&(+c.markup||0)>0&&<div className="mt-2 text-[12px] rounded px-3 py-2 flex items-start gap-1.5 bg-amber-50 text-amber-800 border border-amber-200"><AlertTriangle className="w-4 h-4 shrink-0 mt-0.5"/><span><b>Double-markup warning:</b> this client's England account already returns marked-up rates, and the app is adding another {c.markup}% on top. If England's markup is the whole markup, set Markup % to 0 for this client.</span></div>}
+              <p className="mt-2 text-[11px] text-stone-400">With their own customer ID + API key, this client's quotes and labels run on their England account (their rate table, their markup baked in by England). Leave blank to use the main account with app-side markup. Both empty fields = main account.</p>
+            </div>
           </div>}
         </div>
       );})}
@@ -917,7 +934,7 @@ export default function App(){
   /* receiver + package dims are cleared on login (clearScratchFor) so a fresh session always starts blank */
   // re-check England for any staged orders that have since booked; pull label + tracking into Shipments
   const checkPendingLabels=async()=>{
-    const eng=settings.england;
+    const eng=englandFor(client,settings);
     if(!eng||!eng.integrationId||!pendingShips.length) return {checked:0,booked:0,error:eng&&eng.integrationId?null:"Connect England first"};
     let booked=0,firstLabel=null;
     for(const pend of [...pendingShips]){
@@ -959,7 +976,7 @@ export default function App(){
           </div>
         </div>
       </header>
-      {qq&&<QuickQuote onClose={()=>setQQ(false)} client={client} england={settings.england}/>}
+      {qq&&<QuickQuote onClose={()=>setQQ(false)} client={client} england={englandFor(client,settings)}/>}
       {appLabel&&<LabelPreviewModal data={appLabel} onClose={()=>setAppLabel(null)}/>}
       {navOpen&&<div className="md:hidden fixed inset-0 z-40 flex" role="dialog">
         <div className="absolute inset-0 bg-stone-900/40" onClick={()=>setNavOpen(false)}/>
@@ -1134,7 +1151,7 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
   useEffect(()=>{
     let cancel=false;
     if(!ready){setRateSrc({rates:[],live:false,loading:false,error:null});return;}
-    const eng=settings.england;
+    const eng=englandFor(client,settings);
     if(eng&&eng.enabled&&eng.apiKey&&eng.customerId){
       setRateSrc(s=>({...s,loading:true,error:null}));
       getLiveRates(shipment,eng).then(res=>{ if(cancel)return;
@@ -1143,7 +1160,7 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
       });
     } else setRateSrc({rates:localQuotes(),live:false,loading:false,error:null});
     return ()=>{cancel=true;};
-  },[JSON.stringify(pieces),receiver.zip,sender.zip,residential,signature,sigOption,saturday,insurance,intl,settings.england]);
+  },[JSON.stringify(pieces),receiver.zip,sender.zip,residential,signature,sigOption,saturday,insurance,intl,settings.england,client&&client.england]);
   // address classified yet? only then do we hide the non-matching ground product
   const addrClassified=!!(resTouched||(verify&&verify.type));
   const quotes=useMemo(()=>{
@@ -1162,7 +1179,7 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
   const buildRec=(q,carrier,extra)=>({id:Date.now(),date:new Date().toLocaleDateString(),tracking:(extra&&extra.tracking)||newTracking(carrier),carrier,service:q.label,recipient:{...receiver},sender:{...sender},fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,pieces:pieces.map(p=>({...p})),dims:pieces[0],insurance,cost:q.cost,sell:q.sell,billTo,thirdAcct,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference,invoiceNo,poNo,residential,intl,bookNumber:extra&&extra.bookNumber,customs:intl?{...customs,total:customsTotal,ci:"CI-"+rnd(5)}:null});
   const print=async(q)=>{
     const carrier=carrierOf(q.label);
-    const eng=settings.england;
+    const eng=englandFor(client,settings);
     const canBook=eng&&eng.enabled&&eng.apiKey&&eng.customerId;
     const need=[];
     if(!receiver.name&&!receiver.company)need.push("name");
@@ -1733,7 +1750,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
   const [rateSrc,setRateSrc]=useState({rates:[],live:false,loading:false});
   const boxes=settings?.boxes||SEED_BOXES;
   const box=boxIdx>=0?boxes[boxIdx]:{L:12,W:9,H:4};
-  const eng=settings?.england;
+  const eng=englandFor(client,settings);
   const canBook=eng&&eng.enabled&&eng.apiKey&&eng.customerId;
   const fromZip=settings?.sender?.zip||client?.origin||"84003";
   const ready=/^\d{5}/.test(o.zip||"")&&(+weight>0);
@@ -1845,7 +1862,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
   const [fxTransit,setFxTransit]=useState({});
   const [orPkg,setOrPkg]=useState("");
   const boxes=settings?.boxes||SEED_BOXES;
-  const eng=settings?.england;
+  const eng=englandFor(client,settings);
   const canBook=eng&&eng.enabled&&eng.apiKey&&eng.customerId;
   const fromZip=settings?.sender?.zip||client?.origin||"84003";
   const box={L:+dims.L||12,W:+dims.W||9,H:+dims.H||4};
@@ -2391,7 +2408,7 @@ function Batch({orders,setOrders,client,rules,settings,onShipped}){
   const [running,setRunning]=useState(false);
   const [progress,setProgress]=useState({n:0,total:0});
   const [results,setResults]=useState([]); // [{name, ok, tracking, error, pdf}]
-  const eng=settings&&settings.england;
+  const eng=englandFor(client,settings);
   const canBook=eng&&eng.enabled&&eng.apiKey&&eng.customerId;
   const importCSV=(e)=>{
     const file=e.target.files&&e.target.files[0]; if(!file)return;
@@ -2785,7 +2802,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
     <div className="flex flex-col md:flex-row gap-6">
       <aside className="md:w-56 shrink-0 space-y-1">{secs.map(([id,l,Icon])=><button key={id} onClick={()=>setSec(id)} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}</button>)}</aside>
       <div className="flex-1 min-w-0">
-        {sec==="carriers"&&<CarrierAccounts accounts={accounts} setAccounts={setAccounts} settings={settings} setSettings={setSettings}/>}
+        {sec==="carriers"&&<CarrierAccounts accounts={accounts} setAccounts={setAccounts} settings={settings} setSettings={setSettings} clients={clients}/>}
         {sec==="warehouses"&&<Warehouses settings={settings} setSettings={setSettings}/>}
         {sec==="boxes"&&<BoxesSettings settings={settings} setSettings={setSettings}/>}
         {sec==="boxlogic"&&<BoxLogic settings={settings} setSettings={setSettings}/>}
@@ -3679,7 +3696,7 @@ function Company({settings,setSettings}){
 
 /* ════════ CARRIER ACCOUNTS (platform + own) ════════ */
 const PROVIDERS=[{id:"england",name:"England Logistics API"},{id:"fedex",name:"FedEx · direct"},{id:"ups",name:"UPS · direct"}];
-function CarrierAccounts({accounts,setAccounts,settings,setSettings}){
+function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients}){
   const [adding,setAdding]=useState(false);
   const [d,setD]=useState({label:"",provider:"england",account:"",apiKey:"",secret:"",customerId:""});
   const plat=settings.platforms||PLATFORM_DEFAULTS;
@@ -3717,14 +3734,22 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings}){
   const [flush,setFlush]=useState(null); // {loading} | {ok,msg}
   const runFlush=async()=>{
     setFlush({loading:true});
-    try{
-      const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),12000);
-      const r=await fetch(RATES_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"flushCache",account:{base:eng.base,apiKey:eng.apiKey,customerId:eng.customerId}}),signal:ctrl.signal});
-      clearTimeout(t);
-      const res=await r.json().catch(()=>null);
-      if(res&&res.ok) setFlush({ok:true,msg:`Rates refreshed at ${new Date(res.flushedAt).toLocaleTimeString()} — every quote now pulls fresh from England (customer ${eng.customerId||"default"}).`});
-      else setFlush({ok:false,msg:(res&&res.error)||"Refresh failed — quotes will still auto-refresh on their normal timer."});
-    }catch(e){ setFlush({ok:false,msg:((e&&e.message)||"Network error")+" — quotes will still auto-refresh on their normal timer."}); }
+    // flush the MAIN account plus every client that has their own England account
+    const ids=[...new Set([eng.customerId,...(clients||[]).map(c=>c.england&&c.england.apiKey&&c.england.customerId)].filter(Boolean))];
+    if(!ids.length){setFlush({ok:false,msg:"No England customer IDs configured yet."});return;}
+    let done=0,failed=[];
+    for(const cid of ids){
+      try{
+        const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),12000);
+        const r=await fetch(RATES_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"flushCache",account:{customerId:cid}}),signal:ctrl.signal});
+        clearTimeout(t);
+        const res=await r.json().catch(()=>null);
+        if(res&&res.ok) done++; else failed.push(cid);
+      }catch(e){ failed.push(cid); }
+    }
+    if(done&&!failed.length) setFlush({ok:true,msg:`Rates refreshed for ${done} England account${done>1?"s":""} at ${new Date().toLocaleTimeString()} — every quote now pulls fresh from England.`});
+    else if(done) setFlush({ok:true,msg:`Refreshed ${done} of ${ids.length} accounts. Could not refresh: ${failed.join(", ")} — those still auto-refresh on their normal timer.`});
+    else setFlush({ok:false,msg:"Refresh failed — quotes will still auto-refresh on their normal timer."});
   };
   // Your own direct UPS account (real UPS OAuth via /.netlify/functions/ups)
   const ups=settings.ups||{enabled:false,clientId:"",clientSecret:"",account:"",env:""};

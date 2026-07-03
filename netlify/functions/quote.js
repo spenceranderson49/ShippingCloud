@@ -14,6 +14,104 @@ const carrierName = (c) => { const k = String(c || "").toUpperCase(); return CAR
 const num = (...v) => { for (const x of v) { const n = Number(x); if (!isNaN(n) && n > 0) return n; } return undefined; };
 const S = (n) => String(n);
 
+/* ════════════════════════════════════════════════════════════════════════
+   READ-THROUGH RATE CACHE  (Netlify Blobs, dependency-free & best-effort)
+   ------------------------------------------------------------------------
+   Every entry is a REAL England quote response keyed by the exact inputs
+   that change the price. Repeat lanes serve in ms; a miss falls through to
+   live England (identical to before) and stores the result. If Blobs is
+   unavailable for any reason, everything degrades silently to live quoting —
+   the cache can never break a quote.
+   • Signature / Saturday / insurance are NOT in the key: England ignores them
+     at quote time (they're applied client-side), so leaving them out is both
+     correct and raises the hit rate.
+   • To wipe the whole cache at once (e.g. after a FedEx GRI or a fuel change),
+     bump CACHE_VERSION below ("v1" → "v2") and re-upload this one file.
+   ════════════════════════════════════════════════════════════════════════ */
+const CACHE_STORE = "rate-cache";
+const CACHE_VERSION = "v1";                    // ← bump to invalidate ALL cached rates
+// TTL default 2h. Tunable WITHOUT code changes: set Netlify env var RATE_CACHE_TTL_MINUTES (e.g. 60). 0 disables caching.
+const CACHE_TTL_MS = (() => { const m = parseInt(process.env.RATE_CACHE_TTL_MINUTES, 10); return (isNaN(m) || m < 0 ? 120 : m) * 60 * 1000; })();
+
+function blobsCtx() {
+  try {
+    const raw = process.env.NETLIFY_BLOBS_CONTEXT;
+    if (!raw) return null;
+    const ctx = JSON.parse(Buffer.from(raw, "base64").toString("utf8"));
+    if (!ctx || !ctx.token || !ctx.siteID || !(ctx.edgeURL || ctx.apiURL)) return null;
+    return ctx;
+  } catch { return null; }
+}
+function blobUrl(ctx, key) {
+  const path = "/" + ctx.siteID + "/" + CACHE_STORE + "/" + encodeURIComponent(key);
+  if (ctx.edgeURL) return new URL(path, ctx.edgeURL).toString();
+  return new URL("/api/v1/blobs" + path, ctx.apiURL || "https://api.netlify.com").toString();
+}
+async function blobFetch(ctx, key, opts) {
+  const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 2500);
+  try { return await fetch(blobUrl(ctx, key), { ...opts, headers: { authorization: "Bearer " + ctx.token, ...(opts && opts.headers) }, signal: ctrl.signal }); }
+  finally { clearTimeout(t); }
+}
+// "Refresh rates" marker: any cache entry written BEFORE the marker is treated as gone.
+const flushKeyFor = (customerId) => "flush_" + CACHE_VERSION + "_" + String(customerId || "");
+async function cacheGet(key, flushKey) {
+  const ctx = blobsCtx(); if (!ctx) return null;
+  if (CACHE_TTL_MS === 0) return null;
+  try {
+    const [entryRes, markerRes] = await Promise.all([
+      blobFetch(ctx, key),
+      blobFetch(ctx, flushKey).catch(() => null),
+    ]);
+    if (!entryRes || !entryRes.ok) return null;              // 404 = miss
+    const j = await entryRes.json();
+    if (!j || !Array.isArray(j.rates) || !j.ts) return null;
+    if (Date.now() - j.ts > CACHE_TTL_MS) return null;       // stale by age
+    if (markerRes && markerRes.ok) {
+      const m = await markerRes.json().catch(() => null);
+      if (m && m.ts && j.ts <= m.ts) return null;            // written before last "Refresh rates" → gone
+    }
+    return j;
+  } catch { return null; }
+}
+async function cachePut(key, rates) {
+  const ctx = blobsCtx(); if (!ctx || CACHE_TTL_MS === 0) return;
+  try { await blobFetch(ctx, key, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ts: Date.now(), rates }) }); }
+  catch { /* best-effort: a failed write just means the next identical quote is a miss */ }
+}
+async function cacheFlush(customerId) {
+  const ctx = blobsCtx();
+  if (!ctx) return { ok: false, error: "Netlify Blobs isn't available on this site, so there's no cache to clear — all quotes are already pulling live from England." };
+  try {
+    const ts = Date.now();
+    const r = await blobFetch(ctx, flushKeyFor(customerId), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ts }) });
+    if (r && r.ok) return { ok: true, flushedAt: ts };
+    return { ok: false, error: "Could not write the refresh marker (HTTP " + (r && r.status) + ")." };
+  } catch (e) { return { ok: false, error: "Refresh failed: " + ((e && e.message) || String(e)) }; }
+}
+function cacheKeyFor(body) {
+  const crypto = require("crypto");
+  const pcs = (Array.isArray(body.pieces) && body.pieces.length ? body.pieces : [{ weight: body.weight || 1, L: body.L || 12, W: body.W || 9, H: body.H || 4 }])
+    .map((p) => [S(+p.weight || 1), S(+p.length || +p.L || 1), S(+p.width || +p.W || 1), S(+p.height || +p.H || 1)].join("x"))
+    .join(",");
+  const carriers = String(body.carriers || "fedex").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean).sort().join("+");
+  const parts = [
+    CACHE_VERSION,
+    (body.account && body.account.customerId) || process.env.ENGLAND_CUSTOMER_ID || "",
+    carriers,
+    (body.fromCountry || "US") + ":" + String(body.fromZip || "").trim(),
+    (body.toCountry || "US") + ":" + String(body.toZip || "").trim(),
+    body.residential ? "R" : "C",
+    String(body.packageTypeCode || "").toLowerCase(),
+    pcs,
+  ].join("|");
+  return "q_" + CACHE_VERSION + "_" + crypto.createHash("sha1").update(parts).digest("hex");
+}
+
+// Map the app's internal One Rate box codes to FedEx's canonical packaging type codes.
+// FedEx One Rate pricing is only returned when a FedEx-branded packaging type is requested.
+const PKG_MAP = { fedex_envelope:"FEDEX_ENVELOPE", fedex_pak:"FEDEX_PAK", fedex_extra_small_box:"FEDEX_SMALL_BOX", fedex_small_box:"FEDEX_SMALL_BOX", fedex_medium_box:"FEDEX_MEDIUM_BOX", fedex_large_box:"FEDEX_LARGE_BOX", fedex_extra_large_box:"FEDEX_EXTRA_LARGE_BOX", fedex_tube:"FEDEX_TUBE" };
+const normPkg = (c) => { const k = String(c || "").toLowerCase(); return PKG_MAP[k] || (c || ""); };
+
 function svcCodeFromName(name) {
   const n = String(name || "").toLowerCase().replace(/[®™]/g, "").replace(/\(.*?\)/g, "").replace(/[^a-z0-9]+/g, " ").trim();
   const map = [
@@ -52,6 +150,22 @@ exports.handler = async (event) => {
     let body = {};
     try { body = JSON.parse(event.body || "{}"); } catch { return J({ live: false, error: "Bad JSON body", rates: [] }); }
 
+    // ── "Refresh rates" button: invalidate every cached quote for this England account ──
+    if (body.action === "flushCache") {
+      const custId = (body.account && body.account.customerId) || process.env.ENGLAND_CUSTOMER_ID || "";
+      if (!custId) return J({ ok: false, error: "No England customer ID configured." });
+      const res = await cacheFlush(custId);
+      return J(res);
+    }
+
+    // ── read-through cache: serve a prior real England answer for identical inputs ──
+    const custIdForCache = (body.account && body.account.customerId) || process.env.ENGLAND_CUSTOMER_ID || "";
+    const cacheKey = cacheKeyFor(body);
+    if (!body.noCache) {
+      const hit = await cacheGet(cacheKey, flushKeyFor(custIdForCache));
+      if (hit) return J({ live: true, cached: true, ts: hit.ts, rates: hit.rates });
+    }
+
     const acct = body.account || {};
     const base = (acct.base || process.env.ENGLAND_API_BASE || "https://englandship.rocksolidinternet.com").replace(/\/+$/, "");
     const apiKey = (acct.apiKey || process.env.ENGLAND_API_KEY || "").trim();
@@ -76,17 +190,18 @@ exports.handler = async (event) => {
     const mkBody = (cc, sig) => ({
       carrierCode: cc,
       serviceCode: "",
-      packageTypeCode: "",
+      packageTypeCode: normPkg(body.packageTypeCode),
       sender: { country: body.fromCountry || "US", zip: String(body.fromZip || "").trim() },
       receiver,
       residential: !!body.residential,
       signatureOptionCode: sig,
+      saturdayDelivery: !!body.saturdayDelivery,
       contentDescription: "Merchandise",
       weightUnit: "lb",
       dimUnit: "in",
       currency: "USD",
       customsCurrency: "USD",
-      pieces,
+      pieces: (body.insuranceAmount ? pieces.map((p) => ({ ...p, insuranceAmount: String(body.insuranceAmount) })) : pieces),
       billing: { party: "sender" },
       providerAccountId: null,
     });
@@ -127,9 +242,10 @@ exports.handler = async (event) => {
     let all = [];
     const tried = [];
     let firstErr = null;
+    const raw = {};
     const results = await Promise.all(carriers.map(async (cc) => ({ cc, res: await quoteCarrier(cc) })));
     for (const { cc, res } of results) {
-      if (res.ok) { const r = mapQuotes(res.data, cc); all = all.concat(r); tried.push(cc + " → OK (" + r.length + ")"); }
+      if (res.ok) { raw[cc] = res.data; const r = mapQuotes(res.data, cc); all = all.concat(r); tried.push(cc + " → OK (" + r.length + ")"); }
       else { tried.push(cc + " → HTTP " + (res.err && res.err.status) + (res.err && res.err.detail ? (": " + res.err.detail) : "")); if (!firstErr) firstErr = res.err; }
     }
 
@@ -137,7 +253,7 @@ exports.handler = async (event) => {
     for (const r of all) { const k = r.carrier + "|" + r.key; if (!seen[k] || r.cost < seen[k].cost) seen[k] = r; }
     const rates = Object.values(seen).sort((a, b) => a.cost - b.cost);
 
-    if (rates.length) return J({ live: true, rates });
+    if (rates.length) { await cachePut(cacheKey, rates); return J({ live: true, rates, raw, tried }); }
     if (firstErr) return J({ live: false, error: "England HTTP " + firstErr.status + (firstErr.detail ? (": " + firstErr.detail) : ""), england_status: firstErr.status, england_response: firstErr.detail, tried, rates: [] });
     return J({ live: false, error: "England returned no rates for this shipment.", tried, rates: [] });
   } catch (e) {

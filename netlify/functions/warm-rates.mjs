@@ -108,16 +108,29 @@ export default async () => {
     }
   }
 
-  // 3) Decide which lanes need re-quoting: cache entry missing, aging, or flushed
+  // 3) Decide which lanes need re-quoting: cache entry missing, aging, or flushed.
+  //    Multi-account: the main account warms with the env API key. To ALSO warm client
+  //    accounts, set Netlify env var ENGLAND_ACCOUNTS to a JSON map of customerId→apiKey,
+  //    e.g. {"20605511":"key-for-that-client","20605512":"another-key"}. Lanes for
+  //    accounts with no known key are skipped cleanly (still cached-on-use + Refresh button).
+  const envCustomerId = String(process.env.ENGLAND_CUSTOMER_ID || "").trim();
+  const keyMap = {};
+  try {
+    const parsed = JSON.parse(process.env.ENGLAND_ACCOUNTS || "{}");
+    if (Array.isArray(parsed)) { for (const a of parsed) if (a && a.customerId && a.apiKey) keyMap[String(a.customerId)] = String(a.apiKey); }
+    else if (parsed && typeof parsed === "object") { for (const k in parsed) if (parsed[k]) keyMap[String(k)] = String(parsed[k]); }
+  } catch { status.accountsEnvError = "ENGLAND_ACCOUNTS env var is not valid JSON — only the main account is being warmed"; }
   const candidates = [];
   await mapLimit(live, 8, async (l) => {
+    const cid = String((l.data.body.account && l.data.body.account.customerId) || "");
+    const isMain = !cid || cid === envCustomerId;
+    if (!isMain && !keyMap[cid]) { status.foreignSkipped = (status.foreignSkipped || 0) + 1; return; }
     const cacheKey = l.key.slice("lane_".length);
     const entry = await getJson(ctx, cacheKey);
     status.checked++;
-    const cid = String((l.data.body.account && l.data.body.account.customerId) || "");
     const entryTs = (entry && entry.ts) || 0;
     const needs = !entry || (now - entryTs > REFRESH_AGE_MS) || (entryTs <= flushTs[cid]);
-    if (needs) candidates.push({ ...l, entryTs, count: l.data.count || 0 });
+    if (needs) candidates.push({ ...l, entryTs, count: l.data.count || 0, apiKey: isMain ? null : keyMap[cid] });
   });
   // oldest cache first; heavier-used lanes win ties
   candidates.sort((a, b) => (a.entryTs - b.entryTs) || (b.count - a.count));
@@ -129,7 +142,9 @@ export default async () => {
     if (Date.now() - started > TIME_BUDGET_MS) return;                 // stay inside the time limit
     if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) return;       // England down → back off
     try {
-      const res = await quoteFn.handler({ httpMethod: "POST", body: JSON.stringify({ ...l.data.body, noCache: true, _warm: true }) });
+      const warmBody = { ...l.data.body, noCache: true, _warm: true };
+      if (l.apiKey) warmBody.account = { ...(warmBody.account || {}), apiKey: l.apiKey };
+      const res = await quoteFn.handler({ httpMethod: "POST", body: JSON.stringify(warmBody) });
       const out = JSON.parse((res && res.body) || "{}");
       if (out && out.live && Array.isArray(out.rates) && out.rates.length) { status.refreshed++; consecutiveFailures = 0; }
       else { status.failed++; consecutiveFailures++; }

@@ -30,8 +30,9 @@ const S = (n) => String(n);
    ════════════════════════════════════════════════════════════════════════ */
 const CACHE_STORE = "rate-cache";
 const CACHE_VERSION = "v1";                    // ← bump to invalidate ALL cached rates
-// TTL default 2h. Tunable WITHOUT code changes: set Netlify env var RATE_CACHE_TTL_MINUTES (e.g. 60). 0 disables caching.
-const CACHE_TTL_MS = (() => { const m = parseInt(process.env.RATE_CACHE_TTL_MINUTES, 10); return (isNaN(m) || m < 0 ? 120 : m) * 60 * 1000; })();
+// TTL backstop default 6h (the warmer re-quotes frequent lanes far more often than this).
+// Tunable WITHOUT code changes: set Netlify env var RATE_CACHE_TTL_MINUTES (e.g. 120). 0 disables caching.
+const CACHE_TTL_MS = (() => { const m = parseInt(process.env.RATE_CACHE_TTL_MINUTES, 10); return (isNaN(m) || m < 0 ? 360 : m) * 60 * 1000; })();
 
 function blobsCtx() {
   try {
@@ -87,6 +88,35 @@ async function cacheFlush(customerId) {
     if (r && r.ok) return { ok: true, flushedAt: ts };
     return { ok: false, error: "Could not write the refresh marker (HTTP " + (r && r.status) + ")." };
   } catch (e) { return { ok: false, error: "Refresh failed: " + ((e && e.message) || String(e)) }; }
+}
+
+/* ── Lane tracking for the auto-warmer ──────────────────────────────────────
+   Every real (non-warmer) quote records its lane: the exact re-quotable inputs,
+   how often it's used, and when it was last used. warm-rates.mjs reads these to
+   keep frequent lanes permanently fresh. NO SECRETS are stored — only the
+   customer ID; the warmer authenticates with the Netlify env vars. */
+function sanitizedLaneBody(body) {
+  const pieces = (Array.isArray(body.pieces) && body.pieces.length ? body.pieces : [{ weight: body.weight || 1, L: body.L || 12, W: body.W || 9, H: body.H || 4 }])
+    .map((p) => ({ weight: +p.weight || 1, length: +p.length || +p.L || 1, width: +p.width || +p.W || 1, height: +p.height || +p.H || 1 }));
+  return {
+    carriers: String(body.carriers || "fedex"),
+    fromZip: String(body.fromZip || "").trim(), fromCountry: body.fromCountry || "US",
+    toZip: String(body.toZip || "").trim(), toCountry: body.toCountry || "US",
+    ...(body.toCity ? { toCity: body.toCity } : {}), ...(body.toState ? { toState: body.toState } : {}),
+    residential: !!body.residential,
+    packageTypeCode: String(body.packageTypeCode || ""),
+    pieces,
+    account: { customerId: (body.account && body.account.customerId) || process.env.ENGLAND_CUSTOMER_ID || "" },
+  };
+}
+async function laneTouch(cacheKey, body) {
+  const ctx = blobsCtx(); if (!ctx || CACHE_TTL_MS === 0) return;
+  try {
+    const laneKey = "lane_" + cacheKey;
+    let count = 0;
+    try { const r = await blobFetch(ctx, laneKey); if (r && r.ok) { const j = await r.json(); count = (j && j.count) || 0; } } catch {}
+    await blobFetch(ctx, laneKey, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body: sanitizedLaneBody(body), count: count + 1, lastUsed: Date.now() }) });
+  } catch { /* best-effort */ }
 }
 function cacheKeyFor(body) {
   const crypto = require("crypto");
@@ -161,9 +191,12 @@ exports.handler = async (event) => {
     // ── read-through cache: serve a prior real England answer for identical inputs ──
     const custIdForCache = (body.account && body.account.customerId) || process.env.ENGLAND_CUSTOMER_ID || "";
     const cacheKey = cacheKeyFor(body);
+    const isWarm = !!body._warm; // warmer traffic must not count as real usage
     if (!body.noCache) {
-      const hit = await cacheGet(cacheKey, flushKeyFor(custIdForCache));
+      const [hit] = await Promise.all([cacheGet(cacheKey, flushKeyFor(custIdForCache)), isWarm ? null : laneTouch(cacheKey, body)]);
       if (hit) return J({ live: true, cached: true, ts: hit.ts, rates: hit.rates });
+    } else if (!isWarm) {
+      await laneTouch(cacheKey, body);
     }
 
     const acct = body.account || {};

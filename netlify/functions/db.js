@@ -99,6 +99,27 @@ function mergeUsersForWrite(incoming, current) {
   });
 }
 
+/* ── uploaded files (UPS invoices from signup) live in Netlify Blobs ── */
+function blobsCtx() {
+  try {
+    const raw = process.env.NETLIFY_BLOBS_CONTEXT;
+    if (!raw) return null;
+    const ctx = JSON.parse(Buffer.from(raw, "base64").toString("utf8"));
+    if (!ctx || !ctx.token || !ctx.siteID || !(ctx.edgeURL || ctx.apiURL)) return null;
+    return ctx;
+  } catch { return null; }
+}
+async function blobOp(key, opts) {
+  const ctx = blobsCtx(); if (!ctx) return null;
+  const path = "/" + ctx.siteID + "/uploads/" + encodeURIComponent(key);
+  const url = ctx.edgeURL ? new URL(path, ctx.edgeURL).toString() : new URL("/api/v1/blobs" + path, ctx.apiURL || "https://api.netlify.com").toString();
+  const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 10000);
+  try { return await fetch(url, { ...(opts || {}), headers: { authorization: "Bearer " + ctx.token, ...((opts || {}).headers || {}) }, signal: ctrl.signal }); }
+  catch { return null; } finally { clearTimeout(t); }
+}
+const MAX_UPLOAD_B64 = 4.6 * 1024 * 1024;   // ~3.4 MB file
+const OK_UPLOAD_TYPES = ["application/pdf", "text/csv", "image/png", "image/jpeg", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"];
+
 const userScope = (auth) => "u/" + auth.uid + "/";
 const canWriteKey = (auth, key) => auth.role === "admin" ? key !== "session" : String(key).startsWith(userScope(auth));
 const SYNC_BLOCK = { session: 1 }; // never stored server-side
@@ -147,7 +168,19 @@ exports.handler = async (event) => {
       let reqs = (curR.ok && Array.isArray(curR.value)) ? curR.value : [];
       reqs = reqs.filter((r) => r && String(r.email || "").toLowerCase() !== email);   // resubmission replaces
       if (reqs.length >= 100) return J({ ok: false, error: "Too many pending requests right now — please try again later." });
-      reqs.push({ id: "req" + Date.now(), name, email, company, passHash: hashPw(password), requestedAt: new Date().toISOString() });
+      const volume = String(body.volume || "").slice(0, 40);
+      const carrier = String(body.carrier || "").slice(0, 40);
+      let invoiceName = "", invoiceKey = "";
+      const inv = body.invoice;
+      if (inv && inv.data) {
+        if (String(inv.data).length > MAX_UPLOAD_B64) return J({ ok: false, error: "That file is too large — please upload one under 3 MB (a single recent invoice is perfect)." });
+        if (inv.type && !OK_UPLOAD_TYPES.includes(String(inv.type))) return J({ ok: false, error: "Please upload a PDF, CSV, Excel file, or image of your invoice." });
+        invoiceKey = "inv_" + crypto.createHash("sha1").update(email + "|" + Date.now()).digest("hex");
+        invoiceName = String(inv.name || "invoice").slice(0, 120);
+        const up = await blobOp(invoiceKey, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: invoiceName, type: String(inv.type || "application/octet-stream"), data: String(inv.data) }) });
+        if (!up || !up.ok) { invoiceKey = ""; invoiceName = ""; }   // upload failed → request still goes through without the file
+      }
+      reqs.push({ id: "req" + Date.now(), name, email, company, volume, carrier, invoiceName, invoiceKey, passHash: hashPw(password), requestedAt: new Date().toISOString() });
       const w = await putStores({ signupRequests: reqs });
       if (!w.ok) return J({ ok: false, error: "Could not save your request — try again." });
       return J({ ok: true, pending: true });
@@ -166,7 +199,12 @@ exports.handler = async (event) => {
         if (auth.role !== "admin" && !String(row.key).startsWith(userScope(auth))) continue;
         stores[row.key] = (row.key === "users" || row.key === "signupRequests") ? stripUsers(row.value) : row.value;
       }
-      if (auth.role !== "admin") delete stores.users;
+      if (auth.role !== "admin") {
+        delete stores.users;
+        // hand each customer ONLY their own feature flags (admin manages the full map)
+        const allFlags = (Array.isArray(r.data) ? r.data : []).find((row) => row && row.key === "featureFlags");
+        stores.myFeatures = (allFlags && allFlags.value && allFlags.value[auth.uid]) || {};
+      }
       return J({ ok: true, stores });
     }
 
@@ -201,6 +239,17 @@ exports.handler = async (event) => {
       return J({ ok: true });
     }
 
+    if (action === "getUpload") {
+      if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
+      const key = String(body.key || "");
+      if (!/^inv_[0-9a-f]{40}$/.test(key)) return J({ ok: false, error: "Bad file reference." });
+      const r = await blobOp(key);
+      if (!r || !r.ok) return J({ ok: false, error: "File not found (it may have been cleaned up)." });
+      const f = await r.json().catch(() => null);
+      if (!f || !f.data) return J({ ok: false, error: "File unreadable." });
+      return J({ ok: true, name: f.name || "invoice", type: f.type || "application/octet-stream", data: f.data });
+    }
+
     if (action === "approveSignup" || action === "denySignup") {
       if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
       const email = String(body.email || "").trim().toLowerCase();
@@ -211,6 +260,7 @@ exports.handler = async (event) => {
       if (!req) return J({ ok: false, error: "Request not found (it may have been handled already)." });
       const remaining = reqs.filter((r) => r !== req);
       if (action === "denySignup") {
+        if (req.invoiceKey) await blobOp(req.invoiceKey, { method: "DELETE" });
         const w = await putStores({ signupRequests: remaining });
         return w.ok ? J({ ok: true, requests: stripUsers(remaining) }) : J({ ok: false, error: "Save failed." });
       }

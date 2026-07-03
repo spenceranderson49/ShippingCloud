@@ -38,7 +38,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v82";
+const BUILD_TAG="addr-v86";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -647,7 +647,7 @@ function Branding({settings,setSettings,brand}){
   </div>);
 }
 
-function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,currentUser,settings,setSettings,brand,signupRequests,setSignupRequests,featureFlags,setFeatureFlags}){
+function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,currentUser,settings,setSettings,brand,signupRequests,setSignupRequests,featureFlags,setFeatureFlags,customFeatures,setCustomFeatures}){
   const [sec,setSec]=useState("overview");
   const [openC,setOpenC]=useState(null);
   const statsFor=(cName)=>{const sh=shipments.filter(s=>s.client===cName);const spend=sh.reduce((a,s)=>a+(s.sell||0),0);return {count:sh.length,spend};};
@@ -657,7 +657,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
     <div className="space-y-4">
       <div className="flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-[#0086E0]"/><h1 className="text-lg font-semibold text-stone-800">Admin portal</h1></div>
       <div className="flex flex-wrap bg-stone-100 rounded-lg p-0.5 text-sm w-fit">
-        {[["overview","Overview"],["customers","Customers"],["users","Users & logins"],["platforms","Platform accounts"],["branding","Branding"],["domains","Domains"]].map(([v,l])=><button key={v} onClick={()=>setSec(v)} className={`px-3 py-1.5 rounded-md ${sec===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}
+        {[["overview","Overview"],["customers","Customers"],["users","Users & logins"],["customizations","Customizations"],["platforms","Platform accounts"],["branding","Branding"],["domains","Domains"]].map(([v,l])=><button key={v} onClick={()=>setSec(v)} className={`px-3 py-1.5 rounded-md ${sec===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}
       </div>
 
       {sec==="branding"&&<Branding settings={settings} setSettings={setSettings} brand={brand}/>}
@@ -683,7 +683,8 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
       </div>}
 
       {sec==="customers"&&<CustomersAdmin clients={clients} setClients={setClients} statsFor={statsFor} openC={openC} setOpenC={setOpenC}/>}
-      {sec==="users"&&<UsersAdmin users={users} setUsers={setUsers} clients={clients} currentUser={currentUser} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags}/>}
+      {sec==="users"&&<UsersAdmin users={users} setUsers={setUsers} clients={clients} currentUser={currentUser} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures}/>}
+      {sec==="customizations"&&<CustomizationsAdmin users={users} clients={clients} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures}/>}
     </div>
   );
 }
@@ -759,7 +760,71 @@ function CustomersAdmin({clients,setClients,statsFor,openC,setOpenC}){
     </div>
   </div>);
 }
-function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSignupRequests,featureFlags={},setFeatureFlags}){
+function CustomizationsAdmin({users,clients,featureFlags={},setFeatureFlags,customFeatures=[],setCustomFeatures}){
+  const [draft,setDraft]=useState(null); // {label,desc,clientNote}
+  const customers=users.filter(u=>u&&u.role!=="admin");
+  const clientNameOf=(u)=>{const c=clients.find(c=>c.id===u.clientId);return c?c.name:null;};
+  const setFlag=(uid,fid,on)=>setFeatureFlags(ff=>({...ff,[uid]:{...(ff[uid]||{}),[fid]:on}}));
+  const countOn=(f)=>customers.filter(u=>featureOn(f.id,u,featureFlags[u.id])).length;
+  const addCustom=()=>{
+    const label=(draft.label||"").trim(); if(!label)return;
+    const id="custom_"+label.toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"").slice(0,40)+"_"+String(Date.now()).slice(-4);
+    setCustomFeatures(cf=>[...cf,{id,label,desc:(draft.desc||"").trim(),clientNote:(draft.clientNote||"").trim(),createdAt:new Date().toISOString(),default:false}]);
+    setDraft(null);
+  };
+  const removeCustom=(id)=>{ if(!window.confirm("Remove this customization from the registry? (Any code behind it stays; user toggles for it are simply ignored.)"))return; setCustomFeatures(cf=>cf.filter(c=>c.id!==id)); };
+  const FeatureRow=({f,custom})=>(
+    <div className="border border-stone-200 rounded-lg bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-medium text-stone-800 flex items-center gap-2">{f.label}{custom&&<Badge tone="blue">custom</Badge>}{f.clientNote&&<span className="text-[11px] text-stone-400 font-normal">built for {f.clientNote}</span>}</div>
+          {f.desc&&<div className="text-[12px] text-stone-400 mt-0.5">{f.desc}</div>}
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="text-[11px] text-stone-400">on for {countOn(f)} of {customers.length} logins</span>
+          {custom&&<button onClick={()=>removeCustom(f.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
+        </div>
+      </div>
+      {customers.length===0?<div className="text-[12px] text-stone-400 mt-2">No customer logins yet.</div>:
+      <div className="flex flex-wrap gap-1.5 mt-3">
+        {customers.map(u=>{const on=featureOn(f.id,u,featureFlags[u.id]);const cn=clientNameOf(u);return (
+          <button key={u.id} onClick={()=>setFlag(u.id,f.id,!on)} title={(on?"Click to turn OFF for ":"Click to turn ON for ")+(u.name||u.email)} className={`text-[12px] rounded-full px-3 py-1.5 border transition-colors ${on?"bg-[#0086E0] border-[#0086E0] text-white":"bg-white border-stone-200 text-stone-500 hover:border-stone-400"}`}>
+            {u.name||u.email}{cn?<span className={on?"text-blue-100":"text-stone-400"}> · {cn}</span>:null}{on?" ✓":""}
+          </button>);})}
+      </div>}
+    </div>
+  );
+  const customCat=customFeatures.map(c=>({...c}));
+  return (<div className="space-y-4">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="text-sm text-stone-500 max-w-2xl">Every customization and platform feature, and exactly who has it. Blue chip = on for that login; click any chip to flip it. When we build something custom for one client, register it here — turning it on for the next client is one click.</div>
+      <button onClick={()=>setDraft({label:"",desc:"",clientNote:""})} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Plus className="w-4 h-4"/>Register customization</button>
+    </div>
+    {draft&&<div className="border border-[#0086E0]/40 bg-blue-50/40 rounded-lg p-4 space-y-3">
+      <div className="grid sm:grid-cols-3 gap-3">
+        <Field label="Name"><Input value={draft.label} onChange={e=>setDraft({...draft,label:e.target.value})} placeholder="e.g. Weekly cost report"/></Field>
+        <Field label="What it does"><Input value={draft.desc} onChange={e=>setDraft({...draft,desc:e.target.value})} placeholder="Short description"/></Field>
+        <Field label="Built for (optional)"><Input value={draft.clientNote} onChange={e=>setDraft({...draft,clientNote:e.target.value})} placeholder="e.g. Riley Blake"/></Field>
+      </div>
+      <div className="flex items-center gap-2">
+        <button onClick={addCustom} disabled={!(draft.label||"").trim()} className="text-sm bg-[#0086E0] text-white rounded px-4 py-2 font-medium disabled:opacity-40">Add to registry</button>
+        <button onClick={()=>setDraft(null)} className="text-sm text-stone-500 px-2">Cancel</button>
+      </div>
+      <p className="text-[11px] text-stone-500">Registering creates the on/off switch and its ID. The feature itself is built into the platform behind that ID — register it when you promise it, toggle it on when it ships.</p>
+    </div>}
+    <div>
+      <div className="text-[11px] uppercase tracking-widest text-stone-400 mb-2">Custom built</div>
+      {customCat.length===0?<div className="border border-dashed border-stone-300 rounded-lg p-5 text-sm text-stone-400 bg-white">Nothing registered yet. When we build something for a specific client — a report, a rule, an integration, a workflow tweak — it gets registered here with its own switch, off for everyone by default. Then rolling it out to any other login is one click on their chip.</div>:
+      <div className="space-y-3">{customCat.map(f=><FeatureRow key={f.id} f={f} custom={true}/>)}</div>}
+    </div>
+    <div>
+      <div className="text-[11px] uppercase tracking-widest text-stone-400 mb-2">Platform features</div>
+      <div className="space-y-3">{FEATURE_CATALOG.map(f=><FeatureRow key={f.id} f={f} custom={false}/>)}</div>
+    </div>
+  </div>);
+}
+function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSignupRequests,featureFlags={},setFeatureFlags,customFeatures=[]}){
+  const CATALOG=[...FEATURE_CATALOG,...customFeatures.map(c=>({...c,custom:true}))];
   const [featOpen,setFeatOpen]=useState(null);
   const setFlag=(uid,fid,on)=>setFeatureFlags(ff=>({...ff,[uid]:{...(ff[uid]||{}),[fid]:on}}));
   const [busyReq,setBusyReq]=useState("");
@@ -801,14 +866,15 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
       <button onClick={create} className={`text-sm rounded px-4 py-2 font-medium flex items-center gap-1.5 ${added?"bg-emerald-600 text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{added?<><Check className="w-4 h-4"/>Created</>:<><Plus className="w-4 h-4"/>Create login</>}</button>
     </div>
     <div className="border border-stone-200 rounded-lg bg-white overflow-hidden divide-y divide-stone-100">
-      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400"><div className="flex-1">User</div><div className="w-24">Role</div><div className="w-32 hidden sm:block">Customer</div><div className="w-20">Last login</div><div className="w-32 text-right">Actions</div></div>
+      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400"><div className="flex-1">User</div><div className="w-24">Role</div><div className="w-32 hidden sm:block">Customer</div><div className="w-20">Last login</div><div className="w-44 text-right">Actions</div></div>
       {users.map(u=>(
         <div key={u.id} className="flex items-center gap-3 px-4 py-3 text-sm">
           <div className="flex-1 min-w-0"><div className="font-medium truncate">{u.name}</div><div className="text-[11px] text-stone-400 truncate">{u.email}</div></div>
           <div className="w-24"><Badge tone={u.role==="admin"?"blue":"stone"}>{u.role}</Badge></div>
           <div className="w-32 hidden sm:block text-xs text-stone-500 truncate">{u.role==="admin"?"— all —":(clients.find(c=>c.id===u.clientId)||{}).name||"—"}</div>
           <div className="w-20 text-xs text-stone-400">{u.lastLogin||"—"}</div>
-          <div className="w-32 flex items-center justify-end gap-1.5">
+          <div className="w-44 flex items-center justify-end gap-1.5">
+            {u.role!=="admin"&&<button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }} title="Open the app exactly as this person sees it" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">view as</button>}
             {u.role!=="admin"&&<button onClick={()=>setFeatOpen(featOpen===u.id?null:u.id)} title="Features for this login" className={`text-[11px] rounded px-2 py-1 ${featOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>features</button>}
             {CLOUD.mode==="cloud"&&<button onClick={async()=>{const np=window.prompt("New password for "+u.email+" (min 4 characters):");if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});window.alert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}} title="Reset password" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">pw</button>}
             <button onClick={()=>toggle(u.id)} title={u.status==="active"?"Deactivate":"Activate"} className={`text-[11px] rounded px-2 py-1 ${u.status==="active"?"bg-emerald-50 text-emerald-700":"bg-stone-100 text-stone-500"}`}>{u.status==="active"?"active":"off"}</button>
@@ -817,7 +883,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
           {featOpen===u.id&&u.role!=="admin"&&<div className="w-full mt-2 border-t border-stone-100 pt-3">
             <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Features for {u.name||u.email} — flip anything on or off for this login only</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1.5">
-              {FEATURE_CATALOG.map(f=>{const on=featureOn(f.id,u,featureFlags[u.id]);return (
+              {CATALOG.map(f=>{const on=featureOn(f.id,u,featureFlags[u.id]);return (
                 <label key={f.id} className="flex items-start gap-2 text-sm cursor-pointer py-0.5">
                   <input type="checkbox" checked={on} onChange={e=>setFlag(u.id,f.id,e.target.checked)} className="mt-0.5 accent-[#0086E0]"/>
                   <span><span className="font-medium text-stone-700">{f.label}</span><span className="text-[11px] text-stone-400 block leading-tight">{f.desc}</span></span>
@@ -841,7 +907,7 @@ const lsDel=(k)=>{ if(!LS_OK)return; try{window.localStorage.removeItem("sc_"+k)
 // Which login is active. Every non-global key is stored under this account so each login keeps its OWN settings/data.
 const activeUid=()=>{ try{const s=lsGet("session",null); const id=s&&(s.id||s.email); return id?String(id):"guest"; }catch(e){return "guest";} };
 // Shared across all logins (never namespaced): the accounts list + who is signed in.
-const GLOBAL_KEYS={session:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1};
+const GLOBAL_KEYS={session:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1,customFeatures:1};
 // Scratch = the in-progress shipment. Per-login, but starts blank on each login (never migrated/inherited).
 const isScratch=(key)=>String(key).indexOf("ship.")===0;
 // Scratch keys wiped on login so the receiver + package dims are always blank for a fresh session.
@@ -992,8 +1058,8 @@ function Landing({onAuth}){
     {/* nav */}
     <div className="max-w-6xl mx-auto px-5 py-5 flex items-center justify-between">
       <div>
-        <div className="flex items-center gap-2 text-white font-bold text-lg"><Cloud className="w-6 h-6 text-[#38b6ff]"/>Shipping<span className="text-[#38b6ff]">Cloud</span></div>
-        <div className="text-[11px] text-stone-500 tracking-wide mt-0.5 ml-8">Your shipping, on autopilot.</div>
+        <div className="flex items-center gap-2.5 text-white font-bold text-2xl"><Cloud className="w-8 h-8 text-[#38b6ff]"/><span>Shipping<span className="text-[#38b6ff]">Cloud</span></span></div>
+        <div className="text-[12px] text-stone-400 tracking-wide mt-0.5 ml-[42px]">Your Shipping Platform <span className="text-white font-semibold underline underline-offset-4 decoration-[#38b6ff] decoration-2">PARTNER</span></div>
       </div>
       <div className="flex items-center gap-3">
         <button onClick={()=>onAuth("signin")} className="text-sm text-stone-300 hover:text-white px-3 py-2">Sign in</button>
@@ -1006,6 +1072,10 @@ function Landing({onAuth}){
         <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-widest text-[#38b6ff] bg-[#0086E0]/10 border border-[#0086E0]/25 rounded-full px-3 py-1 mb-5"><Zap className="w-3.5 h-3.5"/>Multi-carrier shipping platform</div>
         <h1 className="text-4xl sm:text-5xl font-bold text-white leading-tight">Enterprise FedEx & DHL pricing.<br/><span className="text-[#38b6ff]">Without the enterprise volume.</span></h1>
         <p className="mt-5 text-lg text-stone-400 leading-relaxed">Ship on deeply discounted contract rates from day one — rate shop instantly, print labels, automate your workflow, and audit every carrier invoice. One login runs your whole shipping operation.</p>
+        <div className="mt-5 border-l-2 border-[#38b6ff] bg-white/[0.03] rounded-r-xl px-4 py-3">
+          <p className="text-[15px] text-stone-300 leading-relaxed">Sick of shipping reps you can’t get ahold of? Tired of waiting weeks on a support ticket from your shipping platform?</p>
+          <p className="text-[15px] text-white font-medium mt-1.5">We’re both — your rate guy and your tech team. Best-in-industry rates <span className="text-stone-400 font-normal">and</span> best-in-industry humans, for your shipping <span className="text-stone-400 font-normal">and</span> your platform.</p>
+        </div>
         <div className="mt-7 flex flex-wrap gap-3">
           <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0a76c2] text-white font-semibold rounded-lg px-6 py-3">Create ShippingCloud account</button>
           <button onClick={()=>onAuth("request")} className="border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#38b6ff] font-semibold rounded-lg px-6 py-3 flex items-center gap-2"><Truck className="w-4 h-4"/>Get your own FedEx account</button>
@@ -1065,20 +1135,55 @@ function Landing({onAuth}){
         </div>
       </div>
     </div>
+    {/* integrations + box logic */}
+    <div className="max-w-6xl mx-auto px-5 pb-16">
+      <div className="grid lg:grid-cols-2 gap-10 items-center">
+        <div>
+          <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-widest text-[#38b6ff] mb-4"><Plug className="w-3.5 h-3.5"/>Plugged into your store</div>
+          <h2 className="text-2xl sm:text-3xl font-bold text-white leading-snug">Connects to your cart.<br/>Quotes real boxes — not air.</h2>
+          <p className="mt-4 text-stone-400 leading-relaxed">Orders flow straight in from your store — and if your platform isn’t on the list, we’ll integrate it for you. That’s the partner part.</p>
+          <p className="mt-3 text-stone-400 leading-relaxed"><span className="text-white font-medium">Box logic built in:</span> we map your actual products to your actual boxes, so every quote prices the box you’ll really ship — not a guess. No shipping air, no dimensional-weight surprises.</p>
+          <p className="mt-3 text-stone-400 leading-relaxed"><span className="text-white font-medium">Accurate rates at checkout:</span> your cart shows customers what shipping really costs — the same number you’ll pay for the label. No more guessing, no more eating the difference, no more scaring carts away with padded rates.</p>
+          <div className="mt-6 flex flex-wrap gap-2">
+            {["Shopify","Amazon","WooCommerce","BigCommerce","Etsy","eBay","Walmart","Squarespace","Wix"].map(n=>(<span key={n} className="text-[13px] bg-white/[0.05] border border-white/10 rounded-full px-3.5 py-1.5 text-stone-300">{n}</span>))}
+            <button onClick={()=>onAuth("request")} className="text-[13px] bg-[#0086E0]/15 border border-[#0086E0]/40 rounded-full px-3.5 py-1.5 text-[#38b6ff] hover:bg-[#0086E0]/25">Yours? We’ll build it →</button>
+          </div>
+        </div>
+        <div className="bg-neutral-900 border border-white/10 rounded-2xl p-5">
+          <div className="text-[11px] uppercase tracking-widest text-stone-500 mb-3 flex items-center gap-2"><Boxes className="w-3.5 h-3.5"/>Box logic · order #10482</div>
+          <div className="space-y-1.5 mb-3">
+            {[["3 × Candle — 4×4×4 in","2.1 lb"],["1 × Picture frame — 12×9×2 in","1.8 lb"],["2 × Soap set — 6×3×2 in","0.9 lb"]].map((r,i)=>(
+              <div key={i} className="flex items-center justify-between bg-white/[0.03] border border-white/5 rounded-lg px-3 py-2 text-sm"><span className="text-stone-300">{r[0]}</span><span className="text-stone-500 font-mono text-[12px]">{r[1]}</span></div>))}
+          </div>
+          <div className="flex items-center gap-2 text-stone-500 text-[12px] mb-3"><ChevronDown className="w-4 h-4"/>box logic picks the right carton</div>
+          <div className="bg-[#0086E0]/10 border border-[#0086E0]/35 rounded-lg px-3 py-2.5 flex items-center justify-between text-sm">
+            <span className="flex items-center gap-2 text-white font-medium"><Package className="w-4 h-4 text-[#38b6ff]"/>Ships in: 12×10×8 · 94% full</span>
+            <span className="text-[12px] text-emerald-400">air shipped: ~0%</span>
+          </div>
+          <div className="mt-3 flex items-center justify-between bg-white/[0.03] border border-white/5 rounded-lg px-3 py-2.5 text-sm">
+            <span className="text-stone-400">Checkout shows customer</span><span className="font-mono text-white">$11.20</span>
+          </div>
+          <div className="mt-1.5 flex items-center justify-between bg-white/[0.03] border border-white/5 rounded-lg px-3 py-2.5 text-sm">
+            <span className="text-stone-400">Your actual label cost</span><span className="font-mono text-emerald-400">$11.20 · difference $0.00</span>
+          </div>
+          <div className="text-[10px] text-stone-600 mt-3">Illustrative — box logic is configured around your real products and cartons.</div>
+        </div>
+      </div>
+    </div>
     {/* partner, not just a platform */}
     <div className="max-w-6xl mx-auto px-5 pb-16">
       <div className="bg-gradient-to-br from-[#0086E0]/15 to-transparent border border-[#0086E0]/25 rounded-2xl p-8 sm:p-10 grid lg:grid-cols-2 gap-8 items-center">
         <div>
           <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-widest text-[#38b6ff] mb-4"><Phone className="w-3.5 h-3.5"/>A partner, not just a platform</div>
           <h2 className="text-2xl sm:text-3xl font-bold text-white leading-snug">Talk to real people.<br/>No AI chatbots. Ever.</h2>
-          <p className="mt-4 text-stone-400 leading-relaxed">Software is half of shipping — the other half is having someone in your corner. When you call, a real person who knows your account picks up. Rate questions, carrier disputes, a workflow that needs custom work: we handle it with you, not a ticket queue.</p>
+          <p className="mt-4 text-stone-400 leading-relaxed">Software is half of shipping — the other half is having someone in your corner. When you call, a real person who knows your account picks up — for <span className="text-white font-medium">both sides of the job</span>: your shipping (rate questions, carrier disputes, claims, a lane that suddenly got expensive) and your platform (an integration acting up, a report you need, a workflow that needs custom work). One call covers your rates and your tech. No ticket queue, no week-long silence.</p>
           <div className="mt-6 flex flex-wrap items-center gap-4">
             <a href={"tel:"+CONTACT_PHONE_TEL} className="bg-white text-neutral-950 font-semibold rounded-lg px-6 py-3 flex items-center gap-2 hover:bg-stone-200"><Phone className="w-4 h-4"/>{CONTACT_PHONE}</a>
             <span className="text-[13px] text-stone-500">Give us a call — we’ll pick up the phone.</span>
           </div>
         </div>
         <div className="space-y-3">
-          {[["A human answers","Call during business hours and talk to someone who can actually fix it — no phone tree, no bot."],["Custom work, included","Need a report, a rule, an integration we don’t have? Tell us how you ship and we build it into your login."],["We know your account","Your history, your lanes, your carriers — the person on the phone already has context."]].map((r,i)=>(
+          {[["A human answers","Carrier problem or platform problem — call during business hours and talk to someone who can actually fix it. No phone tree, no bot, no ticket black hole."],["Custom work, included","Need a report, a rule, an integration we don’t have? Tell us how you ship and we build it into your login."],["We know your account","Your history, your lanes, your carriers — the person on the phone already has context."]].map((r,i)=>(
             <div key={i} className="bg-white/[0.04] border border-white/10 rounded-xl p-4 flex gap-3"><CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5"/><div><div className="font-semibold text-white text-sm">{r[0]}</div><div className="text-[13px] text-stone-400 mt-0.5">{r[1]}</div></div></div>))}
         </div>
       </div>
@@ -1150,6 +1255,7 @@ export default function App(){
 function AppInner(){
   const [signupRequests,setSignupRequests]=usePersist("signupRequests",[]);
   const [featureFlags,setFeatureFlags]=usePersist("featureFlags",{});
+  const [customFeatures,setCustomFeatures]=usePersist("customFeatures",[]);
   const [myFeatures]=usePersist("myFeatures",{});
   const [tab,setTab]=useState("ship");
   useEffect(()=>{ try{
@@ -1306,15 +1412,22 @@ function AppInner(){
 
   const isAdmin=currentUser&&currentUser.role==="admin";
   const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Rules",Zap],["ledger","Ledger",Wallet],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["admin","Admin",ShieldCheck],["settings","Settings",Cog]];
-  const myFlags=isAdmin?{}:(CLOUD.mode==="cloud"?myFeatures:(featureFlags[currentUser&&currentUser.id]||{}));
+  const myFlags=isAdmin?{}:((featureFlags&&featureFlags[currentUser&&currentUser.id])||(CLOUD.mode==="cloud"?myFeatures:{}));
   const TABS=isAdmin?ALL_TABS:ALL_TABS.filter(t=>t[0]!=="admin"&&(t[0]==="ship"||featureOn(t[0],currentUser,myFlags)));
   const unfulfilled=orders.filter(o=>o.status==="unfulfilled").length;
 
   if(!currentUser) return <Login users={users} brand={{...DEFAULT_BRAND,...(settings.brand||{})}} onLogin={(u)=>{ const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }}/>;
 
+  const adminReturn=lsGet("adminReturn",null);
+  const exitImpersonation=()=>{ lsSet("session",adminReturn); lsDel("adminReturn"); window.location.reload(); };
   return (
     <div className="min-h-screen bg-stone-50 text-stone-800" style={{fontFamily:"ui-sans-serif,system-ui,sans-serif"}}>
-      <header className="border-b border-stone-200 sticky top-0 z-30 bg-white/90 backdrop-blur">
+      {adminReturn&&<div className="bg-[#0086E0] text-white text-[13px] px-4 py-2 flex items-center justify-center gap-3 sticky top-0 z-40">
+        <ShieldCheck className="w-4 h-4 shrink-0"/>
+        <span>Admin preview — you’re seeing ShippingCloud exactly as <b>{currentUser&&(currentUser.name||currentUser.email)}</b> sees it. Anything you change here changes their account.</span>
+        <button onClick={exitImpersonation} className="bg-white text-[#0086E0] font-semibold rounded px-3 py-1 hover:bg-blue-50 shrink-0">Return to admin</button>
+      </div>}
+      <header className={"border-b border-stone-200 sticky z-30 bg-white/90 backdrop-blur "+(adminReturn?"top-9":"top-0")}>
         <div className="px-3 sm:px-4 h-14 flex items-center gap-2 sm:gap-3">
           <button onClick={()=>setNavOpen(true)} className="md:hidden p-2 -ml-1 rounded-lg hover:bg-stone-100 text-stone-600" aria-label="Menu"><Layers className="w-5 h-5"/></button>
           <BrandCloud className="h-10 sm:h-11 w-auto" color={brand.primary}/>
@@ -1324,7 +1437,7 @@ function AppInner(){
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="text-right leading-tight hidden sm:block"><div className="text-sm font-medium text-stone-800">{currentUser.name}</div><div className="text-[11px] text-stone-400">{currentUser.role==="admin"?"Administrator":(clients.find(c=>c.id===currentUser.clientId)||{}).name||"Customer"}</div></div>
             <span className="w-8 h-8 rounded-full bg-[#CCEAFF] text-[#006FBF] flex items-center justify-center text-sm font-semibold shrink-0">{(currentUser.name||"?").slice(0,1).toUpperCase()}</span>
-            <button onClick={()=>{ lsSet("session",null); lsDel("cloud.token"); window.location.reload(); }} className="text-xs sm:text-sm text-stone-500 hover:text-stone-800 border border-stone-200 rounded px-2 sm:px-2.5 py-1.5">Sign out</button>
+            <button onClick={()=>{ const ar=lsGet("adminReturn",null); if(ar){ lsSet("session",ar); lsDel("adminReturn"); } else { lsSet("session",null); lsDel("cloud.token"); } window.location.reload(); }} className="text-xs sm:text-sm text-stone-500 hover:text-stone-800 border border-stone-200 rounded px-2 sm:px-2.5 py-1.5">Sign out</button>
           </div>
         </div>
       </header>
@@ -1367,7 +1480,7 @@ function AppInner(){
           {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings}/>}
           {tab==="ledger"&&<Ledger ledger={ledger} addLedger={addLedger}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
-          {tab==="admin"&&isAdmin&&<AdminPortal clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags}/>}
+          {tab==="admin"&&isAdmin&&<AdminPortal clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures}/>}
           {tab==="settings"&&<Settings settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client}/>}
         </main>
       </div>

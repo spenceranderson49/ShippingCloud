@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone } from "lucide-react";
+import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye } from "lucide-react";
 const FW_BLUE="#0099FF";
 const FW_DARK="#111418";
 function BrandCloud({className,color}){return (
@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v102";
+const BUILD_TAG="addr-v103";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -948,6 +948,64 @@ const isScratch=(key)=>String(key).indexOf("ship.")===0;
 // Scratch keys wiped on login so the receiver + package dims are always blank for a fresh session.
 const SCRATCH_KEYS=["ship.receiver","ship.pieces","ship.reference","ship.invoiceNo","ship.poNo","ship.insurance","ship.residential"];
 const clearScratchFor=(uid)=>SCRATCH_KEYS.forEach(k=>lsDel("u/"+uid+"/"+k));
+
+/* ════════ PUBLIC DEMO MODE ════════
+   "Take a peek" on the landing page drops visitors into the real app as a demo
+   customer with seeded sample data. The demo session has NO cloud token, so
+   nothing they do can reach the database — it lives in their own browser only,
+   and it resets to fresh sample data every time they enter. Because it renders
+   the same deployed bundle as real logins, every platform update shows up in
+   the demo automatically. */
+const DEMO_USER={id:"demo",name:"Demo Explorer",email:"demo@shippingcloud.net",role:"customer",clientId:null,status:"active",lastLogin:"Now",demo:true};
+const demoDaysAgo=(n)=>new Date(Date.now()-n*86400000).toLocaleDateString();
+function makeDemoData(){
+  const SVC=[["FedEx","FedEx Ground"],["FedEx","FedEx 2Day"],["FedEx","FedEx Priority Overnight"],["FedEx","FedEx Home Delivery"],["UPS","UPS Ground"],["DHL","DHL Express Worldwide"]];
+  const CITIES=[["Austin","TX","78701"],["Denver","CO","80202"],["Seattle","WA","98101"],["Nashville","TN","37201"],["Phoenix","AZ","85004"],["Columbus","OH","43215"],["Raleigh","NC","27601"],["Boise","ID","83702"],["San Diego","CA","92101"],["Kansas City","MO","64106"]];
+  const NAMES=["Ava Martinez","Liam Chen","Sophia Patel","Noah Johnson","Mia Thompson","Ethan Brooks","Olivia Reed","Lucas Rivera","Emma Caldwell","James Porter"];
+  const sender={name:"Jordan Lee",company:"Summit Goods Co.",zip:"84101",state:"UT",city:"Salt Lake City",address1:"215 S State St",phone:"801-555-0142",email:"ops@summitgoods.example"};
+  const statuses=["Delivered","Delivered","Delivered","In transit","In transit","Out for delivery","Label created","Delivered","In transit","Delivered","Exception","Delivered","Delivered","In transit","Delivered","Out for delivery","Delivered","Delivered"];
+  const days=[0,0,1,1,2,3,4,5,6,7,9,11,13,16,19,22,26,29];
+  const wts=[2,5,1,12,3,8,4,22,6,2,15,3,7,9,1,4,11,5];
+  const shipments=[];
+  for(let i=0;i<18;i++){
+    const [carrier,service]=SVC[i%SVC.length];const c=CITIES[i%CITIES.length];const who=NAMES[i%NAMES.length];
+    const wt=wts[i];
+    const cost=+((7.5+wt*0.85+(service.includes("Overnight")?28:service.includes("2Day")?9:carrier==="DHL"?18:0)).toFixed(2));
+    const sell=+((cost*1.18).toFixed(2));
+    shipments.push({id:9000+i,date:demoDaysAgo(days[i]),dayAgo:days[i],tracking:newTracking(carrier),carrier,service,recipient:{name:who,company:i%3===0?who.split(" ")[1]+" Supply":"",zip:c[2],state:c[1],city:c[0],address1:(120+i*7)+" Market St",phone:"555-01"+String(10+i),email:who.split(" ")[0].toLowerCase()+"@example.com"},sender,fromZip:sender.zip,toZip:c[2],weight:wt,pieces:[{weight:wt,L:12,W:9,H:6}],dims:{L:12,W:9,H:6},cost,sell,billTo:"sender",status:statuses[i],lastScan:SCAN_CITIES[i%SCAN_CITIES.length],eta:demoDaysAgo(-(1+(i%3))),onTime:i!==10,reference:"SO-10"+(40+i),client:"Summit Goods Co."});
+  }
+  const orders=NAMES.map((who,i)=>{const c=CITIES[i];return {id:7000+i,name:"#10"+(42+i),customer:who,company:i%4===0?who.split(" ")[1]+" Supply":"",address1:(88+i*9)+" Cedar Ave",city:c[0],state:c[1],zip:c[2],phone:"555-02"+String(10+i),email:who.split(" ")[0].toLowerCase()+"@example.com",items:i%2?"Trail Blanket × 1":"Camp Mug × 2, Field Notebook × 1",status:i<6?"unfulfilled":"fulfilled",source:i%3===0?"Manual":"Shopify",weight:[3,1,2,5,1,4,2,3,1,2][i],total:+((24+i*11.5).toFixed(2)),date:demoDaysAgo(i%5)};});
+  const returns=[
+    {id:8101,rma:"RMA-4821",customer:"Mia Thompson",order:"#1046",reason:"Wrong size",carrier:"FedEx",tracking:newTracking("FedEx"),status:"In transit",date:demoDaysAgo(2)},
+    {id:8102,rma:"RMA-4809",customer:"Liam Chen",order:"#1043",reason:"Changed mind",carrier:"FedEx",tracking:newTracking("FedEx"),status:"Label created",date:demoDaysAgo(5)},
+    {id:8103,rma:"RMA-4790",customer:"Olivia Reed",order:"#1038",reason:"Damaged in transit",carrier:"UPS",tracking:newTracking("UPS"),status:"Received",date:demoDaysAgo(9)}
+  ];
+  const draftSnapDefaults={reference:"",invoiceNo:"",poNo:"",residential:false,signature:false,billTo:"sender",thirdAcct:"",insurance:"",selectedOrder:null,customs:null};
+  const drafts=[
+    {id:6101,label:"Ava Martinez — Austin",when:new Date(Date.now()-3600e3).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}),to:"Austin, TX",snap:{...draftSnapDefaults,sender,receiver:{name:"Ava Martinez",company:"",zip:"78701",state:"TX",city:"Austin",address1:"127 Market St",phone:"555-0110",email:"ava@example.com"},reference:"SO-1051",pieces:[{weight:4,L:12,W:9,H:6}],residential:true}},
+    {id:6102,label:"Porter Supply — Kansas City",when:new Date(Date.now()-26*3600e3).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}),to:"Kansas City, MO",snap:{...draftSnapDefaults,sender,receiver:{name:"James Porter",company:"Porter Supply",zip:"64106",state:"MO",city:"Kansas City",address1:"960 Cedar Ave",phone:"555-0219",email:"james@example.com"},reference:"SO-1049",pieces:[{weight:11,L:14,W:12,H:10}],signature:true}}
+  ];
+  const ledger=[
+    {id:"l5101",date:demoDaysAgo(1),type:"Shipment",ref:shipments[2].tracking,amount:-shipments[2].sell},
+    {id:"l5102",date:demoDaysAgo(3),type:"Funds added",ref:"ACH ••1844",amount:250},
+    {id:"l5103",date:demoDaysAgo(6),type:"Shipment",ref:shipments[8].tracking,amount:-shipments[8].sell},
+    {id:"l5104",date:demoDaysAgo(12),type:"Adjustment",ref:returns[2].rma,amount:14.6}
+  ];
+  const pickups=[{id:4101,conf:"DEMO-PU-3312",carrier:"FedEx",carrierCode:"fedex",date:demoDaysAgo(-1),count:6,ready:"13:00",close:"17:00",location:"Front desk",live:false}];
+  const addresses=CITIES.slice(0,6).map((c,i)=>({id:"ad"+(300+i),name:NAMES[i],company:i%3===0?NAMES[i].split(" ")[1]+" Supply":"",address1:(120+i*7)+" Market St",city:c[0],state:c[1],zip:c[2],phone:"555-01"+String(10+i),email:NAMES[i].split(" ")[0].toLowerCase()+"@example.com",residential:i%2===0}));
+  const settings={company:"Summit Goods Co.",sender,defaultBillTo:"sender",thirdPartyAccts:[],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,checkout:CHECKOUT_DEFAULTS,platforms:PLATFORM_DEFAULTS,plan:"pro",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:""},addresses,warehouses:[{name:"Main Warehouse",company:"Summit Goods Co.",address:"215 S State St",city:"Salt Lake City",state:"UT",zip:"84101",phone:"801-555-0142"}],autoRunRules:false,brand:DEFAULT_BRAND,domains:[]};
+  return {settings,orders,shipments,returns,drafts,ledger,pickups};
+}
+function enterDemo(){
+  try{
+    const kill=[];for(let i=0;i<window.localStorage.length;i++){const k=window.localStorage.key(i);if(k&&k.indexOf("sc_u/demo/")===0)kill.push(k);}
+    kill.forEach(k=>window.localStorage.removeItem(k));
+    const d=makeDemoData();
+    lsSet("u/demo/settings",d.settings);lsSet("u/demo/orders",d.orders);lsSet("u/demo/shipments",d.shipments);lsSet("u/demo/returns",d.returns);lsSet("u/demo/drafts",d.drafts);lsSet("u/demo/ledger",d.ledger);lsSet("u/demo/pickups",d.pickups);lsSet("u/demo/fedexPrompt",{seen:true});
+    lsSet("session",DEMO_USER);
+    window.location.reload();
+  }catch(e){}
+}
 function usePersist(key,initial){
   const nsKey=GLOBAL_KEYS[key]?key:("u/"+activeUid()+"/"+key);
   const [val,setVal]=useState(()=>{
@@ -1144,6 +1202,7 @@ function Landing({onAuth}){
         {pub&&pub.showLogo&&<div className="flex items-center gap-1.5 text-[11px] text-stone-500 mt-1 ml-[56px]">by <img src={FW_LOGO} alt="Freightwire" className="h-3.5 w-auto object-contain"/></div>}
       </button>
       <div className="flex flex-wrap items-center gap-1.5">
+        <button onClick={enterDemo} className="hidden sm:flex items-center gap-1.5 text-[13px] font-semibold text-amber-300 hover:text-amber-200 border border-amber-400/40 bg-amber-400/10 hover:bg-amber-400/15 rounded-full px-3.5 py-1.5"><Eye className="w-3.5 h-3.5"/>Take a peek</button>
         <NavTab label="Features" onClick={()=>setPage("home","features")}/>
         <NavTab label="Rates" onClick={()=>setPage("home","rates")}/>
         <NavTab label="About" onClick={()=>setPage("about")}/>
@@ -1162,6 +1221,7 @@ function Landing({onAuth}){
         <div className="mt-7 flex flex-wrap gap-3">
           <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0a76c2] text-white font-semibold rounded-lg px-7 py-3.5 text-[15px]">Create ShippingCloud account</button>
           <button onClick={()=>onAuth("fedex")} className="border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#38b6ff] font-semibold rounded-lg px-7 py-3.5 text-[15px] flex items-center gap-2"><Truck className="w-4 h-4"/>Get your own FedEx account</button>
+          <button onClick={enterDemo} className="text-[14px] text-stone-400 hover:text-white flex items-center gap-1.5 px-2 py-3.5 underline underline-offset-4 decoration-stone-600"><Eye className="w-4 h-4"/>Take a peek first</button>
         </div>
       </div>
       {/* hero graphic: mock rate card */}
@@ -1315,7 +1375,7 @@ function FirstRunFedEx({user,onClose}){
   </div>);
 }
 function LandingGate({onDone}){
-  const [auth,setAuth]=useState(null); // null | "signin" | "request" | "fedex"
+  const [auth,setAuth]=useState(()=>{const p=lsGet("postDemo",null);if(p){lsSet("postDemo",null);return "request";}return null;}); // null | "signin" | "request" | "fedex"
   const [intake,setIntake]=useState(null);
   return (<div className="relative">
     <Landing onAuth={(m)=>{if(m!=="fedex")setIntake(null);setAuth(m);}}/>
@@ -1510,7 +1570,8 @@ function AppInner(){
 
   const isAdmin=currentUser&&currentUser.role==="admin";
   const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
-  const myFlags=isAdmin?{}:((featureFlags&&featureFlags[currentUser&&currentUser.id])||(CLOUD.mode==="cloud"?myFeatures:{}));
+  const isDemo=!!(currentUser&&currentUser.id==="demo");
+  const myFlags=isDemo?{pickups:true,batch:true,invoices:true,rules:true,scan:true}:(isAdmin?{}:((featureFlags&&featureFlags[currentUser&&currentUser.id])||(CLOUD.mode==="cloud"?myFeatures:{})));
   const TABS=isAdmin?ALL_TABS:ALL_TABS.filter(t=>t[0]!=="admin"&&(t[0]==="ship"||featureOn(t[0],currentUser,myFlags)));
   const unfulfilled=orders.filter(o=>o.status==="unfulfilled").length;
 
@@ -1526,8 +1587,13 @@ function AppInner(){
         <span>Admin preview — you’re seeing ShippingCloud exactly as <b>{currentUser&&(currentUser.name||currentUser.email)}</b> sees it. Anything you change here changes their account.</span>
         <button onClick={exitImpersonation} className="bg-white text-[#0086E0] font-semibold rounded px-3 py-1 hover:bg-blue-50 shrink-0">Return to admin</button>
       </div>}
-      {!isAdmin&&!adminReturn&&CLOUD.mode==="cloud"&&!fedexPrompt.seen&&<FirstRunFedEx user={currentUser} onClose={()=>setFedexPrompt({seen:true})}/>}
-      <header className={"border-b border-stone-200 sticky z-30 bg-white/90 backdrop-blur "+(adminReturn?"top-9":"top-0")}>
+      {isDemo&&!adminReturn&&<div className="bg-amber-500 text-white text-[13px] px-4 py-2 flex items-center justify-center gap-3 sticky top-0 z-40 flex-wrap">
+        <span className="font-semibold flex items-center gap-1.5"><Eye className="w-3.5 h-3.5"/>Demo mode</span><span className="hidden sm:inline opacity-90">Sample data — click around, nothing here is real.</span>
+        <button onClick={()=>{lsSet("postDemo","request");lsSet("session",null);window.location.reload();}} className="bg-white/20 hover:bg-white/30 rounded px-2.5 py-1 text-xs font-semibold">Create your real account</button>
+        <button onClick={()=>{lsSet("session",null);window.location.reload();}} className="bg-white/10 hover:bg-white/20 rounded px-2.5 py-1 text-xs">Exit demo</button>
+      </div>}
+      {!isDemo&&!isAdmin&&!adminReturn&&CLOUD.mode==="cloud"&&!fedexPrompt.seen&&<FirstRunFedEx user={currentUser} onClose={()=>setFedexPrompt({seen:true})}/>}
+      <header className={"border-b border-stone-200 sticky z-30 bg-white/90 backdrop-blur "+((adminReturn||isDemo)?"top-9":"top-0")}>
         <div className="px-3 sm:px-4 h-14 flex items-center gap-2 sm:gap-3">
           <button onClick={()=>setNavOpen(true)} className="md:hidden p-2 -ml-1 rounded-lg hover:bg-stone-100 text-stone-600" aria-label="Menu"><Layers className="w-5 h-5"/></button>
           <BrandCloud className="h-10 sm:h-11 w-auto" color={brand.primary}/>

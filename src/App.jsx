@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v134";
+const BUILD_TAG="addr-v135";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1033,7 +1033,7 @@ function CustomizationsAdmin({users,clients,featureFlags={},setFeatureFlags,cust
       <div className="grid sm:grid-cols-3 gap-3">
         <Field label="Name"><Input value={draft.label} onChange={e=>setDraft({...draft,label:e.target.value})} placeholder="e.g. Weekly cost report"/></Field>
         <Field label="What it does"><Input value={draft.desc} onChange={e=>setDraft({...draft,desc:e.target.value})} placeholder="Short description"/></Field>
-        <Field label="Built for (optional)"><Input value={draft.clientNote} onChange={e=>setDraft({...draft,clientNote:e.target.value})} placeholder="e.g. Riley Blake"/></Field>
+        <Field label="Built for (optional)"><Input value={draft.clientNote} onChange={e=>setDraft({...draft,clientNote:e.target.value})} placeholder="e.g. Acme Outfitters"/></Field>
       </div>
       <div className="flex items-center gap-2">
         <button onClick={addCustom} disabled={!(draft.label||"").trim()} className="text-sm bg-[#0086E0] text-white rounded px-4 py-2 font-medium disabled:opacity-40">Add to registry</button>
@@ -1295,6 +1295,17 @@ function enterDemo(){
     lsSet("session",DEMO_USER);
     window.location.reload();
   }catch(e){}
+}
+/* v135: the old seed shipped with a hardcoded sender (Matt Goeckeritz / Riley Blake Designs).
+   Accounts that persisted it still carry it — scrub it from every read and write. */
+function scrubLegacyDefaults(s){
+  if(!s)return s;
+  let next=s,changed=false;
+  const sn=s.sender||{};
+  if(sn.name==="Matt Goeckeritz"||sn.company==="Riley Blake Designs"){ next={...next,sender:{name:"",company:"",address1:"",city:"",state:"",zip:"",phone:"",email:""}}; changed=true; }
+  const wh=(next.warehouses||[]).filter(w=>!(w&&(w.company==="Riley Blake Designs"||(w.address==="4060 W 2100 N"&&w.zip==="84003"))));
+  if(wh.length!==(next.warehouses||[]).length){ next={...next,warehouses:wh}; changed=true; }
+  return changed?next:s;
 }
 function usePersist(key,initial){
   const nsKey=GLOBAL_KEYS[key]?key:("u/"+activeUid()+"/"+key);
@@ -1559,6 +1570,7 @@ function Landing({onAuth}){
     <div className="relative w-full flex justify-center py-4" style={{animation:"fwRise .6s .14s ease both",transform:"scale(1.2)",transformOrigin:"top center"}}>
       <CloudAuth onDone={()=>window.location.reload()} initialMode="login"/>
     </div>
+    <button onClick={enterDemo} className="relative mt-4 text-[13px] text-stone-500 hover:text-stone-700 underline underline-offset-4 decoration-stone-300" style={{animation:"fwRise .6s .18s ease both"}}>Just looking? Take a peek →</button>
     <div className="relative mt-16 w-full max-w-3xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" style={{animation:"fwRise .6s .22s ease both",transform:"scale(0.85)",transformOrigin:"top center"}}>
       {[[Zap,"Autopilot & batch","Rules + one-click batch printing"],[Boxes,"Smart box logic","Packs every order automatically"],[ShoppingBag,"Cart sync","Shopify & other shopping carts"],[Receipt,"Invoice auditing","Catches overcharges & mistakes"],[Sparkles,"Powered by Claude","An AI assistant does the busywork"],[Cog,"Made yours","Customizable to how you ship"],[FileText,"All the paperwork","Slips, pick lists, commercial invoices"],[DollarSign,"Best rates","Industry-best shipping rates"]].map(([Ic,h,sub],i)=>
         <div key={i} className="rounded-xl border p-3.5 flex flex-col gap-2.5 transition-all hover:-translate-y-0.5" style={{background:"rgba(255,255,255,.75)",borderColor:"#ece8e1"}}>
@@ -2022,7 +2034,9 @@ function AppInner(){
   const [qq,setQQ]=useState(false);
   const [navOpen,setNavOpen]=useState(false);
   const [prefill,setPrefill]=useState(null);
-  const [settings,setSettings]=usePersist("settings",{company:"Freightwire",sender:{name:"Matt Goeckeritz",company:"Riley Blake Designs",zip:"84003",state:"UT",city:"Lehi",address1:"4060 W 2100 N",phone:"801-816-0540",email:"spencertesttes@test.com"},defaultBillTo:"sender",thirdPartyAccts:[{id:"tp1",carrier:"FedEx",account:"20601652",label:"England FedEx"}],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,products:SEED_PRODUCTS,checkout:CHECKOUT_DEFAULTS,platforms:PLATFORM_DEFAULTS,plan:"starter",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:"20601652"},addresses:[],warehouses:[{name:"Main Warehouse",company:"Riley Blake Designs",address:"4060 W 2100 N",city:"Lehi",state:"UT",zip:"84003",phone:"801-816-0540"}],autoRunRules:false,brand:DEFAULT_BRAND,domains:[]});
+  const [settingsRaw,setSettingsRaw]=usePersist("settings",{company:"Freightwire",sender:{name:"",company:"",zip:"",state:"",city:"",address1:"",phone:"",email:""},defaultBillTo:"sender",thirdPartyAccts:[{id:"tp1",carrier:"FedEx",account:"20601652",label:"England FedEx"}],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,products:SEED_PRODUCTS,checkout:CHECKOUT_DEFAULTS,platforms:PLATFORM_DEFAULTS,plan:"starter",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:"20601652"},addresses:[],warehouses:[],autoRunRules:false,brand:DEFAULT_BRAND,domains:[]});
+  const settings=useMemo(()=>scrubLegacyDefaults(settingsRaw),[settingsRaw]);
+  const setSettings=(v)=>setSettingsRaw(p=>scrubLegacyDefaults(typeof v==="function"?v(scrubLegacyDefaults(p)):v));
 
   useEffect(()=>{ if(currentUser&&currentUser.role==="customer"&&currentUser.clientId) setClientId(currentUser.clientId); },[currentUser]);
   // Auto-run rules on newly imported/synced orders (any import path) when the toggle is on.
@@ -2033,7 +2047,7 @@ function AppInner(){
     const done=s=>{ s=String(s||"").toLowerCase(); return s==="fulfilled"||s==="shipped"||s==="cancelled"||s==="canceled"; };
     const candidates=(orders||[]).filter(o=>!o._ruled&&!done(o.status));
     if(!candidates.length) return;
-    const originZip=(settings.sender&&settings.sender.zip)||"84003";
+    const originZip=(settings.sender&&settings.sender.zip)||"";
     const patches=rulePatchesFor(runRuleEngine(ruleset||[],candidates,originZip));
     const ids=new Set(candidates.map(o=>o.id));
     setOrders(os=>os.map(o=>ids.has(o.id)?{...o,...(patches[o.id]||{}),_ruled:true}:o));
@@ -2268,7 +2282,7 @@ function AppInner(){
           </div>
         </div>
       </header>
-      {qq&&<QuickQuote onClose={()=>setQQ(false)} client={client} england={englandFor(client,settings)}/>}
+      {qq&&<QuickQuote onClose={()=>setQQ(false)} client={client} england={englandFor(client,settings)} senderZip={settings?.sender?.zip||""}/>}
       {appLabel&&<LabelPreviewModal data={appLabel} onClose={()=>setAppLabel(null)}/>}
       {navOpen&&<div className="md:hidden fixed inset-0 z-40 flex" role="dialog">
         <div className="absolute inset-0 bg-stone-900/40" onClick={()=>setNavOpen(false)}/>
@@ -2398,7 +2412,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     let cancel=false;
     setVerify({loading:true});
     const t=setTimeout(async()=>{
-      const fromZip=sender.zip||client.origin||(settings.sender&&settings.sender.zip)||"84003";
+      const fromZip=sender.zip||client.origin||(settings.sender&&settings.sender.zip)||"";
       const res=await fedexValidateAddress(receiver, fromZip);
       try{console.log("[verify] fromZip="+fromZip+" classification="+(res&&res.classification)+" deliverable="+(res&&res.deliverable)+" err="+(res&&res.error||"")+" debug="+JSON.stringify(res&&res.debug||{}));}catch(e){}
       if(cancel)return;
@@ -2609,6 +2623,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-1/2 top-11 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-4 h-4"/></button>
           <AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} contactFallback={{phone:sender.phone,email:sender.email}} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }}/>
         </div>
+        {!(sender.name||sender.company||sender.address1||sender.zip)&&<div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No sender on file — fill in the Sender card above, or set your default sender in Settings → Company.</div>}
         {billTo==="third"&&thirdAcct&&<div className="flex flex-wrap items-center gap-2 text-xs -mt-1">
           <span className="flex items-center gap-1.5 text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-1.5"><CreditCard className="w-3.5 h-3.5"/>Auto-billing to third-party account <b className="font-mono">{thirdAcct}</b><button onClick={()=>{setBillTo("sender");setThirdAcct("");}} className="ml-1 text-[#0086E0] hover:text-[#006FBF] underline">bill sender instead</button></span>
         </div>}
@@ -3069,7 +3084,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
   const box=boxIdx>=0?boxes[boxIdx]:{L:12,W:9,H:4};
   const eng=englandFor(client,settings);
   const canBook=eng&&eng.enabled&&eng.apiKey&&eng.customerId;
-  const fromZip=settings?.sender?.zip||client?.origin||"84003";
+  const fromZip=settings?.sender?.zip||client?.origin||"";
   const ready=/^\d{5}/.test(o.zip||"")&&(+weight>0);
   const orBox=oneRate?oneRateBoxFor(box.L,box.W,box.H,+weight||0):null;
   // live England rates (fall back to demo quoteRates when England isn't connected)
@@ -3183,7 +3198,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
   const boxes=settings?.boxes||SEED_BOXES;
   const eng=englandFor(client,settings);
   const canBook=eng&&eng.enabled&&eng.apiKey&&eng.customerId;
-  const fromZip=settings?.sender?.zip||client?.origin||"84003";
+  const fromZip=settings?.sender?.zip||client?.origin||"";
   const box={L:+dims.L||12,W:+dims.W||9,H:+dims.H||4};
   const totalWeight=Math.round(((+weight||0)+(+oz||0)/16)*100)/100;
   const ready=/^\d{5}/.test(rcv.zip||"")&&totalWeight>0;
@@ -3352,7 +3367,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
                   {shipped?(
                     <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2"><CheckCircle2 className="w-4 h-4"/>Shipped{o.tracking?<> · <span className="font-mono">{o.tracking}</span></>:""}</div>
                   ):(<>
-                    <div>{lbl("Ship from")}<div className="text-[13px] text-stone-600">{settings?.sender?.company||settings?.sender?.name||"Your address"} · {settings?.sender?.city} {settings?.sender?.state} {settings?.sender?.zip}</div></div>
+                    <div>{lbl("Ship from")}{(settings?.sender?.zip||settings?.sender?.company||settings?.sender?.name)?<div className="text-[13px] text-stone-600">{settings?.sender?.company||settings?.sender?.name||"Your address"} · {settings?.sender?.city} {settings?.sender?.state} {settings?.sender?.zip}</div>:<div className="text-[13px] text-amber-700">No sender set — set your default sender in Settings → Company.</div>}</div>
                     <div className="grid grid-cols-3 gap-2">
                       <div>{lbl("Reference")}<input value={reference} onChange={e=>setReference(e.target.value)} placeholder="order / ref" className={inC+" w-full"}/></div>
                       <div>{lbl("PO #")}<input value={poNo} onChange={e=>setPoNo(e.target.value)} placeholder="PO-…" className={inC+" w-full"}/></div>
@@ -3510,8 +3525,8 @@ function Pickups({pickups,setPickups,settings}){
 }
 
 /* ════════ QUICK QUOTE ════════ */
-function QuickQuote({onClose,client,england}){
-  const [fromZip,setFromZip]=useState(client?.origin||"84003");
+function QuickQuote({onClose,client,england,senderZip}){
+  const [fromZip,setFromZip]=useState(senderZip||client?.origin||"");
   const [toZip,setToZip]=useState("90210");
   const [residential,setResidential]=useState(true);
   const [pieces,setPieces]=useState([{weight:3,L:12,W:9,H:4,oz:""}]);
@@ -4052,6 +4067,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         <label className="flex items-center gap-1.5 text-sm bg-stone-200 text-stone-700 rounded px-2.5 py-1.5 font-medium hover:bg-stone-300 cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
       </div>
       {msg&&<div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{msg}</div>}
+      {!originZip&&<div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No ship-from ZIP — set your default sender in Settings → Company so batch rates and zone rules use the right origin.</div>}
 
       {/* command bar */}
       <div className="border border-stone-200 rounded-lg bg-white p-3 space-y-3">
@@ -5184,7 +5200,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
   const [apProg,setApProg]=useState(null);
   const [apResults,setApResults]=useState(null);
   const ords=orders||[];
-  const originZip=(settings&&settings.sender&&settings.sender.zip)||"84003";
+  const originZip=(settings&&settings.sender&&settings.sender.zip)||"";
   const warehouses=(settings&&settings.warehouses)||[];
   const autoRun=!!(settings&&settings.autoRunRules);
   const run=useMemo(()=>runRuleEngine(rules||[],ords,originZip),[rules,ords,originZip]);
@@ -5684,7 +5700,7 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
   };
   const runTest=async()=>{
     setTest({loading:true});
-    const res=await getLiveRates({fromZip:settings.sender?.zip||"84003",toZip:"90210",residential:true,pieces:[{weight:3,L:12,W:9,H:4}]},{...eng,enabled:true});
+    const res=await getLiveRates({fromZip:settings.sender?.zip||"84101",toZip:"90210",residential:true,pieces:[{weight:3,L:12,W:9,H:4}]},{...eng,enabled:true});
     if(res&&res.live&&res.rates&&res.rates.length) setTest({ok:true,msg:`Connected — ${res.rates.length} live services returned (cheapest ${money(res.rates[0].cost)}).`});
     else setTest({ok:false,msg:(res&&res.error)||"No live rates returned.",detail:res&&(res.england_response||res.detail)});
   };

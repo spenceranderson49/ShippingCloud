@@ -250,6 +250,33 @@ exports.handler = async (event) => {
       return J({ ok: true, name: f.name || "invoice", type: f.type || "application/octet-stream", data: f.data });
     }
 
+    /* ── logged-in "get my FedEx account" request (from the welcome popup) ── */
+    if (action === "fedexRequest") {
+      const volume = String(body.volume || "").slice(0, 40);
+      const carrier = String(body.carrier || "").slice(0, 40);
+      const name = String(body.name || "").slice(0, 80);
+      let invoiceName = "", invoiceKey = "";
+      const inv = body.invoice;
+      if (inv && inv.data) {
+        if (String(inv.data).length > MAX_UPLOAD_B64) return J({ ok: false, error: "That file is too large — please upload one under 3 MB." });
+        if (inv.type && !OK_UPLOAD_TYPES.includes(String(inv.type))) return J({ ok: false, error: "Please upload a PDF, CSV, Excel file, or image of your invoice." });
+        invoiceKey = "inv_" + crypto.createHash("sha1").update(auth.uid + "|" + Date.now()).digest("hex");
+        invoiceName = String(inv.name || "invoice").slice(0, 120);
+        const up = await blobOp(invoiceKey, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: invoiceName, type: String(inv.type || "application/octet-stream"), data: String(inv.data) }) });
+        if (!up || !up.ok) { invoiceKey = ""; invoiceName = ""; }
+      }
+      const cur = await getStore("fedexRequests");
+      let reqs = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+      const prior = reqs.find((r) => r && r.uid === auth.uid);
+      if (prior && prior.invoiceKey && invoiceKey) await blobOp(prior.invoiceKey, { method: "DELETE" });
+      reqs = reqs.filter((r) => r && r.uid !== auth.uid);
+      if (reqs.length >= 200) return J({ ok: false, error: "Too many pending requests — try again later." });
+      reqs.push({ id: "fx" + Date.now(), uid: auth.uid, name, email: auth.email || "", volume, carrier, invoiceName, invoiceKey, requestedAt: new Date().toISOString() });
+      const w = await putStores({ fedexRequests: reqs });
+      if (!w.ok) return J({ ok: false, error: "Could not save your request — try again." });
+      return J({ ok: true });
+    }
+
     if (action === "approveSignup" || action === "denySignup") {
       if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
       const email = String(body.email || "").trim().toLowerCase();

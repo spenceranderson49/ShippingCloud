@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v118";
+const BUILD_TAG="addr-v119";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -505,7 +505,7 @@ const CART_ITEMS=[
   {name:"Sandals",l:9,w:5,h:4,wt:0.7,price:22},
   {name:"Hair Bow (3pk)",l:5,w:4,h:2,wt:0.15,price:12},
 ];
-const CHECKOUT_DEFAULTS={registered:true,presentation:"named",handling:0,freeThreshold:75,services:{fedex_ground:true,fedex_home:true,fedex_2day:true,fedex_prio:false}};
+const CHECKOUT_DEFAULTS={registered:true,presentation:"named",handling:0,freeThreshold:75,markup:20,services:{fedex_ground:true,fedex_home:true,fedex_2day:true,fedex_prio:false}};
 
 /* ════════ PLATFORM CARRIER ACCOUNTS ════════ */
 const PLATFORM_CARRIERS=[
@@ -2075,7 +2075,7 @@ function AppInner(){
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
           {tab==="companyadmin"&&isCompanyAdmin&&<CompanyAdmin currentUser={currentUser} companyUsers={companyUsers} setCompanyUsers={setCompanyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags}/>}
           {tab==="admin"&&isAdmin&&<AdminPortal clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} publicBrand={publicBrand} setPublicBrand={setPublicBrand} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
-          {tab==="settings"&&<Settings settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
+          {tab==="settings"&&<Settings uid={currentUser&&currentUser.id} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
         </main>
       </div>
     </div>
@@ -4019,7 +4019,22 @@ function ReportTable({title,head,rows}){return (<div className="border border-st
 
 /* ════════ CHECKOUT RATES (Shopify) ════════ */
 const CHECKOUT_SERVICES=Object.keys(RATES).filter(k=>!RATES[k].intl&&RATES[k].carrier!=="DHL");
-function CheckoutRates({settings,setSettings,client}){
+function CheckoutRates({settings,setSettings,client,uid}){
+  const [cs,setCs]=useState(null);
+  const [cBusy,setCBusy]=useState("");
+  const shopConn=(settings.conn||{}).shopify||{};
+  const carrierCall=async(action)=>{
+    const shop=shopConn.shop||settings.shopifyShop, token=shopConn.token||settings.shopifyToken;
+    if(!shop||!token){setCs({err:"Connect your Shopify store first (Settings → Integrations)."});return;}
+    setCBusy(action);
+    try{
+      const r=await fetch(SHOPIFY_SYNC,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({shop,token,action,uid})});
+      const d=await r.json().catch(()=>null);
+      if(!d||!d.ok)setCs({err:(d&&d.error)||"Shopify call failed."});
+      else setCs(action==="installCarrier"?{ok:d.updated?"Carrier service updated — live rates are on at checkout.":"Installed! Your checkout now quotes through ShippingCloud.",installed:true}:{installed:d.installed,ok:d.installed?"Installed — your checkout is quoting through ShippingCloud.":"Not installed yet — hit Install below."});
+    }catch(e){setCs({err:"Network error — try again."});}
+    setCBusy("");
+  };
   const ck=settings.checkout||CHECKOUT_DEFAULTS;
   const setCk=(patch)=>setSettings({...settings,checkout:{...ck,...patch}});
   const toggleSvc=(k)=>setCk({services:{...ck.services,[k]:!ck.services[k]}});
@@ -4032,7 +4047,7 @@ function CheckoutRates({settings,setSettings,client}){
   const pack=items.length?pickBox(items,boxes):null;
   const enabled=CHECKOUT_SERVICES.filter(k=>ck.services[k]);
   const pieces=pack?Array.from({length:pack.count}).map(()=>({weight:pack.billWt/pack.count,L:pack.box.L,W:pack.box.W,H:pack.box.H})):[{weight:1,L:8,W:6,H:4}];
-  const quotes=useMemo(()=>quoteRates({fromZip:client.origin,toZip:zip,pieces,residential:true}).filter(q=>enabled.includes(q.key)).map(q=>({...q,buyer:Math.round((q.cost*(1+client.markup/100)+(+ck.handling||0))*100)/100})).sort((a,b)=>a.buyer-b.buyer),[zip,JSON.stringify(pieces),JSON.stringify(ck),client.markup]);
+  const quotes=useMemo(()=>quoteRates({fromZip:client.origin,toZip:zip,pieces,residential:true}).filter(q=>enabled.includes(q.key)).map(q=>({...q,buyer:Math.round((q.cost*(1+((ck.markup!=null?+ck.markup:20))/100)+(+ck.handling||0))*100)/100})).sort((a,b)=>a.buyer-b.buyer),[zip,JSON.stringify(pieces),JSON.stringify(ck),client.markup]);
   const tierOf=q=>q.maxDays<=1?"Express":q.maxDays<=3?"Standard":"Economy";
   let display=quotes;
   if(ck.presentation==="tiers"){const bt={};quotes.forEach(q=>{const t=tierOf(q);if(!bt[t]||q.buyer<bt[t].buyer)bt[t]={...q,shown:t};});display=["Express","Standard","Economy"].map(t=>bt[t]).filter(Boolean);}
@@ -4053,7 +4068,11 @@ function CheckoutRates({settings,setSettings,client}){
             <div className="flex-1"><div className="font-medium">Shopify · CarrierService</div><div className="text-[11px] text-stone-400 font-mono break-all">{endpoint}</div></div>
             <Badge tone={ck.registered?"green":"stone"}>{ck.registered?"registered":"off"}</Badge>
           </div>
-          <button onClick={()=>setCk({registered:!ck.registered})} className={`mt-3 text-sm rounded px-3 py-1.5 font-medium ${ck.registered?"bg-stone-200 text-stone-700 hover:bg-stone-300":"bg-stone-900 text-white hover:bg-stone-800"}`}>{ck.registered?"Disable at checkout":"Register carrier service"}</button>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button onClick={()=>carrierCall("carrierStatus")} disabled={!!cBusy} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded px-3 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5">{cBusy==="carrierStatus"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<Search className="w-3.5 h-3.5"/>}Check status</button>
+            <button onClick={()=>carrierCall("installCarrier")} disabled={!!cBusy||!uid} className="text-sm bg-[#0086E0] text-white rounded px-3 py-1.5 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{cBusy==="installCarrier"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<Zap className="w-3.5 h-3.5"/>}{cs&&cs.installed?"Update at checkout":"Install at checkout"}</button>
+          </div>
+          {cs&&(cs.ok||cs.err)&&<div className={`mt-2 text-[12px] rounded px-2.5 py-1.5 border ${cs.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{cs.err||cs.ok}</div>}
           <p className="text-[11px] text-stone-400 mt-2">Live checkout rates require a Shopify plan with Carrier Calculated Shipping (Advanced/Plus, or the $20/mo add-on).</p>
         </div>
         <Panel title="How rates appear">
@@ -4061,6 +4080,7 @@ function CheckoutRates({settings,setSettings,client}){
             <div className="flex bg-stone-100 rounded-lg p-0.5 text-sm">{[["named","Carrier names"],["tiers","Economy / Standard / Express"]].map(([v,l])=><button key={v} onClick={()=>setCk({presentation:v})} className={`flex-1 px-2 py-1.5 rounded-md ${ck.presentation===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}</div>
           </Field>
           <div className="grid grid-cols-2 gap-3">
+            <Field label="Buyer markup (%)"><Input type="number" value={ck.markup!=null?ck.markup:20} onChange={e=>setCk({markup:e.target.value})}/></Field>
             <Field label="Handling fee ($ per order)"><Input type="number" value={ck.handling} onChange={e=>setCk({handling:e.target.value})}/></Field>
             <Field label="Free shipping over ($)"><Input type="number" value={ck.freeThreshold} onChange={e=>setCk({freeThreshold:e.target.value})}/></Field>
           </div>
@@ -4120,7 +4140,7 @@ function CheckoutRates({settings,setSettings,client}){
 }
 
 /* ════════ SETTINGS ════════ */
-function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger}){
+function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid}){
   const [sec,setSec]=useState("carriers");
   const secs=[["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["catalog","Product catalog",Boxes],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["reference","Reference fields",Receipt],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["ledger","Ledger",Wallet],["integrations","Integrations",Layers],["subscription","Subscription",Star],["company","Company",Building2]];
   return (
@@ -4134,7 +4154,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="boxlogic"&&<BoxLogic settings={settings} setSettings={setSettings}/>}
         {sec==="reference"&&<ReferenceFields settings={settings} setSettings={setSettings}/>}
         {sec==="printer"&&<PrinterSettings settings={settings} setSettings={setSettings}/>}
-        {sec==="checkout"&&<CheckoutRates settings={settings} setSettings={setSettings} client={client}/>}
+        {sec==="checkout"&&<CheckoutRates settings={settings} setSettings={setSettings} client={client} uid={uid}/>}
         {sec==="manifests"&&<Manifests shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests}/>}
         {sec==="reports"&&<Reports shipments={shipments}/>}
         {sec==="notifications"&&<Notifications settings={settings} setSettings={setSettings} emails={emails}/>}

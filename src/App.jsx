@@ -26,10 +26,12 @@ const FEATURE_CATALOG=[
   {id:"batch",label:"Batch",desc:"Rate & print in bulk",default:false},
   {id:"invoices",label:"Invoice Audit",desc:"Carrier invoice auditing",default:false},
   {id:"rules",label:"Autopilot",desc:"Autopilot Mode — automation rules",default:false},
-  {id:"ledger",label:"Ledger",desc:"Billing ledger",default:false},
   {id:"scan",label:"Scan",desc:"Barcode scan station",default:false},
   {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:false},
+  {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own UPS / other carrier accounts on the Connections page (England always shows; admins always have this)",default:false},
 ];
+const ADMIN_SECTIONS=[["overview","Overview"],["customers","Customers"],["users","Users & logins"],["customizations","Customizations"],["platforms","Platform accounts"],["branding","Branding"],["domains","Domains"]];
+const adminSectionsFor=(user)=>(user&&user.role==="admin"&&user.adminPerms&&Array.isArray(user.adminPerms.sections))?ADMIN_SECTIONS.filter(s=>user.adminPerms.sections.includes(s[0])):ADMIN_SECTIONS;
 const featureOn=(id,user,flagsForUser)=>{
   if(!user)return false;
   if(user.role==="admin")return true;                                   // admins always have everything
@@ -38,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v98";
+const BUILD_TAG="addr-v101";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -584,7 +586,7 @@ function Domains({settings,setSettings,clients}){
 }
 
 /* ════════ ADMIN PORTAL ════════ */
-function Branding({settings,setSettings,brand}){
+function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
   const [b,setB]=useState({...DEFAULT_BRAND,...(settings.brand||{})});
   const [saved,setSaved]=useState(false);
   const set=(k,v)=>setB(p=>({...p,[k]:v}));
@@ -627,7 +629,9 @@ function Branding({settings,setSettings,brand}){
     </Panel>
 
     <Panel title="Partner / “powered by” logo">
-      <div className="flex items-center gap-2 mb-1"><Toggle on={b.showLogo} set={v=>set("showLogo",v)} label={b.showLogo?"Showing partner logo":"Partner logo hidden"}/></div>
+      <div className="flex items-center gap-2 mb-1"><Toggle on={b.showLogo} set={v=>set("showLogo",v)} label={b.showLogo?"Showing partner logo in the app":"Partner logo hidden in the app"}/></div>
+      <div className="flex items-center gap-2 mb-1"><Toggle on={!!(publicBrand&&publicBrand.showLogo)} set={v=>setPublicBrand&&setPublicBrand({showLogo:v})} label={(publicBrand&&publicBrand.showLogo)?"Showing on the public welcome page":"Hidden on the public welcome page"}/></div>
+      <p className="text-[11px] text-stone-400 mb-2">Top toggle: the shipping portal and sign-in screen. Bottom toggle: shippingcloud.net before anyone signs in — takes effect within a minute of saving.</p>
       {b.showLogo&&<>
         <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
           <div className="sm:w-28"><Field label="Label"><Input value={b.partnerLabel} onChange={e=>set("partnerLabel",e.target.value)} placeholder="by"/></Field></div>
@@ -647,8 +651,10 @@ function Branding({settings,setSettings,brand}){
   </div>);
 }
 
-function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,currentUser,settings,setSettings,brand,signupRequests,setSignupRequests,featureFlags,setFeatureFlags,customFeatures,setCustomFeatures,fedexRequests=[],setFedexRequests}){
+function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,currentUser,settings,setSettings,brand,signupRequests,setSignupRequests,featureFlags,setFeatureFlags,customFeatures,setCustomFeatures,fedexRequests=[],setFedexRequests,publicBrand,setPublicBrand}){
   const [sec,setSec]=useState("overview");
+  const ALLOWED=adminSectionsFor(currentUser);
+  if(ALLOWED.length&&!ALLOWED.some(x=>x[0]===sec))setSec(ALLOWED[0][0]);
   const [openC,setOpenC]=useState(null);
   const statsFor=(cName)=>{const sh=shipments.filter(s=>s.client===cName);const spend=sh.reduce((a,s)=>a+(s.sell||0),0);return {count:sh.length,spend};};
   const totalRev=shipments.reduce((a,s)=>a+(s.sell||0),0);
@@ -657,10 +663,10 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
     <div className="space-y-4">
       <div className="flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-[#0086E0]"/><h1 className="text-lg font-semibold text-stone-800">Admin portal</h1></div>
       <div className="flex flex-wrap bg-stone-100 rounded-lg p-0.5 text-sm w-fit">
-        {[["overview","Overview"],["customers","Customers"],["users","Users & logins"],["customizations","Customizations"],["platforms","Platform accounts"],["branding","Branding"],["domains","Domains"]].map(([v,l])=><button key={v} onClick={()=>setSec(v)} className={`px-3 py-1.5 rounded-md ${sec===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}
+        {ALLOWED.map(([v,l])=><button key={v} onClick={()=>setSec(v)} className={`px-3 py-1.5 rounded-md ${sec===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}
       </div>
 
-      {sec==="branding"&&<Branding settings={settings} setSettings={setSettings} brand={brand}/>}
+      {sec==="branding"&&<Branding settings={settings} setSettings={setSettings} brand={brand} publicBrand={publicBrand} setPublicBrand={setPublicBrand}/>}
       {sec==="domains"&&<Domains settings={settings} setSettings={setSettings} clients={clients}/>}
       {sec==="platforms"&&<PlatformAccountsAdmin settings={settings} setSettings={setSettings}/>}
 
@@ -825,7 +831,9 @@ function CustomizationsAdmin({users,clients,featureFlags={},setFeatureFlags,cust
 }
 function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSignupRequests,featureFlags={},setFeatureFlags,customFeatures=[],fedexRequests=[],setFedexRequests}){
   const CATALOG=[...FEATURE_CATALOG,...customFeatures.map(c=>({...c,custom:true}))];
+  const fullAdmin=!(currentUser&&currentUser.adminPerms&&Array.isArray(currentUser.adminPerms.sections));
   const [featOpen,setFeatOpen]=useState(null);
+  const [accessOpen,setAccessOpen]=useState(null);
   const setFlag=(uid,fid,on)=>setFeatureFlags(ff=>({...ff,[uid]:{...(ff[uid]||{}),[fid]:on}}));
   const [busyReq,setBusyReq]=useState("");
   const decide=async(email,approve,clientId)=>{
@@ -836,13 +844,13 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
     if(res.users)setUsers(res.users);
     if(res.requests&&setSignupRequests)setSignupRequests(res.requests);
   };
-  const [f,setF]=useState({name:"",email:"",role:"customer",clientId:clients[0]?clients[0].id:"",password:""});
+  const [f,setF]=useState({name:"",email:"",role:"customer",clientId:clients[0]?clients[0].id:"",password:"",full:true,perms:ADMIN_SECTIONS.map(x=>x[0])});
   const [added,setAdded]=useState(false);
-  const create=()=>{if(!f.name||!f.email||!f.password)return;setUsers(p=>[...p,{id:"u"+Date.now(),name:f.name,email:f.email,role:f.role,clientId:f.role==="customer"?f.clientId:null,status:"active",password:f.password,lastLogin:"—"}]);setF({name:"",email:"",role:"customer",clientId:clients[0]?clients[0].id:"",password:""});setAdded(true);setTimeout(()=>setAdded(false),1600);};
+  const create=()=>{if(!f.name||!f.email||!f.password)return;const adminPerms=(f.role==="admin"&&!f.full)?{sections:f.perms}:null;setUsers(p=>[...p,{id:"u"+Date.now(),name:f.name,email:f.email,role:f.role,clientId:f.role==="customer"?f.clientId:null,adminPerms,status:"active",password:f.password,lastLogin:"—"}]);setF({name:"",email:"",role:"customer",clientId:clients[0]?clients[0].id:"",password:"",full:true,perms:ADMIN_SECTIONS.map(x=>x[0])});setAdded(true);setTimeout(()=>setAdded(false),1600);};
   const toggle=(id)=>setUsers(us=>us.map(u=>u.id===id?{...u,status:u.status==="active"?"inactive":"active"}:u));
   const del=(id)=>setUsers(us=>us.filter(u=>u.id!==id));
   return (<div className="space-y-3">
-    <div className="text-sm text-stone-500">Create and manage logins. Admins see everything; customer logins are scoped to one customer account.</div>
+    <div className="text-sm text-stone-500">Create and manage logins. Customer logins are scoped to one customer account. Admin logins run the whole portal — use the <b>access</b> button to limit which Admin sections another admin can open.</div>
     {CLOUD.mode==="cloud"&&fedexRequests.length>0&&<div className="border border-emerald-200 bg-emerald-50/50 rounded-lg p-4 space-y-2">
       <div className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Truck className="w-4 h-4 text-emerald-600"/>FedEx account requests<Badge tone="green">{fedexRequests.length}</Badge></div>
       {fedexRequests.map(r=>(<div key={r.id||r.uid} className="flex flex-wrap items-center gap-3 bg-white border border-stone-200 rounded px-3 py-2 text-sm">
@@ -869,9 +877,17 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
         <Field label="Name"><Input value={f.name} onChange={e=>setF({...f,name:e.target.value})}/></Field>
         <Field label="Email"><Input value={f.email} onChange={e=>setF({...f,email:e.target.value})}/></Field>
         <Field label="Temp password"><Input value={f.password} onChange={e=>setF({...f,password:e.target.value})}/></Field>
-        <Field label="Role"><Select value={f.role} onChange={e=>setF({...f,role:e.target.value})}><option value="customer">Customer</option><option value="admin">Admin</option></Select></Field>
+        <Field label="Role"><Select value={f.role} onChange={e=>setF({...f,role:e.target.value})}><option value="customer">Customer</option>{fullAdmin&&<option value="admin">Admin</option>}</Select></Field>
         {f.role==="customer"&&<Field label="Customer account"><Select value={f.clientId} onChange={e=>setF({...f,clientId:e.target.value})}>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>}
       </div>
+      {f.role==="admin"&&<div className="border border-stone-200 rounded-lg bg-stone-50 p-3 space-y-2">
+        <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={f.full} onChange={e=>setF({...f,full:e.target.checked})} className="accent-[#0086E0]"/><span className="font-medium text-stone-700">Full access — every Admin section</span></label>
+        {!f.full&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5">
+          {ADMIN_SECTIONS.map(([id,label])=>{const on=f.perms.includes(id);return (
+            <label key={id} className="flex items-center gap-2 text-sm cursor-pointer py-0.5"><input type="checkbox" checked={on} onChange={e=>setF({...f,perms:e.target.checked?[...f.perms,id]:f.perms.filter(x=>x!==id)})} className="accent-[#0086E0]"/><span className="text-stone-700">{label}</span></label>);})}
+        </div>}
+        <p className="text-[11px] text-stone-400">Limits which Admin portal sections this login can open. They still get every regular tab (Ship, Orders, Settings…) like any admin.</p>
+      </div>}
       <button onClick={create} className={`text-sm rounded px-4 py-2 font-medium flex items-center gap-1.5 ${added?"bg-emerald-600 text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{added?<><Check className="w-4 h-4"/>Created</>:<><Plus className="w-4 h-4"/>Create login</>}</button>
     </div>
     <div className="border border-stone-200 rounded-lg bg-white overflow-hidden divide-y divide-stone-100">
@@ -883,11 +899,12 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
           <div className="w-32 hidden sm:block text-xs text-stone-500 truncate">{u.role==="admin"?"— all —":(clients.find(c=>c.id===u.clientId)||{}).name||"—"}</div>
           <div className="w-20 text-xs text-stone-400">{u.lastLogin||"—"}</div>
           <div className="w-44 flex items-center justify-end gap-1.5">
+            {u.role==="admin"&&u.id!=="u1"&&u.id!==currentUser.id&&fullAdmin&&<button onClick={()=>setAccessOpen(accessOpen===u.id?null:u.id)} title="Which Admin sections this login can open" className={`text-[11px] rounded px-2 py-1 ${accessOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>access</button>}
             {u.role!=="admin"&&<button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }} title="Open the app exactly as this person sees it" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">view as</button>}
             {u.role!=="admin"&&<button onClick={()=>setFeatOpen(featOpen===u.id?null:u.id)} title="Features for this login" className={`text-[11px] rounded px-2 py-1 ${featOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>features</button>}
-            {CLOUD.mode==="cloud"&&<button onClick={async()=>{const np=window.prompt("New password for "+u.email+" (min 4 characters):");if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});window.alert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}} title="Reset password" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">pw</button>}
+            {CLOUD.mode==="cloud"&&(u.role!=="admin"||fullAdmin)&&<button onClick={async()=>{const np=window.prompt("New password for "+u.email+" (min 4 characters):");if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});window.alert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}} title="Reset password" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">pw</button>}
             <button onClick={()=>toggle(u.id)} title={u.status==="active"?"Deactivate":"Activate"} className={`text-[11px] rounded px-2 py-1 ${u.status==="active"?"bg-emerald-50 text-emerald-700":"bg-stone-100 text-stone-500"}`}>{u.status==="active"?"active":"off"}</button>
-            {u.id!==currentUser.id&&<button onClick={()=>del(u.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
+            {u.id!==currentUser.id&&(u.role!=="admin"||(fullAdmin&&u.id!=="u1"))&&<button onClick={()=>del(u.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
           </div>
           {featOpen===u.id&&u.role!=="admin"&&<div className="w-full mt-2 border-t border-stone-100 pt-3">
             <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Features for {u.name||u.email} — flip anything on or off for this login only</div>
@@ -899,6 +916,15 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
                 </label>);})}
             </div>
             <p className="text-[11px] text-stone-400 mt-2">Changes apply the next time this person loads the app. Custom features we build for one customer appear in this list too — enabling them for someone else is one checkbox.</p>
+          </div>}
+          {accessOpen===u.id&&u.role==="admin"&&<div className="w-full mt-2 border-t border-stone-100 pt-3">
+            <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Admin access for {u.name||u.email}</div>
+            <label className="flex items-center gap-2 text-sm cursor-pointer mb-2"><input type="checkbox" checked={!(u.adminPerms&&u.adminPerms.sections)} onChange={e=>setUsers(us=>us.map(x=>x.id===u.id?{...x,adminPerms:e.target.checked?null:{sections:ADMIN_SECTIONS.map(z=>z[0])}}:x))} className="accent-[#0086E0]"/><span className="font-medium text-stone-700">Full access — every Admin section</span></label>
+            {u.adminPerms&&u.adminPerms.sections&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5">
+              {ADMIN_SECTIONS.map(([aid,label])=>{const on=u.adminPerms.sections.includes(aid);return (
+                <label key={aid} className="flex items-center gap-2 text-sm cursor-pointer py-0.5"><input type="checkbox" checked={on} onChange={e=>setUsers(us=>us.map(x=>x.id===u.id?{...x,adminPerms:{sections:e.target.checked?[...x.adminPerms.sections,aid]:x.adminPerms.sections.filter(z=>z!==aid)}}:x))} className="accent-[#0086E0]"/><span className="text-stone-700">{label}</span></label>);})}
+            </div>}
+            <p className="text-[11px] text-stone-400 mt-2">Applies the next time they load the app. Section limits control what the Admin portal shows — every admin login still has full data access underneath, so only make admins of people you trust.</p>
           </div>}
         </div>
       ))}
@@ -916,7 +942,7 @@ const lsDel=(k)=>{ if(!LS_OK)return; try{window.localStorage.removeItem("sc_"+k)
 // Which login is active. Every non-global key is stored under this account so each login keeps its OWN settings/data.
 const activeUid=()=>{ try{const s=lsGet("session",null); const id=s&&(s.id||s.email); return id?String(id):"guest"; }catch(e){return "guest";} };
 // Shared across all logins (never namespaced): the accounts list + who is signed in.
-const GLOBAL_KEYS={session:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1,customFeatures:1,fedexRequests:1};
+const GLOBAL_KEYS={session:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1,customFeatures:1,fedexRequests:1,publicBrand:1};
 // Scratch = the in-progress shipment. Per-login, but starts blank on each login (never migrated/inherited).
 const isScratch=(key)=>String(key).indexOf("ship.")===0;
 // Scratch keys wiped on login so the receiver + package dims are always blank for a fresh session.
@@ -1101,6 +1127,8 @@ function Landing({onAuth}){
     else window.scrollTo({top:0});
   };
   useEffect(()=>{const onHash=()=>setPageState(pageFromHash());window.addEventListener("hashchange",onHash);return ()=>window.removeEventListener("hashchange",onHash);},[]);
+  const [pub,setPub]=useState(null);
+  useEffect(()=>{let on=true;(async()=>{try{const r=await cloudCall({action:"publicConfig"});if(on&&r&&r.ok)setPub(r);}catch{}})();return ()=>{on=false;};},[]);
   const NavTab=({label,onClick})=>(<button onClick={onClick} className="text-sm text-stone-300 hover:text-white px-2.5 py-2">{label}</button>);
   const F=({icon:I,title,children})=>(<div className="bg-white/[0.04] border border-white/10 rounded-2xl p-6 hover:bg-white/[0.07] transition-colors">
     <div className="w-10 h-10 rounded-xl bg-[#0086E0]/15 border border-[#0086E0]/30 flex items-center justify-center mb-4"><I className="w-5 h-5 text-[#38b6ff]"/></div>
@@ -1113,6 +1141,7 @@ function Landing({onAuth}){
       <button onClick={()=>setPage("home")} className="text-left">
         <div className="flex items-center gap-3 text-white font-bold text-4xl"><Cloud className="w-11 h-11 text-[#38b6ff]"/><span>Shipping<span className="text-[#38b6ff]">Cloud</span></span></div>
         <div className="text-[15px] text-stone-400 tracking-wide mt-1 ml-[56px]">Sky’s the limit.</div>
+        {pub&&pub.showLogo&&<div className="flex items-center gap-1.5 text-[11px] text-stone-500 mt-1 ml-[56px]">by <img src={FW_LOGO} alt="Freightwire" className="h-3.5 w-auto object-contain"/></div>}
       </button>
       <div className="flex flex-wrap items-center gap-1.5">
         <NavTab label="Features" onClick={()=>setPage("home","features")}/>
@@ -1323,6 +1352,7 @@ function AppInner(){
   const [signupRequests,setSignupRequests]=usePersist("signupRequests",[]);
   const [featureFlags,setFeatureFlags]=usePersist("featureFlags",{});
   const [fedexRequests,setFedexRequests]=usePersist("fedexRequests",[]);
+  const [publicBrand,setPublicBrand]=usePersist("publicBrand",{showLogo:false});
   const [customFeatures,setCustomFeatures]=usePersist("customFeatures",[]);
   const [myFeatures]=usePersist("myFeatures",{});
   const [tab,setTab]=useState("ship");
@@ -1479,7 +1509,7 @@ function AppInner(){
   };
 
   const isAdmin=currentUser&&currentUser.role==="admin";
-  const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["ledger","Ledger",Wallet],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["admin","Admin",ShieldCheck],["settings","Settings",Cog]];
+  const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
   const myFlags=isAdmin?{}:((featureFlags&&featureFlags[currentUser&&currentUser.id])||(CLOUD.mode==="cloud"?myFeatures:{}));
   const TABS=isAdmin?ALL_TABS:ALL_TABS.filter(t=>t[0]!=="admin"&&(t[0]==="ship"||featureOn(t[0],currentUser,myFlags)));
   const unfulfilled=orders.filter(o=>o.status==="unfulfilled").length;
@@ -1519,9 +1549,12 @@ function AppInner(){
           <div className="flex items-center justify-between px-4 h-14 border-b border-stone-200"><span className="font-extrabold tracking-tight" style={{color:brand.dark}}>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></span><button onClick={()=>setNavOpen(false)} className="p-1.5 rounded hover:bg-stone-100"><X className="w-5 h-5 text-stone-500"/></button></div>
           <nav className="p-2 space-y-0.5">
             {TABS.map(([id,l,Icon])=>(
-              <button key={id} onClick={()=>{setTab(id);setNavOpen(false);}} className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm ${tab===id?"bg-[#E6F4FF] text-[#006FBF] font-medium":"text-stone-600 hover:bg-stone-100"}`}>
+              <React.Fragment key={id}>
+              {id==="admin"&&<div className="mt-3 mb-2 border-t border-stone-200"/>}
+              <button onClick={()=>{setTab(id);setNavOpen(false);}} className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm ${tab===id?"bg-[#E6F4FF] text-[#006FBF] font-medium":"text-stone-600 hover:bg-stone-100"}`}>
                 <Icon className="w-4 h-4 shrink-0"/><span className="flex-1 text-left">{l}</span>{id==="orders"&&unfulfilled>0&&<span className="text-[10px] bg-[#0086E0] text-white rounded-full px-1.5 py-0.5 leading-none">{unfulfilled}</span>}
               </button>
+              </React.Fragment>
             ))}
           </nav>
         </aside>
@@ -1530,9 +1563,12 @@ function AppInner(){
         <aside className="hidden md:block w-52 shrink-0 border-r border-stone-200 bg-white min-h-screen">
           <nav className="p-2 space-y-0.5 sticky top-14">
             {TABS.map(([id,l,Icon])=>(
-              <button key={id} onClick={()=>setTab(id)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm ${tab===id?"bg-[#E6F4FF] text-[#006FBF] font-medium":"text-stone-600 hover:bg-stone-100"}`}>
+              <React.Fragment key={id}>
+              {id==="admin"&&<div className="mt-3 mb-2 border-t border-stone-200"/>}
+              <button onClick={()=>setTab(id)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm ${tab===id?"bg-[#E6F4FF] text-[#006FBF] font-medium":"text-stone-600 hover:bg-stone-100"}`}>
                 <Icon className="w-4 h-4 shrink-0"/><span className="flex-1 text-left">{l}</span>{id==="orders"&&unfulfilled>0&&<span className="text-[10px] bg-[#0086E0] text-white rounded-full px-1.5 py-0.5 leading-none">{unfulfilled}</span>}
               </button>
+              </React.Fragment>
             ))}
           </nav>
         </aside>
@@ -1548,10 +1584,9 @@ function AppInner(){
           {tab==="pickups"&&<Pickups pickups={pickups} setPickups={setPickups} settings={settings}/>}
           {tab==="invoices"&&<Invoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>}
           {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings}/>}
-          {tab==="ledger"&&<Ledger ledger={ledger} addLedger={addLedger}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
-          {tab==="admin"&&isAdmin&&<AdminPortal clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests}/>}
-          {tab==="settings"&&<Settings settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client}/>}
+          {tab==="admin"&&isAdmin&&<AdminPortal clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} publicBrand={publicBrand} setPublicBrand={setPublicBrand}/>}
+          {tab==="settings"&&<Settings settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
         </main>
       </div>
     </div>
@@ -3330,14 +3365,14 @@ function CheckoutRates({settings,setSettings,client}){
 }
 
 /* ════════ SETTINGS ════════ */
-function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client}){
+function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger}){
   const [sec,setSec]=useState("carriers");
-  const secs=[["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package sizes",Boxes],["boxlogic","Box logic",Package],["reference","Reference fields",Receipt],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["integrations","Integrations",Layers],["subscription","Subscription",Star],["company","Company",Building2]];
+  const secs=[["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package sizes",Boxes],["boxlogic","Box logic",Package],["reference","Reference fields",Receipt],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["ledger","Ledger",Wallet],["integrations","Integrations",Layers],["subscription","Subscription",Star],["company","Company",Building2]];
   return (
     <div className="flex flex-col md:flex-row gap-6">
       <aside className="md:w-56 shrink-0 space-y-1">{secs.map(([id,l,Icon])=><button key={id} onClick={()=>setSec(id)} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}</button>)}</aside>
       <div className="flex-1 min-w-0">
-        {sec==="carriers"&&<CarrierAccounts accounts={accounts} setAccounts={setAccounts} settings={settings} setSettings={setSettings} clients={clients}/>}
+        {sec==="carriers"&&<CarrierAccounts accounts={accounts} setAccounts={setAccounts} settings={settings} setSettings={setSettings} clients={clients} byoCarrier={byoCarrier}/>}
         {sec==="warehouses"&&<Warehouses settings={settings} setSettings={setSettings}/>}
         {sec==="boxes"&&<BoxesSettings settings={settings} setSettings={setSettings}/>}
         {sec==="boxlogic"&&<BoxLogic settings={settings} setSettings={setSettings}/>}
@@ -3349,6 +3384,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="notifications"&&<Notifications settings={settings} setSettings={setSettings} emails={emails}/>}
         {sec==="clients"&&<Clients clients={clients} setClients={setClients}/>}
         {sec==="billing"&&<Billing settings={settings} setSettings={setSettings}/>}
+        {sec==="ledger"&&<Ledger ledger={ledger} addLedger={addLedger}/>}
         {sec==="integrations"&&<Integrations settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders}/>}
         {sec==="subscription"&&<Subscription settings={settings} setSettings={setSettings}/>}
         {sec==="company"&&<Company settings={settings} setSettings={setSettings}/>}
@@ -4231,7 +4267,7 @@ function Company({settings,setSettings}){
 
 /* ════════ CARRIER ACCOUNTS (platform + own) ════════ */
 const PROVIDERS=[{id:"england",name:"England Logistics API"},{id:"fedex",name:"FedEx · direct"},{id:"ups",name:"UPS · direct"}];
-function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients}){
+function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoCarrier=false}){
   const [adding,setAdding]=useState(false);
   const [d,setD]=useState({label:"",provider:"england",account:"",apiKey:"",secret:"",customerId:""});
   const plat=settings.platforms||PLATFORM_DEFAULTS;
@@ -4328,6 +4364,7 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients}){
         <p className="text-[11px] text-stone-400">For production, store the API key as a Netlify env var (<span className="font-mono">ENGLAND_API_KEY</span>, <span className="font-mono">ENGLAND_CUSTOMER_ID</span>) instead of here, so it never ships to the browser. England authenticates with the API key + customer ID; if you only have the FedEx account number, try it as the customer ID or confirm the key with your England rep.</p>
       </div>
     </div>
+    {byoCarrier&&<>
     <div>
       <h3 className="text-sm font-semibold text-stone-700 mb-1 flex items-center gap-2"><Truck className="w-4 h-4 text-[#351C15]"/>UPS — connect your own account</h3>
       <p className="text-sm text-stone-500 mb-3">Connect a real UPS account for live UPS rates on your own negotiated pricing. Create a UPS developer app at <span className="font-mono">developer.ups.com</span> (add the Rating + OAuth products) to get a Client ID and Client Secret, then paste them with your 6-character UPS account number.</p>
@@ -4367,6 +4404,7 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients}){
         <button onClick={()=>setAccounts(x=>x.filter(y=>y.id!==a.id))} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>
       </div>))}</div>
     </div>
+    </>}
   </div>);
 }
 

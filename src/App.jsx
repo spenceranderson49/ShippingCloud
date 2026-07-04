@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v133";
+const BUILD_TAG="addr-v134";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1551,22 +1551,22 @@ function Landing({onAuth}){
     <style>{`@keyframes fwRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}@keyframes fwDrift{0%,100%{transform:translate(-50%,0)}50%{transform:translate(calc(-50% + 18px),-12px)}}`}</style>
     <div className="absolute inset-0 pointer-events-none" style={{background:"repeating-linear-gradient(-35deg,transparent 0 70px,rgba(30,155,240,.05) 70px 72px)"}}/>
     <div className="absolute pointer-events-none" style={{width:640,height:640,borderRadius:"50%",top:-180,left:"50%",background:"radial-gradient(circle,rgba(30,155,240,.14),transparent 65%)",animation:"fwDrift 12s ease-in-out infinite"}}/>
-    <div className="relative flex flex-col items-center gap-4 mb-3" style={{animation:"fwRise .6s ease both"}}>
+    <div className="relative flex flex-col items-center gap-1.5 mb-2" style={{animation:"fwRise .6s ease both"}}>
       <img src={FW_LOGO} alt="Freightwire" style={{height:76,filter:"drop-shadow(0 6px 18px rgba(30,155,240,.22))"}} className="w-auto" draggable={false}/>
       <div className="text-[27px] text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></div>
     </div>
     <div className="relative text-[15px] font-medium text-stone-600 mb-6" style={{animation:"fwRise .6s .08s ease both"}}>Your shipping platform <span className="text-stone-900">&</span> partner</div>
-    <div className="relative w-full flex justify-center" style={{animation:"fwRise .6s .14s ease both"}}>
+    <div className="relative w-full flex justify-center py-4" style={{animation:"fwRise .6s .14s ease both",transform:"scale(1.2)",transformOrigin:"top center"}}>
       <CloudAuth onDone={()=>window.location.reload()} initialMode="login"/>
     </div>
-    <div className="relative mt-8 w-full max-w-3xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" style={{animation:"fwRise .6s .22s ease both"}}>
+    <div className="relative mt-16 w-full max-w-3xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" style={{animation:"fwRise .6s .22s ease both",transform:"scale(0.85)",transformOrigin:"top center"}}>
       {[[Zap,"Autopilot & batch","Rules + one-click batch printing"],[Boxes,"Smart box logic","Packs every order automatically"],[ShoppingBag,"Cart sync","Shopify & other shopping carts"],[Receipt,"Invoice auditing","Catches overcharges & mistakes"],[Sparkles,"Powered by Claude","An AI assistant does the busywork"],[Cog,"Made yours","Customizable to how you ship"],[FileText,"All the paperwork","Slips, pick lists, commercial invoices"],[DollarSign,"Best rates","Industry-best shipping rates"]].map(([Ic,h,sub],i)=>
         <div key={i} className="rounded-xl border p-3.5 flex flex-col gap-2.5 transition-all hover:-translate-y-0.5" style={{background:"rgba(255,255,255,.75)",borderColor:"#ece8e1"}}>
           <div className="w-[34px] h-[34px] rounded-[9px] flex items-center justify-center" style={{background:"linear-gradient(135deg,#37aef7,#1E9BF0)",boxShadow:"0 5px 12px -5px rgba(30,155,240,.6)"}}><Ic className="w-[18px] h-[18px] text-white"/></div>
           <div><div className="text-[13px] font-bold text-stone-800">{h}</div><div className="text-[11.5px] text-stone-500 leading-snug mt-0.5">{sub}</div></div>
         </div>)}
     </div>
-    <div className="relative mt-8 text-[11px] text-stone-400 flex items-center gap-2" style={{animation:"fwRise .6s .3s ease both"}}>© {new Date().getFullYear()} Freightwire · <LegalLinks/></div>
+    <div className="relative mt-2 text-[11px] text-stone-400 flex items-center gap-2" style={{animation:"fwRise .6s .3s ease both"}}>© {new Date().getFullYear()} Freightwire · <LegalLinks/></div>
   </div>);
   return (<div className="min-h-screen bg-neutral-950 text-stone-300">
     {/* nav */}
@@ -2254,10 +2254,11 @@ function AppInner(){
       {!isDemo&&!isAdmin&&!adminReturn&&CLOUD.mode==="cloud"&&!fedexPrompt.seen&&<FirstRunFedEx user={currentUser} onClose={()=>setFedexPrompt({seen:true})}/>}
       <AssistantChat who={isDemo?"demo":isAdmin?"admin":"customer"} getContext={assistantContext} onAction={onAssistantAction}/>
       <header className={"border-b border-stone-200 sticky z-30 bg-white/90 backdrop-blur "+((adminReturn||isDemo)?"top-9":"top-0")}>
-        <div className="px-3 sm:px-4 h-14 flex items-center gap-2 sm:gap-3">
+        <div className="px-3 sm:px-4 h-14 flex items-center gap-2 sm:gap-3 relative">
           <button onClick={()=>setNavOpen(true)} className="md:hidden p-2 -ml-1 rounded-lg hover:bg-stone-100 text-stone-600" aria-label="Menu"><Layers className="w-5 h-5"/></button>
-          <BrandCloud className="h-10 sm:h-11 w-auto" color={brand.primary}/>
-          <button onClick={()=>setTab("ship")} title="Back to Ship" className="font-extrabold tracking-tight text-[20px] sm:text-[26px] cursor-pointer flex items-center gap-2" style={{color:brand.dark}}>{BRAND.fw?<><img src={FW_LOGO} alt="Freightwire" className="h-7 w-auto" draggable={false}/><span className="text-[15px] font-semibold text-stone-500 hidden sm:inline">Ship</span></>:<>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></>}</button>
+          {!BRAND.fw&&<BrandCloud className="h-10 sm:h-11 w-auto" color={brand.primary}/>}
+          {BRAND.fw&&<div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2.5 pointer-events-none select-none"><img src={FW_LOGO} alt="Freightwire" className="h-8 w-auto" draggable={false}/><span className="hidden md:inline text-[19px] text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></span></div>}
+          <button onClick={()=>setTab("ship")} title="Back to Ship" className="font-extrabold tracking-tight text-[20px] sm:text-[26px] cursor-pointer flex items-center gap-2" style={{color:brand.dark}}>{BRAND.fw?(settings.brand&&settings.brand.name1?<>{settings.brand.name1}<span style={{color:(settings.brand.primary)||brand.primary}}>{settings.brand.name2||""}</span></>:<span className="text-[12px] font-medium text-stone-300 border border-dashed border-stone-300 rounded px-2.5 py-1">Your logo here</span>):<>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></>}</button>
           {brand.showLogo&&brand.logo&&<span className="hidden sm:flex items-center gap-1.5 text-stone-400 text-xs"><span className="w-px h-5 bg-stone-200"/>{brand.partnerLabel}<img src={brand.logo} alt="partner" className="h-3 w-auto object-contain"/></span>}
           <div className="flex-1"/>
           <div className="flex items-center gap-2 sm:gap-3">
@@ -2272,7 +2273,7 @@ function AppInner(){
       {navOpen&&<div className="md:hidden fixed inset-0 z-40 flex" role="dialog">
         <div className="absolute inset-0 bg-stone-900/40" onClick={()=>setNavOpen(false)}/>
         <aside className="relative w-64 bg-white h-full shadow-xl overflow-y-auto">
-          <div className="flex items-center justify-between px-4 h-14 border-b border-stone-200"><button onClick={()=>{setTab("ship");setNavOpen(false);}} title="Back to Ship" className="font-extrabold tracking-tight flex items-center gap-2" style={{color:brand.dark}}>{BRAND.fw?<img src={FW_LOGO} alt="Freightwire" className="h-6 w-auto" draggable={false}/>:<>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></>}</button><button onClick={()=>setNavOpen(false)} className="p-1.5 rounded hover:bg-stone-100"><X className="w-5 h-5 text-stone-500"/></button></div>
+          <div className="flex items-center justify-between px-4 h-14 border-b border-stone-200"><button onClick={()=>{setTab("ship");setNavOpen(false);}} title="Back to Ship" className="font-extrabold tracking-tight flex items-center gap-2" style={{color:brand.dark}}>{BRAND.fw?<><img src={FW_LOGO} alt="Freightwire" className="h-6 w-auto" draggable={false}/></>:<>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></>}</button><button onClick={()=>setNavOpen(false)} className="p-1.5 rounded hover:bg-stone-100"><X className="w-5 h-5 text-stone-500"/></button></div>
           <nav className="p-2 space-y-0.5">
             {TABS.map(([id,l,Icon])=>(
               <React.Fragment key={id}>

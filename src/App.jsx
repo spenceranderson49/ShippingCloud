@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v115";
+const BUILD_TAG="addr-v116";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -348,18 +348,69 @@ const SEED_BOXES=[
   {id:"bx6",name:"XL box",L:20,W:16,H:12,maxWt:50,empty:1.2},
 ];
 const boxVol=b=>b.L*b.W*b.H;
-/* cartonization: pick the smallest box that fits item volume (+packing slack) and weight */
-function pickBox(items,boxes,slack=1.30){
-  const totalVol=items.reduce((a,it)=>a+(it.l*it.w*it.h)*(it.qty||1),0);
-  const totalWt=items.reduce((a,it)=>a+(it.wt||0)*(it.qty||1),0);
-  const need=totalVol*slack;
-  const sorted=[...boxes].sort((a,b)=>boxVol(a)-boxVol(b));
-  const fit=sorted.find(b=>boxVol(b)>=need&&b.maxWt>=totalWt);
-  if(fit)return {box:fit,count:1,itemWt:totalWt,billWt:Math.round((totalWt+fit.empty)*10)/10,reason:"single box"};
-  const big=sorted[sorted.length-1];
-  const count=Math.max(1,Math.ceil(Math.max(need/boxVol(big),totalWt/big.maxWt)));
-  return {box:big,count,itemWt:totalWt,billWt:Math.round((totalWt+big.empty*count)*10)/10,reason:`split into ${count} boxes`};
+const sortDesc3=(a,b,c)=>[+a||0,+b||0,+c||0].sort((x,y)=>y-x);
+/* Will a single item physically fit inside a box in ANY of the 6 orientations?
+   Compare sorted dimensions: item's longest <= box's longest, etc. */
+function itemFitsBox(it,box,pad){
+  const [il,iw,ih]=sortDesc3(it.l,it.w,it.h);
+  const [bl,bw,bh]=sortDesc3(box.L,box.W,box.H);
+  return il<=(bl-pad)&&iw<=(bw-pad)&&ih<=(bh-pad);
 }
+/* Real cartonization ("box logic" like Boxify): pick the smallest box whose
+   inner dims clear the single largest item, whose volume holds all items with
+   packing slack, and whose weight limit isn't exceeded. Falls back to splitting.
+   `items` are expanded per-unit rows: {l,w,h,wt,qty,name}. */
+function pickBox(items,boxes,slack=1.30,padding=0){
+  const list=(boxes&&boxes.length)?boxes:SEED_BOXES;
+  const pad=+padding||0;
+  const totalVol=items.reduce((a,it)=>a+((+it.l||0)*(+it.w||0)*(+it.h||0))*(it.qty||1),0);
+  const totalWt=items.reduce((a,it)=>a+(+it.wt||0)*(it.qty||1),0);
+  const need=totalVol*slack;
+  // biggest single item must physically fit the box in some orientation
+  const dimsKnown=items.some(it=>(+it.l>0&&+it.w>0&&+it.h>0));
+  const sorted=[...list].sort((a,b)=>boxVol(a)-boxVol(b));
+  const fits=(box)=>{
+    if(boxVol(box)<need)return false;
+    if(box.maxWt&&box.maxWt<totalWt)return false;
+    if(dimsKnown){ for(const it of items){ if((+it.l>0)&&!itemFitsBox(it,box,pad))return false; } }
+    return true;
+  };
+  const fit=sorted.find(fits);
+  if(fit)return {box:fit,count:1,itemWt:Math.round(totalWt*100)/100,billWt:Math.round((totalWt+(fit.empty||0))*10)/10,dimsKnown,reason:dimsKnown?"fits smallest qualifying box":"fits by volume + weight"};
+  // nothing single-fits → split into copies of the largest box
+  const big=sorted[sorted.length-1]||SEED_BOXES[SEED_BOXES.length-1];
+  const count=Math.max(1,Math.ceil(Math.max(need/boxVol(big),big.maxWt?totalWt/big.maxWt:1)));
+  return {box:big,count,itemWt:Math.round(totalWt*100)/100,billWt:Math.round((totalWt+(big.empty||0)*count)*10)/10,dimsKnown,reason:`too big for one box — split into ${count}`};
+}
+/* Turn an order into per-unit item rows by matching its SKUs/names against the product catalog.
+   Order.lineItems [{sku,name,qty}] is preferred; falls back to parsing order.items text. */
+function orderItemRows(order,catalog){
+  const cat=catalog||[];
+  const bySku={},byName={};
+  cat.forEach(pr=>{ if(pr.sku)bySku[String(pr.sku).toLowerCase()]=pr; if(pr.name)byName[String(pr.name).toLowerCase()]=pr; });
+  const rows=[];
+  const push=(pr,qty,label)=>{ if(pr)rows.push({l:+pr.l||0,w:+pr.w||0,h:+pr.h||0,wt:+pr.wt||0,qty:qty||1,name:pr.name||label,sku:pr.sku||"",matched:true});
+    else rows.push({l:0,w:0,h:0,wt:0,qty:qty||1,name:label,sku:"",matched:false}); };
+  if(Array.isArray(order.lineItems)&&order.lineItems.length){
+    order.lineItems.forEach(li=>{ const pr=(li.sku&&bySku[String(li.sku).toLowerCase()])||(li.name&&byName[String(li.name).toLowerCase()]); push(pr,+li.qty||1,li.name||li.sku||"item"); });
+    return rows;
+  }
+  // parse "Camp Mug x 2, Trail Blanket" style text
+  String(order.items||order.product||"").split(/,|;/).map(x=>x.trim()).filter(Boolean).forEach(chunk=>{
+    const m=chunk.match(/(.*?)(?:\s*[x×]\s*(\d+))?$/i);
+    const nm=(m&&m[1]||chunk).trim(); const qty=(m&&+m[2])||1;
+    const pr=byName[nm.toLowerCase()]||bySku[nm.toLowerCase()]||cat.find(p=>nm&&String(p.name||"").toLowerCase().includes(nm.toLowerCase()));
+    if(nm)push(pr,qty,nm);
+  });
+  return rows;
+}
+const SEED_PRODUCTS=[
+  {id:"pr1",sku:"MUG-01",name:"Camp Mug",l:5,w:4,h:4,wt:0.9,value:18,origin:"US",hs:""},
+  {id:"pr2",sku:"BLK-01",name:"Trail Blanket",l:12,w:10,h:3,wt:2.4,value:60,origin:"US",hs:""},
+  {id:"pr3",sku:"HD-09",name:"Summit Hoodie",l:12,w:9,h:2,wt:1.6,value:74,origin:"US",hs:""},
+  {id:"pr4",sku:"BTL-02",name:"Insulated Bottle",l:4,w:4,h:11,wt:1.1,value:32,origin:"US",hs:""},
+  {id:"pr5",sku:"TNT-04",name:"2-Person Tent",l:24,w:8,h:8,wt:6.2,value:210,origin:"CN",hs:""},
+];
 /* FedEx One Rate packaging (flat-rate by box size; volume in cubic inches, weight in lb) */
 const FEDEX_ONERATE=[
   {code:"fedex_envelope",fedexCode:"FEDEX_ENVELOPE",name:"FedEx One Rate® Envelope",maxVol:300,maxLbs:10,kind:"flat"},
@@ -1060,7 +1111,7 @@ function makeDemoData(){
     {id:"e6205",date:new Date(Date.now()-50*3600e3).toLocaleString(),status:"sent",to:"james.porter@example.com",subject:"Your Summit Goods order #1149 has shipped",type:"Shipment notification"}
   ];
 
-  const settings={company:"Summit Goods Co.",sender,defaultBillTo:"sender",thirdPartyAccts:[],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,checkout:CHECKOUT_DEFAULTS,platforms:{ups:false,usps:false,amazon:false,uniuni:false},plan:"pro",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:""},addresses,warehouses:[{name:"Main Warehouse",company:"Summit Goods Co.",address:"215 S State St",city:"Salt Lake City",state:"UT",zip:"84101",phone:"801-555-0142"},{name:"East Fulfillment",company:"Summit Goods Co.",address:"77 Commerce Pkwy",city:"Columbus",state:"OH",zip:"43215",phone:"614-555-0188"}],autoRunRules:true,brand:DEFAULT_BRAND,domains:[]};
+  const settings={company:"Summit Goods Co.",sender,defaultBillTo:"sender",thirdPartyAccts:[],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,products:SEED_PRODUCTS,checkout:CHECKOUT_DEFAULTS,platforms:{ups:false,usps:false,amazon:false,uniuni:false},plan:"pro",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:""},addresses,warehouses:[{name:"Main Warehouse",company:"Summit Goods Co.",address:"215 S State St",city:"Salt Lake City",state:"UT",zip:"84101",phone:"801-555-0142"},{name:"East Fulfillment",company:"Summit Goods Co.",address:"77 Commerce Pkwy",city:"Columbus",state:"OH",zip:"43215",phone:"614-555-0188"}],autoRunRules:true,brand:DEFAULT_BRAND,domains:[]};
   return {settings,orders,shipments,returns,drafts,ledger,pickups,emails};
 }
 function enterDemo(){
@@ -1704,7 +1755,7 @@ function AppInner(){
   const [qq,setQQ]=useState(false);
   const [navOpen,setNavOpen]=useState(false);
   const [prefill,setPrefill]=useState(null);
-  const [settings,setSettings]=usePersist("settings",{company:"Freightwire",sender:{name:"Matt Goeckeritz",company:"Riley Blake Designs",zip:"84003",state:"UT",city:"Lehi",address1:"4060 W 2100 N",phone:"801-816-0540",email:"spencertesttes@test.com"},defaultBillTo:"sender",thirdPartyAccts:[{id:"tp1",carrier:"FedEx",account:"20601652",label:"England FedEx"}],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,checkout:CHECKOUT_DEFAULTS,platforms:PLATFORM_DEFAULTS,plan:"starter",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:"20601652"},addresses:[],warehouses:[{name:"Main Warehouse",company:"Riley Blake Designs",address:"4060 W 2100 N",city:"Lehi",state:"UT",zip:"84003",phone:"801-816-0540"}],autoRunRules:false,brand:DEFAULT_BRAND,domains:[]});
+  const [settings,setSettings]=usePersist("settings",{company:"Freightwire",sender:{name:"Matt Goeckeritz",company:"Riley Blake Designs",zip:"84003",state:"UT",city:"Lehi",address1:"4060 W 2100 N",phone:"801-816-0540",email:"spencertesttes@test.com"},defaultBillTo:"sender",thirdPartyAccts:[{id:"tp1",carrier:"FedEx",account:"20601652",label:"England FedEx"}],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,products:SEED_PRODUCTS,checkout:CHECKOUT_DEFAULTS,platforms:PLATFORM_DEFAULTS,plan:"starter",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:"20601652"},addresses:[],warehouses:[{name:"Main Warehouse",company:"Riley Blake Designs",address:"4060 W 2100 N",city:"Lehi",state:"UT",zip:"84003",phone:"801-816-0540"}],autoRunRules:false,brand:DEFAULT_BRAND,domains:[]});
 
   useEffect(()=>{ if(currentUser&&currentUser.role==="customer"&&currentUser.clientId) setClientId(currentUser.clientId); },[currentUser]);
   // Auto-run rules on newly imported/synced orders (any import path) when the toggle is on.
@@ -4006,13 +4057,14 @@ function CheckoutRates({settings,setSettings,client}){
 /* ════════ SETTINGS ════════ */
 function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger}){
   const [sec,setSec]=useState("carriers");
-  const secs=[["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package sizes",Boxes],["boxlogic","Box logic",Package],["reference","Reference fields",Receipt],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["ledger","Ledger",Wallet],["integrations","Integrations",Layers],["subscription","Subscription",Star],["company","Company",Building2]];
+  const secs=[["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["catalog","Product catalog",Boxes],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["reference","Reference fields",Receipt],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["ledger","Ledger",Wallet],["integrations","Integrations",Layers],["subscription","Subscription",Star],["company","Company",Building2]];
   return (
     <div className="flex flex-col md:flex-row gap-6">
       <aside className="md:w-56 shrink-0 space-y-1">{secs.map(([id,l,Icon])=><button key={id} onClick={()=>setSec(id)} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}</button>)}</aside>
       <div className="flex-1 min-w-0">
         {sec==="carriers"&&<CarrierAccounts accounts={accounts} setAccounts={setAccounts} settings={settings} setSettings={setSettings} clients={clients} byoCarrier={byoCarrier}/>}
         {sec==="warehouses"&&<Warehouses settings={settings} setSettings={setSettings}/>}
+        {sec==="catalog"&&<ProductCatalog settings={settings} setSettings={setSettings}/>}
         {sec==="boxes"&&<BoxesSettings settings={settings} setSettings={setSettings}/>}
         {sec==="boxlogic"&&<BoxLogic settings={settings} setSettings={setSettings}/>}
         {sec==="reference"&&<ReferenceFields settings={settings} setSettings={setSettings}/>}
@@ -4100,6 +4152,148 @@ function Warehouses({settings,setSettings}){
     </div>
   </div>);
 }
+function ProductCatalog({settings,setSettings}){
+  const products=settings.products||SEED_PRODUCTS;
+  const [q,setQ]=useState("");
+  const [editId,setEditId]=useState(null);
+  const [ef,setEf]=useState(null);
+  const [adding,setAdding]=useState(false);
+  const [nf,setNf]=useState({sku:"",name:"",l:"",w:"",h:"",wt:"",value:"",origin:"",hs:""});
+  const [msg,setMsg]=useState(null);
+  const [busy,setBusy]=useState(false);
+  const flash=(m)=>{setMsg(m);setTimeout(()=>setMsg(null),5000);};
+  const write=(list)=>setSettings(st=>({...st,products:list}));
+  const withDims=products.filter(p=>+p.l>0&&+p.w>0&&+p.h>0).length;
+  const filtered=q.trim()?products.filter(p=>[p.sku,p.name].filter(Boolean).some(v=>String(v).toLowerCase().includes(q.trim().toLowerCase()))):products;
+
+  const addProduct=()=>{
+    if(!nf.name&&!nf.sku)return;
+    write([{id:"pr"+Date.now(),sku:nf.sku,name:nf.name||nf.sku,l:+nf.l||0,w:+nf.w||0,h:+nf.h||0,wt:+nf.wt||0,value:+nf.value||0,origin:nf.origin||"",hs:nf.hs||""},...products]);
+    setNf({sku:"",name:"",l:"",w:"",h:"",wt:"",value:"",origin:"",hs:""});setAdding(false);
+    flash({ok:"Product added."});
+  };
+  const saveEdit=()=>{ if(!ef)return; write(products.map(p=>p.id===editId?{...ef,l:+ef.l||0,w:+ef.w||0,h:+ef.h||0,wt:+ef.wt||0,value:+ef.value||0}:p)); setEditId(null);setEf(null); };
+  const del=(id)=>write(products.filter(p=>p.id!==id));
+
+  const importCSV=(e)=>{
+    const file=e.target.files&&e.target.files[0]; if(!file)return;
+    const reader=new FileReader();
+    reader.onload=(ev)=>{
+      try{
+        const rows=parseCSVText(String(ev.target.result||""));
+        if(rows.length<2){flash({err:"That file has no data rows."});return;}
+        const head=rows[0].map(h=>String(h||"").trim().toLowerCase());
+        const col=(names)=>head.findIndex(h=>names.some(n=>h===n||h.includes(n)));
+        const idx={sku:col(["sku","item sku","variant sku"]),name:col(["name","title","product","description"]),l:col(["length","length (in)","l","dim l"]),w:col(["width","width (in)","w","dim w"]),h:col(["height","height (in)","h","dim h"]),wt:col(["weight","weight (lb)","lbs","pounds","wt"]),value:col(["value","price","declared value","unit price"]),origin:col(["origin","country of origin","coo"]),hs:col(["hs","hs code","tariff","harmonized"])};
+        if(idx.name<0&&idx.sku<0){flash({err:"Couldn’t find a Name or SKU column in that CSV."});return;}
+        const g=(c,k)=>idx[k]>=0?(c[idx[k]]||"").trim():"";
+        const parsed=rows.slice(1).map((c,i)=>({id:"pr"+Date.now()+i,sku:g(c,"sku"),name:g(c,"name")||g(c,"sku"),l:+g(c,"l")||0,w:+g(c,"w")||0,h:+g(c,"h")||0,wt:+g(c,"wt")||0,value:+g(c,"value")||0,origin:g(c,"origin"),hs:g(c,"hs")})).filter(p=>p.name||p.sku);
+        // merge by SKU (update existing, add new)
+        const bySku={}; products.forEach(p=>{if(p.sku)bySku[p.sku.toLowerCase()]=p;});
+        let updated=0,added=0; const out=[...products];
+        parsed.forEach(np=>{ const ex=np.sku&&bySku[np.sku.toLowerCase()]; if(ex){ Object.assign(ex,{...np,id:ex.id}); updated++; } else { out.unshift(np); added++; } });
+        write(out);
+        flash({ok:`Imported ${added} new, updated ${updated} by SKU.`});
+      }catch(x){ flash({err:"Couldn’t read that file — make sure it’s a CSV."}); }
+    };
+    reader.readAsText(file); e.target.value="";
+  };
+
+  const pullShopify=async()=>{
+    const conn=(settings.conn||{}).shopify||{};
+    const shop=conn.shop||settings.shopifyShop, token=conn.token||settings.shopifyToken;
+    if(!shop||!token){ flash({err:"Connect your Shopify store first (Settings → Integrations)."}); return; }
+    setBusy(true);
+    try{
+      const r=await fetch(SHOPIFY_SYNC,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({shop,token,action:"products"})});
+      const d=await r.json().catch(()=>null);
+      if(!d||!d.ok){ flash({err:(d&&d.error)||"Shopify pull failed."}); setBusy(false); return; }
+      const incoming=d.products||[];
+      const bySku={}; products.forEach(p=>{if(p.sku)bySku[p.sku.toLowerCase()]=p;});
+      let updated=0,added=0; const out=[...products];
+      incoming.forEach(np=>{ const ex=np.sku&&bySku[np.sku.toLowerCase()];
+        if(ex){ ex.name=np.name||ex.name; if(!(+ex.wt)&&np.wt)ex.wt=np.wt; if(!(+ex.value)&&np.value)ex.value=np.value; ex.shopifyVariantId=np.shopifyVariantId; updated++; }
+        else { out.unshift(np); added++; } });
+      write(out);
+      flash({ok:`Pulled ${incoming.length} from Shopify — ${added} new, ${updated} updated. Add dimensions to enable box logic.`});
+    }catch(x){ flash({err:"Shopify pull failed — try again."}); }
+    setBusy(false);
+  };
+
+  const exportCSV=()=>downloadCSV("shippingcloud-products.csv",[["SKU","Name","Length","Width","Height","Weight","Value","Origin","HS Code"],...products.map(p=>[p.sku,p.name,p.l,p.w,p.h,p.wt,p.value,p.origin,p.hs])]);
+
+  const Cell=({v,ph,on,w})=>(<input value={v} onChange={on} placeholder={ph} className={`${w||"w-14"} bg-white border border-stone-200 rounded px-1.5 py-1 text-xs text-center outline-none focus:border-[#0099FF]`}/>);
+  return (<div className="max-w-4xl space-y-3">
+    <div>
+      <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Boxes className="w-4 h-4"/>Product catalog</h2>
+      <p className="text-sm text-stone-500 mt-0.5">Your products with dimensions and weight. Box logic uses these to auto-pick the right box for every order — so your labels bill the real size, not a guess.</p>
+    </div>
+    {msg&&<div className={`text-[12px] rounded-lg px-3 py-2 border flex items-center gap-2 ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err?<AlertTriangle className="w-4 h-4"/>:<CheckCircle2 className="w-4 h-4"/>}{msg.err||msg.ok}</div>}
+
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="relative flex-1 min-w-[160px]"><Search className="w-4 h-4 absolute left-2.5 top-2 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search products or SKUs" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#0099FF]"/></div>
+      <button onClick={()=>setAdding(a=>!a)} className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE]"><Plus className="w-4 h-4"/>Add product</button>
+      <button onClick={pullShopify} disabled={busy} className="flex items-center gap-1.5 text-sm bg-[#5E8E3E] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#4e7834] disabled:opacity-50">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<ShoppingBag className="w-4 h-4"/>}Pull from Shopify</button>
+      <label className="flex items-center gap-1.5 text-sm bg-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
+      <button onClick={exportCSV} className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 px-2 py-1.5"><Download className="w-4 h-4"/>Export</button>
+    </div>
+    <div className="text-[11px] text-stone-400">CSV columns recognized: SKU, Name, Length, Width, Height, Weight, Value, Origin, HS Code. Rows are merged by SKU.</div>
+
+    {withDims<products.length&&<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[12px] text-amber-800 flex items-center gap-2"><AlertTriangle className="w-4 h-4 shrink-0"/>{products.length-withDims} of {products.length} products have no dimensions yet. Box logic falls back to your default box for those — add L×W×H to pack them precisely.</div>}
+
+    {adding&&<div className="border border-[#99D6FF] rounded-lg bg-[#E6F4FF]/30 p-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <Field label="SKU"><Input value={nf.sku} onChange={e=>setNf({...nf,sku:e.target.value})}/></Field>
+        <div className="col-span-2 sm:col-span-3"><Field label="Product name"><Input value={nf.name} onChange={e=>setNf({...nf,name:e.target.value})}/></Field></div>
+        <Field label="Length (in)"><Input type="number" value={nf.l} onChange={e=>setNf({...nf,l:e.target.value})}/></Field>
+        <Field label="Width (in)"><Input type="number" value={nf.w} onChange={e=>setNf({...nf,w:e.target.value})}/></Field>
+        <Field label="Height (in)"><Input type="number" value={nf.h} onChange={e=>setNf({...nf,h:e.target.value})}/></Field>
+        <Field label="Weight (lb)"><Input type="number" value={nf.wt} onChange={e=>setNf({...nf,wt:e.target.value})}/></Field>
+        <Field label="Value ($)"><Input type="number" value={nf.value} onChange={e=>setNf({...nf,value:e.target.value})}/></Field>
+        <Field label="Origin"><Input value={nf.origin} onChange={e=>setNf({...nf,origin:e.target.value})} placeholder="US"/></Field>
+        <div className="col-span-2"><Field label="HS / tariff code (intl)"><Input value={nf.hs} onChange={e=>setNf({...nf,hs:e.target.value})}/></Field></div>
+      </div>
+      <div className="flex items-center gap-2 mt-2"><button onClick={addProduct} className="text-sm bg-[#0086E0] text-white rounded px-4 py-1.5 font-medium hover:bg-[#0072BE]">Save product</button><button onClick={()=>setAdding(false)} className="text-sm text-stone-500 px-2 py-1.5">Cancel</button></div>
+    </div>}
+
+    <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400">
+        <div className="w-4"/><div className="flex-1">Product</div><div className="w-24 hidden sm:block">SKU</div><div className="w-28 text-center">L×W×H (in)</div><div className="w-16 text-center">Weight</div><div className="w-16 text-center hidden sm:block">Value</div><div className="w-6"/>
+      </div>
+      {filtered.length===0&&<div className="p-8 text-center text-sm text-stone-400">No products{q?" match your search":" yet — add one, import a CSV, or pull from Shopify"}.</div>}
+      <div className="divide-y divide-stone-100">{filtered.map(p=>{
+        const ed=editId===p.id;const noDim=!(+p.l>0&&+p.w>0&&+p.h>0);
+        return (<div key={p.id}>
+          <div className={`flex items-center gap-2 px-3 py-2.5 ${ed?"bg-[#E6F4FF]/40":"hover:bg-stone-50"}`}>
+            <button onClick={()=>{if(ed){setEditId(null);setEf(null);}else{setEditId(p.id);setEf({...p});}}} className="text-stone-300 w-4"><Edit3 className={`w-3.5 h-3.5 ${ed?"text-[#0086E0]":""}`}/></button>
+            <div className="flex-1 min-w-0 text-sm truncate">{p.name}{noDim&&<span className="ml-1.5 text-[10px] text-amber-600">no dims</span>}</div>
+            <div className="w-24 hidden sm:block font-mono text-xs text-stone-500 truncate">{p.sku||"—"}</div>
+            <div className="w-28 text-center font-mono text-xs text-stone-600">{noDim?"—":`${p.l}×${p.w}×${p.h}`}</div>
+            <div className="w-16 text-center font-mono text-xs text-stone-600">{+p.wt?p.wt+" lb":"—"}</div>
+            <div className="w-16 text-center hidden sm:block font-mono text-xs text-stone-500">{+p.value?money(p.value):"—"}</div>
+            <button onClick={()=>del(p.id)} className="text-stone-300 hover:text-rose-500 w-6"><Trash2 className="w-4 h-4"/></button>
+          </div>
+          {ed&&ef&&<div className="px-9 pb-3 pt-0.5 bg-[#E6F4FF]/20">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <Field label="SKU"><Input value={ef.sku||""} onChange={e=>setEf({...ef,sku:e.target.value})}/></Field>
+              <div className="col-span-2 sm:col-span-3"><Field label="Name"><Input value={ef.name||""} onChange={e=>setEf({...ef,name:e.target.value})}/></Field></div>
+              <Field label="Length (in)"><Input type="number" value={ef.l||""} onChange={e=>setEf({...ef,l:e.target.value})}/></Field>
+              <Field label="Width (in)"><Input type="number" value={ef.w||""} onChange={e=>setEf({...ef,w:e.target.value})}/></Field>
+              <Field label="Height (in)"><Input type="number" value={ef.h||""} onChange={e=>setEf({...ef,h:e.target.value})}/></Field>
+              <Field label="Weight (lb)"><Input type="number" value={ef.wt||""} onChange={e=>setEf({...ef,wt:e.target.value})}/></Field>
+              <Field label="Value ($)"><Input type="number" value={ef.value||""} onChange={e=>setEf({...ef,value:e.target.value})}/></Field>
+              <Field label="Origin"><Input value={ef.origin||""} onChange={e=>setEf({...ef,origin:e.target.value})}/></Field>
+              <div className="col-span-2"><Field label="HS / tariff code"><Input value={ef.hs||""} onChange={e=>setEf({...ef,hs:e.target.value})}/></Field></div>
+            </div>
+            <div className="flex items-center gap-2 mt-2"><button onClick={saveEdit} className="text-sm bg-[#0086E0] text-white rounded px-4 py-1.5 font-medium hover:bg-[#0072BE]">Save</button><button onClick={()=>{setEditId(null);setEf(null);}} className="text-sm text-stone-500 px-2 py-1.5">Cancel</button></div>
+          </div>}
+        </div>);
+      })}</div>
+    </div>
+    <div className="text-[11px] text-stone-400 flex items-center justify-between"><span>{products.length} product{products.length!==1?"s":""} · {withDims} with full dimensions</span><span>Feeds → Settings → Box logic</span></div>
+  </div>);
+}
+
 function BoxesSettings({settings,setSettings}){
   const boxes=settings.boxes||SEED_BOXES;
   const [n,setN]=useState({name:"",L:"",W:"",H:"",maxWt:"",empty:""});
@@ -4135,6 +4329,14 @@ function BoxLogic({settings,setSettings}){
   const bl=settings.boxLogic||{mode:"smallest",dimDivisor:139,padding:0.5,fallbackL:12,fallbackW:9,fallbackH:4,allowOverride:true};
   const set=(patch)=>setSettings({...settings,boxLogic:{...bl,...patch}});
   const boxes=settings.boxes||SEED_BOXES;
+  const products=settings.products||SEED_PRODUCTS;
+  const [test,setTest]=useState(()=>({}));  // {productId: qty}
+  const addQty=(id,d)=>setTest(t=>{const n={...t,[id]:Math.max(0,(t[id]||0)+d)};if(!n[id])delete n[id];return n;});
+  const testItems=Object.entries(test).flatMap(([id,qty])=>{const pr=products.find(p=>p.id===id);return pr?[{l:+pr.l||0,w:+pr.w||0,h:+pr.h||0,wt:+pr.wt||0,qty,name:pr.name}]:[];});
+  const fallbackBox={id:"fb",name:"Default box",L:bl.fallbackL,W:bl.fallbackW,H:bl.fallbackH,maxWt:70,empty:0.3};
+  const testPack=testItems.length?pickBox(testItems,boxes.length?boxes:[fallbackBox],1.3,+bl.padding||0):null;
+  const dimWt=testPack?Math.round((testPack.box.L*testPack.box.W*testPack.box.H/(+bl.dimDivisor||139))*10)/10:0;
+  const billShown=testPack?Math.max(testPack.billWt,dimWt):0;
   return (<div className="max-w-2xl space-y-4">
     <p className="text-sm text-stone-500">Box logic decides which box each order ships in and how billable weight is figured. It runs automatically on the Ship tab, in Batch, and for live checkout rates.</p>
     <Panel title="Cartonization">
@@ -4166,7 +4368,30 @@ function BoxLogic({settings,setSettings}){
     </Panel>
     <Panel title="Options">
       <label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={bl.allowOverride} onChange={e=>set({allowOverride:e.target.checked})} className="accent-[#0086E0]"/>Let users override the chosen box on the Ship tab</label>
-      <div className="text-[12px] text-stone-500">Box catalog in use: <b>{boxes.length}</b> boxes (edit them under <b>Package sizes</b>).</div>
+      <div className="text-[12px] text-stone-500">Box catalog in use: <b>{boxes.length}</b> boxes (edit them under <b>Package sizes</b>). Product catalog: <b>{products.length}</b> products.</div>
+    </Panel>
+    <Panel title="Try it — live box logic">
+      <p className="text-[12px] text-stone-500 mb-2">Add products to a test cart and watch box logic pick the box, just like it will for real orders.</p>
+      <div className="border border-stone-200 rounded-lg divide-y divide-stone-100 max-h-52 overflow-auto">
+        {products.slice(0,40).map(pr=>{const noDim=!(+pr.l>0&&+pr.w>0&&+pr.h>0);return (
+          <div key={pr.id} className="flex items-center gap-2 px-3 py-1.5 text-sm">
+            <div className="flex-1 min-w-0 truncate">{pr.name}<span className="text-stone-400 text-xs">{(+pr.l>0)?` · ${pr.l}×${pr.w}×${pr.h}`:""}{(+pr.wt)?` · ${pr.wt}lb`:""}</span>{noDim&&<span className="ml-1 text-[10px] text-amber-600">no dims</span>}</div>
+            <div className="flex items-center gap-1.5">
+              <button onClick={()=>addQty(pr.id,-1)} className="w-6 h-6 rounded bg-stone-100 hover:bg-stone-200 text-stone-600">−</button>
+              <span className="w-6 text-center font-mono text-sm">{test[pr.id]||0}</span>
+              <button onClick={()=>addQty(pr.id,1)} className="w-6 h-6 rounded bg-stone-100 hover:bg-stone-200 text-stone-600">+</button>
+            </div>
+          </div>);})}
+      </div>
+      {testPack?<div className="mt-3 rounded-lg border border-[#99D6FF] bg-[#E6F4FF]/40 p-3">
+        <div className="flex items-center gap-2 text-sm font-semibold text-[#006FBF]"><Package className="w-4 h-4"/>{testPack.count>1?`${testPack.count} × `:""}{testPack.box.name} — {testPack.box.L}×{testPack.box.W}×{testPack.box.H} in</div>
+        <div className="grid grid-cols-3 gap-2 mt-2 text-center">
+          <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Actual wt</div><div className="font-mono text-sm">{testPack.billWt} lb</div></div>
+          <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Dim wt</div><div className="font-mono text-sm">{dimWt} lb</div></div>
+          <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Billable</div><div className="font-mono text-sm font-bold text-[#006FBF]">{billShown} lb</div></div>
+        </div>
+        <div className="text-[11px] text-stone-500 mt-2">{testPack.reason}{!testPack.dimsKnown?" — some items lack dimensions, packed by volume + weight only":""}. Billable weight is the greater of actual and dim weight.</div>
+      </div>:<div className="mt-3 text-[12px] text-stone-400">Add a product above to see the chosen box.</div>}
     </Panel>
   </div>);
 }

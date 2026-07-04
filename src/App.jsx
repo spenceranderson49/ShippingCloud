@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v124";
+const BUILD_TAG="addr-v125";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1399,6 +1399,13 @@ function FedExIntake({onDone,onClose}){
   </div>);
 }
 function CloudAuth({onDone,initialMode,intake}){
+  const [fp,setFp]=useState(null); // null | "ask" | "sent" | {reset:token} | "done"
+  const [fpEmail,setFpEmail]=useState("");
+  const [fpPw,setFpPw]=useState("");
+  const [fpErr,setFpErr]=useState("");
+  useEffect(()=>{try{const t=new URLSearchParams(window.location.search).get("reset");if(t)setFp({reset:t});}catch(e){}},[]);
+  const fpAsk=async()=>{setFpErr("");try{await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"requestReset",email:fpEmail})});setFp("sent");}catch(e){setFpErr("Network error — try again.");}};
+  const fpSave=async()=>{setFpErr("");try{const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"resetPassword",rtoken:fp.reset,password:fpPw})});const d=await r.json();if(d&&d.ok){setFp("done");try{window.history.replaceState({},"",window.location.pathname);}catch(e){}}else setFpErr((d&&d.error)||"Could not reset.");}catch(e){setFpErr("Network error — try again.");}};
   const [mode,setMode]=useState(initialMode||"signin"); // signin | request | requested
   const [f,setF]=useState({name:"",company:"",email:"",pw:"",volume:"",carrier:""});
   const [inv,setInv]=useState(null); // {name,type,data(base64)}
@@ -1522,13 +1529,6 @@ function LegalLinks(){
 }
 
 function Landing({onAuth}){
-  const [fp,setFp]=useState(null); // null | "ask" | "sent" | {reset:token} | "done"
-  const [fpEmail,setFpEmail]=useState("");
-  const [fpPw,setFpPw]=useState("");
-  const [fpErr,setFpErr]=useState("");
-  useEffect(()=>{try{const t=new URLSearchParams(window.location.search).get("reset");if(t)setFp({reset:t});}catch(e){}},[]);
-  const fpAsk=async()=>{setFpErr("");try{await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"requestReset",email:fpEmail})});setFp("sent");}catch(e){setFpErr("Network error — try again.");}};
-  const fpSave=async()=>{setFpErr("");try{const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"resetPassword",rtoken:fp.reset,password:fpPw})});const d=await r.json();if(d&&d.ok){setFp("done");try{window.history.replaceState({},"",window.location.pathname);}catch(e){}}else setFpErr((d&&d.error)||"Could not reset.");}catch(e){setFpErr("Network error — try again.");}};
   const pageFromHash=()=>{const h=(window.location.hash||"").replace("#","");return (h==="about"||h==="contact")?h:"home";};
   const [page,setPageState]=useState(pageFromHash());
   const setPage=(pg,anchor)=>{

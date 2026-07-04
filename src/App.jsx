@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v106";
+const BUILD_TAG="addr-v107";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -959,49 +959,83 @@ const clearScratchFor=(uid)=>SCRATCH_KEYS.forEach(k=>lsDel("u/"+uid+"/"+k));
 const DEMO_USER={id:"demo",name:"Demo Explorer",email:"demo@shippingcloud.net",role:"customer",clientId:null,status:"active",lastLogin:"Now",demo:true};
 const demoDaysAgo=(n)=>new Date(Date.now()-n*86400000).toLocaleDateString();
 function makeDemoData(){
-  const SVC=[["FedEx","FedEx Ground"],["FedEx","FedEx 2Day"],["FedEx","FedEx Priority Overnight"],["FedEx","FedEx Home Delivery"],["UPS","UPS Ground"],["DHL","DHL Express Worldwide"]];
-  const CITIES=[["Austin","TX","78701"],["Denver","CO","80202"],["Seattle","WA","98101"],["Nashville","TN","37201"],["Phoenix","AZ","85004"],["Columbus","OH","43215"],["Raleigh","NC","27601"],["Boise","ID","83702"],["San Diego","CA","92101"],["Kansas City","MO","64106"]];
-  const NAMES=["Ava Martinez","Liam Chen","Sophia Patel","Noah Johnson","Mia Thompson","Ethan Brooks","Olivia Reed","Lucas Rivera","Emma Caldwell","James Porter"];
+  const SVC=[["FedEx","FedEx Ground"],["FedEx","FedEx Ground"],["FedEx","FedEx Home Delivery"],["FedEx","FedEx Ground"],["FedEx","FedEx 2Day"],["FedEx","FedEx Home Delivery"],["FedEx","FedEx Ground"],["FedEx","FedEx Express Saver"],["FedEx","FedEx Priority Overnight"],["FedEx","FedEx Ground"],["DHL","DHL Express Worldwide"],["FedEx","FedEx 2Day"],["FedEx","FedEx Standard Overnight"],["FedEx","FedEx Home Delivery"]];
+  const CITIES=[["Austin","TX","78701"],["Denver","CO","80202"],["Seattle","WA","98101"],["Nashville","TN","37201"],["Phoenix","AZ","85004"],["Columbus","OH","43215"],["Raleigh","NC","27601"],["Boise","ID","83702"],["San Diego","CA","92101"],["Kansas City","MO","64106"],["Portland","OR","97204"],["Minneapolis","MN","55401"],["Charlotte","NC","28202"],["Tampa","FL","33602"]];
+  const NAMES=["Ava Martinez","Liam Chen","Sophia Patel","Noah Johnson","Mia Thompson","Ethan Brooks","Olivia Reed","Lucas Rivera","Emma Caldwell","James Porter","Harper Nguyen","Mason Clark","Isabella Ford","Elijah Ross","Amelia Hart","Benjamin Cole"];
+  const PRODUCTS=["Camp Mug × 2","Trail Blanket × 1","Field Notebook × 3","Canvas Tote × 1","Enamel Kettle × 1","Wool Socks × 4","Summit Hoodie × 1","Trail Mix Crate × 1","Water Bottle × 2","Camp Lantern × 1","Dry Bag × 1","Trucker Hat × 2"];
   const sender={name:"Jordan Lee",company:"Summit Goods Co.",zip:"84101",state:"UT",city:"Salt Lake City",address1:"215 S State St",phone:"801-555-0142",email:"ops@summitgoods.example"};
-  const statuses=["Delivered","Delivered","Delivered","In transit","In transit","Out for delivery","Label created","Delivered","In transit","Delivered","Exception","Delivered","Delivered","In transit","Delivered","Out for delivery","Delivered","Delivered"];
-  const days=[0,0,1,1,2,3,4,5,6,7,9,11,13,16,19,22,26,29];
-  const wts=[2,5,1,12,3,8,4,22,6,2,15,3,7,9,1,4,11,5];
+  const person=(i)=>{const who=NAMES[i%NAMES.length];const c=CITIES[i%CITIES.length];return {who,c,company:i%4===0?who.split(" ")[1]+" Supply Co.":"",email:who.split(" ")[0].toLowerCase()+"."+who.split(" ")[1].toLowerCase()+"@example.com",phone:"555-0"+String(110+i)};};
+
+  // ~40 shipments over 30 days, weighted toward this week — like an account that ships daily
   const shipments=[];
-  for(let i=0;i<18;i++){
-    const [carrier,service]=SVC[i%SVC.length];const c=CITIES[i%CITIES.length];const who=NAMES[i%NAMES.length];
-    const wt=wts[i];
-    const cost=+((7.5+wt*0.85+(service.includes("Overnight")?28:service.includes("2Day")?9:carrier==="DHL"?18:0)).toFixed(2));
+  const dayPlan=[0,0,0,1,1,1,1,2,2,2,3,3,3,4,4,5,5,6,6,7,7,8,9,10,11,12,13,14,15,16,17,18,19,21,23,25,26,27,28,29];
+  for(let i=0;i<dayPlan.length;i++){
+    const [carrier,service]=SVC[(i*5)%SVC.length];
+    const {who,c,company,email,phone}=person(i*3);
+    const dayAgo=dayPlan[i];
+    const wt=[2,5,1,12,3,8,4,22,6,2,15,3,7,9,1,4,11,5,2,6][i%20];
+    const cost=+((7.5+wt*0.85+(service.includes("Priority Overnight")?31:service.includes("Standard Overnight")?24:service.includes("2Day")?9:service.includes("Express Saver")?6:carrier==="DHL"?19:0)).toFixed(2));
     const sell=+((cost*1.18).toFixed(2));
-    shipments.push({id:9000+i,date:demoDaysAgo(days[i]),dayAgo:days[i],tracking:newTracking(carrier),carrier,service,recipient:{name:who,company:i%3===0?who.split(" ")[1]+" Supply":"",zip:c[2],state:c[1],city:c[0],address1:(120+i*7)+" Market St",phone:"555-01"+String(10+i),email:who.split(" ")[0].toLowerCase()+"@example.com"},sender,fromZip:sender.zip,toZip:c[2],weight:wt,pieces:[{weight:wt,L:12,W:9,H:6}],dims:{L:12,W:9,H:6},cost,sell,billTo:"sender",status:statuses[i],lastScan:SCAN_CITIES[i%SCAN_CITIES.length],eta:demoDaysAgo(-(1+(i%3))),onTime:i!==10,reference:"SO-10"+(40+i),client:"Summit Goods Co."});
+    const status=dayAgo===0?["Label created","In transit","In transit"][i%3]:dayAgo<=1?["In transit","Out for delivery","In transit"][i%3]:dayAgo<=2?(i%4===0?"Out for delivery":"In transit"):i===22?"Exception":i===33?"Voided":"Delivered";
+    shipments.push({id:9000+i,date:demoDaysAgo(dayAgo),dayAgo,tracking:newTracking(carrier),carrier,service,recipient:{name:who,company,zip:c[2],state:c[1],city:c[0],address1:(104+i*7)+" "+["Market St","Cedar Ave","Alder Way","5th Ave S","Juniper Ln"][i%5],phone,email},sender,fromZip:sender.zip,toZip:c[2],weight:wt,pieces:[{weight:wt,L:12,W:9,H:6}],dims:{L:12,W:9,H:6},cost,sell,billTo:"sender",status,lastScan:status==="Delivered"?"Delivered":SCAN_CITIES[i%SCAN_CITIES.length],eta:demoDaysAgo(-(1+(i%3))),onTime:i!==22,reference:"SO-1"+(140+i),client:"Summit Goods Co."});
   }
-  const orders=NAMES.map((who,i)=>{const c=CITIES[i];return {id:7000+i,name:"#10"+(42+i),customer:who,company:i%4===0?who.split(" ")[1]+" Supply":"",address1:(88+i*9)+" Cedar Ave",city:c[0],state:c[1],zip:c[2],phone:"555-02"+String(10+i),email:who.split(" ")[0].toLowerCase()+"@example.com",items:i%2?"Trail Blanket × 1":"Camp Mug × 2, Field Notebook × 1",status:i<6?"unfulfilled":"fulfilled",source:i%3===0?"Manual":"Shopify",weight:[3,1,2,5,1,4,2,3,1,2][i],total:+((24+i*11.5).toFixed(2)),date:demoDaysAgo(i%5)};});
+
+  // 18 orders — Shopify-heavy, 8 waiting to fulfill
+  const orders=Array.from({length:18},(_,i)=>{const {who,c,company,email,phone}=person(i);return {id:7000+i,name:"#1"+(140+i),customer:who,company,address1:(88+i*9)+" "+["Cedar Ave","Birch Ct","Market St","Lakeview Dr"][i%4],city:c[0],state:c[1],zip:c[2],phone,email,items:PRODUCTS[i%PRODUCTS.length]+(i%3===0?", "+PRODUCTS[(i+5)%PRODUCTS.length]:""),status:i<8?"unfulfilled":"fulfilled",source:i%5===0?"Manual":"Shopify",weight:[3,1,2,5,1,4,2,3,1,2,6,2,4,1,3,2,5,1][i],total:+((19+i*8.75).toFixed(2)),date:demoDaysAgo(i%6)};});
+
+  // returns — FedEx only
   const returns=[
-    {id:8101,rma:"RMA-4821",customer:"Mia Thompson",order:"#1046",reason:"Wrong size",carrier:"FedEx",tracking:newTracking("FedEx"),status:"In transit",date:demoDaysAgo(2)},
-    {id:8102,rma:"RMA-4809",customer:"Liam Chen",order:"#1043",reason:"Changed mind",carrier:"FedEx",tracking:newTracking("FedEx"),status:"Label created",date:demoDaysAgo(5)},
-    {id:8103,rma:"RMA-4790",customer:"Olivia Reed",order:"#1038",reason:"Damaged in transit",carrier:"UPS",tracking:newTracking("UPS"),status:"Received",date:demoDaysAgo(9)}
+    {id:8101,rma:"RMA-4821",customer:"Mia Thompson",order:"#1146",reason:"Wrong size",carrier:"FedEx",tracking:newTracking("FedEx"),status:"In transit",date:demoDaysAgo(2)},
+    {id:8102,rma:"RMA-4809",customer:"Liam Chen",order:"#1143",reason:"Changed mind",carrier:"FedEx",tracking:newTracking("FedEx"),status:"Label created",date:demoDaysAgo(4)},
+    {id:8103,rma:"RMA-4790",customer:"Olivia Reed",order:"#1138",reason:"Damaged in transit",carrier:"FedEx",tracking:newTracking("FedEx"),status:"Received",date:demoDaysAgo(9)},
+    {id:8104,rma:"RMA-4771",customer:"Harper Nguyen",order:"#1131",reason:"Ordered twice",carrier:"FedEx",tracking:newTracking("FedEx"),status:"Received",date:demoDaysAgo(15)}
   ];
+
   const draftSnapDefaults={reference:"",invoiceNo:"",poNo:"",residential:false,signature:false,billTo:"sender",thirdAcct:"",insurance:"",selectedOrder:null,customs:null};
   const drafts=[
-    {id:6101,label:"Ava Martinez — Austin",when:new Date(Date.now()-3600e3).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}),to:"Austin, TX",snap:{...draftSnapDefaults,sender,receiver:{name:"Ava Martinez",company:"",zip:"78701",state:"TX",city:"Austin",address1:"127 Market St",phone:"555-0110",email:"ava@example.com"},reference:"SO-1051",pieces:[{weight:4,L:12,W:9,H:6}],residential:true}},
-    {id:6102,label:"Porter Supply — Kansas City",when:new Date(Date.now()-26*3600e3).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}),to:"Kansas City, MO",snap:{...draftSnapDefaults,sender,receiver:{name:"James Porter",company:"Porter Supply",zip:"64106",state:"MO",city:"Kansas City",address1:"960 Cedar Ave",phone:"555-0219",email:"james@example.com"},reference:"SO-1049",pieces:[{weight:11,L:14,W:12,H:10}],signature:true}}
+    {id:6101,label:"Ava Martinez — Austin",when:new Date(Date.now()-3600e3).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}),to:"Austin, TX",snap:{...draftSnapDefaults,sender,receiver:{name:"Ava Martinez",company:"",zip:"78701",state:"TX",city:"Austin",address1:"127 Market St",phone:"555-0110",email:"ava.martinez@example.com"},reference:"SO-1181",pieces:[{weight:4,L:12,W:9,H:6}],residential:true}},
+    {id:6102,label:"Porter Supply Co. — Kansas City",when:new Date(Date.now()-26*3600e3).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}),to:"Kansas City, MO",snap:{...draftSnapDefaults,sender,receiver:{name:"James Porter",company:"Porter Supply Co.",zip:"64106",state:"MO",city:"Kansas City",address1:"960 Cedar Ave",phone:"555-0219",email:"james.porter@example.com"},reference:"SO-1179",pieces:[{weight:11,L:14,W:12,H:10}],signature:true}},
+    {id:6103,label:"Isabella Ford — Portland",when:new Date(Date.now()-49*3600e3).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}),to:"Portland, OR",snap:{...draftSnapDefaults,sender,receiver:{name:"Isabella Ford",company:"",zip:"97204",state:"OR",city:"Portland",address1:"412 Alder Way",phone:"555-0122",email:"isabella.ford@example.com"},reference:"SO-1174",pieces:[{weight:2,L:10,W:8,H:4}],residential:true}}
   ];
+
+  // ledger — deposits + shipment charges + a refund, ends with a healthy balance
   const ledger=[
-    {id:"l5101",date:demoDaysAgo(1),type:"Shipment",ref:shipments[2].tracking,amount:-shipments[2].sell},
-    {id:"l5102",date:demoDaysAgo(3),type:"Funds added",ref:"ACH ••1844",amount:250},
-    {id:"l5103",date:demoDaysAgo(6),type:"Shipment",ref:shipments[8].tracking,amount:-shipments[8].sell},
-    {id:"l5104",date:demoDaysAgo(12),type:"Adjustment",ref:returns[2].rma,amount:14.6}
+    {id:"l5101",date:demoDaysAgo(0),type:"Shipment",ref:shipments[1].tracking,amount:-shipments[1].sell},
+    {id:"l5102",date:demoDaysAgo(1),type:"Shipment",ref:shipments[4].tracking,amount:-shipments[4].sell},
+    {id:"l5103",date:demoDaysAgo(2),type:"Funds added",ref:"ACH ••1844",amount:500},
+    {id:"l5104",date:demoDaysAgo(4),type:"Shipment",ref:shipments[12].tracking,amount:-shipments[12].sell},
+    {id:"l5105",date:demoDaysAgo(6),type:"Shipment",ref:shipments[17].tracking,amount:-shipments[17].sell},
+    {id:"l5106",date:demoDaysAgo(9),type:"Adjustment",ref:returns[2].rma,amount:14.6},
+    {id:"l5107",date:demoDaysAgo(12),type:"Funds added",ref:"ACH ••1844",amount:500},
+    {id:"l5108",date:demoDaysAgo(18),type:"Shipment",ref:shipments[30].tracking,amount:-shipments[30].sell}
   ];
-  const pickups=[{id:4101,conf:"DEMO-PU-3312",carrier:"FedEx",carrierCode:"fedex",date:demoDaysAgo(-1),count:6,ready:"13:00",close:"17:00",location:"Front desk",live:false}];
-  const addresses=CITIES.slice(0,6).map((c,i)=>({id:"ad"+(300+i),name:NAMES[i],company:i%3===0?NAMES[i].split(" ")[1]+" Supply":"",address1:(120+i*7)+" Market St",city:c[0],state:c[1],zip:c[2],phone:"555-01"+String(10+i),email:NAMES[i].split(" ")[0].toLowerCase()+"@example.com",residential:i%2===0}));
-  const settings={company:"Summit Goods Co.",sender,defaultBillTo:"sender",thirdPartyAccts:[],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,checkout:CHECKOUT_DEFAULTS,platforms:PLATFORM_DEFAULTS,plan:"pro",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:""},addresses,warehouses:[{name:"Main Warehouse",company:"Summit Goods Co.",address:"215 S State St",city:"Salt Lake City",state:"UT",zip:"84101",phone:"801-555-0142"}],autoRunRules:false,brand:DEFAULT_BRAND,domains:[]};
-  return {settings,orders,shipments,returns,drafts,ledger,pickups};
+
+  const pickups=[
+    {id:4101,conf:"PU-88231",carrier:"FedEx",carrierCode:"fedex",date:demoDaysAgo(-1),count:9,ready:"13:00",close:"17:00",location:"Dock door B",live:false},
+    {id:4102,conf:"PU-87914",carrier:"FedEx",carrierCode:"fedex",date:demoDaysAgo(1),count:14,ready:"12:00",close:"16:30",location:"Dock door B",live:false}
+  ];
+
+  // 14-entry address book
+  const addresses=Array.from({length:14},(_,i)=>{const {who,c,company,email,phone}=person(i);return {id:"ad"+(300+i),name:who,company,address1:(120+i*7)+" "+["Market St","Cedar Ave","Alder Way","5th Ave S"][i%4],city:c[0],state:c[1],zip:c[2],phone,email,residential:i%2===0};});
+
+  // notification history — makes Email automation look alive
+  const emails=[
+    {id:"e6201",date:new Date(Date.now()-2*3600e3).toLocaleString(),status:"sent",to:"ava.martinez@example.com",subject:"Your Summit Goods order #1157 has shipped",type:"Shipment notification"},
+    {id:"e6202",date:new Date(Date.now()-7*3600e3).toLocaleString(),status:"sent",to:"mia.thompson@example.com",subject:"Your return label for #1146 is ready",type:"Return label"},
+    {id:"e6203",date:new Date(Date.now()-26*3600e3).toLocaleString(),status:"sent",to:"liam.chen@example.com",subject:"Your Summit Goods order #1153 has shipped",type:"Shipment notification"},
+    {id:"e6204",date:new Date(Date.now()-31*3600e3).toLocaleString(),status:"sent",to:"noah.johnson@example.com",subject:"Out for delivery: your Summit Goods order",type:"Delivery update"},
+    {id:"e6205",date:new Date(Date.now()-50*3600e3).toLocaleString(),status:"sent",to:"james.porter@example.com",subject:"Your Summit Goods order #1149 has shipped",type:"Shipment notification"}
+  ];
+
+  const settings={company:"Summit Goods Co.",sender,defaultBillTo:"sender",thirdPartyAccts:[],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,checkout:CHECKOUT_DEFAULTS,platforms:{ups:false,usps:false,amazon:false,uniuni:false},plan:"pro",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:""},addresses,warehouses:[{name:"Main Warehouse",company:"Summit Goods Co.",address:"215 S State St",city:"Salt Lake City",state:"UT",zip:"84101",phone:"801-555-0142"},{name:"East Fulfillment",company:"Summit Goods Co.",address:"77 Commerce Pkwy",city:"Columbus",state:"OH",zip:"43215",phone:"614-555-0188"}],autoRunRules:true,brand:DEFAULT_BRAND,domains:[]};
+  return {settings,orders,shipments,returns,drafts,ledger,pickups,emails};
 }
 function enterDemo(){
   try{
     const kill=[];for(let i=0;i<window.localStorage.length;i++){const k=window.localStorage.key(i);if(k&&k.indexOf("sc_u/demo/")===0)kill.push(k);}
     kill.forEach(k=>window.localStorage.removeItem(k));
     const d=makeDemoData();
-    lsSet("u/demo/settings",d.settings);lsSet("u/demo/orders",d.orders);lsSet("u/demo/shipments",d.shipments);lsSet("u/demo/returns",d.returns);lsSet("u/demo/drafts",d.drafts);lsSet("u/demo/ledger",d.ledger);lsSet("u/demo/pickups",d.pickups);lsSet("u/demo/fedexPrompt",{seen:true});
+    lsSet("u/demo/settings",d.settings);lsSet("u/demo/orders",d.orders);lsSet("u/demo/shipments",d.shipments);lsSet("u/demo/returns",d.returns);lsSet("u/demo/drafts",d.drafts);lsSet("u/demo/ledger",d.ledger);lsSet("u/demo/pickups",d.pickups);lsSet("u/demo/emails",d.emails);lsSet("u/demo/fedexPrompt",{seen:true});
     lsSet("session",DEMO_USER);
     window.location.reload();
   }catch(e){}
@@ -1618,7 +1652,7 @@ function AppInner(){
   const isAdmin=currentUser&&currentUser.role==="admin";
   const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
   const isDemo=!!(currentUser&&currentUser.id==="demo");
-  const myFlags=isDemo?{pickups:true,batch:true,invoices:true,rules:true,scan:true}:(isAdmin?{}:((featureFlags&&featureFlags[currentUser&&currentUser.id])||(CLOUD.mode==="cloud"?myFeatures:{})));
+  const myFlags=isDemo?{pickups:true,batch:true,invoices:true,rules:true,scan:true,settings:true}:(isAdmin?{}:((featureFlags&&featureFlags[currentUser&&currentUser.id])||(CLOUD.mode==="cloud"?myFeatures:{})));
   const TABS=isAdmin?ALL_TABS:ALL_TABS.filter(t=>t[0]!=="admin"&&(t[0]==="ship"||featureOn(t[0],currentUser,myFlags)));
   const unfulfilled=orders.filter(o=>o.status==="unfulfilled").length;
 

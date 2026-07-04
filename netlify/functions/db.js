@@ -156,6 +156,12 @@ exports.handler = async (event) => {
     }
 
     /* ── request access (no auth): stores a pending signup for admin approval ── */
+    if (action === "publicConfig") {
+      const cur = await getStore("publicBrand");
+      const v = (cur.ok && cur.value) || {};
+      return J({ ok: true, showLogo: v.showLogo === true });
+    }
+
     if (action === "requestAccess") {
       const name = String(body.name || "").trim().slice(0, 80);
       const email = String(body.email || "").trim().toLowerCase().slice(0, 120);

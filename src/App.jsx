@@ -38,7 +38,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v96";
+const BUILD_TAG="addr-v97";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -1081,24 +1081,24 @@ function Landing({onAuth}){
     </div>
     {page==="home"&&<>
     {/* hero */}
-    <div className="max-w-6xl mx-auto px-5 pt-14 pb-16 grid lg:grid-cols-2 gap-12 items-center">
+    <div className="max-w-6xl mx-auto px-5 pt-16 pb-20 lg:min-h-[74vh] grid lg:grid-cols-2 gap-14 items-center">
       <div>
-        <h1 className="text-4xl sm:text-5xl font-bold text-white leading-tight">Your shipping platform.<br/><span className="text-[#38b6ff]">Your shipping partner.</span></h1>
-        <p className="mt-5 text-lg text-stone-400 leading-relaxed">Enterprise FedEx and DHL rates. Industry leading customer service. Customized for you.</p>
+        <h1 className="text-5xl sm:text-6xl font-bold text-white leading-tight">Your shipping platform.<br/><span className="text-[#38b6ff]">Your shipping partner.</span></h1>
+        <p className="mt-6 text-xl text-stone-400 leading-relaxed">Enterprise FedEx and DHL rates. Industry leading customer service. Customized for you.</p>
         <div className="mt-7 flex flex-wrap gap-3">
-          <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0a76c2] text-white font-semibold rounded-lg px-6 py-3">Create ShippingCloud account</button>
-          <button onClick={()=>onAuth("request")} className="border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#38b6ff] font-semibold rounded-lg px-6 py-3 flex items-center gap-2"><Truck className="w-4 h-4"/>Get your own FedEx account</button>
+          <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0a76c2] text-white font-semibold rounded-lg px-7 py-3.5 text-[15px]">Create ShippingCloud account</button>
+          <button onClick={()=>onAuth("request")} className="border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#38b6ff] font-semibold rounded-lg px-7 py-3.5 text-[15px] flex items-center gap-2"><Truck className="w-4 h-4"/>Get your own FedEx account</button>
         </div>
       </div>
       {/* hero graphic: mock rate card */}
       <div className="relative hidden lg:block">
         <div className="absolute -inset-8 bg-[#0086E0]/20 blur-3xl rounded-full"/>
-        <div className="relative text-center text-[13px] uppercase tracking-widest text-[#38b6ff] font-semibold mb-3">Get FedEx and DHL Enterprise rates</div>
-        <div className="relative bg-neutral-900 border border-white/10 rounded-2xl p-5 shadow-2xl">
+        <div className="relative text-center text-sm uppercase tracking-widest text-[#38b6ff] font-semibold mb-4">Get FedEx and DHL Enterprise rates</div>
+        <div className="relative bg-neutral-900 border border-white/10 rounded-2xl p-7 shadow-2xl">
           {[["FedEx Ground®","2 days","$9.41"],["FedEx One Rate® · 2Day","flat-rate box · 2 days","$14.95"],["FedEx Priority Overnight®","next day","$42.10"],["DHL Express","2 days","$21.66"]].map((r,i)=>(
-            <div key={i} className={`flex items-center justify-between rounded-lg px-3 py-2.5 mb-1.5 ${i===0?"bg-[#0086E0]/15 border border-[#0086E0]/40":"bg-white/[0.03] border border-white/5"}`}>
-              <div className="flex items-center gap-3"><Truck className={`w-4 h-4 ${i===0?"text-[#38b6ff]":"text-stone-500"}`}/><div><div className="text-sm text-white font-medium">{r[0]}</div><div className="text-[11px] text-stone-500">{r[1]}</div></div></div>
-              <div className={`font-mono text-sm ${i===0?"text-[#38b6ff] font-bold":"text-stone-300"}`}>{r[2]}</div>
+            <div key={i} className={`flex items-center justify-between rounded-xl px-4 py-3.5 mb-2 ${i===0?"bg-[#0086E0]/15 border border-[#0086E0]/40":"bg-white/[0.03] border border-white/5"}`}>
+              <div className="flex items-center gap-3.5"><Truck className={`w-5 h-5 ${i===0?"text-[#38b6ff]":"text-stone-500"}`}/><div><div className="text-[15px] text-white font-medium">{r[0]}</div><div className="text-[12px] text-stone-500">{r[1]}</div></div></div>
+              <div className={`font-mono text-lg ${i===0?"text-[#38b6ff] font-bold":"text-stone-300"}`}>{r[2]}</div>
             </div>))}
         </div>
       </div>

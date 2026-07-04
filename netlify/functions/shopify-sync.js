@@ -62,6 +62,29 @@ exports.handler = async (event) => {
     const token = S(body.token);
     if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop) || !token) return J({ ok: false, error: "Connect a Shopify store first (missing shop/token)." });
 
+    // ── carrier service: register/inspect the live checkout-rates callback ──
+    if (body.action === "installCarrier" || body.action === "carrierStatus") {
+      const crypto = require("crypto");
+      const uid = String(body.uid || "");
+      if (body.action === "installCarrier" && !uid) return J({ ok: false, error: "Missing account id." });
+      const cbKey = crypto.createHmac("sha256", process.env.SESSION_SECRET || "").update("carrier:" + uid).digest("hex").slice(0, 32);
+      const appUrl = (process.env.APP_URL || "").replace(/\/+$/, "");
+      const callback = appUrl + "/.netlify/functions/shopify-rates?uid=" + encodeURIComponent(uid) + "&key=" + cbKey;
+      const listUrl = `https://${shop}/admin/api/${API}/carrier_services.json`;
+      const lr = await fetch(listUrl, { headers: { "X-Shopify-Access-Token": token } });
+      const ld = await lr.json().catch(() => ({}));
+      if (!lr.ok) return J({ ok: false, error: "Shopify " + lr.status + ": " + JSON.stringify(ld).slice(0, 200) + (lr.status === 403 ? " \u2014 the app needs the write_shipping scope." : "") });
+      const mine = (ld.carrier_services || []).find((c) => /shippingcloud/i.test(c.name || ""));
+      if (body.action === "carrierStatus") return J({ ok: true, installed: !!mine, service: mine || null, callback });
+      const payload = { carrier_service: { name: "ShippingCloud", callback_url: callback, service_discovery: true, format: "json" } };
+      const wr = mine
+        ? await fetch(`https://${shop}/admin/api/${API}/carrier_services/${mine.id}.json`, { method: "PUT", headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" }, body: JSON.stringify({ carrier_service: { id: mine.id, ...payload.carrier_service } }) })
+        : await fetch(listUrl, { method: "POST", headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const wd = await wr.json().catch(() => ({}));
+      if (!wr.ok) return J({ ok: false, error: "Shopify " + wr.status + ": " + JSON.stringify(wd.errors || wd).slice(0, 250) + (wr.status === 422 && /carrier/i.test(JSON.stringify(wd)) ? " \u2014 carrier-calculated rates may not be enabled on this store\u2019s Shopify plan." : "") });
+      return J({ ok: true, installed: true, updated: !!mine, service: wd.carrier_service || null, callback });
+    }
+
     // ── products pull: build a dimensioned catalog from Shopify variants ──
     if (body.action === "products") {
       const purl = `https://${shop}/admin/api/${API}/products.json?limit=250`;

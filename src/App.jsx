@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v128";
+const BUILD_TAG="addr-v130";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1551,10 +1551,19 @@ function Landing({onAuth}){
   if(BRAND.fw) return (<div className="min-h-screen bg-[#faf6ef] flex flex-col items-center justify-center p-6">
     <div className="mb-8 flex flex-col items-center gap-4">
       <img src={FW_LOGO} alt="Freightwire" style={{height:72}} className="w-auto" draggable={false}/>
-      <div className="text-[21px] font-semibold" style={{fontFamily:"ui-monospace,SF Mono,Menlo,Consolas,monospace",color:"#292524"}}>freightwire<span style={{color:"#1E9BF0"}}>/ship</span></div>
+      <div className="text-[27px] text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></div>
+    </div>
+    <div className="mb-6 text-center">
+      <div className="text-[15px] font-medium text-stone-600">Your shipping platform <span className="text-stone-900">&</span> partner</div>
     </div>
     <CloudAuth onDone={()=>window.location.reload()} initialMode="login"/>
-    <div className="mt-8 text-[11px] text-stone-400 flex items-center gap-2">© {new Date().getFullYear()} Freightwire · FedEx® shipping under partner carrier agreements · <LegalLinks/></div>
+    <div className="mt-8 w-full max-w-xl">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2.5 text-[13px] text-stone-500">
+        {["Autopilot rules & one-click batch printing","Smart box logic packs every order automatically","Syncs with Shopify & other shopping carts","Invoice auditing catches overcharges & shipping mistakes","Powered by Claude — an AI assistant that does the busywork","Customizable to how your company ships","Packing slips, pick lists, commercial invoices & more","Industry-best shipping rates"].map((f,i)=>
+          <div key={i} className="flex items-start gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-[#1E9BF0] mt-[1px]"/><span>{f}</span></div>)}
+      </div>
+    </div>
+    <div className="mt-8 text-[11px] text-stone-400 flex items-center gap-2">© {new Date().getFullYear()} Freightwire · <LegalLinks/></div>
   </div>);
   return (<div className="min-h-screen bg-neutral-950 text-stone-300">
     {/* nav */}

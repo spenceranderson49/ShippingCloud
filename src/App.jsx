@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v101";
+const BUILD_TAG="addr-v102";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -1531,7 +1531,7 @@ function AppInner(){
         <div className="px-3 sm:px-4 h-14 flex items-center gap-2 sm:gap-3">
           <button onClick={()=>setNavOpen(true)} className="md:hidden p-2 -ml-1 rounded-lg hover:bg-stone-100 text-stone-600" aria-label="Menu"><Layers className="w-5 h-5"/></button>
           <BrandCloud className="h-10 sm:h-11 w-auto" color={brand.primary}/>
-          <span className="font-extrabold tracking-tight text-[20px] sm:text-[26px]" style={{color:brand.dark}}>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></span>
+          <button onClick={()=>setTab("ship")} title="Back to Ship" className="font-extrabold tracking-tight text-[20px] sm:text-[26px] cursor-pointer" style={{color:brand.dark}}>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></button>
           {brand.showLogo&&brand.logo&&<span className="hidden sm:flex items-center gap-1.5 text-stone-400 text-xs"><span className="w-px h-5 bg-stone-200"/>{brand.partnerLabel}<img src={brand.logo} alt="partner" className="h-3 w-auto object-contain"/></span>}
           <div className="flex-1"/>
           <div className="flex items-center gap-2 sm:gap-3">
@@ -1546,7 +1546,7 @@ function AppInner(){
       {navOpen&&<div className="md:hidden fixed inset-0 z-40 flex" role="dialog">
         <div className="absolute inset-0 bg-stone-900/40" onClick={()=>setNavOpen(false)}/>
         <aside className="relative w-64 bg-white h-full shadow-xl overflow-y-auto">
-          <div className="flex items-center justify-between px-4 h-14 border-b border-stone-200"><span className="font-extrabold tracking-tight" style={{color:brand.dark}}>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></span><button onClick={()=>setNavOpen(false)} className="p-1.5 rounded hover:bg-stone-100"><X className="w-5 h-5 text-stone-500"/></button></div>
+          <div className="flex items-center justify-between px-4 h-14 border-b border-stone-200"><button onClick={()=>{setTab("ship");setNavOpen(false);}} title="Back to Ship" className="font-extrabold tracking-tight" style={{color:brand.dark}}>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></button><button onClick={()=>setNavOpen(false)} className="p-1.5 rounded hover:bg-stone-100"><X className="w-5 h-5 text-stone-500"/></button></div>
           <nav className="p-2 space-y-0.5">
             {TABS.map(([id,l,Icon])=>(
               <React.Fragment key={id}>

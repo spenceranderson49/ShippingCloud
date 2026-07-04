@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v111";
+const BUILD_TAG="addr-v112";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -1847,7 +1847,7 @@ function AppInner(){
           {tab==="ship"&&<Ship client={client} accounts={accounts} orders={orders} settings={settings} setSettings={setSettings} rules={rules} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders}/>}
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
           {tab==="orders"&&<Orders orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} onShipped={onShipped}/>}
-          {tab==="batch"&&<Batch orders={orders} setOrders={setOrders} client={client} rules={rules} settings={settings} onShipped={onShipped}/>}
+          {tab==="batch"&&<Batch orders={orders} setOrders={setOrders} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} onShipped={onShipped}/>}
           {tab==="shipments"&&<Shipments shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels}/>}
           {tab==="drafts"&&<Drafts drafts={drafts} setDrafts={setDrafts} goShip={goShip}/>}
           {tab==="returns"&&<Returns returns={returns} setReturns={setReturns} orders={orders} settings={settings} logEmail={logEmail}/>}
@@ -3306,28 +3306,36 @@ function Dashboard({shipments,orders,returns,goTab}){
 const US_STATES=["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
 const SERVICE_OPTIONS={FedEx:["FedEx Ground","FedEx Home Delivery","FedEx 2Day","FedEx Express Saver","FedEx Standard Overnight","FedEx Priority Overnight"]};
 const speedRank=(label)=>{const t=String(label||"").toLowerCase();if(/first overnight/.test(t))return 1;if(/priority overnight/.test(t))return 2;if(/standard overnight|next day/.test(t))return 3;if(/2.?day|2nd day air/.test(t))return 4;if(/express saver|3 day/.test(t))return 5;if(/home|ground/.test(t))return 7;return 6;};
-function Batch({orders,setOrders,client,rules,settings,onShipped}){
+function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped}){
   const pool=orders.filter(o=>o.status==="unfulfilled");
   const [sel,setSel]=useState(()=>new Set());
   const [rule,setRule]=useState("cheapest");
   const [specCarrier,setSpecCarrier]=useState("FedEx");
   const [specSvc,setSpecSvc]=useState("FedEx Ground");
-  const [filterDim,setFilterDim]=useState("none");
-  const [filterVals,setFilterVals]=useState(()=>new Set());
   const [groupBy,setGroupBy]=useState("none");
-  const [prodQ,setProdQ]=useState("");
+  const [sortBy,setSortBy]=useState("newest");
   const [search,setSearch]=useState("");
   const [wMin,setWMin]=useState("");const [wMax,setWMax]=useState("");
   const [tMin,setTMin]=useState("");const [tMax,setTMax]=useState("");
+  const [age,setAge]=useState("any");
+  const [fs,setFs]=useState({state:new Set(),zone:new Set(),source:new Set(),sku:new Set(),product:new Set()});
+  const [fOpen,setFOpen]=useState(false);
   const [done,setDone]=useState(0);
   const [openRow,setOpenRow]=useState(null);
   const [svcOv,setSvcOv]=useState({});
+  const [ovWhy,setOvWhy]=useState({});
+  const [holds,setHolds]=useState({});
+  const [apMsg,setApMsg]=useState(null);
+  const [qrOpen,setQrOpen]=useState(false);
+  const [qr,setQr]=useState({property:"Package Weight",operator:">",value:"",service:"ANY - Cheapest Ground"});
   const [msg,setMsg]=useState("");
   const [running,setRunning]=useState(false);
   const [progress,setProgress]=useState({n:0,total:0});
   const [results,setResults]=useState([]); // [{name, ok, tracking, error, pdf}]
+  const [batches,setBatches]=usePersist("batches",[]);
   const eng=englandFor(client,settings);
   const canBook=eng&&eng.enabled&&eng.apiKey&&eng.customerId;
+  const originZip=(settings.sender&&settings.sender.zip)||client.origin;
   const importCSV=(e)=>{
     const file=e.target.files&&e.target.files[0]; if(!file)return;
     const reader=new FileReader();
@@ -3337,10 +3345,10 @@ function Batch({orders,setOrders,client,rules,settings,onShipped}){
       if(!lines.length){setMsg("Empty file");return;}
       const head=lines[0].split(",").map(h=>h.trim().toLowerCase().replace(/"/g,""));
       const col=(names)=>head.findIndex(h=>names.includes(h));
-      const idx={customer:col(["customer","name","contact","ship to"]),company:col(["company","business"]),address1:col(["address","address1","street","address 1"]),city:col(["city","town"]),state:col(["state","province"]),zip:col(["zip","postal","postal code","zipcode"]),phone:col(["phone"]),email:col(["email"]),weight:col(["weight","lbs","lb"]),items:col(["items","item","description","product"]),total:col(["total","order total","amount"]),sku:col(["sku"]),service:col(["service","shipping","shippingservice","shipping service"])};
+      const idx={customer:col(["customer","name","contact","ship to"]),company:col(["company","business"]),address1:col(["address","address1","street","address 1"]),city:col(["city","town"]),state:col(["state","province","region"]),zip:col(["zip","zipcode","postal","zip code","postal code"]),phone:col(["phone","telephone"]),email:col(["email","e-mail"]),weight:col(["weight","lbs","pounds","weight (lb)"]),items:col(["items","products","description"]),sku:col(["sku","item sku"]),total:col(["total","amount","order total","value"])};
       const hasHeader=idx.zip>=0||idx.customer>=0||idx.address1>=0;
       const rows=hasHeader?lines.slice(1):lines;
-      const parsed=rows.map((line,i)=>{const c=line.split(",").map(x=>x.trim().replace(/^"|"$/g,""));const g=(k,d)=>idx[k]>=0?(c[idx[k]]||""):(c[d]||"");const n=Math.floor(1000+Math.random()*9000);return {id:Date.now()+i,name:"#"+n,customer:g("customer",0),company:g("company"),address1:g("address1",1),city:g("city",2),state:g("state",3),zip:g("zip",4),phone:g("phone"),email:g("email"),weight:+g("weight")||1,items:g("items"),product:g("items"),total:g("total")||"0.00",sku:g("sku"),shippingService:g("service")||"Standard",source:"CSV import",status:"unfulfilled",date:new Date().toLocaleDateString(undefined,{month:"numeric",day:"numeric"})};}).filter(r=>r.zip||r.customer);
+      const parsed=rows.map((line,i)=>{const c=line.split(",").map(x=>x.trim().replace(/^"|"$/g,""));const g=(k,d)=>idx[k]>=0?(c[idx[k]]||""):(c[d]||"");const n=Math.floor(1000+Math.random()*9000);return {id:Date.now()+i,name:"#CSV"+n,customer:g("customer",0),company:g("company",-1),address1:g("address1",1),city:g("city",2),state:g("state",3),zip:g("zip",4),phone:g("phone",-1),email:g("email",-1),weight:parseFloat(g("weight",-1))||1,items:g("items",-1),sku:g("sku",-1),total:parseFloat(g("total",-1))||0,status:"unfulfilled",source:"CSV import",date:new Date().toLocaleDateString()};}).filter(o=>o.customer||o.address1||o.zip);
       setOrders(p=>[...parsed,...p]);
       setMsg(`Imported ${parsed.length} order${parsed.length===1?"":"s"} — selected and ready to print.`);
       setSel(new Set(parsed.map(o=>o.id)));
@@ -3348,55 +3356,92 @@ function Batch({orders,setOrders,client,rules,settings,onShipped}){
     };
     reader.readAsText(file); e.target.value="";
   };
+  // pick a rate honoring a service preference ("FedEx - 2Day", "FedEx Ground", "ANY - Cheapest Ground"...)
+  const pickByPref=(qs,pref)=>{
+    if(!qs||!qs.length)return null;
+    const cheap=qs.slice().sort((a,b)=>(a.cost||0)-(b.cost||0))[0];
+    if(!pref)return null;
+    const P=String(pref);
+    if(/^ANY/i.test(P)){
+      if(/ground/i.test(P))return qs.filter(q=>/ground|home/i.test(q.label||"")).sort((a,b)=>(a.cost||0)-(b.cost||0))[0]||cheap;
+      if(/2\s*day/i.test(P))return qs.filter(q=>/2.?day/i.test(q.label||"")).sort((a,b)=>(a.cost||0)-(b.cost||0))[0]||cheap;
+      if(/fastest/i.test(P))return qs.slice().sort((a,b)=>speedRank(a.label)-speedRank(b.label)||(a.cost||0)-(b.cost||0))[0];
+      return cheap;
+    }
+    const dash=P.indexOf(" - ");const prefCarrier=dash>0?P.slice(0,dash).trim().toLowerCase():"";const prefSvc=(dash>0?P.slice(dash+3):P).replace(/^(fedex|dhl)\s*/i,"").trim().toLowerCase();
+    return qs.find(q=>(!prefCarrier||String(q.carrier||q.label||"").toLowerCase().includes(prefCarrier))&&String(q.label||"").toLowerCase().includes(prefSvc))||null;
+  };
   const rateFor=(o)=>{
     const qs=quoteRates({fromZip:client.origin,toZip:o.zip,L:12,W:9,H:4,weight:o.weight,residential:true});
-    let pick;
-    const ov=svcOv[o.id];
-    if(ov) pick=qs.find(q=>String(q.label).toLowerCase().includes(ov.toLowerCase().replace(/^(fedex|dhl)\s*/,"")));
-    if(!pick&&rule==="ground") pick=qs.filter(q=>/Ground|Home/.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
-    else if(!pick&&rule==="fastest") pick=qs.slice().sort((a,b)=>speedRank(a.label)-speedRank(b.label)||a.cost-b.cost)[0];
-    else if(rule==="specific"){ pick=qs.find(q=>String(q.label).toLowerCase().includes(specSvc.toLowerCase().replace(/^(fedex|ups|dhl)\s*/,""))) || qs.filter(q=>carrierOf(q.label)===specCarrier).sort((a,b)=>a.cost-b.cost)[0]; }
-    else pick=qs.slice().sort((a,b)=>a.cost-b.cost)[0];
+    let pick=pickByPref(qs,svcOv[o.id]);
+    if(!pick){
+      if(rule==="ground") pick=qs.filter(q=>/Ground|Home/.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
+      else if(rule==="fastest") pick=qs.slice().sort((a,b)=>speedRank(a.label)-speedRank(b.label)||a.cost-b.cost)[0];
+      else if(rule==="specific") pick=qs.find(q=>String(q.label).toLowerCase().includes(specSvc.toLowerCase().replace(/^(fedex|ups|dhl)\s*/,"")))||qs.filter(q=>carrierOf(q.label)===specCarrier).sort((a,b)=>a.cost-b.cost)[0];
+      else pick=qs.slice().sort((a,b)=>a.cost-b.cost)[0];
+    }
     pick=pick||qs[0]||{label:"—",cost:0};
     return {...pick,sell:Math.round((pick.cost||0)*(1+client.markup/100)*100)/100};
   };
   const zoneOf=(o)=>String(zoneEst(client.origin,o.zip));
   const prodOf=(o)=>o.product||o.items||"—";
-  const matchFilter=(o)=>{
-    if(filterDim==="zone"&&filterVals.size)return filterVals.has(zoneOf(o));
-    if(filterDim==="state"&&filterVals.size)return filterVals.has((o.state||"").toUpperCase());
-    if(filterDim==="product"&&filterVals.size)return filterVals.has(prodOf(o));
-    if(filterDim==="sku"&&filterVals.size)return filterVals.has(o.sku||"—");
-    if(filterDim==="source"&&filterVals.size)return filterVals.has(o.source||"—");
-    if(filterDim==="service"&&filterVals.size)return filterVals.has(o.shippingService||"—");
-    if(filterDim==="carrier"&&filterVals.size)return filterVals.has(carrierOf(rateFor(o).label));
-    return true;
-  };
-  const inRange=(o)=>{
+  const ageDays=(o)=>{const t=Date.parse(o.date||"");return isNaN(t)?null:Math.max(0,Math.floor((Date.now()-t)/86400000));};
+  const dimOf=(o,d)=>d==="state"?(o.state||"—").toUpperCase():d==="zone"?"Z"+zoneOf(o):d==="source"?(o.source||"Manual"):d==="sku"?(o.sku||"—"):prodOf(o);
+  const matches=(o)=>{
+    for(const d of Object.keys(fs)){ if(fs[d].size&&!fs[d].has(dimOf(o,d))) return false; }
     const w=+o.weight||0, t=parseFloat(o.total||0);
     if(wMin!==""&&w<+wMin)return false; if(wMax!==""&&w>+wMax)return false;
     if(tMin!==""&&t<+tMin)return false; if(tMax!==""&&t>+tMax)return false;
-    const s=search.trim().toLowerCase();
-    if(s&&!((o.name+o.customer+(o.city||"")+(o.state||"")+(o.sku||"")+(o.items||"")+(o.source||"")).toLowerCase().includes(s)))return false;
+    if(age!=="any"){const a=ageDays(o); if(a==null)return false; if(age==="today"&&a>0)return false; if(age==="2"&&a>2)return false; if(age==="7"&&a>7)return false; if(age==="old"&&a<=7)return false;}
+    const q=search.trim().toLowerCase();
+    if(q&&!((o.name+" "+(o.customer||"")+" "+(o.company||"")+" "+(o.city||"")+" "+(o.state||"")+" "+(o.zip||"")+" "+(o.sku||"")+" "+(o.items||"")+" "+(o.source||"")+" "+(o.email||"")).toLowerCase().includes(q)))return false;
     return true;
   };
-  const visible=pool.filter(o=>matchFilter(o)&&inRange(o));
-  const toggleVal=(v)=>setFilterVals(s=>{const n=new Set(s);n.has(v)?n.delete(v):n.add(v);return n;});
-  const changeDim=(d)=>{setFilterDim(d);setFilterVals(new Set());setProdQ("");};
-  const zonesPresent=Array.from(new Set(pool.map(zoneOf))).sort();
-  const productsPresent=Array.from(new Set(pool.map(prodOf))).filter(p=>p&&p!=="—");
-  const skusPresent=Array.from(new Set(pool.map(o=>o.sku||"—"))).filter(s=>s&&s!=="—");
-  const sourcesPresent=Array.from(new Set(pool.map(o=>o.source||"—"))).filter(s=>s&&s!=="—");
-  const servicesPresent=Array.from(new Set(pool.map(o=>o.shippingService||"—"))).filter(s=>s&&s!=="—");
+  const SORTS={newest:(a,b)=>(Date.parse(b.date||0)||0)-(Date.parse(a.date||0)||0),oldest:(a,b)=>(Date.parse(a.date||0)||0)-(Date.parse(b.date||0)||0),heaviest:(a,b)=>(+b.weight||0)-(+a.weight||0),lightest:(a,b)=>(+a.weight||0)-(+b.weight||0),value:(a,b)=>(+b.total||0)-(+a.total||0),state:(a,b)=>String(a.state||"").localeCompare(String(b.state||"")),zone:(a,b)=>(+zoneOf(a))-(+zoneOf(b))};
+  const visible=pool.filter(matches).sort(SORTS[sortBy]||(()=>0));
+  const toggleDim=(d,v)=>setFs(f=>{const n={...f,[d]:new Set(f[d])};n[d].has(v)?n[d].delete(v):n[d].add(v);return n;});
+  const activeFilters=Object.values(fs).reduce((a,st)=>a+st.size,0)+(wMin!==""?1:0)+(wMax!==""?1:0)+(tMin!==""?1:0)+(tMax!==""?1:0)+(age!=="any"?1:0);
+  const clearFilters=()=>{setFs({state:new Set(),zone:new Set(),source:new Set(),sku:new Set(),product:new Set()});setWMin("");setWMax("");setTMin("");setTMax("");setAge("any");setSearch("");};
+  const dimValues=(d)=>{const m={};pool.forEach(o=>{const k=dimOf(o,d);m[k]=(m[k]||0)+1;});return Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,14);};
+  // ── Autopilot inside Batch ──
+  const applyAutopilot=()=>{
+    const engine=runRuleEngine((ruleset||[]).filter(r=>r.enabled),visible,originZip);
+    const patches=rulePatchesFor(engine);
+    const ov={...svcOv};const why={...ovWhy};const hd={};let routed=0;
+    engine.results.forEach(r=>{
+      const p=patches[r.order.id]; if(!p)return;
+      if(p.hold){ hd[r.order.id]=p.hold; return; }
+      if(p.ruleService){ ov[r.order.id]=p.ruleService; why[r.order.id]=(r.fires[0]&&r.fires[0].ruleName)||"rule"; routed++; }
+    });
+    setSvcOv(ov);setOvWhy(why);setHolds(hd);
+    if(Object.keys(hd).length)setSel(s=>{const n=new Set(s);Object.keys(hd).forEach(k=>{n.delete(k);n.delete(+k);});return n;});
+    setApMsg({routed,held:Object.keys(hd).length});
+    setTimeout(()=>setApMsg(null),7000);
+  };
+  const clearAutopilot=()=>{setSvcOv({});setOvWhy({});setHolds({});};
+  const saveQuickRule=()=>{
+    const meta=RULE_PROPERTIES[qr.property]||{type:"text"};
+    if(!String(qr.value).trim())return;
+    const nm=`${qr.property} ${qr.operator} ${qr.value} → ${qr.service}`;
+    const r={id:"r"+Date.now(),name:nm,enabled:true,stop:false,match:"all",conditions:[{id:"c"+Date.now(),property:qr.property,operator:qr.operator,value:qr.value}],actions:[{id:"a"+Date.now(),type:"Set Service",service:qr.service}]};
+    setRuleset&&setRuleset(rs=>[...(rs||[]),r]);
+    setQrOpen(false);setQr({property:"Package Weight",operator:">",value:"",service:"ANY - Cheapest Ground"});
+    setMsg("Rule saved — it now lives in Autopilot too. Hit Apply Autopilot rules to use it.");
+    setTimeout(()=>setMsg(""),5000);
+  };
   const toggle=id=>setSel(s=>{const n=new Set(s);n.has(id)?n.delete(id):n.add(id);return n;});
-  const all=()=>setSel(s=>{const ids=visible.map(o=>o.id);const allOn=ids.every(i=>s.has(i))&&ids.length>0;const n=new Set(s);ids.forEach(i=>allOn?n.delete(i):n.add(i));return n;});
-  const rows=visible.filter(o=>sel.has(o.id)).map(o=>({o,q:rateFor(o)}));
-  const totals=rows.reduce((a,r)=>({cost:a.cost+(r.q.cost||0),sell:a.sell+(r.q.sell||0)}),{cost:0,sell:0});
+  const all=()=>setSel(s=>{const ids=visible.filter(o=>!holds[o.id]).map(o=>o.id);const allOn=ids.every(i=>s.has(i))&&ids.length>0;const n=new Set(s);ids.forEach(i=>allOn?n.delete(i):n.add(i));return n;});
+  const invert=()=>setSel(s=>{const n=new Set();visible.forEach(o=>{if(!s.has(o.id)&&!holds[o.id])n.add(o.id);});return n;});
+  const rows=visible.filter(o=>sel.has(o.id)&&!holds[o.id]).map(o=>({o,q:rateFor(o)}));
+  const totals=rows.reduce((a,r)=>({cost:a.cost+(r.q.cost||0),sell:a.sell+(r.q.sell||0),wt:a.wt+(+r.o.weight||0)}),{cost:0,sell:0,wt:0});
+  const svcMixSel=(()=>{const m={};rows.forEach(r=>{m[r.q.label]=(m[r.q.label]||0)+1;});return Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,3);})();
+  const logBatch=(ok,fail)=>{const entry={id:"b"+Date.now(),date:new Date().toLocaleDateString(),time:new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}),count:ok+fail,ok,fail,est:Math.round(totals.sell*100)/100,mode:canBook?"live":"recorded"};setBatches(b=>[entry,...(b||[])].slice(0,20));};
   const run=async()=>{
-    const chosen=visible.filter(o=>sel.has(o.id));
+    const chosen=visible.filter(o=>sel.has(o.id)&&!holds[o.id]);
     if(!chosen.length)return;
     if(!canBook){ // demo fallback — record locally
-      chosen.forEach((o)=>{const q=rateFor(o);const carrier=carrierOf(q.label);onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:newTracking(carrier),carrier,service:q.label,recipient:{name:o.customer,city:o.city,state:o.state,zip:o.zip},sender:{...(settings&&settings.sender||{})},fromZip:client.origin,toZip:o.zip,weight:o.weight,dims:{L:12,W:9,H:4},cost:q.cost,sell:q.sell,billTo:"sender",status:"Label created",reference:o.name},o.id);});
+      chosen.forEach((o)=>{const q=rateFor(o);const carrier=carrierOf(q.label);onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:newTracking(carrier),carrier,service:q.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings&&settings.sender||{})},fromZip:originZip,toZip:o.zip,weight:o.weight,dims:{L:12,W:9,H:4},cost:q.cost,sell:q.sell,billTo:"sender",status:"Label created",reference:o.name},o.id);});
+      logBatch(chosen.length,0);
       setDone(chosen.length);setSel(new Set());setTimeout(()=>setDone(0),2500);return;
     }
     setRunning(true);setResults([]);setProgress({n:0,total:chosen.length});
@@ -3404,17 +3449,17 @@ function Batch({orders,setOrders,client,rules,settings,onShipped}){
     for(let i=0;i<chosen.length;i++){
       const o=chosen[i];
       setProgress({n:i+1,total:chosen.length});
-      // fetch real rates for this order, pick per rule
       let picked=null;
       try{
-        const res=await ratesForOrder(o,{residential:true,weightLb:o.weight,fromZip:(settings.sender&&settings.sender.zip)||client.origin,sender:settings.sender},eng);
-        let qs=((res&&res.rates)||[]).filter(q=>q.carrier==="FedEx"&&!/first\s*overnight/i.test(q.label||"")).map(q=>({...q,sell:Math.round((q.cost||0)*(1+(client.markup||0)/100)*100)/100}));
-        const ov=svcOv[o.id];
-        if(ov)picked=qs.find(q=>String(q.label).toLowerCase().includes(ov.toLowerCase().replace(/^(fedex|dhl)\s*/,"")));
-        if(!picked&&rule==="ground")picked=qs.filter(q=>/ground|home/i.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
-        else if(!picked&&rule==="fastest")picked=qs.slice().sort((a,b)=>speedRank(a.label)-speedRank(b.label)||a.cost-b.cost)[0];
-        else if(rule==="specific")picked=qs.find(q=>String(q.label).toLowerCase().includes(specSvc.toLowerCase().replace(/^fedex\s*/,"")))||qs[0];
-        else picked=qs.slice().sort((a,b)=>a.cost-b.cost)[0];
+        const res=await ratesForOrder(o,{residential:true,weightLb:o.weight,fromZip:originZip,sender:settings.sender},eng);
+        let qs=((res&&res.rates)||[]).filter(q=>!/first\s*overnight/i.test(q.label||"")).map(q=>({...q,sell:Math.round((q.cost||0)*(1+(client.markup||0)/100)*100)/100}));
+        picked=pickByPref(qs,svcOv[o.id]);
+        if(!picked){
+          if(rule==="ground")picked=qs.filter(q=>/ground|home/i.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
+          else if(rule==="fastest")picked=qs.slice().sort((a,b)=>speedRank(a.label)-speedRank(b.label)||a.cost-b.cost)[0];
+          else if(rule==="specific")picked=qs.find(q=>String(q.label).toLowerCase().includes(specSvc.toLowerCase().replace(/^fedex\s*/,"")))||qs[0];
+          else picked=qs.slice().sort((a,b)=>a.cost-b.cost)[0];
+        }
       }catch(e){}
       if(!picked){ out.push({name:o.name,ok:false,error:"No rate returned"}); setResults([...out]); continue; }
       const need=[]; if(!o.customer&&!o.company)need.push("name"); if(String(o.phone||"").replace(/\D/g,"").length<10)need.push("phone"); if(!o.email)need.push("email");
@@ -3422,11 +3467,12 @@ function Batch({orders,setOrders,client,rules,settings,onShipped}){
       const res=await bookOrderLabel(o,{quote:picked,weightLb:o.weight,residential:true,sender:settings.sender},eng,settings.sender);
       if(res&&res.ok){
         const carrier=carrierOf(picked.label);
-        onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:(settings.sender&&settings.sender.zip)||client.origin,toZip:o.zip,weight:o.weight,dims:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,bookNumber:res.bookNumber},o.id);
+        onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:originZip,toZip:o.zip,weight:o.weight,dims:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,bookNumber:res.bookNumber},o.id);
         out.push({name:o.name,ok:true,tracking:res.tracking,service:picked.label,pdf:res.labelPdfBase64||null});
       } else out.push({name:o.name,ok:false,error:(res&&res.error)||"Booking failed"});
       setResults([...out]);
     }
+    logBatch(out.filter(r=>r.ok).length,out.filter(r=>!r.ok).length);
     setRunning(false);
     setSel(new Set());
   };
@@ -3434,23 +3480,31 @@ function Batch({orders,setOrders,client,rules,settings,onShipped}){
   const keyOf=(o)=>{if(groupBy==="sku")return o.sku||"—";if(groupBy==="product")return prodOf(o);if(groupBy==="zone")return "Zone "+zoneOf(o);if(groupBy==="service")return rateFor(o).label;if(groupBy==="carrier")return carrierOf(rateFor(o).label);if(groupBy==="state")return o.state||"—";return "All orders";};
   const groups={}; visible.forEach(o=>{const k=keyOf(o);(groups[k]=groups[k]||[]).push(o);});
   const groupKeys=Object.keys(groups).sort();
-  const selectGroup=(arr)=>setSel(s=>{const n=new Set(s);const allOn=arr.every(o=>n.has(o.id));arr.forEach(o=>allOn?n.delete(o.id):n.add(o.id));return n;});
+  const selectGroup=(arr)=>setSel(s=>{const n=new Set(s);const ok=arr.filter(o=>!holds[o.id]);const allOn=ok.every(o=>n.has(o.id));ok.forEach(o=>allOn?n.delete(o.id):n.add(o.id));return n;});
   const Chip=({on,onClick,children})=>(<button onClick={onClick} className={`text-xs rounded-full px-2.5 py-1 border font-medium ${on?"bg-[#0099FF] text-white border-[#0099FF]":"bg-white text-stone-600 border-stone-200 hover:border-[#99D6FF]"}`}>{children}</button>);
-  const OrderRow=(o)=>{const q=rateFor(o);const on=sel.has(o.id);const ex=openRow===o.id;return (
-    <div key={o.id} className={on?"bg-[#E6F4FF]/50":""}>
-      <div className={`flex items-center gap-3 px-3 sm:px-4 py-3 cursor-pointer ${on?"":"hover:bg-stone-50"}`} onClick={()=>setOpenRow(ex?null:o.id)}>
-        <input type="checkbox" checked={on} onClick={e=>e.stopPropagation()} onChange={()=>toggle(o.id)} className="accent-[#0086E0]"/>
-        <ChevronRight className={`w-3.5 h-3.5 text-stone-300 transition-transform ${ex?"rotate-90":""}`}/>
-        <div className="w-12 sm:w-14 font-semibold text-sm">{o.name}</div>
-        <div className="flex-1 min-w-0"><div className="text-sm truncate">{o.customer}{o.company?` · ${o.company}`:""}</div><div className="text-[11px] text-stone-400 truncate">{o.city}, {o.state} · {o.weight} lb{o.sku?` · ${o.sku}`:""} · Z{zoneOf(o)}</div></div>
-        <div className="w-44 hidden sm:block" onClick={e=>e.stopPropagation()}>
-          <select value={svcOv[o.id]||""} onChange={e=>setSvcOv(v=>{const n={...v};if(e.target.value)n[o.id]=e.target.value;else delete n[o.id];return n;})} className={`w-full bg-white border rounded px-2 py-1 text-xs outline-none focus:border-[#0099FF] ${svcOv[o.id]?"border-[#0099FF] text-[#006FBF] font-medium":"border-stone-200 text-stone-500"}`}>
-            <option value="">Auto — {q.label}</option>
-            {SERVICE_OPTIONS.FedEx.map(sv=><option key={sv} value={sv}>{sv}</option>)}
-            <option value="DHL Express Worldwide">DHL Express Worldwide</option>
-          </select>
+  const srcTone=(src)=>src==="Shopify"?"green":src==="CSV import"?"amber":"stone";
+  const OrderRow=(o)=>{const q=rateFor(o);const on=sel.has(o.id);const ex=openRow===o.id;const held=holds[o.id];const a=ageDays(o);return (
+    <div key={o.id} className={held?"bg-rose-50/40":on?"bg-[#E6F4FF]/50":""}>
+      <div className={`flex items-center gap-2.5 px-3 sm:px-4 py-2.5 cursor-pointer ${on||held?"":"hover:bg-stone-50"}`} onClick={()=>setOpenRow(ex?null:o.id)}>
+        <input type="checkbox" checked={on&&!held} disabled={!!held} onClick={e=>e.stopPropagation()} onChange={()=>toggle(o.id)} className="accent-[#0086E0] disabled:opacity-40"/>
+        <ChevronRight className={`w-3.5 h-3.5 text-stone-300 transition-transform shrink-0 ${ex?"rotate-90":""}`}/>
+        <div className="w-14 sm:w-16 shrink-0"><div className="font-semibold text-sm">{o.name}</div>{a!=null&&<div className={`text-[10px] ${a>=3?"text-amber-600 font-medium":"text-stone-400"}`}>{a===0?"today":a+"d old"}</div>}</div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm truncate">{o.customer}{o.company?` · ${o.company}`:""}<span className="text-stone-400 text-[12px]">{o.items?` · ${o.items}`:""}</span></div>
+          <div className="text-[11px] text-stone-400 truncate">{o.address1?o.address1+", ":""}{o.city}, {o.state} {o.zip} · {o.weight} lb · Z{zoneOf(o)}{o.sku?` · ${o.sku}`:""}</div>
         </div>
-        <div className="w-16 sm:w-20 text-right font-mono text-sm">{money(q.sell)}</div>
+        <span className="hidden md:block shrink-0"><Badge tone={srcTone(o.source||"Manual")}>{o.source||"Manual"}</Badge></span>
+        <div className="w-16 hidden lg:block text-right font-mono text-[12px] text-stone-500 shrink-0">{o.total!=null?money(o.total):"—"}</div>
+        {held
+          ?<span className="w-44 hidden sm:flex items-center gap-1 text-[11px] text-rose-600 shrink-0"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="truncate">Held: {held}</span></span>
+          :<div className="w-44 hidden sm:block shrink-0" onClick={e=>e.stopPropagation()}>
+            <select value={svcOv[o.id]||""} onChange={e=>setSvcOv(v=>{const n={...v};if(e.target.value)n[o.id]=e.target.value;else delete n[o.id];return n;})} title={ovWhy[o.id]?`Set by Autopilot rule: ${ovWhy[o.id]}`:""} className={`w-full bg-white border rounded px-2 py-1 text-xs outline-none focus:border-[#0099FF] ${svcOv[o.id]?"border-[#0099FF] text-[#006FBF] font-medium":"border-stone-200 text-stone-500"}`}>
+              <option value="">Auto — {q.label}</option>
+              {RULE_SERVICES.map(sv=><option key={sv} value={sv}>{sv}</option>)}
+            </select>
+            {ovWhy[o.id]&&svcOv[o.id]&&<div className="text-[9px] text-violet-600 truncate mt-0.5 flex items-center gap-0.5"><Zap className="w-2.5 h-2.5 shrink-0"/>{ovWhy[o.id]}</div>}
+          </div>}
+        <div className="w-16 sm:w-20 text-right font-mono text-sm shrink-0">{money(q.sell)}</div>
       </div>
       {ex&&<div className="px-10 sm:px-12 pb-3 pt-0.5 bg-stone-50/60 grid sm:grid-cols-2 gap-x-8 gap-y-1 text-sm">
         <Info k="Ship to" v={`${o.address1||"—"}, ${o.city||""}, ${o.state||""} ${o.zip||""}`}/>
@@ -3458,8 +3512,8 @@ function Batch({orders,setOrders,client,rules,settings,onShipped}){
         <Info k="Items" v={o.items||"—"}/>
         <Info k="Order total" v={o.total!=null?money(o.total):"—"}/>
         <Info k="Source" v={`${o.source||"Manual"}${o.date?" · "+o.date:""}`}/>
-        <Info k="Weight" v={`${o.weight||"?"} lb`}/>
-        <Info k="Service for this label" v={svcOv[o.id]?svcOv[o.id]+" (your pick)":q.label+" (by rate rule)"}/>
+        <Info k="Weight / zone" v={`${o.weight||"?"} lb · zone ${zoneOf(o)}`}/>
+        <Info k="Service for this label" v={held?`HELD — ${held}`:svcOv[o.id]?`${svcOv[o.id]}${ovWhy[o.id]?" (Autopilot: "+ovWhy[o.id]+")":" (your pick)"}`:q.label+" (by rate rule)"}/>
         <Info k="Rate" v={money(q.sell)}/>
       </div>}
     </div>
@@ -3467,12 +3521,43 @@ function Batch({orders,setOrders,client,rules,settings,onShipped}){
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-        <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Layers className="w-4 h-4"/>Batch label printing</h2>
+        <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Layers className="w-4 h-4"/>Batch shipping</h2>
+        <span className="text-[11px] text-stone-400">{pool.length} open order{pool.length===1?"":"s"}</span>
+        <div className="flex-1"/>
         <label className="flex items-center gap-1.5 text-sm bg-stone-200 text-stone-700 rounded px-2.5 py-1.5 font-medium hover:bg-stone-300 cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
       </div>
+      {msg&&<div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{msg}</div>}
+
+      {/* command bar */}
       <div className="border border-stone-200 rounded-lg bg-white p-3 space-y-3">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <span className="text-[11px] uppercase tracking-widest text-stone-400 w-full sm:w-auto">Rate rule</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[180px]"><Search className="w-4 h-4 absolute left-2.5 top-2 text-stone-400"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search orders — name, address, SKU, item, email…" className="w-full bg-stone-50 border border-stone-200 rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#0099FF] focus:bg-white"/></div>
+          <select value={sortBy} onChange={e=>setSortBy(e.target.value)} className="bg-white border border-stone-200 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">
+            <option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="heaviest">Heaviest first</option><option value="lightest">Lightest first</option><option value="value">Highest value</option><option value="state">By state</option><option value="zone">By zone</option>
+          </select>
+          <button onClick={()=>setFOpen(v=>!v)} className={`text-sm rounded-lg px-3 py-1.5 font-medium border flex items-center gap-1.5 ${activeFilters?"bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF]":"bg-white border-stone-200 text-stone-600 hover:bg-stone-100"}`}><ChevronDown className={`w-3.5 h-3.5 transition-transform ${fOpen?"rotate-180":""}`}/>Filters{activeFilters?` · ${activeFilters}`:""}</button>
+          {activeFilters>0&&<button onClick={clearFilters} className="text-[12px] text-stone-400 hover:text-stone-600 underline">clear</button>}
+        </div>
+        {fOpen&&<div className="border-t border-stone-100 pt-3 space-y-2.5">
+          {[["state","State"],["zone","Zone"],["source","Source"],["sku","SKU"],["product","Product"]].map(([d,label])=>{
+            const vals=dimValues(d); if(!vals.length)return null;
+            return (<div key={d} className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] uppercase tracking-widest text-stone-400 w-14 shrink-0">{label}</span>
+              {vals.map(([v,n])=><Chip key={v} on={fs[d].has(v)} onClick={()=>toggleDim(d,v)}>{v} <span className="opacity-60">{n}</span></Chip>)}
+            </div>);
+          })}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <span className="text-[10px] uppercase tracking-widest text-stone-400 w-14 shrink-0">Ranges</span>
+            <span className="text-[12px] text-stone-500">Weight</span>
+            <input value={wMin} onChange={e=>setWMin(e.target.value)} placeholder="min" className="w-16 bg-white border border-stone-200 rounded px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>–<input value={wMax} onChange={e=>setWMax(e.target.value)} placeholder="max" className="w-16 bg-white border border-stone-200 rounded px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>
+            <span className="text-[12px] text-stone-500 ml-2">Total $</span>
+            <input value={tMin} onChange={e=>setTMin(e.target.value)} placeholder="min" className="w-16 bg-white border border-stone-200 rounded px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>–<input value={tMax} onChange={e=>setTMax(e.target.value)} placeholder="max" className="w-16 bg-white border border-stone-200 rounded px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>
+            <span className="text-[12px] text-stone-500 ml-2">Age</span>
+            <select value={age} onChange={e=>setAge(e.target.value)} className="bg-white border border-stone-200 rounded px-2 py-1 text-xs outline-none focus:border-[#0099FF]"><option value="any">Any</option><option value="today">Today</option><option value="2">≤ 2 days</option><option value="7">≤ 7 days</option><option value="old">Over 7 days</option></select>
+          </div>
+        </div>}
+        <div className="border-t border-stone-100 pt-3 flex flex-wrap items-center gap-2 sm:gap-3">
+          <span className="text-[11px] uppercase tracking-widest text-stone-400">Rate rule</span>
           <select value={rule} onChange={e=>setRule(e.target.value)} className="bg-white border border-stone-200 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">
             <option value="cheapest">Cheapest overall</option>
             <option value="fastest">Fastest delivery</option>
@@ -3481,61 +3566,87 @@ function Batch({orders,setOrders,client,rules,settings,onShipped}){
           </select>
           {rule==="specific"&&<>
             <select value={specCarrier} onChange={e=>{setSpecCarrier(e.target.value);setSpecSvc(SERVICE_OPTIONS[e.target.value][0]);}} className="bg-white border border-stone-200 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">{Object.keys(SERVICE_OPTIONS).map(c=><option key={c}>{c}</option>)}</select>
-            <select value={specSvc} onChange={e=>setSpecSvc(e.target.value)} className="bg-white border border-stone-200 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">{(SERVICE_OPTIONS[specCarrier]||[]).map(s=><option key={s}>{s}</option>)}</select>
+            <select value={specSvc} onChange={e=>setSpecSvc(e.target.value)} className="bg-white border border-stone-200 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">{(SERVICE_OPTIONS[specCarrier]||[]).map(sv=><option key={sv}>{sv}</option>)}</select>
           </>}
+          <span className="text-[11px] uppercase tracking-widest text-stone-400 ml-2">Group</span>
+          <select value={groupBy} onChange={e=>setGroupBy(e.target.value)} className="bg-white border border-stone-200 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">
+            <option value="none">No grouping</option><option value="zone">By zone</option><option value="state">By state</option><option value="sku">By SKU</option><option value="product">By product</option><option value="service">By service</option><option value="carrier">By carrier</option>
+          </select>
+          <div className="flex-1"/>
+          <button onClick={applyAutopilot} disabled={!(ruleset||[]).some(r=>r.enabled)||!visible.length} title="Run your Autopilot rules on the orders below: routes services, applies holds" className="text-sm bg-violet-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-violet-700 disabled:opacity-40 flex items-center gap-1.5"><Zap className="w-4 h-4"/>Apply Autopilot rules</button>
+          <button onClick={()=>setQrOpen(v=>!v)} className={`text-sm rounded-lg px-3 py-1.5 font-medium border flex items-center gap-1.5 ${qrOpen?"bg-violet-50 border-violet-300 text-violet-700":"bg-white border-stone-200 text-stone-600 hover:bg-stone-100"}`}><Plus className="w-3.5 h-3.5"/>Quick rule</button>
+          {(Object.keys(svcOv).length>0||Object.keys(holds).length>0)&&<button onClick={clearAutopilot} className="text-[12px] text-stone-400 hover:text-stone-600 underline">reset routing</button>}
         </div>
+        {qrOpen&&<div className="border-t border-stone-100 pt-3 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-stone-500">If</span>
+          <select value={qr.property} onChange={e=>{const p=e.target.value;const t=(RULE_PROPERTIES[p]||{}).type||"text";setQr({...qr,property:p,operator:RULE_OPERATORS[t][0]});}} className="bg-white border border-stone-200 rounded px-2 py-1.5 outline-none focus:border-violet-400">{RULE_PROP_NAMES.map(pn=><option key={pn}>{pn}</option>)}</select>
+          <select value={qr.operator} onChange={e=>setQr({...qr,operator:e.target.value})} className="bg-white border border-stone-200 rounded px-2 py-1.5 outline-none focus:border-violet-400">{(RULE_OPERATORS[(RULE_PROPERTIES[qr.property]||{}).type||"text"]||[]).map(op=><option key={op}>{op}</option>)}</select>
+          <input value={qr.value} onChange={e=>setQr({...qr,value:e.target.value})} placeholder="value (commas = list)" className="w-40 bg-white border border-stone-200 rounded px-2.5 py-1.5 outline-none focus:border-violet-400"/>
+          <span className="text-stone-500">→ ship</span>
+          <select value={qr.service} onChange={e=>setQr({...qr,service:e.target.value})} className="bg-white border border-stone-200 rounded px-2 py-1.5 outline-none focus:border-violet-400">{RULE_SERVICES.map(sv=><option key={sv}>{sv}</option>)}</select>
+          <button onClick={saveQuickRule} disabled={!String(qr.value).trim()} className="text-sm bg-violet-600 text-white rounded px-3 py-1.5 font-medium hover:bg-violet-700 disabled:opacity-40">Save to Autopilot</button>
+          <span className="text-[11px] text-stone-400 w-full">Saved rules appear in the Autopilot tab too — same pipeline, one source of truth.</span>
+        </div>}
       </div>
-      <div className="border border-stone-200 rounded-lg bg-white p-3 space-y-3">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <span className="text-[11px] uppercase tracking-widest text-stone-400">Filter to</span>
-          {[["none","Everything"],["zone","Zone"],["state","State"],["product","Product"],["sku","SKU"],["source","Source"],["service","Requested service"],["carrier","Carrier"]].map(([v,l])=>
-            <button key={v} onClick={()=>changeDim(v)} className={`text-xs rounded-lg px-2.5 py-1.5 border font-medium ${filterDim===v?"bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF]":"bg-white border-stone-200 text-stone-500 hover:bg-stone-50"}`}>{l}</button>
-          )}
-          {filterDim!=="none"&&filterVals.size>0&&<button onClick={()=>setFilterVals(new Set())} className="text-xs text-stone-400 hover:text-stone-700 underline ml-1">clear</button>}
-        </div>
-        {filterDim==="zone"&&<div className="flex flex-wrap gap-1.5">{["2","3","4","5","6","7","8"].map(z=><Chip key={z} on={filterVals.has(z)} onClick={()=>toggleVal(z)}>Zone {z}{zonesPresent.includes(z)?` · ${pool.filter(o=>zoneOf(o)===z).length}`:""}</Chip>)}</div>}
-        {filterDim==="state"&&<div className="flex flex-wrap gap-1.5 max-h-44 overflow-auto">{US_STATES.map(s=>{const n=pool.filter(o=>(o.state||"").toUpperCase()===s).length;return <Chip key={s} on={filterVals.has(s)} onClick={()=>toggleVal(s)}>{s}{n?` · ${n}`:""}</Chip>;})}</div>}
-        {filterDim==="product"&&<div className="space-y-2"><div className="relative"><Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400"/><input value={prodQ} onChange={e=>setProdQ(e.target.value)} placeholder="Search products…" className="w-full bg-white border border-stone-200 rounded pl-8 pr-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/></div><div className="flex flex-wrap gap-1.5 max-h-44 overflow-auto">{productsPresent.filter(p=>!prodQ.trim()||p.toLowerCase().includes(prodQ.toLowerCase())).map(p=><Chip key={p} on={filterVals.has(p)} onClick={()=>toggleVal(p)}>{p} · {pool.filter(o=>prodOf(o)===p).length}</Chip>)}{productsPresent.length===0&&<span className="text-xs text-stone-400">No product names on these orders.</span>}</div></div>}
-        {filterDim==="sku"&&<div className="flex flex-wrap gap-1.5 max-h-44 overflow-auto">{skusPresent.map(s=><Chip key={s} on={filterVals.has(s)} onClick={()=>toggleVal(s)}>{s} · {pool.filter(o=>(o.sku||"—")===s).length}</Chip>)}{skusPresent.length===0&&<span className="text-xs text-stone-400">No SKUs on these orders.</span>}</div>}
-        {filterDim==="source"&&<div className="flex flex-wrap gap-1.5">{sourcesPresent.map(s=><Chip key={s} on={filterVals.has(s)} onClick={()=>toggleVal(s)}>{s} · {pool.filter(o=>(o.source||"—")===s).length}</Chip>)}{sourcesPresent.length===0&&<span className="text-xs text-stone-400">No sources on these orders.</span>}</div>}
-        {filterDim==="service"&&<div className="flex flex-wrap gap-1.5">{servicesPresent.map(s=><Chip key={s} on={filterVals.has(s)} onClick={()=>toggleVal(s)}>{s} · {pool.filter(o=>(o.shippingService||"—")===s).length}</Chip>)}{servicesPresent.length===0&&<span className="text-xs text-stone-400">No requested services on these orders.</span>}</div>}
-        {filterDim==="carrier"&&<div className="flex flex-wrap gap-1.5">{["FedEx"].map(c=><Chip key={c} on={filterVals.has(c)} onClick={()=>toggleVal(c)}>{c}</Chip>)}</div>}
-        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-stone-100">
-          <div className="relative flex-1 min-w-[180px]"><Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, city, SKU, items…" className="w-full bg-white border border-stone-200 rounded pl-8 pr-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/></div>
-          <div className="flex items-center gap-1 text-xs text-stone-500">Weight<input type="number" value={wMin} onChange={e=>setWMin(e.target.value)} placeholder="min" className="w-16 bg-white border border-stone-200 rounded px-2 py-1 outline-none focus:border-[#0099FF]"/>–<input type="number" value={wMax} onChange={e=>setWMax(e.target.value)} placeholder="max" className="w-16 bg-white border border-stone-200 rounded px-2 py-1 outline-none focus:border-[#0099FF]"/>lb</div>
-          <div className="flex items-center gap-1 text-xs text-stone-500">Total $<input type="number" value={tMin} onChange={e=>setTMin(e.target.value)} placeholder="min" className="w-16 bg-white border border-stone-200 rounded px-2 py-1 outline-none focus:border-[#0099FF]"/>–<input type="number" value={tMax} onChange={e=>setTMax(e.target.value)} placeholder="max" className="w-16 bg-white border border-stone-200 rounded px-2 py-1 outline-none focus:border-[#0099FF]"/></div>
-          {(search||wMin||wMax||tMin||tMax)&&<button onClick={()=>{setSearch("");setWMin("");setWMax("");setTMin("");setTMax("");}} className="text-xs text-stone-400 hover:text-stone-700 underline">clear</button>}
-        </div>
-        <div className="flex items-center gap-3 pt-1 border-t border-stone-100 flex-wrap">
-          <span className="text-[11px] uppercase tracking-widest text-stone-400">Group rows by</span>
-          <select value={groupBy} onChange={e=>setGroupBy(e.target.value)} className="bg-white border border-stone-200 rounded px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="none">None</option><option value="zone">Zone</option><option value="state">State</option><option value="product">Product</option><option value="sku">SKU</option><option value="carrier">Carrier</option><option value="service">Service</option></select>
-          <span className="text-xs text-stone-400">{visible.length} of {pool.length} orders shown</span>
-        </div>
+
+      {apMsg&&<div className="bg-violet-50 border border-violet-200 text-violet-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><Zap className="w-4 h-4"/>Autopilot routed {apMsg.routed} order{apMsg.routed!==1?"s":""}{apMsg.held?` and held ${apMsg.held} for review (unchecked below)`:""}. Service picks are marked with a ⚡ — override any of them with the dropdowns.</div>}
+
+      {/* selection summary */}
+      <div className="border border-stone-200 rounded-lg bg-white px-3 sm:px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
+        <button onClick={all} className="text-[12px] font-medium text-[#006FBF] hover:underline">{visible.filter(o=>!holds[o.id]).every(o=>sel.has(o.id))&&visible.length>0?"Deselect all":"Select all"} ({visible.length})</button>
+        <button onClick={invert} className="text-[12px] text-stone-500 hover:underline">Invert</button>
+        <button onClick={()=>setSel(new Set())} className="text-[12px] text-stone-500 hover:underline">Clear</button>
+        <div className="flex-1"/>
+        <span className="text-stone-500"><b className="text-stone-800">{rows.length}</b> selected</span>
+        <span className="text-stone-500 hidden sm:inline"><b className="text-stone-800">{Math.round(totals.wt*10)/10}</b> lb</span>
+        <span className="text-stone-500">est. <b className="text-stone-800 font-mono">{money(totals.sell)}</b></span>
+        {svcMixSel.length>0&&<span className="hidden lg:flex items-center gap-1.5">{svcMixSel.map(([l,n])=><Badge key={l} tone="stone">{l.replace(/^FedEx /,"")} ×{n}</Badge>)}</span>}
+        <button onClick={run} disabled={running||rows.length===0} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-semibold hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{running?<Loader2 className="w-4 h-4 animate-spin"/>:<Printer className="w-4 h-4"/>}{running?`Booking ${progress.n}/${progress.total}…`:`Create ${rows.length} label${rows.length!==1?"s":""}`}</button>
       </div>
-      {msg&&<div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2.5 text-sm text-emerald-700 flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{msg}</div>}
-      {done>0&&<div className="bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-4 py-3 text-sm text-[#006FBF] flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>Printed {done} labels — orders moved to Shipments.</div>}
-      <div className="border border-stone-200 rounded-lg overflow-hidden bg-white divide-y divide-stone-100">
-        <div className="flex items-center gap-3 px-3 sm:px-4 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400"><input type="checkbox" checked={visible.length>0&&visible.every(o=>sel.has(o.id))} onChange={all} className="accent-[#0086E0]"/><div className="w-12 sm:w-14">Order</div><div className="flex-1">Customer</div><div className="w-32 hidden sm:block">Service</div><div className="w-16 sm:w-20 text-right">Rate</div></div>
-        {visible.length===0&&<div className="p-8 text-center text-sm text-stone-400">{pool.length===0?"No unfulfilled orders to batch.":"No orders match this filter."}</div>}
+      {done>0&&<div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{done} shipment{done!==1?"s":""} recorded — see the Shipments tab. Connect your carrier account for live labels.</div>}
+      {results.length>0&&<div className="border border-stone-200 rounded-lg bg-white p-4 space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-semibold text-sm text-stone-800">Batch complete</span>
+          <Badge tone="green">{results.filter(r=>r.ok).length} labeled</Badge>
+          {results.filter(r=>!r.ok).length>0&&<Badge tone="rose">{results.filter(r=>!r.ok).length} failed</Badge>}
+          <div className="flex-1"/>
+          {results.some(r=>r.ok&&r.pdf)&&<button onClick={printAll} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE] flex items-center gap-1.5"><Printer className="w-4 h-4"/>Print all labels</button>}
+          <button onClick={()=>setResults([])} className="text-stone-300 hover:text-stone-600"><X className="w-4 h-4"/></button>
+        </div>
+        {results.map((r,i)=>(<div key={i} className="flex items-center gap-2 text-[13px]">
+          {r.ok?<CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0"/>:<AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0"/>}
+          <span className="font-medium text-stone-700 w-16">{r.name}</span>
+          {r.ok?<span className="text-stone-500 truncate">{r.service}{r.tracking?` · ${r.tracking}`:""}</span>:<span className="text-rose-600 truncate">{r.error}</span>}
+        </div>))}
+      </div>}
+
+      {/* order list */}
+      <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+        {visible.length===0&&<div className="p-10 text-center text-sm text-stone-400">{pool.length===0?"No open orders — sync your store or import a CSV.":"Nothing matches these filters."}</div>}
         {groupBy==="none"
-          ? visible.map(OrderRow)
-          : groupKeys.map(k=>(<div key={k}>
-              <button onClick={()=>selectGroup(groups[k])} className="w-full flex items-center gap-2 px-4 py-1.5 bg-stone-50/80 text-left text-[11px] uppercase tracking-widest text-stone-500 font-semibold hover:bg-stone-100"><Layers className="w-3 h-3"/>{k}<span className="text-stone-400">· {groups[k].length}</span></button>
-              {groups[k].map(OrderRow)}
+          ?<div className="divide-y divide-stone-100">{visible.map(OrderRow)}</div>
+          :groupKeys.map(k=>(<div key={k}>
+              <div className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-stone-50 border-y border-stone-100 first:border-t-0">
+                <button onClick={()=>selectGroup(groups[k])} className="text-[11px] font-medium text-[#006FBF] hover:underline">select</button>
+                <span className="text-[12px] font-semibold text-stone-700">{k}</span>
+                <span className="text-[11px] text-stone-400">{groups[k].length}</span>
+              </div>
+              <div className="divide-y divide-stone-100">{groups[k].map(OrderRow)}</div>
             </div>))}
       </div>
-      {results.length>0&&<div className="border border-stone-200 rounded-lg bg-white p-3 space-y-1.5">
-        <div className="flex items-center justify-between"><div className="text-sm font-semibold text-stone-700">Batch results — {results.filter(r=>r.ok).length}/{results.length} booked</div>{results.some(r=>r.ok&&r.pdf)&&<button onClick={printAll} className="text-sm bg-stone-900 text-white rounded px-3 py-1.5 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Printer className="w-4 h-4"/>Print all labels</button>}</div>
-        {results.map((r,i)=><div key={i} className={`text-[12px] flex items-center gap-2 ${r.ok?"text-emerald-700":"text-rose-600"}`}>{r.ok?<CheckCircle2 className="w-3.5 h-3.5 shrink-0"/>:<AlertTriangle className="w-3.5 h-3.5 shrink-0"/>}<b>{r.name}</b>{r.ok?<span className="font-mono">{r.service} · {r.tracking}</span>:<span>{r.error}</span>}</div>)}
+
+      {/* recent batches */}
+      {(batches||[]).length>0&&<div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+        <div className="px-4 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400 flex items-center gap-2"><Clock className="w-3.5 h-3.5"/>Recent batches</div>
+        <div className="divide-y divide-stone-50">
+          {(batches||[]).slice(0,5).map(b=>(<div key={b.id} className="px-4 py-2 flex items-center gap-3 text-[13px]">
+            <span className="text-stone-500 w-36 font-mono text-xs">{b.date} · {b.time}</span>
+            <span className="flex-1 text-stone-700">{b.count} label{b.count!==1?"s":""}{b.fail?` · ${b.fail} failed`:""}</span>
+            <span className="font-mono text-xs text-stone-500">{money(b.est)}</span>
+            <Badge tone={b.mode==="live"?"green":"stone"}>{b.mode}</Badge>
+          </div>))}
+        </div>
       </div>}
-      <div className="flex flex-wrap items-center gap-3 sm:gap-4 border border-stone-200 rounded-lg bg-white p-3 sticky bottom-2 shadow-sm">
-        <div className="text-sm"><span className="font-semibold">{sel.size}</span> selected</div>
-        <div className="text-sm text-stone-500">est. total <span className="font-mono text-stone-900">{money(totals.sell)}</span></div>
-        {!canBook&&<span className="text-[11px] text-amber-600">Demo — connect England to book real labels</span>}
-        <div className="flex-1"/>
-        {running&&<span className="text-xs text-stone-500 flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Booking {progress.n}/{progress.total}…</span>}
-        <button disabled={!sel.size||running} onClick={run} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5"><Printer className="w-4 h-4"/>{canBook?"Book & print":"Print"} {sel.size||""} label{sel.size===1?"":"s"}</button>
-      </div>
     </div>
   );
 }

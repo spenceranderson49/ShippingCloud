@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v136";
+const BUILD_TAG="addr-v137";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -48,6 +48,41 @@ const BRAND=(()=>{ let k="shippingcloud"; try{ k=(import.meta.env&&import.meta.e
   return k==="freightwire"
     ?{key:"freightwire",fw:true,name:"Freightwire Ship",short:"Freightwire",accent:"#1e3a5f",accent2:"#2d5a8e"}
     :{key:"shippingcloud",fw:false,name:"ShippingCloud",short:"ShippingCloud",accent:"#0086E0",accent2:"#0072BE"}; })();
+/* v137: on the Freightwire build, the browser tab shows the FW "F" mark (auto-cropped out of FW_LOGO
+   by scanning for the transparent gap before the wordmark) instead of the ShippingCloud cloud, plus
+   the FreightwireShip tab title. Crop bounds verified against the shipped asset: mark = 78x78 at x5,y2. */
+if(typeof window!=="undefined"&&BRAND.fw){
+  try{ document.title="FreightwireShip"; }catch(e){}
+  try{
+    const setIcon=(href)=>{ try{
+      document.querySelectorAll('link[rel*="icon"]').forEach(l=>l.parentNode&&l.parentNode.removeChild(l));
+      const l=document.createElement("link"); l.rel="icon"; l.type="image/png"; l.href=href; document.head.appendChild(l);
+    }catch(e){} };
+    const img=new window.Image();
+    img.onload=function(){ try{
+      const W=img.width,H=img.height;
+      const c=document.createElement("canvas"); c.width=W; c.height=H;
+      const x=c.getContext("2d"); x.drawImage(img,0,0);
+      const d=x.getImageData(0,0,W,H).data;
+      const colHas=[];
+      for(let px=0;px<W;px++){ let has=false; for(let py=0;py<H;py++){ if(d[(py*W+px)*4+3]>16){has=true;break;} } colHas.push(has); }
+      let start=colHas.indexOf(true); if(start<0){ setIcon(FW_LOGO); return; }
+      const gap=Math.max(4,Math.round(W*0.02));
+      let end=W,run=0;
+      for(let i2=start;i2<W;i2++){ if(!colHas[i2]){ run++; if(run>=gap){ end=i2-run+1; break; } } else run=0; }
+      let top=-1,bot=-1;
+      for(let py=0;py<H;py++){ let has=false; for(let px=start;px<end;px++){ if(d[(py*W+px)*4+3]>16){has=true;break;} } if(has){ if(top<0)top=py; bot=py; } }
+      if(top<0){ setIcon(FW_LOGO); return; }
+      const w=end-start,h=bot-top+1;
+      const out=document.createElement("canvas"); out.width=64; out.height=64;
+      const ox=out.getContext("2d");
+      const pad=3,box=64-pad*2,sc=Math.min(box/w,box/h);
+      ox.drawImage(c,start,top,w,h,(64-w*sc)/2,(64-h*sc)/2,w*sc,h*sc);
+      setIcon(out.toDataURL("image/png"));
+    }catch(e){ setIcon(FW_LOGO); } };
+    img.src=FW_LOGO;
+  }catch(e){}
+}
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;

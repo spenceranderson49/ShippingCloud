@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v125";
+const BUILD_TAG="addr-v126";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1473,6 +1473,7 @@ function CloudAuth({onDone,initialMode,intake}){
       </div>
       {err&&<div className="text-xs text-red-600">{err}</div>}
       <button onClick={mode==="signin"?signin:request} disabled={busy} className="w-full bg-stone-900 text-white rounded px-4 py-2 text-sm font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"One moment…":(mode==="signin"?"Sign in":"Create account")}</button>
+      {mode==="signin"&&<button onClick={()=>{setFp("ask");setFpEmail("");}} className="w-full text-center text-[12px] text-stone-400 hover:text-stone-600 underline underline-offset-2">Forgot password?</button>}
       {mode==="request"&&<p className="text-[11px] text-stone-400 text-center">No approval wait, no credit card — you’re in immediately.</p>}
     </>)}
   </div>);
@@ -1570,7 +1571,6 @@ function Landing({onAuth}){
         <NavTab label="Contact" onClick={()=>setPage("contact")}/>
         <a href={"tel:"+CONTACT_PHONE_TEL} className="hidden md:flex items-center gap-2 text-sm text-stone-300 hover:text-white px-2.5 py-2"><Phone className="w-4 h-4 text-[#38b6ff]"/>{CONTACT_PHONE}</a>
         <button onClick={()=>onAuth("signin")} className="text-sm text-stone-300 hover:text-white px-2.5 py-2">Sign in</button>
-        {mode!=="request"&&<button onClick={()=>{setFp("ask");setFpEmail("");}} className="w-full text-center text-[12px] text-stone-400 hover:text-stone-600 underline underline-offset-2">Forgot password?</button>}
         <button onClick={()=>onAuth("request")} className="text-sm bg-[#0086E0] hover:bg-[#0a76c2] text-white font-medium rounded-lg px-4 py-2">Create account</button>
       </div>
     </div>

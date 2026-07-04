@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v135";
+const BUILD_TAG="addr-v136";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -2034,7 +2034,7 @@ function AppInner(){
   const [qq,setQQ]=useState(false);
   const [navOpen,setNavOpen]=useState(false);
   const [prefill,setPrefill]=useState(null);
-  const [settingsRaw,setSettingsRaw]=usePersist("settings",{company:"Freightwire",sender:{name:"",company:"",zip:"",state:"",city:"",address1:"",phone:"",email:""},defaultBillTo:"sender",thirdPartyAccts:[{id:"tp1",carrier:"FedEx",account:"20601652",label:"England FedEx"}],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,products:SEED_PRODUCTS,checkout:CHECKOUT_DEFAULTS,platforms:PLATFORM_DEFAULTS,plan:"starter",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:"20601652"},addresses:[],warehouses:[],autoRunRules:false,brand:DEFAULT_BRAND,domains:[]});
+  const [settingsRaw,setSettingsRaw]=usePersist("settings",{company:"Freightwire",sender:{name:"",company:"",zip:"",state:"",city:"",address1:"",phone:"",email:""},defaultBillTo:"sender",thirdPartyAccts:[{id:"tp1",carrier:"FedEx",account:"20601652",label:"England FedEx"}],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,products:SEED_PRODUCTS,checkout:CHECKOUT_DEFAULTS,platforms:PLATFORM_DEFAULTS,plan:"starter",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:"20601652"},addresses:[],warehouses:[],autoRunRules:false,brand:DEFAULT_BRAND,domains:[],companyLogo:""});
   const settings=useMemo(()=>scrubLegacyDefaults(settingsRaw),[settingsRaw]);
   const setSettings=(v)=>setSettingsRaw(p=>scrubLegacyDefaults(typeof v==="function"?v(scrubLegacyDefaults(p)):v));
 
@@ -2271,8 +2271,17 @@ function AppInner(){
         <div className="px-3 sm:px-4 h-14 flex items-center gap-2 sm:gap-3 relative">
           <button onClick={()=>setNavOpen(true)} className="md:hidden p-2 -ml-1 rounded-lg hover:bg-stone-100 text-stone-600" aria-label="Menu"><Layers className="w-5 h-5"/></button>
           {!BRAND.fw&&<BrandCloud className="h-10 sm:h-11 w-auto" color={brand.primary}/>}
-          {BRAND.fw&&<div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2.5 pointer-events-none select-none"><img src={FW_LOGO} alt="Freightwire" className="h-8 w-auto" draggable={false}/><span className="hidden md:inline text-[19px] text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></span></div>}
-          <button onClick={()=>setTab("ship")} title="Back to Ship" className="font-extrabold tracking-tight text-[20px] sm:text-[26px] cursor-pointer flex items-center gap-2" style={{color:brand.dark}}>{BRAND.fw?(settings.brand&&settings.brand.name1?<>{settings.brand.name1}<span style={{color:(settings.brand.primary)||brand.primary}}>{settings.brand.name2||""}</span></>:<span className="text-[12px] font-medium text-stone-300 border border-dashed border-stone-300 rounded px-2.5 py-1">Your logo here</span>):<>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></>}</button>
+          {BRAND.fw?(<>
+            <button onClick={()=>setTab("ship")} title="Back to Ship" className="flex items-center gap-2.5 cursor-pointer select-none shrink-0">
+              <img src={FW_LOGO} alt="Freightwire" className="h-8 w-auto" draggable={false}/>
+              <span className="w-px h-6 bg-stone-300 hidden sm:block"/>
+              <span className="hidden sm:inline text-[19px] leading-none text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></span>
+            </button>
+            {settings.companyLogo
+              ?<span className="flex items-center gap-2.5 sm:gap-3 mt-1.5 min-w-0"><span className="w-px h-6 bg-stone-200 shrink-0 hidden sm:block"/><img src={settings.companyLogo} alt={settings.company||"Company logo"} className="h-7 w-auto max-w-[180px] object-contain" draggable={false}/></span>
+              :<span className="hidden md:flex items-center gap-2.5 mt-1.5"><span className="w-px h-6 bg-stone-200"/><button onClick={()=>setTab("settings")} title="Upload your company logo in Settings → Company" className="text-[11px] font-medium text-stone-300 border border-dashed border-stone-300 rounded px-2.5 py-1 hover:text-stone-400 hover:border-stone-400">Your logo here</button></span>}
+          </>):(
+          <button onClick={()=>setTab("ship")} title="Back to Ship" className="font-extrabold tracking-tight text-[20px] sm:text-[26px] cursor-pointer flex items-center gap-2" style={{color:brand.dark}}><>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></></button>)}
           {brand.showLogo&&brand.logo&&<span className="hidden sm:flex items-center gap-1.5 text-stone-400 text-xs"><span className="w-px h-5 bg-stone-200"/>{brand.partnerLabel}<img src={brand.logo} alt="partner" className="h-3 w-auto object-contain"/></span>}
           <div className="flex-1"/>
           <div className="flex items-center gap-2 sm:gap-3">
@@ -2287,7 +2296,7 @@ function AppInner(){
       {navOpen&&<div className="md:hidden fixed inset-0 z-40 flex" role="dialog">
         <div className="absolute inset-0 bg-stone-900/40" onClick={()=>setNavOpen(false)}/>
         <aside className="relative w-64 bg-white h-full shadow-xl overflow-y-auto">
-          <div className="flex items-center justify-between px-4 h-14 border-b border-stone-200"><button onClick={()=>{setTab("ship");setNavOpen(false);}} title="Back to Ship" className="font-extrabold tracking-tight flex items-center gap-2" style={{color:brand.dark}}>{BRAND.fw?<><img src={FW_LOGO} alt="Freightwire" className="h-6 w-auto" draggable={false}/></>:<>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></>}</button><button onClick={()=>setNavOpen(false)} className="p-1.5 rounded hover:bg-stone-100"><X className="w-5 h-5 text-stone-500"/></button></div>
+          <div className="flex items-center justify-between px-4 h-14 border-b border-stone-200"><button onClick={()=>{setTab("ship");setNavOpen(false);}} title="Back to Ship" className="font-extrabold tracking-tight flex items-center gap-2" style={{color:brand.dark}}>{BRAND.fw?<><img src={FW_LOGO} alt="Freightwire" className="h-6 w-auto" draggable={false}/><span className="w-px h-5 bg-stone-300"/><span className="text-[15px] leading-none text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></span></>:<>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></>}</button><button onClick={()=>setNavOpen(false)} className="p-1.5 rounded hover:bg-stone-100"><X className="w-5 h-5 text-stone-500"/></button></div>
           <nav className="p-2 space-y-0.5">
             {TABS.map(([id,l,Icon])=>(
               <React.Fragment key={id}>
@@ -5650,8 +5659,33 @@ function Billing({settings,setSettings}){
 }
 function Company({settings,setSettings}){
   const sn=settings.sender; const set=(k,v)=>setSettings({...settings,sender:{...sn,[k]:v}});
+  const uploadLogo=(e)=>{const f=e.target.files&&e.target.files[0]; if(!f)return; e.target.value="";
+    const done=(b64)=>setSettings(s=>({...s,companyLogo:b64}));
+    const rd=new FileReader();
+    rd.onload=()=>{const url=String(rd.result||"");
+      if(/^data:image\/svg/.test(url)&&url.length<120000){done(url);return;}
+      const img=new Image();
+      img.onload=()=>{try{
+        const scale=Math.min(1,360/img.width,120/img.height);
+        const w=Math.max(1,Math.round(img.width*scale)),h=Math.max(1,Math.round(img.height*scale));
+        const c=document.createElement("canvas");c.width=w;c.height=h;
+        c.getContext("2d").drawImage(img,0,0,w,h);
+        let out=c.toDataURL("image/png");
+        if(out.length>160000){const c2=document.createElement("canvas");const s2=Math.min(1,240/w);c2.width=Math.max(1,Math.round(w*s2));c2.height=Math.max(1,Math.round(h*s2));c2.getContext("2d").drawImage(img,0,0,c2.width,c2.height);out=c2.toDataURL("image/png");}
+        done(out);
+      }catch(err){}};
+      img.src=url;};
+    rd.readAsDataURL(f);};
   return (<div className="max-w-xl space-y-4">
     <Panel title="Company"><Field label="Company name"><Input value={settings.company} onChange={e=>setSettings({...settings,company:e.target.value})}/></Field></Panel>
+    {BRAND.fw&&<Panel title="Company logo">
+      <p className="text-xs text-stone-500 mb-2">Shows in the header, next to the FreightwireShip brand. PNG, JPG, or SVG — resized automatically.</p>
+      <div className="flex items-center gap-3 flex-wrap">
+        {settings.companyLogo?<img src={settings.companyLogo} alt="Company logo" className="h-9 w-auto max-w-[200px] object-contain border border-stone-200 rounded bg-white px-2 py-1"/>:<span className="text-[11px] text-stone-300 border border-dashed border-stone-300 rounded px-2.5 py-1.5">No logo yet</span>}
+        <label className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded px-3 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload logo<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={uploadLogo} className="hidden"/></label>
+        {settings.companyLogo&&<button onClick={()=>setSettings(s=>({...s,companyLogo:""}))} className="text-sm text-stone-400 hover:text-rose-600">Remove</button>}
+      </div>
+    </Panel>}
     <Panel title="Default sender (ship-from)">
       <div className="grid grid-cols-2 gap-2">
         <Field label="Name"><Input value={sn.name} onChange={e=>set("name",e.target.value)}/></Field>

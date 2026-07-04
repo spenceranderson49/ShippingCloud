@@ -62,6 +62,35 @@ exports.handler = async (event) => {
     const token = S(body.token);
     if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop) || !token) return J({ ok: false, error: "Connect a Shopify store first (missing shop/token)." });
 
+    // ── products pull: build a dimensioned catalog from Shopify variants ──
+    if (body.action === "products") {
+      const purl = `https://${shop}/admin/api/${API}/products.json?limit=250`;
+      let pr, ptext, pd = null;
+      try {
+        pr = await fetch(purl, { headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" } });
+        ptext = await pr.text(); try { pd = JSON.parse(ptext); } catch {}
+      } catch (e) { return J({ ok: false, error: "Shopify fetch failed: " + (e && e.message) }); }
+      if (pr.status === 401) return J({ ok: false, error: "Shopify rejected the token (401) — reconnect the store." });
+      if (!pr.ok) return J({ ok: false, error: "Shopify HTTP " + pr.status });
+      const products = [];
+      for (const p2 of (pd.products || [])) {
+        for (const v of (p2.variants || [])) {
+          const title = (p2.variants || []).length > 1 ? `${p2.title} — ${v.title}` : p2.title;
+          products.push({
+            id: "shpf_" + v.id,
+            sku: S(v.sku),
+            name: S(title),
+            wt: gramsToLb(v.grams || (v.weight_unit === "lb" ? (v.weight || 0) * 453.592 : v.weight_unit === "oz" ? (v.weight || 0) * 28.35 : v.weight_unit === "kg" ? (v.weight || 0) * 1000 : v.weight || 0)),
+            l: 0, w: 0, h: 0,
+            value: Number(v.price) || 0,
+            origin: "", hs: "",
+            shopifyVariantId: S(v.id)
+          });
+        }
+      }
+      return J({ ok: true, count: products.length, products });
+    }
+
     const params = new URLSearchParams({ status: "open", fulfillment_status: "unfulfilled", limit: "100", order: "created_at desc" });
     if (body.sinceId) params.set("since_id", S(body.sinceId));
     const url = `https://${shop}/admin/api/${API}/orders.json?${params.toString()}`;

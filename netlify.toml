@@ -1,9 +1,6 @@
-# Let serverless functions through, THEN do SPA fallback
-[[redirects]]
-  from = "/.netlify/functions/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
-
+# SPA fallback — serve index.html for all app routes.
+# (Function paths under /.netlify/functions/ are routed natively by Netlify
+#  before redirects run, so no rule is needed for them.)
 [[redirects]]
   from = "/*"
   to = "/index.html"

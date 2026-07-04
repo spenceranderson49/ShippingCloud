@@ -25,7 +25,7 @@ const FEATURE_CATALOG=[
   {id:"pickups",label:"Pickups",desc:"Schedule carrier pickups",default:false},
   {id:"batch",label:"Batch",desc:"Rate & print in bulk",default:false},
   {id:"invoices",label:"Invoice Audit",desc:"Carrier invoice auditing",default:false},
-  {id:"rules",label:"Autopilot Rules",desc:"Automation rules engine",default:false},
+  {id:"rules",label:"Autopilot",desc:"Autopilot Mode — automation rules",default:false},
   {id:"ledger",label:"Ledger",desc:"Billing ledger",default:false},
   {id:"scan",label:"Scan",desc:"Barcode scan station",default:false},
   {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:false},
@@ -38,7 +38,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v86";
+const BUILD_TAG="addr-v87";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -1050,16 +1050,12 @@ function Landing({onAuth}){
     <div className="font-semibold text-white mb-1.5">{title}</div>
     <div className="text-sm text-stone-400 leading-relaxed">{children}</div>
   </div>);
-  const Step=({n,title,children})=>(<div className="flex gap-4">
-    <div className="w-8 h-8 rounded-full bg-[#0086E0] text-white text-sm font-bold flex items-center justify-center shrink-0">{n}</div>
-    <div><div className="font-semibold text-white">{title}</div><div className="text-sm text-stone-400 mt-0.5">{children}</div></div>
-  </div>);
   return (<div className="min-h-screen bg-neutral-950 text-stone-300">
     {/* nav */}
     <div className="max-w-6xl mx-auto px-5 py-5 flex items-center justify-between">
       <div>
-        <div className="flex items-center gap-2.5 text-white font-bold text-2xl"><Cloud className="w-8 h-8 text-[#38b6ff]"/><span>Shipping<span className="text-[#38b6ff]">Cloud</span></span></div>
-        <div className="text-[12px] text-stone-400 tracking-wide mt-0.5 ml-[42px]">Your Shipping Platform <span className="text-white font-semibold underline underline-offset-4 decoration-[#38b6ff] decoration-2">PARTNER</span></div>
+        <div className="flex items-center gap-3 text-white font-bold text-4xl"><Cloud className="w-11 h-11 text-[#38b6ff]"/><span>Shipping<span className="text-[#38b6ff]">Cloud</span></span></div>
+        <div className="text-[13px] text-stone-400 tracking-wide mt-1 ml-[56px]">Sky’s the limit.</div>
       </div>
       <div className="flex items-center gap-3">
         <button onClick={()=>onAuth("signin")} className="text-sm text-stone-300 hover:text-white px-3 py-2">Sign in</button>
@@ -1070,11 +1066,10 @@ function Landing({onAuth}){
     <div className="max-w-6xl mx-auto px-5 pt-14 pb-16 grid lg:grid-cols-2 gap-12 items-center">
       <div>
         <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-widest text-[#38b6ff] bg-[#0086E0]/10 border border-[#0086E0]/25 rounded-full px-3 py-1 mb-5"><Zap className="w-3.5 h-3.5"/>Multi-carrier shipping platform</div>
-        <h1 className="text-4xl sm:text-5xl font-bold text-white leading-tight">Enterprise FedEx & DHL pricing.<br/><span className="text-[#38b6ff]">Without the enterprise volume.</span></h1>
-        <p className="mt-5 text-lg text-stone-400 leading-relaxed">Ship on deeply discounted contract rates from day one — rate shop instantly, print labels, automate your workflow, and audit every carrier invoice. One login runs your whole shipping operation.</p>
+        <h1 className="text-4xl sm:text-5xl font-bold text-white leading-tight">More than a shipping platform.<br/><span className="text-[#38b6ff]">A true shipping partner.</span></h1>
+        <p className="mt-5 text-lg text-stone-400 leading-relaxed">Enterprise FedEx & DHL pricing. Real people who pick up the phone. Software that bends to how you work.</p>
         <div className="mt-5 border-l-2 border-[#38b6ff] bg-white/[0.03] rounded-r-xl px-4 py-3">
-          <p className="text-[15px] text-stone-300 leading-relaxed">Sick of shipping reps you can’t get ahold of? Tired of waiting weeks on a support ticket from your shipping platform?</p>
-          <p className="text-[15px] text-white font-medium mt-1.5">We’re both — your rate guy and your tech team. Best-in-industry rates <span className="text-stone-400 font-normal">and</span> best-in-industry humans, for your shipping <span className="text-stone-400 font-normal">and</span> your platform.</p>
+          <p className="text-[15px] text-stone-300 leading-relaxed">Sick of reps you can’t get ahold of and week-old support tickets? <span className="text-white font-medium">Call us — a person answers.</span></p>
         </div>
         <div className="mt-7 flex flex-wrap gap-3">
           <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0a76c2] text-white font-semibold rounded-lg px-6 py-3">Create ShippingCloud account</button>
@@ -1086,6 +1081,7 @@ function Landing({onAuth}){
       {/* hero graphic: mock rate card */}
       <div className="relative hidden lg:block">
         <div className="absolute -inset-8 bg-[#0086E0]/20 blur-3xl rounded-full"/>
+        <div className="relative text-center text-[13px] uppercase tracking-widest text-[#38b6ff] font-semibold mb-3">Get FedEx and DHL Enterprise rates</div>
         <div className="relative bg-neutral-900 border border-white/10 rounded-2xl p-5 shadow-2xl">
           <div className="text-[11px] uppercase tracking-widest text-stone-500 mb-3 flex items-center justify-between"><span>Live rates · 5 lb · SLC → Los Angeles</span><span className="text-emerald-400 flex items-center gap-1"><Zap className="w-3 h-3"/>instant</span></div>
           {[["FedEx Ground®","2 days","$9.41"],["FedEx One Rate® · 2Day","flat-rate box · 2 days","$14.95"],["FedEx Priority Overnight®","next day","$42.10"],["DHL Express","2 days","$21.66"]].map((r,i)=>(
@@ -1101,38 +1097,20 @@ function Landing({onAuth}){
     <div className="max-w-6xl mx-auto px-5 pb-16">
       <div className="text-center mb-10"><h2 className="text-2xl sm:text-3xl font-bold text-white">Everything your shipping desk does — in one place</h2><p className="text-stone-400 mt-2">Built by freight people, for businesses that actually ship.</p></div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <F icon={Search} title="Rate shop instantly">Every service, every carrier, side by side the moment you type an address — cheapest highlighted, fuel and residential surcharges already baked in. No tabs, no waiting.</F>
-        <F icon={Zap} title="Autopilot rules">Set it once: "Under 1 lb → cheapest ground. West coast → 2Day. Marked fragile → add signature." Orders arrive already rated, boxed, and ready to print.</F>
-        <F icon={DollarSign} title="Industry-leading FedEx rates">Your own account on enterprise contract tiers from day one — pricing normally reserved for shippers moving thousands of packages a month.</F>
-        <F icon={Receipt} title="Automated invoice auditing">Upload a carrier invoice and instantly see every shipment where billed didn't match quoted — reweighs, dimension bumps, address corrections — with accept/dispute in one click.</F>
-        <F icon={Cog} title="Built around your workflow">Your rules, your presets, your branding — and when you need something the platform doesn't do, we build it for you. Actual custom features, turned on for your login. Not a feature-request black hole.</F>
-        <F icon={TrendingUp} title="Always getting smarter">The big legacy platforms have looked the same for years. ShippingCloud ships improvements every week — the tool you use gets better while you sleep.</F>
+        <F icon={DollarSign} title="Industry-leading FedEx rates">The pricing big shippers get, from day one. No volume commitments, no negotiating.</F>
+        <F icon={Receipt} title="Automated invoice auditing">We check every carrier bill against what you were quoted and flag anything off, so you can dispute anything that isn’t right.</F>
+        <F icon={Zap} title="Autopilot Mode">Set your rules once, then let the platform do all the work. Orders arrive rated, boxed, and ready to print — you just hit go.</F>
+        <F icon={Cog} title="Customization">We adapt to your flow, not the other way around. Need something the platform doesn’t do? Tell us. We’ll build it.</F>
+        <F icon={Users} title="Built by shipping people, supported by tech people">We’ve stood at the shipping desk — the reweighs, the surprise surcharges, the reps who never call back. We know the problems firsthand, and we have the tech team to fix them.</F>
+        <F icon={Boxes} title="Box logic and live cart rates">We know your products and your boxes, so your store shows the real cost to ship — and you never pay to ship empty space.</F>
       </div>
     </div>
     {/* beat your UPS rates */}
     <div className="max-w-6xl mx-auto px-5 pb-16">
-      <div className="border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-transparent rounded-2xl p-8 sm:p-10 grid lg:grid-cols-2 gap-8 items-center">
-        <div>
-          <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-widest text-emerald-400 mb-4"><ArrowLeftRight className="w-3.5 h-3.5"/>Shipping with UPS?</div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-white leading-snug">Most shippers save 10–15% switching to our FedEx rates.</h2>
-          <p className="mt-4 text-stone-400 leading-relaxed">No fees. No BS. Upload a recent UPS invoice and we’ll hand back a line-by-line, apples-to-apples comparison on your exact shipments — same weights, same zips, same services, surcharges included — <span className="text-white font-medium">the same day</span>. No smoke and mirrors: you see the real number before you move a single package.</p>
-          <p className="mt-3 text-stone-400 leading-relaxed">Move your UPS spend over to FedEx and get better rates, better service, and the best customer support in the industry.</p>
-          <button onClick={()=>onAuth("request")} className="mt-6 bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-semibold rounded-lg px-6 py-3 flex items-center gap-2"><Upload className="w-4 h-4"/>Send us your UPS invoice</button>
-          <div className="mt-5 bg-white/[0.04] border border-white/10 rounded-xl p-4">
-            <div className="text-[11px] uppercase tracking-widest text-stone-500 mb-2">Where to find your invoice (30 seconds)</div>
-            <div className="text-[13px] text-stone-400 leading-relaxed">Open the <a href="https://www.ups.com/us/en/business-solutions/ups-billing" target="_blank" rel="noopener noreferrer" className="text-[#38b6ff] underline underline-offset-2 hover:text-white">UPS Billing Center</a>, then: <span className="text-stone-300">Manage Your Bills → Go to Billing Center → Log in → Download a PDF or CSV invoice</span> — and upload it right here.</div>
-          </div>
-        </div>
-        <div className="bg-neutral-900 border border-white/10 rounded-2xl p-5">
-          <div className="text-[11px] uppercase tracking-widest text-stone-500 mb-3">Apples to apples · from your actual invoice</div>
-          {[["3 lb · zone 4 · residential","$11.84","$9.90"],["8 lb · zone 6 · commercial","$16.51","$13.95"],["1 lb · zone 2 · residential","$9.12","$7.79"],["15 lb · zone 7 · residential","$24.37","$20.68"]].map((r,i)=>(
-            <div key={i} className="flex items-center justify-between py-2.5 border-b border-white/5 last:border-0 text-sm gap-3">
-              <span className="text-stone-400">{r[0]}</span>
-              <span className="font-mono text-stone-600 line-through">{r[1]}</span>
-              <span className="font-mono text-emerald-400 font-bold">{r[2]}</span>
-            </div>))}
-          <div className="text-[10px] text-stone-600 mt-3">Illustrative — your comparison is built line-by-line from your own invoice.</div>
-        </div>
+      <div className="border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-transparent rounded-2xl p-8 sm:p-10 text-center">
+        <h2 className="text-2xl sm:text-3xl font-bold text-white leading-snug">Most shippers save 10–15% switching to our FedEx rates.</h2>
+        <p className="mt-3 text-stone-400 max-w-2xl mx-auto">No fees. No BS. Send us a recent UPS invoice and get a line-by-line comparison back — the same day.</p>
+        <button onClick={()=>onAuth("request")} className="mt-6 border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#38b6ff] font-semibold rounded-lg px-6 py-3 inline-flex items-center gap-2"><Upload className="w-4 h-4"/>Send us your UPS invoice</button>
       </div>
     </div>
     {/* integrations + box logic */}
@@ -1172,31 +1150,15 @@ function Landing({onAuth}){
     </div>
     {/* partner, not just a platform */}
     <div className="max-w-6xl mx-auto px-5 pb-16">
-      <div className="bg-gradient-to-br from-[#0086E0]/15 to-transparent border border-[#0086E0]/25 rounded-2xl p-8 sm:p-10 grid lg:grid-cols-2 gap-8 items-center">
-        <div>
-          <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-widest text-[#38b6ff] mb-4"><Phone className="w-3.5 h-3.5"/>A partner, not just a platform</div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-white leading-snug">Talk to real people.<br/>No AI chatbots. Ever.</h2>
-          <p className="mt-4 text-stone-400 leading-relaxed">Software is half of shipping — the other half is having someone in your corner. When you call, a real person who knows your account picks up — for <span className="text-white font-medium">both sides of the job</span>: your shipping (rate questions, carrier disputes, claims, a lane that suddenly got expensive) and your platform (an integration acting up, a report you need, a workflow that needs custom work). One call covers your rates and your tech. No ticket queue, no week-long silence.</p>
-          <div className="mt-6 flex flex-wrap items-center gap-4">
-            <a href={"tel:"+CONTACT_PHONE_TEL} className="bg-white text-neutral-950 font-semibold rounded-lg px-6 py-3 flex items-center gap-2 hover:bg-stone-200"><Phone className="w-4 h-4"/>{CONTACT_PHONE}</a>
-            <span className="text-[13px] text-stone-500">Give us a call — we’ll pick up the phone.</span>
-          </div>
-        </div>
-        <div className="space-y-3">
-          {[["A human answers","Carrier problem or platform problem — call during business hours and talk to someone who can actually fix it. No phone tree, no bot, no ticket black hole."],["Custom work, included","Need a report, a rule, an integration we don’t have? Tell us how you ship and we build it into your login."],["We know your account","Your history, your lanes, your carriers — the person on the phone already has context."]].map((r,i)=>(
-            <div key={i} className="bg-white/[0.04] border border-white/10 rounded-xl p-4 flex gap-3"><CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5"/><div><div className="font-semibold text-white text-sm">{r[0]}</div><div className="text-[13px] text-stone-400 mt-0.5">{r[1]}</div></div></div>))}
-        </div>
+      <div className="bg-gradient-to-br from-[#0086E0]/15 to-transparent border border-[#0086E0]/25 rounded-2xl p-8 sm:p-10 text-center">
+        <h2 className="text-2xl sm:text-3xl font-bold text-white leading-snug">Talk to real people. No AI chatbots. Ever.</h2>
+        <p className="mt-3 text-stone-400 max-w-xl mx-auto">One call covers your shipping and your tech — a real person who knows your account picks up.</p>
+        <a href={"tel:"+CONTACT_PHONE_TEL} className="mt-6 inline-flex items-center gap-2 bg-white text-neutral-950 font-semibold rounded-lg px-6 py-3 hover:bg-stone-200"><Phone className="w-4 h-4"/>{CONTACT_PHONE}</a>
       </div>
     </div>
-    {/* how it works */}
+    {/* why businesses switch */}
     <div className="border-y border-white/10 bg-white/[0.02]">
-      <div className="max-w-6xl mx-auto px-5 py-14 grid lg:grid-cols-2 gap-10 items-center">
-        <div className="space-y-6">
-          <h2 className="text-2xl sm:text-3xl font-bold text-white">Shipping in three steps</h2>
-          <Step n="1" title="Request access">Tell us who you are. A real person approves your account — usually the same day.</Step>
-          <Step n="2" title="Get your account">We provision your own FedEx account, pre-loaded with discounted enterprise contract rates. Nothing to negotiate, nothing to install.</Step>
-          <Step n="3" title="Ship">Quote, print, automate, audit. Your first label takes about two minutes.</Step>
-        </div>
+      <div className="max-w-2xl mx-auto px-5 py-14">
         <div className="bg-neutral-900 border border-white/10 rounded-2xl p-6">
           <div className="text-[11px] uppercase tracking-widest text-stone-500 mb-4">Why businesses switch</div>
           {[["Rate quotes","2–3 seconds elsewhere","instant here"],["Carrier invoices","spot-checked, maybe","audited line by line"],["Shipping rules","tribal knowledge","Autopilot, written down once"],["Your rates","retail counter pricing","enterprise contract tiers"],["Support","a chatbot maze","a human picks up"]].map((r,i)=>(
@@ -1206,15 +1168,9 @@ function Landing({onAuth}){
         </div>
       </div>
     </div>
-    {/* CTA + footer */}
-    <div className="max-w-6xl mx-auto px-5 py-16 text-center">
-      <h2 className="text-2xl sm:text-3xl font-bold text-white">Ready to stop overpaying at the counter?</h2>
-      <p className="text-stone-400 mt-2">Request access now — approval is personal and usually same-day.</p>
-      <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-        <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0a76c2] text-white font-semibold rounded-lg px-8 py-3">Get your own FedEx account</button>
-        <a href={"tel:"+CONTACT_PHONE_TEL} className="border border-white/15 hover:bg-white/5 text-white font-medium rounded-lg px-6 py-3 flex items-center gap-2"><Phone className="w-4 h-4"/>Or call {CONTACT_PHONE} — a person answers</a>
-      </div>
-      <div className="mt-14 pt-6 border-t border-white/10 text-[12px] text-stone-600 flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+    {/* footer */}
+    <div className="max-w-6xl mx-auto px-5 py-10 text-center">
+      <div className="pt-6 border-t border-white/10 text-[12px] text-stone-600 flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
         <span>© {new Date().getFullYear()} ShippingCloud.</span>
         <span>FedEx® and DHL® are trademarks of their respective owners; shipping is provided under partner carrier agreements.</span>
       </div>
@@ -1411,7 +1367,7 @@ function AppInner(){
   };
 
   const isAdmin=currentUser&&currentUser.role==="admin";
-  const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Rules",Zap],["ledger","Ledger",Wallet],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["admin","Admin",ShieldCheck],["settings","Settings",Cog]];
+  const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["ledger","Ledger",Wallet],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["admin","Admin",ShieldCheck],["settings","Settings",Cog]];
   const myFlags=isAdmin?{}:((featureFlags&&featureFlags[currentUser&&currentUser.id])||(CLOUD.mode==="cloud"?myFeatures:{}));
   const TABS=isAdmin?ALL_TABS:ALL_TABS.filter(t=>t[0]!=="admin"&&(t[0]==="ship"||featureOn(t[0],currentUser,myFlags)));
   const unfulfilled=orders.filter(o=>o.status==="unfulfilled").length;

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye } from "lucide-react";
+import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, MessageCircle, Sparkles } from "lucide-react";
 const FW_BLUE="#0099FF";
 const FW_DARK="#111418";
 function BrandCloud({className,color}){return (
@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v104";
+const BUILD_TAG="addr-v106";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -1374,6 +1374,51 @@ function FirstRunFedEx({user,onClose}){
     </div>
   </div>);
 }
+/* ════════ ASSISTANT CHAT ════════ */
+function AssistantChat({who}){
+  const [open,setOpen]=useState(false);
+  const [msgs,setMsgs]=useState([{role:"assistant",content:who==="demo"?"Hi, I’m Claude! Ask me anything about ShippingCloud — how a tab works, what Autopilot does, shipping advice, whatever. Everything in this demo is sample data, so click around freely.":"Hi, I’m Claude! Ask me anything about ShippingCloud — how features work, or general shipping advice."}]);
+  const [input,setInput]=useState("");
+  const [busy,setBusy]=useState(false);
+  const endRef=React.useRef(null);
+  useEffect(()=>{if(open&&endRef.current)endRef.current.scrollIntoView({behavior:"smooth"});},[msgs,open,busy]);
+  const send=async()=>{
+    const q=input.trim();if(!q||busy)return;
+    const next=[...msgs,{role:"user",content:q}];
+    setMsgs(next);setInput("");setBusy(true);
+    try{
+      const r=await fetch("/.netlify/functions/assistant",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:next.slice(-16),context:who})});
+      const d=await r.json().catch(()=>null);
+      setMsgs(m=>[...m,{role:"assistant",content:(d&&d.ok&&d.text)||(d&&d.error)||"Couldn’t reach the assistant just now — try again in a moment."}]);
+    }catch(e){setMsgs(m=>[...m,{role:"assistant",content:"Couldn’t reach the assistant just now — try again in a moment."}]);}
+    setBusy(false);
+  };
+  return (<>
+    {open&&<div className="fixed bottom-20 right-4 sm:right-5 w-[min(92vw,370px)] h-[480px] max-h-[70vh] bg-white border border-stone-200 rounded-2xl shadow-2xl z-40 flex flex-col overflow-hidden">
+      <div className="px-4 py-3 border-b border-stone-200 bg-stone-50 flex items-center gap-2">
+        <span className="w-7 h-7 rounded-full bg-[#D97757] text-white flex items-center justify-center"><Sparkles className="w-3.5 h-3.5"/></span>
+        <div className="flex-1"><div className="text-sm font-semibold text-stone-800 leading-tight">Ask Claude</div><div className="text-[11px] text-stone-400 leading-tight">about ShippingCloud · answers + shipping advice</div></div>
+        <button onClick={()=>setOpen(false)} className="p-1 rounded hover:bg-stone-200"><X className="w-4 h-4 text-stone-500"/></button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 text-sm">
+        {msgs.map((m,i)=>(<div key={i} className={`flex ${m.role==="user"?"justify-end":"justify-start"}`}>
+          <div className={`max-w-[85%] rounded-2xl px-3 py-2 whitespace-pre-wrap leading-relaxed ${m.role==="user"?"bg-[#0086E0] text-white rounded-br-sm":"bg-[#faf3ef] border border-[#D97757]/20 text-stone-800 rounded-bl-sm"}`}>{m.content}</div>
+        </div>))}
+        {busy&&<div className="flex justify-start"><div className="bg-stone-100 rounded-2xl rounded-bl-sm px-3 py-2"><Loader2 className="w-4 h-4 animate-spin text-stone-400"/></div></div>}
+        <div ref={endRef}/>
+      </div>
+      <div className="border-t border-stone-200 p-2 flex items-end gap-2">
+        <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}} rows={1} placeholder="Ask about the platform…" className="flex-1 resize-none text-sm border border-stone-300 rounded-lg px-3 py-2 focus:outline-none focus:border-[#0086E0] max-h-24"/>
+        <button onClick={send} disabled={busy||!input.trim()} className="bg-[#D97757] hover:bg-[#c9663f] disabled:opacity-40 text-white rounded-lg p-2.5"><Send className="w-4 h-4"/></button>
+      </div>
+      <div className="text-center text-[10px] text-stone-400 pb-1.5 -mt-0.5">Powered by Claude</div>
+    </div>}
+    <button onClick={()=>setOpen(v=>!v)} title="Ask Claude about ShippingCloud" className="fixed bottom-4 right-4 sm:bottom-5 sm:right-5 z-40 w-12 h-12 rounded-full bg-[#D97757] hover:bg-[#c9663f] text-white shadow-lg flex items-center justify-center">
+      {open?<X className="w-5 h-5"/>:<Sparkles className="w-5 h-5"/>}
+    </button>
+  </>);
+}
+
 function LandingGate({onDone}){
   const [auth,setAuth]=useState(()=>{const p=lsGet("postDemo",null);if(p){lsSet("postDemo",null);return "request";}return null;}); // null | "signin" | "request" | "fedex"
   const [intake,setIntake]=useState(null);
@@ -1595,6 +1640,7 @@ function AppInner(){
         <button onClick={()=>{lsSet("session",null);window.location.reload();}} className="bg-white/10 hover:bg-white/20 rounded px-2.5 py-1 text-xs">Exit demo</button>
       </div>}
       {!isDemo&&!isAdmin&&!adminReturn&&CLOUD.mode==="cloud"&&!fedexPrompt.seen&&<FirstRunFedEx user={currentUser} onClose={()=>setFedexPrompt({seen:true})}/>}
+      <AssistantChat who={isDemo?"demo":isAdmin?"admin":"customer"}/>
       <header className={"border-b border-stone-200 sticky z-30 bg-white/90 backdrop-blur "+((adminReturn||isDemo)?"top-9":"top-0")}>
         <div className="px-3 sm:px-4 h-14 flex items-center gap-2 sm:gap-3">
           <button onClick={()=>setNavOpen(true)} className="md:hidden p-2 -ml-1 rounded-lg hover:bg-stone-100 text-stone-600" aria-label="Menu"><Layers className="w-5 h-5"/></button>

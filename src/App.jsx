@@ -38,7 +38,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v91";
+const BUILD_TAG="addr-v94";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -1013,16 +1013,14 @@ function CloudAuth({onDone,initialMode}){
     const res=await cloudCall({action:"requestAccess",name:f.name,company:f.company,email:f.email,password:f.pw,volume:f.volume,carrier:f.carrier});
     setBusy(false);
     if(!res||!res.ok){setErr((res&&res.error)||"Could not reach the server.");return;}
-    setMode("requested");
+    CLOUD.token=res.token; lsSet("cloud.token",res.token);
+    const uid=String(res.user.id||res.user.email); clearScratchFor(uid);
+    lsSet("session",res.user);
+    onDone(false);
   };
   const inp="w-full border border-stone-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0086E0]/30";
   return (<div className={"w-full bg-white rounded-xl p-6 space-y-4 shadow-2xl "+(mode==="request"?"max-w-md":"max-w-sm")}>
-    {mode==="requested"?(<div className="text-center space-y-3 py-4">
-      <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto"/>
-      <div className="text-lg font-semibold text-stone-800">Request received</div>
-      <p className="text-sm text-stone-500">We review every account personally — a real person, usually same-day. Sign in with the email and password you chose once you’re approved.</p>
-      <button onClick={()=>setMode("signin")} className="text-sm text-[#0086E0] font-medium">Back to sign in</button>
-    </div>):(<>
+    {(<>
       <div className="grid grid-cols-2 bg-stone-100 rounded-lg p-1 text-sm font-medium">
         <button onClick={()=>{setMode("signin");setErr("");}} className={`rounded-md py-1.5 ${mode==="signin"?"bg-white shadow text-stone-800":"text-stone-500"}`}>Sign in</button>
         <button onClick={()=>{setMode("request");setErr("");}} className={`rounded-md py-1.5 ${mode==="request"?"bg-white shadow text-stone-800":"text-stone-500"}`}>Create account</button>
@@ -1039,7 +1037,7 @@ function CloudAuth({onDone,initialMode}){
       </div>
       {err&&<div className="text-xs text-red-600">{err}</div>}
       <button onClick={mode==="signin"?signin:request} disabled={busy} className="w-full bg-stone-900 text-white rounded px-4 py-2 text-sm font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"One moment…":(mode==="signin"?"Sign in":"Create account")}</button>
-      {mode==="request"&&<p className="text-[11px] text-stone-400 text-center">Accounts are approved personally — no bots, no spam, usually same-day.</p>}
+      {mode==="request"&&<p className="text-[11px] text-stone-400 text-center">No approval wait, no credit card — you’re in immediately.</p>}
     </>)}
   </div>);
 }
@@ -1119,7 +1117,7 @@ function Landing({onAuth}){
     {/* customization banner */}
     <div className="max-w-6xl mx-auto px-5 pb-16">
       <div className="border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-transparent rounded-2xl p-8 sm:p-10 text-center">
-        <h2 className="text-2xl sm:text-3xl font-bold text-white leading-snug">Every shipping platform makes you play by their rules.</h2>
+        <h2 className="text-2xl sm:text-3xl font-bold text-white leading-snug">Customized for your company and processes.</h2>
         <p className="mt-3 text-stone-400 max-w-2xl mx-auto">Their limitations become your limitations. Not here — we grow with you and build the features you actually need, on your account, when you need them.</p>
         <button onClick={()=>onAuth("request")} className="mt-6 border border-amber-400/50 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-semibold rounded-lg px-6 py-3 inline-flex items-center gap-2"><Cog className="w-4 h-4"/>Get started</button>
       </div>
@@ -4804,11 +4802,12 @@ function AddressCard({title,data,set,required,residential,setResidential,address
         {setResidential&&<label className="flex items-center gap-1.5 text-[11px] cursor-pointer"><input type="checkbox" checked={residential} onChange={e=>setResidential(e.target.checked)} className="accent-[#0086E0]"/>{residential?<span className="flex items-center gap-1 text-[#006FBF]"><Home className="w-3.5 h-3.5"/>Residential</span>:<span className="flex items-center gap-1 text-stone-600"><Building2 className="w-3.5 h-3.5"/>Commercial</span>}</label>}
       </div>
     </div>
-    {addresses&&addresses.length>0&&(
+    {addresses!==undefined&&(
       <div className="relative mb-1.5">
         <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400"/>
-        <input value={q} onChange={e=>{setQ(e.target.value);setOpen(true);}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder={`Address book — ${addresses.length} saved (click to choose)…`} className="w-full bg-white border border-stone-200 rounded pl-8 pr-8 py-1.5 text-[13px] outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+        <input value={q} onChange={e=>{setQ(e.target.value);setOpen(true);}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder={(addresses&&addresses.length)?`Address book — ${addresses.length} saved (click to choose)…`:"Address book — empty (use Save to Address Book below)"} className="w-full bg-white border border-stone-200 rounded pl-8 pr-8 py-1.5 text-[13px] outline-none focus:border-[#0099FF] placeholder-stone-300"/>
         <button type="button" onMouseDown={(e)=>{e.preventDefault();setOpen(o=>!o);}} className="absolute right-2 top-1.5 text-stone-400 hover:text-[#0086E0]" title="Show all saved addresses"><ChevronDown className={`w-4 h-4 transition-transform ${open?"rotate-180":""}`}/></button>
+        {open&&matches.length===0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg px-3 py-2.5 text-[12px] text-stone-400">{(addresses&&addresses.length)?"No matches — try fewer letters.":"Nothing saved yet. Fill in an address and hit “Save to Address Book” — it’ll be one click next time."}</div>}
         {open&&matches.length>0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-64 overflow-auto">
           <div className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50 border-b border-stone-100 sticky top-0">{q.trim()?`${matches.length} match${matches.length===1?"":"es"}`:`${addresses.length} saved address${addresses.length===1?"":"es"}`}</div>
           <div className="divide-y divide-stone-100">

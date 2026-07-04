@@ -199,6 +199,46 @@ exports.handler = async (event) => {
       if (!w.ok) return J({ ok: false, error: "Could not create your account — try again." });
       return J({ ok: true, token: makeToken(newUser), user: { ...newUser, passHash: undefined }, fedexFiled: !!writes.fedexRequests });
     }
+    // ── self-serve password reset ──
+    if (action === "requestReset") {
+      const email = String(body.email || "").trim().toLowerCase();
+      const generic = { ok: true, note: "If that email has an account, a reset link is on its way." };
+      if (!/.+@.+\..+/.test(email)) return J(generic);
+      const curU = await getStore("users");
+      const users = Array.isArray(curU.value) ? curU.value : [];
+      const u = users.find((x) => x && String(x.email || "").toLowerCase() === email && x.status !== "disabled");
+      if (!u) return J(generic); // never reveal which emails exist
+      const payload = b64u(JSON.stringify({ uid: String(u.id), kind: "pwreset", exp: Date.now() + 60 * 60 * 1000 }));
+      const rtoken = payload + "." + sign(payload);
+      const appUrl = (process.env.APP_URL || "").replace(/\/+$/, "");
+      const link = appUrl + "/?reset=" + encodeURIComponent(rtoken);
+      const key = (process.env.RESEND_API_KEY || "").trim();
+      if (!key) return J({ ...generic, configured: false });
+      const from = (process.env.EMAIL_FROM || "ShippingCloud <notify@shippingcloud.net>").trim();
+      await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
+        body: JSON.stringify({ from, to: [email], subject: "Reset your ShippingCloud password",
+          html: `<body style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;"><div style="max-width:480px;margin:0 auto;padding:28px 20px;"><div style="font-size:20px;font-weight:800;color:#0c4a6e;">Shipping<span style=\"color:#0086E0;\">Cloud</span></div><p style="font-size:14px;color:#57534e;">Someone (hopefully you) asked to reset the password for this account. This link works for 1 hour.</p><a href="${link}" style="display:inline-block;background:#0086E0;color:#fff;text-decoration:none;font-weight:600;border-radius:8px;padding:10px 18px;font-size:14px;">Choose a new password</a><p style="font-size:11px;color:#a8a29e;margin-top:16px;">Didn\u2019t ask for this? Ignore this email \u2014 nothing changes.</p></div></body>` }) }).catch(() => {});
+      return J(generic);
+    }
+    if (action === "resetPassword") {
+      const [pp, sig] = String(body.rtoken || "").split(".");
+      let data = null;
+      try {
+        const want = Buffer.from(sign(pp), "hex"); const got = Buffer.from(sig || "", "hex");
+        if (pp && sig && want.length === got.length && crypto.timingSafeEqual(want, got)) data = JSON.parse(unb64u(pp));
+      } catch (e) {}
+      if (!data || data.kind !== "pwreset" || !data.uid || Date.now() > data.exp) return J({ ok: false, error: "That reset link is invalid or expired \u2014 request a new one." });
+      const password = String(body.password || "");
+      if (password.length < 6) return J({ ok: false, error: "Password must be at least 6 characters." });
+      const curU2 = await getStore("users");
+      const users = Array.isArray(curU2.value) ? curU2.value : [];
+      if (!users.find((x) => x && x.id === data.uid)) return J({ ok: false, error: "Account not found." });
+      const merged = users.map((x) => x && x.id === data.uid ? { ...x, password: "", passHash: hashPw(password) } : x);
+      const w = await putStores({ users: merged });
+      if (!w.ok) return J({ ok: false, error: "Could not save \u2014 try again." });
+      return J({ ok: true });
+    }
+
 
     /* ── everything below requires a valid session ── */
     const auth = verifyToken(body.token);

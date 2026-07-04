@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v116";
+const BUILD_TAG="addr-v117";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -389,7 +389,7 @@ function orderItemRows(order,catalog){
   const bySku={},byName={};
   cat.forEach(pr=>{ if(pr.sku)bySku[String(pr.sku).toLowerCase()]=pr; if(pr.name)byName[String(pr.name).toLowerCase()]=pr; });
   const rows=[];
-  const push=(pr,qty,label)=>{ if(pr)rows.push({l:+pr.l||0,w:+pr.w||0,h:+pr.h||0,wt:+pr.wt||0,qty:qty||1,name:pr.name||label,sku:pr.sku||"",matched:true});
+  const push=(pr,qty,label)=>{ if(pr)rows.push({l:+pr.l||0,w:+pr.w||0,h:+pr.h||0,wt:+pr.wt||0,qty:qty||1,name:pr.name||label,sku:pr.sku||"",shipsAlone:!!pr.shipsAlone,matched:true});
     else rows.push({l:0,w:0,h:0,wt:0,qty:qty||1,name:label,sku:"",matched:false}); };
   if(Array.isArray(order.lineItems)&&order.lineItems.length){
     order.lineItems.forEach(li=>{ const pr=(li.sku&&bySku[String(li.sku).toLowerCase()])||(li.name&&byName[String(li.name).toLowerCase()]); push(pr,+li.qty||1,li.name||li.sku||"item"); });
@@ -403,6 +403,42 @@ function orderItemRows(order,catalog){
     if(nm)push(pr,qty,nm);
   });
   return rows;
+}
+
+/* Full cartonization for one order (Boxify-style):
+   1) resolve line items against the product catalog,
+   2) "ships alone" items each become their own piece using their own dims,
+   3) everything else runs through pickBox (smallest fitting box, weight caps, multi-box split),
+   4) returns ready-to-quote pieces + a human explanation. Null when nothing matches the catalog. */
+function packOrder(order,catalog,boxes,bl){
+  try{
+    const cfg=bl||{};
+    const rows=orderItemRows(order,catalog||[]);
+    const matched=rows.filter(r=>r.matched);
+    if(!matched.length)return null;
+    const pad=+cfg.padding||0;
+    const pieces=[];const names=[];
+    matched.filter(r=>r.shipsAlone&&r.l>0&&r.w>0&&r.h>0).forEach(r=>{
+      for(let k=0;k<(r.qty||1);k++)pieces.push({weight:Math.max(0.1,Math.round((+r.wt||0.5)*100)/100),L:Math.ceil(r.l+pad),W:Math.ceil(r.w+pad),H:Math.ceil(r.h+pad),box:r.name+" (own box)"});
+      names.push(((r.qty||1)>1?(r.qty)+"× ":"")+r.name+" (own box)");
+    });
+    const rest=matched.filter(r=>!(r.shipsAlone&&r.l>0&&r.w>0&&r.h>0));
+    if(rest.length){
+      const list=(boxes&&boxes.length)?boxes:SEED_BOXES;
+      const useBoxes=cfg.mode==="single"
+        ?[{id:"fb",name:"Default box",L:+cfg.fallbackL||12,W:+cfg.fallbackW||9,H:+cfg.fallbackH||4,maxWt:150,empty:0.3}]
+        :list;
+      const pk=pickBox(rest,useBoxes,1.3,pad);
+      if(pk&&pk.box){
+        const per=Math.max(0.1,Math.round((pk.billWt/pk.count)*10)/10);
+        for(let k=0;k<pk.count;k++)pieces.push({weight:per,L:pk.box.L,W:pk.box.W,H:pk.box.H,box:pk.box.name});
+        names.push((pk.count>1?pk.count+"× ":"")+pk.box.name);
+      }
+    }
+    if(!pieces.length)return null;
+    const totalWt=Math.round(pieces.reduce((a,p2)=>a+(+p2.weight||0),0)*10)/10;
+    return {pieces,totalWt,boxNames:names.join(" + "),matchedCount:matched.length,unresolved:rows.filter(r=>!r.matched).map(r=>r.name)};
+  }catch(e){return null;}
 }
 const SEED_PRODUCTS=[
   {id:"pr1",sku:"MUG-01",name:"Camp Mug",l:5,w:4,h:4,wt:0.9,value:18,origin:"US",hs:""},
@@ -1998,6 +2034,7 @@ function AppInner(){
               </React.Fragment>
             ))}
             {!isAdmin&&!isDemo&&!isCompanyAdmin&&CLOUD.mode==="cloud"&&<CompanyAdminRequestButton currentUser={currentUser}/>}
+            <div className="px-3 pt-3 text-[9px] text-stone-300 select-none">{BUILD_TAG}</div>
           </nav>
         </aside>
       </div>}
@@ -2013,6 +2050,7 @@ function AppInner(){
               </React.Fragment>
             ))}
             {!isAdmin&&!isDemo&&!isCompanyAdmin&&CLOUD.mode==="cloud"&&<CompanyAdminRequestButton currentUser={currentUser}/>}
+            <div className="px-3 pt-3 text-[9px] text-stone-300 select-none">{BUILD_TAG}</div>
           </nav>
         </aside>
         <main className="flex-1 min-w-0 px-3 sm:px-6 py-4 sm:py-6">
@@ -2132,7 +2170,12 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
   const applySuggestion=()=>{const n=verify&&verify.normalized;if(!n)return;setReceiver(prev=>({...prev,address1:Array.isArray(n.streetLines)?n.streetLines.join(" "):(n.streetLines||prev.address1),city:n.city||prev.city,state:n.state||prev.state,zip:n.zip||prev.zip}));};
   const setOverride=(on)=>{ setResTouched(on); if(!on) setVerifyNonce(x=>x+1); };  // turning override off re-asks FedEx
 
-  const applyOrder=(o)=>{setSelectedOrder(o.id);setReference(o.name);setReceiver({...empty,name:o.customer||"",company:o.company||"",zip:o.zip||"",state:o.state||"",city:o.city||"",address1:o.address1||"",phone:o.phone||"",email:o.email||""});setPieces([{weight:o.weight||1,L:12,W:9,H:4}]);};
+  const [packNote,setPackNote]=useState(null);
+  const applyOrder=(o)=>{setSelectedOrder(o.id);setReference(o.name);setReceiver({...empty,name:o.customer||"",company:o.company||"",zip:o.zip||"",state:o.state||"",city:o.city||"",address1:o.address1||"",phone:o.phone||"",email:o.email||""});
+    const pk=packOrder(o,settings.products||SEED_PRODUCTS,settings.boxes||SEED_BOXES,settings.boxLogic);
+    if(pk&&pk.pieces.length){ setPieces(pk.pieces.map(x=>({weight:x.weight,L:x.L,W:x.W,H:x.H}))); setPackNote(pk); }
+    else { setPieces([{weight:o.weight||1,L:12,W:9,H:4}]); setPackNote(null); }
+  };
   useEffect(()=>{ if(!prefill)return;
     if(prefill.draft){const s=prefill.draft;setSender(s.sender);setReceiver(s.receiver);setReference(s.reference||"");setInvoiceNo(s.invoiceNo||"");setPoNo(s.poNo||"");setPieces(s.pieces||[{weight:3,L:12,W:9,H:4}]);setRes(s.residential);setSig(s.signature);setBillTo(s.billTo);setThirdAcct(s.thirdAcct||"");setInsurance(s.insurance||"");setSelectedOrder(s.selectedOrder||null);if(s.customs)setCustoms(s.customs);clearPrefill();return;}
     if(prefill.receiver)setReceiver({...empty,...prefill.receiver}); if(prefill.weight)setPieces([{weight:prefill.weight,L:12,W:9,H:4}]); if(prefill.reference)setReference(prefill.reference); setSelectedOrder(prefill.fromOrderId||null); clearPrefill();
@@ -2262,7 +2305,9 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
   const [draftName,setDraftName]=useState("");
   const commitDraft=(title)=>{const d={id:Date.now(),label:title||reference||receiver.name||receiver.city||"Untitled",when:new Date().toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}),to:`${receiver.city||""}${receiver.state?", "+receiver.state:""}`,snap:{sender,receiver,reference,invoiceNo,poNo,pieces,residential,signature,billTo,thirdAcct,insurance,selectedOrder,customs}};setDrafts(p=>[d,...p]);setNaming(false);setDraftName("");setSaved(true);setTimeout(()=>setSaved(false),1600);};
   const saveDraft=()=>{setDraftName(reference||receiver.name||receiver.city||"");setNaming(true);};
-  const newShipment=()=>{setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setRes(true);setResTouched(false);setSig(false);setSigOption("none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");};
+  /* box-logic explanation banner shown while a packed order is loaded */
+  const PackNote=()=>packNote?(<div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-[12px] text-emerald-800 flex items-center gap-2"><Boxes className="w-3.5 h-3.5 shrink-0"/><span className="flex-1">Box logic packed this order: <b>{packNote.boxNames}</b> · {packNote.totalWt} lb billable{packNote.unresolved.length?` · ${packNote.unresolved.length} item${packNote.unresolved.length===1?"":"s"} not in your catalog (weight may be low)`:""} — dims are editable below.</span><button onClick={()=>setPackNote(null)} className="text-emerald-500 hover:text-emerald-700"><X className="w-3.5 h-3.5"/></button></div>):null;
+  const newShipment=()=>{setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setRes(true);setResTouched(false);setSig(false);setSigOption("none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");};
   return (
     <div className="flex flex-row gap-4 items-start">
       {ordersOpen?(
@@ -2304,9 +2349,9 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
         <div className="flex items-center justify-between">
           <h1 className="text-base font-semibold text-stone-800 flex items-center gap-2"><Package className="w-4 h-4 text-[#0086E0]"/>Create shipment</h1>
           <div className="flex items-center gap-2">
+            <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-200 text-stone-700 rounded px-3 py-1.5 font-medium hover:bg-stone-300"><Plus className="w-4 h-4"/>New shipment</button>
             {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded px-3 py-1.5 font-medium hover:bg-stone-200"><Calculator className="w-4 h-4"/>Quick quote</button>}
             <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Ship "}}))} title="Describe a shipment in plain English and Claude fills the form" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded px-3 py-1.5 font-medium hover:bg-[#f5e6de]"><Sparkles className="w-4 h-4"/>Ask Claude</button>
-            <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-200 text-stone-700 rounded px-3 py-1.5 font-medium hover:bg-stone-300"><Plus className="w-4 h-4"/>New shipment</button>
           </div>
         </div>
         <div className="relative grid lg:grid-cols-2 gap-4">
@@ -2360,6 +2405,7 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
               {quotes.some(q=>{const l=String(q.label||"").toLowerCase();return l.includes("fedex")&&/(overnight|2\s?day|express saver)/.test(l);})&&<label className="flex items-center gap-1.5 text-[11px] text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSat(e.target.checked)} className="accent-[#0086E0]"/><span className="uppercase tracking-widest text-stone-500">Saturday delivery <span className="normal-case text-stone-400">(Express only)</span></span></label>}
             </div>
           </div>
+          <PackNote/>
           {pieces.map((p,i)=>(
             <div key={i} className="flex flex-wrap items-end gap-2 bg-white border border-stone-200 rounded px-2 py-2">
               <div className="text-[11px] text-stone-400 font-mono w-6">#{i+1}</div>
@@ -3513,6 +3559,8 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped,ba
   const eng=englandFor(client,settings);
   const canBook=eng&&eng.enabled&&eng.apiKey&&eng.customerId;
   const originZip=(settings.sender&&settings.sender.zip)||client.origin;
+  // box logic: cartonize every open order once (products + boxes from Settings)
+  const packs=useMemo(()=>{const m={};const prods=settings.products||SEED_PRODUCTS;const bxs=settings.boxes||SEED_BOXES;pool.forEach(o=>{m[o.id]=packOrder(o,prods,bxs,settings.boxLogic);});return m;},[orders,settings]);
   const importCSV=(e)=>{
     const file=e.target.files&&e.target.files[0]; if(!file)return;
     const reader=new FileReader();
@@ -3549,7 +3597,10 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped,ba
     return qs.find(q=>(!prefCarrier||String(q.carrier||q.label||"").toLowerCase().includes(prefCarrier))&&String(q.label||"").toLowerCase().includes(prefSvc))||null;
   };
   const rateFor=(o)=>{
-    const qs=quoteRates({fromZip:client.origin,toZip:o.zip,L:12,W:9,H:4,weight:o.weight,residential:true});
+    const pk=packs[o.id];
+    const qs=quoteRates(pk&&pk.pieces&&pk.pieces.length
+      ?{fromZip:client.origin,toZip:o.zip,pieces:pk.pieces,residential:true}
+      :{fromZip:client.origin,toZip:o.zip,L:12,W:9,H:4,weight:o.weight,residential:true});
     let pick=pickByPref(qs,svcOv[o.id]);
     if(!pick){
       if(rule==="ground") pick=qs.filter(q=>/Ground|Home/.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
@@ -3628,7 +3679,7 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped,ba
   const all=()=>setSel(s=>{const ids=visible.filter(o=>!holds[o.id]).map(o=>o.id);const allOn=ids.every(i=>s.has(i))&&ids.length>0;const n=new Set(s);ids.forEach(i=>allOn?n.delete(i):n.add(i));return n;});
   const invert=()=>setSel(s=>{const n=new Set();visible.forEach(o=>{if(!s.has(o.id)&&!holds[o.id])n.add(o.id);});return n;});
   const rows=visible.filter(o=>sel.has(o.id)&&!holds[o.id]).map(o=>({o,q:rateFor(o)}));
-  const totals=rows.reduce((a,r)=>({cost:a.cost+(r.q.cost||0),sell:a.sell+(r.q.sell||0),wt:a.wt+(+r.o.weight||0)}),{cost:0,sell:0,wt:0});
+  const totals=rows.reduce((a,r)=>({cost:a.cost+(r.q.cost||0),sell:a.sell+(r.q.sell||0),wt:a.wt+((packs[r.o.id]&&packs[r.o.id].totalWt)||+r.o.weight||0)}),{cost:0,sell:0,wt:0});
   const svcMixSel=(()=>{const m={};rows.forEach(r=>{m[r.q.label]=(m[r.q.label]||0)+1;});return Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,3);})();
   const logBatch=(ok,fail)=>{const entry={id:"b"+Date.now(),date:new Date().toLocaleDateString(),time:new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}),count:ok+fail,ok,fail,est:Math.round(totals.sell*100)/100,mode:canBook?"live":"recorded"};setBatches(b=>[entry,...(b||[])].slice(0,20));};
   const run=async()=>{
@@ -3646,7 +3697,8 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped,ba
       setProgress({n:i+1,total:chosen.length});
       let picked=null;
       try{
-        const res=await ratesForOrder(o,{residential:true,weightLb:o.weight,fromZip:originZip,sender:settings.sender},eng);
+        const pk0=packs[o.id];
+        const res=await ratesForOrder(o,{residential:true,weightLb:(pk0&&pk0.totalWt)||o.weight,box:pk0&&pk0.pieces[0]?{L:pk0.pieces[0].L,W:pk0.pieces[0].W,H:pk0.pieces[0].H}:undefined,fromZip:originZip,sender:settings.sender},eng);
         let qs=((res&&res.rates)||[]).filter(q=>!/first\s*overnight/i.test(q.label||"")).map(q=>({...q,sell:Math.round((q.cost||0)*(1+(client.markup||0)/100)*100)/100}));
         picked=pickByPref(qs,svcOv[o.id]);
         if(!picked){
@@ -3659,10 +3711,11 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped,ba
       if(!picked){ out.push({name:o.name,ok:false,error:"No rate returned"}); setResults([...out]); continue; }
       const need=[]; if(!o.customer&&!o.company)need.push("name"); if(String(o.phone||"").replace(/\D/g,"").length<10)need.push("phone"); if(!o.email)need.push("email");
       if(need.length){ out.push({name:o.name,ok:false,error:"Missing "+need.join(", ")}); setResults([...out]); continue; }
-      const res=await bookOrderLabel(o,{quote:picked,weightLb:o.weight,residential:true,sender:settings.sender},eng,settings.sender);
+      const pkB=packs[o.id];
+      const res=await bookOrderLabel(o,{quote:picked,weightLb:(pkB&&pkB.totalWt)||o.weight,box:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:undefined,residential:true,sender:settings.sender},eng,settings.sender);
       if(res&&res.ok){
         const carrier=carrierOf(picked.label);
-        onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:originZip,toZip:o.zip,weight:o.weight,dims:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,bookNumber:res.bookNumber},o.id);
+        onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:originZip,toZip:o.zip,weight:(pkB&&pkB.totalWt)||o.weight,pieces:pkB?pkB.pieces:undefined,dims:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,bookNumber:res.bookNumber},o.id);
         out.push({name:o.name,ok:true,tracking:res.tracking,service:picked.label,pdf:res.labelPdfBase64||null});
       } else out.push({name:o.name,ok:false,error:(res&&res.error)||"Booking failed"});
       setResults([...out]);
@@ -3686,7 +3739,7 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped,ba
         <div className="w-14 sm:w-16 shrink-0"><div className="font-semibold text-sm">{o.name}</div>{a!=null&&<div className={`text-[10px] ${a>=3?"text-amber-600 font-medium":"text-stone-400"}`}>{a===0?"today":a+"d old"}</div>}</div>
         <div className="flex-1 min-w-0">
           <div className="text-sm truncate">{o.customer}{o.company?` · ${o.company}`:""}<span className="text-stone-400 text-[12px]">{o.items?` · ${o.items}`:""}</span></div>
-          <div className="text-[11px] text-stone-400 truncate">{o.address1?o.address1+", ":""}{o.city}, {o.state} {o.zip} · {o.weight} lb · Z{zoneOf(o)}{o.sku?` · ${o.sku}`:""}</div>
+          <div className="text-[11px] text-stone-400 truncate">{o.address1?o.address1+", ":""}{o.city}, {o.state} {o.zip} · {packs[o.id]?<span className="text-emerald-700">{packs[o.id].totalWt} lb · {packs[o.id].boxNames}</span>:<>{o.weight} lb</>} · Z{zoneOf(o)}{o.sku?` · ${o.sku}`:""}</div>
         </div>
         <span className="hidden md:block shrink-0"><Badge tone={srcTone(o.source||"Manual")}>{o.source||"Manual"}</Badge></span>
         <div className="w-16 hidden lg:block text-right font-mono text-[12px] text-stone-500 shrink-0">{o.total!=null?money(o.total):"—"}</div>
@@ -3707,7 +3760,8 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped,ba
         <Info k="Items" v={o.items||"—"}/>
         <Info k="Order total" v={o.total!=null?money(o.total):"—"}/>
         <Info k="Source" v={`${o.source||"Manual"}${o.date?" · "+o.date:""}`}/>
-        <Info k="Weight / zone" v={`${o.weight||"?"} lb · zone ${zoneOf(o)}`}/>
+        <Info k="Weight / zone" v={`${(packs[o.id]&&packs[o.id].totalWt)||o.weight||"?"} lb · zone ${zoneOf(o)}`}/>
+        <Info k="Packs into" v={packs[o.id]?packs[o.id].boxNames+(packs[o.id].unresolved.length?` · ${packs[o.id].unresolved.length} item${packs[o.id].unresolved.length===1?"":"s"} not in catalog`:""):"Not in catalog — using order weight + default box"}/>
         <Info k="Service for this label" v={held?`HELD — ${held}`:svcOv[o.id]?`${svcOv[o.id]}${ovWhy[o.id]?" (Autopilot: "+ovWhy[o.id]+")":" (your pick)"}`:q.label+" (by rate rule)"}/>
         <Info k="Rate" v={money(q.sell)}/>
       </div>}
@@ -4158,7 +4212,7 @@ function ProductCatalog({settings,setSettings}){
   const [editId,setEditId]=useState(null);
   const [ef,setEf]=useState(null);
   const [adding,setAdding]=useState(false);
-  const [nf,setNf]=useState({sku:"",name:"",l:"",w:"",h:"",wt:"",value:"",origin:"",hs:""});
+  const [nf,setNf]=useState({sku:"",name:"",l:"",w:"",h:"",wt:"",value:"",origin:"",hs:"",barcode:"",shipsAlone:false});
   const [msg,setMsg]=useState(null);
   const [busy,setBusy]=useState(false);
   const flash=(m)=>{setMsg(m);setTimeout(()=>setMsg(null),5000);};
@@ -4168,8 +4222,8 @@ function ProductCatalog({settings,setSettings}){
 
   const addProduct=()=>{
     if(!nf.name&&!nf.sku)return;
-    write([{id:"pr"+Date.now(),sku:nf.sku,name:nf.name||nf.sku,l:+nf.l||0,w:+nf.w||0,h:+nf.h||0,wt:+nf.wt||0,value:+nf.value||0,origin:nf.origin||"",hs:nf.hs||""},...products]);
-    setNf({sku:"",name:"",l:"",w:"",h:"",wt:"",value:"",origin:"",hs:""});setAdding(false);
+    write([{id:"pr"+Date.now(),sku:nf.sku,name:nf.name||nf.sku,l:+nf.l||0,w:+nf.w||0,h:+nf.h||0,wt:+nf.wt||0,value:+nf.value||0,origin:nf.origin||"",hs:nf.hs||"",barcode:nf.barcode||"",shipsAlone:!!nf.shipsAlone},...products]);
+    setNf({sku:"",name:"",l:"",w:"",h:"",wt:"",value:"",origin:"",hs:"",barcode:"",shipsAlone:false});setAdding(false);
     flash({ok:"Product added."});
   };
   const saveEdit=()=>{ if(!ef)return; write(products.map(p=>p.id===editId?{...ef,l:+ef.l||0,w:+ef.w||0,h:+ef.h||0,wt:+ef.wt||0,value:+ef.value||0}:p)); setEditId(null);setEf(null); };
@@ -4184,10 +4238,10 @@ function ProductCatalog({settings,setSettings}){
         if(rows.length<2){flash({err:"That file has no data rows."});return;}
         const head=rows[0].map(h=>String(h||"").trim().toLowerCase());
         const col=(names)=>head.findIndex(h=>names.some(n=>h===n||h.includes(n)));
-        const idx={sku:col(["sku","item sku","variant sku"]),name:col(["name","title","product","description"]),l:col(["length","length (in)","l","dim l"]),w:col(["width","width (in)","w","dim w"]),h:col(["height","height (in)","h","dim h"]),wt:col(["weight","weight (lb)","lbs","pounds","wt"]),value:col(["value","price","declared value","unit price"]),origin:col(["origin","country of origin","coo"]),hs:col(["hs","hs code","tariff","harmonized"])};
+        const idx={sku:col(["sku","item sku","variant sku"]),name:col(["name","title","product","description"]),l:col(["length","length (in)","l","dim l"]),w:col(["width","width (in)","w","dim w"]),h:col(["height","height (in)","h","dim h"]),wt:col(["weight","weight (lb)","lbs","pounds","wt"]),value:col(["value","price","declared value","unit price"]),origin:col(["origin","country of origin","coo"]),hs:col(["hs","hs code","tariff","harmonized"]),barcode:col(["barcode","upc","ean","gtin"]),alone:col(["ships alone","own box","ship separately","separately"])};
         if(idx.name<0&&idx.sku<0){flash({err:"Couldn’t find a Name or SKU column in that CSV."});return;}
         const g=(c,k)=>idx[k]>=0?(c[idx[k]]||"").trim():"";
-        const parsed=rows.slice(1).map((c,i)=>({id:"pr"+Date.now()+i,sku:g(c,"sku"),name:g(c,"name")||g(c,"sku"),l:+g(c,"l")||0,w:+g(c,"w")||0,h:+g(c,"h")||0,wt:+g(c,"wt")||0,value:+g(c,"value")||0,origin:g(c,"origin"),hs:g(c,"hs")})).filter(p=>p.name||p.sku);
+        const parsed=rows.slice(1).map((c,i)=>({id:"pr"+Date.now()+i,sku:g(c,"sku"),name:g(c,"name")||g(c,"sku"),l:+g(c,"l")||0,w:+g(c,"w")||0,h:+g(c,"h")||0,wt:+g(c,"wt")||0,value:+g(c,"value")||0,barcode:g(c,"barcode"),shipsAlone:/^(y|yes|true|1)$/i.test(g(c,"alone")),origin:g(c,"origin"),hs:g(c,"hs")})).filter(p=>p.name||p.sku);
         // merge by SKU (update existing, add new)
         const bySku={}; products.forEach(p=>{if(p.sku)bySku[p.sku.toLowerCase()]=p;});
         let updated=0,added=0; const out=[...products];
@@ -4220,7 +4274,7 @@ function ProductCatalog({settings,setSettings}){
     setBusy(false);
   };
 
-  const exportCSV=()=>downloadCSV("shippingcloud-products.csv",[["SKU","Name","Length","Width","Height","Weight","Value","Origin","HS Code"],...products.map(p=>[p.sku,p.name,p.l,p.w,p.h,p.wt,p.value,p.origin,p.hs])]);
+  const exportCSV=()=>downloadCSV("shippingcloud-products.csv",[["SKU","Name","Length","Width","Height","Weight","Value","Origin","HS Code","Barcode","Ships Alone"],...products.map(p=>[p.sku,p.name,p.l,p.w,p.h,p.wt,p.value,p.origin,p.hs,p.barcode||"",p.shipsAlone?"yes":""])]);
 
   const Cell=({v,ph,on,w})=>(<input value={v} onChange={on} placeholder={ph} className={`${w||"w-14"} bg-white border border-stone-200 rounded px-1.5 py-1 text-xs text-center outline-none focus:border-[#0099FF]`}/>);
   return (<div className="max-w-4xl space-y-3">
@@ -4237,7 +4291,7 @@ function ProductCatalog({settings,setSettings}){
       <label className="flex items-center gap-1.5 text-sm bg-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
       <button onClick={exportCSV} className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 px-2 py-1.5"><Download className="w-4 h-4"/>Export</button>
     </div>
-    <div className="text-[11px] text-stone-400">CSV columns recognized: SKU, Name, Length, Width, Height, Weight, Value, Origin, HS Code. Rows are merged by SKU.</div>
+    <div className="text-[11px] text-stone-400">CSV columns recognized: SKU, Name, Length, Width, Height, Weight, Value, Origin, HS Code, Barcode/UPC, Ships Alone (yes/no). Rows are merged by SKU.</div>
 
     {withDims<products.length&&<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[12px] text-amber-800 flex items-center gap-2"><AlertTriangle className="w-4 h-4 shrink-0"/>{products.length-withDims} of {products.length} products have no dimensions yet. Box logic falls back to your default box for those — add L×W×H to pack them precisely.</div>}
 
@@ -4252,6 +4306,8 @@ function ProductCatalog({settings,setSettings}){
         <Field label="Value ($)"><Input type="number" value={nf.value} onChange={e=>setNf({...nf,value:e.target.value})}/></Field>
         <Field label="Origin"><Input value={nf.origin} onChange={e=>setNf({...nf,origin:e.target.value})} placeholder="US"/></Field>
         <div className="col-span-2"><Field label="HS / tariff code (intl)"><Input value={nf.hs} onChange={e=>setNf({...nf,hs:e.target.value})}/></Field></div>
+        <Field label="Barcode / UPC"><Input value={nf.barcode} onChange={e=>setNf({...nf,barcode:e.target.value})}/></Field>
+        <label className="flex items-center gap-2 text-sm text-stone-600 pt-5 cursor-pointer"><input type="checkbox" checked={!!nf.shipsAlone} onChange={e=>setNf({...nf,shipsAlone:e.target.checked})} className="accent-[#0086E0]"/>Ships alone (own box)</label>
       </div>
       <div className="flex items-center gap-2 mt-2"><button onClick={addProduct} className="text-sm bg-[#0086E0] text-white rounded px-4 py-1.5 font-medium hover:bg-[#0072BE]">Save product</button><button onClick={()=>setAdding(false)} className="text-sm text-stone-500 px-2 py-1.5">Cancel</button></div>
     </div>}
@@ -4266,7 +4322,7 @@ function ProductCatalog({settings,setSettings}){
         return (<div key={p.id}>
           <div className={`flex items-center gap-2 px-3 py-2.5 ${ed?"bg-[#E6F4FF]/40":"hover:bg-stone-50"}`}>
             <button onClick={()=>{if(ed){setEditId(null);setEf(null);}else{setEditId(p.id);setEf({...p});}}} className="text-stone-300 w-4"><Edit3 className={`w-3.5 h-3.5 ${ed?"text-[#0086E0]":""}`}/></button>
-            <div className="flex-1 min-w-0 text-sm truncate">{p.name}{noDim&&<span className="ml-1.5 text-[10px] text-amber-600">no dims</span>}</div>
+            <div className="flex-1 min-w-0 text-sm truncate">{p.name}{p.shipsAlone&&<span className="ml-1.5 text-[10px] uppercase tracking-wide rounded px-1 py-0.5 bg-[#E6F4FF] text-[#006FBF]">own box</span>}{noDim&&<span className="ml-1.5 text-[10px] text-amber-600">no dims</span>}</div>
             <div className="w-24 hidden sm:block font-mono text-xs text-stone-500 truncate">{p.sku||"—"}</div>
             <div className="w-28 text-center font-mono text-xs text-stone-600">{noDim?"—":`${p.l}×${p.w}×${p.h}`}</div>
             <div className="w-16 text-center font-mono text-xs text-stone-600">{+p.wt?p.wt+" lb":"—"}</div>
@@ -4284,6 +4340,8 @@ function ProductCatalog({settings,setSettings}){
               <Field label="Value ($)"><Input type="number" value={ef.value||""} onChange={e=>setEf({...ef,value:e.target.value})}/></Field>
               <Field label="Origin"><Input value={ef.origin||""} onChange={e=>setEf({...ef,origin:e.target.value})}/></Field>
               <div className="col-span-2"><Field label="HS / tariff code"><Input value={ef.hs||""} onChange={e=>setEf({...ef,hs:e.target.value})}/></Field></div>
+              <Field label="Barcode / UPC"><Input value={ef.barcode||""} onChange={e=>setEf({...ef,barcode:e.target.value})}/></Field>
+              <label className="flex items-center gap-2 text-sm text-stone-600 pt-5 cursor-pointer"><input type="checkbox" checked={!!ef.shipsAlone} onChange={e=>setEf({...ef,shipsAlone:e.target.checked})} className="accent-[#0086E0]"/>Ships alone (own box)</label>
             </div>
             <div className="flex items-center gap-2 mt-2"><button onClick={saveEdit} className="text-sm bg-[#0086E0] text-white rounded px-4 py-1.5 font-medium hover:bg-[#0072BE]">Save</button><button onClick={()=>{setEditId(null);setEf(null);}} className="text-sm text-stone-500 px-2 py-1.5">Cancel</button></div>
           </div>}

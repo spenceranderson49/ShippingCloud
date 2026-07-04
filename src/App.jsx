@@ -38,7 +38,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v89";
+const BUILD_TAG="addr-v90";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -647,7 +647,7 @@ function Branding({settings,setSettings,brand}){
   </div>);
 }
 
-function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,currentUser,settings,setSettings,brand,signupRequests,setSignupRequests,featureFlags,setFeatureFlags,customFeatures,setCustomFeatures}){
+function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,currentUser,settings,setSettings,brand,signupRequests,setSignupRequests,featureFlags,setFeatureFlags,customFeatures,setCustomFeatures,fedexRequests=[],setFedexRequests}){
   const [sec,setSec]=useState("overview");
   const [openC,setOpenC]=useState(null);
   const statsFor=(cName)=>{const sh=shipments.filter(s=>s.client===cName);const spend=sh.reduce((a,s)=>a+(s.sell||0),0);return {count:sh.length,spend};};
@@ -683,7 +683,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
       </div>}
 
       {sec==="customers"&&<CustomersAdmin clients={clients} setClients={setClients} statsFor={statsFor} openC={openC} setOpenC={setOpenC}/>}
-      {sec==="users"&&<UsersAdmin users={users} setUsers={setUsers} clients={clients} currentUser={currentUser} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures}/>}
+      {sec==="users"&&<UsersAdmin users={users} setUsers={setUsers} clients={clients} currentUser={currentUser} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests}/>}
       {sec==="customizations"&&<CustomizationsAdmin users={users} clients={clients} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures}/>}
     </div>
   );
@@ -823,7 +823,7 @@ function CustomizationsAdmin({users,clients,featureFlags={},setFeatureFlags,cust
     </div>
   </div>);
 }
-function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSignupRequests,featureFlags={},setFeatureFlags,customFeatures=[]}){
+function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSignupRequests,featureFlags={},setFeatureFlags,customFeatures=[],fedexRequests=[],setFedexRequests}){
   const CATALOG=[...FEATURE_CATALOG,...customFeatures.map(c=>({...c,custom:true}))];
   const [featOpen,setFeatOpen]=useState(null);
   const setFlag=(uid,fid,on)=>setFeatureFlags(ff=>({...ff,[uid]:{...(ff[uid]||{}),[fid]:on}}));
@@ -843,6 +843,15 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
   const del=(id)=>setUsers(us=>us.filter(u=>u.id!==id));
   return (<div className="space-y-3">
     <div className="text-sm text-stone-500">Create and manage logins. Admins see everything; customer logins are scoped to one customer account.</div>
+    {CLOUD.mode==="cloud"&&fedexRequests.length>0&&<div className="border border-emerald-200 bg-emerald-50/50 rounded-lg p-4 space-y-2">
+      <div className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Truck className="w-4 h-4 text-emerald-600"/>FedEx account requests<Badge tone="green">{fedexRequests.length}</Badge></div>
+      {fedexRequests.map(r=>(<div key={r.id||r.uid} className="flex flex-wrap items-center gap-3 bg-white border border-stone-200 rounded px-3 py-2 text-sm">
+        <div className="flex-1 min-w-[180px]"><div className="font-medium">{r.name||r.email}</div><div className="text-[11px] text-stone-400">{r.email}{r.volume?<> · {r.volume}/mo</>:null}{r.carrier?<> · ships {r.carrier}</>:null} · {r.requestedAt?new Date(r.requestedAt).toLocaleDateString():"recently"}</div></div>
+        {r.invoiceKey&&<button onClick={async()=>{const res=await cloudCall({action:"getUpload",token:CLOUD.token,key:r.invoiceKey});if(!res||!res.ok){window.alert((res&&res.error)||"Could not fetch the file.");return;}const bytes=atob(res.data);const arr=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);const url=URL.createObjectURL(new Blob([arr],{type:res.type}));const a=document.createElement("a");a.href=url;a.download=res.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);}} className="text-xs border border-[#0086E0]/40 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>UPS invoice</button>}
+        <button onClick={()=>setFedexRequests&&setFedexRequests(rs=>rs.filter(x=>x!==r))} className="text-xs border border-stone-300 text-stone-600 rounded px-3 py-1.5 hover:bg-stone-50">Done</button>
+      </div>))}
+      <p className="text-[11px] text-stone-400">These come from the welcome popup after a user’s first sign-in. Provision their England/FedEx account, drop the credentials into their customer card, then hit Done.</p>
+    </div>}
     {CLOUD.mode==="cloud"&&signupRequests.length>0&&<div className="border border-blue-200 bg-blue-50/50 rounded-lg p-4 space-y-2">
       <div className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Users className="w-4 h-4 text-[#0086E0]"/>Access requests<Badge tone="blue">{signupRequests.length}</Badge></div>
       {signupRequests.map(r=>(<div key={r.id||r.email} className="flex flex-wrap items-center gap-3 bg-white border border-stone-200 rounded px-3 py-2 text-sm">
@@ -907,7 +916,7 @@ const lsDel=(k)=>{ if(!LS_OK)return; try{window.localStorage.removeItem("sc_"+k)
 // Which login is active. Every non-global key is stored under this account so each login keeps its OWN settings/data.
 const activeUid=()=>{ try{const s=lsGet("session",null); const id=s&&(s.id||s.email); return id?String(id):"guest"; }catch(e){return "guest";} };
 // Shared across all logins (never namespaced): the accounts list + who is signed in.
-const GLOBAL_KEYS={session:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1,customFeatures:1};
+const GLOBAL_KEYS={session:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1,customFeatures:1,fedexRequests:1};
 // Scratch = the in-progress shipment. Per-login, but starts blank on each login (never migrated/inherited).
 const isScratch=(key)=>String(key).indexOf("ship.")===0;
 // Scratch keys wiped on login so the receiver + package dims are always blank for a fresh session.
@@ -1001,7 +1010,7 @@ function CloudAuth({onDone,initialMode}){
   };
   const request=async()=>{
     if(busy)return; setBusy(true);setErr("");
-    const res=await cloudCall({action:"requestAccess",name:f.name,company:f.company,email:f.email,password:f.pw,volume:f.volume,carrier:f.carrier,invoice:inv||undefined});
+    const res=await cloudCall({action:"requestAccess",name:f.name,company:f.company,email:f.email,password:f.pw,volume:f.volume,carrier:f.carrier});
     setBusy(false);
     if(!res||!res.ok){setErr((res&&res.error)||"Could not reach the server.");return;}
     setMode("requested");
@@ -1011,7 +1020,7 @@ function CloudAuth({onDone,initialMode}){
     {mode==="requested"?(<div className="text-center space-y-3 py-4">
       <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto"/>
       <div className="text-lg font-semibold text-stone-800">Request received</div>
-      <p className="text-sm text-stone-500">We review every account personally — a real person, usually same-day. If you attached a UPS invoice, your line-by-line rate comparison comes back the same day. Sign in with the email and password you chose once you’re in.</p>
+      <p className="text-sm text-stone-500">We review every account personally — a real person, usually same-day. Sign in with the email and password you chose once you’re approved.</p>
       <button onClick={()=>setMode("signin")} className="text-sm text-[#0086E0] font-medium">Back to sign in</button>
     </div>):(<>
       <div className="grid grid-cols-2 bg-stone-100 rounded-lg p-1 text-sm font-medium">
@@ -1024,13 +1033,7 @@ function CloudAuth({onDone,initialMode}){
         <div className="grid grid-cols-2 gap-2">
           <select value={f.volume} onChange={e=>setF({...f,volume:e.target.value})} className={inp+" bg-white"}><option value="">Packages / month</option><option>Under 100</option><option>100–500</option><option>500–2,000</option><option>2,000+</option></select>
           <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp+" bg-white"}><option value="">Ship mostly with…</option><option>UPS</option><option>FedEx</option><option>USPS</option><option>A mix</option></select>
-        </div>
-        <label className={"flex items-center justify-between gap-2 border border-dashed rounded px-3 py-2 text-sm cursor-pointer "+(inv?"border-emerald-400 bg-emerald-50/50 text-emerald-700":"border-stone-300 text-stone-500 hover:border-[#0086E0]")}>
-          <span className="flex items-center gap-2 truncate">{inv?<CheckCircle2 className="w-4 h-4 shrink-0"/>:<Upload className="w-4 h-4 shrink-0"/>}<span className="truncate">{inv?inv.name:"Upload a recent UPS invoice (optional)"}</span></span>
-          {inv&&<button type="button" onClick={(e)=>{e.preventDefault();setInv(null);}} className="text-[11px] underline shrink-0">remove</button>}
-          <input type="file" accept=".pdf,.csv,.xls,.xlsx,.png,.jpg,.jpeg,application/pdf,text/csv,image/png,image/jpeg" onChange={pickFile} className="hidden"/>
-        </label>
-        <p className="text-[11px] text-stone-400 -mt-1">Attach an invoice and we’ll send back a line-by-line, apples-to-apples rate comparison on your exact shipments — same day. (Grab one from the <a href="https://www.ups.com/us/en/business-solutions/ups-billing" target="_blank" rel="noopener noreferrer" className="text-[#0086E0] underline">UPS Billing Center</a>: Manage Your Bills → Billing Center → Log in → Download PDF or CSV.)</p></>}
+        </div></>}
         <input value={f.email} onChange={e=>setF({...f,email:e.target.value})} placeholder="Email" className={inp} autoFocus/>
         <input value={f.pw} onChange={e=>setF({...f,pw:e.target.value})} onKeyDown={e=>e.key==="Enter"&&(mode==="signin"?signin():request())} placeholder={mode==="request"?"Choose a password":"Password"} type="password" className={inp}/>
       </div>
@@ -1065,7 +1068,6 @@ function Landing({onAuth}){
     {/* hero */}
     <div className="max-w-6xl mx-auto px-5 pt-14 pb-16 grid lg:grid-cols-2 gap-12 items-center">
       <div>
-        <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-widest text-[#38b6ff] bg-[#0086E0]/10 border border-[#0086E0]/25 rounded-full px-3 py-1 mb-5"><Zap className="w-3.5 h-3.5"/>Multi-carrier shipping platform</div>
         <h1 className="text-4xl sm:text-5xl font-bold text-white leading-tight">More than your shipping platform.<br/><span className="text-[#38b6ff]">Your shipping partner and custom solution.</span></h1>
         <p className="mt-5 text-lg text-stone-400 leading-relaxed">Enterprise FedEx & DHL pricing. Real people who pick up the phone. Software that bends to how you work.</p>
         <div className="mt-5 border-l-2 border-[#38b6ff] bg-white/[0.03] rounded-r-xl px-4 py-3">
@@ -1109,6 +1111,22 @@ function Landing({onAuth}){
         <button onClick={()=>onAuth("request")} className="mt-6 border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#38b6ff] font-semibold rounded-lg px-6 py-3 inline-flex items-center gap-2"><Upload className="w-4 h-4"/>Send us your UPS invoice</button>
       </div>
     </div>
+    {/* integrations banner */}
+    <div className="max-w-6xl mx-auto px-5 pb-16">
+      <div className="border border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-transparent rounded-2xl p-8 sm:p-10 text-center">
+        <h2 className="text-2xl sm:text-3xl font-bold text-white leading-snug">We want to integrate with your systems.</h2>
+        <p className="mt-3 text-stone-400 max-w-2xl mx-auto">Your WMS, your ERP, your inventory management, your shopping cart — we plug into what you already run, so this works as a long-term solution. We already have lots of integrations, and if we don’t have yours, we’ll build it.</p>
+        <button onClick={()=>onAuth("request")} className="mt-6 border border-violet-400/50 bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 font-semibold rounded-lg px-6 py-3 inline-flex items-center gap-2"><Plug className="w-4 h-4"/>Tell us what you run</button>
+      </div>
+    </div>
+    {/* customization banner */}
+    <div className="max-w-6xl mx-auto px-5 pb-16">
+      <div className="border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-transparent rounded-2xl p-8 sm:p-10 text-center">
+        <h2 className="text-2xl sm:text-3xl font-bold text-white leading-snug">Every shipping platform makes you play by their rules.</h2>
+        <p className="mt-3 text-stone-400 max-w-2xl mx-auto">Their limitations become your limitations. Not here — we grow with you and build the features you actually need, on your account, when you need them.</p>
+        <button onClick={()=>onAuth("request")} className="mt-6 border border-amber-400/50 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-semibold rounded-lg px-6 py-3 inline-flex items-center gap-2"><Cog className="w-4 h-4"/>Get started</button>
+      </div>
+    </div>
     {/* partner, not just a platform */}
     <div className="max-w-6xl mx-auto px-5 pb-16">
       <div className="bg-gradient-to-br from-[#0086E0]/15 to-transparent border border-[#0086E0]/25 rounded-2xl p-8 sm:p-10 text-center">
@@ -1135,6 +1153,59 @@ function Landing({onAuth}){
         <span>© {new Date().getFullYear()} ShippingCloud.</span>
         <span>FedEx® and DHL® are trademarks of their respective owners; shipping is provided under partner carrier agreements.</span>
       </div>
+    </div>
+  </div>);
+}
+function FirstRunFedEx({user,onClose}){
+  const [f,setF]=useState({volume:"",carrier:""});
+  const [inv,setInv]=useState(null);
+  const [state,setState]=useState("form"); // form | busy | done
+  const [err,setErr]=useState("");
+  const pickFile=(e)=>{
+    const file=e.target.files&&e.target.files[0]; e.target.value=""; if(!file)return;
+    if(file.size>3*1024*1024){setErr("That file is over 3 MB — one recent invoice is perfect.");return;}
+    const r=new FileReader();
+    r.onload=()=>{setInv({name:file.name,type:file.type||"application/octet-stream",data:String(r.result).split(",")[1]||""});setErr("");};
+    r.readAsDataURL(file);
+  };
+  const go=async()=>{
+    setState("busy");setErr("");
+    const res=await cloudCall({action:"fedexRequest",token:CLOUD.token,name:(user&&user.name)||"",volume:f.volume,carrier:f.carrier,invoice:inv||undefined});
+    if(res&&res.ok){setState("done");return;}
+    setState("form");setErr((res&&res.error)||"Could not send — try again.");
+  };
+  const inp="w-full border border-stone-300 rounded px-3 py-2 text-sm bg-white";
+  return (<div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="w-full max-w-md bg-white rounded-xl p-6 space-y-4 shadow-2xl">
+      {state==="done"?(<div className="text-center space-y-3 py-4">
+        <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto"/>
+        <div className="text-lg font-semibold text-stone-800">You’re on the list</div>
+        <p className="text-sm text-stone-500">A real person will set up your FedEx account and reach out — usually the same day. If you attached a UPS invoice, your rate comparison comes with it.</p>
+        <button onClick={onClose} className="bg-stone-900 text-white rounded px-5 py-2 text-sm font-medium">Start shipping</button>
+      </div>):(<>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-lg font-semibold text-stone-800">Get your own FedEx account</div>
+          <p className="text-sm text-stone-500 mt-1">Welcome{user&&user.name?", "+String(user.name).split(" ")[0]:""}! Let’s get you enterprise FedEx rates — two quick questions and we’ll handle the rest.</p>
+        </div>
+        <button onClick={onClose} className="text-stone-300 hover:text-stone-500 shrink-0"><X className="w-5 h-5"/></button>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <select value={f.volume} onChange={e=>setF({...f,volume:e.target.value})} className={inp}><option value="">Packages / month</option><option>Under 100</option><option>100–500</option><option>500–2,000</option><option>2,000+</option></select>
+        <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp}><option value="">Ship mostly with…</option><option>UPS</option><option>FedEx</option><option>USPS</option><option>A mix</option></select>
+      </div>
+      <label className={"flex items-center justify-between gap-2 border border-dashed rounded px-3 py-2 text-sm cursor-pointer "+(inv?"border-emerald-400 bg-emerald-50/50 text-emerald-700":"border-stone-300 text-stone-500 hover:border-[#0086E0]")}>
+        <span className="flex items-center gap-2 truncate">{inv?<CheckCircle2 className="w-4 h-4 shrink-0"/>:<Upload className="w-4 h-4 shrink-0"/>}<span className="truncate">{inv?inv.name:"Upload a recent UPS invoice (optional)"}</span></span>
+        {inv&&<button type="button" onClick={(e)=>{e.preventDefault();setInv(null);}} className="text-[11px] underline shrink-0">remove</button>}
+        <input type="file" accept=".pdf,.csv,.xls,.xlsx,.png,.jpg,.jpeg,application/pdf,text/csv,image/png,image/jpeg" onChange={pickFile} className="hidden"/>
+      </label>
+      <p className="text-[11px] text-stone-400 -mt-1">Attach one and we’ll send back a line-by-line rate comparison — same day. (Find it in the <a href="https://www.ups.com/us/en/business-solutions/ups-billing" target="_blank" rel="noopener noreferrer" className="text-[#0086E0] underline">UPS Billing Center</a>: Manage Your Bills → Billing Center → Log in → Download PDF or CSV.)</p>
+      {err&&<div className="text-xs text-red-600">{err}</div>}
+      <div className="flex items-center gap-2">
+        <button onClick={go} disabled={state==="busy"} className="flex-1 bg-[#0086E0] text-white rounded px-4 py-2 text-sm font-semibold hover:bg-[#0a76c2] disabled:opacity-50">{state==="busy"?"Sending…":"Get my FedEx account"}</button>
+        <button onClick={onClose} className="text-sm text-stone-500 px-3 py-2">Maybe later</button>
+      </div>
+      </>)}
     </div>
   </div>);
 }
@@ -1172,6 +1243,7 @@ export default function App(){
 function AppInner(){
   const [signupRequests,setSignupRequests]=usePersist("signupRequests",[]);
   const [featureFlags,setFeatureFlags]=usePersist("featureFlags",{});
+  const [fedexRequests,setFedexRequests]=usePersist("fedexRequests",[]);
   const [customFeatures,setCustomFeatures]=usePersist("customFeatures",[]);
   const [myFeatures]=usePersist("myFeatures",{});
   const [tab,setTab]=useState("ship");
@@ -1335,6 +1407,7 @@ function AppInner(){
 
   if(!currentUser) return <Login users={users} brand={{...DEFAULT_BRAND,...(settings.brand||{})}} onLogin={(u)=>{ const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }}/>;
 
+  const [fedexPrompt,setFedexPrompt]=usePersist("fedexPrompt",{seen:false});
   const adminReturn=lsGet("adminReturn",null);
   const exitImpersonation=()=>{ lsSet("session",adminReturn); lsDel("adminReturn"); window.location.reload(); };
   return (
@@ -1344,6 +1417,7 @@ function AppInner(){
         <span>Admin preview — you’re seeing ShippingCloud exactly as <b>{currentUser&&(currentUser.name||currentUser.email)}</b> sees it. Anything you change here changes their account.</span>
         <button onClick={exitImpersonation} className="bg-white text-[#0086E0] font-semibold rounded px-3 py-1 hover:bg-blue-50 shrink-0">Return to admin</button>
       </div>}
+      {!isAdmin&&!adminReturn&&CLOUD.mode==="cloud"&&!fedexPrompt.seen&&<FirstRunFedEx user={currentUser} onClose={()=>setFedexPrompt({seen:true})}/>}
       <header className={"border-b border-stone-200 sticky z-30 bg-white/90 backdrop-blur "+(adminReturn?"top-9":"top-0")}>
         <div className="px-3 sm:px-4 h-14 flex items-center gap-2 sm:gap-3">
           <button onClick={()=>setNavOpen(true)} className="md:hidden p-2 -ml-1 rounded-lg hover:bg-stone-100 text-stone-600" aria-label="Menu"><Layers className="w-5 h-5"/></button>
@@ -1397,7 +1471,7 @@ function AppInner(){
           {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings}/>}
           {tab==="ledger"&&<Ledger ledger={ledger} addLedger={addLedger}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
-          {tab==="admin"&&isAdmin&&<AdminPortal clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures}/>}
+          {tab==="admin"&&isAdmin&&<AdminPortal clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests}/>}
           {tab==="settings"&&<Settings settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client}/>}
         </main>
       </div>

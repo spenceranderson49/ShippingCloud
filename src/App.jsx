@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v107";
+const BUILD_TAG="addr-v108";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -1731,7 +1731,7 @@ function AppInner(){
           {tab==="returns"&&<Returns returns={returns} setReturns={setReturns} orders={orders} settings={settings} logEmail={logEmail}/>}
           {tab==="pickups"&&<Pickups pickups={pickups} setPickups={setPickups} settings={settings}/>}
           {tab==="invoices"&&<Invoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>}
-          {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings}/>}
+          {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings} client={client} onShipped={onShipped}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
           {tab==="admin"&&isAdmin&&<AdminPortal clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} publicBrand={publicBrand} setPublicBrand={setPublicBrand}/>}
           {tab==="settings"&&<Settings settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
@@ -4057,10 +4057,13 @@ function RuleEditorModal({rule,onSave,onClose,onDelete,warehouses}){
   );
 }
 
-function RulesTab({rules,setRules,orders,setOrders,settings,setSettings}){
+function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,onShipped}){
   const [editing,setEditing]=useState(null);
   const [view,setView]=useState("all");
   const [applied,setApplied]=useState(null);
+  const [apRunning,setApRunning]=useState(false);
+  const [apProg,setApProg]=useState(null);
+  const [apResults,setApResults]=useState(null);
   const ords=orders||[];
   const originZip=(settings&&settings.sender&&settings.sender.zip)||"84003";
   const warehouses=(settings&&settings.warehouses)||[];
@@ -4076,6 +4079,63 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings}){
     setApplied({n});
     setTimeout(()=>setApplied(null),6000);
   };
+  const eng=englandFor(client,settings);
+  const canBook=!!(eng&&eng.enabled&&eng.apiKey&&eng.customerId);
+  // honor the rule-chosen service when picking a rate; fall back to cheapest
+  const pickRate=(qs,pref)=>{
+    if(!qs||!qs.length)return null;
+    const cheap=qs.slice().sort((a,b)=>(a.cost||a.sell||0)-(b.cost||b.sell||0))[0];
+    if(!pref)return cheap;
+    const P=String(pref);
+    if(/^ANY/i.test(P)){ if(/ground/i.test(P)){const g=qs.filter(q=>/ground|home/i.test(q.label||"")).sort((a,b)=>(a.cost||a.sell||0)-(b.cost||b.sell||0))[0]; return g||cheap;} return cheap; }
+    const dash=P.indexOf(" - ");const prefCarrier=dash>0?P.slice(0,dash).trim().toLowerCase():"";const prefSvc=(dash>0?P.slice(dash+3):P).trim().toLowerCase();
+    const hit=qs.find(q=>(!prefCarrier||String(q.carrier||q.label||"").toLowerCase().includes(prefCarrier))&&String(q.label||"").toLowerCase().includes(prefSvc));
+    return hit||cheap;
+  };
+  const runAutopilot=async()=>{
+    const patchById=rulePatchesFor(run);
+    const eligible=run.results.filter(r=>r.order.status!=="fulfilled"&&!r.view.hold).map(r=>r.order);
+    const heldN=run.results.filter(r=>r.order.status!=="fulfilled"&&r.view.hold).length;
+    if(!eligible.length){ setApResults({rows:[],heldN,none:true}); return; }
+    if(!window.confirm(`Autopilot will apply your rules and create labels for ${eligible.length} unfulfilled order${eligible.length!==1?"s":""}${heldN?` (${heldN} held for your review — skipped)`:""}. Continue?`))return;
+    if(Object.keys(patchById).length)setOrders(os=>os.map(o=>patchById[o.id]?{...o,...patchById[o.id],_ruled:true}:o));
+    const senderZip=(settings&&settings.sender&&settings.sender.zip)||(client&&client.origin)||"";
+    const rows=[];
+    setApRunning(true);setApResults(null);setApProg({n:0,total:eligible.length});
+    for(let i=0;i<eligible.length;i++){
+      const o=eligible[i];const patch=patchById[o.id]||{};const pref=patch.ruleService||o.ruleService||null;const wt=patch.weight||o.weight||1;
+      setApProg({n:i+1,total:eligible.length});
+      if(!canBook){
+        const qs=quoteRates({fromZip:senderZip,toZip:o.zip,L:12,W:9,H:4,weight:wt,residential:true});
+        const q=pickRate(qs,pref);
+        if(!q){rows.push({name:o.name,ok:false,error:"No rate"});continue;}
+        const carrier=/dhl/i.test(q.label)?"DHL":"FedEx";
+        onShipped&&onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:newTracking(carrier),carrier,service:q.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...((settings&&settings.sender)||{})},fromZip:senderZip,toZip:o.zip,weight:wt,dims:{L:12,W:9,H:4},cost:q.cost,sell:q.sell,billTo:"sender",status:"Label created",reference:o.name},o.id);
+        rows.push({name:o.name,ok:true,service:q.label,demo:true});
+        setApResults({rows:[...rows],heldN});
+        continue;
+      }
+      let picked=null;
+      try{
+        const res=await ratesForOrder(o,{residential:true,weightLb:wt,fromZip:senderZip,sender:settings.sender},eng);
+        const qs=((res&&res.rates)||[]).map(q=>({...q,sell:Math.round((q.cost||0)*(1+((client&&client.markup)||0)/100)*100)/100}));
+        picked=pickRate(qs,pref);
+      }catch(e){}
+      if(!picked){rows.push({name:o.name,ok:false,error:"No rate returned"});setApResults({rows:[...rows],heldN});continue;}
+      const need=[];if(!o.customer&&!o.company)need.push("name");if(String(o.phone||"").replace(/\D/g,"").length<10)need.push("phone");if(!o.email)need.push("email");
+      if(need.length){rows.push({name:o.name,ok:false,error:"Missing "+need.join(", ")});setApResults({rows:[...rows],heldN});continue;}
+      const res=await bookOrderLabel(o,{quote:picked,weightLb:wt,residential:true,sender:settings.sender},eng,settings.sender);
+      if(res&&res.ok){
+        const carrier=/dhl/i.test(picked.label)?"DHL":"FedEx";
+        onShipped&&onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:senderZip,toZip:o.zip,weight:wt,dims:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,bookNumber:res.bookNumber},o.id);
+        rows.push({name:o.name,ok:true,service:picked.label,tracking:res.tracking,pdf:res.labelPdfBase64||null});
+      } else rows.push({name:o.name,ok:false,error:(res&&res.error)||"Booking failed"});
+      setApResults({rows:[...rows],heldN});
+    }
+    setApRunning(false);setApProg(null);
+  };
+  const apPrintAll=()=>{ ((apResults&&apResults.rows)||[]).filter(r=>r.ok&&r.pdf).forEach((r,i)=>setTimeout(()=>openLabelPdf(r.pdf),i*400)); };
+  const addStarters=()=>setRules(rs=>[...rs,...SEED_RULESET.map((r,i)=>({...JSON.parse(JSON.stringify(r)),id:"r"+Date.now()+i}))]);
   const newRule=()=>setEditing({_isNew:true,id:"r"+Date.now(),name:"",enabled:true,stop:false,match:"all",conditions:[],actions:[{id:"a"+Date.now(),type:"Set Service",service:"ANY - Cheapest"}]});
   const saveRule=(r)=>{ const clean={id:r.id,name:r.name,enabled:r.enabled,stop:r.stop,match:r.match||"all",conditions:r.conditions,actions:r.actions};
     setRules(rs=>{ const i=rs.findIndex(x=>x.id===r.id); if(i>=0){const c=[...rs];c[i]=clean;return c;} return [...rs,clean]; });
@@ -4092,18 +4152,43 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings}){
   return (<div className="space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Zap className="w-5 h-5 text-[#0086E0]"/>Rules</h2>
-        <p className="text-sm text-stone-500 mt-0.5">Automation pipeline — rules run top to bottom on every order. Add conditions and actions, drag order with the arrows, and see a live simulation on your real orders.</p>
+        <h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Zap className="w-5 h-5 text-[#0086E0]"/>Autopilot</h2>
+        <p className="text-sm text-stone-500 mt-0.5">Tell ShippingCloud how you ship — it handles the rest.</p>
       </div>
       <div className="flex items-center gap-2">
         {setSettings&&<button onClick={()=>setSettings(s=>({...s,autoRunRules:!autoRun}))} title="When on, newly imported/synced orders are run through enabled rules automatically" className={`text-sm rounded-lg px-3 py-2 font-medium flex items-center gap-1.5 border ${autoRun?"bg-emerald-50 border-emerald-300 text-emerald-800":"bg-white border-stone-200 text-stone-600 hover:bg-stone-100"}`}><span className={`w-8 h-4 rounded-full relative transition ${autoRun?"bg-emerald-500":"bg-stone-300"}`}><span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${autoRun?"left-4":"left-0.5"}`}/></span>Auto-run on import</button>}
         <button onClick={exportJSON} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-100 flex items-center gap-1.5"><Download className="w-4 h-4"/>Export JSON</button>
-        <button onClick={applyToOrders} disabled={run.summary.touched===0} title="Write these rule outcomes onto the matching orders" className="text-sm bg-emerald-600 text-white rounded-lg px-3 py-2 font-medium hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-1.5"><Check className="w-4 h-4"/>Apply to {run.summary.touched} order{run.summary.touched!==1?"s":""}</button>
-        <button onClick={newRule} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium flex items-center gap-1.5 hover:bg-[#0072BE]"><Plus className="w-4 h-4"/>New rule</button>
+        <button onClick={applyToOrders} disabled={run.summary.touched===0} title="Write rule outcomes onto matching orders without creating labels" className="text-sm bg-white border border-stone-200 text-stone-600 rounded-lg px-3 py-2 font-medium hover:bg-stone-100 disabled:opacity-40 flex items-center gap-1.5"><Check className="w-4 h-4"/>Apply only</button>
+        <button onClick={newRule} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium flex items-center gap-1.5 hover:bg-stone-100"><Plus className="w-4 h-4"/>New rule</button>
+        <button onClick={runAutopilot} disabled={apRunning||ords.filter(o=>o.status!=="fulfilled").length===0} title="Apply your rules and create labels for every unfulfilled order (held orders are skipped)" className="text-sm bg-emerald-600 text-white rounded-lg px-4 py-2.5 font-semibold hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-2 shadow-sm">{apRunning?<Loader2 className="w-4 h-4 animate-spin"/>:<Zap className="w-4 h-4"/>}Run Autopilot{!apRunning&&run?` — label ${run.results.filter(r=>r.order.status!=="fulfilled"&&!r.view.hold).length} orders`:""}</button>
       </div>
     </div>
 
+    <div className="border border-stone-200 rounded-lg bg-white px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-[13px] text-stone-600">
+      <span className="flex items-center gap-2"><span className="w-5 h-5 rounded-full bg-[#E6F4FF] text-[#006FBF] text-[11px] font-bold flex items-center justify-center">1</span>Set simple rules — "if this, do that"</span>
+      <span className="flex items-center gap-2"><span className="w-5 h-5 rounded-full bg-[#E6F4FF] text-[#006FBF] text-[11px] font-bold flex items-center justify-center">2</span>The preview below shows exactly what will happen — live, on your real orders</span>
+      <span className="flex items-center gap-2"><span className="w-5 h-5 rounded-full bg-[#E6F4FF] text-[#006FBF] text-[11px] font-bold flex items-center justify-center">3</span>Hit <b>Run Autopilot</b> — every open order gets its label; anything held waits for you</span>
+    </div>
     {applied&&<div className="text-[12px] rounded px-3 py-2 flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200"><CheckCircle2 className="w-3.5 h-3.5"/>{applied.n?`Applied to ${applied.n} order${applied.n!==1?"s":""} — service preference, tags, holds and shipping options written onto those orders.`:"No matching orders to apply right now."}</div>}
+    {apProg&&<div className="border border-emerald-200 bg-emerald-50 rounded-lg px-4 py-3 flex items-center gap-3 text-sm text-emerald-800"><Loader2 className="w-4 h-4 animate-spin"/>Autopilot is working… order {apProg.n} of {apProg.total}<div className="flex-1 h-1.5 bg-emerald-100 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 transition-all" style={{width:(apProg.n/apProg.total*100)+"%"}}/></div></div>}
+    {apResults&&!apProg&&<div className="border border-stone-200 rounded-lg bg-white p-4 space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="font-semibold text-sm text-stone-800 flex items-center gap-1.5"><Zap className="w-4 h-4 text-emerald-600"/>Autopilot run complete</span>
+        <Badge tone="green">{apResults.rows.filter(r=>r.ok).length} labeled</Badge>
+        {apResults.rows.filter(r=>!r.ok).length>0&&<Badge tone="rose">{apResults.rows.filter(r=>!r.ok).length} failed</Badge>}
+        {apResults.heldN>0&&<Badge tone="amber">{apResults.heldN} held for review</Badge>}
+        <div className="flex-1"/>
+        {apResults.rows.some(r=>r.ok&&r.pdf)&&<button onClick={apPrintAll} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE] flex items-center gap-1.5"><Printer className="w-4 h-4"/>Print all labels</button>}
+        <button onClick={()=>setApResults(null)} className="text-stone-300 hover:text-stone-600"><X className="w-4 h-4"/></button>
+      </div>
+      {apResults.none&&<div className="text-sm text-stone-500">No unfulfilled orders to run right now{apResults.heldN?` — ${apResults.heldN} are held for your review`:""}.</div>}
+      {apResults.rows.map((r,i)=>(<div key={i} className="flex items-center gap-2 text-[13px]">
+        {r.ok?<CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0"/>:<AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0"/>}
+        <span className="font-medium text-stone-700 w-16">{r.name}</span>
+        {r.ok?<span className="text-stone-500 truncate">{r.service}{r.tracking?` · ${r.tracking}`:""}{r.demo?" · recorded (connect your carrier account for live labels)":""}</span>:<span className="text-rose-600 truncate">{r.error}</span>}
+      </div>))}
+      {apResults.rows.some(r=>r.ok&&!r.demo)&&<div className="text-[11px] text-stone-400">Labeled orders are marked fulfilled and now live in Shipments.</div>}
+    </div>}
 
     <div className="flex items-center gap-2 text-[11px]">
       <Badge tone="blue">{rules.length} rule{rules.length!==1?"s":""}</Badge>
@@ -4119,8 +4204,11 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings}){
         <div className="text-[11px] uppercase tracking-widest text-stone-400 flex items-center justify-between"><span>Rules pipeline</span><span>{rules.length}</span></div>
         {rules.length===0&&<div className="border border-dashed border-stone-300 rounded-lg bg-white p-8 text-center">
           <div className="text-stone-800 font-medium">No rules yet</div>
-          <div className="text-sm text-stone-500 mt-1">Build conditions and actions to auto-route, tag, insure, and hold orders.</div>
-          <button onClick={newRule} className="mt-3 text-sm text-[#006FBF] font-medium">＋ Add your first rule</button>
+          <div className="text-sm text-stone-500 mt-1">Rules are simple "if this, do that" sentences — Autopilot runs them on every order.</div>
+          <div className="mt-3 flex items-center justify-center gap-3">
+            <button onClick={addStarters} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#0072BE]">Add starter rules</button>
+            <button onClick={newRule} className="text-sm text-[#006FBF] font-medium">＋ Build your own</button>
+          </div>
         </div>}
         {rules.map((r,i)=>{
           const {cond,acts}=ruleSummaryText(r); const hits=matchCount(r.id);
@@ -4148,7 +4236,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings}){
       {/* live floor */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <div className="text-[11px] uppercase tracking-widest text-stone-400">Live simulation · your orders</div>
+          <div className="text-[11px] uppercase tracking-widest text-stone-400">Preview — what Autopilot will do</div>
           <div className="flex bg-stone-100 rounded-lg p-0.5 text-[11px]">{[["all","All"],["matched","Affected"],["held","Held"],["untouched","Untouched"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-2 py-1 rounded-md ${view===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}</div>
         </div>
         {ords.length===0&&<div className="border border-dashed border-stone-300 rounded-lg bg-white p-8 text-center text-sm text-stone-400">No orders on the floor. Sync or add orders to see rules act on them.</div>}
@@ -4164,7 +4252,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings}){
                 <span className="text-[11px] font-mono text-stone-500">${o.total} · {o.weight||"?"}lb{res.view.zone?` · zone ${res.view.zone}`:""}</span>
               </div>
               {res.fires.length===0
-                ? <div className="text-[12px] text-stone-400">No rules matched — passes through untouched.</div>
+                ? <div className="text-[12px] text-stone-400">No rules matched — ships normally at the best rate.</div>
                 : <div className="space-y-1">
                     {res.fires.map((f,fi)=>(<div key={fi} className="flex items-start gap-2 text-[12px]">
                       <Zap className="w-3.5 h-3.5 text-[#0086E0] shrink-0 mt-0.5"/>

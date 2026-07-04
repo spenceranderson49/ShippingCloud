@@ -161,29 +161,37 @@ exports.handler = async (event) => {
       const email = String(body.email || "").trim().toLowerCase().slice(0, 120);
       const company = String(body.company || "").trim().slice(0, 120);
       const password = String(body.password || "");
-      if (!name || !/.+@.+\..+/.test(email) || password.length < 4) return J({ ok: false, error: "Enter your name, a valid email, and a password (4+ characters)." });
-      const [curU, curR] = await Promise.all([getStore("users"), getStore("signupRequests")]);
-      const users = (curU.ok && Array.isArray(curU.value)) ? curU.value : [];
-      if (users.some((u) => u && String(u.email || "").toLowerCase() === email)) return J({ ok: false, error: "That email already has a login. Try signing in." });
-      let reqs = (curR.ok && Array.isArray(curR.value)) ? curR.value : [];
-      reqs = reqs.filter((r) => r && String(r.email || "").toLowerCase() !== email);   // resubmission replaces
-      if (reqs.length >= 100) return J({ ok: false, error: "Too many pending requests right now — please try again later." });
       const volume = String(body.volume || "").slice(0, 40);
       const carrier = String(body.carrier || "").slice(0, 40);
-      let invoiceName = "", invoiceKey = "";
+      if (!name || !/.+@.+\..+/.test(email) || password.length < 4) return J({ ok: false, error: "Enter your name, a valid email, and a password (4+ characters)." });
+      const [curU, curR, curF] = await Promise.all([getStore("users"), getStore("signupRequests"), getStore("fedexRequests")]);
+      const users = (curU.ok && Array.isArray(curU.value)) ? curU.value : [];
+      if (users.some((u) => u && String(u.email || "").toLowerCase() === email)) return J({ ok: false, error: "That email already has a login. Try signing in." });
+      if (users.length >= 2000) return J({ ok: false, error: "Signups are temporarily paused — give us a call." });
+      const newUser = { id: "u" + Date.now(), name, company, email, role: "customer", clientId: null, status: "active", password: "", passHash: hashPw(password), volume, carrier, createdAt: new Date().toISOString(), lastLogin: new Date().toLocaleDateString() };
+      const writes = { users: [...users, newUser] };
+      const reqs = (curR.ok && Array.isArray(curR.value)) ? curR.value : [];
+      const remaining = reqs.filter((r) => r && String(r.email || "").toLowerCase() !== email);
+      if (remaining.length !== reqs.length) writes.signupRequests = remaining;   // clean any legacy pending request
+      // FedEx-account intake collected before signup: file it against the new login
       const inv = body.invoice;
-      if (inv && inv.data) {
-        if (String(inv.data).length > MAX_UPLOAD_B64) return J({ ok: false, error: "That file is too large — please upload one under 3 MB (a single recent invoice is perfect)." });
-        if (inv.type && !OK_UPLOAD_TYPES.includes(String(inv.type))) return J({ ok: false, error: "Please upload a PDF, CSV, Excel file, or image of your invoice." });
-        invoiceKey = "inv_" + crypto.createHash("sha1").update(email + "|" + Date.now()).digest("hex");
-        invoiceName = String(inv.name || "invoice").slice(0, 120);
-        const up = await blobOp(invoiceKey, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: invoiceName, type: String(inv.type || "application/octet-stream"), data: String(inv.data) }) });
-        if (!up || !up.ok) { invoiceKey = ""; invoiceName = ""; }   // upload failed → request still goes through without the file
+      if (volume || carrier || (inv && inv.data)) {
+        let invoiceName = "", invoiceKey = "";
+        if (inv && inv.data) {
+          if (String(inv.data).length > MAX_UPLOAD_B64) return J({ ok: false, error: "That file is too large — please upload one under 3 MB." });
+          if (inv.type && !OK_UPLOAD_TYPES.includes(String(inv.type))) return J({ ok: false, error: "Please upload a PDF, CSV, Excel file, or image of your invoice." });
+          invoiceKey = "inv_" + crypto.createHash("sha1").update(newUser.id + "|" + Date.now()).digest("hex");
+          invoiceName = String(inv.name || "invoice").slice(0, 120);
+          const up = await blobOp(invoiceKey, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: invoiceName, type: String(inv.type || "application/octet-stream"), data: String(inv.data) }) });
+          if (!up || !up.ok) { invoiceKey = ""; invoiceName = ""; }
+        }
+        const freqs = ((curF.ok && Array.isArray(curF.value)) ? curF.value : []).slice(0, 199);
+        freqs.push({ id: "fx" + Date.now(), uid: newUser.id, name, email, volume, carrier, invoiceName, invoiceKey, requestedAt: new Date().toISOString() });
+        writes.fedexRequests = freqs;
       }
-      reqs.push({ id: "req" + Date.now(), name, email, company, volume, carrier, invoiceName, invoiceKey, passHash: hashPw(password), requestedAt: new Date().toISOString() });
-      const w = await putStores({ signupRequests: reqs });
-      if (!w.ok) return J({ ok: false, error: "Could not save your request — try again." });
-      return J({ ok: true, pending: true });
+      const w = await putStores(writes);
+      if (!w.ok) return J({ ok: false, error: "Could not create your account — try again." });
+      return J({ ok: true, token: makeToken(newUser), user: { ...newUser, passHash: undefined }, fedexFiled: !!writes.fedexRequests });
     }
 
     /* ── everything below requires a valid session ── */

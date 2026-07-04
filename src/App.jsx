@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v117";
+const BUILD_TAG="addr-v118";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -1682,9 +1682,14 @@ function AssistantChat({who,getContext,onAction}){
     }catch(e){setMsgs(m=>[...m,{role:"assistant",content:"Couldn’t reach the assistant just now — try again in a moment."}]);}
     setBusy(false);
   };
-  const CHIPS=who==="admin"
-    ?["Batch all Shopify orders under 5 lb as cheapest ground","Make a rule: orders over $500 ship Priority Overnight","Run my Autopilot rules","Which orders are getting stale?"]
-    :["Batch all Shopify orders under 5 lb as cheapest ground","Make a rule: orders over $500 ship Priority Overnight","Run my Autopilot rules","How does the Batch tab work?"];
+  const ctxTab=(getContext&&open?(getContext()||{}).tab:"")||"";
+  const CHIPS=ctxTab==="batch"?["Batch all Shopify orders under 5 lb as cheapest ground","Batch everything going to Texas","Run my Autopilot rules","Batch orders over a week old"]
+    :ctxTab==="rules"?["Make a rule: orders over $500 ship Priority Overnight","Make a rule: international orders ship DHL","Make a rule: over 50 lb goes cheapest ground","Run my Autopilot rules"]
+    :ctxTab==="ship"?["Ship 4 lb to a saved contact","Save this address: ","Which service is cheapest for 2-day delivery?","Start a label to "]
+    :ctxTab==="shipments"?["How many delivered this week?","Anything delivered late?","What’s still in transit?","Take me to the Transit audit"]
+    :ctxTab==="orders"?["Batch all open orders as cheapest ground","Which orders are getting stale?","Batch the Shopify orders","Make a rule: orders over $500 ship Priority Overnight"]
+    :ctxTab==="addresses"?["Save this address: ","Ship 3 lb to ","How do I import my address book?","Take me to the Ship tab"]
+    :["Batch all Shopify orders under 5 lb as cheapest ground","Make a rule: orders over $500 ship Priority Overnight","Run my Autopilot rules",who==="admin"?"Which orders are getting stale?":"How does the Batch tab work?"];
   return (<>
     {open&&<div className="fixed bottom-20 right-4 sm:right-5 w-[min(92vw,370px)] h-[480px] max-h-[70vh] bg-white border border-stone-200 rounded-2xl shadow-2xl z-40 flex flex-col overflow-hidden">
       <div className="px-4 py-3 border-b border-stone-200 bg-stone-50 flex items-center gap-2">
@@ -1932,6 +1937,8 @@ function AppInner(){
         sources:uniq(open.map(o=>o.source||"Manual"),8),
         autopilotRules:(ruleset||[]).filter(r=>r.enabled).map(r=>r.name).slice(0,12),
         addressBook:uniq((settings.addresses||[]).map(a=>a.name),30),
+        shipmentStatusCounts:(()=>{const m={};shipments.forEach(s2=>{if(s2&&s2.status)m[s2.status]=(m[s2.status]||0)+1;});return m;})(),
+        deliveredLate:shipments.filter(s2=>s2.status==="Delivered"&&!s2.onTime).length,
         shipmentsTotal:shipments.length };
     }catch(e){return {tab};}
   };
@@ -2351,7 +2358,7 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
           <div className="flex items-center gap-2">
             <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-200 text-stone-700 rounded px-3 py-1.5 font-medium hover:bg-stone-300"><Plus className="w-4 h-4"/>New shipment</button>
             {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded px-3 py-1.5 font-medium hover:bg-stone-200"><Calculator className="w-4 h-4"/>Quick quote</button>}
-            <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Ship "}}))} title="Describe a shipment in plain English and Claude fills the form" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded px-3 py-1.5 font-medium hover:bg-[#f5e6de]"><Sparkles className="w-4 h-4"/>Ask Claude</button>
+            <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Ship "}}))} title="Describe a shipment in plain English and Claude fills the form" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded px-3 py-1.5 font-medium hover:bg-[#f5e6de]"><Sparkles className="w-4 h-4"/>Ask Claude to fill this</button>
           </div>
         </div>
         <div className="relative grid lg:grid-cols-2 gap-4">
@@ -2719,6 +2726,7 @@ function Orders({orders,setOrders,goShip,client,settings,onShipped}){
             <div className="md:hidden flex bg-stone-100 rounded-lg p-0.5 text-sm">{[["all","All"],["unfulfilled","Awaiting"],["fulfilled","Shipped"]].map(([v,l])=><button key={v} onClick={()=>setFilter(v)} className={`px-3 py-1.5 rounded-md ${filter===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}</div>
             <div className="flex-1 relative min-w-[160px]"><Search className="w-4 h-4 absolute left-2.5 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search orders, items, recipient…" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-3 py-2 text-sm outline-none focus:border-[#0099FF]"/></div>
             <div className="flex items-center gap-1.5 text-sm"><span className="text-stone-500 hidden sm:inline">Sort</span><select value={sort} onChange={e=>setSort(e.target.value)} className="bg-white border border-stone-200 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="total">Order total</option><option value="customer">Recipient</option><option value="state">Dest. state</option><option value="weight">Weight</option><option value="source">Store</option></select></div>
+            <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Batch "}}))} title="e.g. ‘batch everything going to Texas under 5 lb as cheapest ground’" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded px-3 py-2 font-medium hover:bg-[#f5e6de]"><Sparkles className="w-4 h-4"/>Ask Claude to batch these</button>
             {orderSources.length>0&&<button onClick={syncAll} disabled={syncing} title={orderSources.length>1?`Syncs: ${orderSources.map(s=>s.name).join(", ")}`:undefined} className="flex items-center gap-1.5 text-sm border border-[#0086E0]/30 bg-[#E6F4FF] text-[#006FBF] rounded px-3 py-2 font-medium hover:bg-[#CDE9FF] disabled:opacity-40">{syncing?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>{syncLabel}</>}</button>}
             <button onClick={()=>setAdding(true)} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded px-3 py-2 font-medium hover:bg-stone-800"><Plus className="w-4 h-4"/>New order</button>
           </div>
@@ -3154,7 +3162,10 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels}
     <div className="space-y-3">
       <PendingBar/>
       {chkMsg&&<div className={`text-[12px] rounded px-2 py-1.5 flex items-center gap-1.5 ${chkMsg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{chkMsg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{chkMsg.err||chkMsg.ok}</div>}
-      <div className="relative"><Search className="w-4 h-4 absolute left-3 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by name, tracking, order, reference or PO #" className="w-full bg-white border border-stone-200 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:border-[#0099FF]"/></div>
+      <div className="flex items-center gap-2">
+      <div className="relative flex-1"><Search className="w-4 h-4 absolute left-3 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by name, tracking, order, reference or PO #" className="w-full bg-white border border-stone-200 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:border-[#0099FF]"/></div>
+      <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude"))} title="e.g. ‘how many delivered this week?’ or ‘anything stuck in transit?’" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded-lg px-3 py-2 font-medium hover:bg-[#f5e6de] shrink-0"><Sparkles className="w-4 h-4"/><span className="hidden sm:inline">Ask Claude about shipments</span><span className="sm:hidden">Ask Claude</span></button>
+      </div>
       <div className="border border-stone-200 rounded-lg overflow-hidden bg-white divide-y divide-stone-100">
         <div className="flex items-center gap-3 px-4 py-2 text-[11px] uppercase tracking-widest text-stone-400 bg-stone-50"><div className="w-4"/><div className="w-24">Created</div><div className="flex-1">Recipient</div><div className="w-52 hidden lg:block">Ship-to address</div><div className="w-24 hidden xl:block">Reference</div><div className="w-40 hidden md:block">Tracking</div><div className="w-24 text-right">Status</div></div>
         {list.length===0&&<div className="p-8 text-center text-sm text-stone-400">No shipments match “{q}”.</div>}
@@ -3834,7 +3845,7 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped,ba
           <div className="flex-1"/>
           <button onClick={applyAutopilot} disabled={!(ruleset||[]).some(r=>r.enabled)||!visible.length} title="Run your Autopilot rules on the orders below: routes services, applies holds" className="text-sm bg-violet-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-violet-700 disabled:opacity-40 flex items-center gap-1.5"><Zap className="w-4 h-4"/>Apply Autopilot rules</button>
           <button onClick={()=>setQrOpen(v=>!v)} className={`text-sm rounded-lg px-3 py-1.5 font-medium border flex items-center gap-1.5 ${qrOpen?"bg-violet-50 border-violet-300 text-violet-700":"bg-white border-stone-200 text-stone-600 hover:bg-stone-100"}`}><Plus className="w-3.5 h-3.5"/>Quick rule</button>
-          <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Batch "}}))} title="Tell Claude what to batch in plain English — e.g. ‘batch the camp mugs to Texas as cheapest ground’" className="text-sm rounded-lg px-3 py-1.5 font-medium border bg-[#faf3ef] border-[#D97757]/40 text-[#c2410c] hover:bg-[#f5e6de] flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/>Ask Claude</button>
+          <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Batch "}}))} title="Tell Claude what to batch in plain English — e.g. ‘batch the camp mugs to Texas as cheapest ground’" className="text-sm rounded-lg px-3 py-1.5 font-medium border bg-[#faf3ef] border-[#D97757]/40 text-[#c2410c] hover:bg-[#f5e6de] flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/>Ask Claude to batch</button>
           {(Object.keys(svcOv).length>0||Object.keys(holds).length>0)&&<button onClick={clearAutopilot} className="text-[12px] text-stone-400 hover:text-stone-600 underline">reset routing</button>}
         </div>
         {qrOpen&&<div className="border-t border-stone-100 pt-3 flex flex-wrap items-center gap-2 text-sm">
@@ -4934,7 +4945,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
         <button onClick={exportJSON} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-100 flex items-center gap-1.5"><Download className="w-4 h-4"/>Export JSON</button>
         <button onClick={applyToOrders} disabled={run.summary.touched===0} title="Write rule outcomes onto matching orders without creating labels" className="text-sm bg-white border border-stone-200 text-stone-600 rounded-lg px-3 py-2 font-medium hover:bg-stone-100 disabled:opacity-40 flex items-center gap-1.5"><Check className="w-4 h-4"/>Apply only</button>
         <button onClick={newRule} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium flex items-center gap-1.5 hover:bg-stone-100"><Plus className="w-4 h-4"/>New rule</button>
-        <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Make a rule: "}}))} title="Describe a rule in plain English — Claude writes it into the pipeline" className="text-sm rounded-lg px-3 py-2 font-medium border bg-[#faf3ef] border-[#D97757]/40 text-[#c2410c] hover:bg-[#f5e6de] flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/>Ask Claude</button>
+        <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Make a rule: "}}))} title="Describe a rule in plain English — Claude writes it into the pipeline" className="text-sm rounded-lg px-3 py-2 font-medium border bg-[#faf3ef] border-[#D97757]/40 text-[#c2410c] hover:bg-[#f5e6de] flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/>Ask Claude to write a rule</button>
         <button onClick={runAutopilot} disabled={apRunning||ords.filter(o=>o.status!=="fulfilled").length===0} title="Apply your rules and create labels for every unfulfilled order (held orders are skipped)" className="text-sm bg-emerald-600 text-white rounded-lg px-4 py-2.5 font-semibold hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-2 shadow-sm">{apRunning?<Loader2 className="w-4 h-4 animate-spin"/>:<Zap className="w-4 h-4"/>}Run Autopilot{!apRunning&&run?` — label ${run.results.filter(r=>r.order.status!=="fulfilled"&&!r.view.hold).length} orders`:""}</button>
       </div>
     </div>
@@ -5081,7 +5092,7 @@ function AddressBook({settings,setSettings}){
   return (<div className="max-w-3xl space-y-3">
     <div className="flex flex-wrap items-center gap-3">
       <p className="text-sm text-stone-500 flex-1">Saved contacts for fast ship-to / ship-from. Import your whole list from a CSV.</p>
-      <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Save this address: "}}))} className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded px-3 py-2 font-medium hover:bg-[#f5e6de]"><Sparkles className="w-4 h-4"/>Ask Claude</button>
+      <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Save this address: "}}))} title="Dictate a contact and Claude saves it" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded px-3 py-2 font-medium hover:bg-[#f5e6de]"><Sparkles className="w-4 h-4"/>Ask Claude to add one</button>
       <label className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded px-3 py-2 font-medium hover:bg-stone-800 cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
     </div>
     {msg&&<div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{msg}</div>}

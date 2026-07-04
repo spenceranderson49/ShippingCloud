@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v108";
+const BUILD_TAG="addr-v111";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -651,7 +651,7 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
   </div>);
 }
 
-function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,currentUser,settings,setSettings,brand,signupRequests,setSignupRequests,featureFlags,setFeatureFlags,customFeatures,setCustomFeatures,fedexRequests=[],setFedexRequests,publicBrand,setPublicBrand}){
+function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,currentUser,settings,setSettings,brand,signupRequests,setSignupRequests,featureFlags,setFeatureFlags,customFeatures,setCustomFeatures,fedexRequests=[],setFedexRequests,publicBrand,setPublicBrand,companyAdminRequests=[],setCompanyAdminRequests}){
   const [sec,setSec]=useState("overview");
   const ALLOWED=adminSectionsFor(currentUser);
   if(ALLOWED.length&&!ALLOWED.some(x=>x[0]===sec))setSec(ALLOWED[0][0]);
@@ -689,7 +689,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
       </div>}
 
       {sec==="customers"&&<CustomersAdmin clients={clients} setClients={setClients} statsFor={statsFor} openC={openC} setOpenC={setOpenC}/>}
-      {sec==="users"&&<UsersAdmin users={users} setUsers={setUsers} clients={clients} currentUser={currentUser} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests}/>}
+      {sec==="users"&&<UsersAdmin users={users} setUsers={setUsers} clients={clients} currentUser={currentUser} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
       {sec==="customizations"&&<CustomizationsAdmin users={users} clients={clients} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures}/>}
     </div>
   );
@@ -829,7 +829,7 @@ function CustomizationsAdmin({users,clients,featureFlags={},setFeatureFlags,cust
     </div>
   </div>);
 }
-function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSignupRequests,featureFlags={},setFeatureFlags,customFeatures=[],fedexRequests=[],setFedexRequests}){
+function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSignupRequests,featureFlags={},setFeatureFlags,customFeatures=[],fedexRequests=[],setFedexRequests,companyAdminRequests=[],setCompanyAdminRequests}){
   const CATALOG=[...FEATURE_CATALOG,...customFeatures.map(c=>({...c,custom:true}))];
   const fullAdmin=!(currentUser&&currentUser.adminPerms&&Array.isArray(currentUser.adminPerms.sections));
   const [featOpen,setFeatOpen]=useState(null);
@@ -851,6 +851,16 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
   const del=(id)=>setUsers(us=>us.filter(u=>u.id!==id));
   return (<div className="space-y-3">
     <div className="text-sm text-stone-500">Create and manage logins. Customer logins are scoped to one customer account. Admin logins run the whole portal — use the <b>access</b> button to limit which Admin sections another admin can open.</div>
+    {companyAdminRequests.length>0&&<div className="border border-violet-200 rounded-lg bg-violet-50/50 p-4 space-y-2">
+      <div className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Building2 className="w-4 h-4 text-violet-600"/>Company admin requests<Badge tone="stone">{companyAdminRequests.length}</Badge></div>
+      {companyAdminRequests.map(r=>{const co=clients.find(c=>c.id===r.clientId);return (
+        <div key={r.id} className="flex items-center gap-3 bg-white border border-stone-200 rounded-lg px-3 py-2 flex-wrap">
+          <div className="flex-1 min-w-0"><div className="text-sm font-medium text-stone-800 truncate">{r.name||r.email}</div><div className="text-[11px] text-stone-400 truncate">{r.email} · {(co&&co.name)||"—"} · {r.date}</div></div>
+          <button onClick={()=>{setUsers(us=>us.map(u=>u.id===r.uid?{...u,companyAdmin:true}:u));setCompanyAdminRequests&&setCompanyAdminRequests(l=>l.filter(x=>x.id!==r.id));}} className="text-[12px] bg-violet-600 text-white rounded px-3 py-1.5 font-medium hover:bg-violet-700">Approve</button>
+          <button onClick={()=>setCompanyAdminRequests&&setCompanyAdminRequests(l=>l.filter(x=>x.id!==r.id))} className="text-[12px] bg-stone-100 text-stone-600 rounded px-3 py-1.5 font-medium hover:bg-stone-200">Deny</button>
+        </div>);})}
+      <p className="text-[11px] text-stone-500">Approving gives this person a Company admin tab where they can create logins for their own company and set each login’s tabs. It never touches other companies or your Admin portal.</p>
+    </div>}
     {CLOUD.mode==="cloud"&&fedexRequests.length>0&&<div className="border border-emerald-200 bg-emerald-50/50 rounded-lg p-4 space-y-2">
       <div className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Truck className="w-4 h-4 text-emerald-600"/>FedEx account requests<Badge tone="green">{fedexRequests.length}</Badge></div>
       {fedexRequests.map(r=>(<div key={r.id||r.uid} className="flex flex-wrap items-center gap-3 bg-white border border-stone-200 rounded px-3 py-2 text-sm">
@@ -901,6 +911,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
           <div className="w-44 flex items-center justify-end gap-1.5">
             {u.role==="admin"&&u.id!=="u1"&&u.id!==currentUser.id&&fullAdmin&&<button onClick={()=>setAccessOpen(accessOpen===u.id?null:u.id)} title="Which Admin sections this login can open" className={`text-[11px] rounded px-2 py-1 ${accessOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>access</button>}
             {u.role!=="admin"&&<button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }} title="Open the app exactly as this person sees it" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">view as</button>}
+            {u.role!=="admin"&&<button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))} title={u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins"} className={`text-[11px] rounded px-2 py-1 ${u.companyAdmin?"bg-violet-600 text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>co-admin</button>}
             {u.role!=="admin"&&<button onClick={()=>setFeatOpen(featOpen===u.id?null:u.id)} title="Features for this login" className={`text-[11px] rounded px-2 py-1 ${featOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>features</button>}
             {CLOUD.mode==="cloud"&&(u.role!=="admin"||fullAdmin)&&<button onClick={async()=>{const np=window.prompt("New password for "+u.email+" (min 4 characters):");if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});window.alert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}} title="Reset password" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">pw</button>}
             <button onClick={()=>toggle(u.id)} title={u.status==="active"?"Deactivate":"Activate"} className={`text-[11px] rounded px-2 py-1 ${u.status==="active"?"bg-emerald-50 text-emerald-700":"bg-stone-100 text-stone-500"}`}>{u.status==="active"?"active":"off"}</button>
@@ -942,7 +953,7 @@ const lsDel=(k)=>{ if(!LS_OK)return; try{window.localStorage.removeItem("sc_"+k)
 // Which login is active. Every non-global key is stored under this account so each login keeps its OWN settings/data.
 const activeUid=()=>{ try{const s=lsGet("session",null); const id=s&&(s.id||s.email); return id?String(id):"guest"; }catch(e){return "guest";} };
 // Shared across all logins (never namespaced): the accounts list + who is signed in.
-const GLOBAL_KEYS={session:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1,customFeatures:1,fedexRequests:1,publicBrand:1};
+const GLOBAL_KEYS={session:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1,customFeatures:1,fedexRequests:1,publicBrand:1,myAccess:1,companyUsers:1,companyFlags:1,companyAdminRequests:1};
 // Scratch = the in-progress shipment. Per-login, but starts blank on each login (never migrated/inherited).
 const isScratch=(key)=>String(key).indexOf("ship.")===0;
 // Scratch keys wiped on login so the receiver + package dims are always blank for a fresh session.
@@ -977,7 +988,7 @@ function makeDemoData(){
     const cost=+((7.5+wt*0.85+(service.includes("Priority Overnight")?31:service.includes("Standard Overnight")?24:service.includes("2Day")?9:service.includes("Express Saver")?6:carrier==="DHL"?19:0)).toFixed(2));
     const sell=+((cost*1.18).toFixed(2));
     const status=dayAgo===0?["Label created","In transit","In transit"][i%3]:dayAgo<=1?["In transit","Out for delivery","In transit"][i%3]:dayAgo<=2?(i%4===0?"Out for delivery":"In transit"):i===22?"Exception":i===33?"Voided":"Delivered";
-    shipments.push({id:9000+i,date:demoDaysAgo(dayAgo),dayAgo,tracking:newTracking(carrier),carrier,service,recipient:{name:who,company,zip:c[2],state:c[1],city:c[0],address1:(104+i*7)+" "+["Market St","Cedar Ave","Alder Way","5th Ave S","Juniper Ln"][i%5],phone,email},sender,fromZip:sender.zip,toZip:c[2],weight:wt,pieces:[{weight:wt,L:12,W:9,H:6}],dims:{L:12,W:9,H:6},cost,sell,billTo:"sender",status,lastScan:status==="Delivered"?"Delivered":SCAN_CITIES[i%SCAN_CITIES.length],eta:demoDaysAgo(-(1+(i%3))),onTime:i!==22,reference:"SO-1"+(140+i),client:"Summit Goods Co."});
+    shipments.push({id:9000+i,date:demoDaysAgo(dayAgo),time:(((i*3)%10)+7)>12?((((i*3)%10)+7)-12)+":"+String((i*17)%60).padStart(2,"0")+" PM":((((i*3)%10)+7)+":"+String((i*17)%60).padStart(2,"0")+" AM"),dayAgo,tracking:newTracking(carrier),carrier,service,recipient:{name:who,company,zip:c[2],state:c[1],city:c[0],address1:(104+i*7)+" "+["Market St","Cedar Ave","Alder Way","5th Ave S","Juniper Ln"][i%5],phone,email},sender,fromZip:sender.zip,toZip:c[2],weight:wt,pieces:[{weight:wt,L:12,W:9,H:6}],dims:{L:12,W:9,H:6},cost,sell,billTo:"sender",status,lastScan:status==="Delivered"?"Delivered":SCAN_CITIES[i%SCAN_CITIES.length],eta:demoDaysAgo(-(1+(i%3))),onTime:i!==22,reference:"SO-1"+(140+i),client:"Summit Goods Co."});
   }
 
   // 18 orders — Shopify-heavy, 8 waiting to fulfill
@@ -1408,6 +1419,105 @@ function FirstRunFedEx({user,onClose}){
     </div>
   </div>);
 }
+/* ════════ COMPANY ADMIN ════════ */
+function CompanyAdminRequestButton({currentUser}){
+  const uid=(currentUser&&currentUser.id)||"";
+  const [state,setState]=useState(()=>lsGet("u/"+uid+"/caReq",""));
+  const [busy,setBusy]=useState(false);
+  const ask=async()=>{
+    if(busy)return; setBusy(true);
+    const r=await cloudCall({action:"requestCompanyAdmin",token:CLOUD.token});
+    setBusy(false);
+    if(r&&r.ok){ setState("pending"); lsSet("u/"+uid+"/caReq","pending"); }
+    else window.alert((r&&r.error)||"Could not send the request — try again.");
+  };
+  return (<div className="mt-3 pt-3 border-t border-stone-200 px-1">
+    {state==="pending"
+      ?<div className="text-[11px] text-stone-400 px-2 py-1.5 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5"/>Company admin request pending</div>
+      :<button onClick={ask} disabled={busy} className="w-full text-left text-[12px] text-stone-500 hover:text-[#006FBF] hover:bg-[#E6F4FF]/50 rounded-lg px-2 py-1.5 flex items-center gap-1.5">{busy?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<ShieldCheck className="w-3.5 h-3.5"/>}Request company admin</button>}
+  </div>);
+}
+
+function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,setCompanyFlags}){
+  const [f,setF]=useState({name:"",email:"",password:""});
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState(null);
+  const [flagBusy,setFlagBusy]=useState("");
+  const users=companyUsers||[];
+  const flash=(m)=>{setMsg(m);setTimeout(()=>setMsg(null),4000);};
+  const create=async()=>{
+    if(!f.name||!f.email||!f.password||busy)return;
+    setBusy(true);
+    const r=await cloudCall({action:"companyCreateUser",token:CLOUD.token,name:f.name,email:f.email,password:f.password});
+    setBusy(false);
+    if(r&&r.ok&&r.user){ setCompanyUsers(u=>[...(u||[]),r.user]); setCompanyFlags(m=>({...(m||{}),[r.user.id]:{}})); setF({name:"",email:"",password:""}); flash({ok:`Login created for ${r.user.email} — send them the temp password.`}); }
+    else flash({err:(r&&r.error)||"Could not create the login."});
+  };
+  const setFlag=async(uid,fid,on)=>{
+    const cur={...((companyFlags||{})[uid]||{}),[fid]:on};
+    setFlagBusy(uid+fid);
+    const r=await cloudCall({action:"companySetFlags",token:CLOUD.token,uid,flags:cur});
+    setFlagBusy("");
+    if(r&&r.ok)setCompanyFlags(m=>({...(m||{}),[uid]:r.flags||cur}));
+    else flash({err:(r&&r.error)||"Could not save."});
+  };
+  const setActive=async(u)=>{
+    const to=u.status!=="active";
+    if(!to&&!window.confirm(`Deactivate ${u.email}? They won’t be able to sign in until re-activated.`))return;
+    const r=await cloudCall({action:"companySetActive",token:CLOUD.token,uid:u.id,active:to});
+    if(r&&r.ok)setCompanyUsers(list=>(list||[]).map(x=>x.id===u.id?{...x,status:r.status}:x));
+    else flash({err:(r&&r.error)||"Could not save."});
+  };
+  const resetPw=async(u)=>{
+    const np=window.prompt("New password for "+u.email+" (min 4 characters):");
+    if(!np)return;
+    const r=await cloudCall({action:"companySetPassword",token:CLOUD.token,uid:u.id,password:np});
+    if(r&&r.ok)flash({ok:`Password updated for ${u.email}.`});
+    else flash({err:(r&&r.error)||"Could not update the password."});
+  };
+  const CATALOG=FEATURE_CATALOG.filter(c=>c.id!=="byoCarrier");
+  return (<div className="max-w-4xl space-y-4">
+    <div>
+      <h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Building2 className="w-5 h-5 text-[#0086E0]"/>Company admin</h2>
+      <p className="text-sm text-stone-500 mt-0.5">Create logins for your team and choose which tabs each person can use. Changes apply the next time they load the app.</p>
+    </div>
+    {msg&&<div className={`text-[12px] rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
+    <Panel title="New team login">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <Field label="Name"><Input value={f.name} onChange={e=>setF({...f,name:e.target.value})}/></Field>
+        <Field label="Email"><Input value={f.email} onChange={e=>setF({...f,email:e.target.value})}/></Field>
+        <Field label="Temp password"><Input value={f.password} onChange={e=>setF({...f,password:e.target.value})}/></Field>
+      </div>
+      <button onClick={create} disabled={busy||!f.name||!f.email||!f.password} className="text-sm bg-[#0086E0] text-white rounded px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<Plus className="w-4 h-4"/>}Create login</button>
+    </Panel>
+    <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
+      <div className="px-4 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400">{users.length} login{users.length===1?"":"s"} in your company</div>
+      {users.length===0&&<div className="p-6 text-center text-sm text-stone-400">No logins yet — create the first one above.</div>}
+      {users.map(u=>{
+        const flags=(companyFlags||{})[u.id]||{};
+        const self=u.id===(currentUser&&currentUser.id);
+        return (<div key={u.id} className="px-4 py-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-sm text-stone-900 flex items-center gap-2 truncate">{u.name||u.email}{u.companyAdmin&&<Badge tone="blue">company admin</Badge>}{self&&<Badge tone="stone">you</Badge>}{u.status!=="active"&&<Badge tone="rose">disabled</Badge>}</div>
+              <div className="text-[11px] text-stone-400 truncate">{u.email} · last sign-in {u.lastLogin||"—"}</div>
+            </div>
+            {!self&&<button onClick={()=>resetPw(u)} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">reset password</button>}
+            {!self&&<button onClick={()=>setActive(u)} className={`text-[11px] rounded px-2 py-1 ${u.status==="active"?"bg-stone-100 text-stone-600 hover:bg-rose-50 hover:text-rose-600":"bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}>{u.status==="active"?"deactivate":"re-activate"}</button>}
+          </div>
+          {!u.companyAdmin&&<div className="mt-2 flex flex-wrap gap-1.5">
+            {CATALOG.map(c=>{
+              const on=(c.id in flags)?!!flags[c.id]:!!c.default;
+              return (<button key={c.id} onClick={()=>setFlag(u.id,c.id,!on)} disabled={flagBusy===u.id+c.id} title={c.desc} className={`text-[11px] rounded-full px-2.5 py-1 border font-medium transition ${on?"bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]":"bg-white text-stone-400 border-stone-200 hover:border-stone-300"}`}>{c.label}</button>);
+            })}
+          </div>}
+        </div>);
+      })}
+    </div>
+    <p className="text-[11px] text-stone-400">Blue chip = the person has that tab. Company admins always have every tab your account includes.</p>
+  </div>);
+}
+
 /* ════════ ASSISTANT CHAT ════════ */
 function AssistantChat({who}){
   const [open,setOpen]=useState(false);
@@ -1496,6 +1606,10 @@ function AppInner(){
   const [publicBrand,setPublicBrand]=usePersist("publicBrand",{showLogo:false});
   const [customFeatures,setCustomFeatures]=usePersist("customFeatures",[]);
   const [myFeatures]=usePersist("myFeatures",{});
+  const [myAccess]=usePersist("myAccess",{companyAdmin:false});
+  const [companyUsers,setCompanyUsers]=usePersist("companyUsers",[]);
+  const [companyFlags,setCompanyFlags]=usePersist("companyFlags",{});
+  const [companyAdminRequests,setCompanyAdminRequests]=usePersist("companyAdminRequests",[]);
   const [tab,setTab]=useState("ship");
   useEffect(()=>{ try{
     if(localStorage.getItem("scPurge")!=="2"){
@@ -1576,7 +1690,7 @@ function AppInner(){
 
   const goShip=(pf)=>{setPrefill(pf);setTab("ship");};
   const onShipped=(rec,orderId)=>{
-    setShipments(p=>[{...rec,dayAgo:0,client:client.name},...p]);
+    setShipments(p=>[{...rec,time:rec.time||new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}),dayAgo:0,client:client.name},...p]);
     if(orderId) setOrders(o=>o.map(x=>x.id===orderId?{...x,status:"fulfilled",tracking:rec.tracking}:x));
     // push tracking back to Shopify if this order came from a connected store
     if(orderId&&shopifyConnected(settings)){
@@ -1653,7 +1767,13 @@ function AppInner(){
   const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
   const isDemo=!!(currentUser&&currentUser.id==="demo");
   const myFlags=isDemo?{pickups:true,batch:true,invoices:true,rules:true,scan:true,settings:true}:(isAdmin?{}:((featureFlags&&featureFlags[currentUser&&currentUser.id])||(CLOUD.mode==="cloud"?myFeatures:{})));
-  const TABS=isAdmin?ALL_TABS:ALL_TABS.filter(t=>t[0]!=="admin"&&(t[0]==="ship"||featureOn(t[0],currentUser,myFlags)));
+  const isCompanyAdmin=!isAdmin&&!isDemo&&!!(myAccess&&myAccess.companyAdmin);
+  const TABS=useMemo(()=>{
+    if(isAdmin)return ALL_TABS;
+    const t=ALL_TABS.filter(x=>x[0]!=="admin"&&(x[0]==="ship"||featureOn(x[0],currentUser,myFlags)));
+    if(isCompanyAdmin){const entry=["companyadmin","Company admin",Building2];const i=t.findIndex(x=>x[0]==="settings");i>=0?t.splice(i,0,entry):t.push(entry);}
+    return t;
+  },[isAdmin,isCompanyAdmin,currentUser,myFlags]);
   const unfulfilled=orders.filter(o=>o.status==="unfulfilled").length;
 
   if(!currentUser) return <Login users={users} brand={{...DEFAULT_BRAND,...(settings.brand||{})}} onLogin={(u)=>{ const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }}/>;
@@ -1698,12 +1818,13 @@ function AppInner(){
           <nav className="p-2 space-y-0.5">
             {TABS.map(([id,l,Icon])=>(
               <React.Fragment key={id}>
-              {id==="admin"&&<div className="mt-3 mb-2 border-t border-stone-200"/>}
+              {(id==="admin"||id==="companyadmin")&&<div className="mt-3 mb-2 border-t border-stone-200"/>}
               <button onClick={()=>{setTab(id);setNavOpen(false);}} className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm ${tab===id?"bg-[#E6F4FF] text-[#006FBF] font-medium":"text-stone-600 hover:bg-stone-100"}`}>
                 <Icon className="w-4 h-4 shrink-0"/><span className="flex-1 text-left">{l}</span>{id==="orders"&&unfulfilled>0&&<span className="text-[10px] bg-[#0086E0] text-white rounded-full px-1.5 py-0.5 leading-none">{unfulfilled}</span>}
               </button>
               </React.Fragment>
             ))}
+            {!isAdmin&&!isDemo&&!isCompanyAdmin&&CLOUD.mode==="cloud"&&<CompanyAdminRequestButton currentUser={currentUser}/>}
           </nav>
         </aside>
       </div>}
@@ -1712,12 +1833,13 @@ function AppInner(){
           <nav className="p-2 space-y-0.5 sticky top-14">
             {TABS.map(([id,l,Icon])=>(
               <React.Fragment key={id}>
-              {id==="admin"&&<div className="mt-3 mb-2 border-t border-stone-200"/>}
+              {(id==="admin"||id==="companyadmin")&&<div className="mt-3 mb-2 border-t border-stone-200"/>}
               <button onClick={()=>setTab(id)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm ${tab===id?"bg-[#E6F4FF] text-[#006FBF] font-medium":"text-stone-600 hover:bg-stone-100"}`}>
                 <Icon className="w-4 h-4 shrink-0"/><span className="flex-1 text-left">{l}</span>{id==="orders"&&unfulfilled>0&&<span className="text-[10px] bg-[#0086E0] text-white rounded-full px-1.5 py-0.5 leading-none">{unfulfilled}</span>}
               </button>
               </React.Fragment>
             ))}
+            {!isAdmin&&!isDemo&&!isCompanyAdmin&&CLOUD.mode==="cloud"&&<CompanyAdminRequestButton currentUser={currentUser}/>}
           </nav>
         </aside>
         <main className="flex-1 min-w-0 px-3 sm:px-6 py-4 sm:py-6">
@@ -1733,7 +1855,8 @@ function AppInner(){
           {tab==="invoices"&&<Invoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>}
           {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings} client={client} onShipped={onShipped}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
-          {tab==="admin"&&isAdmin&&<AdminPortal clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} publicBrand={publicBrand} setPublicBrand={setPublicBrand}/>}
+          {tab==="companyadmin"&&isCompanyAdmin&&<CompanyAdmin currentUser={currentUser} companyUsers={companyUsers} setCompanyUsers={setCompanyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags}/>}
+          {tab==="admin"&&isAdmin&&<AdminPortal clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} publicBrand={publicBrand} setPublicBrand={setPublicBrand} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
           {tab==="settings"&&<Settings settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
         </main>
       </div>
@@ -2813,16 +2936,17 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels}
       {chkMsg&&<div className={`text-[12px] rounded px-2 py-1.5 flex items-center gap-1.5 ${chkMsg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{chkMsg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{chkMsg.err||chkMsg.ok}</div>}
       <div className="relative"><Search className="w-4 h-4 absolute left-3 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by name, tracking, order, reference or PO #" className="w-full bg-white border border-stone-200 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:border-[#0099FF]"/></div>
       <div className="border border-stone-200 rounded-lg overflow-hidden bg-white divide-y divide-stone-100">
-        <div className="flex items-center gap-3 px-4 py-2 text-[11px] uppercase tracking-widest text-stone-400 bg-stone-50"><div className="w-4"/><div className="w-24">Date</div><div className="flex-1">Recipient</div><div className="w-40 hidden md:block">Tracking</div><div className="w-20 text-right">Rate</div><div className="w-24 text-right">Status</div></div>
+        <div className="flex items-center gap-3 px-4 py-2 text-[11px] uppercase tracking-widest text-stone-400 bg-stone-50"><div className="w-4"/><div className="w-24">Created</div><div className="flex-1">Recipient</div><div className="w-52 hidden lg:block">Ship-to address</div><div className="w-24 hidden xl:block">Reference</div><div className="w-40 hidden md:block">Tracking</div><div className="w-24 text-right">Status</div></div>
         {list.length===0&&<div className="p-8 text-center text-sm text-stone-400">No shipments match “{q}”.</div>}
         {list.map(s=>(
         <div key={s.id}>
-          <div className="flex items-center gap-3 px-4 py-3 hover:bg-stone-50">
-            <button onClick={()=>setOpen(open===s.id?null:s.id)} className="text-stone-400"><ChevronRight className={`w-4 h-4 transition-transform ${open===s.id?"rotate-90":""}`}/></button>
-            <div className="w-24 text-sm font-mono text-stone-500">{s.date}</div>
+          <div onClick={()=>setOpen(open===s.id?null:s.id)} className="flex items-center gap-3 px-4 py-3 hover:bg-stone-50 cursor-pointer">
+            <button className="text-stone-400"><ChevronRight className={`w-4 h-4 transition-transform ${open===s.id?"rotate-90":""}`}/></button>
+            <div className="w-24"><div className="text-sm font-mono text-stone-500">{s.date}</div><div className="text-[10px] text-stone-400">{s.time||""}</div></div>
             <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{s.recipient?.name||"—"}</div><div className="text-[11px] text-stone-400 truncate">{s.service}</div></div>
-            <div className="w-40 hidden md:block"><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" className="text-[#0086E0] underline font-mono text-xs flex items-center gap-1 truncate">{s.tracking}<ExternalLink className="w-3 h-3 shrink-0"/></a></div>
-            <div className="w-20 text-right font-mono text-sm text-stone-900">{money(s.sell)}</div>
+            <div className="w-52 hidden lg:block min-w-0"><div className="text-[12px] text-stone-600 truncate">{s.recipient?.address1||"—"}</div><div className="text-[11px] text-stone-400 truncate">{s.recipient?.city}{s.recipient?.state?", "+s.recipient.state:""} {s.recipient?.zip||""}</div></div>
+            <div className="w-24 hidden xl:block text-[12px] text-stone-500 font-mono truncate">{s.reference||"—"}</div>
+            <div className="w-40 hidden md:block"><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" onClick={e=>e.stopPropagation()} className="text-[#0086E0] underline font-mono text-xs flex items-center gap-1 truncate">{s.tracking}<ExternalLink className="w-3 h-3 shrink-0"/></a></div>
             <div className="w-24 text-right"><Badge tone={tone(s.status)}>{s.status}</Badge></div>
           </div>
           {open===s.id&&(
@@ -2830,7 +2954,9 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels}
               <div className="grid sm:grid-cols-2 gap-x-8 gap-y-1 mb-3">
                 <Info k="Carrier / service" v={s.service}/>
                 <Info k="Tracking" v={<a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" className="text-[#0086E0] underline">{s.tracking} ↗</a>}/>
-                <Info k="To" v={`${s.recipient?.name||""} — ${s.recipient?.city||""}, ${s.recipient?.state||""} ${s.recipient?.zip||""}`}/>
+                <Info k="To" v={`${s.recipient?.name||""}${s.recipient?.company?" · "+s.recipient.company:""} — ${s.recipient?.address1||""}, ${s.recipient?.city||""}, ${s.recipient?.state||""} ${s.recipient?.zip||""}`}/>
+                <Info k="Reference" v={s.reference||"—"}/>
+                <Info k="Created" v={`${s.date}${s.time?" · "+s.time:""}`}/>
                 <Info k="From ZIP" v={s.fromZip}/>
                 <Info k="Packages" v={`${s.pieces?.length||1} pkg · ${s.weight} lb total`}/>
                 <Info k="Last scan" v={s.lastScan||"—"}/>
@@ -3034,49 +3160,117 @@ function Dashboard({shipments,orders,returns,goTab}){
   const a=useMemo(()=>analytics(shipments),[shipments]);
   const days=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   const maxDay=Math.max(1,...a.byDay);
-  const carriers=Object.entries(a.byCarrier).sort((x,y)=>y[1]-x[1]);
   const live=shipments.filter(s=>s.status!=="Voided");
   const cnt=st=>live.filter(s=>s.status===st).length;
   const inTransit=cnt("In transit"),outForDel=cnt("Out for delivery"),delivered=cnt("Delivered"),exceptions=cnt("Exception"),created=cnt("Label created");
+  const moving=inTransit+outForDel+created;
   const delivCount=live.filter(s=>s.status==="Delivered").length;
   const onTime=live.filter(s=>s.status==="Delivered"&&s.onTime).length;
   const onTimePct=delivCount?Math.round((onTime/delivCount)*100):100;
   const active=live.filter(s=>["Label created","In transit","Out for delivery","Exception"].includes(s.status));
-  const Tile=({label,value,tone,Icon,onClick})=>(<button onClick={onClick} className="border border-stone-200 rounded-xl bg-white p-3 text-left hover:border-[#99D6FF]"><div className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-stone-400">{Icon&&<Icon className="w-3.5 h-3.5"/>}{label}</div><div className={`text-2xl font-bold mt-1 ${tone||"text-stone-900"}`}>{value}</div></button>);
+  const week=live.filter(s=>(s.dayAgo??99)<=6).length;
+  const delivered7=live.filter(s=>s.status==="Delivered"&&(s.dayAgo??99)<=6).length;
+  const avgWt=live.length?(live.reduce((t,s)=>t+(+s.weight||0),0)/live.length):0;
+  const unful=orders.filter(o=>o.status==="unfulfilled").length;
+  const fulfilled=orders.filter(o=>o.status==="fulfilled").length;
+  const bySource=useMemo(()=>{const m={};orders.forEach(o=>{const k=o.source||"Manual";m[k]=(m[k]||0)+1;});return Object.entries(m).sort((x,y)=>y[1]-x[1]);},[orders]);
+  const carriers=Object.entries(a.byCarrier).sort((x,y)=>y[1]-x[1]);
+  const svcMix=useMemo(()=>{const m={};live.forEach(s=>{const k=String(s.service||"—").replace(/^FedEx\s+/,"");m[k]=(m[k]||0)+1;});return Object.entries(m).sort((x,y)=>y[1]-x[1]).slice(0,5);},[shipments]);
+  const destMix=useMemo(()=>{const m={};live.forEach(s=>{const k=(s.recipient&&s.recipient.state)||"—";m[k]=(m[k]||0)+1;});return Object.entries(m).sort((x,y)=>y[1]-x[1]).slice(0,5);},[shipments]);
+  const Ring=({pct,size=76})=>{const r=(size-10)/2;const c=2*Math.PI*r;return(
+    <svg width={size} height={size} className="shrink-0">
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#E7E5E4" strokeWidth="7"/>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={pct>=95?"#10B981":pct>=85?"#F59E0B":"#F43F5E"} strokeWidth="7" strokeDasharray={`${c*pct/100} ${c}`} strokeLinecap="round" transform={`rotate(-90 ${size/2} ${size/2})`}/>
+      <text x="50%" y="50%" dominantBaseline="central" textAnchor="middle" className="fill-stone-800" fontSize="15" fontWeight="700">{pct}%</text>
+    </svg>);};
+  const Tile=({label,value,tone,Icon,onClick,sub})=>(<button onClick={onClick} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition group">
+    <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-stone-400">{Icon&&<Icon className="w-3.5 h-3.5 group-hover:text-[#0086E0] transition"/>}{label}</div>
+    <div className={`text-3xl font-bold mt-1 tracking-tight ${tone||"text-stone-900"}`}>{value}</div>
+    {sub&&<div className="text-[11px] text-stone-400 mt-0.5">{sub}</div>}
+  </button>);
+  const MixBar=({rows,total,tint})=>(<div className="space-y-2.5">{rows.map(([k,n])=>(<div key={k}>
+    <div className="flex justify-between text-xs mb-1"><span className={`font-semibold ${tint?(tint[k]||"text-stone-700"):"text-stone-700"}`}>{k}</span><span className="text-stone-400 font-mono">{n}</span></div>
+    <div className="h-2 bg-stone-100 rounded-full overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-[#0086E0] to-[#33ADFF]" style={{width:`${(n/Math.max(1,total))*100}%`}}/></div>
+  </div>))}</div>);
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="border border-stone-200 rounded-xl bg-white p-4"><div className="text-[11px] uppercase tracking-widest text-stone-400">Labels</div><div className="text-2xl font-bold mt-1">{a.count}</div></div>
-        <div className="border border-stone-200 rounded-xl bg-white p-4"><div className="text-[11px] uppercase tracking-widest text-stone-400">Shipping spend</div><div className="text-2xl font-bold mt-1">{money(a.revenue)}</div></div>
-        <div className="border border-stone-200 rounded-xl bg-white p-4"><div className="text-[11px] uppercase tracking-widest text-stone-400">Avg / label</div><div className="text-2xl font-bold mt-1">{money(a.count?a.revenue/a.count:0)}</div></div>
-        <div className="border border-stone-200 rounded-xl bg-white p-4"><div className="text-[11px] uppercase tracking-widest text-stone-400">On-time</div><div className="text-2xl font-bold mt-1 text-emerald-700">{onTimePct}%</div></div>
+      {/* hero band */}
+      <div className="rounded-2xl bg-gradient-to-br from-[#00518C] via-[#006FBF] to-[#0099FF] text-white p-5 sm:p-6 shadow-lg relative overflow-hidden">
+        <Cloud className="absolute -right-6 -top-8 w-44 h-44 text-white/10" strokeWidth={1}/>
+        <div className="flex flex-wrap items-end gap-x-10 gap-y-4 relative">
+          <div>
+            <div className="text-[11px] uppercase tracking-widest text-white/60">Labels · 30 days</div>
+            <div className="text-4xl font-extrabold tracking-tight mt-0.5">{a.count}</div>
+            <div className="text-[12px] text-white/70 mt-0.5">{week} this week</div>
+          </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-widest text-white/60">Moving now</div>
+            <div className="text-4xl font-extrabold tracking-tight mt-0.5">{moving}</div>
+            <div className="text-[12px] text-white/70 mt-0.5">{outForDel} out for delivery</div>
+          </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-widest text-white/60">On-time</div>
+            <div className="text-4xl font-extrabold tracking-tight mt-0.5">{onTimePct}%</div>
+            <div className="text-[12px] text-white/70 mt-0.5">{delivered7} delivered this week</div>
+          </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-widest text-white/60">Avg weight</div>
+            <div className="text-4xl font-extrabold tracking-tight mt-0.5">{avgWt.toFixed(1)}<span className="text-lg font-semibold text-white/70 ml-1">lb</span></div>
+            <div className="text-[12px] text-white/70 mt-0.5">across {live.length} shipments</div>
+          </div>
+          <div className="flex-1 min-w-[180px] hidden sm:flex items-end justify-end gap-1.5 h-20 self-stretch pt-2">
+            {a.byDay.map((v,i)=>(<div key={i} className="flex flex-col items-center gap-1 w-7">
+              <div className="w-full bg-white/25 hover:bg-white/40 transition rounded-t" style={{height:`${Math.max(6,(v/maxDay)*100)}%`}} title={`${days[i]}: ${v}`}/>
+              <span className="text-[9px] text-white/50">{days[i][0]}</span>
+            </div>))}
+          </div>
+        </div>
       </div>
 
+      {/* orders */}
       <div>
-        <div className="flex items-center justify-between mb-2"><h3 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Truck className="w-4 h-4"/>Tracking</h3><button onClick={()=>goTab("shipments")} className="text-xs text-[#0086E0]">View all →</button></div>
+        <div className="flex items-center justify-between mb-2"><h3 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><ShoppingBag className="w-4 h-4"/>Orders</h3><button onClick={()=>goTab("orders")} className="text-xs text-[#0086E0]">View all →</button></div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <Tile label="To ship" value={unful} tone={unful?"text-amber-600":"text-stone-900"} Icon={Package} onClick={()=>goTab("orders")} sub={unful?"waiting in the queue":"queue is clear"}/>
+          <Tile label="Fulfilled" value={fulfilled} tone="text-emerald-700" Icon={CheckCircle2} onClick={()=>goTab("orders")}/>
+          <Tile label="Open returns" value={returns.length} tone={returns.length?"text-stone-900":"text-stone-900"} Icon={Undo2} onClick={()=>goTab("returns")}/>
+          <div className="border border-stone-200 rounded-2xl bg-white p-4">
+            <div className="text-[11px] uppercase tracking-widest text-stone-400 mb-2">Order sources</div>
+            {bySource.length===0?<div className="text-sm text-stone-400">No orders yet.</div>:<MixBar rows={bySource} total={orders.length}/>}
+          </div>
+        </div>
+      </div>
+
+      {/* transit */}
+      <div>
+        <div className="flex items-center justify-between mb-2"><h3 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Truck className="w-4 h-4"/>Transit</h3><button onClick={()=>goTab("shipments")} className="text-xs text-[#0086E0]">View all →</button></div>
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <Tile label="Label created" value={created} Icon={FileText} onClick={()=>goTab("shipments")}/>
           <Tile label="In transit" value={inTransit} Icon={Truck} onClick={()=>goTab("shipments")}/>
-          <Tile label="Out for delivery" value={outForDel} Icon={MapPin} onClick={()=>goTab("shipments")}/>
-          <Tile label="Delivered" value={delivered} tone="text-emerald-700" Icon={CheckCircle2} onClick={()=>goTab("shipments")}/>
-          <Tile label="Exceptions" value={exceptions} tone={exceptions?"text-rose-600":""} Icon={AlertTriangle} onClick={()=>goTab("shipments")}/>
-          <div className="border border-stone-200 rounded-xl bg-white p-3"><div className="text-[11px] uppercase tracking-widest text-stone-400">On-time</div><div className="text-2xl font-bold mt-1 text-emerald-700">{onTimePct}%</div><div className="h-1.5 bg-stone-100 rounded-full overflow-hidden mt-1"><div className="h-full bg-emerald-500" style={{width:`${onTimePct}%`}}/></div></div>
+          <Tile label="Out for delivery" value={outForDel} tone="text-amber-600" Icon={MapPin} onClick={()=>goTab("shipments")}/>
+          <Tile label="Exceptions" value={exceptions} tone={exceptions?"text-rose-600":"text-stone-900"} Icon={AlertTriangle} onClick={()=>goTab("shipments")}/>
+          <div className="border border-stone-200 rounded-2xl bg-white p-4 flex items-center gap-3">
+            <Ring pct={onTimePct}/>
+            <div><div className="text-[11px] uppercase tracking-widest text-stone-400">On-time</div><div className="text-[12px] text-stone-500 mt-0.5">{onTime} of {delivCount} delivered on time</div></div>
+          </div>
         </div>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 border border-stone-200 rounded-xl bg-white overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-stone-100 flex items-center justify-between"><h3 className="text-sm font-semibold text-stone-700">Active shipments</h3><span className="text-[11px] text-stone-400">{active.length} moving</span></div>
-          <div className="divide-y divide-stone-50 max-h-80 overflow-auto">
+        <div className="lg:col-span-2 border border-stone-200 rounded-2xl bg-white overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-stone-100 flex items-center justify-between"><h3 className="text-sm font-semibold text-stone-700">Live board — shipments in motion</h3><span className="text-[11px] text-stone-400">{active.length} moving</span></div>
+          <div className="divide-y divide-stone-50 max-h-96 overflow-auto">
             {active.length===0&&<div className="p-6 text-center text-sm text-stone-400">Nothing in transit.</div>}
             {active.map(s=>{const exc=s.status==="Exception";return (
-              <div key={s.id} className="px-4 py-3">
+              <div key={s.id} className="px-4 py-3 hover:bg-stone-50/60 transition">
                 <div className="flex items-center gap-3">
                   <span className={`text-[11px] font-bold w-10 ${CARRIER_TINT[s.carrier]}`}>{s.carrier}</span>
                   <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{s.recipient?.name} · {s.recipient?.city}, {s.recipient?.state}</div><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" className="text-[11px] text-[#0086E0] font-mono">{s.tracking}</a></div>
+                  <div className="hidden sm:block text-right"><div className="text-[11px] text-stone-400">ETA</div><div className="text-[12px] text-stone-600 font-medium">{s.eta||"—"}</div></div>
                   <Badge tone={exc?"rose":s.status==="Out for delivery"?"amber":"blue"}>{s.status}</Badge>
                 </div>
                 <div className="mt-2 flex items-center gap-2">
-                  <div className="flex-1 h-1.5 bg-stone-100 rounded-full overflow-hidden"><div className={`h-full ${exc?"bg-rose-400":"bg-[#0086E0]"}`} style={{width:`${trackPct(s.status)}%`}}/></div>
+                  <div className="flex-1 h-1.5 bg-stone-100 rounded-full overflow-hidden"><div className={`h-full rounded-full ${exc?"bg-rose-400":"bg-gradient-to-r from-[#0086E0] to-[#33ADFF]"}`} style={{width:`${trackPct(s.status)}%`}}/></div>
                   <span className={`text-[11px] ${exc?"text-rose-600":"text-stone-400"} w-28 truncate text-right`}>{s.lastScan}</span>
                 </div>
               </div>
@@ -3084,21 +3278,25 @@ function Dashboard({shipments,orders,returns,goTab}){
           </div>
         </div>
         <div className="space-y-4">
-          <div className="border border-stone-200 rounded-xl bg-white p-4">
-            <h3 className="text-sm font-semibold text-stone-700 mb-4">Carrier mix</h3>
-            <div className="space-y-3">{carriers.map(([c,n])=>(<div key={c}><div className="flex justify-between text-xs mb-1"><span className={`font-semibold ${CARRIER_TINT[c]}`}>{c}</span><span className="text-stone-400">{n}</span></div><div className="h-2 bg-stone-100 rounded-full overflow-hidden"><div className="h-full bg-[#0086E0] rounded-full" style={{width:`${(n/a.count)*100}%`}}/></div></div>))}</div>
+          <div className="border border-stone-200 rounded-2xl bg-white p-4">
+            <h3 className="text-sm font-semibold text-stone-700 mb-3">Carrier mix</h3>
+            <MixBar rows={carriers} total={a.count} tint={CARRIER_TINT}/>
           </div>
-          <div className="border border-stone-200 rounded-xl bg-white p-4">
-            <div className="flex items-center justify-between mb-3"><h3 className="text-sm font-semibold text-stone-700">Volume · 7 days</h3></div>
-            <div className="flex items-end gap-2 h-24">{a.byDay.map((v,i)=>(<div key={i} className="flex-1 flex flex-col items-center gap-1"><div className="w-full bg-[#CCEAFF] rounded-t" style={{height:`${Math.max(4,(v/maxDay)*100)}%`}}/><span className="text-[10px] text-stone-400">{days[i]}</span></div>))}</div>
+          <div className="border border-stone-200 rounded-2xl bg-white p-4">
+            <h3 className="text-sm font-semibold text-stone-700 mb-3">Top services</h3>
+            {svcMix.length===0?<div className="text-sm text-stone-400">No shipments yet.</div>:<MixBar rows={svcMix} total={live.length}/>}
+          </div>
+          <div className="border border-stone-200 rounded-2xl bg-white p-4">
+            <h3 className="text-sm font-semibold text-stone-700 mb-3">Top destinations</h3>
+            {destMix.length===0?<div className="text-sm text-stone-400">No shipments yet.</div>:<MixBar rows={destMix} total={live.length}/>}
           </div>
         </div>
       </div>
 
       <div className="grid sm:grid-cols-3 gap-3">
-        <button onClick={()=>goTab("orders")} className="border border-stone-200 rounded-xl bg-white p-4 text-left hover:border-[#99D6FF]"><div className="flex items-center gap-2 text-[#0086E0]"><ShoppingBag className="w-4 h-4"/><span className="font-semibold">{orders.filter(o=>o.status==="unfulfilled").length} orders to ship</span></div><div className="text-[11px] text-stone-400 mt-1">Open the queue →</div></button>
-        <button onClick={()=>goTab("returns")} className="border border-stone-200 rounded-xl bg-white p-4 text-left hover:border-[#99D6FF]"><div className="flex items-center gap-2 text-[#0086E0]"><Undo2 className="w-4 h-4"/><span className="font-semibold">{returns.length} open returns</span></div><div className="text-[11px] text-stone-400 mt-1">Manage RMAs →</div></button>
-        <button onClick={()=>goTab("shipments")} className="border border-stone-200 rounded-xl bg-white p-4 text-left hover:border-[#99D6FF]"><div className="flex items-center gap-2 text-[#0086E0]"><TrendingUp className="w-4 h-4"/><span className="font-semibold">{money(a.count?a.revenue/a.count:0)} avg / label</span></div><div className="text-[11px] text-stone-400 mt-1">Shipment history →</div></button>
+        <button onClick={()=>goTab("orders")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><ShoppingBag className="w-4 h-4"/><span className="font-semibold">{unful} orders to ship</span></div><div className="text-[11px] text-stone-400 mt-1">Open the queue →</div></button>
+        <button onClick={()=>goTab("rules")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><Zap className="w-4 h-4"/><span className="font-semibold">Run Autopilot</span></div><div className="text-[11px] text-stone-400 mt-1">Rules → labels, one click →</div></button>
+        <button onClick={()=>goTab("returns")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><Undo2 className="w-4 h-4"/><span className="font-semibold">{returns.length} open returns</span></div><div className="text-[11px] text-stone-400 mt-1">Manage RMAs →</div></button>
       </div>
     </div>
   );
@@ -3122,6 +3320,8 @@ function Batch({orders,setOrders,client,rules,settings,onShipped}){
   const [wMin,setWMin]=useState("");const [wMax,setWMax]=useState("");
   const [tMin,setTMin]=useState("");const [tMax,setTMax]=useState("");
   const [done,setDone]=useState(0);
+  const [openRow,setOpenRow]=useState(null);
+  const [svcOv,setSvcOv]=useState({});
   const [msg,setMsg]=useState("");
   const [running,setRunning]=useState(false);
   const [progress,setProgress]=useState({n:0,total:0});
@@ -3151,8 +3351,10 @@ function Batch({orders,setOrders,client,rules,settings,onShipped}){
   const rateFor=(o)=>{
     const qs=quoteRates({fromZip:client.origin,toZip:o.zip,L:12,W:9,H:4,weight:o.weight,residential:true});
     let pick;
-    if(rule==="ground") pick=qs.filter(q=>/Ground|Home/.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
-    else if(rule==="fastest") pick=qs.slice().sort((a,b)=>speedRank(a.label)-speedRank(b.label)||a.cost-b.cost)[0];
+    const ov=svcOv[o.id];
+    if(ov) pick=qs.find(q=>String(q.label).toLowerCase().includes(ov.toLowerCase().replace(/^(fedex|dhl)\s*/,"")));
+    if(!pick&&rule==="ground") pick=qs.filter(q=>/Ground|Home/.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
+    else if(!pick&&rule==="fastest") pick=qs.slice().sort((a,b)=>speedRank(a.label)-speedRank(b.label)||a.cost-b.cost)[0];
     else if(rule==="specific"){ pick=qs.find(q=>String(q.label).toLowerCase().includes(specSvc.toLowerCase().replace(/^(fedex|ups|dhl)\s*/,""))) || qs.filter(q=>carrierOf(q.label)===specCarrier).sort((a,b)=>a.cost-b.cost)[0]; }
     else pick=qs.slice().sort((a,b)=>a.cost-b.cost)[0];
     pick=pick||qs[0]||{label:"—",cost:0};
@@ -3207,8 +3409,10 @@ function Batch({orders,setOrders,client,rules,settings,onShipped}){
       try{
         const res=await ratesForOrder(o,{residential:true,weightLb:o.weight,fromZip:(settings.sender&&settings.sender.zip)||client.origin,sender:settings.sender},eng);
         let qs=((res&&res.rates)||[]).filter(q=>q.carrier==="FedEx"&&!/first\s*overnight/i.test(q.label||"")).map(q=>({...q,sell:Math.round((q.cost||0)*(1+(client.markup||0)/100)*100)/100}));
-        if(rule==="ground")picked=qs.filter(q=>/ground|home/i.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
-        else if(rule==="fastest")picked=qs.slice().sort((a,b)=>speedRank(a.label)-speedRank(b.label)||a.cost-b.cost)[0];
+        const ov=svcOv[o.id];
+        if(ov)picked=qs.find(q=>String(q.label).toLowerCase().includes(ov.toLowerCase().replace(/^(fedex|dhl)\s*/,"")));
+        if(!picked&&rule==="ground")picked=qs.filter(q=>/ground|home/i.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
+        else if(!picked&&rule==="fastest")picked=qs.slice().sort((a,b)=>speedRank(a.label)-speedRank(b.label)||a.cost-b.cost)[0];
         else if(rule==="specific")picked=qs.find(q=>String(q.label).toLowerCase().includes(specSvc.toLowerCase().replace(/^fedex\s*/,"")))||qs[0];
         else picked=qs.slice().sort((a,b)=>a.cost-b.cost)[0];
       }catch(e){}
@@ -3232,14 +3436,33 @@ function Batch({orders,setOrders,client,rules,settings,onShipped}){
   const groupKeys=Object.keys(groups).sort();
   const selectGroup=(arr)=>setSel(s=>{const n=new Set(s);const allOn=arr.every(o=>n.has(o.id));arr.forEach(o=>allOn?n.delete(o.id):n.add(o.id));return n;});
   const Chip=({on,onClick,children})=>(<button onClick={onClick} className={`text-xs rounded-full px-2.5 py-1 border font-medium ${on?"bg-[#0099FF] text-white border-[#0099FF]":"bg-white text-stone-600 border-stone-200 hover:border-[#99D6FF]"}`}>{children}</button>);
-  const OrderRow=(o)=>{const q=rateFor(o);const on=sel.has(o.id);return (
-    <label key={o.id} className={`flex items-center gap-3 px-3 sm:px-4 py-3 cursor-pointer ${on?"bg-[#E6F4FF]/50":"hover:bg-stone-50"}`}>
-      <input type="checkbox" checked={on} onChange={()=>toggle(o.id)} className="accent-[#0086E0]"/>
-      <div className="w-12 sm:w-14 font-semibold text-sm">{o.name}</div>
-      <div className="flex-1 min-w-0"><div className="text-sm truncate">{o.customer}</div><div className="text-[11px] text-stone-400 truncate">{o.city}, {o.state} · {o.weight} lb{o.sku?` · ${o.sku}`:""} · Z{zoneOf(o)}</div></div>
-      <div className="w-32 hidden sm:block text-xs text-stone-500 truncate">{q.label}</div>
-      <div className="w-16 sm:w-20 text-right font-mono text-sm">{money(q.sell)}</div>
-    </label>
+  const OrderRow=(o)=>{const q=rateFor(o);const on=sel.has(o.id);const ex=openRow===o.id;return (
+    <div key={o.id} className={on?"bg-[#E6F4FF]/50":""}>
+      <div className={`flex items-center gap-3 px-3 sm:px-4 py-3 cursor-pointer ${on?"":"hover:bg-stone-50"}`} onClick={()=>setOpenRow(ex?null:o.id)}>
+        <input type="checkbox" checked={on} onClick={e=>e.stopPropagation()} onChange={()=>toggle(o.id)} className="accent-[#0086E0]"/>
+        <ChevronRight className={`w-3.5 h-3.5 text-stone-300 transition-transform ${ex?"rotate-90":""}`}/>
+        <div className="w-12 sm:w-14 font-semibold text-sm">{o.name}</div>
+        <div className="flex-1 min-w-0"><div className="text-sm truncate">{o.customer}{o.company?` · ${o.company}`:""}</div><div className="text-[11px] text-stone-400 truncate">{o.city}, {o.state} · {o.weight} lb{o.sku?` · ${o.sku}`:""} · Z{zoneOf(o)}</div></div>
+        <div className="w-44 hidden sm:block" onClick={e=>e.stopPropagation()}>
+          <select value={svcOv[o.id]||""} onChange={e=>setSvcOv(v=>{const n={...v};if(e.target.value)n[o.id]=e.target.value;else delete n[o.id];return n;})} className={`w-full bg-white border rounded px-2 py-1 text-xs outline-none focus:border-[#0099FF] ${svcOv[o.id]?"border-[#0099FF] text-[#006FBF] font-medium":"border-stone-200 text-stone-500"}`}>
+            <option value="">Auto — {q.label}</option>
+            {SERVICE_OPTIONS.FedEx.map(sv=><option key={sv} value={sv}>{sv}</option>)}
+            <option value="DHL Express Worldwide">DHL Express Worldwide</option>
+          </select>
+        </div>
+        <div className="w-16 sm:w-20 text-right font-mono text-sm">{money(q.sell)}</div>
+      </div>
+      {ex&&<div className="px-10 sm:px-12 pb-3 pt-0.5 bg-stone-50/60 grid sm:grid-cols-2 gap-x-8 gap-y-1 text-sm">
+        <Info k="Ship to" v={`${o.address1||"—"}, ${o.city||""}, ${o.state||""} ${o.zip||""}`}/>
+        <Info k="Contact" v={`${o.phone||"—"}${o.email?" · "+o.email:""}`}/>
+        <Info k="Items" v={o.items||"—"}/>
+        <Info k="Order total" v={o.total!=null?money(o.total):"—"}/>
+        <Info k="Source" v={`${o.source||"Manual"}${o.date?" · "+o.date:""}`}/>
+        <Info k="Weight" v={`${o.weight||"?"} lb`}/>
+        <Info k="Service for this label" v={svcOv[o.id]?svcOv[o.id]+" (your pick)":q.label+" (by rate rule)"}/>
+        <Info k="Rate" v={money(q.sell)}/>
+      </div>}
+    </div>
   );};
   return (
     <div className="space-y-3">
@@ -4274,6 +4497,10 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
 }
 function AddressBook({settings,setSettings}){
   const [f,setF]=useState({name:"",company:"",address1:"",city:"",state:"",zip:"",phone:"",acctCarrier:"",acctNum:""});
+  const [editId,setEditId]=useState(null);
+  const [ef,setEf]=useState(null);
+  const startEdit=(adr)=>{setEditId(adr.id);setEf({email:"",...adr});};
+  const saveEdit=()=>{if(!ef||!ef.name)return;setSettings(st=>({...st,addresses:(st.addresses||[]).map(a=>a.id===editId?{...ef}:a)}));setEditId(null);setEf(null);};
   const [q,setQ]=useState("");
   const [msg,setMsg]=useState("");
   const list=settings.addresses||[];
@@ -4322,7 +4549,32 @@ function AddressBook({settings,setSettings}){
     <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
       <div className="px-4 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400 flex items-center justify-between"><span>{filtered.length} address{filtered.length===1?"":"es"}</span></div>
       {filtered.length===0&&<div className="p-6 text-center text-sm text-stone-400">No addresses{q?" match your search":" yet"}.</div>}
-      {filtered.map(adr=>(<div key={adr.id} className="flex items-center gap-3 px-4 py-2.5"><MapPin className="w-4 h-4 text-stone-400 shrink-0"/><div className="flex-1 min-w-0"><div className="font-medium text-sm truncate flex items-center gap-2">{adr.name}{adr.company?` · ${adr.company}`:""}{adr.acctNum?<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 border bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]">{adr.acctCarrier||"Bill"} {adr.acctNum}</span>:null}</div><div className="text-[11px] text-stone-400 truncate">{adr.address1}{adr.address1?", ":""}{adr.city} {adr.state} {adr.zip}{adr.phone?` · ${adr.phone}`:""}</div></div><button onClick={()=>del(adr.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button></div>))}
+      {filtered.map(adr=>(<div key={adr.id}>
+        <div onClick={()=>editId===adr.id?(setEditId(null),setEf(null)):startEdit(adr)} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer ${editId===adr.id?"bg-[#E6F4FF]/40":"hover:bg-stone-50"}`}>
+          <MapPin className="w-4 h-4 text-stone-400 shrink-0"/>
+          <div className="flex-1 min-w-0"><div className="font-medium text-sm truncate flex items-center gap-2">{adr.name}{adr.company?` · ${adr.company}`:""}{adr.acctNum?<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 border bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]">{adr.acctCarrier||"Bill"} {adr.acctNum}</span>:null}</div><div className="text-[11px] text-stone-400 truncate">{adr.address1}{adr.address1?", ":""}{adr.city} {adr.state} {adr.zip}{adr.phone?` · ${adr.phone}`:""}</div></div>
+          <Edit3 className={`w-3.5 h-3.5 shrink-0 ${editId===adr.id?"text-[#0086E0]":"text-stone-300"}`}/>
+          <button onClick={e=>{e.stopPropagation();del(adr.id);}} className="text-stone-300 hover:text-rose-500 shrink-0"><Trash2 className="w-4 h-4"/></button>
+        </div>
+        {editId===adr.id&&ef&&<div className="px-4 pb-4 pt-1 bg-[#E6F4FF]/20 border-t border-stone-100">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <Field label="Name"><Input value={ef.name} onChange={e=>setEf({...ef,name:e.target.value})}/></Field>
+            <Field label="Company"><Input value={ef.company||""} onChange={e=>setEf({...ef,company:e.target.value})}/></Field>
+            <Field label="Phone"><Input value={ef.phone||""} onChange={e=>setEf({...ef,phone:e.target.value})}/></Field>
+            <div className="col-span-2 sm:col-span-3"><Field label="Street address"><Input value={ef.address1||""} onChange={e=>setEf({...ef,address1:e.target.value})}/></Field></div>
+            <Field label="City"><Input value={ef.city||""} onChange={e=>setEf({...ef,city:e.target.value})}/></Field>
+            <Field label="State"><Input value={ef.state||""} onChange={e=>setEf({...ef,state:e.target.value})}/></Field>
+            <Field label="ZIP"><Input value={ef.zip||""} onChange={e=>setEf({...ef,zip:e.target.value})}/></Field>
+            <div className="col-span-2 sm:col-span-3"><Field label="Email"><Input value={ef.email||""} onChange={e=>setEf({...ef,email:e.target.value})}/></Field></div>
+            <Field label="Bill carrier"><Select value={ef.acctCarrier||""} onChange={e=>setEf({...ef,acctCarrier:e.target.value})}><option value="">—</option><option>FedEx</option><option>DHL</option></Select></Field>
+            <div className="col-span-1 sm:col-span-2"><Field label="Third-party billing account #"><Input value={ef.acctNum||""} onChange={e=>setEf({...ef,acctNum:e.target.value})}/></Field></div>
+          </div>
+          <div className="flex items-center gap-2 mt-3">
+            <button onClick={saveEdit} className="text-sm bg-[#0086E0] text-white rounded px-4 py-1.5 font-medium hover:bg-[#0072BE]">Save changes</button>
+            <button onClick={()=>{setEditId(null);setEf(null);}} className="text-sm text-stone-500 hover:text-stone-700 px-2 py-1.5">Cancel</button>
+          </div>
+        </div>}
+      </div>))}
     </div>
   </div>);
 }
@@ -4685,14 +4937,71 @@ function Drafts({drafts,setDrafts,goShip}){
 
 /* ════════ INVOICES ════════ */
 function Invoices({invoices,setInvoices,shipments,client}){
-  const [view,setView]=useState("client");
+  const [view,setView]=useState("audit");
   return (<div className="max-w-5xl space-y-4">
     <div className="flex bg-stone-100 rounded-lg p-0.5 w-fit text-sm">
-      {[["client","Client invoices"],["audit","Carrier audit"]].map(([v,l])=>(
+      {[["audit","Invoice audit"],["transit","Transit audit"]].map(([v,l])=>(
         <button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md font-medium ${view===v?"bg-white shadow-sm text-stone-900":"text-stone-500 hover:text-stone-700"}`}>{l}</button>
       ))}
     </div>
-    {view==="client"?<ClientInvoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>:<CarrierAudit shipments={shipments}/>}
+    {view==="audit"?<CarrierAudit shipments={shipments}/>:<TransitAudit shipments={shipments}/>}
+  </div>);
+}
+
+/* Transit audit: upload a carrier invoice, pull every tracking number, grade the transit performance */
+function TransitAudit({shipments}){
+  const [trks,setTrks]=useState(null);
+  const [name,setName]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState("");
+  const norm=t=>String(t||"").replace(/\s+/g,"").toUpperCase();
+  const harvest=(text)=>{const out=new Set();(String(text).match(/\b\d{10,22}\b/g)||[]).forEach(t=>{if(t.length===10||t.length===12||t.length===15||t.length===20||t.length===22)out.add(t);});return [...out];};
+  const onFile=async(e)=>{
+    const f=e.target.files&&e.target.files[0]; if(!f)return; setErr("");setTrks(null);setName(f.name);setBusy(true);
+    try{
+      const isPdf=/\.pdf$/i.test(f.name)||f.type==="application/pdf";
+      if(isPdf){ const lines=await extractPdfLines(f); const g=parsePdfInvoice(lines); const keys=Object.keys(g); const found=keys.length?keys:harvest(lines.join(" ")); if(!found.length){setErr("Couldn’t find tracking numbers in that PDF — try the CSV export from your carrier’s billing site.");} setTrks(found); }
+      else { const text=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result||""));r.onerror=rej;r.readAsText(f);}); const found=harvest(text); if(!found.length)setErr("No tracking numbers found in that file."); setTrks(found); }
+    }catch(x){ setErr("Couldn’t read that file — make sure it’s a PDF or CSV invoice."); }
+    setBusy(false);
+  };
+  const rep=useMemo(()=>{
+    if(!trks||!trks.length)return null;
+    const byTrack={}; for(const sh of shipments){ if(sh.tracking)byTrack[norm(sh.tracking)]=sh; }
+    const matched=[],unmatched=[];
+    trks.forEach(t=>{const sh=byTrack[norm(t)];sh?matched.push(sh):unmatched.push(t);});
+    const delivered=matched.filter(sh=>sh.status==="Delivered");
+    const onTime=delivered.filter(sh=>sh.onTime);
+    const late=delivered.filter(sh=>!sh.onTime);
+    const exceptions=matched.filter(sh=>sh.status==="Exception");
+    const moving=matched.filter(sh=>["Label created","In transit","Out for delivery"].includes(sh.status));
+    return {matched,unmatched,delivered,onTime,late,exceptions,moving,pct:delivered.length?Math.round(onTime.length/delivered.length*100):null};
+  },[trks,shipments]);
+  const Stat=({label,v,tone})=>(<div className="border border-stone-200 rounded-xl bg-white p-3"><div className="text-[11px] uppercase tracking-widest text-stone-400">{label}</div><div className={`text-2xl font-bold mt-0.5 ${tone||"text-stone-900"}`}>{v}</div></div>);
+  return (<div className="space-y-4">
+    <div>
+      <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Clock className="w-4 h-4"/>Transit audit</h2>
+      <p className="text-sm text-stone-500 mt-0.5">Upload a carrier invoice (PDF or CSV). We pull every tracking number on it, match them to your shipments, and grade how the carrier actually performed.</p>
+    </div>
+    <label className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded px-3 py-2 font-medium hover:bg-stone-800 cursor-pointer w-fit">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<Upload className="w-4 h-4"/>}Upload invoice<input type="file" accept=".pdf,.csv,application/pdf,text/csv" onChange={onFile} className="hidden" disabled={busy}/></label>
+    {name&&!busy&&<div className="text-[12px] text-stone-400">{name}{trks?` · ${trks.length} tracking number${trks.length===1?"":"s"} found`:""}</div>}
+    {err&&<div className="bg-rose-50 border border-rose-200 text-rose-600 rounded-lg px-3 py-2 text-sm">{err}</div>}
+    {rep&&<>
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <Stat label="On invoice" v={trks.length}/>
+        <Stat label="Matched" v={rep.matched.length}/>
+        <Stat label="Delivered" v={rep.delivered.length} tone="text-emerald-700"/>
+        <Stat label="On-time" v={rep.pct==null?"—":rep.pct+"%"} tone={rep.pct==null?"":rep.pct>=95?"text-emerald-700":rep.pct>=85?"text-amber-600":"text-rose-600"}/>
+        <Stat label="Exceptions" v={rep.exceptions.length} tone={rep.exceptions.length?"text-rose-600":"text-stone-900"}/>
+      </div>
+      {rep.late.length>0&&<div className="border border-amber-200 rounded-lg bg-white overflow-hidden">
+        <div className="px-4 py-2 bg-amber-50 text-[12px] font-semibold text-amber-800">{rep.late.length} delivered late — candidates for service-failure refunds</div>
+        <div className="divide-y divide-stone-50">{rep.late.map(sh=>(<div key={sh.id} className="px-4 py-2 flex items-center gap-3 text-sm"><span className="font-mono text-xs text-stone-500 w-44 truncate">{sh.tracking}</span><span className="flex-1 truncate">{sh.recipient?.name} · {sh.recipient?.city}, {sh.recipient?.state}</span><span className="text-[11px] text-stone-400">{sh.service}</span></div>))}</div>
+      </div>}
+      {rep.moving.length>0&&<div className="text-[12px] text-stone-500">{rep.moving.length} still in motion — not graded yet.</div>}
+      {rep.unmatched.length>0&&<div className="border border-stone-200 rounded-lg bg-white p-3 text-[12px] text-stone-500">{rep.unmatched.length} tracking number{rep.unmatched.length===1?"":"s"} on the invoice {rep.unmatched.length===1?"doesn’t":"don’t"} match any shipment here (other accounts, or older than your history): <span className="font-mono text-stone-400">{rep.unmatched.slice(0,6).join(", ")}{rep.unmatched.length>6?"…":""}</span></div>}
+    </>}
+    {!rep&&!err&&!busy&&<div className="border border-dashed border-stone-300 rounded-lg bg-white p-8 text-center text-sm text-stone-400">Upload an invoice to see on-time %, late deliveries, and exceptions at a glance.</div>}
   </div>);
 }
 function ClientInvoices({invoices,setInvoices,shipments,client}){

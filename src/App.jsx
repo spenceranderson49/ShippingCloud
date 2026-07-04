@@ -40,7 +40,14 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v123";
+const BUILD_TAG="addr-v124";
+/* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
+   Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
+   FedEx-focused client portal. Default = ShippingCloud retail. */
+const BRAND=(()=>{ let k="shippingcloud"; try{ k=(import.meta.env&&import.meta.env.VITE_BRAND)||"shippingcloud"; }catch(e){}
+  return k==="freightwire"
+    ?{key:"freightwire",fw:true,name:"Freightwire Ship",short:"Freightwire",accent:"#1e3a5f",accent2:"#2d5a8e"}
+    :{key:"shippingcloud",fw:false,name:"ShippingCloud",short:"ShippingCloud",accent:"#0086E0",accent2:"#0072BE"}; })();
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -1539,6 +1546,14 @@ function Landing({onAuth}){
     <div className="font-semibold text-white mb-1.5">{title}</div>
     <div className="text-sm text-stone-400 leading-relaxed">{children}</div>
   </div>);
+  if(BRAND.fw) return (<div className="min-h-screen bg-[#0d1b2e] flex flex-col items-center justify-center p-6">
+    <div className="mb-8 text-center">
+      <div className="text-3xl font-extrabold tracking-tight text-white">FREIGHT<span className="text-[#7fa8d4]">WIRE</span></div>
+      <div className="mt-1 text-[12px] uppercase tracking-[0.3em] text-[#7fa8d4]/70">Ship</div>
+    </div>
+    <CloudAuth onDone={()=>window.location.reload()} initialMode="login"/>
+    <div className="mt-8 text-[11px] text-[#7fa8d4]/50 flex items-center gap-2">© {new Date().getFullYear()} Freightwire · FedEx® shipping under partner carrier agreements · <LegalLinks/></div>
+  </div>);
   return (<div className="min-h-screen bg-neutral-950 text-stone-300">
     {/* nav */}
     <div className="max-w-6xl mx-auto px-5 py-5 flex flex-wrap items-center justify-between gap-y-3">
@@ -2037,7 +2052,9 @@ function AppInner(){
       }
     }catch(e){}
   },[]);
-  const brand={...DEFAULT_BRAND,...(settings.brand||{})};
+  const brand=BRAND.fw
+    ?{...DEFAULT_BRAND,name1:"FREIGHT",name2:"WIRE",dark:"#0d1b2e",primary:"#2d5a8e",...(settings.brand||{})}
+    :{...DEFAULT_BRAND,...(settings.brand||{})};
   const client=clients.find(c=>c.id===clientId)||clients[0];
   const SandboxBanner=()=>isSandbox?(<div className="bg-amber-500/95 text-white text-[12px] font-medium text-center py-1.5">SANDBOX — play freely. This account’s data is yours to trash; real accounts are untouched.</div>):null;
   const _origOnShippedAudit=(rec)=>{try{window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Booked label",detail:(rec.reference||"")+" · "+(rec.service||"")+" · "+(rec.tracking||"")}}));}catch(x){}};

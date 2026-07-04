@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v112";
+const BUILD_TAG="addr-v113";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -3318,8 +3318,10 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped}){
   const [wMin,setWMin]=useState("");const [wMax,setWMax]=useState("");
   const [tMin,setTMin]=useState("");const [tMax,setTMax]=useState("");
   const [age,setAge]=useState("any");
-  const [fs,setFs]=useState({state:new Set(),zone:new Set(),source:new Set(),sku:new Set(),product:new Set()});
-  const [fOpen,setFOpen]=useState(false);
+  const [fs,setFs]=useState({state:new Set(),zone:new Set(),source:new Set(),sku:new Set(),product:new Set(),service:new Set(),carrier:new Set()});
+  const [fOpen,setFOpen]=useState(true);
+  const [prodQ,setProdQ]=useState("");
+  const [showAll,setShowAll]=useState(()=>new Set());
   const [done,setDone]=useState(0);
   const [openRow,setOpenRow]=useState(null);
   const [svcOv,setSvcOv]=useState({});
@@ -3386,7 +3388,7 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped}){
   const zoneOf=(o)=>String(zoneEst(client.origin,o.zip));
   const prodOf=(o)=>o.product||o.items||"—";
   const ageDays=(o)=>{const t=Date.parse(o.date||"");return isNaN(t)?null:Math.max(0,Math.floor((Date.now()-t)/86400000));};
-  const dimOf=(o,d)=>d==="state"?(o.state||"—").toUpperCase():d==="zone"?"Z"+zoneOf(o):d==="source"?(o.source||"Manual"):d==="sku"?(o.sku||"—"):prodOf(o);
+  const dimOf=(o,d)=>d==="state"?(o.state||"—").toUpperCase():d==="zone"?"Z"+zoneOf(o):d==="source"?(o.source||"Manual"):d==="sku"?(o.sku||"—"):d==="service"?(o.shippingService||"—"):d==="carrier"?carrierOf(rateFor(o).label):prodOf(o);
   const matches=(o)=>{
     for(const d of Object.keys(fs)){ if(fs[d].size&&!fs[d].has(dimOf(o,d))) return false; }
     const w=+o.weight||0, t=parseFloat(o.total||0);
@@ -3401,8 +3403,8 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped}){
   const visible=pool.filter(matches).sort(SORTS[sortBy]||(()=>0));
   const toggleDim=(d,v)=>setFs(f=>{const n={...f,[d]:new Set(f[d])};n[d].has(v)?n[d].delete(v):n[d].add(v);return n;});
   const activeFilters=Object.values(fs).reduce((a,st)=>a+st.size,0)+(wMin!==""?1:0)+(wMax!==""?1:0)+(tMin!==""?1:0)+(tMax!==""?1:0)+(age!=="any"?1:0);
-  const clearFilters=()=>{setFs({state:new Set(),zone:new Set(),source:new Set(),sku:new Set(),product:new Set()});setWMin("");setWMax("");setTMin("");setTMax("");setAge("any");setSearch("");};
-  const dimValues=(d)=>{const m={};pool.forEach(o=>{const k=dimOf(o,d);m[k]=(m[k]||0)+1;});return Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,14);};
+  const clearFilters=()=>{setFs({state:new Set(),zone:new Set(),source:new Set(),sku:new Set(),product:new Set(),service:new Set(),carrier:new Set()});setWMin("");setWMax("");setTMin("");setTMax("");setAge("any");setSearch("");setProdQ("");};
+  const dimValues=(d)=>{const m={};pool.forEach(o=>{const k=dimOf(o,d);m[k]=(m[k]||0)+1;});return Object.entries(m).sort((a,b)=>b[1]-a[1]);};
   // ── Autopilot inside Batch ──
   const applyAutopilot=()=>{
     const engine=runRuleEngine((ruleset||[]).filter(r=>r.enabled),visible,originZip);
@@ -3539,13 +3541,23 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped}){
           {activeFilters>0&&<button onClick={clearFilters} className="text-[12px] text-stone-400 hover:text-stone-600 underline">clear</button>}
         </div>
         {fOpen&&<div className="border-t border-stone-100 pt-3 space-y-2.5">
-          {[["state","State"],["zone","Zone"],["source","Source"],["sku","SKU"],["product","Product"]].map(([d,label])=>{
-            const vals=dimValues(d); if(!vals.length)return null;
+          {[["state","State"],["zone","Zone"],["source","Source"],["sku","SKU"],["product","Product"],["service","Req. svc"],["carrier","Carrier"]].map(([d,label])=>{
+            let vals=dimValues(d).filter(([v])=>v!=="—"||fs[d].has(v)); if(!vals.length)return null;
+            if(d==="product"&&prodQ.trim())vals=vals.filter(([v])=>v.toLowerCase().includes(prodQ.trim().toLowerCase()));
+            const cap=showAll.has(d)?vals.length:12;
+            const shown=vals.slice(0,cap);
             return (<div key={d} className="flex flex-wrap items-center gap-1.5">
               <span className="text-[10px] uppercase tracking-widest text-stone-400 w-14 shrink-0">{label}</span>
-              {vals.map(([v,n])=><Chip key={v} on={fs[d].has(v)} onClick={()=>toggleDim(d,v)}>{v} <span className="opacity-60">{n}</span></Chip>)}
+              {d==="product"&&dimValues("product").length>8&&<input value={prodQ} onChange={e=>setProdQ(e.target.value)} placeholder="find product…" className="w-28 bg-white border border-stone-200 rounded-full px-2.5 py-1 text-xs outline-none focus:border-[#0099FF]"/>}
+              {shown.map(([v,n])=><Chip key={v} on={fs[d].has(v)} onClick={()=>toggleDim(d,v)}>{v} <span className="opacity-60">{n}</span></Chip>)}
+              {vals.length>cap&&<button onClick={()=>setShowAll(x=>{const nx=new Set(x);nx.add(d);return nx;})} className="text-[11px] text-[#006FBF] hover:underline">+{vals.length-cap} more</button>}
+              {showAll.has(d)&&vals.length>12&&<button onClick={()=>setShowAll(x=>{const nx=new Set(x);nx.delete(d);return nx;})} className="text-[11px] text-stone-400 hover:underline">less</button>}
             </div>);
           })}
+          {activeFilters>0&&<div className="flex items-center gap-3 pt-1">
+            <button onClick={()=>setSel(new Set(visible.filter(o=>!holds[o.id]).map(o=>o.id)))} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE] flex items-center gap-1.5"><Check className="w-4 h-4"/>Select these {visible.filter(o=>!holds[o.id]).length}</button>
+            <span className="text-[11px] text-stone-400">Filters narrow the list → grab them all with one click → batch.</span>
+          </div>}
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <span className="text-[10px] uppercase tracking-widest text-stone-400 w-14 shrink-0">Ranges</span>
             <span className="text-[12px] text-stone-500">Weight</span>
@@ -3627,9 +3639,11 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped}){
           ?<div className="divide-y divide-stone-100">{visible.map(OrderRow)}</div>
           :groupKeys.map(k=>(<div key={k}>
               <div className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-stone-50 border-y border-stone-100 first:border-t-0">
-                <button onClick={()=>selectGroup(groups[k])} className="text-[11px] font-medium text-[#006FBF] hover:underline">select</button>
+                <button onClick={()=>selectGroup(groups[k])} className="text-[11px] font-medium bg-[#E6F4FF] text-[#006FBF] hover:bg-[#CCEAFF] rounded px-2 py-0.5">{groups[k].filter(o=>!holds[o.id]).every(o=>sel.has(o.id))&&groups[k].some(o=>!holds[o.id])?"deselect":"select"} all</button>
                 <span className="text-[12px] font-semibold text-stone-700">{k}</span>
-                <span className="text-[11px] text-stone-400">{groups[k].length}</span>
+                <span className="text-[11px] text-stone-400">{groups[k].length} order{groups[k].length!==1?"s":""} · {Math.round(groups[k].reduce((a,o)=>a+(+o.weight||0),0)*10)/10} lb · {money(groups[k].reduce((a,o)=>a+rateFor(o).sell,0))}</span>
+                <span className="flex-1"/>
+                {groups[k].some(o=>holds[o.id])&&<Badge tone="rose">{groups[k].filter(o=>holds[o.id]).length} held</Badge>}
               </div>
               <div className="divide-y divide-stone-100">{groups[k].map(OrderRow)}</div>
             </div>))}

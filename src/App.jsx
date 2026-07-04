@@ -38,7 +38,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v94";
+const BUILD_TAG="addr-v96";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -1045,7 +1045,18 @@ function CloudAuth({onDone,initialMode}){
 /* ════════ PUBLIC LANDING PAGE ════════ */
 const CONTACT_PHONE="(801) 555-0123";   // ← REPLACE with your real number (shows on the public landing page)
 const CONTACT_PHONE_TEL="+18015550123"; // ← same number, digits only with +1, used for tap-to-call
+const CONTACT_EMAIL="support@shippingcloud.net"; // ← REPLACE with your real support email (shows on the Contact page)
 function Landing({onAuth}){
+  const pageFromHash=()=>{const h=(window.location.hash||"").replace("#","");return (h==="about"||h==="contact")?h:"home";};
+  const [page,setPageState]=useState(pageFromHash());
+  const setPage=(pg,anchor)=>{
+    window.location.hash=(pg==="home"&&!anchor)?"":(anchor||pg);
+    setPageState(pg);
+    if(pg==="home"&&anchor)setTimeout(()=>{const el=document.getElementById(anchor);if(el)el.scrollIntoView({behavior:"smooth"});},60);
+    else window.scrollTo({top:0});
+  };
+  useEffect(()=>{const onHash=()=>setPageState(pageFromHash());window.addEventListener("hashchange",onHash);return ()=>window.removeEventListener("hashchange",onHash);},[]);
+  const NavTab=({label,onClick})=>(<button onClick={onClick} className="text-sm text-stone-300 hover:text-white px-2.5 py-2">{label}</button>);
   const F=({icon:I,title,children})=>(<div className="bg-white/[0.04] border border-white/10 rounded-2xl p-6 hover:bg-white/[0.07] transition-colors">
     <div className="w-10 h-10 rounded-xl bg-[#0086E0]/15 border border-[#0086E0]/30 flex items-center justify-center mb-4"><I className="w-5 h-5 text-[#38b6ff]"/></div>
     <div className="font-semibold text-white mb-1.5">{title}</div>
@@ -1053,21 +1064,27 @@ function Landing({onAuth}){
   </div>);
   return (<div className="min-h-screen bg-neutral-950 text-stone-300">
     {/* nav */}
-    <div className="max-w-6xl mx-auto px-5 py-5 flex items-center justify-between">
-      <div>
+    <div className="max-w-6xl mx-auto px-5 py-5 flex flex-wrap items-center justify-between gap-y-3">
+      <button onClick={()=>setPage("home")} className="text-left">
         <div className="flex items-center gap-3 text-white font-bold text-4xl"><Cloud className="w-11 h-11 text-[#38b6ff]"/><span>Shipping<span className="text-[#38b6ff]">Cloud</span></span></div>
         <div className="text-[15px] text-stone-400 tracking-wide mt-1 ml-[56px]">Sky’s the limit.</div>
-      </div>
-      <div className="flex items-center gap-3">
-        <button onClick={()=>onAuth("signin")} className="text-sm text-stone-300 hover:text-white px-3 py-2">Sign in</button>
+      </button>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <NavTab label="Features" onClick={()=>setPage("home","features")}/>
+        <NavTab label="Rates" onClick={()=>setPage("home","rates")}/>
+        <NavTab label="About" onClick={()=>setPage("about")}/>
+        <NavTab label="Contact" onClick={()=>setPage("contact")}/>
+        <a href={"tel:"+CONTACT_PHONE_TEL} className="hidden md:flex items-center gap-2 text-sm text-stone-300 hover:text-white px-2.5 py-2"><Phone className="w-4 h-4 text-[#38b6ff]"/>{CONTACT_PHONE}</a>
+        <button onClick={()=>onAuth("signin")} className="text-sm text-stone-300 hover:text-white px-2.5 py-2">Sign in</button>
         <button onClick={()=>onAuth("request")} className="text-sm bg-[#0086E0] hover:bg-[#0a76c2] text-white font-medium rounded-lg px-4 py-2">Create account</button>
       </div>
     </div>
+    {page==="home"&&<>
     {/* hero */}
     <div className="max-w-6xl mx-auto px-5 pt-14 pb-16 grid lg:grid-cols-2 gap-12 items-center">
       <div>
         <h1 className="text-4xl sm:text-5xl font-bold text-white leading-tight">Your shipping platform.<br/><span className="text-[#38b6ff]">Your shipping partner.</span></h1>
-        <p className="mt-5 text-lg text-stone-400 leading-relaxed">Enterprise FedEx rates. Built by shipping people. Customized to how you work.</p>
+        <p className="mt-5 text-lg text-stone-400 leading-relaxed">Enterprise FedEx and DHL rates. Industry leading customer service. Customized for you.</p>
         <div className="mt-7 flex flex-wrap gap-3">
           <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0a76c2] text-white font-semibold rounded-lg px-6 py-3">Create ShippingCloud account</button>
           <button onClick={()=>onAuth("request")} className="border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#38b6ff] font-semibold rounded-lg px-6 py-3 flex items-center gap-2"><Truck className="w-4 h-4"/>Get your own FedEx account</button>
@@ -1087,7 +1104,7 @@ function Landing({onAuth}){
       </div>
     </div>
     {/* features */}
-    <div className="max-w-6xl mx-auto px-5 pb-16">
+    <div id="features" className="max-w-6xl mx-auto px-5 pb-16 scroll-mt-6">
       <div className="text-center mb-10"><h2 className="text-2xl sm:text-3xl font-bold text-white">Your customized long term solution</h2></div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <F icon={DollarSign} title="Industry-leading FedEx rates">The pricing big shippers get, from day one. No volume commitments, no negotiating.</F>
@@ -1099,7 +1116,7 @@ function Landing({onAuth}){
       </div>
     </div>
     {/* beat your UPS rates */}
-    <div className="max-w-6xl mx-auto px-5 pb-16">
+    <div id="rates" className="max-w-6xl mx-auto px-5 pb-16 scroll-mt-6">
       <div className="border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-transparent rounded-2xl p-8 sm:p-10 text-center">
         <h2 className="text-2xl sm:text-3xl font-bold text-white leading-snug">Save 10–15% switching to our FedEx rates.</h2>
         <p className="mt-3 text-stone-400 max-w-2xl mx-auto">No fees. No BS. Send us a recent UPS invoice and get a line-by-line comparison back — the same day.</p>
@@ -1130,18 +1147,37 @@ function Landing({onAuth}){
         <a href={"tel:"+CONTACT_PHONE_TEL} className="mt-6 inline-flex items-center gap-2 bg-white text-neutral-950 font-semibold rounded-lg px-6 py-3 hover:bg-stone-200"><Phone className="w-4 h-4"/>{CONTACT_PHONE}</a>
       </div>
     </div>
-    {/* why businesses switch */}
-    <div className="border-y border-white/10 bg-white/[0.02]">
-      <div className="max-w-2xl mx-auto px-5 py-14">
-        <div className="bg-neutral-900 border border-white/10 rounded-2xl p-6">
-          <div className="text-[11px] uppercase tracking-widest text-stone-500 mb-4">Why businesses switch</div>
-          {[["Rate quotes","2–3 seconds elsewhere","instant here"],["Carrier invoices","spot-checked, maybe","audited line by line"],["Shipping rules","tribal knowledge","Autopilot, written down once"],["Your rates","retail counter pricing","enterprise contract tiers"],["Support","a chatbot maze","a human picks up"]].map((r,i)=>(
-            <div key={i} className="flex items-center justify-between py-2.5 border-b border-white/5 last:border-0 text-sm gap-3">
-              <span className="text-stone-400 w-28 shrink-0">{r[0]}</span><span className="text-stone-600 line-through text-[13px]">{r[1]}</span><span className="text-emerald-400 font-medium text-right">{r[2]}</span>
-            </div>))}
-        </div>
+    </>}
+    {page==="about"&&<div className="max-w-3xl mx-auto px-5 py-14">
+      <h1 className="text-3xl sm:text-4xl font-bold text-white">About ShippingCloud</h1>
+      <p className="mt-6 text-stone-400 leading-relaxed text-lg">We’re shipping people. We’ve run the shipping desks, eaten the surprise surcharges, argued the reweighs, and waited on hold with carriers who never called back. ShippingCloud exists because we got tired of choosing between good rates and good software — and tired of platforms that make you work their way.</p>
+      <p className="mt-4 text-stone-400 leading-relaxed text-lg">So we built both sides of it: enterprise FedEx and DHL pricing from day one, and a platform with real humans behind it who answer the phone and build what you need. When a customer says “I wish it did this,” our answer is usually “give us a week.”</p>
+      <p className="mt-4 text-stone-400 leading-relaxed text-lg">We’re not trying to be the biggest shipping platform. We’re trying to be <span className="text-white font-medium">your</span> shipping platform — the last one you’ll need to switch to.</p>
+      <div className="mt-8 flex flex-wrap gap-3">
+        <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0a76c2] text-white font-semibold rounded-lg px-6 py-3">Create ShippingCloud account</button>
+        <button onClick={()=>setPage("contact")} className="border border-white/15 hover:bg-white/5 text-white font-medium rounded-lg px-6 py-3">Talk to us</button>
       </div>
-    </div>
+    </div>}
+    {page==="contact"&&<div className="max-w-3xl mx-auto px-5 py-14">
+      <h1 className="text-3xl sm:text-4xl font-bold text-white">Talk to a real person</h1>
+      <p className="mt-4 text-stone-400 leading-relaxed text-lg">No chatbots, no ticket black holes. Call or write — a human who can actually fix it answers.</p>
+      <div className="mt-8 grid sm:grid-cols-2 gap-4">
+        <a href={"tel:"+CONTACT_PHONE_TEL} className="bg-white/[0.04] border border-white/10 hover:bg-white/[0.07] rounded-2xl p-6 block">
+          <Phone className="w-6 h-6 text-[#38b6ff]"/>
+          <div className="mt-3 font-semibold text-white">Call us</div>
+          <div className="text-[#38b6ff] text-lg font-semibold mt-1">{CONTACT_PHONE}</div>
+          <div className="text-[13px] text-stone-500 mt-1">Monday–Friday, business hours (MT)</div>
+        </a>
+        <a href={"mailto:"+CONTACT_EMAIL} className="bg-white/[0.04] border border-white/10 hover:bg-white/[0.07] rounded-2xl p-6 block">
+          <Mail className="w-6 h-6 text-[#38b6ff]"/>
+          <div className="mt-3 font-semibold text-white">Email us</div>
+          <div className="text-[#38b6ff] text-lg font-semibold mt-1 break-all">{CONTACT_EMAIL}</div>
+          <div className="text-[13px] text-stone-500 mt-1">We reply the same business day.</div>
+        </a>
+      </div>
+      <p className="mt-6 text-[13px] text-stone-500">Already a customer? Sign in and your account context comes with you — the person you reach will know your shipping.</p>
+      <div className="mt-6"><button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0a76c2] text-white font-semibold rounded-lg px-6 py-3">Create ShippingCloud account</button></div>
+    </div>}
     {/* footer */}
     <div className="max-w-6xl mx-auto px-5 py-10 text-center">
       <div className="pt-6 border-t border-white/10 text-[12px] text-stone-600 flex flex-wrap items-center justify-center gap-x-2 gap-y-1">

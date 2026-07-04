@@ -38,7 +38,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v97";
+const BUILD_TAG="addr-v98";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -986,7 +986,45 @@ async function cloudLoadAll(){
   }
   return res||{ok:false,error:"No response"};
 }
-function CloudAuth({onDone,initialMode}){
+function FedExIntake({onDone,onClose}){
+  const [f,setF]=useState({volume:"",carrier:""});
+  const [inv,setInv]=useState(null);
+  const [err,setErr]=useState("");
+  const pickFile=(e)=>{
+    const file=e.target.files&&e.target.files[0]; e.target.value=""; if(!file)return;
+    if(file.size>3*1024*1024){setErr("That file is over 3 MB — one recent invoice is perfect.");return;}
+    const r=new FileReader();
+    r.onload=()=>{setInv({name:file.name,type:file.type||"application/octet-stream",data:String(r.result).split(",")[1]||""});setErr("");};
+    r.readAsDataURL(file);
+  };
+  const inp="w-full border border-stone-300 rounded px-3 py-2 text-sm bg-white";
+  return (<div className="w-full max-w-md bg-white rounded-xl p-6 space-y-4 shadow-2xl">
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <div className="text-lg font-semibold text-stone-800">Get your own FedEx account</div>
+        <p className="text-sm text-stone-500 mt-1">Two quick questions about your shipping — we’ll handle the rest.</p>
+      </div>
+      <button onClick={onClose} className="text-stone-300 hover:text-stone-500 shrink-0"><X className="w-5 h-5"/></button>
+    </div>
+    <div className="grid grid-cols-2 gap-2">
+      <select value={f.volume} onChange={e=>setF({...f,volume:e.target.value})} className={inp}><option value="">Packages / month</option><option>Under 100</option><option>100–500</option><option>500–2,000</option><option>2,000+</option></select>
+      <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp}><option value="">Ship mostly with…</option><option>UPS</option><option>FedEx</option><option>USPS</option><option>A mix</option></select>
+    </div>
+    <label className={"flex items-center justify-between gap-2 border border-dashed rounded px-3 py-2 text-sm cursor-pointer "+(inv?"border-emerald-400 bg-emerald-50/50 text-emerald-700":"border-stone-300 text-stone-500 hover:border-[#0086E0]")}>
+      <span className="flex items-center gap-2 truncate">{inv?<CheckCircle2 className="w-4 h-4 shrink-0"/>:<Upload className="w-4 h-4 shrink-0"/>}<span className="truncate">{inv?inv.name:"Upload a recent UPS invoice (optional)"}</span></span>
+      {inv&&<button type="button" onClick={(e)=>{e.preventDefault();setInv(null);}} className="text-[11px] underline shrink-0">remove</button>}
+      <input type="file" accept=".pdf,.csv,.xls,.xlsx,.png,.jpg,.jpeg,application/pdf,text/csv,image/png,image/jpeg" onChange={pickFile} className="hidden"/>
+    </label>
+    <div className="bg-stone-50 border border-stone-200 rounded-lg p-3">
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Where to find your invoice (30 seconds)</div>
+      <div className="text-[12px] text-stone-500 leading-relaxed">Open the <a href="https://www.ups.com/us/en/business-solutions/ups-billing" target="_blank" rel="noopener noreferrer" className="text-[#0086E0] underline">UPS Billing Center</a>, then: <span className="text-stone-700">Manage Your Bills → Go to Billing Center → Log in → Download a PDF or CSV invoice</span> — then upload it above. Attach one and your line-by-line rate comparison comes back the same day.</div>
+    </div>
+    {err&&<div className="text-xs text-red-600">{err}</div>}
+    <button onClick={()=>onDone({volume:f.volume,carrier:f.carrier,invoice:inv})} className="w-full bg-[#0086E0] text-white rounded px-4 py-2.5 text-sm font-semibold hover:bg-[#0a76c2]">Continue</button>
+    <p className="text-[11px] text-stone-400 text-center">Next step: create your ShippingCloud login so we can attach this to your account.</p>
+  </div>);
+}
+function CloudAuth({onDone,initialMode,intake}){
   const [mode,setMode]=useState(initialMode||"signin"); // signin | request | requested
   const [f,setF]=useState({name:"",company:"",email:"",pw:"",volume:"",carrier:""});
   const [inv,setInv]=useState(null); // {name,type,data(base64)}
@@ -1001,20 +1039,26 @@ function CloudAuth({onDone,initialMode}){
   const signin=async()=>{
     if(busy)return; setBusy(true);setErr("");
     const res=await cloudCall({action:"login",email:f.email,password:f.pw});
-    setBusy(false);
-    if(!res||!res.ok){setErr((res&&res.error)||"Could not reach the server.");return;}
+    if(!res||!res.ok){setBusy(false);setErr((res&&res.error)||"Could not reach the server.");return;}
     CLOUD.token=res.token; lsSet("cloud.token",res.token);
     const uid=String(res.user.id||res.user.email); clearScratchFor(uid);
+    if(intake&&(intake.volume||intake.carrier||intake.invoice)){
+      await cloudCall({action:"fedexRequest",token:res.token,name:res.user.name||"",volume:intake.volume,carrier:intake.carrier,invoice:intake.invoice||undefined});
+      lsSet("u/"+uid+"/fedexPrompt",{seen:true});
+    }
+    setBusy(false);
     lsSet("session",res.user);
     onDone(res.bootstrap===true);
   };
   const request=async()=>{
     if(busy)return; setBusy(true);setErr("");
-    const res=await cloudCall({action:"requestAccess",name:f.name,company:f.company,email:f.email,password:f.pw,volume:f.volume,carrier:f.carrier});
+    const it=intake||{};
+    const res=await cloudCall({action:"requestAccess",name:f.name,company:f.company,email:f.email,password:f.pw,volume:it.volume||f.volume,carrier:it.carrier||f.carrier,invoice:it.invoice||undefined});
     setBusy(false);
     if(!res||!res.ok){setErr((res&&res.error)||"Could not reach the server.");return;}
     CLOUD.token=res.token; lsSet("cloud.token",res.token);
     const uid=String(res.user.id||res.user.email); clearScratchFor(uid);
+    if(res.fedexFiled)lsSet("u/"+uid+"/fedexPrompt",{seen:true});
     lsSet("session",res.user);
     onDone(false);
   };
@@ -1026,12 +1070,13 @@ function CloudAuth({onDone,initialMode}){
         <button onClick={()=>{setMode("request");setErr("");}} className={`rounded-md py-1.5 ${mode==="request"?"bg-white shadow text-stone-800":"text-stone-500"}`}>Create account</button>
       </div>
       <div className="space-y-2">
+        {mode==="request"&&intake&&<div className="text-[12px] bg-blue-50 border border-blue-200 text-[#006FBF] rounded px-3 py-2 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 shrink-0"/>Your FedEx account request is ready — create your login and we’ll attach it.</div>}
         {mode==="request"&&<><input value={f.name} onChange={e=>setF({...f,name:e.target.value})} placeholder="Your name" className={inp}/>
         <input value={f.company} onChange={e=>setF({...f,company:e.target.value})} placeholder="Company" className={inp}/>
-        <div className="grid grid-cols-2 gap-2">
+        {!intake&&<div className="grid grid-cols-2 gap-2">
           <select value={f.volume} onChange={e=>setF({...f,volume:e.target.value})} className={inp+" bg-white"}><option value="">Packages / month</option><option>Under 100</option><option>100–500</option><option>500–2,000</option><option>2,000+</option></select>
           <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp+" bg-white"}><option value="">Ship mostly with…</option><option>UPS</option><option>FedEx</option><option>USPS</option><option>A mix</option></select>
-        </div></>}
+        </div>}</>}
         <input value={f.email} onChange={e=>setF({...f,email:e.target.value})} placeholder="Email" className={inp} autoFocus/>
         <input value={f.pw} onChange={e=>setF({...f,pw:e.target.value})} onKeyDown={e=>e.key==="Enter"&&(mode==="signin"?signin():request())} placeholder={mode==="request"?"Choose a password":"Password"} type="password" className={inp}/>
       </div>
@@ -1087,7 +1132,7 @@ function Landing({onAuth}){
         <p className="mt-6 text-xl text-stone-400 leading-relaxed">Enterprise FedEx and DHL rates. Industry leading customer service. Customized for you.</p>
         <div className="mt-7 flex flex-wrap gap-3">
           <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0a76c2] text-white font-semibold rounded-lg px-7 py-3.5 text-[15px]">Create ShippingCloud account</button>
-          <button onClick={()=>onAuth("request")} className="border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#38b6ff] font-semibold rounded-lg px-7 py-3.5 text-[15px] flex items-center gap-2"><Truck className="w-4 h-4"/>Get your own FedEx account</button>
+          <button onClick={()=>onAuth("fedex")} className="border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#38b6ff] font-semibold rounded-lg px-7 py-3.5 text-[15px] flex items-center gap-2"><Truck className="w-4 h-4"/>Get your own FedEx account</button>
         </div>
       </div>
       {/* hero graphic: mock rate card */}
@@ -1120,7 +1165,7 @@ function Landing({onAuth}){
       <div className="border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-transparent rounded-2xl p-8 sm:p-10 text-center">
         <h2 className="text-2xl sm:text-3xl font-bold text-white leading-snug">Save 10–15% switching to our FedEx rates.</h2>
         <p className="mt-3 text-stone-400 max-w-2xl mx-auto">No fees. No BS. Send us a recent UPS invoice and get a line-by-line comparison back — the same day.</p>
-        <button onClick={()=>onAuth("request")} className="mt-6 border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#38b6ff] font-semibold rounded-lg px-6 py-3 inline-flex items-center gap-2"><Upload className="w-4 h-4"/>Send us your UPS invoice</button>
+        <button onClick={()=>onAuth("fedex")} className="mt-6 border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#38b6ff] font-semibold rounded-lg px-6 py-3 inline-flex items-center gap-2"><Upload className="w-4 h-4"/>Send us your UPS invoice</button>
       </div>
     </div>
     {/* integrations banner */}
@@ -1241,11 +1286,14 @@ function FirstRunFedEx({user,onClose}){
   </div>);
 }
 function LandingGate({onDone}){
-  const [auth,setAuth]=useState(null); // null | "signin" | "request"
+  const [auth,setAuth]=useState(null); // null | "signin" | "request" | "fedex"
+  const [intake,setIntake]=useState(null);
   return (<div className="relative">
-    <Landing onAuth={(m)=>setAuth(m)}/>
+    <Landing onAuth={(m)=>{if(m!=="fedex")setIntake(null);setAuth(m);}}/>
     {auth&&<div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={(e)=>{if(e.target===e.currentTarget)setAuth(null);}}>
-      <CloudAuth initialMode={auth} onDone={onDone}/>
+      {auth==="fedex"
+        ?<FedExIntake onClose={()=>setAuth(null)} onDone={(it)=>{setIntake(it);setAuth("request");}}/>
+        :<CloudAuth initialMode={auth} intake={intake} onDone={onDone}/>}
     </div>}
   </div>);
 }

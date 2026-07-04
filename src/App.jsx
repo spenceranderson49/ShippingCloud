@@ -38,7 +38,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v87";
+const BUILD_TAG="addr-v89";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -1066,7 +1066,7 @@ function Landing({onAuth}){
     <div className="max-w-6xl mx-auto px-5 pt-14 pb-16 grid lg:grid-cols-2 gap-12 items-center">
       <div>
         <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-widest text-[#38b6ff] bg-[#0086E0]/10 border border-[#0086E0]/25 rounded-full px-3 py-1 mb-5"><Zap className="w-3.5 h-3.5"/>Multi-carrier shipping platform</div>
-        <h1 className="text-4xl sm:text-5xl font-bold text-white leading-tight">More than a shipping platform.<br/><span className="text-[#38b6ff]">A true shipping partner.</span></h1>
+        <h1 className="text-4xl sm:text-5xl font-bold text-white leading-tight">More than your shipping platform.<br/><span className="text-[#38b6ff]">Your shipping partner and custom solution.</span></h1>
         <p className="mt-5 text-lg text-stone-400 leading-relaxed">Enterprise FedEx & DHL pricing. Real people who pick up the phone. Software that bends to how you work.</p>
         <div className="mt-5 border-l-2 border-[#38b6ff] bg-white/[0.03] rounded-r-xl px-4 py-3">
           <p className="text-[15px] text-stone-300 leading-relaxed">Sick of reps you can’t get ahold of and week-old support tickets? <span className="text-white font-medium">Call us — a person answers.</span></p>
@@ -1075,27 +1075,23 @@ function Landing({onAuth}){
           <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0a76c2] text-white font-semibold rounded-lg px-6 py-3">Create ShippingCloud account</button>
           <button onClick={()=>onAuth("request")} className="border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#38b6ff] font-semibold rounded-lg px-6 py-3 flex items-center gap-2"><Truck className="w-4 h-4"/>Get your own FedEx account</button>
         </div>
-        <p className="mt-3 text-[13px] text-stone-500">Your own account number — pre-loaded with enterprise contract pricing. No negotiating.</p>
-        <div className="mt-6 flex items-center gap-5 text-[12px] text-stone-500"><span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-500"/>No monthly minimums</span><span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-500"/>No setup fees</span><span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-500"/>Approved same-day</span></div>
       </div>
       {/* hero graphic: mock rate card */}
       <div className="relative hidden lg:block">
         <div className="absolute -inset-8 bg-[#0086E0]/20 blur-3xl rounded-full"/>
         <div className="relative text-center text-[13px] uppercase tracking-widest text-[#38b6ff] font-semibold mb-3">Get FedEx and DHL Enterprise rates</div>
         <div className="relative bg-neutral-900 border border-white/10 rounded-2xl p-5 shadow-2xl">
-          <div className="text-[11px] uppercase tracking-widest text-stone-500 mb-3 flex items-center justify-between"><span>Live rates · 5 lb · SLC → Los Angeles</span><span className="text-emerald-400 flex items-center gap-1"><Zap className="w-3 h-3"/>instant</span></div>
           {[["FedEx Ground®","2 days","$9.41"],["FedEx One Rate® · 2Day","flat-rate box · 2 days","$14.95"],["FedEx Priority Overnight®","next day","$42.10"],["DHL Express","2 days","$21.66"]].map((r,i)=>(
             <div key={i} className={`flex items-center justify-between rounded-lg px-3 py-2.5 mb-1.5 ${i===0?"bg-[#0086E0]/15 border border-[#0086E0]/40":"bg-white/[0.03] border border-white/5"}`}>
               <div className="flex items-center gap-3"><Truck className={`w-4 h-4 ${i===0?"text-[#38b6ff]":"text-stone-500"}`}/><div><div className="text-sm text-white font-medium">{r[0]}</div><div className="text-[11px] text-stone-500">{r[1]}</div></div></div>
               <div className={`font-mono text-sm ${i===0?"text-[#38b6ff] font-bold":"text-stone-300"}`}>{r[2]}</div>
             </div>))}
-          <div className="text-[10px] text-stone-600 mt-2">Illustrative example — your rates are quoted live for every shipment.</div>
         </div>
       </div>
     </div>
     {/* features */}
     <div className="max-w-6xl mx-auto px-5 pb-16">
-      <div className="text-center mb-10"><h2 className="text-2xl sm:text-3xl font-bold text-white">Everything your shipping desk does — in one place</h2><p className="text-stone-400 mt-2">Built by freight people, for businesses that actually ship.</p></div>
+      <div className="text-center mb-10"><h2 className="text-2xl sm:text-3xl font-bold text-white">Your customized long term solution</h2></div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <F icon={DollarSign} title="Industry-leading FedEx rates">The pricing big shippers get, from day one. No volume commitments, no negotiating.</F>
         <F icon={Receipt} title="Automated invoice auditing">We check every carrier bill against what you were quoted and flag anything off, so you can dispute anything that isn’t right.</F>
@@ -1108,44 +1104,9 @@ function Landing({onAuth}){
     {/* beat your UPS rates */}
     <div className="max-w-6xl mx-auto px-5 pb-16">
       <div className="border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-transparent rounded-2xl p-8 sm:p-10 text-center">
-        <h2 className="text-2xl sm:text-3xl font-bold text-white leading-snug">Most shippers save 10–15% switching to our FedEx rates.</h2>
+        <h2 className="text-2xl sm:text-3xl font-bold text-white leading-snug">Save 10–15% switching to our FedEx rates.</h2>
         <p className="mt-3 text-stone-400 max-w-2xl mx-auto">No fees. No BS. Send us a recent UPS invoice and get a line-by-line comparison back — the same day.</p>
         <button onClick={()=>onAuth("request")} className="mt-6 border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#38b6ff] font-semibold rounded-lg px-6 py-3 inline-flex items-center gap-2"><Upload className="w-4 h-4"/>Send us your UPS invoice</button>
-      </div>
-    </div>
-    {/* integrations + box logic */}
-    <div className="max-w-6xl mx-auto px-5 pb-16">
-      <div className="grid lg:grid-cols-2 gap-10 items-center">
-        <div>
-          <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-widest text-[#38b6ff] mb-4"><Plug className="w-3.5 h-3.5"/>Plugged into your store</div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-white leading-snug">Connects to your cart.<br/>Quotes real boxes — not air.</h2>
-          <p className="mt-4 text-stone-400 leading-relaxed">Orders flow straight in from your store — and if your platform isn’t on the list, we’ll integrate it for you. That’s the partner part.</p>
-          <p className="mt-3 text-stone-400 leading-relaxed"><span className="text-white font-medium">Box logic built in:</span> we map your actual products to your actual boxes, so every quote prices the box you’ll really ship — not a guess. No shipping air, no dimensional-weight surprises.</p>
-          <p className="mt-3 text-stone-400 leading-relaxed"><span className="text-white font-medium">Accurate rates at checkout:</span> your cart shows customers what shipping really costs — the same number you’ll pay for the label. No more guessing, no more eating the difference, no more scaring carts away with padded rates.</p>
-          <div className="mt-6 flex flex-wrap gap-2">
-            {["Shopify","Amazon","WooCommerce","BigCommerce","Etsy","eBay","Walmart","Squarespace","Wix"].map(n=>(<span key={n} className="text-[13px] bg-white/[0.05] border border-white/10 rounded-full px-3.5 py-1.5 text-stone-300">{n}</span>))}
-            <button onClick={()=>onAuth("request")} className="text-[13px] bg-[#0086E0]/15 border border-[#0086E0]/40 rounded-full px-3.5 py-1.5 text-[#38b6ff] hover:bg-[#0086E0]/25">Yours? We’ll build it →</button>
-          </div>
-        </div>
-        <div className="bg-neutral-900 border border-white/10 rounded-2xl p-5">
-          <div className="text-[11px] uppercase tracking-widest text-stone-500 mb-3 flex items-center gap-2"><Boxes className="w-3.5 h-3.5"/>Box logic · order #10482</div>
-          <div className="space-y-1.5 mb-3">
-            {[["3 × Candle — 4×4×4 in","2.1 lb"],["1 × Picture frame — 12×9×2 in","1.8 lb"],["2 × Soap set — 6×3×2 in","0.9 lb"]].map((r,i)=>(
-              <div key={i} className="flex items-center justify-between bg-white/[0.03] border border-white/5 rounded-lg px-3 py-2 text-sm"><span className="text-stone-300">{r[0]}</span><span className="text-stone-500 font-mono text-[12px]">{r[1]}</span></div>))}
-          </div>
-          <div className="flex items-center gap-2 text-stone-500 text-[12px] mb-3"><ChevronDown className="w-4 h-4"/>box logic picks the right carton</div>
-          <div className="bg-[#0086E0]/10 border border-[#0086E0]/35 rounded-lg px-3 py-2.5 flex items-center justify-between text-sm">
-            <span className="flex items-center gap-2 text-white font-medium"><Package className="w-4 h-4 text-[#38b6ff]"/>Ships in: 12×10×8 · 94% full</span>
-            <span className="text-[12px] text-emerald-400">air shipped: ~0%</span>
-          </div>
-          <div className="mt-3 flex items-center justify-between bg-white/[0.03] border border-white/5 rounded-lg px-3 py-2.5 text-sm">
-            <span className="text-stone-400">Checkout shows customer</span><span className="font-mono text-white">$11.20</span>
-          </div>
-          <div className="mt-1.5 flex items-center justify-between bg-white/[0.03] border border-white/5 rounded-lg px-3 py-2.5 text-sm">
-            <span className="text-stone-400">Your actual label cost</span><span className="font-mono text-emerald-400">$11.20 · difference $0.00</span>
-          </div>
-          <div className="text-[10px] text-stone-600 mt-3">Illustrative — box logic is configured around your real products and cartons.</div>
-        </div>
       </div>
     </div>
     {/* partner, not just a platform */}

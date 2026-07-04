@@ -38,7 +38,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v90";
+const BUILD_TAG="addr-v91";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -1058,7 +1058,7 @@ function Landing({onAuth}){
     <div className="max-w-6xl mx-auto px-5 py-5 flex items-center justify-between">
       <div>
         <div className="flex items-center gap-3 text-white font-bold text-4xl"><Cloud className="w-11 h-11 text-[#38b6ff]"/><span>Shipping<span className="text-[#38b6ff]">Cloud</span></span></div>
-        <div className="text-[13px] text-stone-400 tracking-wide mt-1 ml-[56px]">Sky’s the limit.</div>
+        <div className="text-[15px] text-stone-400 tracking-wide mt-1 ml-[56px]">Sky’s the limit.</div>
       </div>
       <div className="flex items-center gap-3">
         <button onClick={()=>onAuth("signin")} className="text-sm text-stone-300 hover:text-white px-3 py-2">Sign in</button>
@@ -1068,11 +1068,8 @@ function Landing({onAuth}){
     {/* hero */}
     <div className="max-w-6xl mx-auto px-5 pt-14 pb-16 grid lg:grid-cols-2 gap-12 items-center">
       <div>
-        <h1 className="text-4xl sm:text-5xl font-bold text-white leading-tight">More than your shipping platform.<br/><span className="text-[#38b6ff]">Your shipping partner and custom solution.</span></h1>
-        <p className="mt-5 text-lg text-stone-400 leading-relaxed">Enterprise FedEx & DHL pricing. Real people who pick up the phone. Software that bends to how you work.</p>
-        <div className="mt-5 border-l-2 border-[#38b6ff] bg-white/[0.03] rounded-r-xl px-4 py-3">
-          <p className="text-[15px] text-stone-300 leading-relaxed">Sick of reps you can’t get ahold of and week-old support tickets? <span className="text-white font-medium">Call us — a person answers.</span></p>
-        </div>
+        <h1 className="text-4xl sm:text-5xl font-bold text-white leading-tight">Your shipping platform.<br/><span className="text-[#38b6ff]">Your shipping partner.</span></h1>
+        <p className="mt-5 text-lg text-stone-400 leading-relaxed">Enterprise FedEx rates. Built by shipping people. Customized to how you work.</p>
         <div className="mt-7 flex flex-wrap gap-3">
           <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0a76c2] text-white font-semibold rounded-lg px-6 py-3">Create ShippingCloud account</button>
           <button onClick={()=>onAuth("request")} className="border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#38b6ff] font-semibold rounded-lg px-6 py-3 flex items-center gap-2"><Truck className="w-4 h-4"/>Get your own FedEx account</button>
@@ -1131,7 +1128,7 @@ function Landing({onAuth}){
     <div className="max-w-6xl mx-auto px-5 pb-16">
       <div className="bg-gradient-to-br from-[#0086E0]/15 to-transparent border border-[#0086E0]/25 rounded-2xl p-8 sm:p-10 text-center">
         <h2 className="text-2xl sm:text-3xl font-bold text-white leading-snug">Talk to real people. No AI chatbots. Ever.</h2>
-        <p className="mt-3 text-stone-400 max-w-xl mx-auto">One call covers your shipping and your tech — a real person who knows your account picks up.</p>
+        <p className="mt-3 text-stone-400 max-w-xl mx-auto">Sick of reps who vanish and week-old support tickets? One call covers your shipping and your tech — a real person who knows your account picks up.</p>
         <a href={"tel:"+CONTACT_PHONE_TEL} className="mt-6 inline-flex items-center gap-2 bg-white text-neutral-950 font-semibold rounded-lg px-6 py-3 hover:bg-stone-200"><Phone className="w-4 h-4"/>{CONTACT_PHONE}</a>
       </div>
     </div>

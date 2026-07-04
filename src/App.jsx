@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v120";
+const BUILD_TAG="addr-v121";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -439,6 +439,55 @@ function packOrder(order,catalog,boxes,bl){
     const totalWt=Math.round(pieces.reduce((a,p2)=>a+(+p2.weight||0),0)*10)/10;
     return {pieces,totalWt,boxNames:names.join(" + "),matchedCount:matched.length,unresolved:rows.filter(r=>!r.matched).map(r=>r.name)};
   }catch(e){return null;}
+}
+
+/* ── packing slips ─────────────────────────────────────────────── */
+function parseItemsList(order){
+  if(Array.isArray(order&&order.lineItems)&&order.lineItems.length)return order.lineItems.map(li=>({name:li.name||li.sku||"Item",qty:+li.qty||1}));
+  return String((order&&(order.items||order.product))||"").split(/,|;/).map(x=>x.trim()).filter(Boolean).map(chunk=>{
+    const m=chunk.match(/(.*?)(?:\s*[x×]\s*(\d+))?$/i);
+    return {name:((m&&m[1])||chunk).trim(),qty:(m&&+m[2])||1};
+  }).filter(r=>r.name);
+}
+function slipFromOrder(o,sender){
+  return {company:(sender&&(sender.company||sender.name))||"ShippingCloud shipper",orderName:o.name||"",date:new Date().toLocaleDateString(),
+    to:{name:o.customer||"",company:o.company||"",address1:o.address1||"",city:o.city||"",state:o.state||"",zip:o.zip||""},
+    items:parseItemsList(o),tracking:o.tracking||"",service:""};
+}
+function slipFromShipment(sh){
+  const r=sh.recipient||{};
+  return {company:(sh.sender&&(sh.sender.company||sh.sender.name))||"ShippingCloud shipper",orderName:sh.reference||"",date:sh.date||"",
+    to:{name:r.name||"",company:r.company||"",address1:r.address1||"",city:r.city||"",state:r.state||"",zip:r.zip||""},
+    items:parseItemsList({items:sh.items||""}),tracking:sh.tracking||"",service:sh.service||""};
+}
+function packingSlipHTML(slips){
+  const esc=(x)=>String(x||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  const one=(sl)=>`<div class="slip">
+    <div class="hd"><div class="brand">${esc(sl.company)}</div><div class="meta">${sl.orderName?"Order "+esc(sl.orderName)+" · ":""}${esc(sl.date)}</div></div>
+    <div class="to"><div class="lbl">Ship to</div><div>${esc(sl.to.name)}</div>${sl.to.company?`<div>${esc(sl.to.company)}</div>`:""}<div>${esc(sl.to.address1)}</div><div>${esc(sl.to.city)}, ${esc(sl.to.state)} ${esc(sl.to.zip)}</div></div>
+    ${sl.items.length?`<table><thead><tr><th>Item</th><th class="q">Qty</th></tr></thead><tbody>${sl.items.map(it=>`<tr><td>${esc(it.name)}</td><td class="q">${it.qty}</td></tr>`).join("")}</tbody></table>`:""}
+    <div class="ft">${sl.tracking?"Tracking "+esc(sl.tracking):""}${sl.service?" · "+esc(sl.service):""}<span class="thanks">Thank you for your order!</span></div>
+  </div>`;
+  return `<!doctype html><html><head><title>Packing slips</title><style>
+    body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;margin:0;}
+    .slip{padding:36px 40px;page-break-after:always;max-width:640px;}
+    .hd{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #1c1917;padding-bottom:10px;}
+    .brand{font-size:19px;font-weight:800;} .meta{font-size:12px;color:#57534e;}
+    .to{margin-top:18px;font-size:14px;line-height:1.45;} .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#a8a29e;margin-bottom:3px;}
+    table{width:100%;border-collapse:collapse;margin-top:18px;font-size:13px;}
+    th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#a8a29e;border-bottom:1px solid #e7e5e4;padding:6px 0;}
+    td{padding:7px 0;border-bottom:1px solid #f5f5f4;} .q{text-align:right;width:56px;}
+    .ft{margin-top:22px;font-size:11px;color:#78716c;display:flex;justify-content:space-between;} .thanks{color:#1c1917;font-weight:600;}
+    @media print{.slip{padding:24px 8px;}}
+  </style></head><body>${slips.map(one).join("")}<script>window.onload=()=>window.print();</` + `script></body></html>`;
+}
+function printPackingSlips(slips){
+  const list=(slips||[]).filter(Boolean);
+  if(!list.length)return;
+  const w=window.open("","_blank");
+  if(!w)return;
+  w.document.write(packingSlipHTML(list));
+  w.document.close();
 }
 const SEED_PRODUCTS=[
   {id:"pr1",sku:"MUG-01",name:"Camp Mug",l:5,w:4,h:4,wt:0.9,value:18,origin:"US",hs:""},
@@ -1329,6 +1378,52 @@ function CloudAuth({onDone,initialMode,intake}){
 const CONTACT_PHONE="(801) 555-0123";   // ← REPLACE with your real number (shows on the public landing page)
 const CONTACT_PHONE_TEL="+18015550123"; // ← same number, digits only with +1, used for tap-to-call
 const CONTACT_EMAIL="support@shippingcloud.net"; // ← REPLACE with your real support email (shows on the Contact page)
+
+/* Terms & Privacy — quiet footer links opening a self-contained reader. Not legal advice; standard SaaS coverage. */
+function LegalLinks(){
+  const [open,setOpen]=useState(null); // "terms" | "privacy"
+  const H=({children})=><h3 className="text-[13px] font-semibold text-stone-800 mt-5 mb-1">{children}</h3>;
+  const P=({children})=><p className="text-[12.5px] text-stone-500 leading-relaxed">{children}</p>;
+  return (<>
+    <button onClick={()=>setOpen("terms")} className="hover:text-stone-400 underline-offset-2 hover:underline">Terms</button>
+    <span>·</span>
+    <button onClick={()=>setOpen("privacy")} className="hover:text-stone-400 underline-offset-2 hover:underline">Privacy</button>
+    {open&&<div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={()=>setOpen(null)}>
+      <div onClick={e=>e.stopPropagation()} className="bg-white rounded-2xl max-w-2xl w-full max-h-[82vh] flex flex-col text-left">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100">
+          <div className="flex gap-1 bg-stone-100 rounded-lg p-0.5 text-sm">
+            {[["terms","Terms of Service"],["privacy","Privacy Policy"]].map(([k,l])=><button key={k} onClick={()=>setOpen(k)} className={`rounded-md px-3 py-1.5 ${open===k?"bg-white shadow text-stone-800 font-medium":"text-stone-500"}`}>{l}</button>)}
+          </div>
+          <button onClick={()=>setOpen(null)} className="text-stone-400 hover:text-stone-600"><X className="w-5 h-5"/></button>
+        </div>
+        <div className="overflow-y-auto px-6 py-4 pb-8">
+          <p className="text-[11px] text-stone-400">Last updated July 2026 · Contact: support@shippingcloud.net</p>
+          {open==="terms"&&<>
+            <H>1. The service</H><P>ShippingCloud (operated by Freightwire) is software for quoting, purchasing, and managing parcel shipping. We are a software platform and shipping reseller — not a carrier. Transportation is performed by carriers (e.g. FedEx, DHL) under their own service terms, tariffs, and liability limits, which govern the physical handling of every shipment.</P>
+            <H>2. Accounts</H><P>You're responsible for activity under your login, for keeping credentials confidential, and for the accuracy of shipment details you submit. You must have the right to ship what you ship; items prohibited or restricted by carrier rules or applicable law may not be tendered through the platform.</P>
+            <H>3. Rates & billing</H><P>Quoted rates are based on the details you provide. Carriers may adjust charges after delivery (dimensional reweighs, address corrections, residential surcharges, and similar), and adjusted amounts are your responsibility. Rate estimates shown before purchase are estimates until a label is issued. Fees owed to us are due as invoiced; unpaid balances may result in suspension.</P>
+            <H>4. Delivery estimates</H><P>Transit times and delivery dates shown anywhere in the platform (including at your store's checkout) are estimates, not guarantees, except where a carrier's own money-back service commitment applies.</P>
+            <H>5. Claims & refunds</H><P>Loss, damage, and service-failure claims are governed by the carrier's terms and limits. We'll assist with filing where we can, but carrier decisions control the outcome.</P>
+            <H>6. Acceptable use</H><P>No unlawful use, no interference with the service, no attempts to access other customers' data, and no reselling of the platform without a written agreement with us.</P>
+            <H>7. Disclaimers & liability</H><P>The service is provided "as is." To the maximum extent permitted by law, we disclaim implied warranties, and our total liability for any claim is limited to the fees you paid us for the shipment or service giving rise to the claim. We are not liable for indirect, incidental, or consequential damages, or for carrier performance.</P>
+            <H>8. Termination</H><P>You may stop using the service at any time. We may suspend or terminate accounts for breach of these terms, non-payment, or misuse, with notice where practical.</P>
+            <H>9. Changes & governing law</H><P>We may update these terms; continued use after an update is acceptance. These terms are governed by the laws of the State of Utah, USA. If any provision is unenforceable, the rest remain in effect.</P>
+          </>}
+          {open==="privacy"&&<>
+            <H>1. What we collect</H><P>Account details (name, email, company), shipment data you enter or import (including recipient names and addresses), order data from stores you connect (e.g. Shopify), product catalog data, and usage/technical logs needed to run the service.</P>
+            <H>2. How we use it</H><P>To quote and purchase shipping, print labels and documents, sync orders, send shipment notifications, calculate checkout rates, provide support, and improve the service. If you use the in-app assistant, the messages you send it (plus limited, non-personal workspace context) are processed to generate its responses.</P>
+            <H>3. Who we share it with</H><P>Service providers who make the platform work: shipping carriers and our logistics partners (to move your packages), cloud hosting and database providers, an email delivery provider (for notifications you trigger), payment processing when applicable, and the AI provider powering the in-app assistant. Each receives only what its function requires. We do not sell personal information.</P>
+            <H>4. Recipient data</H><P>When you ship to someone, you're providing us their delivery details on your authority. We use recipient data only to perform the shipment and related notifications — never for marketing to recipients.</P>
+            <H>5. Retention & your choices</H><P>We keep data while your account is active and as needed for legal, tax, and dispute purposes. You can export your data from within the platform, and you can request deletion of your account data by emailing support@shippingcloud.net.</P>
+            <H>6. Security</H><P>Data is encrypted in transit, access is credentialed and scoped, and secrets are stored server-side. No system is perfectly secure, but we take reasonable measures appropriate to the data we handle.</P>
+            <H>7. Changes</H><P>We'll update this policy as the service evolves; material changes will be reflected on this page with a new date.</P>
+          </>}
+        </div>
+      </div>
+    </div>}
+  </>);
+}
+
 function Landing({onAuth}){
   const pageFromHash=()=>{const h=(window.location.hash||"").replace("#","");return (h==="about"||h==="contact")?h:"home";};
   const [page,setPageState]=useState(pageFromHash());
@@ -1496,6 +1591,7 @@ function Landing({onAuth}){
     <div className="max-w-6xl mx-auto px-5 py-10 text-center">
       <div className="pt-6 border-t border-white/10 text-[12px] text-stone-600 flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
         <span>© {new Date().getFullYear()} ShippingCloud.</span>
+        <LegalLinks/>
         <span>FedEx® and DHL® are trademarks of their respective owners; shipping is provided under partner carrier agreements.</span>
       </div>
     </div>
@@ -2514,6 +2610,7 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
           <p className="text-[11px] text-stone-400">Emails the buyer a tracking link or a printable label PDF. Logged under Settings → Email automation.</p>
         </div>
         <div className="flex justify-end gap-2 pt-1">
+          <button onClick={()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);printPackingSlips([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||"ShippingCloud shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:(shipStatus&&shipStatus.tracking)||"",service:""}]);}} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-200"><FileText className="w-4 h-4"/>Packing slip</button>
           <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-200 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-300"><Plus className="w-4 h-4"/>New shipment</button>
           <button onClick={saveDraft} className={`flex items-center gap-1.5 text-sm rounded px-4 py-2 font-medium ${saved?"bg-emerald-600 text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{saved?<><Check className="w-4 h-4"/>Saved to drafts</>:<><FileText className="w-4 h-4"/>Save draft</>}</button>
         </div>
@@ -2896,6 +2993,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
           <div className="flex-1"/>
           {rateSrc.live?<span className="text-[11px] text-emerald-600 flex items-center gap-1"><Wifi className="w-3.5 h-3.5"/>Live England rates</span>:canBook?<span className="text-[11px] text-stone-400">{rateSrc.loading?"Loading rates…":""}</span>:<span className="text-[11px] text-amber-600">Demo rates — connect England</span>}
           <button onClick={()=>goShip(o)} className="text-sm bg-stone-200 text-stone-700 rounded px-3 py-1.5 font-medium hover:bg-stone-300 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/>Open in Ship tab</button>
+          <button onClick={()=>printPackingSlips([slipFromOrder(o,settings&&settings.sender)])} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing slip</button>
         </div>
         {oneRate&&<div className={`text-[12px] rounded px-3 py-2 flex items-center gap-2 ${orBox?"bg-[#E6F4FF] text-[#0072BE] border border-[#99D6FF]":"bg-amber-50 text-amber-700 border border-amber-200"}`}><Boxes className="w-4 h-4 shrink-0"/>{orBox?<span>Qualifies for <b>{orBox.name}</b> — pricing this box only.</span>:<span>Set a box size within One Rate limits (≤2,200 cu in, ≤50 lb).</span>}</div>}
         {(o.shippingService||o.source)&&<div className="text-[12px] text-stone-500 flex items-center gap-1.5 -mt-1"><Truck className="w-3.5 h-3.5 text-stone-400"/>Buyer selected <b className="text-stone-700">{o.shippingService||"Standard"}</b>{o.source?` from ${o.source}`:""} — match it or pick the best rate below.</div>}
@@ -3197,6 +3295,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels}
                 <Info k="Tracking" v={<a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" className="text-[#0086E0] underline">{s.tracking} ↗</a>}/>
                 <Info k="To" v={`${s.recipient?.name||""}${s.recipient?.company?" · "+s.recipient.company:""} — ${s.recipient?.address1||""}, ${s.recipient?.city||""}, ${s.recipient?.state||""} ${s.recipient?.zip||""}`}/>
                 <Info k="Reference" v={s.reference||"—"}/>
+                <div className="flex items-end"><button onClick={(e)=>{e.stopPropagation();printPackingSlips([slipFromShipment(s)]);}} className="text-[12px] bg-stone-100 border border-stone-200 text-stone-700 rounded px-2.5 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing slip</button></div>
                 <Info k="Created" v={`${s.date}${s.time?" · "+s.time:""}`}/>
                 <Info k="From ZIP" v={s.fromZip}/>
                 <Info k="Packages" v={`${s.pieces?.length||1} pkg · ${s.weight} lb total`}/>
@@ -3729,16 +3828,16 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped,ba
           else picked=qs.slice().sort((a,b)=>a.cost-b.cost)[0];
         }
       }catch(e){}
-      if(!picked){ out.push({name:o.name,ok:false,error:"No rate returned"}); setResults([...out]); continue; }
+      if(!picked){ out.push({o,name:o.name,ok:false,error:"No rate returned"}); setResults([...out]); continue; }
       const need=[]; if(!o.customer&&!o.company)need.push("name"); if(String(o.phone||"").replace(/\D/g,"").length<10)need.push("phone"); if(!o.email)need.push("email");
-      if(need.length){ out.push({name:o.name,ok:false,error:"Missing "+need.join(", ")}); setResults([...out]); continue; }
+      if(need.length){ out.push({o,name:o.name,ok:false,error:"Missing "+need.join(", ")}); setResults([...out]); continue; }
       const pkB=packs[o.id];
       const res=await bookOrderLabel(o,{quote:picked,weightLb:(pkB&&pkB.totalWt)||o.weight,box:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:undefined,residential:true,sender:settings.sender},eng,settings.sender);
       if(res&&res.ok){
         const carrier=carrierOf(picked.label);
-        onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:originZip,toZip:o.zip,weight:(pkB&&pkB.totalWt)||o.weight,pieces:pkB?pkB.pieces:undefined,dims:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,bookNumber:res.bookNumber},o.id);
-        out.push({name:o.name,ok:true,tracking:res.tracking,service:picked.label,pdf:res.labelPdfBase64||null});
-      } else out.push({name:o.name,ok:false,error:(res&&res.error)||"Booking failed"});
+        onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:originZip,toZip:o.zip,weight:(pkB&&pkB.totalWt)||o.weight,pieces:pkB?pkB.pieces:undefined,dims:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,items:o.items||"",bookNumber:res.bookNumber},o.id);
+        out.push({o,name:o.name,ok:true,tracking:res.tracking,service:picked.label,pdf:res.labelPdfBase64||null});
+      } else out.push({o,name:o.name,ok:false,error:(res&&res.error)||"Booking failed"});
       setResults([...out]);
     }
     logBatch(out.filter(r=>r.ok).length,out.filter(r=>!r.ok).length);
@@ -3882,6 +3981,7 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped,ba
         <span className="text-stone-500 hidden sm:inline"><b className="text-stone-800">{Math.round(totals.wt*10)/10}</b> lb</span>
         <span className="text-stone-500">est. <b className="text-stone-800 font-mono">{money(totals.sell)}</b></span>
         {svcMixSel.length>0&&<span className="hidden lg:flex items-center gap-1.5">{svcMixSel.map(([l,n])=><Badge key={l} tone="stone">{l.replace(/^FedEx /,"")} ×{n}</Badge>)}</span>}
+        <button onClick={()=>printPackingSlips(rows.map(r=>slipFromOrder(r.o,settings.sender)))} disabled={rows.length===0} title="Print a packing slip for every selected order" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5"><FileText className="w-4 h-4"/>Packing slips</button>
         <button onClick={run} disabled={running||rows.length===0} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-semibold hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{running?<Loader2 className="w-4 h-4 animate-spin"/>:<Printer className="w-4 h-4"/>}{running?`Booking ${progress.n}/${progress.total}…`:`Create ${rows.length} label${rows.length!==1?"s":""}`}</button>
       </div>
       {done>0&&<div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{done} shipment{done!==1?"s":""} recorded — see the Shipments tab. Connect your carrier account for live labels.</div>}
@@ -3892,6 +3992,7 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped,ba
           {results.filter(r=>!r.ok).length>0&&<Badge tone="rose">{results.filter(r=>!r.ok).length} failed</Badge>}
           <div className="flex-1"/>
           {results.some(r=>r.ok&&r.pdf)&&<button onClick={printAll} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE] flex items-center gap-1.5"><Printer className="w-4 h-4"/>Print all labels</button>}
+        {results.some(r=>r.ok)&&<button onClick={()=>printPackingSlips(results.filter(r=>r.ok&&r.o).map(r=>slipFromOrder(r.o,settings.sender)))} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-4 h-4"/>Print packing slips</button>}
           <button onClick={()=>setResults([])} className="text-stone-300 hover:text-stone-600"><X className="w-4 h-4"/></button>
         </div>
         {results.map((r,i)=>(<div key={i} className="flex items-center gap-2 text-[13px]">
@@ -4942,7 +5043,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
       const res=await bookOrderLabel(o,{quote:picked,weightLb:wt,residential:true,sender:settings.sender},eng,settings.sender);
       if(res&&res.ok){
         const carrier=/dhl/i.test(picked.label)?"DHL":"FedEx";
-        onShipped&&onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:senderZip,toZip:o.zip,weight:wt,dims:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,bookNumber:res.bookNumber},o.id);
+        onShipped&&onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:senderZip,toZip:o.zip,weight:wt,dims:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,items:o.items||"",bookNumber:res.bookNumber},o.id);
         rows.push({name:o.name,ok:true,service:picked.label,tracking:res.tracking,pdf:res.labelPdfBase64||null});
       } else rows.push({name:o.name,ok:false,error:(res&&res.error)||"Booking failed"});
       setApResults({rows:[...rows],heldN});

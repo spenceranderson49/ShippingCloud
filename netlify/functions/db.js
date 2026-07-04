@@ -216,10 +216,105 @@ exports.handler = async (event) => {
       if (auth.role !== "admin") {
         delete stores.users;
         // hand each customer ONLY their own feature flags (admin manages the full map)
-        const allFlags = (Array.isArray(r.data) ? r.data : []).find((row) => row && row.key === "featureFlags");
+        const rows = Array.isArray(r.data) ? r.data : [];
+        const allFlags = rows.find((row) => row && row.key === "featureFlags");
         stores.myFeatures = (allFlags && allFlags.value && allFlags.value[auth.uid]) || {};
+        // fresh access facts so company-admin approval works without re-login
+        const usersRow = rows.find((row) => row && row.key === "users");
+        const allUsers = (usersRow && Array.isArray(usersRow.value)) ? usersRow.value : [];
+        const me = allUsers.find((x) => x && x.id === auth.uid) || null;
+        stores.myAccess = { companyAdmin: !!(me && me.companyAdmin), clientId: (me && me.clientId) || null };
+        if (me && me.companyAdmin && me.clientId) {
+          stores.companyUsers = allUsers
+            .filter((x) => x && x.role !== "admin" && x.clientId === me.clientId)
+            .map((x) => ({ id: x.id, name: x.name, email: x.email, status: x.status || "active", companyAdmin: !!x.companyAdmin, lastLogin: x.lastLogin || "\u2014" }));
+          const fmap = (allFlags && allFlags.value) || {};
+          const cf = {}; stores.companyUsers.forEach((m) => { cf[m.id] = fmap[m.id] || {}; });
+          stores.companyFlags = cf;
+        }
       }
       return J({ ok: true, stores });
+    }
+
+    /* ── company admin: customers flagged companyAdmin manage logins for their own company only ── */
+    if (action === "requestCompanyAdmin" || String(action).startsWith("company")) {
+      const curU = await getStore("users");
+      const allUsers = (curU.ok && Array.isArray(curU.value)) ? curU.value : [];
+      const me = allUsers.find((x) => x && x.id === auth.uid) || null;
+      if (!me || me.role === "admin") {
+        if (action !== "requestCompanyAdmin" || !me) return J({ ok: false, error: "Not available for this login." });
+      }
+
+      if (action === "requestCompanyAdmin") {
+        if (me.companyAdmin) return J({ ok: true, already: true });
+        const cur = await getStore("companyAdminRequests");
+        const list = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+        if (list.some((r2) => r2 && r2.uid === auth.uid)) return J({ ok: true, pending: true });
+        list.push({ id: "car" + Date.now(), uid: auth.uid, name: me.name || "", email: me.email || "", clientId: me.clientId || null, date: new Date().toLocaleDateString() });
+        const w = await putStores({ companyAdminRequests: list });
+        if (!w.ok) return J({ ok: false, error: "Could not file the request \u2014 try again." });
+        return J({ ok: true, pending: true });
+      }
+
+      // everything below requires an ACTIVE company admin
+      if (!me.companyAdmin || (me.status && me.status !== "active") || !me.clientId) return J({ ok: false, error: "Company admin access required." });
+      const sameCompany = (u2) => u2 && u2.role !== "admin" && u2.clientId === me.clientId;
+
+      if (action === "companyCreateUser") {
+        const name = String(body.name || "").trim().slice(0, 80);
+        const email = String(body.email || "").trim().toLowerCase().slice(0, 120);
+        const password = String(body.password || "");
+        if (!name || !/.+@.+\..+/.test(email) || password.length < 4) return J({ ok: false, error: "Enter a name, valid email, and password (4+ characters)." });
+        if (allUsers.some((x) => x && String(x.email || "").toLowerCase() === email)) return J({ ok: false, error: "That email already has a login." });
+        if (allUsers.length >= 2000) return J({ ok: false, error: "User limit reached." });
+        const nu = { id: "u" + Date.now() + Math.floor(Math.random() * 1000), name, email, role: "customer", clientId: me.clientId, status: "active", password, lastLogin: "\u2014", createdBy: auth.uid };
+        const merged = mergeUsersForWrite([...allUsers, nu], allUsers);
+        const w = await putStores({ users: merged });
+        if (!w.ok) return J({ ok: false, error: "Could not create the login \u2014 try again." });
+        return J({ ok: true, user: { id: nu.id, name, email, status: "active", companyAdmin: false, lastLogin: "\u2014" } });
+      }
+
+      if (action === "companySetFlags") {
+        const uid = String(body.uid || "");
+        const target = allUsers.find((x) => x && x.id === uid);
+        if (!sameCompany(target)) return J({ ok: false, error: "That login isn\u2019t in your company." });
+        const raw = (body.flags && typeof body.flags === "object") ? body.flags : {};
+        const flags = {}; let n = 0;
+        for (const k of Object.keys(raw)) { if (n >= 64) break; if (typeof k === "string" && k.length <= 64) { flags[k] = raw[k] === true; n++; } }
+        const cur = await getStore("featureFlags");
+        const map = (cur.ok && cur.value && typeof cur.value === "object") ? cur.value : {};
+        map[uid] = flags;
+        const w = await putStores({ featureFlags: map });
+        if (!w.ok) return J({ ok: false, error: "Could not save \u2014 try again." });
+        return J({ ok: true, uid, flags });
+      }
+
+      if (action === "companySetActive") {
+        const uid = String(body.uid || "");
+        if (uid === auth.uid) return J({ ok: false, error: "You can\u2019t deactivate your own login." });
+        const target = allUsers.find((x) => x && x.id === uid);
+        if (!sameCompany(target)) return J({ ok: false, error: "That login isn\u2019t in your company." });
+        const status = body.active ? "active" : "disabled";
+        const merged = mergeUsersForWrite(allUsers.map((x) => x && x.id === uid ? { ...x, status } : x), allUsers);
+        const w = await putStores({ users: merged });
+        if (!w.ok) return J({ ok: false, error: "Could not save \u2014 try again." });
+        return J({ ok: true, uid, status });
+      }
+
+      if (action === "companySetPassword") {
+        const uid = String(body.uid || "");
+        const password = String(body.password || "");
+        if (password.length < 4) return J({ ok: false, error: "Password must be at least 4 characters." });
+        const target = allUsers.find((x) => x && x.id === uid);
+        if (!sameCompany(target)) return J({ ok: false, error: "That login isn\u2019t in your company." });
+        // mergeUsersForWrite never rehashes existing users, so hash explicitly here
+        const merged = allUsers.map((x) => x && x.id === uid ? { ...x, password: "", passHash: hashPw(password) } : x);
+        const w = await putStores({ users: merged });
+        if (!w.ok) return J({ ok: false, error: "Could not save \u2014 try again." });
+        return J({ ok: true, uid });
+      }
+
+      return J({ ok: false, error: "Unknown company action." });
     }
 
     if (action === "putMany") {

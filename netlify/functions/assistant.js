@@ -7,6 +7,71 @@ const MAX_MSGS = 16;      // history window sent to the model
 const MAX_CHARS = 4000;   // per-message cap
 const MAX_TOKENS = 700;   // reply cap — keeps answers tight and cost low
 
+/* Copilot tools: Claude proposes actions; the BROWSER executes them against local
+   data and the human always presses the final "Create labels" button. The server
+   never touches orders — it only relays which actions Claude chose. */
+const TOOLS = [
+  {
+    name: "batch_orders",
+    description: "Stage a batch in the Batch tab: filter the open orders, select every match, and optionally force a shipping service for them. Use when the person asks to batch/select/queue orders by any criteria (product, SKU, state, zone, source, weight, order value, age). This only SELECTS — the person reviews and clicks Create labels themselves.",
+    input_schema: { type: "object", properties: {
+      productContains: { type: "string", description: "Match orders whose items/product text contains this (case-insensitive)" },
+      skus: { type: "array", items: { type: "string" }, description: "Match these exact SKUs" },
+      states: { type: "array", items: { type: "string" }, description: "2-letter destination states" },
+      zones: { type: "array", items: { type: "string" }, description: "Shipping zones as numbers in strings, e.g. [\"2\",\"3\"]" },
+      sources: { type: "array", items: { type: "string" }, description: "Order sources, e.g. Shopify, Manual, CSV import" },
+      weightMin: { type: "number" }, weightMax: { type: "number" },
+      totalMin: { type: "number" }, totalMax: { type: "number" },
+      ageMaxDays: { type: "number", description: "Only orders at most this many days old" },
+      ageMinDays: { type: "number", description: "Only orders at least this many days old (use for stale/old orders)" },
+      service: { type: "string", description: "Optional service to force for the selected orders, e.g. FedEx - 2Day, ANY - Cheapest Ground, DHL - Express Worldwide" }
+    } }
+  },
+  {
+    name: "create_rule",
+    description: "Create a new Autopilot automation rule (if CONDITION then ship with SERVICE). It saves into the shared Autopilot pipeline. Use when the person describes an if-this-then-that shipping rule.",
+    input_schema: { type: "object", required: ["property","operator","value","service"], properties: {
+      name: { type: "string", description: "Short human name for the rule" },
+      property: { type: "string", description: "One of: To Postal, To State, To Country, To City, Recipient Name, Zone, Item Count, Item SKUs, Item Name, Item Weight (oz), Order Value, Package Weight, Cubic Volume, Requested Service, Store / Source, Tag Names, Order Note, Status" },
+      operator: { type: "string", description: "Text/list ops: IN, NOT IN, =, != ; number ops: =, !=, >, <, >=, <=" },
+      value: { type: "string", description: "Comparison value; comma-separate lists" },
+      service: { type: "string", description: "Service to set, e.g. FedEx - Priority Overnight, ANY - Cheapest Ground, DHL - Express Worldwide" }
+    } }
+  },
+  {
+    name: "apply_autopilot",
+    description: "Run the person's enabled Autopilot rules across the open orders in the Batch tab: routes services and applies holds. Use when asked to run autopilot, apply my rules, or after creating a rule they want used right away.",
+    input_schema: { type: "object", properties: {} }
+  },
+  {
+    name: "prefill_shipment",
+    description: "Open the Ship tab with the form pre-filled so the person can review, quote, and book one shipment. Use when they describe a single package to send (\"ship 5 lb to Jane in Austin\", \"start a label to Acme Corp\"). You can name a saved contact and it will be looked up. Never claim you booked it \u2014 they still quote and click Buy.",
+    input_schema: { type: "object", properties: {
+      contactName: { type: "string", description: "Name of a saved address-book contact to load as the recipient" },
+      name: { type: "string" }, company: { type: "string" },
+      address1: { type: "string" }, city: { type: "string" }, state: { type: "string" }, zip: { type: "string" },
+      phone: { type: "string" }, email: { type: "string" },
+      weight: { type: "number", description: "Package weight in pounds" },
+      residential: { type: "boolean" },
+      reference: { type: "string", description: "Reference note for the label" }
+    } }
+  },
+  {
+    name: "add_address",
+    description: "Save a contact to the address book. Use when the person dictates an address to remember (\"save Acme Corp, 123 Main St, Austin TX 78701\").",
+    input_schema: { type: "object", required: ["name"], properties: {
+      name: { type: "string" }, company: { type: "string" },
+      address1: { type: "string" }, city: { type: "string" }, state: { type: "string" }, zip: { type: "string" },
+      phone: { type: "string" }, email: { type: "string" }
+    } }
+  },
+  {
+    name: "go_to_tab",
+    description: "Navigate the app to a tab. Valid: ship, orders, shipments, drafts, returns, pickups, batch, invoices, rules (Autopilot), addresses, scan, dashboard, settings.",
+    input_schema: { type: "object", required: ["tab"], properties: { tab: { type: "string" } } }
+  }
+];
+
 const SYSTEM = `You are Claude, made by Anthropic, serving as the in-app assistant for ShippingCloud (shippingcloud.net) — a multi-carrier shipping platform with enterprise FedEx and DHL rates, built and supported by shipping people.
 
 What the platform does, by tab:
@@ -30,6 +95,13 @@ How to behave:
 - Give genuinely useful shipping advice (packaging, service selection, residential vs commercial, dimensional weight, insurance) when asked.
 - NEVER invent prices, discounts, or rate numbers. Real rates come from quoting in the Ship tab. For pricing, account, or billing specifics, direct people to support: (801) 555-0123 or support@shippingcloud.net.
 - Never discuss internal systems, credentials, API keys, other customers, or how the platform is built. Politely steer off-topic conversations back to shipping.
+You are also a COPILOT with tools that act on the app:
+- batch_orders stages a selection in the Batch tab; create_rule writes an Autopilot rule; apply_autopilot runs the rules; prefill_shipment opens a pre-filled Ship form; add_address saves a contact; go_to_tab navigates.
+- Use tools eagerly when the person asks you to DO something ("batch the camp mugs", "select everything going to Texas under 5 lb", "make a rule that orders over $500 get overnight"). Prefer acting over explaining how to click.
+- You STAGE work — you never print or book labels. After batch_orders or apply_autopilot, tell the person to review the selection and hit Create labels themselves. Never claim a label was created.
+- The app context message lists the products, SKUs, states, zones, sources and saved address-book names that actually exist right now — match the person’s words to those real values (e.g. "mugs" → the product containing "Camp Mug"). If nothing plausibly matches, say so instead of guessing.
+- Combine tools when natural: create_rule then apply_autopilot when someone says "make a rule and run it".
+- Keep the accompanying text short: one line about what you staged and what to check.
 - If the person is exploring the public demo, everything they see is sample data — encourage them to click around, and mention they can create a real account from the banner up top when ready.`;
 
 exports.handler = async (event) => {
@@ -53,16 +125,25 @@ exports.handler = async (event) => {
     : body.context === "demo" ? "a visitor exploring the public demo (everything they see is sample data)"
     : "a signed-in customer";
 
+  let ctx = "";
+  try {
+    if (body.appContext && typeof body.appContext === "object") {
+      const raw = JSON.stringify(body.appContext);
+      if (raw.length <= 6000) ctx = "\n\nCurrent app context (live, from the person’s browser): " + raw;
+    }
+  } catch (e) {}
+
   try {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: MODEL, max_tokens: MAX_TOKENS, system: SYSTEM + "\n\nThe person you are talking to right now is " + who + ".", messages: msgs })
+      body: JSON.stringify({ model: MODEL, max_tokens: MAX_TOKENS, tools: TOOLS, system: SYSTEM + "\n\nThe person you are talking to right now is " + who + "." + ctx, messages: msgs })
     });
     const data = await r.json().catch(() => null);
     if (!r.ok || !data) return J(200, { ok: false, error: (data && data.error && data.error.message) || ("Assistant error (" + r.status + ")") });
     const text = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("\n").trim();
-    return J(200, { ok: true, text: text || "Hmm, I came back empty — try asking that another way?" });
+    const actions = (data.content || []).filter(c => c.type === "tool_use").map(c => ({ tool: c.name, input: c.input || {} })).slice(0, 5);
+    return J(200, { ok: true, text: text || (actions.length ? "On it "+String.fromCharCode(8212) : "Hmm, I came back empty — try asking that another way?"), actions });
   } catch (e) {
     return J(200, { ok: false, error: "Couldn't reach the assistant just now — give it another try in a moment." });
   }

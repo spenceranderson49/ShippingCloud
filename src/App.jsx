@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v119";
+const BUILD_TAG="addr-v120";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -1841,7 +1841,17 @@ function AppInner(){
   },[]);
   const brand={...DEFAULT_BRAND,...(settings.brand||{})};
   const client=clients.find(c=>c.id===clientId)||clients[0];
-  const logEmail=(e)=>setEmails(p=>[{id:"e"+Date.now()+Math.random(),date:new Date().toLocaleString(),status:"sent",...e},...p]);
+  const logEmail=(e)=>{
+    const id="e"+Date.now()+Math.random();
+    const canSend=CLOUD.mode==="cloud"&&CLOUD.token&&!isDemo&&e&&/.+@.+\..+/.test(String(e.to||""));
+    setEmails(p=>[{id,date:new Date().toLocaleString(),status:canSend?"sending":"logged",...e},...p]);
+    if(!canSend)return;
+    fetch(fn("email"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:CLOUD.token,to:e.to,subject:e.subject||"Update on your shipment",template:{title:e.subject||"Your order is on the way",line:e.body||"",tracking:e.tracking||"",service:e.service||"",eta:e.eta||""}})})
+      .then(r=>r.json()).then(d=>{
+        const st=d&&d.sent?"sent":(d&&d.configured===false?"logged":"failed");
+        setEmails(p=>p.map(x=>x.id===id?{...x,status:st,err:(d&&!d.ok&&d.error)||undefined}:x));
+      }).catch(()=>setEmails(p=>p.map(x=>x.id===id?{...x,status:"failed"}:x)));
+  };
   const addLedger=(entry)=>setLedger(l=>[{id:"l"+Date.now()+Math.random(),date:new Date().toLocaleDateString(),...entry},...l]);
 
   const goShip=(pf)=>{setPrefill(pf);setTab("ship");};

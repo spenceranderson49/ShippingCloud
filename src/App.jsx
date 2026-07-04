@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v113";
+const BUILD_TAG="addr-v115";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -960,6 +960,28 @@ const isScratch=(key)=>String(key).indexOf("ship.")===0;
 const SCRATCH_KEYS=["ship.receiver","ship.pieces","ship.reference","ship.invoiceNo","ship.poNo","ship.insurance","ship.residential"];
 const clearScratchFor=(uid)=>SCRATCH_KEYS.forEach(k=>lsDel("u/"+uid+"/"+k));
 
+/* Copilot: does an order match a Claude-staged batch filter? Pure, testable. */
+function batchCmdMatch(o,f,zone){
+  const has=(arr)=>Array.isArray(arr)&&arr.length;
+  if(f.productContains&&!String(o.items||o.product||"").toLowerCase().includes(String(f.productContains).toLowerCase()))return false;
+  if(has(f.skus)&&!f.skus.map(x=>String(x).toLowerCase()).includes(String(o.sku||"").toLowerCase()))return false;
+  if(has(f.states)&&!f.states.map(x=>String(x).toUpperCase()).includes(String(o.state||"").toUpperCase()))return false;
+  if(has(f.zones)&&!f.zones.map(String).includes(String(zone)))return false;
+  if(has(f.sources)&&!f.sources.map(x=>String(x).toLowerCase()).includes(String(o.source||"Manual").toLowerCase()))return false;
+  const w=+o.weight||0,t=parseFloat(o.total||0);
+  if(f.weightMin!=null&&w<+f.weightMin)return false;
+  if(f.weightMax!=null&&w>+f.weightMax)return false;
+  if(f.totalMin!=null&&t<+f.totalMin)return false;
+  if(f.totalMax!=null&&t>+f.totalMax)return false;
+  if(f.ageMaxDays!=null||f.ageMinDays!=null){
+    const tt=Date.parse(o.date||"");if(isNaN(tt))return false;
+    const a=Math.max(0,Math.floor((Date.now()-tt)/86400000));
+    if(f.ageMaxDays!=null&&a>+f.ageMaxDays)return false;
+    if(f.ageMinDays!=null&&a<+f.ageMinDays)return false;
+  }
+  return true;
+}
+
 /* ════════ PUBLIC DEMO MODE ════════
    "Take a peek" on the landing page drops visitors into the real app as a demo
    customer with seeded sample data. The demo session has NO cloud token, so
@@ -1318,11 +1340,37 @@ function Landing({onAuth}){
         <button onClick={()=>onAuth("request")} className="mt-6 border border-amber-400/50 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-semibold rounded-lg px-6 py-3 inline-flex items-center gap-2"><Cog className="w-4 h-4"/>Get started</button>
       </div>
     </div>
+    {/* built-in Claude */}
+    <div className="max-w-6xl mx-auto px-5 pb-4">
+      <div className="rounded-2xl p-8 sm:p-12 border border-[#D97757]/30 bg-gradient-to-br from-[#D97757]/12 via-[#faf3ef]/[0.04] to-transparent">
+        <div className="flex items-center gap-2 text-[#E8927C] font-semibold text-sm"><Sparkles className="w-4 h-4"/>Built-in AI · powered by Claude</div>
+        <h2 className="mt-3 text-3xl sm:text-4xl font-bold text-white leading-tight max-w-3xl">Let Claude do the shipping busywork for you.</h2>
+        <p className="mt-4 text-stone-300 max-w-2xl text-[15px] leading-relaxed">ShippingCloud has Anthropic’s Claude built right in — not a canned help bot, but an assistant that actually works your account. Ask in plain English and it sets things up for you to approve.</p>
+        <div className="mt-8 grid sm:grid-cols-3 gap-4 max-w-4xl">
+          <div className="bg-white/[0.03] border border-white/10 rounded-xl p-5">
+            <div className="flex items-center gap-2 text-white font-semibold"><Layers className="w-4 h-4 text-[#E8927C]"/>Batch by voice</div>
+            <p className="mt-2 text-[13px] text-stone-400 leading-relaxed">“Batch every Shopify order under 5 lb to Texas as cheapest ground.” Claude filters, selects, and stages the whole run.</p>
+          </div>
+          <div className="bg-white/[0.03] border border-white/10 rounded-xl p-5">
+            <div className="flex items-center gap-2 text-white font-semibold"><Zap className="w-4 h-4 text-[#E8927C]"/>Rules in plain English</div>
+            <p className="mt-2 text-[13px] text-stone-400 leading-relaxed">“Orders over $500 ship Priority Overnight.” It writes the automation rule into Autopilot and can run it on the spot.</p>
+          </div>
+          <div className="bg-white/[0.03] border border-white/10 rounded-xl p-5">
+            <div className="flex items-center gap-2 text-white font-semibold"><MessageCircle className="w-4 h-4 text-[#E8927C]"/>Answers, instantly</div>
+            <p className="mt-2 text-[13px] text-stone-400 leading-relaxed">“Start a label to Acme in Austin,” “which orders are going stale?” — it fills forms and knows your shipping cold.</p>
+          </div>
+        </div>
+        <div className="mt-7 flex flex-wrap items-center gap-4">
+          <button onClick={enterDemo} className="inline-flex items-center gap-2 bg-white text-neutral-950 font-semibold rounded-lg px-6 py-3 hover:bg-stone-200"><Eye className="w-4 h-4"/>Try it in the demo</button>
+          <span className="inline-flex items-center gap-1.5 text-[13px] text-stone-400"><ShieldCheck className="w-4 h-4 text-[#E8927C]"/>It stages, you approve — Claude never prints a label without you.</span>
+        </div>
+      </div>
+    </div>
     {/* partner, not just a platform */}
-    <div className="max-w-6xl mx-auto px-5 pb-16">
+    <div className="max-w-6xl mx-auto px-5 pb-16 pt-8">
       <div className="bg-gradient-to-br from-[#0086E0]/15 to-transparent border border-[#0086E0]/25 rounded-2xl p-8 sm:p-10 text-center">
-        <h2 className="text-2xl sm:text-3xl font-bold text-white leading-snug">Talk to real people. No AI chatbots. Ever.</h2>
-        <p className="mt-3 text-stone-400 max-w-xl mx-auto">Sick of reps who vanish and week-old support tickets? One call covers your shipping and your tech — a real person who knows your account picks up.</p>
+        <h2 className="text-2xl sm:text-3xl font-bold text-white leading-snug">Real people answer the phone.</h2>
+        <p className="mt-3 text-stone-400 max-w-xl mx-auto">Claude handles the busywork inside the app — but when you need a human, you get one. No week-old tickets, no runaround. One call covers your shipping and your tech, from someone who knows your account.</p>
         <a href={"tel:"+CONTACT_PHONE_TEL} className="mt-6 inline-flex items-center gap-2 bg-white text-neutral-950 font-semibold rounded-lg px-6 py-3 hover:bg-stone-200"><Phone className="w-4 h-4"/>{CONTACT_PHONE}</a>
       </div>
     </div>
@@ -1519,35 +1567,51 @@ function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,set
 }
 
 /* ════════ ASSISTANT CHAT ════════ */
-function AssistantChat({who}){
+function AssistantChat({who,getContext,onAction}){
   const [open,setOpen]=useState(false);
   const [msgs,setMsgs]=useState([{role:"assistant",content:who==="demo"?"Hi, I’m Claude! Ask me anything about ShippingCloud — how a tab works, what Autopilot does, shipping advice, whatever. Everything in this demo is sample data, so click around freely.":"Hi, I’m Claude! Ask me anything about ShippingCloud — how features work, or general shipping advice."}]);
   const [input,setInput]=useState("");
   const [busy,setBusy]=useState(false);
   const endRef=React.useRef(null);
   useEffect(()=>{if(open&&endRef.current)endRef.current.scrollIntoView({behavior:"smooth"});},[msgs,open,busy]);
-  const send=async()=>{
-    const q=input.trim();if(!q||busy)return;
+  useEffect(()=>{
+    const h=(e)=>{setOpen(true);if(e&&e.detail&&e.detail.prefill)setInput(e.detail.prefill);};
+    window.addEventListener("sc-ask-claude",h);
+    return ()=>window.removeEventListener("sc-ask-claude",h);
+  },[]);
+  const send=async(forced)=>{
+    const q=String(forced!=null?forced:input).trim();if(!q||busy)return;
     const next=[...msgs,{role:"user",content:q}];
     setMsgs(next);setInput("");setBusy(true);
     try{
-      const r=await fetch("/.netlify/functions/assistant",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:next.slice(-16),context:who})});
+      const r=await fetch("/.netlify/functions/assistant",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:next.filter(m=>!m.act).slice(-16),context:who,appContext:getContext?getContext():undefined})});
       const d=await r.json().catch(()=>null);
       setMsgs(m=>[...m,{role:"assistant",content:(d&&d.ok&&d.text)||(d&&d.error)||"Couldn’t reach the assistant just now — try again in a moment."}]);
+      if(d&&d.ok&&Array.isArray(d.actions)&&d.actions.length&&onAction){
+        const outs=[];
+        for(const a of d.actions){ const res=onAction(a); if(res)outs.push(res); }
+        if(outs.length)setMsgs(m=>[...m,{role:"assistant",act:true,content:outs.join("\n")}]);
+      }
     }catch(e){setMsgs(m=>[...m,{role:"assistant",content:"Couldn’t reach the assistant just now — try again in a moment."}]);}
     setBusy(false);
   };
+  const CHIPS=who==="admin"
+    ?["Batch all Shopify orders under 5 lb as cheapest ground","Make a rule: orders over $500 ship Priority Overnight","Run my Autopilot rules","Which orders are getting stale?"]
+    :["Batch all Shopify orders under 5 lb as cheapest ground","Make a rule: orders over $500 ship Priority Overnight","Run my Autopilot rules","How does the Batch tab work?"];
   return (<>
     {open&&<div className="fixed bottom-20 right-4 sm:right-5 w-[min(92vw,370px)] h-[480px] max-h-[70vh] bg-white border border-stone-200 rounded-2xl shadow-2xl z-40 flex flex-col overflow-hidden">
       <div className="px-4 py-3 border-b border-stone-200 bg-stone-50 flex items-center gap-2">
         <span className="w-7 h-7 rounded-full bg-[#D97757] text-white flex items-center justify-center"><Sparkles className="w-3.5 h-3.5"/></span>
-        <div className="flex-1"><div className="text-sm font-semibold text-stone-800 leading-tight">Ask Claude</div><div className="text-[11px] text-stone-400 leading-tight">about ShippingCloud · answers + shipping advice</div></div>
+        <div className="flex-1"><div className="text-sm font-semibold text-stone-800 leading-tight">Ask Claude</div><div className="text-[11px] text-stone-400 leading-tight">answers, advice — and it can batch, rule &amp; route for you</div></div>
         <button onClick={()=>setOpen(false)} className="p-1 rounded hover:bg-stone-200"><X className="w-4 h-4 text-stone-500"/></button>
       </div>
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 text-sm">
         {msgs.map((m,i)=>(<div key={i} className={`flex ${m.role==="user"?"justify-end":"justify-start"}`}>
-          <div className={`max-w-[85%] rounded-2xl px-3 py-2 whitespace-pre-wrap leading-relaxed ${m.role==="user"?"bg-[#0086E0] text-white rounded-br-sm":"bg-[#faf3ef] border border-[#D97757]/20 text-stone-800 rounded-bl-sm"}`}>{m.content}</div>
+          <div className={`max-w-[85%] rounded-2xl px-3 py-2 whitespace-pre-wrap leading-relaxed ${m.act?"bg-violet-50 border border-violet-200 text-violet-900 rounded-bl-sm":m.role==="user"?"bg-[#0086E0] text-white rounded-br-sm":"bg-[#faf3ef] border border-[#D97757]/20 text-stone-800 rounded-bl-sm"}`}>{m.content}</div>
         </div>))}
+        {msgs.length<=1&&!busy&&<div className="flex flex-wrap gap-1.5 pt-1">
+          {CHIPS.map(c=><button key={c} onClick={()=>send(c)} className="text-[11px] text-left rounded-full px-2.5 py-1.5 border border-[#D97757]/30 bg-white text-[#c2410c] hover:bg-[#faf3ef]">{c}</button>)}
+        </div>}
         {busy&&<div className="flex justify-start"><div className="bg-stone-100 rounded-2xl rounded-bl-sm px-3 py-2"><Loader2 className="w-4 h-4 animate-spin text-stone-400"/></div></div>}
         <div ref={endRef}/>
       </div>
@@ -1767,6 +1831,64 @@ function AppInner(){
   const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
   const isDemo=!!(currentUser&&currentUser.id==="demo");
   const myFlags=isDemo?{pickups:true,batch:true,invoices:true,rules:true,scan:true,settings:true}:(isAdmin?{}:((featureFlags&&featureFlags[currentUser&&currentUser.id])||(CLOUD.mode==="cloud"?myFeatures:{})));
+  const [batchCmd,setBatchCmd]=useState(null);
+  const assistantContext=()=>{
+    try{
+      const open=orders.filter(o=>o.status==="unfulfilled");
+      const uniq=(arr,cap)=>Array.from(new Set(arr.filter(Boolean))).slice(0,cap||24);
+      const oz=(settings.sender&&settings.sender.zip)||client.origin;
+      return { tab, openOrders:open.length,
+        products:uniq(open.map(o=>o.items||o.product),24),
+        skus:uniq(open.map(o=>o.sku),24),
+        states:uniq(open.map(o=>(o.state||"").toUpperCase()),40),
+        zones:uniq(open.map(o=>String(zoneEst(oz,o.zip))),9),
+        sources:uniq(open.map(o=>o.source||"Manual"),8),
+        autopilotRules:(ruleset||[]).filter(r=>r.enabled).map(r=>r.name).slice(0,12),
+        addressBook:uniq((settings.addresses||[]).map(a=>a.name),30),
+        shipmentsTotal:shipments.length };
+    }catch(e){return {tab};}
+  };
+  const onAssistantAction=(a)=>{
+    try{
+      if(!a||!a.tool)return null;
+      if(a.tool==="go_to_tab"){
+        const t=String((a.input&&a.input.tab)||"");
+        if(!TABS.some(x=>x[0]===t))return "That tab isn’t available on this login.";
+        setTab(t);return "Opened "+t+".";
+      }
+      if(a.tool==="create_rule"){
+        const i=a.input||{};const meta=RULE_PROPERTIES[i.property];
+        if(!meta)return "Couldn’t create the rule — “"+(i.property||"?")+"” isn’t a rule property.";
+        const ops=RULE_OPERATORS[meta.type]||["="];const op=ops.includes(i.operator)?i.operator:ops[0];
+        const want=String(i.service||"").toLowerCase().replace(/^(fedex|dhl)\s*-?\s*/,"");
+        const svc=RULE_SERVICES.includes(i.service)?i.service:(RULE_SERVICES.find(x=>x.toLowerCase().includes(want))||"ANY - Cheapest");
+        const r={id:"r"+Date.now(),name:i.name||(i.property+" "+op+" "+i.value+" → "+svc),enabled:true,stop:false,match:"all",conditions:[{id:"c"+Date.now(),property:i.property,operator:op,value:String(i.value==null?"":i.value)}],actions:[{id:"a"+Date.now(),type:"Set Service",service:svc}]};
+        setRuleset(rs=>[...(rs||[]),r]);
+        return "Rule saved to Autopilot: "+r.name;
+      }
+      if(a.tool==="prefill_shipment"){
+        const i=a.input||{};
+        let rec={};
+        if(i.contactName){
+          const want=String(i.contactName).toLowerCase();
+          const hit=(settings.addresses||[]).find(x=>String(x.name||"").toLowerCase()===want)||(settings.addresses||[]).find(x=>String(x.name||"").toLowerCase().includes(want));
+          if(hit)rec={name:hit.name,company:hit.company,address1:hit.address1,city:hit.city,state:hit.state,zip:hit.zip,phone:hit.phone,email:hit.email};
+        }
+        ["name","company","address1","city","state","zip","phone","email"].forEach(k=>{if(i[k]!=null&&i[k]!=="")rec[k]=i[k];});
+        goShip({receiver:rec,weight:i.weight,reference:i.reference,residential:i.residential});
+        return "Ship form prefilled"+(rec.name?" for "+rec.name:"")+" — review the details, get a quote, then Buy the label.";
+      }
+      if(a.tool==="add_address"){
+        const i=a.input||{};if(!i.name)return "Give me a name to save the contact under.";
+        const adr={id:"ab"+Date.now(),name:i.name,company:i.company||"",address1:i.address1||"",city:i.city||"",state:i.state||"",zip:i.zip||"",phone:i.phone||"",email:i.email||""};
+        setSettings(st=>({...st,addresses:[adr,...(st.addresses||[])]}));
+        return "Saved "+i.name+" to your address book.";
+      }
+      if(a.tool==="apply_autopilot"){ setTab("batch"); setBatchCmd({type:"autopilot",ts:Date.now()}); return "Running your Autopilot rules on the open orders in Batch…"; }
+      if(a.tool==="batch_orders"){ setTab("batch"); setBatchCmd({type:"select",filters:a.input||{},ts:Date.now()}); return "Staged in the Batch tab — review the selection, then hit Create labels."; }
+      return null;
+    }catch(e){return "That action hit a snag — try again.";}
+  };
   const isCompanyAdmin=!isAdmin&&!isDemo&&!!(myAccess&&myAccess.companyAdmin);
   const TABS=useMemo(()=>{
     if(isAdmin)return ALL_TABS;
@@ -1794,7 +1916,7 @@ function AppInner(){
         <button onClick={()=>{lsSet("session",null);window.location.reload();}} className="bg-white/10 hover:bg-white/20 rounded px-2.5 py-1 text-xs">Exit demo</button>
       </div>}
       {!isDemo&&!isAdmin&&!adminReturn&&CLOUD.mode==="cloud"&&!fedexPrompt.seen&&<FirstRunFedEx user={currentUser} onClose={()=>setFedexPrompt({seen:true})}/>}
-      <AssistantChat who={isDemo?"demo":isAdmin?"admin":"customer"}/>
+      <AssistantChat who={isDemo?"demo":isAdmin?"admin":"customer"} getContext={assistantContext} onAction={onAssistantAction}/>
       <header className={"border-b border-stone-200 sticky z-30 bg-white/90 backdrop-blur "+((adminReturn||isDemo)?"top-9":"top-0")}>
         <div className="px-3 sm:px-4 h-14 flex items-center gap-2 sm:gap-3">
           <button onClick={()=>setNavOpen(true)} className="md:hidden p-2 -ml-1 rounded-lg hover:bg-stone-100 text-stone-600" aria-label="Menu"><Layers className="w-5 h-5"/></button>
@@ -1847,7 +1969,7 @@ function AppInner(){
           {tab==="ship"&&<Ship client={client} accounts={accounts} orders={orders} settings={settings} setSettings={setSettings} rules={rules} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders}/>}
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
           {tab==="orders"&&<Orders orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} onShipped={onShipped}/>}
-          {tab==="batch"&&<Batch orders={orders} setOrders={setOrders} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} onShipped={onShipped}/>}
+          {tab==="batch"&&<Batch orders={orders} setOrders={setOrders} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
           {tab==="shipments"&&<Shipments shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels}/>}
           {tab==="drafts"&&<Drafts drafts={drafts} setDrafts={setDrafts} goShip={goShip}/>}
           {tab==="returns"&&<Returns returns={returns} setReturns={setReturns} orders={orders} settings={settings} logEmail={logEmail}/>}
@@ -2132,6 +2254,7 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
           <h1 className="text-base font-semibold text-stone-800 flex items-center gap-2"><Package className="w-4 h-4 text-[#0086E0]"/>Create shipment</h1>
           <div className="flex items-center gap-2">
             {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded px-3 py-1.5 font-medium hover:bg-stone-200"><Calculator className="w-4 h-4"/>Quick quote</button>}
+            <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Ship "}}))} title="Describe a shipment in plain English and Claude fills the form" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded px-3 py-1.5 font-medium hover:bg-[#f5e6de]"><Sparkles className="w-4 h-4"/>Ask Claude</button>
             <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-200 text-stone-700 rounded px-3 py-1.5 font-medium hover:bg-stone-300"><Plus className="w-4 h-4"/>New shipment</button>
           </div>
         </div>
@@ -3293,9 +3416,10 @@ function Dashboard({shipments,orders,returns,goTab}){
         </div>
       </div>
 
-      <div className="grid sm:grid-cols-3 gap-3">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <button onClick={()=>goTab("orders")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><ShoppingBag className="w-4 h-4"/><span className="font-semibold">{unful} orders to ship</span></div><div className="text-[11px] text-stone-400 mt-1">Open the queue →</div></button>
         <button onClick={()=>goTab("rules")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><Zap className="w-4 h-4"/><span className="font-semibold">Run Autopilot</span></div><div className="text-[11px] text-stone-400 mt-1">Rules → labels, one click →</div></button>
+        <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude"))} className="border border-[#D97757]/30 rounded-2xl bg-[#faf3ef] p-4 text-left hover:border-[#D97757]/60 hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#c2410c]"><Sparkles className="w-4 h-4"/><span className="font-semibold">Ask Claude</span></div><div className="text-[11px] text-[#c2410c]/70 mt-1">Batch, rule &amp; route by chat →</div></button>
         <button onClick={()=>goTab("returns")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><Undo2 className="w-4 h-4"/><span className="font-semibold">{returns.length} open returns</span></div><div className="text-[11px] text-stone-400 mt-1">Manage RMAs →</div></button>
       </div>
     </div>
@@ -3306,7 +3430,7 @@ function Dashboard({shipments,orders,returns,goTab}){
 const US_STATES=["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
 const SERVICE_OPTIONS={FedEx:["FedEx Ground","FedEx Home Delivery","FedEx 2Day","FedEx Express Saver","FedEx Standard Overnight","FedEx Priority Overnight"]};
 const speedRank=(label)=>{const t=String(label||"").toLowerCase();if(/first overnight/.test(t))return 1;if(/priority overnight/.test(t))return 2;if(/standard overnight|next day/.test(t))return 3;if(/2.?day|2nd day air/.test(t))return 4;if(/express saver|3 day/.test(t))return 5;if(/home|ground/.test(t))return 7;return 6;};
-function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped}){
+function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped,batchCmd,onBatchCmdDone}){
   const pool=orders.filter(o=>o.status==="unfulfilled");
   const [sel,setSel]=useState(()=>new Set());
   const [rule,setRule]=useState("cheapest");
@@ -3431,6 +3555,24 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped}){
     setMsg("Rule saved — it now lives in Autopilot too. Hit Apply Autopilot rules to use it.");
     setTimeout(()=>setMsg(""),5000);
   };
+  useEffect(()=>{
+    if(!batchCmd)return;
+    if(batchCmd.type==="autopilot")applyAutopilot();
+    if(batchCmd.type==="select"){
+      const f=batchCmd.filters||{};
+      const hit=pool.filter(o=>batchCmdMatch(o,f,zoneOf(o)));
+      clearFilters();
+      setSel(new Set(hit.filter(o=>!holds[o.id]).map(o=>o.id)));
+      if(f.service){
+        setSvcOv(v=>{const n={...v};hit.forEach(o=>{n[o.id]=f.service;});return n;});
+        setOvWhy(w=>{const n={...w};hit.forEach(o=>{n[o.id]="Claude";});return n;});
+      }
+      setMsg(hit.length?`Claude selected ${hit.length} order${hit.length!==1?"s":""}${f.service?` · service: ${f.service}`:""} — review below, then hit Create labels.`:"Claude’s filter matched no open orders — nothing was selected.");
+      setTimeout(()=>setMsg(""),9000);
+    }
+    onBatchCmdDone&&onBatchCmdDone();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[batchCmd]);
   const toggle=id=>setSel(s=>{const n=new Set(s);n.has(id)?n.delete(id):n.add(id);return n;});
   const all=()=>setSel(s=>{const ids=visible.filter(o=>!holds[o.id]).map(o=>o.id);const allOn=ids.every(i=>s.has(i))&&ids.length>0;const n=new Set(s);ids.forEach(i=>allOn?n.delete(i):n.add(i));return n;});
   const invert=()=>setSel(s=>{const n=new Set();visible.forEach(o=>{if(!s.has(o.id)&&!holds[o.id])n.add(o.id);});return n;});
@@ -3587,6 +3729,7 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped}){
           <div className="flex-1"/>
           <button onClick={applyAutopilot} disabled={!(ruleset||[]).some(r=>r.enabled)||!visible.length} title="Run your Autopilot rules on the orders below: routes services, applies holds" className="text-sm bg-violet-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-violet-700 disabled:opacity-40 flex items-center gap-1.5"><Zap className="w-4 h-4"/>Apply Autopilot rules</button>
           <button onClick={()=>setQrOpen(v=>!v)} className={`text-sm rounded-lg px-3 py-1.5 font-medium border flex items-center gap-1.5 ${qrOpen?"bg-violet-50 border-violet-300 text-violet-700":"bg-white border-stone-200 text-stone-600 hover:bg-stone-100"}`}><Plus className="w-3.5 h-3.5"/>Quick rule</button>
+          <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Batch "}}))} title="Tell Claude what to batch in plain English — e.g. ‘batch the camp mugs to Texas as cheapest ground’" className="text-sm rounded-lg px-3 py-1.5 font-medium border bg-[#faf3ef] border-[#D97757]/40 text-[#c2410c] hover:bg-[#f5e6de] flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/>Ask Claude</button>
           {(Object.keys(svcOv).length>0||Object.keys(holds).length>0)&&<button onClick={clearAutopilot} className="text-[12px] text-stone-400 hover:text-stone-600 underline">reset routing</button>}
         </div>
         {qrOpen&&<div className="border-t border-stone-100 pt-3 flex flex-wrap items-center gap-2 text-sm">
@@ -4508,6 +4651,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
         <button onClick={exportJSON} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-100 flex items-center gap-1.5"><Download className="w-4 h-4"/>Export JSON</button>
         <button onClick={applyToOrders} disabled={run.summary.touched===0} title="Write rule outcomes onto matching orders without creating labels" className="text-sm bg-white border border-stone-200 text-stone-600 rounded-lg px-3 py-2 font-medium hover:bg-stone-100 disabled:opacity-40 flex items-center gap-1.5"><Check className="w-4 h-4"/>Apply only</button>
         <button onClick={newRule} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium flex items-center gap-1.5 hover:bg-stone-100"><Plus className="w-4 h-4"/>New rule</button>
+        <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Make a rule: "}}))} title="Describe a rule in plain English — Claude writes it into the pipeline" className="text-sm rounded-lg px-3 py-2 font-medium border bg-[#faf3ef] border-[#D97757]/40 text-[#c2410c] hover:bg-[#f5e6de] flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/>Ask Claude</button>
         <button onClick={runAutopilot} disabled={apRunning||ords.filter(o=>o.status!=="fulfilled").length===0} title="Apply your rules and create labels for every unfulfilled order (held orders are skipped)" className="text-sm bg-emerald-600 text-white rounded-lg px-4 py-2.5 font-semibold hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-2 shadow-sm">{apRunning?<Loader2 className="w-4 h-4 animate-spin"/>:<Zap className="w-4 h-4"/>}Run Autopilot{!apRunning&&run?` — label ${run.results.filter(r=>r.order.status!=="fulfilled"&&!r.view.hold).length} orders`:""}</button>
       </div>
     </div>
@@ -4654,6 +4798,7 @@ function AddressBook({settings,setSettings}){
   return (<div className="max-w-3xl space-y-3">
     <div className="flex flex-wrap items-center gap-3">
       <p className="text-sm text-stone-500 flex-1">Saved contacts for fast ship-to / ship-from. Import your whole list from a CSV.</p>
+      <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Save this address: "}}))} className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded px-3 py-2 font-medium hover:bg-[#f5e6de]"><Sparkles className="w-4 h-4"/>Ask Claude</button>
       <label className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded px-3 py-2 font-medium hover:bg-stone-800 cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
     </div>
     {msg&&<div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{msg}</div>}

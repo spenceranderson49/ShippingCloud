@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v103";
+const BUILD_TAG="addr-v104";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -1202,7 +1202,7 @@ function Landing({onAuth}){
         {pub&&pub.showLogo&&<div className="flex items-center gap-1.5 text-[11px] text-stone-500 mt-1 ml-[56px]">by <img src={FW_LOGO} alt="Freightwire" className="h-3.5 w-auto object-contain"/></div>}
       </button>
       <div className="flex flex-wrap items-center gap-1.5">
-        <button onClick={enterDemo} className="hidden sm:flex items-center gap-1.5 text-[13px] font-semibold text-amber-300 hover:text-amber-200 border border-amber-400/40 bg-amber-400/10 hover:bg-amber-400/15 rounded-full px-3.5 py-1.5"><Eye className="w-3.5 h-3.5"/>Take a peek</button>
+        <NavTab label="Take a peek" onClick={enterDemo}/>
         <NavTab label="Features" onClick={()=>setPage("home","features")}/>
         <NavTab label="Rates" onClick={()=>setPage("home","rates")}/>
         <NavTab label="About" onClick={()=>setPage("about")}/>
@@ -1393,6 +1393,8 @@ export default function App(){
     const ping=await cloudCall({action:"ping"});
     if(!ping||ping.network||!ping.configured){ CLOUD.mode="local"; setPhase("local"); return; }
     CLOUD.mode="cloud";
+    const sess=lsGet("session",null);
+    if(sess&&sess.id==="demo"){ setPhase("ready"); return; }   // demo sandbox: no token, no cloud load — pure local
     if(!CLOUD.token){ setPhase("login"); return; }
     setPhase("loading");
     const res=await cloudLoadAll();

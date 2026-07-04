@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, MessageCircle, Sparkles } from "lucide-react";
+import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, MessageCircle, Sparkles, ClipboardList, Ban } from "lucide-react";
 const FW_BLUE="#0099FF";
 const FW_DARK="#111418";
 function BrandCloud({className,color}){return (
@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v122";
+const BUILD_TAG="addr-v123";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -452,13 +452,13 @@ function parseItemsList(order){
 function slipFromOrder(o,sender){
   return {company:(sender&&(sender.company||sender.name))||"ShippingCloud shipper",orderName:o.name||"",date:new Date().toLocaleDateString(),
     to:{name:o.customer||"",company:o.company||"",address1:o.address1||"",city:o.city||"",state:o.state||"",zip:o.zip||""},
-    items:parseItemsList(o),tracking:o.tracking||"",service:""};
+    items:parseItemsList(o),note:o.note||o.giftMessage||"",tracking:o.tracking||"",service:""};
 }
 function slipFromShipment(sh){
   const r=sh.recipient||{};
   return {company:(sh.sender&&(sh.sender.company||sh.sender.name))||"ShippingCloud shipper",orderName:sh.reference||"",date:sh.date||"",
     to:{name:r.name||"",company:r.company||"",address1:r.address1||"",city:r.city||"",state:r.state||"",zip:r.zip||""},
-    items:parseItemsList({items:sh.items||""}),tracking:sh.tracking||"",service:sh.service||""};
+    items:parseItemsList({items:sh.items||""}),note:sh.note||"",tracking:sh.tracking||"",service:sh.service||""};
 }
 function packingSlipHTML(slips){
   const esc=(x)=>String(x||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
@@ -466,6 +466,7 @@ function packingSlipHTML(slips){
     <div class="hd"><div class="brand">${esc(sl.company)}</div><div class="meta">${sl.orderName?"Order "+esc(sl.orderName)+" · ":""}${esc(sl.date)}</div></div>
     <div class="to"><div class="lbl">Ship to</div><div>${esc(sl.to.name)}</div>${sl.to.company?`<div>${esc(sl.to.company)}</div>`:""}<div>${esc(sl.to.address1)}</div><div>${esc(sl.to.city)}, ${esc(sl.to.state)} ${esc(sl.to.zip)}</div></div>
     ${sl.items.length?`<table><thead><tr><th>Item</th><th class="q">Qty</th></tr></thead><tbody>${sl.items.map(it=>`<tr><td>${esc(it.name)}</td><td class="q">${it.qty}</td></tr>`).join("")}</tbody></table>`:""}
+    ${sl.note?`<div style="margin-top:16px;border:1px solid #e7e5e4;border-radius:8px;padding:10px 12px;font-size:13px;"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#a8a29e;margin-bottom:3px;">Note</div>${esc(sl.note)}</div>`:""}
     <div class="ft">${sl.tracking?"Tracking "+esc(sl.tracking):""}${sl.service?" · "+esc(sl.service):""}<span class="thanks">Thank you for your order!</span></div>
   </div>`;
   return `<!doctype html><html><head><title>Packing slips</title><style>
@@ -522,6 +523,51 @@ function routePrinter(ctx,settings){
 }
 function printerCtxFromOrder(o,service,carrier){
   return {carrier:carrier||"",service:service||"",sku:o&&o.sku||"",product:o&&(o.product||o.items)||"",items:o&&o.items||"",state:o&&o.state||"",source:o&&o.source||"",weight:o&&o.weight||0,orderDate:o&&(o.dateISO||o.date)||""};
+}
+
+/* ── shipment safety checks ── */
+const isPOBox=(a)=>/\b(p\.?\s*o\.?\s*box|pob\b|post\s*office\s*box)/i.test(String(a||""));
+function orderHasHazmat(o,products){
+  const bySku={},byName={};(products||[]).forEach(p=>{if(!p||!p.hazmat)return;if(p.sku)bySku[String(p.sku).toLowerCase()]=1;if(p.name)byName[String(p.name).toLowerCase()]=1;});
+  if(!Object.keys(bySku).length&&!Object.keys(byName).length)return false;
+  if(o&&o.sku&&bySku[String(o.sku).toLowerCase()])return true;
+  return parseItemsList(o||{}).some(it=>byName[String(it.name).toLowerCase()]||bySku[String(it.name).toLowerCase()]);
+}
+function dupShipment(refName,shipments){
+  if(!refName)return null;
+  const cutoff=Date.now()-7*86400000;
+  return (shipments||[]).find(sh=>sh&&sh.reference===refName&&sh.status!=="Voided"&&(()=>{const d=new Date(sh.date);return isNaN(d)||d.getTime()>=cutoff;})())||null;
+}
+/* ── pick list: aggregate a batch by item so the puller walks the shelves once ── */
+function printPickList(orderList){
+  const agg={};
+  (orderList||[]).forEach(o=>parseItemsList(o).forEach(it=>{const k=it.name;agg[k]=(agg[k]||0)+it.qty;}));
+  const rows=Object.keys(agg).sort().map(k=>({name:k,qty:agg[k]}));
+  if(!rows.length)return;
+  const esc=(x)=>String(x||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  const html=`<!doctype html><html><head><title>Pick list</title><style>body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;padding:36px 40px;}h1{font-size:19px;border-bottom:2px solid #1c1917;padding-bottom:10px;}table{width:100%;border-collapse:collapse;margin-top:16px;font-size:14px;max-width:560px;}th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#a8a29e;border-bottom:1px solid #e7e5e4;padding:6px 0;}td{padding:8px 0;border-bottom:1px solid #f5f5f4;}.q{text-align:right;width:64px;font-weight:700;}.c{width:36px;}.box{width:14px;height:14px;border:1.5px solid #a8a29e;border-radius:3px;display:inline-block;}</style></head><body><h1>Pick list · ${orderList.length} order${orderList.length!==1?"s":""} · ${new Date().toLocaleDateString()}</h1><table><thead><tr><th class="c"></th><th>Item</th><th class="q">Qty</th></tr></thead><tbody>${rows.map(r=>`<tr><td class="c"><span class="box"></span></td><td>${esc(r.name)}</td><td class="q">${r.qty}</td></tr>`).join("")}</tbody></table><script>window.onload=()=>window.print();</`+`script></body></html>`;
+  const w=window.open("","_blank"); if(!w)return; w.document.write(html); w.document.close();
+}
+
+/* ── commercial invoice for international shipments (3 copies convention: print thrice) ── */
+function printCommercialInvoice(o,catalog,sender){
+  const esc=(x)=>String(x||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  const bySku={},byName={};(catalog||[]).forEach(p=>{if(p.sku)bySku[String(p.sku).toLowerCase()]=p;if(p.name)byName[String(p.name).toLowerCase()]=p;});
+  const rows=parseItemsList(o).map(it=>{const pr=byName[String(it.name).toLowerCase()]||bySku[String(it.name).toLowerCase()];return {name:it.name,qty:it.qty,hs:pr&&pr.hs||"",origin:pr&&pr.origin||"US",unit:pr&&+pr.value||0};});
+  const total=rows.reduce((a,r)=>a+r.unit*r.qty,0);
+  const sn=(sender||{});
+  const html=`<!doctype html><html><head><title>Commercial invoice</title><style>body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;padding:32px 40px;font-size:13px;}h1{font-size:17px;letter-spacing:.02em;border-bottom:2px solid #1c1917;padding-bottom:8px;}.grid{display:flex;gap:32px;margin-top:14px;}.col{flex:1;}.lbl{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:#a8a29e;}table{width:100%;border-collapse:collapse;margin-top:16px;}th{text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#a8a29e;border-bottom:1px solid #e7e5e4;padding:5px 0;}td{padding:6px 0;border-bottom:1px solid #f5f5f4;}.r{text-align:right;}.tot{margin-top:10px;text-align:right;font-weight:700;}.sig{margin-top:34px;display:flex;gap:40px;font-size:11px;color:#78716c;}.line{border-top:1px solid #a8a29e;padding-top:4px;flex:1;}</style></head><body>
+  <h1>COMMERCIAL INVOICE</h1>
+  <div class="grid"><div class="col"><div class="lbl">Exporter / shipper</div><div>${esc(sn.company||sn.name||"")}</div><div>${esc(sn.address1||"")}</div><div>${esc([sn.city,sn.state,sn.zip].filter(Boolean).join(", "))}, US</div></div>
+  <div class="col"><div class="lbl">Consignee</div><div>${esc(o.customer||"")}</div>${o.company?`<div>${esc(o.company)}</div>`:""}<div>${esc(o.address1||"")}</div><div>${esc([o.city,o.state,o.zip].filter(Boolean).join(", "))}, ${esc(o.country||"")}</div></div>
+  <div class="col"><div class="lbl">Details</div><div>Order ${esc(o.name||"")}</div><div>Date ${new Date().toLocaleDateString()}</div><div>Reason: Sale of goods</div><div>Currency: USD</div></div></div>
+  <table><thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Unit value</th><th class="r">Total</th><th>HS code</th><th>Origin</th></tr></thead>
+  <tbody>${rows.map(r=>`<tr><td>${esc(r.name)}</td><td class="r">${r.qty}</td><td class="r">$${r.unit.toFixed(2)}</td><td class="r">$${(r.unit*r.qty).toFixed(2)}</td><td>${esc(r.hs)||"—"}</td><td>${esc(r.origin)}</td></tr>`).join("")}</tbody></table>
+  <div class="tot">Declared value: $${total.toFixed(2)} USD</div>
+  ${rows.some(r=>!r.hs)?`<div style="margin-top:10px;font-size:11px;color:#b45309;">⚠ Some items are missing HS codes — add them in Settings → Product catalog to avoid customs delays.</div>`:""}
+  <div class="sig"><div class="line">Signature of exporter</div><div class="line">Date</div></div>
+  <script>window.onload=()=>window.print();</`+`script></body></html>`;
+  const w=window.open("","_blank");if(!w)return;w.document.write(html);w.document.close();
 }
 const SEED_PRODUCTS=[
   {id:"pr1",sku:"MUG-01",name:"Camp Mug",l:5,w:4,h:4,wt:0.9,value:18,origin:"US",hs:""},
@@ -1385,10 +1431,20 @@ function CloudAuth({onDone,initialMode,intake}){
   };
   const inp="w-full border border-stone-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0086E0]/30";
   return (<div className={"w-full bg-white rounded-xl p-6 space-y-4 shadow-2xl "+(mode==="request"?"max-w-md":"max-w-sm")}>
+    {fp&&<div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={()=>setFp(null)}>
+      <div onClick={e=>e.stopPropagation()} className="bg-white rounded-2xl p-6 max-w-sm w-full space-y-3 text-left">
+        {fp==="ask"&&<><div className="font-semibold text-stone-800">Reset your password</div><p className="text-[13px] text-stone-500">Enter your login email and we’ll send a one-hour reset link.</p><input value={fpEmail} onChange={e=>setFpEmail(e.target.value)} placeholder="you@company.com" className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><button onClick={fpAsk} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium hover:bg-[#0072BE]">Send reset link</button></>}
+        {fp==="sent"&&<><div className="font-semibold text-stone-800">Check your email</div><p className="text-[13px] text-stone-500">If that address has an account, a reset link is on its way. It works for one hour.</p><button onClick={()=>setFp(null)} className="w-full text-sm bg-stone-100 border border-stone-200 rounded-lg py-2 font-medium">Back to sign in</button></>}
+        {fp&&fp.reset&&<><div className="font-semibold text-stone-800">Choose a new password</div><input type="password" value={fpPw} onChange={e=>setFpPw(e.target.value)} placeholder="New password (6+ characters)" className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><button onClick={fpSave} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium hover:bg-[#0072BE]">Save new password</button></>}
+        {fp==="done"&&<><div className="font-semibold text-emerald-700 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>Password updated</div><p className="text-[13px] text-stone-500">Sign in with your new password.</p><button onClick={()=>setFp(null)} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium">Sign in</button></>}
+        {fpErr&&<div className="text-[12px] text-rose-600">{fpErr}</div>}
+      </div>
+    </div>}
     {(<>
       <div className="grid grid-cols-2 bg-stone-100 rounded-lg p-1 text-sm font-medium">
         <button onClick={()=>{setMode("signin");setErr("");}} className={`rounded-md py-1.5 ${mode==="signin"?"bg-white shadow text-stone-800":"text-stone-500"}`}>Sign in</button>
         <button onClick={()=>{setMode("request");setErr("");}} className={`rounded-md py-1.5 ${mode==="request"?"bg-white shadow text-stone-800":"text-stone-500"}`}>Create account</button>
+
       </div>
       <div className="space-y-2">
         {mode==="request"&&intake&&<div className="text-[12px] bg-blue-50 border border-blue-200 text-[#006FBF] rounded px-3 py-2 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 shrink-0"/>Your FedEx account request is ready — create your login and we’ll attach it.</div>}
@@ -1459,6 +1515,13 @@ function LegalLinks(){
 }
 
 function Landing({onAuth}){
+  const [fp,setFp]=useState(null); // null | "ask" | "sent" | {reset:token} | "done"
+  const [fpEmail,setFpEmail]=useState("");
+  const [fpPw,setFpPw]=useState("");
+  const [fpErr,setFpErr]=useState("");
+  useEffect(()=>{try{const t=new URLSearchParams(window.location.search).get("reset");if(t)setFp({reset:t});}catch(e){}},[]);
+  const fpAsk=async()=>{setFpErr("");try{await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"requestReset",email:fpEmail})});setFp("sent");}catch(e){setFpErr("Network error — try again.");}};
+  const fpSave=async()=>{setFpErr("");try{const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"resetPassword",rtoken:fp.reset,password:fpPw})});const d=await r.json();if(d&&d.ok){setFp("done");try{window.history.replaceState({},"",window.location.pathname);}catch(e){}}else setFpErr((d&&d.error)||"Could not reset.");}catch(e){setFpErr("Network error — try again.");}};
   const pageFromHash=()=>{const h=(window.location.hash||"").replace("#","");return (h==="about"||h==="contact")?h:"home";};
   const [page,setPageState]=useState(pageFromHash());
   const setPage=(pg,anchor)=>{
@@ -1492,6 +1555,7 @@ function Landing({onAuth}){
         <NavTab label="Contact" onClick={()=>setPage("contact")}/>
         <a href={"tel:"+CONTACT_PHONE_TEL} className="hidden md:flex items-center gap-2 text-sm text-stone-300 hover:text-white px-2.5 py-2"><Phone className="w-4 h-4 text-[#38b6ff]"/>{CONTACT_PHONE}</a>
         <button onClick={()=>onAuth("signin")} className="text-sm text-stone-300 hover:text-white px-2.5 py-2">Sign in</button>
+        {mode!=="request"&&<button onClick={()=>{setFp("ask");setFpEmail("");}} className="w-full text-center text-[12px] text-stone-400 hover:text-stone-600 underline underline-offset-2">Forgot password?</button>}
         <button onClick={()=>onAuth("request")} className="text-sm bg-[#0086E0] hover:bg-[#0a76c2] text-white font-medium rounded-lg px-4 py-2">Create account</button>
       </div>
     </div>
@@ -1912,6 +1976,10 @@ function AppInner(){
   const [accounts,setAccounts]=usePersist("accounts",SEED_ACCOUNTS);
   const [orders,setOrders]=usePersist("orders",SEED_ORDERS);
   const [shipments,setShipments]=usePersist("shipments",SEED_SHIPMENTS);
+  const [audit,setAudit]=usePersist("audit",[]);
+  const isSandbox=!!(currentUser&&/^sandbox@/i.test(currentUser.email||""));
+  useEffect(()=>{ if(!isSandbox)return; try{ if((orders||[]).length===0&&(shipments||[]).length===0){ const d=makeDemoData(); setOrders(d.orders); setShipments(d.shipments); setSettings(st=>({...st,...d.settings,sender:st.sender||d.settings.sender})); } }catch(e){} },[isSandbox]);
+  useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};setAudit(a=>[{ts:new Date().toLocaleString(),user:(currentUser&&currentUser.email)||"",action:d.action||"",detail:d.detail||""},...a].slice(0,200));};window.addEventListener("sc-audit",h);return()=>window.removeEventListener("sc-audit",h);},[currentUser]);
   const [pendingShips,setPendingShips]=usePersist("pendingShips",[]);
   const [appLabel,setAppLabel]=useState(null);
   const [pickups,setPickups]=usePersist("pickups",[]);
@@ -1971,6 +2039,8 @@ function AppInner(){
   },[]);
   const brand={...DEFAULT_BRAND,...(settings.brand||{})};
   const client=clients.find(c=>c.id===clientId)||clients[0];
+  const SandboxBanner=()=>isSandbox?(<div className="bg-amber-500/95 text-white text-[12px] font-medium text-center py-1.5">SANDBOX — play freely. This account’s data is yours to trash; real accounts are untouched.</div>):null;
+  const _origOnShippedAudit=(rec)=>{try{window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Booked label",detail:(rec.reference||"")+" · "+(rec.service||"")+" · "+(rec.tracking||"")}}));}catch(x){}};
   const logEmail=(e)=>{
     const id="e"+Date.now()+Math.random();
     const canSend=CLOUD.mode==="cloud"&&CLOUD.token&&!isDemo&&e&&/.+@.+\..+/.test(String(e.to||""));
@@ -1986,6 +2056,7 @@ function AppInner(){
 
   const goShip=(pf)=>{setPrefill(pf);setTab("ship");};
   const onShipped=(rec,orderId)=>{
+    _origOnShippedAudit(rec);
     setShipments(p=>[{...rec,time:rec.time||new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}),dayAgo:0,client:client.name},...p]);
     if(orderId) setOrders(o=>o.map(x=>x.id===orderId?{...x,status:"fulfilled",tracking:rec.tracking}:x));
     // push tracking back to Shopify if this order came from a connected store
@@ -2137,8 +2208,9 @@ function AppInner(){
   const [fedexPrompt,setFedexPrompt]=usePersist("fedexPrompt",{seen:false});
   const adminReturn=lsGet("adminReturn",null);
   const exitImpersonation=()=>{ lsSet("session",adminReturn); lsDel("adminReturn"); window.location.reload(); };
+  /* shell */
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-800" style={{fontFamily:"ui-sans-serif,system-ui,sans-serif"}}>
+    <div className="min-h-screen bg-stone-50 text-stone-800" style={{fontFamily:"ui-sans-serif,system-ui,sans-serif"}}><SandboxBanner/>
       {adminReturn&&<div className="bg-[#0086E0] text-white text-[13px] px-4 py-2 flex items-center justify-center gap-3 sticky top-0 z-40">
         <ShieldCheck className="w-4 h-4 shrink-0"/>
         <span>Admin preview — you’re seeing ShippingCloud exactly as <b>{currentUser&&(currentUser.name||currentUser.email)}</b> sees it. Anything you change here changes their account.</span>
@@ -2202,10 +2274,10 @@ function AppInner(){
         </aside>
         <main className="flex-1 min-w-0 px-3 sm:px-6 py-4 sm:py-6">
           {tab==="dashboard"&&<Dashboard shipments={shipments} orders={orders} returns={returns} goTab={setTab}/>}
-          {tab==="ship"&&<Ship client={client} accounts={accounts} orders={orders} settings={settings} setSettings={setSettings} rules={rules} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders}/>}
+          {tab==="ship"&&<Ship client={client} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={rules} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders}/>}
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
           {tab==="orders"&&<Orders orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} onShipped={onShipped}/>}
-          {tab==="batch"&&<Batch orders={orders} setOrders={setOrders} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
+          {tab==="batch"&&<Batch orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
           {tab==="shipments"&&<Shipments shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels}/>}
           {tab==="drafts"&&<Drafts drafts={drafts} setDrafts={setDrafts} goShip={goShip}/>}
           {tab==="returns"&&<Returns returns={returns} setReturns={setReturns} orders={orders} settings={settings} logEmail={logEmail}/>}
@@ -2215,7 +2287,7 @@ function AppInner(){
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
           {tab==="companyadmin"&&isCompanyAdmin&&<CompanyAdmin currentUser={currentUser} companyUsers={companyUsers} setCompanyUsers={setCompanyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags}/>}
           {tab==="admin"&&isAdmin&&<AdminPortal clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} publicBrand={publicBrand} setPublicBrand={setPublicBrand} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
-          {tab==="settings"&&<Settings uid={currentUser&&currentUser.id} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
+          {tab==="settings"&&<Settings uid={currentUser&&currentUser.id} audit={audit} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
         </main>
       </div>
     </div>
@@ -2223,7 +2295,7 @@ function AppInner(){
 }
 
 /* ════════ SHIP ════════ */
-function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDrafts,prefill,clearPrefill,onShipped,onPending,logEmail,onQuickQuote,onRefresh,syncing}){
+function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,drafts,setDrafts,prefill,clearPrefill,onShipped,onPending,logEmail,onQuickQuote,onRefresh,syncing}){
   const empty={country:"United States",name:"",company:"",zip:"",state:"",city:"",address1:"",address2:"",address3:"",phone:"",email:""};
   const [sender,setSender]=useState({country:"United States",...settings.sender,address2:"",address3:""});
   // Persist any sender edits made here back into saved settings, so the ship-from sticks across reloads/logins (no more reverting to the seed).
@@ -2553,6 +2625,9 @@ function Ship({client,accounts,orders,settings,setSettings,rules,drafts,setDraft
             </div>
           </div>
           <PackNote/>
+          {isPOBox(receiver.address1)&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-[12px] text-rose-700 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>This looks like a PO Box — FedEx can’t deliver to PO Boxes. Use a street address (or USPS when available).</div>}
+          {(()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);return so&&orderHasHazmat(so,settings.products||[])?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[12px] text-amber-800 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Contains a hazmat / lithium-battery item — ship ground only; air services aren’t allowed.</div>:null;})()}
+          {(()=>{const d=dupShipment(reference,shipments);return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[12px] text-amber-800 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}). Booking again creates a second charge.</div>:null;})()}
           {pieces.map((p,i)=>(
             <div key={i} className="flex flex-wrap items-end gap-2 bg-white border border-stone-200 rounded px-2 py-2">
               <div className="text-[11px] text-stone-400 font-mono w-6">#{i+1}</div>
@@ -2867,6 +2942,7 @@ function Orders({orders,setOrders,goShip,client,settings,onShipped}){
             <div className="md:hidden flex bg-stone-100 rounded-lg p-0.5 text-sm">{[["all","All"],["unfulfilled","Awaiting"],["fulfilled","Shipped"]].map(([v,l])=><button key={v} onClick={()=>setFilter(v)} className={`px-3 py-1.5 rounded-md ${filter===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}</div>
             <div className="flex-1 relative min-w-[160px]"><Search className="w-4 h-4 absolute left-2.5 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search orders, items, recipient…" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-3 py-2 text-sm outline-none focus:border-[#0099FF]"/></div>
             <div className="flex items-center gap-1.5 text-sm"><span className="text-stone-500 hidden sm:inline">Sort</span><select value={sort} onChange={e=>setSort(e.target.value)} className="bg-white border border-stone-200 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="total">Order total</option><option value="customer">Recipient</option><option value="state">Dest. state</option><option value="weight">Weight</option><option value="source">Store</option></select></div>
+            <button onClick={()=>downloadCSV("shippingcloud-orders.csv",[["Order","Customer","Company","Address","City","State","ZIP","Country","Items","SKU","Weight","Total","Source","Date","Note"],...orders.map(o=>[o.name,o.customer,o.company||"",o.address1||"",o.city,o.state,o.zip,o.country||"US",o.items||"",o.sku||"",o.weight,o.total||"",o.source||"",o.date||"",o.note||""])])} title="Download every open order as CSV" className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 px-2 py-2"><Download className="w-4 h-4"/>Export</button>
             <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Batch "}}))} title="e.g. ‘batch everything going to Texas under 5 lb as cheapest ground’" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded px-3 py-2 font-medium hover:bg-[#f5e6de]"><Sparkles className="w-4 h-4"/>Ask Claude to batch these</button>
             {orderSources.length>0&&<button onClick={syncAll} disabled={syncing} title={orderSources.length>1?`Syncs: ${orderSources.map(s=>s.name).join(", ")}`:undefined} className="flex items-center gap-1.5 text-sm border border-[#0086E0]/30 bg-[#E6F4FF] text-[#006FBF] rounded px-3 py-2 font-medium hover:bg-[#CDE9FF] disabled:opacity-40">{syncing?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>{syncLabel}</>}</button>}
             <button onClick={()=>setAdding(true)} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded px-3 py-2 font-medium hover:bg-stone-800"><Plus className="w-4 h-4"/>New order</button>
@@ -3028,6 +3104,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
           {rateSrc.live?<span className="text-[11px] text-emerald-600 flex items-center gap-1"><Wifi className="w-3.5 h-3.5"/>Live England rates</span>:canBook?<span className="text-[11px] text-stone-400">{rateSrc.loading?"Loading rates…":""}</span>:<span className="text-[11px] text-amber-600">Demo rates — connect England</span>}
           <button onClick={()=>goShip(o)} className="text-sm bg-stone-200 text-stone-700 rounded px-3 py-1.5 font-medium hover:bg-stone-300 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/>Open in Ship tab</button>
           <button onClick={()=>printPackingSlips([slipFromOrder(o,settings&&settings.sender)])} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing slip</button>
+          {o.country&&o.country!=="US"&&<button onClick={()=>printCommercialInvoice(o,(settings&&settings.products)||[],settings&&settings.sender)} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Commercial invoice</button>}
         </div>
         {oneRate&&<div className={`text-[12px] rounded px-3 py-2 flex items-center gap-2 ${orBox?"bg-[#E6F4FF] text-[#0072BE] border border-[#99D6FF]":"bg-amber-50 text-amber-700 border border-amber-200"}`}><Boxes className="w-4 h-4 shrink-0"/>{orBox?<span>Qualifies for <b>{orBox.name}</b> — pricing this box only.</span>:<span>Set a box size within One Rate limits (≤2,200 cu in, ≤50 lb).</span>}</div>}
         {(o.shippingService||o.source)&&<div className="text-[12px] text-stone-500 flex items-center gap-1.5 -mt-1"><Truck className="w-3.5 h-3.5 text-stone-400"/>Buyer selected <b className="text-stone-700">{o.shippingService||"Standard"}</b>{o.source?` from ${o.source}`:""} — match it or pick the best rate below.</div>}
@@ -3329,7 +3406,8 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels}
                 <Info k="Tracking" v={<a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" className="text-[#0086E0] underline">{s.tracking} ↗</a>}/>
                 <Info k="To" v={`${s.recipient?.name||""}${s.recipient?.company?" · "+s.recipient.company:""} — ${s.recipient?.address1||""}, ${s.recipient?.city||""}, ${s.recipient?.state||""} ${s.recipient?.zip||""}`}/>
                 <Info k="Reference" v={s.reference||"—"}/>
-                <div className="flex items-end"><button onClick={(e)=>{e.stopPropagation();printPackingSlips([slipFromShipment(s)]);}} className="text-[12px] bg-stone-100 border border-stone-200 text-stone-700 rounded px-2.5 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing slip</button></div>
+                <div className="flex items-end gap-2"><button onClick={(e)=>{e.stopPropagation();printPackingSlips([slipFromShipment(s)]);}} className="text-[12px] bg-stone-100 border border-stone-200 text-stone-700 rounded px-2.5 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing slip</button>
+                {s.status!=="Voided"&&s.status!=="Delivered"&&<button onClick={(e)=>{e.stopPropagation();if(!window.confirm("Void this label?\n\nIt will be marked Voided here and excluded from audits and duplicate checks. Until England void is wired, also void it in Webship to trigger the carrier refund."))return;setShipments(list=>list.map(x=>x.id===s.id?{...x,status:"Voided",voidedAt:new Date().toLocaleString()}:x));window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Voided label",detail:(s.reference||"")+" · "+(s.tracking||"")}}));}} className="text-[12px] bg-rose-50 border border-rose-200 text-rose-600 rounded px-2.5 py-1.5 font-medium hover:bg-rose-100 flex items-center gap-1.5"><Ban className="w-3.5 h-3.5"/>Void label</button>}</div>
                 <Info k="Created" v={`${s.date}${s.time?" · "+s.time:""}`}/>
                 <Info k="From ZIP" v={s.fromZip}/>
                 <Info k="Packages" v={`${s.pieces?.length||1} pkg · ${s.weight} lb total`}/>
@@ -3681,7 +3759,7 @@ function Dashboard({shipments,orders,returns,goTab}){
 const US_STATES=["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
 const SERVICE_OPTIONS={FedEx:["FedEx Ground","FedEx Home Delivery","FedEx 2Day","FedEx Express Saver","FedEx Standard Overnight","FedEx Priority Overnight"]};
 const speedRank=(label)=>{const t=String(label||"").toLowerCase();if(/first overnight/.test(t))return 1;if(/priority overnight/.test(t))return 2;if(/standard overnight|next day/.test(t))return 3;if(/2.?day|2nd day air/.test(t))return 4;if(/express saver|3 day/.test(t))return 5;if(/home|ground/.test(t))return 7;return 6;};
-function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped,batchCmd,onBatchCmdDone}){
+function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings,onShipped,batchCmd,onBatchCmdDone}){
   const pool=orders.filter(o=>o.status==="unfulfilled");
   const [sel,setSel]=useState(()=>new Set());
   const [rule,setRule]=useState("cheapest");
@@ -3851,6 +3929,9 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped,ba
       setProgress({n:i+1,total:chosen.length});
       let picked=null;
       try{
+        const dup=dupShipment(o.name,shipments);
+        if(dup){ out.push({o,name:o.name,ok:false,error:"Skipped — already shipped "+dup.date+" ("+dup.tracking+"). Void that label first if this is intentional."}); setResults([...out]); setProgress(pr0=>({...pr0,n:pr0.n+1})); continue; }
+        if(orderHasHazmat(o,settings.products||[])&&!/ground|home/i.test(String((svcOv[o.id]||"")))){ /* ground-only enforcement happens at pick below */ }
         const pk0=packs[o.id];
         const res=await ratesForOrder(o,{residential:true,weightLb:(pk0&&pk0.totalWt)||o.weight,box:pk0&&pk0.pieces[0]?{L:pk0.pieces[0].L,W:pk0.pieces[0].W,H:pk0.pieces[0].H}:undefined,fromZip:originZip,sender:settings.sender},eng);
         let qs=((res&&res.rates)||[]).filter(q=>!/first\s*overnight/i.test(q.label||"")).map(q=>({...q,sell:Math.round((q.cost||0)*(1+(client.markup||0)/100)*100)/100}));
@@ -3869,7 +3950,7 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped,ba
       const res=await bookOrderLabel(o,{quote:picked,weightLb:(pkB&&pkB.totalWt)||o.weight,box:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:undefined,residential:true,sender:settings.sender},eng,settings.sender);
       if(res&&res.ok){
         const carrier=carrierOf(picked.label);
-        onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:originZip,toZip:o.zip,weight:(pkB&&pkB.totalWt)||o.weight,pieces:pkB?pkB.pieces:undefined,dims:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,items:o.items||"",bookNumber:res.bookNumber},o.id);
+        onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:originZip,toZip:o.zip,weight:(pkB&&pkB.totalWt)||o.weight,pieces:pkB?pkB.pieces:undefined,dims:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,items:o.items||"",note:o.note||"",bookNumber:res.bookNumber},o.id);
         out.push({o,name:o.name,ok:true,tracking:res.tracking,service:picked.label,carrier,pdf:res.labelPdfBase64||null});
       } else out.push({o,name:o.name,ok:false,error:(res&&res.error)||"Booking failed"});
       setResults([...out]);
@@ -4026,6 +4107,7 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped,ba
         <span className="text-stone-500">est. <b className="text-stone-800 font-mono">{money(totals.sell)}</b></span>
         {svcMixSel.length>0&&<span className="hidden lg:flex items-center gap-1.5">{svcMixSel.map(([l,n])=><Badge key={l} tone="stone">{l.replace(/^FedEx /,"")} ×{n}</Badge>)}</span>}
         <button onClick={()=>printPackingSlips(rows.map(r=>slipFromOrder(r.o,settings.sender)))} disabled={rows.length===0} title="Print a packing slip for every selected order" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5"><FileText className="w-4 h-4"/>Packing slips</button>
+        <button onClick={()=>printPickList(rows.map(r=>r.o))} disabled={rows.length===0} title="One sheet: every item in this batch aggregated by product, with checkboxes" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5"><ClipboardList className="w-4 h-4"/>Pick list</button>
         <button onClick={run} disabled={running||rows.length===0} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-semibold hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{running?<Loader2 className="w-4 h-4 animate-spin"/>:<Printer className="w-4 h-4"/>}{running?`Booking ${progress.n}/${progress.total}…`:`Create ${rows.length} label${rows.length!==1?"s":""}`}</button>
       </div>
       {done>0&&<div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{done} shipment{done!==1?"s":""} recorded — see the Shipments tab. Connect your carrier account for live labels.</div>}
@@ -4296,7 +4378,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
 }
 
 /* ════════ SETTINGS ════════ */
-function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid}){
+function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,audit=[]}){
   const [sec,setSec]=useState("carriers");
   const secs=[["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["catalog","Product catalog",Boxes],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["reference","Reference fields",Receipt],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["ledger","Ledger",Wallet],["integrations","Integrations",Layers],["subscription","Subscription",Star],["company","Company",Building2]];
   return (
@@ -4319,7 +4401,15 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="ledger"&&<Ledger ledger={ledger} addLedger={addLedger}/>}
         {sec==="integrations"&&<Integrations settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders}/>}
         {sec==="subscription"&&<Subscription settings={settings} setSettings={setSettings}/>}
-        {sec==="company"&&<Company settings={settings} setSettings={setSettings}/>}
+        {sec==="company"&&<><Company settings={settings} setSettings={setSettings}/>
+          <div className="max-w-2xl mt-6">
+            <h3 className="text-sm font-semibold text-stone-700 flex items-center gap-2 mb-2"><Clock className="w-4 h-4"/>Activity log</h3>
+            <p className="text-[12px] text-stone-500 mb-2">Who did what — label bookings and voids, newest first (last 200).</p>
+            <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100 max-h-80 overflow-y-auto">
+              {audit.length===0&&<div className="p-4 text-sm text-stone-400">No activity yet.</div>}
+              {audit.map((a,i)=><div key={i} className="px-3 py-2 text-[12px] flex items-baseline gap-2"><span className="text-stone-400 shrink-0 w-36">{a.ts}</span><span className="font-medium text-stone-700 shrink-0">{a.action}</span><span className="text-stone-500 truncate">{a.detail}</span><span className="ml-auto text-stone-300 shrink-0">{a.user}</span></div>)}
+            </div>
+          </div></>}
       </div>
     </div>
   );
@@ -4495,6 +4585,7 @@ function ProductCatalog({settings,setSettings}){
         <div className="col-span-2"><Field label="HS / tariff code (intl)"><Input value={nf.hs} onChange={e=>setNf({...nf,hs:e.target.value})}/></Field></div>
         <Field label="Barcode / UPC"><Input value={nf.barcode} onChange={e=>setNf({...nf,barcode:e.target.value})}/></Field>
         <label className="flex items-center gap-2 text-sm text-stone-600 pt-5 cursor-pointer"><input type="checkbox" checked={!!nf.shipsAlone} onChange={e=>setNf({...nf,shipsAlone:e.target.checked})} className="accent-[#0086E0]"/>Ships alone (own box)</label>
+        <label className="flex items-center gap-2 text-sm text-stone-600 pt-5 cursor-pointer"><input type="checkbox" checked={!!nf.hazmat} onChange={e=>setNf({...nf,hazmat:e.target.checked})} className="accent-amber-600"/>Hazmat / lithium battery (ground only)</label>
       </div>
       <div className="flex items-center gap-2 mt-2"><button onClick={addProduct} className="text-sm bg-[#0086E0] text-white rounded px-4 py-1.5 font-medium hover:bg-[#0072BE]">Save product</button><button onClick={()=>setAdding(false)} className="text-sm text-stone-500 px-2 py-1.5">Cancel</button></div>
     </div>}
@@ -4509,7 +4600,7 @@ function ProductCatalog({settings,setSettings}){
         return (<div key={p.id}>
           <div className={`flex items-center gap-2 px-3 py-2.5 ${ed?"bg-[#E6F4FF]/40":"hover:bg-stone-50"}`}>
             <button onClick={()=>{if(ed){setEditId(null);setEf(null);}else{setEditId(p.id);setEf({...p});}}} className="text-stone-300 w-4"><Edit3 className={`w-3.5 h-3.5 ${ed?"text-[#0086E0]":""}`}/></button>
-            <div className="flex-1 min-w-0 text-sm truncate">{p.name}{p.shipsAlone&&<span className="ml-1.5 text-[10px] uppercase tracking-wide rounded px-1 py-0.5 bg-[#E6F4FF] text-[#006FBF]">own box</span>}{noDim&&<span className="ml-1.5 text-[10px] text-amber-600">no dims</span>}</div>
+            <div className="flex-1 min-w-0 text-sm truncate">{p.name}{p.shipsAlone&&<span className="ml-1.5 text-[10px] uppercase tracking-wide rounded px-1 py-0.5 bg-[#E6F4FF] text-[#006FBF]">own box</span>}{p.hazmat&&<span className="ml-1.5 text-[10px] uppercase tracking-wide rounded px-1 py-0.5 bg-amber-50 text-amber-700 border border-amber-200">hazmat</span>}{noDim&&<span className="ml-1.5 text-[10px] text-amber-600">no dims</span>}</div>
             <div className="w-24 hidden sm:block font-mono text-xs text-stone-500 truncate">{p.sku||"—"}</div>
             <div className="w-28 text-center font-mono text-xs text-stone-600">{noDim?"—":`${p.l}×${p.w}×${p.h}`}</div>
             <div className="w-16 text-center font-mono text-xs text-stone-600">{+p.wt?p.wt+" lb":"—"}</div>
@@ -4529,6 +4620,7 @@ function ProductCatalog({settings,setSettings}){
               <div className="col-span-2"><Field label="HS / tariff code"><Input value={ef.hs||""} onChange={e=>setEf({...ef,hs:e.target.value})}/></Field></div>
               <Field label="Barcode / UPC"><Input value={ef.barcode||""} onChange={e=>setEf({...ef,barcode:e.target.value})}/></Field>
               <label className="flex items-center gap-2 text-sm text-stone-600 pt-5 cursor-pointer"><input type="checkbox" checked={!!ef.shipsAlone} onChange={e=>setEf({...ef,shipsAlone:e.target.checked})} className="accent-[#0086E0]"/>Ships alone (own box)</label>
+              <label className="flex items-center gap-2 text-sm text-stone-600 pt-5 cursor-pointer"><input type="checkbox" checked={!!ef.hazmat} onChange={e=>setEf({...ef,hazmat:e.target.checked})} className="accent-amber-600"/>Hazmat / lithium battery</label>
             </div>
             <div className="flex items-center gap-2 mt-2"><button onClick={saveEdit} className="text-sm bg-[#0086E0] text-white rounded px-4 py-1.5 font-medium hover:bg-[#0072BE]">Save</button><button onClick={()=>{setEditId(null);setEf(null);}} className="text-sm text-stone-500 px-2 py-1.5">Cancel</button></div>
           </div>}
@@ -5123,7 +5215,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
       const res=await bookOrderLabel(o,{quote:picked,weightLb:wt,residential:true,sender:settings.sender},eng,settings.sender);
       if(res&&res.ok){
         const carrier=/dhl/i.test(picked.label)?"DHL":"FedEx";
-        onShipped&&onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:senderZip,toZip:o.zip,weight:wt,dims:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,items:o.items||"",bookNumber:res.bookNumber},o.id);
+        onShipped&&onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:senderZip,toZip:o.zip,weight:wt,dims:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,items:o.items||"",note:o.note||"",bookNumber:res.bookNumber},o.id);
         rows.push({name:o.name,ok:true,service:picked.label,tracking:res.tracking,pdf:res.labelPdfBase64||null});
       } else rows.push({name:o.name,ok:false,error:(res&&res.error)||"Booking failed"});
       setApResults({rows:[...rows],heldN});

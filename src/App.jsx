@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v121";
+const BUILD_TAG="addr-v122";
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -488,6 +488,40 @@ function printPackingSlips(slips){
   if(!w)return;
   w.document.write(packingSlipHTML(list));
   w.document.close();
+}
+
+/* ── multi-printer routing ─────────────────────────────────────────
+   Browsers can't silently pick a printer, so routing SPLITS print jobs into
+   one run per printer — each opens as its own job you point at that device.
+   Rules evaluate in order, first match wins; otherwise the default printer. */
+function routePrinter(ctx,settings){
+  const printers=(settings&&settings.printers)||[];
+  if(!printers.length)return null;
+  const routes=((settings&&settings.printRoutes)||[]).filter(r=>r&&r.enabled!==false);
+  const val=(f)=>{
+    if(f==="carrier")return ctx.carrier||"";
+    if(f==="service")return ctx.service||"";
+    if(f==="product")return ctx.product||ctx.items||"";
+    if(f==="sku")return ctx.sku||"";
+    if(f==="state")return ctx.state||"";
+    if(f==="source")return ctx.source||"";
+    if(f==="weight")return +ctx.weight||0;
+    if(f==="orderAgeDays"){const d=ctx.orderDate?new Date(ctx.orderDate):null;return d&&!isNaN(d)?Math.floor((Date.now()-d.getTime())/86400000):0;}
+    return "";
+  };
+  for(const r of routes){
+    const v=val(r.field), t=r.value;
+    let hit=false;
+    if(r.op==="contains")hit=String(v).toLowerCase().includes(String(t||"").toLowerCase());
+    else if(r.op==="equals")hit=String(v).toLowerCase()===String(t||"").toLowerCase();
+    else if(r.op==="gt")hit=(+v||0)>(+t||0);
+    else if(r.op==="lt")hit=(+v||0)<(+t||0);
+    if(hit){const pr=printers.find(x=>x.id===r.printerId);if(pr)return pr;}
+  }
+  return printers.find(x=>x.id===(settings&&settings.defaultPrinterId))||printers[0]||null;
+}
+function printerCtxFromOrder(o,service,carrier){
+  return {carrier:carrier||"",service:service||"",sku:o&&o.sku||"",product:o&&(o.product||o.items)||"",items:o&&o.items||"",state:o&&o.state||"",source:o&&o.source||"",weight:o&&o.weight||0,orderDate:o&&(o.dateISO||o.date)||""};
 }
 const SEED_PRODUCTS=[
   {id:"pr1",sku:"MUG-01",name:"Camp Mug",l:5,w:4,h:4,wt:0.9,value:18,origin:"US",hs:""},
@@ -3836,7 +3870,7 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped,ba
       if(res&&res.ok){
         const carrier=carrierOf(picked.label);
         onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:originZip,toZip:o.zip,weight:(pkB&&pkB.totalWt)||o.weight,pieces:pkB?pkB.pieces:undefined,dims:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,items:o.items||"",bookNumber:res.bookNumber},o.id);
-        out.push({o,name:o.name,ok:true,tracking:res.tracking,service:picked.label,pdf:res.labelPdfBase64||null});
+        out.push({o,name:o.name,ok:true,tracking:res.tracking,service:picked.label,carrier,pdf:res.labelPdfBase64||null});
       } else out.push({o,name:o.name,ok:false,error:(res&&res.error)||"Booking failed"});
       setResults([...out]);
     }
@@ -3844,7 +3878,17 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped,ba
     setRunning(false);
     setSel(new Set());
   };
-  const printAll=()=>{ results.filter(r=>r.ok&&r.pdf).forEach((r,i)=>setTimeout(()=>openLabelPdf(r.pdf),i*400)); };
+  const printAll=(only)=>{ results.filter(r=>r.ok&&r.pdf&&(!only||only.includes(r))).forEach((r,i)=>setTimeout(()=>openLabelPdf(r.pdf),i*400)); };
+  const printGroups=(()=>{
+    const done=results.filter(r=>r.ok&&r.pdf);
+    if(!((settings.printers||[]).length))return null;
+    const g={};
+    let ruleP={};
+    try{ const rr=runRuleEngine((ruleset||[]).filter(x=>x.enabled&&(x.actions||[]).some(a=>a.type==="Route to Printer")),done.map(r=>r.o).filter(Boolean),originZip); rr.results&&rr.results.forEach(x=>{if(x.view&&x.view.printer)ruleP[x.order.id]=x.view.printer;}); }catch(e){}
+    done.forEach(r=>{const byRule=r.o&&ruleP[r.o.id];const pr=byRule?((settings.printers||[]).find(x=>x.name===byRule)||{name:byRule}):routePrinter(printerCtxFromOrder(r.o||{},r.service,r.carrier),settings);const k=pr?pr.name:"Default";(g[k]=g[k]||[]).push(r);});
+    const keys=Object.keys(g);
+    return keys.length>1?keys.map(k=>({name:k,rows:g[k]})):null;
+  })();
   const keyOf=(o)=>{if(groupBy==="sku")return o.sku||"—";if(groupBy==="product")return prodOf(o);if(groupBy==="zone")return "Zone "+zoneOf(o);if(groupBy==="service")return rateFor(o).label;if(groupBy==="carrier")return carrierOf(rateFor(o).label);if(groupBy==="state")return o.state||"—";return "All orders";};
   const groups={}; visible.forEach(o=>{const k=keyOf(o);(groups[k]=groups[k]||[]).push(o);});
   const groupKeys=Object.keys(groups).sort();
@@ -3991,7 +4035,8 @@ function Batch({orders,setOrders,client,ruleset,setRuleset,settings,onShipped,ba
           <Badge tone="green">{results.filter(r=>r.ok).length} labeled</Badge>
           {results.filter(r=>!r.ok).length>0&&<Badge tone="rose">{results.filter(r=>!r.ok).length} failed</Badge>}
           <div className="flex-1"/>
-          {results.some(r=>r.ok&&r.pdf)&&<button onClick={printAll} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE] flex items-center gap-1.5"><Printer className="w-4 h-4"/>Print all labels</button>}
+          {results.some(r=>r.ok&&r.pdf)&&!printGroups&&<button onClick={()=>printAll()} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE] flex items-center gap-1.5"><Printer className="w-4 h-4"/>Print all labels</button>}
+        {printGroups&&printGroups.map(gp=><button key={gp.name} onClick={()=>printAll(gp.rows)} title="Opens these labels as their own print run — pick this printer in the dialog once" className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE] flex items-center gap-1.5"><Printer className="w-4 h-4"/>{gp.rows.length} → {gp.name}</button>)}
         {results.some(r=>r.ok)&&<button onClick={()=>printPackingSlips(results.filter(r=>r.ok&&r.o).map(r=>slipFromOrder(r.o,settings.sender)))} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-4 h-4"/>Print packing slips</button>}
           <button onClick={()=>setResults([])} className="text-stone-300 hover:text-stone-600"><X className="w-4 h-4"/></button>
         </div>
@@ -4598,8 +4643,42 @@ function BoxLogic({settings,setSettings}){
 function PrinterSettings({settings,setSettings}){
   const pr=settings.printer||{labelSize:"4x6",format:"PDF",printer:"",packingSlip:true,autoPrint:false,slipSize:"letter",rotate:false};
   const set=(patch)=>setSettings({...settings,printer:{...pr,...patch}});
+  const printers=settings.printers||[];
+  const routes=settings.printRoutes||[];
+  const [pn,setPn]=useState("");
+  const addPrinter=()=>{if(!pn.trim())return;setSettings({...settings,printers:[...printers,{id:"pn"+Date.now(),name:pn.trim()}]});setPn("");};
+  const delPrinter=(id)=>setSettings({...settings,printers:printers.filter(x=>x.id!==id),printRoutes:routes.filter(r=>r.printerId!==id),defaultPrinterId:settings.defaultPrinterId===id?undefined:settings.defaultPrinterId});
+  const ROUTE_FIELDS=[["carrier","Carrier"],["service","Service"],["product","Product / items"],["sku","SKU"],["state","Ship-to state"],["source","Order source"],["weight","Weight (lb)"],["orderAgeDays","Order age (days)"]];
+  const opsFor=(f)=>(f==="weight"||f==="orderAgeDays")?[["gt","is over"],["lt","is under"]]:[["contains","contains"],["equals","is exactly"]];
+  const addRoute=()=>setSettings({...settings,printRoutes:[...routes,{id:"rt"+Date.now(),enabled:true,field:"carrier",op:"contains",value:"",printerId:(printers[0]||{}).id}]});
+  const setRoute=(id,patch)=>setSettings({...settings,printRoutes:routes.map(r=>r.id===id?{...r,...patch}:r)});
+  const delRoute=(id)=>setSettings({...settings,printRoutes:routes.filter(r=>r.id!==id)});
   return (<div className="max-w-2xl space-y-4">
     <p className="text-sm text-stone-500">Controls how labels are generated and printed when you buy a label or run a batch.</p>
+    <Panel title="Printers & routing">
+      <p className="text-[12px] text-stone-500">Name your printers (e.g. “Zebra — Station A”, “Office laser”), then route labels to them by rule. Batch splits its printing into one run per printer — each opens as its own job so you pick that device once. Autopilot rules can also route with the “Route to Printer” action (use the printer’s exact name as the value).</p>
+      <div className="space-y-1.5">
+        {printers.map(x=>(<div key={x.id} className="flex items-center gap-2 text-sm">
+          <Printer className="w-3.5 h-3.5 text-stone-400"/><span className="flex-1">{x.name}</span>
+          <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><input type="radio" name="defprinter" checked={settings.defaultPrinterId===x.id} onChange={()=>setSettings({...settings,defaultPrinterId:x.id})} className="accent-[#0086E0]"/>default</label>
+          <button onClick={()=>delPrinter(x.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button>
+        </div>))}
+        <div className="flex items-center gap-2"><Input value={pn} onChange={e=>setPn(e.target.value)} placeholder="Printer name (e.g. Zebra — Station A)"/><button onClick={addPrinter} className="text-sm bg-stone-900 text-white rounded px-3 py-1.5 font-medium shrink-0">Add</button></div>
+      </div>
+      {printers.length>0&&<div className="space-y-1.5 pt-2 border-t border-stone-100">
+        <div className="text-[10px] uppercase tracking-widest text-stone-400">Routing rules · first match wins</div>
+        {routes.map(r=>(<div key={r.id} className="flex flex-wrap items-center gap-1.5 text-[13px]">
+          <Toggle on={r.enabled!==false} set={v=>setRoute(r.id,{enabled:v})}/>
+          <Select value={r.field} onChange={e=>setRoute(r.id,{field:e.target.value,op:opsFor(e.target.value)[0][0]})} className="!w-auto">{ROUTE_FIELDS.map(([v,l])=><option key={v} value={v}>{l}</option>)}</Select>
+          <Select value={r.op} onChange={e=>setRoute(r.id,{op:e.target.value})} className="!w-auto">{opsFor(r.field).map(([v,l])=><option key={v} value={v}>{l}</option>)}</Select>
+          <Input value={r.value} onChange={e=>setRoute(r.id,{value:e.target.value})} placeholder="value" className="!w-28"/>
+          <span className="text-stone-400">→</span>
+          <Select value={r.printerId||""} onChange={e=>setRoute(r.id,{printerId:e.target.value})} className="!w-auto">{printers.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</Select>
+          <button onClick={()=>delRoute(r.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button>
+        </div>))}
+        <button onClick={addRoute} className="text-[12px] text-[#0086E0] font-medium flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add routing rule</button>
+      </div>}
+    </Panel>
     <Panel title="Label">
       <div className="grid grid-cols-2 gap-2">
         <Field label="Label size">
@@ -4711,7 +4790,7 @@ const RULE_PROPERTIES={
 };
 const RULE_PROP_NAMES=Object.keys(RULE_PROPERTIES);
 const RULE_OPERATORS={text:["IN","NOT IN","=","!="],list:["IN","NOT IN","=","!="],number:["=","!=",">","<",">=","<="],date:["=","!=",">","<"]};
-const RULE_ACTION_TYPES=["Set Service","Set Package","Set One Rate Box","Request Signature","Set Insurance","Saturday Delivery","Add Order Tag","Add Note","Assign To","Set Weight","Set Custom Field","Mark as Gift","Split Packages","Assign Hold","Set From Address"];
+const RULE_ACTION_TYPES=["Set Service","Set Package","Set One Rate Box","Request Signature","Set Insurance","Saturday Delivery","Add Order Tag","Add Note","Assign To","Set Weight","Set Custom Field","Mark as Gift","Split Packages","Assign Hold","Set From Address","Route to Printer"];
 const RULE_SERVICES=["ANY - Cheapest","ANY - Cheapest Ground","ANY - Cheapest 2 Day","ANY - Fastest","FedEx - Ground","FedEx - Home Delivery","FedEx - Express Saver","FedEx - 2Day","FedEx - 2Day One Rate","FedEx - Standard Overnight","FedEx - Priority Overnight","DHL - Express Worldwide"];
 const RULE_PACKAGES=["Custom","FedEx Envelope","FedEx Small Box","FedEx Medium Box","FedEx Large Box","FedEx Extra Large Box"];
 const RULE_SIG=["direct","indirect","adult"];
@@ -4795,6 +4874,7 @@ function ruleEval(cond,ov){
   if(op==="=")return A===(set[0]||""); if(op==="!=")return A!==(set[0]||""); return false;
 }
 function ruleApply(act,ov,changed){
+  if(act&&act.type==="Route to Printer"){ov.printer=String(act.value||"");return "print → "+(act.value||"default");}
   const mark=k=>changed.add(k);
   switch(act.type){
     case "Set Service": ov.selectedService=act.service||"";mark("service"); return `service → ${act.service||"—"}`;

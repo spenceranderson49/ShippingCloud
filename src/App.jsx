@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v143";
+const BUILD_TAG="addr-v144";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -774,16 +774,16 @@ function Login({users,onLogin,brand}){
         </div>
         <div className="bg-white border border-stone-200 rounded-xl shadow-sm p-6 space-y-3">
           <div className="flex bg-stone-100 rounded-lg p-0.5 text-sm mb-1">
-            {[["signin","Sign in"],["signup","Create account"]].map(([v,l])=><button key={v} onClick={()=>{setMode(v);setErr("");setNote("");}} className={`flex-1 px-3 py-1.5 rounded-md ${mode===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}
+            {[["signin","Sign in"],["signup","Create account"]].map(([v,l])=><button key={v} onClick={()=>{setMode(v);setErr("");setNote("");}} className={`flex-1 px-3 py-1.5 rounded-lg ${mode===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}
           </div>
           {mode==="signup"&&<><Field label="Your name"><Input value={name} onChange={e=>setName(e.target.value)}/></Field><Field label="Company"><Input value={company} onChange={e=>setCompany(e.target.value)}/></Field></>}
           <Field label="Email"><Input value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&mode==="signin")signin();}} placeholder="you@company.com"/></Field>
           <Field label="Password"><Input type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")mode==="signin"?signin():signup();}} placeholder="••••••••"/></Field>
           {err&&<div className="text-sm text-rose-600 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4"/>{err}</div>}
-          {note&&<div className="text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded px-3 py-2">{note}</div>}
+          {note&&<div className="text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2">{note}</div>}
           <button onClick={mode==="signin"?signin:signup} className="w-full bg-stone-900 text-white rounded-lg px-4 py-2.5 font-medium hover:bg-stone-800">{mode==="signin"?"Sign in":"Request account"}</button>
         </div>
-        <div className="mt-4 bg-white/60 border border-stone-200 rounded-lg p-3 text-[12px] text-stone-500 space-y-1">
+        <div className="mt-4 bg-white/60 border border-stone-200 rounded-lg p-3 text-xs text-stone-500 space-y-1">
           <div className="font-medium text-stone-600">Demo logins</div>
           <button onClick={()=>{setEmail("spencer@shippingcloud.net");setPw("admin");setMode("signin");}} className="block hover:text-[#0086E0]">Admin · spencer@shippingcloud.net / admin</button>
                   </div>
@@ -817,13 +817,13 @@ function Domains({settings,setSettings,clients}){
           </div>
         </div>
         <div className="sm:w-48"><Field label="Partner / label (optional)"><Input value={label} onChange={e=>setLabel(e.target.value)} placeholder="InXpress"/></Field></div>
-        <button onClick={add} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Plus className="w-4 h-4"/>Create</button>
+        <button onClick={add} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Plus className="w-4 h-4"/>Create</button>
       </div>
       {sub&&<div className="text-[11px] text-stone-400 mt-1">Will create <span className="font-mono text-[#0086E0]">{clean(sub)||"…"}.{base}</span></div>}
     </Panel>
 
     <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
-      <div className="px-4 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400">{list.length} white-label domain{list.length===1?"":"s"}</div>
+      <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400">{list.length} white-label domain{list.length===1?"":"s"}</div>
       {list.length===0&&<div className="p-6 text-center text-sm text-stone-400">No white-label domains yet.</div>}
       {list.map(d=>(<div key={d.id} className="flex items-center gap-3 px-4 py-3">
         <Cloud className="w-4 h-4 text-[#0099FF] shrink-0"/>
@@ -854,7 +854,7 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
   const ColorRow=({label,k})=>(
     <div className="flex items-center gap-3">
       <input type="color" value={b[k]} onChange={e=>set(k,e.target.value)} className="w-10 h-9 rounded border border-stone-200 bg-white cursor-pointer p-0.5"/>
-      <div className="flex-1"><div className="text-[11px] text-stone-500">{label}</div><input value={b[k]} onChange={e=>set(k,e.target.value)} className="w-full bg-white border border-stone-200 rounded px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF]"/></div>
+      <div className="flex-1"><div className="text-[11px] text-stone-500">{label}</div><input value={b[k]} onChange={e=>set(k,e.target.value)} className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF]"/></div>
     </div>
   );
   return (<div className="max-w-3xl space-y-4">
@@ -862,7 +862,7 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
 
     {/* Live preview */}
     <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
-      <div className="px-4 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400">Live preview</div>
+      <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400">Live preview</div>
       <div className="p-5 flex items-center gap-3">
         <BrandCloud className="h-10 w-auto" color={b.primary}/>
         <span className="font-extrabold tracking-tight text-[26px]" style={{color:b.dark}}>{b.name1}<span style={{color:b.primary}}>{b.name2}</span></span>
@@ -894,7 +894,7 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
         <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
           <div className="sm:w-28"><Field label="Label"><Input value={b.partnerLabel} onChange={e=>set("partnerLabel",e.target.value)} placeholder="by"/></Field></div>
           <div className="flex items-center gap-3">
-            <label className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded px-3 py-2 font-medium hover:bg-stone-800 cursor-pointer"><Upload className="w-4 h-4"/>Upload logo<input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={upload} className="hidden"/></label>
+            <label className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 cursor-pointer"><Upload className="w-4 h-4"/>Upload logo<input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={upload} className="hidden"/></label>
             {b.logo&&<><img src={b.logo} alt="logo" className="h-7 w-auto object-contain border border-stone-100 rounded px-1 bg-white"/><button onClick={()=>set("logo","")} className="text-xs text-stone-400 hover:text-rose-500 underline">remove</button></>}
           </div>
         </div>
@@ -947,7 +947,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
     <div className="space-y-4">
       <div className="flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-[#0086E0]"/><h1 className="text-lg font-semibold text-stone-800">Admin portal</h1></div>
       <div className="flex flex-wrap bg-stone-100 rounded-lg p-0.5 text-sm w-fit">
-        {ALLOWED.map(([v,l])=><button key={v} onClick={()=>setSec(v)} className={`px-3 py-1.5 rounded-md ${sec===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}
+        {ALLOWED.map(([v,l])=><button key={v} onClick={()=>setSec(v)} className={`px-3 py-1.5 rounded-lg ${sec===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}
       </div>
 
       {sec==="branding"&&<Branding settings={settings} setSettings={setSettings} brand={brand} publicBrand={publicBrand} setPublicBrand={setPublicBrand}/>}
@@ -1022,7 +1022,7 @@ function CustomersAdmin({clients,setClients,statsFor,openC,setOpenC}){
   const setClientEng=(id,patch)=>setClients(cs=>cs.map(c=>c.id===id?{...c,england:{...(c.england||{}),...patch}}:c));
   const setStatus=(id,v)=>setClients(cs=>cs.map(c=>c.id===id?{...c,status:v}:c));
   return (<div className="space-y-3">
-    <div className="flex justify-between items-center"><div className="text-sm text-stone-500">Your shipping customers — markup, origin, and activity.</div><button onClick={()=>setAdding(a=>!a)} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded px-3 py-2 font-medium hover:bg-stone-800"><Plus className="w-4 h-4"/>New customer</button></div>
+    <div className="flex justify-between items-center"><div className="text-sm text-stone-500">Your shipping customers — markup, origin, and activity.</div><button onClick={()=>setAdding(a=>!a)} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800"><Plus className="w-4 h-4"/>New customer</button></div>
     {adding&&<div className="border border-stone-200 rounded-lg bg-white p-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
       <Field label="Company"><Input value={f.name} onChange={e=>setF({...f,name:e.target.value})}/></Field>
       <Field label="Contact"><Input value={f.contact} onChange={e=>setF({...f,contact:e.target.value})}/></Field>
@@ -1030,10 +1030,10 @@ function CustomersAdmin({clients,setClients,statsFor,openC,setOpenC}){
       <Field label="Phone"><Input value={f.phone} onChange={e=>setF({...f,phone:e.target.value})}/></Field>
       <Field label="Origin ZIP"><Input value={f.origin} onChange={e=>setF({...f,origin:e.target.value})}/></Field>
       <Field label="Markup %"><Input type="number" value={f.markup} onChange={e=>setF({...f,markup:e.target.value})}/></Field>
-      <div className="col-span-2 sm:col-span-3"><button onClick={create} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium">Create customer</button></div>
+      <div className="col-span-2 sm:col-span-3"><button onClick={create} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Create customer</button></div>
     </div>}
     <div className="border border-stone-200 rounded-lg bg-white overflow-hidden divide-y divide-stone-100">
-      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400"><div className="flex-1">Customer</div><div className="w-24 text-right">Shipments</div><div className="w-24 text-right">Billed</div><div className="w-24 text-right">Markup</div><div className="w-20 text-right">Status</div></div>
+      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="flex-1">Customer</div><div className="w-24 text-right">Shipments</div><div className="w-24 text-right">Billed</div><div className="w-24 text-right">Markup</div><div className="w-20 text-right">Status</div></div>
       {clients.map(c=>{const st=statsFor(c.name);const open=openC===c.id;return (
         <div key={c.id}>
           <div className="flex items-center gap-3 px-4 py-3 hover:bg-stone-50 cursor-pointer" onClick={()=>setOpenC(open?null:c.id)}>
@@ -1059,7 +1059,7 @@ function CustomersAdmin({clients,setClients,statsFor,openC,setOpenC}){
                 <Field label="Integration ID (labels)"><Input value={(c.england&&c.england.integrationId)||""} onChange={e=>setClientEng(c.id,{integrationId:e.target.value.trim()})} placeholder="optional"/></Field>
                 <Field label="Provider account ID"><Input value={(c.england&&c.england.providerAccountId)||""} onChange={e=>setClientEng(c.id,{providerAccountId:e.target.value.trim()})} placeholder="optional · auto-resolves"/></Field>
               </div>
-              {c.england&&c.england.customerId&&c.england.apiKey&&(+c.markup||0)>0&&<div className="mt-2 text-[12px] rounded px-3 py-2 flex items-start gap-1.5 bg-amber-50 text-amber-800 border border-amber-200"><AlertTriangle className="w-4 h-4 shrink-0 mt-0.5"/><span><b>Double-markup warning:</b> this client's England account already returns marked-up rates, and the app is adding another {c.markup}% on top. If England's markup is the whole markup, set Markup % to 0 for this client.</span></div>}
+              {c.england&&c.england.customerId&&c.england.apiKey&&(+c.markup||0)>0&&<div className="mt-2 text-xs rounded px-3 py-2 flex items-start gap-1.5 bg-amber-50 text-amber-800 border border-amber-200"><AlertTriangle className="w-4 h-4 shrink-0 mt-0.5"/><span><b>Double-markup warning:</b> this client's England account already returns marked-up rates, and the app is adding another {c.markup}% on top. If England's markup is the whole markup, set Markup % to 0 for this client.</span></div>}
               <p className="mt-2 text-[11px] text-stone-400">With their own customer ID + API key, this client's quotes and labels run on their England account (their rate table, their markup baked in by England). Leave blank to use the main account with app-side markup. Both empty fields = main account.</p>
             </div>
           </div>}
@@ -1086,17 +1086,17 @@ function CustomizationsAdmin({users,clients,featureFlags={},setFeatureFlags,cust
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="font-medium text-stone-800 flex items-center gap-2">{f.label}{custom&&<Badge tone="blue">custom</Badge>}{f.clientNote&&<span className="text-[11px] text-stone-400 font-normal">built for {f.clientNote}</span>}</div>
-          {f.desc&&<div className="text-[12px] text-stone-400 mt-0.5">{f.desc}</div>}
+          {f.desc&&<div className="text-xs text-stone-400 mt-0.5">{f.desc}</div>}
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <span className="text-[11px] text-stone-400">on for {countOn(f)} of {customers.length} logins</span>
           {custom&&<button onClick={()=>removeCustom(f.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
         </div>
       </div>
-      {customers.length===0?<div className="text-[12px] text-stone-400 mt-2">No customer logins yet.</div>:
+      {customers.length===0?<div className="text-xs text-stone-400 mt-2">No customer logins yet.</div>:
       <div className="flex flex-wrap gap-1.5 mt-3">
         {customers.map(u=>{const on=featureOn(f.id,u,featureFlags[u.id]);const cn=clientNameOf(u);return (
-          <button key={u.id} onClick={()=>setFlag(u.id,f.id,!on)} title={(on?"Click to turn OFF for ":"Click to turn ON for ")+(u.name||u.email)} className={`text-[12px] rounded-full px-3 py-1.5 border transition-colors ${on?"bg-[#0086E0] border-[#0086E0] text-white":"bg-white border-stone-200 text-stone-500 hover:border-stone-400"}`}>
+          <button key={u.id} onClick={()=>setFlag(u.id,f.id,!on)} title={(on?"Click to turn OFF for ":"Click to turn ON for ")+(u.name||u.email)} className={`text-xs rounded-full px-3 py-1.5 border transition-colors ${on?"bg-[#0086E0] border-[#0086E0] text-white":"bg-white border-stone-200 text-stone-500 hover:border-stone-400"}`}>
             {u.name||u.email}{cn?<span className={on?"text-blue-100":"text-stone-400"}> · {cn}</span>:null}{on?" ✓":""}
           </button>);})}
       </div>}
@@ -1106,7 +1106,7 @@ function CustomizationsAdmin({users,clients,featureFlags={},setFeatureFlags,cust
   return (<div className="space-y-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="text-sm text-stone-500 max-w-2xl">Every customization and platform feature, and exactly who has it. Blue chip = on for that login; click any chip to flip it. When we build something custom for one client, register it here — turning it on for the next client is one click.</div>
-      <button onClick={()=>setDraft({label:"",desc:"",clientNote:""})} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Plus className="w-4 h-4"/>Register customization</button>
+      <button onClick={()=>setDraft({label:"",desc:"",clientNote:""})} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Plus className="w-4 h-4"/>Register customization</button>
     </div>
     {draft&&<div className="border border-[#0086E0]/40 bg-blue-50/40 rounded-lg p-4 space-y-3">
       <div className="grid sm:grid-cols-3 gap-3">
@@ -1115,18 +1115,18 @@ function CustomizationsAdmin({users,clients,featureFlags={},setFeatureFlags,cust
         <Field label="Built for (optional)"><Input value={draft.clientNote} onChange={e=>setDraft({...draft,clientNote:e.target.value})} placeholder="e.g. Acme Outfitters"/></Field>
       </div>
       <div className="flex items-center gap-2">
-        <button onClick={addCustom} disabled={!(draft.label||"").trim()} className="text-sm bg-[#0086E0] text-white rounded px-4 py-2 font-medium disabled:opacity-40">Add to registry</button>
+        <button onClick={addCustom} disabled={!(draft.label||"").trim()} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium disabled:opacity-40">Add to registry</button>
         <button onClick={()=>setDraft(null)} className="text-sm text-stone-500 px-2">Cancel</button>
       </div>
       <p className="text-[11px] text-stone-500">Registering creates the on/off switch and its ID. The feature itself is built into the platform behind that ID — register it when you promise it, toggle it on when it ships.</p>
     </div>}
     <div>
-      <div className="text-[11px] uppercase tracking-widest text-stone-400 mb-2">Custom built</div>
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Custom built</div>
       {customCat.length===0?<div className="border border-dashed border-stone-300 rounded-lg p-5 text-sm text-stone-400 bg-white">Nothing registered yet. When we build something for a specific client — a report, a rule, an integration, a workflow tweak — it gets registered here with its own switch, off for everyone by default. Then rolling it out to any other login is one click on their chip.</div>:
       <div className="space-y-3">{customCat.map(f=><FeatureRow key={f.id} f={f} custom={true}/>)}</div>}
     </div>
     <div>
-      <div className="text-[11px] uppercase tracking-widest text-stone-400 mb-2">Platform features</div>
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Platform features</div>
       <div className="space-y-3">{FEATURE_CATALOG.map(f=><FeatureRow key={f.id} f={f} custom={false}/>)}</div>
     </div>
   </div>);
@@ -1154,21 +1154,21 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
   return (<div className="space-y-3">
     <div className="text-sm text-stone-500 space-y-1">
       <p>Create and manage every login on the platform. <b>Customer</b> logins see only their own data and the tabs you give them; <b>admin</b> logins run this portal.</p>
-      <p className="text-[12px] text-stone-400">Per-login buttons: <b>Log in as</b> opens the app exactly as that person sees it (sign out to come back) · <b>Company admin</b> lets them manage their own company's logins · <b>Tabs &amp; logo</b> sets which tabs they see and their header logo · <b>Password</b> resets it · <b>Active/Deactivated</b> controls whether they can sign in.</p>
+      <p className="text-xs text-stone-400">Per-login buttons: <b>Log in as</b> opens the app exactly as that person sees it (sign out to come back) · <b>Company admin</b> lets them manage their own company's logins · <b>Tabs &amp; logo</b> sets which tabs they see and their header logo · <b>Password</b> resets it · <b>Active/Deactivated</b> controls whether they can sign in.</p>
     </div>
     {companyAdminRequests.length>0&&<div className="border border-violet-200 rounded-lg bg-violet-50/50 p-4 space-y-2">
       <div className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Building2 className="w-4 h-4 text-violet-600"/>Company admin requests<Badge tone="stone">{companyAdminRequests.length}</Badge></div>
       {companyAdminRequests.map(r=>{const co=clients.find(c=>c.id===r.clientId);return (
         <div key={r.id} className="flex items-center gap-3 bg-white border border-stone-200 rounded-lg px-3 py-2 flex-wrap">
           <div className="flex-1 min-w-0"><div className="text-sm font-medium text-stone-800 truncate">{r.name||r.email}</div><div className="text-[11px] text-stone-400 truncate">{r.email} · {(co&&co.name)||"—"} · {r.date}</div></div>
-          <button onClick={()=>{setUsers(us=>us.map(u=>u.id===r.uid?{...u,companyAdmin:true}:u));setCompanyAdminRequests&&setCompanyAdminRequests(l=>l.filter(x=>x.id!==r.id));}} className="text-[12px] bg-violet-600 text-white rounded px-3 py-1.5 font-medium hover:bg-violet-700">Approve</button>
-          <button onClick={()=>setCompanyAdminRequests&&setCompanyAdminRequests(l=>l.filter(x=>x.id!==r.id))} className="text-[12px] bg-stone-100 text-stone-600 rounded px-3 py-1.5 font-medium hover:bg-stone-200">Deny</button>
+          <button onClick={()=>{setUsers(us=>us.map(u=>u.id===r.uid?{...u,companyAdmin:true}:u));setCompanyAdminRequests&&setCompanyAdminRequests(l=>l.filter(x=>x.id!==r.id));}} className="text-xs bg-violet-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-violet-700">Approve</button>
+          <button onClick={()=>setCompanyAdminRequests&&setCompanyAdminRequests(l=>l.filter(x=>x.id!==r.id))} className="text-xs bg-stone-100 text-stone-600 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200">Deny</button>
         </div>);})}
       <p className="text-[11px] text-stone-500">Approving gives this person a Company admin tab where they can create logins for their own company and set each login’s tabs. It never touches other companies or your Admin portal.</p>
     </div>}
     {CLOUD.mode==="cloud"&&fedexRequests.length>0&&<div className="border border-emerald-200 bg-emerald-50/50 rounded-lg p-4 space-y-2">
       <div className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Truck className="w-4 h-4 text-emerald-600"/>FedEx account requests<Badge tone="green">{fedexRequests.length}</Badge></div>
-      {fedexRequests.map(r=>(<div key={r.id||r.uid} className="flex flex-wrap items-center gap-3 bg-white border border-stone-200 rounded px-3 py-2 text-sm">
+      {fedexRequests.map(r=>(<div key={r.id||r.uid} className="flex flex-wrap items-center gap-3 bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm">
         <div className="flex-1 min-w-[180px]"><div className="font-medium">{r.name||r.email}</div><div className="text-[11px] text-stone-400">{r.email}{r.volume?<> · {r.volume}/mo</>:null}{r.carrier?<> · ships {r.carrier}</>:null} · {r.requestedAt?new Date(r.requestedAt).toLocaleDateString():"recently"}</div></div>
         {r.invoiceKey&&<button onClick={async()=>{const res=await cloudCall({action:"getUpload",token:CLOUD.token,key:r.invoiceKey});if(!res||!res.ok){window.alert((res&&res.error)||"Could not fetch the file.");return;}const bytes=atob(res.data);const arr=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);const url=URL.createObjectURL(new Blob([arr],{type:res.type}));const a=document.createElement("a");a.href=url;a.download=res.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);}} className="text-xs border border-[#0086E0]/40 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>UPS invoice</button>}
         <button onClick={()=>setFedexRequests&&setFedexRequests(rs=>rs.filter(x=>x!==r))} className="text-xs border border-stone-300 text-stone-600 rounded px-3 py-1.5 hover:bg-stone-50">Done</button>
@@ -1177,11 +1177,11 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
     </div>}
     {CLOUD.mode==="cloud"&&signupRequests.length>0&&<div className="border border-blue-200 bg-blue-50/50 rounded-lg p-4 space-y-2">
       <div className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Users className="w-4 h-4 text-[#0086E0]"/>Access requests<Badge tone="blue">{signupRequests.length}</Badge></div>
-      {signupRequests.map(r=>(<div key={r.id||r.email} className="flex flex-wrap items-center gap-3 bg-white border border-stone-200 rounded px-3 py-2 text-sm">
+      {signupRequests.map(r=>(<div key={r.id||r.email} className="flex flex-wrap items-center gap-3 bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm">
         <div className="flex-1 min-w-[180px]"><div className="font-medium">{r.name}{r.company?<span className="text-stone-400 font-normal"> · {r.company}</span>:null}</div><div className="text-[11px] text-stone-400">{r.email} · requested {r.requestedAt?new Date(r.requestedAt).toLocaleDateString():"recently"}{r.volume?<> · {r.volume}/mo</>:null}{r.carrier?<> · ships {r.carrier}</>:null}</div></div>
         {r.invoiceKey&&<button onClick={async()=>{const res=await cloudCall({action:"getUpload",token:CLOUD.token,key:r.invoiceKey});if(!res||!res.ok){window.alert((res&&res.error)||"Could not fetch the file.");return;}const bytes=atob(res.data);const arr=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);const url=URL.createObjectURL(new Blob([arr],{type:res.type}));const a=document.createElement("a");a.href=url;a.download=res.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);}} className="text-xs border border-[#0086E0]/40 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>UPS invoice</button>}
         <select id={"reqclient-"+(r.id||r.email)} defaultValue="" className="text-xs border border-stone-300 rounded px-2 py-1.5 bg-white"><option value="">No customer account yet</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
-        <button disabled={busyReq===r.email} onClick={()=>{const sel=document.getElementById("reqclient-"+(r.id||r.email));decide(r.email,true,sel?sel.value:null);}} className="text-xs bg-emerald-600 text-white rounded px-3 py-1.5 font-medium hover:bg-emerald-700 disabled:opacity-50">{busyReq===r.email?"…":"Approve"}</button>
+        <button disabled={busyReq===r.email} onClick={()=>{const sel=document.getElementById("reqclient-"+(r.id||r.email));decide(r.email,true,sel?sel.value:null);}} className="text-xs bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-emerald-700 disabled:opacity-50">{busyReq===r.email?"…":"Approve"}</button>
         <button disabled={busyReq===r.email} onClick={()=>decide(r.email,false)} className="text-xs border border-stone-300 text-stone-600 rounded px-3 py-1.5 hover:bg-stone-50 disabled:opacity-50">Deny</button>
       </div>))}
       <p className="text-[11px] text-stone-400">Approving creates their login instantly with the password they chose at signup. Assign a customer account to give them that customer’s pricing, or leave unassigned and set it later.</p>
@@ -1206,7 +1206,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
       <button onClick={create} className={`text-sm rounded px-4 py-2 font-medium flex items-center gap-1.5 ${added?"bg-emerald-600 text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{added?<><Check className="w-4 h-4"/>Created</>:<><Plus className="w-4 h-4"/>Create login</>}</button>
     </div>
     <div className="border border-stone-200 rounded-lg bg-white overflow-hidden divide-y divide-stone-100">
-      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400"><div className="flex-1">Login</div><div className="w-24">Role</div><div className="w-32 hidden sm:block">Company</div><div className="w-24 hidden sm:block">Last login</div><div className="text-right flex-1 hidden lg:block">Actions</div></div>
+      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="flex-1">Login</div><div className="w-24">Role</div><div className="w-32 hidden sm:block">Company</div><div className="w-24 hidden sm:block">Last login</div><div className="text-right flex-1 hidden lg:block">Actions</div></div>
       {users.map(u=>(
         <div key={u.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
           <div className="flex-1 min-w-0"><div className="font-medium truncate">{u.name}</div><div className="text-[11px] text-stone-400 truncate">{u.email}</div></div>
@@ -1235,7 +1235,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
               <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Header logo for this login</div>
               <div className="flex items-center gap-3 flex-wrap">
                 {(featureFlags[u.id]||{})._logoB64?<img src={(featureFlags[u.id]||{})._logoB64} alt="Logo" className="h-8 w-auto max-w-[180px] object-contain border border-stone-200 rounded bg-white px-2 py-1"/>:<span className="text-[11px] text-stone-300 border border-dashed border-stone-300 rounded px-2.5 py-1.5">No logo</span>}
-                <label className="text-[11px] bg-stone-100 border border-stone-200 text-stone-700 rounded px-2.5 py-1 font-medium hover:bg-stone-200 cursor-pointer">Upload<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(e)=>{const file=e.target.files&&e.target.files[0]; if(!file)return; e.target.value="";
+                <label className="text-[11px] bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1 font-medium hover:bg-stone-200 cursor-pointer">Upload<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(e)=>{const file=e.target.files&&e.target.files[0]; if(!file)return; e.target.value="";
                   const done=(b64)=>setFlag(u.id,"_logoB64",b64);
                   const rd=new FileReader();
                   rd.onload=()=>{const url=String(rd.result||"");
@@ -1509,10 +1509,10 @@ function FedExIntake({onDone,onClose}){
     </label>
     <div className="bg-stone-50 border border-stone-200 rounded-lg p-3">
       <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Where to find your invoice (30 seconds)</div>
-      <div className="text-[12px] text-stone-500 leading-relaxed">Open the <a href="https://www.ups.com/us/en/business-solutions/ups-billing" target="_blank" rel="noopener noreferrer" className="text-[#0086E0] underline">UPS Billing Center</a>, then: <span className="text-stone-700">Manage Your Bills → Go to Billing Center → Log in → Download a PDF or CSV invoice</span> — then upload it above. Attach one and your line-by-line rate comparison comes back the same day.</div>
+      <div className="text-xs text-stone-500 leading-relaxed">Open the <a href="https://www.ups.com/us/en/business-solutions/ups-billing" target="_blank" rel="noopener noreferrer" className="text-[#0086E0] underline">UPS Billing Center</a>, then: <span className="text-stone-700">Manage Your Bills → Go to Billing Center → Log in → Download a PDF or CSV invoice</span> — then upload it above. Attach one and your line-by-line rate comparison comes back the same day.</div>
     </div>
     {err&&<div className="text-xs text-red-600">{err}</div>}
-    <button onClick={()=>onDone({volume:f.volume,carrier:f.carrier,invoice:inv})} className="w-full bg-[#0086E0] text-white rounded px-4 py-2.5 text-sm font-semibold hover:bg-[#0a76c2]">Continue</button>
+    <button onClick={()=>onDone({volume:f.volume,carrier:f.carrier,invoice:inv})} className="w-full bg-[#0086E0] text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-[#0a76c2]">Continue</button>
     <p className="text-[11px] text-stone-400 text-center">Next step: create your ShippingCloud login so we can attach this to your account.</p>
   </div>);
 }
@@ -1569,17 +1569,17 @@ function CloudAuth({onDone,initialMode,intake}){
         {fp==="sent"&&<><div className="font-semibold text-stone-800">Check your email</div><p className="text-[13px] text-stone-500">If that address has an account, a reset link is on its way. It works for one hour.</p><button onClick={()=>setFp(null)} className="w-full text-sm bg-stone-100 border border-stone-200 rounded-lg py-2 font-medium">Back to sign in</button></>}
         {fp&&fp.reset&&<><div className="font-semibold text-stone-800">Choose a new password</div><input type="password" value={fpPw} onChange={e=>setFpPw(e.target.value)} placeholder="New password (6+ characters)" className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><button onClick={fpSave} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium hover:bg-[#0072BE]">Save new password</button></>}
         {fp==="done"&&<><div className="font-semibold text-emerald-700 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>Password updated</div><p className="text-[13px] text-stone-500">Sign in with your new password.</p><button onClick={()=>setFp(null)} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium">Sign in</button></>}
-        {fpErr&&<div className="text-[12px] text-rose-600">{fpErr}</div>}
+        {fpErr&&<div className="text-xs text-rose-600">{fpErr}</div>}
       </div>
     </div>}
     {(<>
       <div className="grid grid-cols-2 bg-stone-100 rounded-lg p-1 text-sm font-medium">
-        <button onClick={()=>{setMode("signin");setErr("");}} className={`rounded-md py-1.5 ${mode==="signin"?"bg-white shadow text-stone-800":"text-stone-500"}`}>Sign in</button>
-        <button onClick={()=>{setMode("request");setErr("");}} className={`rounded-md py-1.5 ${mode==="request"?"bg-white shadow text-stone-800":"text-stone-500"}`}>Create account</button>
+        <button onClick={()=>{setMode("signin");setErr("");}} className={`rounded-lg py-1.5 ${mode==="signin"?"bg-white shadow text-stone-800":"text-stone-500"}`}>Sign in</button>
+        <button onClick={()=>{setMode("request");setErr("");}} className={`rounded-lg py-1.5 ${mode==="request"?"bg-white shadow text-stone-800":"text-stone-500"}`}>Create account</button>
 
       </div>
       <div className="space-y-2">
-        {mode==="request"&&intake&&<div className="text-[12px] bg-blue-50 border border-blue-200 text-[#006FBF] rounded px-3 py-2 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 shrink-0"/>Your FedEx account request is ready — create your login and we’ll attach it.</div>}
+        {mode==="request"&&intake&&<div className="text-xs bg-blue-50 border border-blue-200 text-[#006FBF] rounded-lg px-3 py-2 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 shrink-0"/>Your FedEx account request is ready — create your login and we’ll attach it.</div>}
         {mode==="request"&&<><input value={f.name} onChange={e=>setF({...f,name:e.target.value})} placeholder="Your name" className={inp}/>
         <input value={f.company} onChange={e=>setF({...f,company:e.target.value})} placeholder="Company" className={inp}/>
         {!intake&&<div className="grid grid-cols-2 gap-2">
@@ -1590,8 +1590,8 @@ function CloudAuth({onDone,initialMode,intake}){
         <input value={f.pw} onChange={e=>setF({...f,pw:e.target.value})} onKeyDown={e=>e.key==="Enter"&&(mode==="signin"?signin():request())} placeholder={mode==="request"?"Choose a password":"Password"} type="password" className={inp}/>
       </div>
       {err&&<div className="text-xs text-red-600">{err}</div>}
-      <button onClick={mode==="signin"?signin:request} disabled={busy} className="w-full bg-stone-900 text-white rounded px-4 py-2 text-sm font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"One moment…":(mode==="signin"?"Sign in":"Create account")}</button>
-      {mode==="signin"&&<button onClick={()=>{setFp("ask");setFpEmail("");}} className="w-full text-center text-[12px] text-stone-400 hover:text-stone-600 underline underline-offset-2">Forgot password?</button>}
+      <button onClick={mode==="signin"?signin:request} disabled={busy} className="w-full bg-stone-900 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"One moment…":(mode==="signin"?"Sign in":"Create account")}</button>
+      {mode==="signin"&&<button onClick={()=>{setFp("ask");setFpEmail("");}} className="w-full text-center text-xs text-stone-400 hover:text-stone-600 underline underline-offset-2">Forgot password?</button>}
       {mode==="request"&&<p className="text-[11px] text-stone-400 text-center">No approval wait, no credit card — you’re in immediately.</p>}
     </>)}
   </div>);
@@ -1615,7 +1615,7 @@ function LegalLinks(){
       <div onClick={e=>e.stopPropagation()} className="bg-white rounded-2xl max-w-2xl w-full max-h-[82vh] flex flex-col text-left">
         <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100">
           <div className="flex gap-1 bg-stone-100 rounded-lg p-0.5 text-sm">
-            {[["terms","Terms of Service"],["privacy","Privacy Policy"]].map(([k,l])=><button key={k} onClick={()=>setOpen(k)} className={`rounded-md px-3 py-1.5 ${open===k?"bg-white shadow text-stone-800 font-medium":"text-stone-500"}`}>{l}</button>)}
+            {[["terms","Terms of Service"],["privacy","Privacy Policy"]].map(([k,l])=><button key={k} onClick={()=>setOpen(k)} className={`rounded-lg px-3 py-1.5 ${open===k?"bg-white shadow text-stone-800 font-medium":"text-stone-500"}`}>{l}</button>)}
           </div>
           <button onClick={()=>setOpen(null)} className="text-stone-400 hover:text-stone-600"><X className="w-5 h-5"/></button>
         </div>
@@ -1725,7 +1725,7 @@ function Landing({onAuth}){
         <div className="relative bg-neutral-900 border border-white/10 rounded-2xl p-7 shadow-2xl">
           {[["FedEx Ground®","2 days","$9.41"],["FedEx One Rate® · 2Day","flat-rate box · 2 days","$14.95"],["FedEx Priority Overnight®","next day","$42.10"],["DHL Express","2 days","$21.66"]].map((r,i)=>(
             <div key={i} className={`flex items-center justify-between rounded-xl px-4 py-3.5 mb-2 ${i===0?"bg-[#0086E0]/15 border border-[#0086E0]/40":"bg-white/[0.03] border border-white/5"}`}>
-              <div className="flex items-center gap-3.5"><Truck className={`w-5 h-5 ${i===0?"text-[#38b6ff]":"text-stone-500"}`}/><div><div className="text-[15px] text-white font-medium">{r[0]}</div><div className="text-[12px] text-stone-500">{r[1]}</div></div></div>
+              <div className="flex items-center gap-3.5"><Truck className={`w-5 h-5 ${i===0?"text-[#38b6ff]":"text-stone-500"}`}/><div><div className="text-[15px] text-white font-medium">{r[0]}</div><div className="text-xs text-stone-500">{r[1]}</div></div></div>
               <div className={`font-mono text-lg ${i===0?"text-[#38b6ff] font-bold":"text-stone-300"}`}>{r[2]}</div>
             </div>))}
         </div>
@@ -1834,7 +1834,7 @@ function Landing({onAuth}){
     </div>}
     {/* footer */}
     <div className="max-w-6xl mx-auto px-5 py-10 text-center">
-      <div className="pt-6 border-t border-white/10 text-[12px] text-stone-600 flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+      <div className="pt-6 border-t border-white/10 text-xs text-stone-600 flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
         <span>© {new Date().getFullYear()} ShippingCloud.</span>
         <LegalLinks/>
         <span>FedEx® and DHL® are trademarks of their respective owners; shipping is provided under partner carrier agreements.</span>
@@ -1867,7 +1867,7 @@ function FirstRunFedEx({user,onClose}){
         <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto"/>
         <div className="text-lg font-semibold text-stone-800">You’re on the list</div>
         <p className="text-sm text-stone-500">A real person will set up your FedEx account and reach out — usually the same day. If you attached a UPS invoice, your rate comparison comes with it.</p>
-        <button onClick={onClose} className="bg-stone-900 text-white rounded px-5 py-2 text-sm font-medium">Start shipping</button>
+        <button onClick={onClose} className="bg-stone-900 text-white rounded-lg px-5 py-2 text-sm font-medium">Start shipping</button>
       </div>):(<>
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -1888,7 +1888,7 @@ function FirstRunFedEx({user,onClose}){
       <p className="text-[11px] text-stone-400 -mt-1">Attach one and we’ll send back a line-by-line rate comparison — same day. (Find it in the <a href="https://www.ups.com/us/en/business-solutions/ups-billing" target="_blank" rel="noopener noreferrer" className="text-[#0086E0] underline">UPS Billing Center</a>: Manage Your Bills → Billing Center → Log in → Download PDF or CSV.)</p>
       {err&&<div className="text-xs text-red-600">{err}</div>}
       <div className="flex items-center gap-2">
-        <button onClick={go} disabled={state==="busy"} className="flex-1 bg-[#0086E0] text-white rounded px-4 py-2 text-sm font-semibold hover:bg-[#0a76c2] disabled:opacity-50">{state==="busy"?"Sending…":"Get my FedEx account"}</button>
+        <button onClick={go} disabled={state==="busy"} className="flex-1 bg-[#0086E0] text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-[#0a76c2] disabled:opacity-50">{state==="busy"?"Sending…":"Get my FedEx account"}</button>
         <button onClick={onClose} className="text-sm text-stone-500 px-3 py-2">Maybe later</button>
       </div>
       </>)}
@@ -1910,7 +1910,7 @@ function CompanyAdminRequestButton({currentUser}){
   return (<div className="mt-3 pt-3 border-t border-stone-200 px-1">
     {state==="pending"
       ?<div className="text-[11px] text-stone-400 px-2 py-1.5 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5"/>Company admin request pending</div>
-      :<button onClick={ask} disabled={busy} className="w-full text-left text-[12px] text-stone-500 hover:text-[#006FBF] hover:bg-[#E6F4FF]/50 rounded-lg px-2 py-1.5 flex items-center gap-1.5">{busy?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<ShieldCheck className="w-3.5 h-3.5"/>}Request company admin</button>}
+      :<button onClick={ask} disabled={busy} className="w-full text-left text-xs text-stone-500 hover:text-[#006FBF] hover:bg-[#E6F4FF]/50 rounded-lg px-2 py-1.5 flex items-center gap-1.5">{busy?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<ShieldCheck className="w-3.5 h-3.5"/>}Request company admin</button>}
   </div>);
 }
 
@@ -1957,17 +1957,17 @@ function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,set
       <h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Building2 className="w-5 h-5 text-[#0086E0]"/>Company admin</h2>
       <p className="text-sm text-stone-500 mt-0.5">Create logins for your team and choose which tabs each person can use. Changes apply the next time they load the app.</p>
     </div>
-    {msg&&<div className={`text-[12px] rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
+    {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
     <Panel title="New team login">
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         <Field label="Name"><Input value={f.name} onChange={e=>setF({...f,name:e.target.value})}/></Field>
         <Field label="Email"><Input value={f.email} onChange={e=>setF({...f,email:e.target.value})}/></Field>
         <Field label="Temp password"><Input value={f.password} onChange={e=>setF({...f,password:e.target.value})}/></Field>
       </div>
-      <button onClick={create} disabled={busy||!f.name||!f.email||!f.password} className="text-sm bg-[#0086E0] text-white rounded px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<Plus className="w-4 h-4"/>}Create login</button>
+      <button onClick={create} disabled={busy||!f.name||!f.email||!f.password} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<Plus className="w-4 h-4"/>}Create login</button>
     </Panel>
     <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
-      <div className="px-4 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400">{users.length} login{users.length===1?"":"s"} in your company</div>
+      <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400">{users.length} login{users.length===1?"":"s"} in your company</div>
       {users.length===0&&<div className="p-6 text-center text-sm text-stone-400">No logins yet — create the first one above.</div>}
       {users.map(u=>{
         const flags=(companyFlags||{})[u.id]||{};
@@ -2190,7 +2190,7 @@ function AppInner(){
     ?{...DEFAULT_BRAND,name1:"FREIGHT",name2:"WIRE SHIP",dark:"#1c1917",primary:"#1E9BF0",...(settings.brand||{})}
     :{...DEFAULT_BRAND,...(settings.brand||{})};
   const client=clients.find(c=>c.id===clientId)||clients[0];
-  const SandboxBanner=()=>isSandbox?(<div className="bg-amber-500/95 text-white text-[12px] font-medium text-center py-1.5">SANDBOX — play freely. This account’s data is yours to trash; real accounts are untouched.</div>):null;
+  const SandboxBanner=()=>isSandbox?(<div className="bg-amber-500/95 text-white text-xs font-medium text-center py-1.5">SANDBOX — play freely. This account’s data is yours to trash; real accounts are untouched.</div>):null;
   const _origOnShippedAudit=(rec)=>{try{window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Booked label",detail:(rec.reference||"")+" · "+(rec.service||"")+" · "+(rec.tracking||"")}}));}catch(x){}};
   const logEmail=(e)=>{
     const id="e"+Date.now()+Math.random();
@@ -2365,12 +2365,12 @@ function AppInner(){
       {adminReturn&&<div className="bg-[#0086E0] text-white text-[13px] px-4 py-2 flex items-center justify-center gap-3 sticky top-0 z-40">
         <ShieldCheck className="w-4 h-4 shrink-0"/>
         <span>Admin preview — you’re seeing ShippingCloud exactly as <b>{currentUser&&(currentUser.name||currentUser.email)}</b> sees it. Anything you change here changes their account.</span>
-        <button onClick={exitImpersonation} className="bg-white text-[#0086E0] font-semibold rounded px-3 py-1 hover:bg-blue-50 shrink-0">Return to admin</button>
+        <button onClick={exitImpersonation} className="bg-white text-[#0086E0] font-semibold rounded-lg px-3 py-1 hover:bg-blue-50 shrink-0">Return to admin</button>
       </div>}
       {isDemo&&!adminReturn&&<div className="bg-amber-500 text-white text-[13px] px-4 py-2 flex items-center justify-center gap-3 sticky top-0 z-40 flex-wrap">
         <span className="font-semibold flex items-center gap-1.5"><Eye className="w-3.5 h-3.5"/>Demo mode</span><span className="hidden sm:inline opacity-90">Sample data — click around, nothing here is real.</span>
-        <button onClick={()=>{lsSet("postDemo","request");lsSet("session",null);window.location.reload();}} className="bg-white/20 hover:bg-white/30 rounded px-2.5 py-1 text-xs font-semibold">Create your real account</button>
-        <button onClick={()=>{lsSet("session",null);window.location.reload();}} className="bg-white/10 hover:bg-white/20 rounded px-2.5 py-1 text-xs">Exit demo</button>
+        <button onClick={()=>{lsSet("postDemo","request");lsSet("session",null);window.location.reload();}} className="bg-white/20 hover:bg-white/30 rounded-lg px-2.5 py-1 text-xs font-semibold">Create your real account</button>
+        <button onClick={()=>{lsSet("session",null);window.location.reload();}} className="bg-white/10 hover:bg-white/20 rounded-lg px-2.5 py-1 text-xs">Exit demo</button>
       </div>}
       {!isDemo&&!isAdmin&&!adminReturn&&CLOUD.mode==="cloud"&&!fedexPrompt.seen&&<FirstRunFedEx user={currentUser} onClose={()=>setFedexPrompt({seen:true})}/>}
       <AssistantChat who={isDemo?"demo":isAdmin?"admin":"customer"} getContext={assistantContext} onAction={onAssistantAction}/>
@@ -2684,7 +2684,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const commitDraft=(title)=>{const d={id:Date.now(),label:title||reference||receiver.name||receiver.city||"Untitled",when:new Date().toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}),to:`${receiver.city||""}${receiver.state?", "+receiver.state:""}`,snap:{sender,receiver,reference,invoiceNo,poNo,pieces,residential,signature,billTo,thirdAcct,insurance,selectedOrder,customs}};setDrafts(p=>[d,...p]);setNaming(false);setDraftName("");setSaved(true);setTimeout(()=>setSaved(false),1600);};
   const saveDraft=()=>{setDraftName(reference||receiver.name||receiver.city||"");setNaming(true);};
   /* box-logic explanation banner shown while a packed order is loaded */
-  const PackNote=()=>packNote?(<div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-[12px] text-emerald-800 flex items-center gap-2"><Boxes className="w-3.5 h-3.5 shrink-0"/><span className="flex-1">Box logic packed this order: <b>{packNote.boxNames}</b> · {packNote.totalWt} lb billable{packNote.unresolved.length?` · ${packNote.unresolved.length} item${packNote.unresolved.length===1?"":"s"} not in your catalog (weight may be low)`:""} — dims are editable below.</span><button onClick={()=>setPackNote(null)} className="text-emerald-500 hover:text-emerald-700"><X className="w-3.5 h-3.5"/></button></div>):null;
+  const PackNote=()=>packNote?(<div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800 flex items-center gap-2"><Boxes className="w-3.5 h-3.5 shrink-0"/><span className="flex-1">Box logic packed this order: <b>{packNote.boxNames}</b> · {packNote.totalWt} lb billable{packNote.unresolved.length?` · ${packNote.unresolved.length} item${packNote.unresolved.length===1?"":"s"} not in your catalog (weight may be low)`:""} — dims are editable below.</span><button onClick={()=>setPackNote(null)} className="text-emerald-500 hover:text-emerald-700"><X className="w-3.5 h-3.5"/></button></div>):null;
   const newShipment=()=>{setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setRes(true);setResTouched(false);setSig(false);setSigOption("none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");};
   return (
     <div className="flex flex-row gap-4 items-start">
@@ -2694,24 +2694,24 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <button onClick={()=>setOrdersOpen(false)} className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-stone-500 hover:text-stone-700"><ChevronDown className="w-4 h-4"/><ShoppingBag className="w-4 h-4"/>Orders{ordersToShow.length?<span className="text-stone-400 normal-case font-normal">· {ordersToShow.length}</span>:""}</button>
           <div className="flex items-center gap-1">
             {onRefresh&&shopifyConnected(settings)&&<button onClick={onRefresh} disabled={syncing} title="Refresh orders" className="text-stone-400 hover:text-[#0086E0] disabled:opacity-40 p-1">{syncing?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<RotateCcw className="w-3.5 h-3.5"/>}</button>}
-            <select value={orderSort} onChange={e=>setOrderSort(e.target.value)} className="bg-white border border-stone-200 rounded px-1.5 py-1 text-[11px] outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="total">Total</option><option value="customer">Name</option><option value="state">State</option><option value="weight">Weight</option></select>
+            <select value={orderSort} onChange={e=>setOrderSort(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-1.5 py-1 text-[11px] outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="total">Total</option><option value="customer">Name</option><option value="state">State</option><option value="weight">Weight</option></select>
           </div>
         </div>
         <div className="relative"><Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400"/><input value={orderQ} onChange={e=>setOrderQ(e.target.value)} placeholder="Search orders" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/></div>
         <div className="flex items-center gap-1.5">
-          <select value={storeFilter} onChange={e=>setStoreFilter(e.target.value)} className="flex-1 bg-white border border-stone-200 rounded px-1.5 py-1 text-[11px] outline-none focus:border-[#0099FF]"><option value="all">All stores</option>{storesPresent.map(s=><option key={s} value={s}>{s}</option>)}</select>
+          <select value={storeFilter} onChange={e=>setStoreFilter(e.target.value)} className="flex-1 bg-white border border-stone-200 rounded-lg px-1.5 py-1 text-[11px] outline-none focus:border-[#0099FF]"><option value="all">All stores</option>{storesPresent.map(s=><option key={s} value={s}>{s}</option>)}</select>
           <button onClick={()=>{const t=new Date().toISOString().slice(0,10);if(dateFrom===t&&dateTo===t){setDateFrom("");setDateTo("");}else{setDateFrom(t);setDateTo(t);}}} className={`text-[11px] font-medium rounded px-2 py-1 border shrink-0 ${(()=>{const t=new Date().toISOString().slice(0,10);return dateFrom===t&&dateTo===t;})()?"bg-[#0099FF] text-white border-[#0099FF]":"bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF] hover:bg-[#D6ECFF]"}`}>Today</button>
         </div>
         <div className="flex items-center gap-1 text-[10px] text-stone-400">
-          <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} className="flex-1 bg-white border border-stone-200 rounded px-1.5 py-1 text-[11px] text-stone-600 outline-none focus:border-[#0099FF]"/>
+          <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} className="flex-1 bg-white border border-stone-200 rounded-lg px-1.5 py-1 text-[11px] text-stone-600 outline-none focus:border-[#0099FF]"/>
           <span>–</span>
-          <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} className="flex-1 bg-white border border-stone-200 rounded px-1.5 py-1 text-[11px] text-stone-600 outline-none focus:border-[#0099FF]"/>
+          <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} className="flex-1 bg-white border border-stone-200 rounded-lg px-1.5 py-1 text-[11px] text-stone-600 outline-none focus:border-[#0099FF]"/>
           {(dateFrom||dateTo||storeFilter!=="all")&&<button onClick={()=>{setDateFrom("");setDateTo("");setStoreFilter("all");}} className="text-stone-400 hover:text-stone-700 shrink-0"><X className="w-3.5 h-3.5"/></button>}
         </div>
         <div className="space-y-2 max-h-[calc(100vh-220px)] overflow-auto pr-0.5">
         {ordersFiltered.length===0?<div className="border border-dashed border-stone-300 rounded-lg p-4 text-center text-xs text-stone-400">{ordersToShow.length===0?"No unfulfilled orders.":"No orders match."}</div>:ordersFiltered.map(o=>(
           <button key={o.id} onClick={()=>applyOrder(o)} className={`w-full text-left border rounded-lg p-3 transition-colors ${selectedOrder===o.id?"border-[#33ABFF] bg-[#E6F4FF]":"border-stone-200 bg-white hover:border-stone-300"}`}>
-            <div className="flex items-center justify-between"><span className="font-semibold text-sm text-stone-800 flex items-center gap-1.5">{o.name}{o.source&&<span className="text-[9px] uppercase tracking-wide text-stone-400 border border-stone-200 rounded px-1">{o.source}</span>}</span><span className="font-mono text-xs text-stone-400">${o.total}</span></div>
+            <div className="flex items-center justify-between"><span className="font-semibold text-sm text-stone-800 flex items-center gap-1.5">{o.name}{o.source&&<span className="text-[10px] uppercase tracking-wide text-stone-400 border border-stone-200 rounded px-1">{o.source}</span>}</span><span className="font-mono text-xs text-stone-400">${o.total}</span></div>
             <div className="text-xs text-stone-600 mt-0.5">{o.customer}</div>
             <div className="text-[11px] text-stone-400 mt-0.5">{o.city}, {o.state} {o.zip}</div>
             <div className="text-[11px] text-stone-400 truncate">{o.items}</div>
@@ -2727,9 +2727,9 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-base font-semibold text-stone-800 flex items-center gap-2 whitespace-nowrap"><Package className="w-4 h-4 text-[#0086E0]"/>Create shipment</h1>
           <div className="flex flex-wrap items-center gap-2">
-            <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-200 text-stone-700 rounded px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New shipment</button>
-            {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}
-            <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Ship "}}))} title="Describe a shipment in plain English and Claude fills the form" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded px-3 py-1.5 font-medium hover:bg-[#f5e6de] whitespace-nowrap"><Sparkles className="w-4 h-4"/><span className="sm:hidden">Ask Claude</span><span className="hidden sm:inline">Ask Claude to help</span></button>
+            <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New shipment</button>
+            {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}
+            <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Ship "}}))} title="Describe a shipment in plain English and Claude fills the form" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded-lg px-3 py-1.5 font-medium hover:bg-[#f5e6de] whitespace-nowrap"><Sparkles className="w-4 h-4"/><span className="sm:hidden">Ask Claude</span><span className="hidden sm:inline">Ask Claude to help</span></button>
           </div>
         </div>
         <div className="relative grid lg:grid-cols-2 gap-4">
@@ -2771,27 +2771,27 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         <div className="bg-stone-100 border border-stone-200 rounded-lg p-3 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-3">
-              <div className="text-[11px] uppercase tracking-widest text-stone-600 font-semibold">Packages · {pieces.length}</div>
+              <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">Packages · {pieces.length}</div>
               <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Ship date</span><input type="date" value={shipDate} onChange={e=>setShipDate(e.target.value)} className="text-sm font-mono text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-[#0099FF]"/></div>
-              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Ref #</span><input value={reference} onChange={e=>setReference(e.target.value)} placeholder="order / ref" className="w-28 bg-white border border-stone-300 rounded px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
-              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Invoice #</span><input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} placeholder="INV-…" className="w-24 bg-white border border-stone-300 rounded px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
-              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">PO #</span><input value={poNo} onChange={e=>setPoNo(e.target.value)} placeholder="PO-…" className="w-24 bg-white border border-stone-300 rounded px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
+              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Ref #</span><input value={reference} onChange={e=>setReference(e.target.value)} placeholder="order / ref" className="w-28 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
+              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Invoice #</span><input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} placeholder="INV-…" className="w-24 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
+              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">PO #</span><input value={poNo} onChange={e=>setPoNo(e.target.value)} placeholder="PO-…" className="w-24 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
             </div>
             <div className="flex flex-wrap items-center gap-4">
               <span className="text-[11px] text-stone-400 font-mono">total {totalWeight} lb</span>
-              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Insure $</span><input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0" className="w-16 bg-white border border-stone-300 rounded px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
-              <div className="flex items-center gap-1.5"><span className="text-[10px] uppercase tracking-widest text-stone-500">Signature</span><select value={sigOption} onChange={e=>{setSigOption(e.target.value);setSig(e.target.value!=="none");}} className="bg-white border border-stone-300 rounded px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="none">None</option><option value="direct">Direct signature</option><option value="indirect">Indirect signature</option><option value="adult">Adult signature</option></select></div>
+              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Insure $</span><input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0" className="w-16 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
+              <div className="flex items-center gap-1.5"><span className="text-[10px] uppercase tracking-widest text-stone-500">Signature</span><select value={sigOption} onChange={e=>{setSigOption(e.target.value);setSig(e.target.value!=="none");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="none">None</option><option value="direct">Direct signature</option><option value="indirect">Indirect signature</option><option value="adult">Adult signature</option></select></div>
               {quotes.some(q=>{const l=String(q.label||"").toLowerCase();return l.includes("fedex")&&/(overnight|2\s?day|express saver)/.test(l);})&&<label className="flex items-center gap-1.5 text-[11px] text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSat(e.target.checked)} className="accent-[#0086E0]"/><span className="uppercase tracking-widest text-stone-500">Saturday delivery <span className="normal-case text-stone-400">(Express only)</span></span></label>}
             </div>
           </div>
           <PackNote/>
-          {isPOBox(receiver.address1)&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-[12px] text-rose-700 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>This looks like a PO Box — FedEx can’t deliver to PO Boxes. Use a street address (or USPS when available).</div>}
-          {(()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);return so&&orderHasHazmat(so,settings.products||[])?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[12px] text-amber-800 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Contains a hazmat / lithium-battery item — ship ground only; air services aren’t allowed.</div>:null;})()}
-          {(()=>{const d=dupShipment(reference,shipments);return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[12px] text-amber-800 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}). Booking again creates a second charge.</div>:null;})()}
+          {isPOBox(receiver.address1)&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-xs text-rose-700 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>This looks like a PO Box — FedEx can’t deliver to PO Boxes. Use a street address (or USPS when available).</div>}
+          {(()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);return so&&orderHasHazmat(so,settings.products||[])?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Contains a hazmat / lithium-battery item — ship ground only; air services aren’t allowed.</div>:null;})()}
+          {(()=>{const d=dupShipment(reference,shipments);return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}). Booking again creates a second charge.</div>:null;})()}
           {pieces.map((p,i)=>(
-            <div key={i} className="flex flex-wrap items-end gap-2 bg-white border border-stone-200 rounded px-2 py-2">
+            <div key={i} className="flex flex-wrap items-end gap-2 bg-white border border-stone-200 rounded-lg px-2 py-2">
               <div className="text-[11px] text-stone-400 font-mono w-6">#{i+1}</div>
-              <div><div className="text-[10px] uppercase tracking-widest text-stone-500">Box</div><select value={p.boxIdx??-1} onChange={e=>{const j=+e.target.value;const pr=(settings.boxes||SEED_BOXES)[j];if(pr)setPiece(i,{L:pr.L,W:pr.W,H:pr.H,boxIdx:j,orBox:""});else setPiece(i,{boxIdx:-1});}} className="bg-white border border-stone-300 rounded px-2 py-1 text-sm outline-none focus:border-[#0099FF]">{p.orBox?<option value="-1">{p.orBox}</option>:<option value="-1">Custom</option>}{(settings.boxes||SEED_BOXES).map((pr,j)=><option key={pr.id} value={j}>{pr.name}</option>)}</select></div>
+              <div><div className="text-[10px] uppercase tracking-widest text-stone-500">Box</div><select value={p.boxIdx??-1} onChange={e=>{const j=+e.target.value;const pr=(settings.boxes||SEED_BOXES)[j];if(pr)setPiece(i,{L:pr.L,W:pr.W,H:pr.H,boxIdx:j,orBox:""});else setPiece(i,{boxIdx:-1});}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]">{p.orBox?<option value="-1">{p.orBox}</option>:<option value="-1">Custom</option>}{(settings.boxes||SEED_BOXES).map((pr,j)=><option key={pr.id} value={j}>{pr.name}</option>)}</select></div>
               <PkgInput label="L" req value={p.L} onChange={e=>setPiece(i,{L:e.target.value})}/>
               <PkgInput label="W" req value={p.W} onChange={e=>setPiece(i,{W:e.target.value})}/>
               <PkgInput label="H" req value={p.H} onChange={e=>setPiece(i,{H:e.target.value})}/>
@@ -2800,7 +2800,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               {pieces.length>1&&<button onClick={()=>delPiece(i)} className="text-stone-300 hover:text-rose-500 mb-1"><Trash2 className="w-4 h-4"/></button>}
             </div>
           ))}
-          <button onClick={addPiece} className="flex items-center gap-1 text-xs bg-stone-200 hover:bg-stone-300 rounded px-2.5 py-1.5 font-medium text-stone-700"><Plus className="w-3.5 h-3.5"/>Add package</button>
+          <button onClick={addPiece} className="flex items-center gap-1 text-xs bg-stone-200 hover:bg-stone-300 rounded-lg px-2.5 py-1.5 font-medium text-stone-700"><Plus className="w-3.5 h-3.5"/>Add package</button>
         </div>
 
         {intl&&(
@@ -2815,20 +2815,20 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <div className="hidden sm:flex text-[10px] uppercase tracking-wide text-stone-400 px-1 gap-2"><div className="flex-1">Description</div><div className="w-28">HTS code</div><div className="w-28">Origin</div><div className="w-12">Qty</div><div className="w-16">Unit $</div><div className="w-5"/></div>
               {customs.lines.map((l,i)=>(
                 <div key={i} className="flex flex-wrap sm:flex-nowrap gap-2 items-center">
-                  <input value={l.desc} onChange={e=>setLine(i,{desc:e.target.value})} placeholder="Item description" className="flex-1 min-w-0 bg-white border border-stone-200 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/>
-                  <input value={l.hts} onChange={e=>setLine(i,{hts:e.target.value})} list="htscodes" placeholder="HTS" className="w-28 bg-white border border-stone-200 rounded px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
-                  <select value={l.origin} onChange={e=>setLine(i,{origin:e.target.value})} className="w-28 bg-white border border-stone-200 rounded px-1 py-1.5 text-sm outline-none focus:border-[#0099FF]">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
-                  <input type="number" value={l.qty} onChange={e=>setLine(i,{qty:+e.target.value})} className="w-12 bg-white border border-stone-200 rounded px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
-                  <input type="number" value={l.value} onChange={e=>setLine(i,{value:e.target.value})} placeholder="0.00" className="w-16 bg-white border border-stone-200 rounded px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+                  <input value={l.desc} onChange={e=>setLine(i,{desc:e.target.value})} placeholder="Item description" className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/>
+                  <input value={l.hts} onChange={e=>setLine(i,{hts:e.target.value})} list="htscodes" placeholder="HTS" className="w-28 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
+                  <select value={l.origin} onChange={e=>setLine(i,{origin:e.target.value})} className="w-28 bg-white border border-stone-200 rounded-lg px-1 py-1.5 text-sm outline-none focus:border-[#0099FF]">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
+                  <input type="number" value={l.qty} onChange={e=>setLine(i,{qty:+e.target.value})} className="w-12 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
+                  <input type="number" value={l.value} onChange={e=>setLine(i,{value:e.target.value})} placeholder="0.00" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/>
                   <button onClick={()=>delLine(i)} className="text-stone-300 hover:text-rose-500 w-5"><X className="w-4 h-4"/></button>
                 </div>
               ))}
               <datalist id="htscodes">{HTS_SUGGEST.map(h=><option key={h.code} value={h.code}>{h.desc}</option>)}</datalist>
-              <button onClick={addLine} className="flex items-center gap-1 text-xs bg-white border border-stone-200 hover:bg-stone-100 rounded px-2.5 py-1.5 font-medium text-stone-700"><Plus className="w-3.5 h-3.5"/>Add item</button>
+              <button onClick={addLine} className="flex items-center gap-1 text-xs bg-white border border-stone-200 hover:bg-stone-100 rounded-lg px-2.5 py-1.5 font-medium text-stone-700"><Plus className="w-3.5 h-3.5"/>Add item</button>
             </div>
             <div className="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-[#99D6FF]">
               <div className="text-sm">Declared value <span className="font-mono font-semibold">{money(customsTotal)}</span></div>
-              <button onClick={()=>setShowCI(s=>!s)} className="text-sm bg-stone-900 text-white rounded px-3 py-1.5 font-medium flex items-center gap-1.5 hover:bg-stone-800"><FileText className="w-4 h-4"/>{showCI?"Hide":"View"} commercial invoice</button>
+              <button onClick={()=>setShowCI(s=>!s)} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium flex items-center gap-1.5 hover:bg-stone-800"><FileText className="w-4 h-4"/>{showCI?"Hide":"View"} commercial invoice</button>
             </div>
             {showCI&&<CommercialInvoice sender={sender} receiver={receiver} customs={customs} total={customsTotal} reference={reference} pieces={pieces} totalWeight={totalWeight}/>}
           </div>
@@ -2842,7 +2842,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         </div>}
         <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} onOneRate={applyOneRateBox}/>
         {labelPreview&&<LabelPreviewModal data={labelPreview} onClose={()=>setLabelPreview(null)}/>}
-        {naming&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setNaming(false)}><div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-sm space-y-3" onClick={e=>e.stopPropagation()}><div className="text-sm font-semibold text-stone-800">Name this draft</div><input autoFocus value={draftName} onChange={e=>setDraftName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")commitDraft(draftName.trim());}} placeholder="e.g. Dana Cole – Miami" className="w-full bg-white border border-stone-300 rounded px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><div className="flex justify-end gap-2"><button onClick={()=>setNaming(false)} className="text-sm px-3 py-1.5 rounded text-stone-600 hover:bg-stone-100">Cancel</button><button onClick={()=>commitDraft(draftName.trim())} className="text-sm px-3 py-1.5 rounded bg-stone-900 text-white font-medium hover:bg-stone-800">Save draft</button></div></div></div>}
+        {naming&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setNaming(false)}><div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-sm space-y-3" onClick={e=>e.stopPropagation()}><div className="text-sm font-semibold text-stone-800">Name this draft</div><input autoFocus value={draftName} onChange={e=>setDraftName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")commitDraft(draftName.trim());}} placeholder="e.g. Dana Cole – Miami" className="w-full bg-white border border-stone-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><div className="flex justify-end gap-2"><button onClick={()=>setNaming(false)} className="text-sm px-3 py-1.5 rounded text-stone-600 hover:bg-stone-100">Cancel</button><button onClick={()=>commitDraft(draftName.trim())} className="text-sm px-3 py-1.5 rounded bg-stone-900 text-white font-medium hover:bg-stone-800">Save draft</button></div></div></div>}
         {shipStatus&&<div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2.5 ${shipStatus.state==="error"?"bg-rose-50 text-rose-700 border border-rose-200":shipStatus.state==="booked"?"bg-emerald-50 text-emerald-700 border border-emerald-200":shipStatus.state==="pending_timeout"?"bg-amber-50 text-amber-700 border border-amber-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
           {shipStatus.state==="booking"&&<><Loader2 className="w-4 h-4 animate-spin"/>Booking label on your England account…</>}
           {shipStatus.state==="pending"&&<><Loader2 className="w-4 h-4 animate-spin"/>Order pushed to England — waiting for it to book and return the label…</>}
@@ -2852,20 +2852,20 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         </div>}
 
         <div className="border border-stone-200 rounded-lg bg-white p-3 space-y-3">
-          <div className="text-[11px] uppercase tracking-widest text-stone-600 font-semibold">Billing &amp; third-party</div>
+          <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">Billing &amp; third-party</div>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <div className="flex items-center gap-2 text-sm">
               <span className="text-stone-500 flex items-center gap-1"><CreditCard className="w-3.5 h-3.5"/>Bill to</span>
-              <select value={billTo} onChange={e=>setBillTo(e.target.value)} className="bg-white border border-stone-200 rounded px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="sender">Sender (you)</option><option value="receiver">Receiver</option><option value="third">Third-party acct</option></select>
-              {billTo==="third"&&<input value={thirdAcct} onChange={e=>setThirdAcct(e.target.value)} placeholder="3rd-party acct #" className="bg-white border border-stone-200 rounded px-2 py-1 text-sm w-40 outline-none focus:border-[#0099FF] font-mono"/>}
+              <select value={billTo} onChange={e=>setBillTo(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="sender">Sender (you)</option><option value="receiver">Receiver</option><option value="third">Third-party acct</option></select>
+              {billTo==="third"&&<input value={thirdAcct} onChange={e=>setThirdAcct(e.target.value)} placeholder="3rd-party acct #" className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm w-40 outline-none focus:border-[#0099FF] font-mono"/>}
             </div>
           </div>
         </div>
 
         <div className="border border-stone-200 rounded-lg bg-white p-3 space-y-3">
-          <div className="text-[11px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><Send className="w-3.5 h-3.5"/>Send label &amp; notify</div>
+          <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><Send className="w-3.5 h-3.5"/>Send label &amp; notify</div>
           <div className="flex flex-wrap items-end gap-3">
-            <div className="flex-1 min-w-0"><div className="text-[10px] uppercase tracking-widest text-stone-400">Send to email</div><input value={emailTo} onChange={e=>setEmailTo(e.target.value)} placeholder={receiver.email||"customer@example.com"} className="w-full bg-white border border-stone-200 rounded px-2.5 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
+            <div className="flex-1 min-w-0"><div className="text-[10px] uppercase tracking-widest text-stone-400">Send to email</div><input value={emailTo} onChange={e=>setEmailTo(e.target.value)} placeholder={receiver.email||"customer@example.com"} className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
             <button onClick={sendLabel} className={`flex items-center gap-1.5 text-sm rounded px-3 py-2 font-medium ${sent==="label"?"bg-emerald-600 text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{sent==="label"?<><Check className="w-4 h-4"/>Label sent</>:<><Printer className="w-4 h-4"/>Send shipping label</>}</button>
             <button onClick={sendEmail} className={`flex items-center gap-1.5 text-sm rounded px-3 py-2 font-medium ${sent==="email"?"bg-emerald-600 text-white":"bg-stone-200 text-stone-700 hover:bg-stone-300"}`}>{sent==="email"?<><Check className="w-4 h-4"/>Email sent</>:<><Mail className="w-4 h-4"/>Send tracking email</>}</button>
           </div>
@@ -2874,13 +2874,13 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <div className="text-[10px] uppercase tracking-widest text-stone-400">Message to customer</div>
               <button onClick={saveMsgDefault} className={`text-[11px] font-medium ${msgSaved?"text-emerald-600":"text-[#0086E0] hover:text-[#006FBF]"}`}>{msgSaved?"✓ Saved as default":"Save as default"}</button>
             </div>
-            <textarea value={emailMsg} onChange={e=>setEmailMsg(e.target.value)} rows={3} placeholder="Add a custom note to include in the email — or save a default that's always pre-filled here." className="w-full bg-white border border-stone-200 rounded px-2.5 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 resize-y"/>
+            <textarea value={emailMsg} onChange={e=>setEmailMsg(e.target.value)} rows={3} placeholder="Add a custom note to include in the email — or save a default that's always pre-filled here." className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 resize-y"/>
           </div>
           <p className="text-[11px] text-stone-400">Emails the buyer a tracking link or a printable label PDF. Logged under Settings → Email automation.</p>
         </div>
         <div className="flex justify-end gap-2 pt-1">
-          <button onClick={()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);printPackingSlips([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||"ShippingCloud shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:(shipStatus&&shipStatus.tracking)||"",service:""}]);}} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-200"><FileText className="w-4 h-4"/>Packing slip</button>
-          <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-200 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-300"><Plus className="w-4 h-4"/>New shipment</button>
+          <button onClick={()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);printPackingSlips([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||"ShippingCloud shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:(shipStatus&&shipStatus.tracking)||"",service:""}]);}} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-200"><FileText className="w-4 h-4"/>Packing slip</button>
+          <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-300"><Plus className="w-4 h-4"/>New shipment</button>
           <button onClick={saveDraft} className={`flex items-center gap-1.5 text-sm rounded px-4 py-2 font-medium ${saved?"bg-emerald-600 text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{saved?<><Check className="w-4 h-4"/>Saved to drafts</>:<><FileText className="w-4 h-4"/>Save draft</>}</button>
         </div>
       </div>
@@ -2890,7 +2890,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
 
 function CommercialInvoice({sender,receiver,customs,total,reference,pieces,totalWeight}){
   return (
-    <div className="overflow-x-auto"><div className="bg-white border border-stone-300 rounded-lg p-5 text-[12px] text-stone-700 min-w-[520px]" style={{fontFamily:"ui-sans-serif,system-ui"}}>
+    <div className="overflow-x-auto"><div className="bg-white border border-stone-300 rounded-lg p-5 text-xs text-stone-700 min-w-[520px]" style={{fontFamily:"ui-sans-serif,system-ui"}}>
       <div className="flex items-start justify-between border-b border-stone-300 pb-3 mb-3">
         <div><div className="text-lg font-bold tracking-tight text-stone-900">COMMERCIAL INVOICE</div><div className="text-stone-400">ShippingCloud · for customs clearance</div></div>
         <div className="text-right"><div>Invoice # <span className="font-mono">{customs.ci||"CI-PREVIEW"}</span></div><div>Date {new Date().toLocaleDateString()}</div><div>Ref {reference||"—"}</div></div>
@@ -2998,7 +2998,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
             {comps.map((c,i)=><div key={i} className="flex justify-between text-[13px]"><span className="text-stone-600">{c.label}</span><span className="font-mono text-stone-700">{money(c.amount)}</span></div>)}
             <div className="flex justify-between text-[13px] border-t border-stone-200 pt-1 mt-1 font-semibold"><span>Total</span><span className="font-mono">{money(sell)}</span></div>
           </div>
-          {q.dimWeight&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-2 flex items-center gap-1.5"><AlertTriangle className="w-3 h-3 shrink-0"/>Billed at <b>{q.quotedWeight?`${q.quotedWeight} lb `:""}dimensional weight</b>.</div>}
+          {q.dimWeight&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 mt-2 flex items-center gap-1.5"><AlertTriangle className="w-3 h-3 shrink-0"/>Billed at <b>{q.quotedWeight?`${q.quotedWeight} lb `:""}dimensional weight</b>.</div>}
           {eta&&<div className="text-[11px] text-stone-400 mt-2 flex items-center gap-1"><Calendar className="w-3 h-3"/>{fxLive?"FedEx delivery":"Estimated delivery"} {fmtDeliv(eta)}{days?` · ${days} business day${days>1?"s":""} in transit`:""}</div>}
         </div>}
       </div>
@@ -3011,7 +3011,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
         <div className="flex items-center gap-2">
           {!ready&&<span className="text-[11px] text-stone-400">enter ZIP &amp; weight to see rates</span>}
           <div className="flex bg-stone-100 rounded-lg p-0.5 text-xs">
-            {[["cheapest","Cheapest"],["carrier","By carrier"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-2.5 py-1 rounded-md ${view===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}
+            {[["cheapest","Cheapest"],["carrier","By carrier"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-2.5 py-1 rounded-lg ${view===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}
           </div>
         </div>
       </div>
@@ -3079,7 +3079,7 @@ function Orders({orders,setOrders,goShip,client,settings,onShipped}){
   };
   return (
     <div className="space-y-3">
-      {syncMsg&&<div className={`text-[12px] rounded px-3 py-2 flex items-center gap-1.5 ${syncMsg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{syncMsg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{syncMsg.err||syncMsg.ok}</div>}
+      {syncMsg&&<div className={`text-xs rounded px-3 py-2 flex items-center gap-1.5 ${syncMsg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{syncMsg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{syncMsg.err||syncMsg.ok}</div>}
       {adding&&<NewOrderForm onClose={()=>setAdding(false)} onCreate={(o)=>{setOrders(p=>[o,...p]);setAdding(false);}}/>}
       <div className="flex gap-4">
         <aside className="w-48 shrink-0 hidden md:block space-y-4">
@@ -3099,13 +3099,13 @@ function Orders({orders,setOrders,goShip,client,settings,onShipped}){
         </aside>
         <div className="flex-1 min-w-0 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="md:hidden flex bg-stone-100 rounded-lg p-0.5 text-sm">{[["all","All"],["unfulfilled","Awaiting"],["fulfilled","Shipped"]].map(([v,l])=><button key={v} onClick={()=>setFilter(v)} className={`px-3 py-1.5 rounded-md ${filter===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}</div>
+            <div className="md:hidden flex bg-stone-100 rounded-lg p-0.5 text-sm">{[["all","All"],["unfulfilled","Awaiting"],["fulfilled","Shipped"]].map(([v,l])=><button key={v} onClick={()=>setFilter(v)} className={`px-3 py-1.5 rounded-lg ${filter===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}</div>
             <div className="flex-1 relative min-w-[160px]"><Search className="w-4 h-4 absolute left-2.5 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search orders, items, recipient…" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-3 py-2 text-sm outline-none focus:border-[#0099FF]"/></div>
-            <div className="flex items-center gap-1.5 text-sm"><span className="text-stone-500 hidden sm:inline">Sort</span><select value={sort} onChange={e=>setSort(e.target.value)} className="bg-white border border-stone-200 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="total">Order total</option><option value="customer">Recipient</option><option value="state">Dest. state</option><option value="weight">Weight</option><option value="source">Store</option></select></div>
+            <div className="flex items-center gap-1.5 text-sm"><span className="text-stone-500 hidden sm:inline">Sort</span><select value={sort} onChange={e=>setSort(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="total">Order total</option><option value="customer">Recipient</option><option value="state">Dest. state</option><option value="weight">Weight</option><option value="source">Store</option></select></div>
             <button onClick={()=>downloadCSV("shippingcloud-orders.csv",[["Order","Customer","Company","Address","City","State","ZIP","Country","Items","SKU","Weight","Total","Source","Date","Note"],...orders.map(o=>[o.name,o.customer,o.company||"",o.address1||"",o.city,o.state,o.zip,o.country||"US",o.items||"",o.sku||"",o.weight,o.total||"",o.source||"",o.date||"",o.note||""])])} title="Download every open order as CSV" className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 px-2 py-2"><Download className="w-4 h-4"/>Export</button>
-            <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Batch "}}))} title="e.g. ‘batch everything going to Texas under 5 lb as cheapest ground’" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded px-3 py-2 font-medium hover:bg-[#f5e6de]"><Sparkles className="w-4 h-4"/>Ask Claude to batch these</button>
-            {orderSources.length>0&&<button onClick={syncAll} disabled={syncing} title={orderSources.length>1?`Syncs: ${orderSources.map(s=>s.name).join(", ")}`:undefined} className="flex items-center gap-1.5 text-sm border border-[#0086E0]/30 bg-[#E6F4FF] text-[#006FBF] rounded px-3 py-2 font-medium hover:bg-[#CDE9FF] disabled:opacity-40">{syncing?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>{syncLabel}</>}</button>}
-            <button onClick={()=>setAdding(true)} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded px-3 py-2 font-medium hover:bg-stone-800"><Plus className="w-4 h-4"/>New order</button>
+            <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Batch "}}))} title="e.g. ‘batch everything going to Texas under 5 lb as cheapest ground’" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded-lg px-3 py-2 font-medium hover:bg-[#f5e6de]"><Sparkles className="w-4 h-4"/>Ask Claude to batch these</button>
+            {orderSources.length>0&&<button onClick={syncAll} disabled={syncing} title={orderSources.length>1?`Syncs: ${orderSources.map(s=>s.name).join(", ")}`:undefined} className="flex items-center gap-1.5 text-sm border border-[#0086E0]/30 bg-[#E6F4FF] text-[#006FBF] rounded-lg px-3 py-2 font-medium hover:bg-[#CDE9FF] disabled:opacity-40">{syncing?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>{syncLabel}</>}</button>}
+            <button onClick={()=>setAdding(true)} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800"><Plus className="w-4 h-4"/>New order</button>
           </div>
           <div className="border border-stone-200 rounded-lg overflow-hidden bg-white">
             <div className="overflow-x-auto">
@@ -3180,7 +3180,7 @@ function NewOrderForm({onClose,onCreate}){
         <Field label="Order total $"><Input value={f.total} onChange={e=>set("total",e.target.value)}/></Field>
         <Field label="Source"><Select value={f.source} onChange={e=>set("source",e.target.value)}>{["Manual","Shopify",...CONNECTORS.filter(c=>c.orders).map(c=>c.name)].map(s=><option key={s}>{s}</option>)}</Select></Field>
       </div>
-      <button onClick={create} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium hover:bg-stone-800">Create order</button>
+      <button onClick={create} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800">Create order</button>
     </div>
   );
 }
@@ -3255,19 +3255,19 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
         <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2"><CheckCircle2 className="w-4 h-4"/>Shipped{o.tracking?<> · tracking <a className="underline font-mono" href={TRACK_URL[carrierOf("FedEx")](o.tracking)} target="_blank" rel="noopener">{o.tracking}</a></>:""}</div>
       ):(<>
         <div className="flex flex-wrap items-end gap-3 border border-stone-200 rounded-lg bg-white p-3">
-          <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Weight (lb)</div><input type="number" value={weight} onChange={e=>{setWeight(+e.target.value);upd({weight:+e.target.value});}} className="w-20 bg-white border border-stone-300 rounded px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF]"/></div>
-          <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Box</div><select value={boxIdx} onChange={e=>setBoxIdx(+e.target.value)} className="bg-white border border-stone-300 rounded px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="-1">Default 12×9×4</option>{boxes.map((b,j)=><option key={b.id} value={j}>{b.name}</option>)}</select></div>
+          <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Weight (lb)</div><input type="number" value={weight} onChange={e=>{setWeight(+e.target.value);upd({weight:+e.target.value});}} className="w-20 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF]"/></div>
+          <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Box</div><select value={boxIdx} onChange={e=>setBoxIdx(+e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="-1">Default 12×9×4</option>{boxes.map((b,j)=><option key={b.id} value={j}>{b.name}</option>)}</select></div>
           <label className="flex items-center gap-1.5 text-sm text-stone-600"><input type="checkbox" checked={residential} onChange={e=>setRes(e.target.checked)} className="accent-[#0086E0]"/>Residential</label>
           <label className="flex items-center gap-1.5 text-[13px] text-stone-600"><input type="checkbox" checked={oneRate} onChange={e=>setOneRate(e.target.checked)} className="accent-[#0086E0]"/>One Rate</label>
           <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border ${residential?"text-[#006FBF] bg-[#E6F4FF] border-[#99D6FF]":"text-stone-700 bg-stone-100 border-stone-200"}`}>{residential?<Home className="w-3.5 h-3.5"/>:<Building2 className="w-3.5 h-3.5"/>}{residential?"Residential":"Commercial"}</span>
           <div className="flex-1"/>
           {rateSrc.live?<span className="text-[11px] text-emerald-600 flex items-center gap-1"><Wifi className="w-3.5 h-3.5"/>Live England rates</span>:canBook?<span className="text-[11px] text-stone-400">{rateSrc.loading?"Loading rates…":""}</span>:<span className="text-[11px] text-amber-600">Demo rates — connect England</span>}
-          <button onClick={()=>goShip(o)} className="text-sm bg-stone-200 text-stone-700 rounded px-3 py-1.5 font-medium hover:bg-stone-300 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/>Open in Ship tab</button>
-          <button onClick={()=>printPackingSlips([slipFromOrder(o,settings&&settings.sender)])} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing slip</button>
-          {o.country&&o.country!=="US"&&<button onClick={()=>printCommercialInvoice(o,(settings&&settings.products)||[],settings&&settings.sender)} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Commercial invoice</button>}
+          <button onClick={()=>goShip(o)} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/>Open in Ship tab</button>
+          <button onClick={()=>printPackingSlips([slipFromOrder(o,settings&&settings.sender)])} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing slip</button>
+          {o.country&&o.country!=="US"&&<button onClick={()=>printCommercialInvoice(o,(settings&&settings.products)||[],settings&&settings.sender)} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Commercial invoice</button>}
         </div>
-        {oneRate&&<div className={`text-[12px] rounded px-3 py-2 flex items-center gap-2 ${orBox?"bg-[#E6F4FF] text-[#0072BE] border border-[#99D6FF]":"bg-amber-50 text-amber-700 border border-amber-200"}`}><Boxes className="w-4 h-4 shrink-0"/>{orBox?<span>Qualifies for <b>{orBox.name}</b> — pricing this box only.</span>:<span>Set a box size within One Rate limits (≤2,200 cu in, ≤50 lb).</span>}</div>}
-        {(o.shippingService||o.source)&&<div className="text-[12px] text-stone-500 flex items-center gap-1.5 -mt-1"><Truck className="w-3.5 h-3.5 text-stone-400"/>Buyer selected <b className="text-stone-700">{o.shippingService||"Standard"}</b>{o.source?` from ${o.source}`:""} — match it or pick the best rate below.</div>}
+        {oneRate&&<div className={`text-xs rounded px-3 py-2 flex items-center gap-2 ${orBox?"bg-[#E6F4FF] text-[#0072BE] border border-[#99D6FF]":"bg-amber-50 text-amber-700 border border-amber-200"}`}><Boxes className="w-4 h-4 shrink-0"/>{orBox?<span>Qualifies for <b>{orBox.name}</b> — pricing this box only.</span>:<span>Set a box size within One Rate limits (≤2,200 cu in, ≤50 lb).</span>}</div>}
+        {(o.shippingService||o.source)&&<div className="text-xs text-stone-500 flex items-center gap-1.5 -mt-1"><Truck className="w-3.5 h-3.5 text-stone-400"/>Buyer selected <b className="text-stone-700">{o.shippingService||"Standard"}</b>{o.source?` from ${o.source}`:""} — match it or pick the best rate below.</div>}
         <ServiceList quotes={quotes} best={best} bought={bought} action={ready?printHere:null} label="Buy & print" doneLabel="Printed" ready={ready}/>
         {status&&<div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2 ${status.state==="error"?"text-rose-600 bg-rose-50 border border-rose-200":status.state==="booking"?"text-stone-600 bg-stone-50 border border-stone-200":"text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF]"}`}>{status.state==="booking"?<Loader2 className="w-4 h-4 animate-spin"/>:status.state==="error"?<AlertTriangle className="w-4 h-4"/>:<CheckCircle2 className="w-4 h-4"/>}{status.msg}</div>}
       </>)}
@@ -3410,7 +3410,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <button onClick={()=>{goShip&&goShip(o);onClose&&onClose();}} className="text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/>Open in Ship tab</button>
+            <button onClick={()=>{goShip&&goShip(o);onClose&&onClose();}} className="text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/>Open in Ship tab</button>
             <button onClick={onClose} className="text-stone-400 hover:text-stone-700 p-1"><X className="w-5 h-5"/></button>
           </div>
         </div>
@@ -3507,8 +3507,8 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
             </div>
             {!shipped&&<div className="bg-white border border-stone-200 rounded-lg p-4">
               {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} onOneRate={applyORBox}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
-              {ready&&rateSrc.loading&&<div className="text-[12px] text-stone-400 flex items-center gap-1.5 mt-2"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Loading rates…</div>}
-              {status&&<div className={`mt-2 text-[12px] rounded px-2 py-1.5 flex items-center gap-1.5 ${status.state==="error"?"text-rose-600 bg-rose-50 border border-rose-200":status.state==="booking"?"text-stone-600 bg-stone-50 border border-stone-200":"text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF]"}`}>{status.state==="error"?<AlertTriangle className="w-3.5 h-3.5"/>:status.state==="booking"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{status.msg}</div>}
+              {ready&&rateSrc.loading&&<div className="text-xs text-stone-400 flex items-center gap-1.5 mt-2"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Loading rates…</div>}
+              {status&&<div className={`mt-2 text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${status.state==="error"?"text-rose-600 bg-rose-50 border border-rose-200":status.state==="booking"?"text-stone-600 bg-stone-50 border border-stone-200":"text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF]"}`}>{status.state==="error"?<AlertTriangle className="w-3.5 h-3.5"/>:status.state==="booking"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{status.msg}</div>}
             </div>}
           </div>
         </div>
@@ -3528,10 +3528,10 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels}
     <div className="border border-amber-200 bg-amber-50 rounded-lg px-3 py-2.5 flex items-center gap-3">
       <Clock className="w-4 h-4 text-amber-600 shrink-0"/>
       <div className="flex-1 text-[13px] text-amber-800">{pendingShips.length} order{pendingShips.length===1?"":"s"} staged in England, waiting to book in Webship. Once you ship {pendingShips.length===1?"it":"them"} there (or auto-ship books {pendingShips.length===1?"it":"them"}), pull the label + tracking here.</div>
-      <button onClick={check} disabled={checking} className="text-sm bg-amber-600 text-white rounded px-3 py-1.5 font-medium hover:bg-amber-700 disabled:opacity-50 flex items-center gap-1.5 shrink-0">{checking?<><Loader2 className="w-4 h-4 animate-spin"/>Checking…</>:<><RotateCcw className="w-4 h-4"/>Check for labels</>}</button>
+      <button onClick={check} disabled={checking} className="text-sm bg-amber-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-amber-700 disabled:opacity-50 flex items-center gap-1.5 shrink-0">{checking?<><Loader2 className="w-4 h-4 animate-spin"/>Checking…</>:<><RotateCcw className="w-4 h-4"/>Check for labels</>}</button>
     </div>
   ):null;
-  if(!shipments.length)return (<div className="space-y-3"><PendingBar/>{chkMsg&&<div className={`text-[12px] rounded px-2 py-1.5 flex items-center gap-1.5 ${chkMsg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{chkMsg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{chkMsg.err||chkMsg.ok}</div>}<Empty icon={Truck} title="No shipments yet" body="Print a label on the Ship tab and it lands here with tracking, edit & reship."/></div>);
+  if(!shipments.length)return (<div className="space-y-3"><PendingBar/>{chkMsg&&<div className={`text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${chkMsg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{chkMsg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{chkMsg.err||chkMsg.ok}</div>}<Empty icon={Truck} title="No shipments yet" body="Print a label on the Ship tab and it lands here with tracking, edit & reship."/></div>);
   const voidS=id=>setShipments(s=>s.map(x=>x.id===id?{...x,status:"Voided"}:x));
   const reship=s=>goShip({receiver:s.recipient,weight:s.weight,reference:s.reference});
   const tone=st=>st==="Delivered"?"green":st==="Voided"?"stone":st==="Exception"?"rose":st==="Out for delivery"?"amber":st==="In transit"?"amber":"blue";
@@ -3540,13 +3540,13 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels}
   return (
     <div className="space-y-3">
       <PendingBar/>
-      {chkMsg&&<div className={`text-[12px] rounded px-2 py-1.5 flex items-center gap-1.5 ${chkMsg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{chkMsg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{chkMsg.err||chkMsg.ok}</div>}
+      {chkMsg&&<div className={`text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${chkMsg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{chkMsg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{chkMsg.err||chkMsg.ok}</div>}
       <div className="flex items-center gap-2">
       <div className="relative flex-1"><Search className="w-4 h-4 absolute left-3 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by name, tracking, order, reference or PO #" className="w-full bg-white border border-stone-200 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:border-[#0099FF]"/></div>
       <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude"))} title="e.g. ‘how many delivered this week?’ or ‘anything stuck in transit?’" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded-lg px-3 py-2 font-medium hover:bg-[#f5e6de] shrink-0"><Sparkles className="w-4 h-4"/><span className="hidden sm:inline">Ask Claude about shipments</span><span className="sm:hidden">Ask Claude</span></button>
       </div>
       <div className="border border-stone-200 rounded-lg overflow-hidden bg-white divide-y divide-stone-100">
-        <div className="flex items-center gap-3 px-4 py-2 text-[11px] uppercase tracking-widest text-stone-400 bg-stone-50"><div className="w-4"/><div className="w-24">Created</div><div className="flex-1">Recipient</div><div className="w-52 hidden lg:block">Ship-to address</div><div className="w-24 hidden xl:block">Reference</div><div className="w-40 hidden md:block">Tracking</div><div className="w-24 text-right">Status</div></div>
+        <div className="flex items-center gap-3 px-4 py-2 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50"><div className="w-4"/><div className="w-24">Created</div><div className="flex-1">Recipient</div><div className="w-52 hidden lg:block">Ship-to address</div><div className="w-24 hidden xl:block">Reference</div><div className="w-40 hidden md:block">Tracking</div><div className="w-24 text-right">Status</div></div>
         {list.length===0&&<div className="p-8 text-center text-sm text-stone-400">No shipments match “{q}”.</div>}
         {list.map(s=>(
         <div key={s.id}>
@@ -3554,8 +3554,8 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels}
             <button className="text-stone-400"><ChevronRight className={`w-4 h-4 transition-transform ${open===s.id?"rotate-90":""}`}/></button>
             <div className="w-24"><div className="text-sm font-mono text-stone-500">{s.date}</div><div className="text-[10px] text-stone-400">{s.time||""}</div></div>
             <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{s.recipient?.name||"—"}</div><div className="text-[11px] text-stone-400 truncate">{s.service}</div></div>
-            <div className="w-52 hidden lg:block min-w-0"><div className="text-[12px] text-stone-600 truncate">{s.recipient?.address1||"—"}</div><div className="text-[11px] text-stone-400 truncate">{s.recipient?.city}{s.recipient?.state?", "+s.recipient.state:""} {s.recipient?.zip||""}</div></div>
-            <div className="w-24 hidden xl:block text-[12px] text-stone-500 font-mono truncate">{s.reference||"—"}</div>
+            <div className="w-52 hidden lg:block min-w-0"><div className="text-xs text-stone-600 truncate">{s.recipient?.address1||"—"}</div><div className="text-[11px] text-stone-400 truncate">{s.recipient?.city}{s.recipient?.state?", "+s.recipient.state:""} {s.recipient?.zip||""}</div></div>
+            <div className="w-24 hidden xl:block text-xs text-stone-500 font-mono truncate">{s.reference||"—"}</div>
             <div className="w-40 hidden md:block"><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" onClick={e=>e.stopPropagation()} className="text-[#0086E0] underline font-mono text-xs flex items-center gap-1 truncate">{s.tracking}<ExternalLink className="w-3 h-3 shrink-0"/></a></div>
             <div className="w-24 text-right"><Badge tone={tone(s.status)}>{s.status}</Badge></div>
           </div>
@@ -3566,8 +3566,8 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels}
                 <Info k="Tracking" v={<a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" className="text-[#0086E0] underline">{s.tracking} ↗</a>}/>
                 <Info k="To" v={`${s.recipient?.name||""}${s.recipient?.company?" · "+s.recipient.company:""} — ${s.recipient?.address1||""}, ${s.recipient?.city||""}, ${s.recipient?.state||""} ${s.recipient?.zip||""}`}/>
                 <Info k="Reference" v={s.reference||"—"}/>
-                <div className="flex items-end gap-2"><button onClick={(e)=>{e.stopPropagation();printPackingSlips([slipFromShipment(s)]);}} className="text-[12px] bg-stone-100 border border-stone-200 text-stone-700 rounded px-2.5 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing slip</button>
-                {s.status!=="Voided"&&s.status!=="Delivered"&&<button onClick={(e)=>{e.stopPropagation();if(!window.confirm("Void this label?\n\nIt will be marked Voided here and excluded from audits and duplicate checks. Until England void is wired, also void it in Webship to trigger the carrier refund."))return;setShipments(list=>list.map(x=>x.id===s.id?{...x,status:"Voided",voidedAt:new Date().toLocaleString()}:x));window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Voided label",detail:(s.reference||"")+" · "+(s.tracking||"")}}));}} className="text-[12px] bg-rose-50 border border-rose-200 text-rose-600 rounded px-2.5 py-1.5 font-medium hover:bg-rose-100 flex items-center gap-1.5"><Ban className="w-3.5 h-3.5"/>Void label</button>}</div>
+                <div className="flex items-end gap-2"><button onClick={(e)=>{e.stopPropagation();printPackingSlips([slipFromShipment(s)]);}} className="text-xs bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing slip</button>
+                {s.status!=="Voided"&&s.status!=="Delivered"&&<button onClick={(e)=>{e.stopPropagation();if(!window.confirm("Void this label?\n\nIt will be marked Voided here and excluded from audits and duplicate checks. Until England void is wired, also void it in Webship to trigger the carrier refund."))return;setShipments(list=>list.map(x=>x.id===s.id?{...x,status:"Voided",voidedAt:new Date().toLocaleString()}:x));window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Voided label",detail:(s.reference||"")+" · "+(s.tracking||"")}}));}} className="text-xs bg-rose-50 border border-rose-200 text-rose-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-rose-100 flex items-center gap-1.5"><Ban className="w-3.5 h-3.5"/>Void label</button>}</div>
                 <Info k="Created" v={`${s.date}${s.time?" · "+s.time:""}`}/>
                 <Info k="From ZIP" v={s.fromZip}/>
                 <Info k="Packages" v={`${s.pieces?.length||1} pkg · ${s.weight} lb total`}/>
@@ -3577,9 +3577,9 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels}
                 <Info k="Rate" v={money(s.sell)}/>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button onClick={()=>reship(s)} className="text-sm bg-stone-900 text-white rounded px-3 py-1.5 font-medium hover:bg-stone-800 flex items-center gap-1.5"><RotateCcw className="w-3.5 h-3.5"/>Edit &amp; reship</button>
-                <button className="text-sm bg-stone-200 text-stone-700 rounded px-3 py-1.5 font-medium hover:bg-stone-300 flex items-center gap-1.5"><Printer className="w-3.5 h-3.5"/>Reprint</button>
-                {s.status!=="Voided"&&<button onClick={()=>voidS(s.id)} className="text-sm text-rose-600 hover:bg-rose-50 rounded px-3 py-1.5 font-medium flex items-center gap-1.5"><X className="w-3.5 h-3.5"/>Void label</button>}
+                <button onClick={()=>reship(s)} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-800 flex items-center gap-1.5"><RotateCcw className="w-3.5 h-3.5"/>Edit &amp; reship</button>
+                <button className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 flex items-center gap-1.5"><Printer className="w-3.5 h-3.5"/>Reprint</button>
+                {s.status!=="Voided"&&<button onClick={()=>voidS(s.id)} className="text-sm text-rose-600 hover:bg-rose-50 rounded-lg px-3 py-1.5 font-medium flex items-center gap-1.5"><X className="w-3.5 h-3.5"/>Void label</button>}
               </div>
             </div>
           )}
@@ -3620,8 +3620,8 @@ function Pickups({pickups,setPickups,settings}){
         <div className="grid grid-cols-2 gap-3"><Field label="Ready time"><Input type="time" value={f.ready} onChange={e=>setF({...f,ready:e.target.value})}/></Field><Field label="Close time"><Input type="time" value={f.close} onChange={e=>setF({...f,close:e.target.value})}/></Field></div>
         <div className="grid grid-cols-2 gap-3"><Field label="Total weight (lb)"><Input type="number" value={f.weight} onChange={e=>setF({...f,weight:+e.target.value})}/></Field><Field label="Package location"><Select value={f.location} onChange={e=>setF({...f,location:e.target.value})}>{PKG_LOC.map(([v,l])=><option key={v} value={v}>{l}</option>)}</Select></Field></div>
         <div className="text-[11px] text-stone-400 flex items-center gap-1"><MapPin className="w-3.5 h-3.5"/>{addrReady?`${s.address1}, ${s.city} ${s.state} ${s.zip}`:"Set your pickup address in Settings → Company"}</div>
-        {err&&<div className="text-[12px] text-rose-600 bg-rose-50 border border-rose-200 rounded px-2 py-1.5 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>{err}</div>}
-        <button onClick={add} disabled={busy||!addrReady} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Scheduling with FedEx…</>:<><Calendar className="w-4 h-4"/>Schedule pickup</>}</button>
+        {err&&<div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1.5 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>{err}</div>}
+        <button onClick={add} disabled={busy||!addrReady} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Scheduling with FedEx…</>:<><Calendar className="w-4 h-4"/>Schedule pickup</>}</button>
       </Panel>
       <div className="space-y-2">
         <div className="text-xs font-semibold uppercase tracking-widest text-stone-500">Scheduled</div>
@@ -3629,7 +3629,7 @@ function Pickups({pickups,setPickups,settings}){
           <div key={p.id} className="border border-stone-200 rounded-lg bg-white p-3 flex items-center gap-3">
             <div className={`text-xs font-bold ${CARRIER_TINT[p.carrier]||"text-[#0086E0]"}`}>{p.carrier}</div>
             <div className="flex-1"><div className="text-sm text-stone-800">{p.date} · {p.count} pkg{p.carrierCode==="FDXG"?" · Ground":" · Express"}</div><div className="text-[11px] text-stone-400">{p.ready}–{p.close} · {p.location}</div></div>
-            <div className="text-right"><div className="font-mono text-[11px] text-stone-600">{p.conf}</div>{p.live&&<div className="text-[9px] uppercase tracking-wide text-emerald-600">confirmed</div>}</div>
+            <div className="text-right"><div className="font-mono text-[11px] text-stone-600">{p.conf}</div>{p.live&&<div className="text-[10px] uppercase tracking-wide text-emerald-600">confirmed</div>}</div>
             <button onClick={()=>setPickups(x=>x.filter(y=>y.id!==p.id))} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>
           </div>
         ))}
@@ -3693,7 +3693,7 @@ function QuickQuote({onClose,client,england,senderZip}){
             <div className="space-y-2">
               <div className="flex items-center justify-between"><span className="text-[10px] uppercase tracking-widest text-stone-400">Packages · {pieces.length}</span><span className="text-[11px] text-stone-400 font-mono">total {totalWeight} lb</span></div>
               {pieces.map((p,i)=>(
-                <div key={i} className="flex flex-wrap items-end gap-1.5 bg-white border border-stone-200 rounded px-2 py-2">
+                <div key={i} className="flex flex-wrap items-end gap-1.5 bg-white border border-stone-200 rounded-lg px-2 py-2">
                   <div className="text-[11px] text-stone-400 font-mono w-4">#{i+1}</div>
                   <PkgInput label="L" req value={p.L} onChange={e=>setPiece(i,{L:e.target.value})}/>
                   <PkgInput label="W" req value={p.W} onChange={e=>setPiece(i,{W:e.target.value})}/>
@@ -3703,7 +3703,7 @@ function QuickQuote({onClose,client,england,senderZip}){
                   {pieces.length>1&&<button onClick={()=>delPiece(i)} className="text-stone-300 hover:text-rose-500 mb-1"><Trash2 className="w-3.5 h-3.5"/></button>}
                 </div>
               ))}
-              <button onClick={addPiece} className="flex items-center gap-1 text-xs bg-stone-200 hover:bg-stone-300 rounded px-2.5 py-1.5 font-medium text-stone-700"><Plus className="w-3.5 h-3.5"/>Add package</button>
+              <button onClick={addPiece} className="flex items-center gap-1 text-xs bg-stone-200 hover:bg-stone-300 rounded-lg px-2.5 py-1.5 font-medium text-stone-700"><Plus className="w-3.5 h-3.5"/>Add package</button>
             </div>
             <Field label="Signature"><Select value={sigOption} onChange={e=>setSigOption(e.target.value)}><option value="none">None</option><option value="direct">Direct signature</option><option value="indirect">Indirect signature</option><option value="adult">Adult signature</option></Select></Field>
             <Field label="Insurance $"><Input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0"/></Field>
@@ -3746,12 +3746,12 @@ function Scan({orders,goShip,goTab}){
       <div className="border-2 border-dashed border-[#99D6FF] rounded-xl bg-[#E6F4FF]/40 p-6 flex flex-col items-center gap-3">
         <ScanLine className="w-10 h-10 text-[#33ABFF]"/>
         <input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();submit(val);}}} placeholder="Scan or type a code, then Enter" className="w-full max-w-md text-center bg-white border border-stone-300 rounded-lg px-4 py-3 text-lg font-mono outline-none focus:border-[#0099FF]"/>
-        <button onClick={()=>submit(val)} className="text-sm bg-stone-900 text-white rounded px-5 py-2 font-medium hover:bg-stone-800">Look up</button>
+        <button onClick={()=>submit(val)} className="text-sm bg-stone-900 text-white rounded-lg px-5 py-2 font-medium hover:bg-stone-800">Look up</button>
         {err&&<div className="text-sm text-rose-600 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4"/>{err}</div>}
       </div>
       <div className="text-[11px] text-stone-400">Tip: most barcode scanners act like a keyboard and send Enter automatically — just keep this box focused and scan.</div>
       {log.length>0&&<div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
-        <div className="px-4 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400">Recent scans</div>
+        <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400">Recent scans</div>
         <div className="divide-y divide-stone-100">{log.map((e,i)=>(
           <div key={i} className="flex items-center gap-3 px-4 py-2 text-sm">
             {e.ok?<CheckCircle2 className="w-4 h-4 text-emerald-500"/>:<X className="w-4 h-4 text-rose-400"/>}
@@ -3796,7 +3796,7 @@ function Dashboard({shipments,orders,returns,goTab}){
       <text x="50%" y="50%" dominantBaseline="central" textAnchor="middle" className="fill-stone-800" fontSize="15" fontWeight="700">{pct}%</text>
     </svg>);};
   const Tile=({label,value,tone,Icon,onClick,sub})=>(<button onClick={onClick} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition group">
-    <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-stone-400">{Icon&&<Icon className="w-3.5 h-3.5 group-hover:text-[#0086E0] transition"/>}{label}</div>
+    <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-stone-400">{Icon&&<Icon className="w-3.5 h-3.5 group-hover:text-[#0086E0] transition"/>}{label}</div>
     <div className={`text-3xl font-bold mt-1 tracking-tight ${tone||"text-stone-900"}`}>{value}</div>
     {sub&&<div className="text-[11px] text-stone-400 mt-0.5">{sub}</div>}
   </button>);
@@ -3811,24 +3811,24 @@ function Dashboard({shipments,orders,returns,goTab}){
         <Cloud className="absolute -right-6 -top-8 w-44 h-44 text-white/10" strokeWidth={1}/>
         <div className="flex flex-wrap items-end gap-x-10 gap-y-4 relative">
           <div>
-            <div className="text-[11px] uppercase tracking-widest text-white/60">Labels · 30 days</div>
+            <div className="text-[10px] uppercase tracking-widest text-white/60">Labels · 30 days</div>
             <div className="text-4xl font-extrabold tracking-tight mt-0.5">{a.count}</div>
-            <div className="text-[12px] text-white/70 mt-0.5">{week} this week</div>
+            <div className="text-xs text-white/70 mt-0.5">{week} this week</div>
           </div>
           <div>
-            <div className="text-[11px] uppercase tracking-widest text-white/60">Moving now</div>
+            <div className="text-[10px] uppercase tracking-widest text-white/60">Moving now</div>
             <div className="text-4xl font-extrabold tracking-tight mt-0.5">{moving}</div>
-            <div className="text-[12px] text-white/70 mt-0.5">{outForDel} out for delivery</div>
+            <div className="text-xs text-white/70 mt-0.5">{outForDel} out for delivery</div>
           </div>
           <div>
-            <div className="text-[11px] uppercase tracking-widest text-white/60">On-time</div>
+            <div className="text-[10px] uppercase tracking-widest text-white/60">On-time</div>
             <div className="text-4xl font-extrabold tracking-tight mt-0.5">{onTimePct}%</div>
-            <div className="text-[12px] text-white/70 mt-0.5">{delivered7} delivered this week</div>
+            <div className="text-xs text-white/70 mt-0.5">{delivered7} delivered this week</div>
           </div>
           <div>
-            <div className="text-[11px] uppercase tracking-widest text-white/60">Avg weight</div>
+            <div className="text-[10px] uppercase tracking-widest text-white/60">Avg weight</div>
             <div className="text-4xl font-extrabold tracking-tight mt-0.5">{avgWt.toFixed(1)}<span className="text-lg font-semibold text-white/70 ml-1">lb</span></div>
-            <div className="text-[12px] text-white/70 mt-0.5">across {live.length} shipments</div>
+            <div className="text-xs text-white/70 mt-0.5">across {live.length} shipments</div>
           </div>
           <div className="flex-1 min-w-[180px] hidden sm:flex items-end justify-end gap-1.5 h-20 self-stretch pt-2">
             {a.byDay.map((v,i)=>(<div key={i} className="flex flex-col items-center gap-1 w-7">
@@ -3847,7 +3847,7 @@ function Dashboard({shipments,orders,returns,goTab}){
           <Tile label="Fulfilled" value={fulfilled} tone="text-emerald-700" Icon={CheckCircle2} onClick={()=>goTab("orders")}/>
           <Tile label="Open returns" value={returns.length} tone={returns.length?"text-stone-900":"text-stone-900"} Icon={Undo2} onClick={()=>goTab("returns")}/>
           <div className="border border-stone-200 rounded-2xl bg-white p-4">
-            <div className="text-[11px] uppercase tracking-widest text-stone-400 mb-2">Order sources</div>
+            <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Order sources</div>
             {bySource.length===0?<div className="text-sm text-stone-400">No orders yet.</div>:<MixBar rows={bySource} total={orders.length}/>}
           </div>
         </div>
@@ -3863,7 +3863,7 @@ function Dashboard({shipments,orders,returns,goTab}){
           <Tile label="Exceptions" value={exceptions} tone={exceptions?"text-rose-600":"text-stone-900"} Icon={AlertTriangle} onClick={()=>goTab("shipments")}/>
           <div className="border border-stone-200 rounded-2xl bg-white p-4 flex items-center gap-3">
             <Ring pct={onTimePct}/>
-            <div><div className="text-[11px] uppercase tracking-widest text-stone-400">On-time</div><div className="text-[12px] text-stone-500 mt-0.5">{onTime} of {delivCount} delivered on time</div></div>
+            <div><div className="text-[10px] uppercase tracking-widest text-stone-400">On-time</div><div className="text-xs text-stone-500 mt-0.5">{onTime} of {delivCount} delivered on time</div></div>
           </div>
         </div>
       </div>
@@ -3878,7 +3878,7 @@ function Dashboard({shipments,orders,returns,goTab}){
                 <div className="flex items-center gap-3">
                   <span className={`text-[11px] font-bold w-10 ${CARRIER_TINT[s.carrier]}`}>{s.carrier}</span>
                   <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{s.recipient?.name} · {s.recipient?.city}, {s.recipient?.state}</div><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" className="text-[11px] text-[#0086E0] font-mono">{s.tracking}</a></div>
-                  <div className="hidden sm:block text-right"><div className="text-[11px] text-stone-400">ETA</div><div className="text-[12px] text-stone-600 font-medium">{s.eta||"—"}</div></div>
+                  <div className="hidden sm:block text-right"><div className="text-[11px] text-stone-400">ETA</div><div className="text-xs text-stone-600 font-medium">{s.eta||"—"}</div></div>
                   <Badge tone={exc?"rose":s.status==="Out for delivery"?"amber":"blue"}>{s.status}</Badge>
                 </div>
                 <div className="mt-2 flex items-center gap-2">
@@ -4143,11 +4143,11 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         <ChevronRight className={`w-3.5 h-3.5 text-stone-300 transition-transform shrink-0 ${ex?"rotate-90":""}`}/>
         <div className="w-14 sm:w-16 shrink-0"><div className="font-semibold text-sm">{o.name}</div>{a!=null&&<div className={`text-[10px] ${a>=3?"text-amber-600 font-medium":"text-stone-400"}`}>{a===0?"today":a+"d old"}</div>}</div>
         <div className="flex-1 min-w-0">
-          <div className="text-sm truncate">{o.customer}{o.company?` · ${o.company}`:""}<span className="text-stone-400 text-[12px]">{o.items?` · ${o.items}`:""}</span></div>
+          <div className="text-sm truncate">{o.customer}{o.company?` · ${o.company}`:""}<span className="text-stone-400 text-xs">{o.items?` · ${o.items}`:""}</span></div>
           <div className="text-[11px] text-stone-400 truncate">{o.address1?o.address1+", ":""}{o.city}, {o.state} {o.zip} · {packs[o.id]?<span className="text-emerald-700">{packs[o.id].totalWt} lb · {packs[o.id].boxNames}</span>:<>{o.weight} lb</>} · Z{zoneOf(o)}{o.sku?` · ${o.sku}`:""}</div>
         </div>
         <span className="hidden md:block shrink-0"><Badge tone={srcTone(o.source||"Manual")}>{o.source||"Manual"}</Badge></span>
-        <div className="w-16 hidden lg:block text-right font-mono text-[12px] text-stone-500 shrink-0">{o.total!=null?money(o.total):"—"}</div>
+        <div className="w-16 hidden lg:block text-right font-mono text-xs text-stone-500 shrink-0">{o.total!=null?money(o.total):"—"}</div>
         {held
           ?<span className="w-44 hidden sm:flex items-center gap-1 text-[11px] text-rose-600 shrink-0"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="truncate">Held: {held}</span></span>
           :<div className="w-44 hidden sm:block shrink-0" onClick={e=>e.stopPropagation()}>
@@ -4178,7 +4178,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Layers className="w-4 h-4"/>Batch shipping</h2>
         <span className="text-[11px] text-stone-400">{pool.length} open order{pool.length===1?"":"s"}</span>
         <div className="flex-1"/>
-        <label className="flex items-center gap-1.5 text-sm bg-stone-200 text-stone-700 rounded px-2.5 py-1.5 font-medium hover:bg-stone-300 cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
+        <label className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-300 cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
       </div>
       {msg&&<div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{msg}</div>}
       {!originZip&&<div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No ship-from ZIP — set your default sender in Settings → Company so batch rates and zone rules use the right origin.</div>}
@@ -4187,11 +4187,11 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
       <div className="border border-stone-200 rounded-lg bg-white p-3 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[180px]"><Search className="w-4 h-4 absolute left-2.5 top-2 text-stone-400"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search orders — name, address, SKU, item, email…" className="w-full bg-stone-50 border border-stone-200 rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#0099FF] focus:bg-white"/></div>
-          <select value={sortBy} onChange={e=>setSortBy(e.target.value)} className="bg-white border border-stone-200 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">
+          <select value={sortBy} onChange={e=>setSortBy(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">
             <option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="heaviest">Heaviest first</option><option value="lightest">Lightest first</option><option value="value">Highest value</option><option value="state">By state</option><option value="zone">By zone</option>
           </select>
           <button onClick={()=>setFOpen(v=>!v)} className={`text-sm rounded-lg px-3 py-1.5 font-medium border flex items-center gap-1.5 ${activeFilters?"bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF]":"bg-white border-stone-200 text-stone-600 hover:bg-stone-100"}`}><ChevronDown className={`w-3.5 h-3.5 transition-transform ${fOpen?"rotate-180":""}`}/>Filters{activeFilters?` · ${activeFilters}`:""}</button>
-          {activeFilters>0&&<button onClick={clearFilters} className="text-[12px] text-stone-400 hover:text-stone-600 underline">clear</button>}
+          {activeFilters>0&&<button onClick={clearFilters} className="text-xs text-stone-400 hover:text-stone-600 underline">clear</button>}
         </div>
         {fOpen&&<div className="border-t border-stone-100 pt-3 space-y-2.5">
           {[["state","State"],["zone","Zone"],["source","Source"],["sku","SKU"],["product","Product"],["service","Req. svc"],["carrier","Carrier"]].map(([d,label])=>{
@@ -4213,44 +4213,44 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
           </div>}
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <span className="text-[10px] uppercase tracking-widest text-stone-400 w-14 shrink-0">Ranges</span>
-            <span className="text-[12px] text-stone-500">Weight</span>
-            <input value={wMin} onChange={e=>setWMin(e.target.value)} placeholder="min" className="w-16 bg-white border border-stone-200 rounded px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>–<input value={wMax} onChange={e=>setWMax(e.target.value)} placeholder="max" className="w-16 bg-white border border-stone-200 rounded px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>
-            <span className="text-[12px] text-stone-500 ml-2">Total $</span>
-            <input value={tMin} onChange={e=>setTMin(e.target.value)} placeholder="min" className="w-16 bg-white border border-stone-200 rounded px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>–<input value={tMax} onChange={e=>setTMax(e.target.value)} placeholder="max" className="w-16 bg-white border border-stone-200 rounded px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>
-            <span className="text-[12px] text-stone-500 ml-2">Age</span>
-            <select value={age} onChange={e=>setAge(e.target.value)} className="bg-white border border-stone-200 rounded px-2 py-1 text-xs outline-none focus:border-[#0099FF]"><option value="any">Any</option><option value="today">Today</option><option value="2">≤ 2 days</option><option value="7">≤ 7 days</option><option value="old">Over 7 days</option></select>
+            <span className="text-xs text-stone-500">Weight</span>
+            <input value={wMin} onChange={e=>setWMin(e.target.value)} placeholder="min" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>–<input value={wMax} onChange={e=>setWMax(e.target.value)} placeholder="max" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>
+            <span className="text-xs text-stone-500 ml-2">Total $</span>
+            <input value={tMin} onChange={e=>setTMin(e.target.value)} placeholder="min" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>–<input value={tMax} onChange={e=>setTMax(e.target.value)} placeholder="max" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>
+            <span className="text-xs text-stone-500 ml-2">Age</span>
+            <select value={age} onChange={e=>setAge(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"><option value="any">Any</option><option value="today">Today</option><option value="2">≤ 2 days</option><option value="7">≤ 7 days</option><option value="old">Over 7 days</option></select>
           </div>
         </div>}
         <div className="border-t border-stone-100 pt-3 flex flex-wrap items-center gap-2 sm:gap-3">
-          <span className="text-[11px] uppercase tracking-widest text-stone-400">Rate rule</span>
-          <select value={rule} onChange={e=>setRule(e.target.value)} className="bg-white border border-stone-200 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">
+          <span className="text-[10px] uppercase tracking-widest text-stone-400">Rate rule</span>
+          <select value={rule} onChange={e=>setRule(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">
             <option value="cheapest">Cheapest overall</option>
             <option value="fastest">Fastest delivery</option>
             <option value="ground">Cheapest ground</option>
             <option value="specific">Specific carrier &amp; service</option>
           </select>
           {rule==="specific"&&<>
-            <select value={specCarrier} onChange={e=>{setSpecCarrier(e.target.value);setSpecSvc(SERVICE_OPTIONS[e.target.value][0]);}} className="bg-white border border-stone-200 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">{Object.keys(SERVICE_OPTIONS).map(c=><option key={c}>{c}</option>)}</select>
-            <select value={specSvc} onChange={e=>setSpecSvc(e.target.value)} className="bg-white border border-stone-200 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">{(SERVICE_OPTIONS[specCarrier]||[]).map(sv=><option key={sv}>{sv}</option>)}</select>
+            <select value={specCarrier} onChange={e=>{setSpecCarrier(e.target.value);setSpecSvc(SERVICE_OPTIONS[e.target.value][0]);}} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">{Object.keys(SERVICE_OPTIONS).map(c=><option key={c}>{c}</option>)}</select>
+            <select value={specSvc} onChange={e=>setSpecSvc(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">{(SERVICE_OPTIONS[specCarrier]||[]).map(sv=><option key={sv}>{sv}</option>)}</select>
           </>}
-          <span className="text-[11px] uppercase tracking-widest text-stone-400 ml-2">Group</span>
-          <select value={groupBy} onChange={e=>setGroupBy(e.target.value)} className="bg-white border border-stone-200 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">
+          <span className="text-[10px] uppercase tracking-widest text-stone-400 ml-2">Group</span>
+          <select value={groupBy} onChange={e=>setGroupBy(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">
             <option value="none">No grouping</option><option value="zone">By zone</option><option value="state">By state</option><option value="sku">By SKU</option><option value="product">By product</option><option value="service">By service</option><option value="carrier">By carrier</option>
           </select>
           <div className="flex-1"/>
           <button onClick={applyAutopilot} disabled={!(ruleset||[]).some(r=>r.enabled)||!visible.length} title="Run your Autopilot rules on the orders below: routes services, applies holds" className="text-sm bg-violet-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-violet-700 disabled:opacity-40 flex items-center gap-1.5"><Zap className="w-4 h-4"/>Apply Autopilot rules</button>
           <button onClick={()=>setQrOpen(v=>!v)} className={`text-sm rounded-lg px-3 py-1.5 font-medium border flex items-center gap-1.5 ${qrOpen?"bg-violet-50 border-violet-300 text-violet-700":"bg-white border-stone-200 text-stone-600 hover:bg-stone-100"}`}><Plus className="w-3.5 h-3.5"/>Quick rule</button>
           <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Batch "}}))} title="Tell Claude what to batch in plain English — e.g. ‘batch the camp mugs to Texas as cheapest ground’" className="text-sm rounded-lg px-3 py-1.5 font-medium border bg-[#faf3ef] border-[#D97757]/40 text-[#c2410c] hover:bg-[#f5e6de] flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/>Ask Claude to batch</button>
-          {(Object.keys(svcOv).length>0||Object.keys(holds).length>0)&&<button onClick={clearAutopilot} className="text-[12px] text-stone-400 hover:text-stone-600 underline">reset routing</button>}
+          {(Object.keys(svcOv).length>0||Object.keys(holds).length>0)&&<button onClick={clearAutopilot} className="text-xs text-stone-400 hover:text-stone-600 underline">reset routing</button>}
         </div>
         {qrOpen&&<div className="border-t border-stone-100 pt-3 flex flex-wrap items-center gap-2 text-sm">
           <span className="text-stone-500">If</span>
-          <select value={qr.property} onChange={e=>{const p=e.target.value;const t=(RULE_PROPERTIES[p]||{}).type||"text";setQr({...qr,property:p,operator:RULE_OPERATORS[t][0]});}} className="bg-white border border-stone-200 rounded px-2 py-1.5 outline-none focus:border-violet-400">{RULE_PROP_NAMES.map(pn=><option key={pn}>{pn}</option>)}</select>
-          <select value={qr.operator} onChange={e=>setQr({...qr,operator:e.target.value})} className="bg-white border border-stone-200 rounded px-2 py-1.5 outline-none focus:border-violet-400">{(RULE_OPERATORS[(RULE_PROPERTIES[qr.property]||{}).type||"text"]||[]).map(op=><option key={op}>{op}</option>)}</select>
-          <input value={qr.value} onChange={e=>setQr({...qr,value:e.target.value})} placeholder="value (commas = list)" className="w-40 bg-white border border-stone-200 rounded px-2.5 py-1.5 outline-none focus:border-violet-400"/>
+          <select value={qr.property} onChange={e=>{const p=e.target.value;const t=(RULE_PROPERTIES[p]||{}).type||"text";setQr({...qr,property:p,operator:RULE_OPERATORS[t][0]});}} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-violet-400">{RULE_PROP_NAMES.map(pn=><option key={pn}>{pn}</option>)}</select>
+          <select value={qr.operator} onChange={e=>setQr({...qr,operator:e.target.value})} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-violet-400">{(RULE_OPERATORS[(RULE_PROPERTIES[qr.property]||{}).type||"text"]||[]).map(op=><option key={op}>{op}</option>)}</select>
+          <input value={qr.value} onChange={e=>setQr({...qr,value:e.target.value})} placeholder="value (commas = list)" className="w-40 bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-violet-400"/>
           <span className="text-stone-500">→ ship</span>
-          <select value={qr.service} onChange={e=>setQr({...qr,service:e.target.value})} className="bg-white border border-stone-200 rounded px-2 py-1.5 outline-none focus:border-violet-400">{RULE_SERVICES.map(sv=><option key={sv}>{sv}</option>)}</select>
-          <button onClick={saveQuickRule} disabled={!String(qr.value).trim()} className="text-sm bg-violet-600 text-white rounded px-3 py-1.5 font-medium hover:bg-violet-700 disabled:opacity-40">Save to Autopilot</button>
+          <select value={qr.service} onChange={e=>setQr({...qr,service:e.target.value})} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-violet-400">{RULE_SERVICES.map(sv=><option key={sv}>{sv}</option>)}</select>
+          <button onClick={saveQuickRule} disabled={!String(qr.value).trim()} className="text-sm bg-violet-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-violet-700 disabled:opacity-40">Save to Autopilot</button>
           <span className="text-[11px] text-stone-400 w-full">Saved rules appear in the Autopilot tab too — same pipeline, one source of truth.</span>
         </div>}
       </div>
@@ -4259,9 +4259,9 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
 
       {/* selection summary */}
       <div className="border border-stone-200 rounded-lg bg-white px-3 sm:px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
-        <button onClick={all} className="text-[12px] font-medium text-[#006FBF] hover:underline">{visible.filter(o=>!holds[o.id]).every(o=>sel.has(o.id))&&visible.length>0?"Deselect all":"Select all"} ({visible.length})</button>
-        <button onClick={invert} className="text-[12px] text-stone-500 hover:underline">Invert</button>
-        <button onClick={()=>setSel(new Set())} className="text-[12px] text-stone-500 hover:underline">Clear</button>
+        <button onClick={all} className="text-xs font-medium text-[#006FBF] hover:underline">{visible.filter(o=>!holds[o.id]).every(o=>sel.has(o.id))&&visible.length>0?"Deselect all":"Select all"} ({visible.length})</button>
+        <button onClick={invert} className="text-xs text-stone-500 hover:underline">Invert</button>
+        <button onClick={()=>setSel(new Set())} className="text-xs text-stone-500 hover:underline">Clear</button>
         <div className="flex-1"/>
         <span className="text-stone-500"><b className="text-stone-800">{rows.length}</b> selected</span>
         <span className="text-stone-500 hidden sm:inline"><b className="text-stone-800">{Math.round(totals.wt*10)/10}</b> lb</span>
@@ -4297,8 +4297,8 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
           ?<div className="divide-y divide-stone-100">{visible.map(OrderRow)}</div>
           :groupKeys.map(k=>(<div key={k}>
               <div className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-stone-50 border-y border-stone-100 first:border-t-0">
-                <button onClick={()=>selectGroup(groups[k])} className="text-[11px] font-medium bg-[#E6F4FF] text-[#006FBF] hover:bg-[#CCEAFF] rounded px-2 py-0.5">{groups[k].filter(o=>!holds[o.id]).every(o=>sel.has(o.id))&&groups[k].some(o=>!holds[o.id])?"deselect":"select"} all</button>
-                <span className="text-[12px] font-semibold text-stone-700">{k}</span>
+                <button onClick={()=>selectGroup(groups[k])} className="text-[11px] font-medium bg-[#E6F4FF] text-[#006FBF] hover:bg-[#CCEAFF] rounded-lg px-2 py-0.5">{groups[k].filter(o=>!holds[o.id]).every(o=>sel.has(o.id))&&groups[k].some(o=>!holds[o.id])?"deselect":"select"} all</button>
+                <span className="text-xs font-semibold text-stone-700">{k}</span>
                 <span className="text-[11px] text-stone-400">{groups[k].length} order{groups[k].length!==1?"s":""} · {Math.round(groups[k].reduce((a,o)=>a+(+o.weight||0),0)*10)/10} lb · {money(groups[k].reduce((a,o)=>a+rateFor(o).sell,0))}</span>
                 <span className="flex-1"/>
                 {groups[k].some(o=>holds[o.id])&&<Badge tone="rose">{groups[k].filter(o=>holds[o.id]).length} held</Badge>}
@@ -4309,7 +4309,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
 
       {/* recent batches */}
       {(batches||[]).length>0&&<div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
-        <div className="px-4 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400 flex items-center gap-2"><Clock className="w-3.5 h-3.5"/>Recent batches</div>
+        <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 flex items-center gap-2"><Clock className="w-3.5 h-3.5"/>Recent batches</div>
         <div className="divide-y divide-stone-50">
           {(batches||[]).slice(0,5).map(b=>(<div key={b.id} className="px-4 py-2 flex items-center gap-3 text-[13px]">
             <span className="text-stone-500 w-36 font-mono text-xs">{b.date} · {b.time}</span>
@@ -4332,7 +4332,7 @@ function Returns({returns,setReturns,orders,settings,logEmail}){
   const tone=s=>s==="Delivered"?"green":s==="In transit"?"amber":"blue";
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between"><h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Undo2 className="w-4 h-4"/>Returns &amp; RMAs</h2><button onClick={()=>setCreating(v=>!v)} className="flex items-center gap-1 text-sm bg-stone-900 text-white rounded px-3 py-1.5 font-medium hover:bg-stone-800"><Plus className="w-4 h-4"/>Create return</button></div>
+      <div className="flex items-center justify-between"><h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Undo2 className="w-4 h-4"/>Returns &amp; RMAs</h2><button onClick={()=>setCreating(v=>!v)} className="flex items-center gap-1 text-sm bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-800"><Plus className="w-4 h-4"/>Create return</button></div>
       {creating&&<Panel title="New return label">
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Customer"><Input value={f.customer} onChange={e=>setF({...f,customer:e.target.value})} placeholder="Name"/></Field>
@@ -4340,7 +4340,7 @@ function Returns({returns,setReturns,orders,settings,logEmail}){
           <Field label="Reason"><Select value={f.reason} onChange={e=>setF({...f,reason:e.target.value})}><option>Wrong size</option><option>Defective</option><option>Not as described</option><option>No longer wanted</option></Select></Field>
           <Field label="Return carrier"><Select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})}><option>FedEx</option><option>UPS</option><option>USPS</option></Select></Field>
         </div>
-        <button onClick={create} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium">Generate return label</button>
+        <button onClick={create} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Generate return label</button>
       </Panel>}
       <div className="border border-stone-200 rounded-lg overflow-hidden bg-white divide-y divide-stone-100">
         {returns.length===0&&<div className="p-8 text-center text-sm text-stone-400">No returns yet.</div>}
@@ -4366,7 +4366,7 @@ function Manifests({shipments,setShipments,manifests,setManifests}){
   return (
     <div className="space-y-4 max-w-3xl">
       <div className="border border-stone-200 rounded-lg bg-white p-4">
-        <div className="flex items-center justify-between mb-3"><h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><FileText className="w-4 h-4"/>End-of-day manifests</h2><button onClick={closeAll} disabled={!open.length} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40">Close manifests</button></div>
+        <div className="flex items-center justify-between mb-3"><h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><FileText className="w-4 h-4"/>End-of-day manifests</h2><button onClick={closeAll} disabled={!open.length} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40">Close manifests</button></div>
         {open.length===0?<p className="text-sm text-stone-400">No open labels. Today's labels are all manifested.</p>:
           <div className="grid sm:grid-cols-3 gap-3">{Object.entries(byCarrier).map(([c,n])=>(<div key={c} className="border border-stone-200 rounded-lg p-3"><div className={`text-xs font-bold ${CARRIER_TINT[c]}`}>{c}</div><div className="text-2xl font-bold mt-1">{n}</div><div className="text-[11px] text-stone-400">open labels</div></div>))}</div>}
       </div>
@@ -4377,7 +4377,7 @@ function Manifests({shipments,setShipments,manifests,setManifests}){
             <div className={`text-xs font-bold ${CARRIER_TINT[m.carrier]}`}>{m.carrier}</div>
             <div className="flex-1"><div className="text-sm">{m.count} packages</div><div className="text-[11px] text-stone-400">{m.date}</div></div>
             <div className="font-mono text-[11px] text-stone-400">{m.manifest}</div>
-            <button className="text-xs bg-stone-200 hover:bg-stone-300 rounded px-2.5 py-1.5 flex items-center gap-1"><Printer className="w-3.5 h-3.5"/>Print</button>
+            <button className="text-xs bg-stone-200 hover:bg-stone-300 rounded-lg px-2.5 py-1.5 flex items-center gap-1"><Printer className="w-3.5 h-3.5"/>Print</button>
           </div>
         ))}
       </div>
@@ -4399,8 +4399,8 @@ function Reports({shipments}){
       <div className="flex flex-wrap items-center gap-3">
         <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><TrendingUp className="w-4 h-4"/>Reports</h2>
         <div className="flex-1"/>
-        <select value={range} onChange={e=>setRange(+e.target.value)} className="bg-white border border-stone-200 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option><option value={0}>All time</option></select>
-        <button onClick={exportCSV} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded px-3 py-1.5 font-medium hover:bg-stone-800"><Download className="w-4 h-4"/>Export CSV</button>
+        <select value={range} onChange={e=>setRange(+e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option><option value={0}>All time</option></select>
+        <button onClick={exportCSV} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-800"><Download className="w-4 h-4"/>Export CSV</button>
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat2 label="Labels" v={a.count}/><Stat2 label="Shipping spend" v={money(a.revenue)}/><Stat2 label="Avg / label" v={money(a.count?a.revenue/a.count:0)}/><Stat2 label="Carriers used" v={carriers.length}/>
@@ -4412,8 +4412,8 @@ function Reports({shipments}){
     </div>
   );
 }
-function Stat2({label,v,tone}){return <div className="border border-stone-200 rounded-xl bg-white p-4"><div className="text-[11px] uppercase tracking-widest text-stone-400">{label}</div><div className={`text-xl font-bold mt-1 ${tone||"text-stone-900"}`}>{v}</div></div>;}
-function ReportTable({title,head,rows}){return (<div className="border border-stone-200 rounded-lg bg-white overflow-hidden"><div className="px-4 py-2.5 text-sm font-semibold text-stone-700 border-b border-stone-100">{title}</div><div className="overflow-x-auto"><table className="w-full text-sm min-w-[480px]"><thead><tr className="text-[11px] uppercase tracking-widest text-stone-400">{head.map(h=><th key={h} className="text-left font-normal px-4 py-2">{h}</th>)}</tr></thead><tbody>{rows.length===0?<tr><td colSpan={head.length} className="px-4 py-4 text-stone-400">No data.</td></tr>:rows.map((r,i)=><tr key={i} className="border-t border-stone-50">{r.map((c,j)=><td key={j} className="px-4 py-2 font-mono text-stone-700">{c}</td>)}</tr>)}</tbody></table></div></div>);}
+function Stat2({label,v,tone}){return <div className="border border-stone-200 rounded-xl bg-white p-4"><div className="text-[10px] uppercase tracking-widest text-stone-400">{label}</div><div className={`text-xl font-bold mt-1 ${tone||"text-stone-900"}`}>{v}</div></div>;}
+function ReportTable({title,head,rows}){return (<div className="border border-stone-200 rounded-lg bg-white overflow-hidden"><div className="px-4 py-2.5 text-sm font-semibold text-stone-700 border-b border-stone-100">{title}</div><div className="overflow-x-auto"><table className="w-full text-sm min-w-[480px]"><thead><tr className="text-[10px] uppercase tracking-widest text-stone-400">{head.map(h=><th key={h} className="text-left font-normal px-4 py-2">{h}</th>)}</tr></thead><tbody>{rows.length===0?<tr><td colSpan={head.length} className="px-4 py-4 text-stone-400">No data.</td></tr>:rows.map((r,i)=><tr key={i} className="border-t border-stone-50">{r.map((c,j)=><td key={j} className="px-4 py-2 font-mono text-stone-700">{c}</td>)}</tr>)}</tbody></table></div></div>);}
 
 
 /* ════════ CHECKOUT RATES (Shopify) ════════ */
@@ -4468,15 +4468,15 @@ function CheckoutRates({settings,setSettings,client,uid}){
             <Badge tone={ck.registered?"green":"stone"}>{ck.registered?"registered":"off"}</Badge>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button onClick={()=>carrierCall("carrierStatus")} disabled={!!cBusy} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded px-3 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5">{cBusy==="carrierStatus"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<Search className="w-3.5 h-3.5"/>}Check status</button>
-            <button onClick={()=>carrierCall("installCarrier")} disabled={!!cBusy||!uid} className="text-sm bg-[#0086E0] text-white rounded px-3 py-1.5 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{cBusy==="installCarrier"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<Zap className="w-3.5 h-3.5"/>}{cs&&cs.installed?"Update at checkout":"Install at checkout"}</button>
+            <button onClick={()=>carrierCall("carrierStatus")} disabled={!!cBusy} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5">{cBusy==="carrierStatus"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<Search className="w-3.5 h-3.5"/>}Check status</button>
+            <button onClick={()=>carrierCall("installCarrier")} disabled={!!cBusy||!uid} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{cBusy==="installCarrier"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<Zap className="w-3.5 h-3.5"/>}{cs&&cs.installed?"Update at checkout":"Install at checkout"}</button>
           </div>
-          {cs&&(cs.ok||cs.err)&&<div className={`mt-2 text-[12px] rounded px-2.5 py-1.5 border ${cs.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{cs.err||cs.ok}</div>}
+          {cs&&(cs.ok||cs.err)&&<div className={`mt-2 text-xs rounded px-2.5 py-1.5 border ${cs.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{cs.err||cs.ok}</div>}
           <p className="text-[11px] text-stone-400 mt-2">Live checkout rates require a Shopify plan with Carrier Calculated Shipping (Advanced/Plus, or the $20/mo add-on).</p>
         </div>
         <Panel title="How rates appear">
           <Field label="Presentation">
-            <div className="flex bg-stone-100 rounded-lg p-0.5 text-sm">{[["named","Carrier names"],["tiers","Economy / Standard / Express"]].map(([v,l])=><button key={v} onClick={()=>setCk({presentation:v})} className={`flex-1 px-2 py-1.5 rounded-md ${ck.presentation===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}</div>
+            <div className="flex bg-stone-100 rounded-lg p-0.5 text-sm">{[["named","Carrier names"],["tiers","Economy / Standard / Express"]].map(([v,l])=><button key={v} onClick={()=>setCk({presentation:v})} className={`flex-1 px-2 py-1.5 rounded-lg ${ck.presentation===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}</div>
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Buyer markup (%)"><Input type="number" value={ck.markup!=null?ck.markup:20} onChange={e=>setCk({markup:e.target.value})}/></Field>
@@ -4497,7 +4497,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
       {/* PREVIEW */}
       <div className="space-y-4">
         <div className="border border-stone-200 rounded-lg bg-white p-4">
-          <div className="flex items-center justify-between mb-3"><h3 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Calculator className="w-4 h-4"/>Test cart</h3><div className="flex items-center gap-1.5 text-sm"><span className="text-stone-400">Ship to</span><input value={zip} onChange={e=>setZip(e.target.value)} className="w-20 bg-white border border-stone-200 rounded px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF]"/></div></div>
+          <div className="flex items-center justify-between mb-3"><h3 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Calculator className="w-4 h-4"/>Test cart</h3><div className="flex items-center gap-1.5 text-sm"><span className="text-stone-400">Ship to</span><input value={zip} onChange={e=>setZip(e.target.value)} className="w-20 bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF]"/></div></div>
           <div className="space-y-1.5">{CART_ITEMS.map((it,i)=>(
             <div key={i} className="flex items-center gap-3 text-sm">
               <div className="flex-1"><span className="text-stone-800">{it.name}</span><span className="text-[11px] text-stone-400 ml-2 font-mono">{it.l}×{it.w}×{it.h} · {it.wt}lb · ${it.price}</span></div>
@@ -4565,10 +4565,10 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="company"&&<><Company settings={settings} setSettings={setSettings}/>
           <div className="max-w-2xl mt-6">
             <h3 className="text-sm font-semibold text-stone-700 flex items-center gap-2 mb-2"><Clock className="w-4 h-4"/>Activity log</h3>
-            <p className="text-[12px] text-stone-500 mb-2">Who did what — label bookings and voids, newest first (last 200).</p>
+            <p className="text-xs text-stone-500 mb-2">Who did what — label bookings and voids, newest first (last 200).</p>
             <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100 max-h-80 overflow-y-auto">
               {audit.length===0&&<div className="p-4 text-sm text-stone-400">No activity yet.</div>}
-              {audit.map((a,i)=><div key={i} className="px-3 py-2 text-[12px] flex items-baseline gap-2"><span className="text-stone-400 shrink-0 w-36">{a.ts}</span><span className="font-medium text-stone-700 shrink-0">{a.action}</span><span className="text-stone-500 truncate">{a.detail}</span><span className="ml-auto text-stone-300 shrink-0">{a.user}</span></div>)}
+              {audit.map((a,i)=><div key={i} className="px-3 py-2 text-xs flex items-baseline gap-2"><span className="text-stone-400 shrink-0 w-36">{a.ts}</span><span className="font-medium text-stone-700 shrink-0">{a.action}</span><span className="text-stone-500 truncate">{a.detail}</span><span className="ml-auto text-stone-300 shrink-0">{a.user}</span></div>)}
             </div>
           </div></>}
       </div>
@@ -4603,7 +4603,7 @@ function ReferenceFields({settings,setSettings}){
         </label>
       ))}
     </div>
-    <div className="text-[12px] text-stone-400 flex items-start gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5"/>Only fills when the field is empty — anything you’ve already typed is left untouched.</div>
+    <div className="text-xs text-stone-400 flex items-start gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5"/>Only fills when the field is empty — anything you’ve already typed is left untouched.</div>
   </div>);
 }
 function Warehouses({settings,setSettings}){
@@ -4640,7 +4640,7 @@ function Warehouses({settings,setSettings}){
         <input value={n.state} onChange={e=>setN({...n,state:e.target.value})} placeholder="State" className={inC}/>
         <input value={n.zip} onChange={e=>setN({...n,zip:e.target.value})} placeholder="ZIP" className={inC+" font-mono"}/>
       </div>
-      <button onClick={add} disabled={!n.name||!n.zip} className="text-sm bg-[#0086E0] text-white rounded px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5"><Plus className="w-4 h-4"/>Add warehouse</button>
+      <button onClick={add} disabled={!n.name||!n.zip} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5"><Plus className="w-4 h-4"/>Add warehouse</button>
     </div>
   </div>);
 }
@@ -4720,18 +4720,18 @@ function ProductCatalog({settings,setSettings}){
       <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Boxes className="w-4 h-4"/>Product catalog</h2>
       <p className="text-sm text-stone-500 mt-0.5">Your products with dimensions and weight. Box logic uses these to auto-pick the right box for every order — so your labels bill the real size, not a guess.</p>
     </div>
-    {msg&&<div className={`text-[12px] rounded-lg px-3 py-2 border flex items-center gap-2 ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err?<AlertTriangle className="w-4 h-4"/>:<CheckCircle2 className="w-4 h-4"/>}{msg.err||msg.ok}</div>}
+    {msg&&<div className={`text-xs rounded-lg px-3 py-2 border flex items-center gap-2 ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err?<AlertTriangle className="w-4 h-4"/>:<CheckCircle2 className="w-4 h-4"/>}{msg.err||msg.ok}</div>}
 
     <div className="flex flex-wrap items-center gap-2">
       <div className="relative flex-1 min-w-[160px]"><Search className="w-4 h-4 absolute left-2.5 top-2 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search products or SKUs" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#0099FF]"/></div>
       <button onClick={()=>setAdding(a=>!a)} className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE]"><Plus className="w-4 h-4"/>Add product</button>
       <button onClick={pullShopify} disabled={busy} className="flex items-center gap-1.5 text-sm bg-[#5E8E3E] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#4e7834] disabled:opacity-50">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<ShoppingBag className="w-4 h-4"/>}Pull from Shopify</button>
-      <label className="flex items-center gap-1.5 text-sm bg-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
+      <label className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
       <button onClick={exportCSV} className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 px-2 py-1.5"><Download className="w-4 h-4"/>Export</button>
     </div>
     <div className="text-[11px] text-stone-400">CSV columns recognized: SKU, Name, Length, Width, Height, Weight, Value, Origin, HS Code, Barcode/UPC, Ships Alone (yes/no). Rows are merged by SKU.</div>
 
-    {withDims<products.length&&<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[12px] text-amber-800 flex items-center gap-2"><AlertTriangle className="w-4 h-4 shrink-0"/>{products.length-withDims} of {products.length} products have no dimensions yet. Box logic falls back to your default box for those — add L×W×H to pack them precisely.</div>}
+    {withDims<products.length&&<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex items-center gap-2"><AlertTriangle className="w-4 h-4 shrink-0"/>{products.length-withDims} of {products.length} products have no dimensions yet. Box logic falls back to your default box for those — add L×W×H to pack them precisely.</div>}
 
     {adding&&<div className="border border-[#99D6FF] rounded-lg bg-[#E6F4FF]/30 p-3">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -4748,7 +4748,7 @@ function ProductCatalog({settings,setSettings}){
         <label className="flex items-center gap-2 text-sm text-stone-600 pt-5 cursor-pointer"><input type="checkbox" checked={!!nf.shipsAlone} onChange={e=>setNf({...nf,shipsAlone:e.target.checked})} className="accent-[#0086E0]"/>Ships alone (own box)</label>
         <label className="flex items-center gap-2 text-sm text-stone-600 pt-5 cursor-pointer"><input type="checkbox" checked={!!nf.hazmat} onChange={e=>setNf({...nf,hazmat:e.target.checked})} className="accent-amber-600"/>Hazmat / lithium battery (ground only)</label>
       </div>
-      <div className="flex items-center gap-2 mt-2"><button onClick={addProduct} className="text-sm bg-[#0086E0] text-white rounded px-4 py-1.5 font-medium hover:bg-[#0072BE]">Save product</button><button onClick={()=>setAdding(false)} className="text-sm text-stone-500 px-2 py-1.5">Cancel</button></div>
+      <div className="flex items-center gap-2 mt-2"><button onClick={addProduct} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-1.5 font-medium hover:bg-[#0072BE]">Save product</button><button onClick={()=>setAdding(false)} className="text-sm text-stone-500 px-2 py-1.5">Cancel</button></div>
     </div>}
 
     <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
@@ -4783,7 +4783,7 @@ function ProductCatalog({settings,setSettings}){
               <label className="flex items-center gap-2 text-sm text-stone-600 pt-5 cursor-pointer"><input type="checkbox" checked={!!ef.shipsAlone} onChange={e=>setEf({...ef,shipsAlone:e.target.checked})} className="accent-[#0086E0]"/>Ships alone (own box)</label>
               <label className="flex items-center gap-2 text-sm text-stone-600 pt-5 cursor-pointer"><input type="checkbox" checked={!!ef.hazmat} onChange={e=>setEf({...ef,hazmat:e.target.checked})} className="accent-amber-600"/>Hazmat / lithium battery</label>
             </div>
-            <div className="flex items-center gap-2 mt-2"><button onClick={saveEdit} className="text-sm bg-[#0086E0] text-white rounded px-4 py-1.5 font-medium hover:bg-[#0072BE]">Save</button><button onClick={()=>{setEditId(null);setEf(null);}} className="text-sm text-stone-500 px-2 py-1.5">Cancel</button></div>
+            <div className="flex items-center gap-2 mt-2"><button onClick={saveEdit} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-1.5 font-medium hover:bg-[#0072BE]">Save</button><button onClick={()=>{setEditId(null);setEf(null);}} className="text-sm text-stone-500 px-2 py-1.5">Cancel</button></div>
           </div>}
         </div>);
       })}</div>
@@ -4800,7 +4800,7 @@ function BoxesSettings({settings,setSettings}){
   return (<div className="max-w-2xl space-y-3">
     <p className="text-sm text-stone-500">Your box catalog. ShippingCloud's box logic auto-picks the smallest box that fits each order — used on the Ship tab and for live Shopify checkout rates.</p>
     <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
-      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400"><div className="flex-1">Box</div><div className="w-28">Dimensions</div><div className="w-16 text-right">Max wt</div><div className="w-16 text-right">Empty</div><div className="w-6"/></div>
+      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="flex-1">Box</div><div className="w-28">Dimensions</div><div className="w-16 text-right">Max wt</div><div className="w-16 text-right">Empty</div><div className="w-6"/></div>
       <div className="divide-y divide-stone-100">{boxes.map(b=>(
         <div key={b.id} className="flex items-center gap-3 px-4 py-2.5">
           <div className="flex-1 text-sm font-medium">{b.name}</div>
@@ -4819,7 +4819,7 @@ function BoxesSettings({settings,setSettings}){
         <Field label="H"><Input type="number" value={n.H} onChange={e=>setN({...n,H:e.target.value})}/></Field>
         <Field label="Max wt"><Input type="number" value={n.maxWt} onChange={e=>setN({...n,maxWt:e.target.value})}/></Field>
       </div>
-      <button onClick={add} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium">Add box</button>
+      <button onClick={add} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Add box</button>
     </Panel>
   </div>);
 }
@@ -4862,14 +4862,14 @@ function BoxLogic({settings,setSettings}){
         </Select>
       </Field>
       <p className="text-[11px] text-stone-400">Billable weight = the greater of actual weight and (L×W×H ÷ divisor). A lower divisor means higher dim weight. The carrier charges on whichever is larger.</p>
-      <div className="bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-[12px] text-stone-600 font-mono">Example: a 12×9×4 box ÷ {bl.dimDivisor} = {(12*9*4/bl.dimDivisor).toFixed(1)} lb dim weight</div>
+      <div className="bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-xs text-stone-600 font-mono">Example: a 12×9×4 box ÷ {bl.dimDivisor} = {(12*9*4/bl.dimDivisor).toFixed(1)} lb dim weight</div>
     </Panel>
     <Panel title="Options">
       <label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={bl.allowOverride} onChange={e=>set({allowOverride:e.target.checked})} className="accent-[#0086E0]"/>Let users override the chosen box on the Ship tab</label>
-      <div className="text-[12px] text-stone-500">Box catalog in use: <b>{boxes.length}</b> boxes (edit them under <b>Package sizes</b>). Product catalog: <b>{products.length}</b> products.</div>
+      <div className="text-xs text-stone-500">Box catalog in use: <b>{boxes.length}</b> boxes (edit them under <b>Package sizes</b>). Product catalog: <b>{products.length}</b> products.</div>
     </Panel>
     <Panel title="Try it — live box logic">
-      <p className="text-[12px] text-stone-500 mb-2">Add products to a test cart and watch box logic pick the box, just like it will for real orders.</p>
+      <p className="text-xs text-stone-500 mb-2">Add products to a test cart and watch box logic pick the box, just like it will for real orders.</p>
       <div className="border border-stone-200 rounded-lg divide-y divide-stone-100 max-h-52 overflow-auto">
         {products.slice(0,40).map(pr=>{const noDim=!(+pr.l>0&&+pr.w>0&&+pr.h>0);return (
           <div key={pr.id} className="flex items-center gap-2 px-3 py-1.5 text-sm">
@@ -4889,7 +4889,7 @@ function BoxLogic({settings,setSettings}){
           <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Billable</div><div className="font-mono text-sm font-bold text-[#006FBF]">{billShown} lb</div></div>
         </div>
         <div className="text-[11px] text-stone-500 mt-2">{testPack.reason}{!testPack.dimsKnown?" — some items lack dimensions, packed by volume + weight only":""}. Billable weight is the greater of actual and dim weight.</div>
-      </div>:<div className="mt-3 text-[12px] text-stone-400">Add a product above to see the chosen box.</div>}
+      </div>:<div className="mt-3 text-xs text-stone-400">Add a product above to see the chosen box.</div>}
     </Panel>
   </div>);
 }
@@ -4909,14 +4909,14 @@ function PrinterSettings({settings,setSettings}){
   return (<div className="max-w-2xl space-y-4">
     <p className="text-sm text-stone-500">Controls how labels are generated and printed when you buy a label or run a batch.</p>
     <Panel title="Printers & routing">
-      <p className="text-[12px] text-stone-500">Name your printers (e.g. “Zebra — Station A”, “Office laser”), then route labels to them by rule. Batch splits its printing into one run per printer — each opens as its own job so you pick that device once. Autopilot rules can also route with the “Route to Printer” action (use the printer’s exact name as the value).</p>
+      <p className="text-xs text-stone-500">Name your printers (e.g. “Zebra — Station A”, “Office laser”), then route labels to them by rule. Batch splits its printing into one run per printer — each opens as its own job so you pick that device once. Autopilot rules can also route with the “Route to Printer” action (use the printer’s exact name as the value).</p>
       <div className="space-y-1.5">
         {printers.map(x=>(<div key={x.id} className="flex items-center gap-2 text-sm">
           <Printer className="w-3.5 h-3.5 text-stone-400"/><span className="flex-1">{x.name}</span>
           <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><input type="radio" name="defprinter" checked={settings.defaultPrinterId===x.id} onChange={()=>setSettings({...settings,defaultPrinterId:x.id})} className="accent-[#0086E0]"/>default</label>
           <button onClick={()=>delPrinter(x.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button>
         </div>))}
-        <div className="flex items-center gap-2"><Input value={pn} onChange={e=>setPn(e.target.value)} placeholder="Printer name (e.g. Zebra — Station A)"/><button onClick={addPrinter} className="text-sm bg-stone-900 text-white rounded px-3 py-1.5 font-medium shrink-0">Add</button></div>
+        <div className="flex items-center gap-2"><Input value={pn} onChange={e=>setPn(e.target.value)} placeholder="Printer name (e.g. Zebra — Station A)"/><button onClick={addPrinter} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium shrink-0">Add</button></div>
       </div>
       {printers.length>0&&<div className="space-y-1.5 pt-2 border-t border-stone-100">
         <div className="text-[10px] uppercase tracking-widest text-stone-400">Routing rules · first match wins</div>
@@ -4929,7 +4929,7 @@ function PrinterSettings({settings,setSettings}){
           <Select value={r.printerId||""} onChange={e=>setRoute(r.id,{printerId:e.target.value})} className="!w-auto">{printers.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</Select>
           <button onClick={()=>delRoute(r.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button>
         </div>))}
-        <button onClick={addRoute} className="text-[12px] text-[#0086E0] font-medium flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add routing rule</button>
+        <button onClick={addRoute} className="text-xs text-[#0086E0] font-medium flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add routing rule</button>
       </div>}
     </Panel>
     <Panel title="Label">
@@ -4962,7 +4962,7 @@ function PrinterSettings({settings,setSettings}){
         </Select>
       </Field>
     </Panel>
-    <div className="flex items-center gap-2 text-[12px] text-stone-400"><Printer className="w-4 h-4"/>Thermal sizes (4×6 / ZPL) print fastest on label printers; choose Letter/PDF if you print on a standard office printer.</div>
+    <div className="flex items-center gap-2 text-xs text-stone-400"><Printer className="w-4 h-4"/>Thermal sizes (4×6 / ZPL) print fastest on label printers; choose Letter/PDF if you print on a standard office printer.</div>
   </div>);
 }
 function Notifications({settings,setSettings,emails}){
@@ -5008,7 +5008,7 @@ function AutomationRules({rules,setRules}){
         <Field label="Then"><Select value={f.action} onChange={e=>setF({...f,action:e.target.value})}><option value="service">Set service</option><option value="signature">Require signature</option><option value="insure">Auto-insure</option><option value="flag">Flag for review</option></Select></Field>
         <Field label="Detail"><Input value={f.actionValue} onChange={e=>setF({...f,actionValue:e.target.value})} placeholder="e.g. Cheapest Ground"/></Field>
       </div>
-      <button onClick={add} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium">Add rule</button>
+      <button onClick={add} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Add rule</button>
     </Panel>
   </div>);
 }
@@ -5259,7 +5259,7 @@ function RuleEditorModal({rule,onSave,onClose,onDelete,warehouses}){
           </div>
 
           <div className="bg-white border border-stone-200 rounded-lg p-3">
-            <div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2 text-sm font-semibold text-stone-800">When{(r.conditions||[]).length>1&&<div className="flex bg-stone-100 rounded-lg p-0.5 text-[11px] font-normal">{[["all","Match ALL"],["any","Match ANY"]].map(([v,l])=><button key={v} onClick={()=>upd({match:v})} className={`px-2 py-0.5 rounded-md ${(r.match||"all")===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}</div>}{(r.conditions||[]).length<=1&&<span className="text-stone-400 font-normal text-[13px]">· conditions</span>}</div><button onClick={addCond} className="text-[13px] text-[#0086E0] font-medium flex items-center gap-1 hover:underline"><Plus className="w-3.5 h-3.5"/>Add condition</button></div>
+            <div className="flex items-center justify-between mb-2"><div className="flex items-center gap-2 text-sm font-semibold text-stone-800">When{(r.conditions||[]).length>1&&<div className="flex bg-stone-100 rounded-lg p-0.5 text-[11px] font-normal">{[["all","Match ALL"],["any","Match ANY"]].map(([v,l])=><button key={v} onClick={()=>upd({match:v})} className={`px-2 py-0.5 rounded-lg ${(r.match||"all")===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}</div>}{(r.conditions||[]).length<=1&&<span className="text-stone-400 font-normal text-[13px]">· conditions</span>}</div><button onClick={addCond} className="text-[13px] text-[#0086E0] font-medium flex items-center gap-1 hover:underline"><Plus className="w-3.5 h-3.5"/>Add condition</button></div>
             {(r.conditions||[]).length===0&&<div className="text-[13px] text-stone-400 border border-dashed border-stone-200 rounded px-3 py-2">No conditions — this rule runs on <b>every order</b>.</div>}
             <div className="space-y-2">
               {(r.conditions||[]).map((c,i)=>{
@@ -5295,10 +5295,10 @@ function RuleEditorModal({rule,onSave,onClose,onDelete,warehouses}){
           </label>
         </div>
         <div className="bg-white border-t border-stone-200 px-4 py-3 flex items-center justify-between shrink-0">
-          {!rule._isNew?<button onClick={()=>onDelete(r.id)} className="text-sm text-rose-600 hover:bg-rose-50 rounded px-3 py-2 font-medium">Delete</button>:<span/>}
+          {!rule._isNew?<button onClick={()=>onDelete(r.id)} className="text-sm text-rose-600 hover:bg-rose-50 rounded-lg px-3 py-2 font-medium">Delete</button>:<span/>}
           <div className="flex items-center gap-2">
             <button onClick={onClose} className="text-sm text-stone-500 rounded px-3 py-2 hover:bg-stone-100">Cancel</button>
-            <button onClick={()=>onSave(r)} disabled={!r.name} className="text-sm bg-[#0086E0] text-white rounded px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40">Save rule</button>
+            <button onClick={()=>onSave(r)} disabled={!r.name} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40">Save rule</button>
           </div>
         </div>
       </div>
@@ -5419,7 +5419,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
       <span className="flex items-center gap-2"><span className="w-5 h-5 rounded-full bg-[#E6F4FF] text-[#006FBF] text-[11px] font-bold flex items-center justify-center">2</span>The preview below shows exactly what will happen — live, on your real orders</span>
       <span className="flex items-center gap-2"><span className="w-5 h-5 rounded-full bg-[#E6F4FF] text-[#006FBF] text-[11px] font-bold flex items-center justify-center">3</span>Hit <b>Run Autopilot</b> — every open order gets its label; anything held waits for you</span>
     </div>
-    {applied&&<div className="text-[12px] rounded px-3 py-2 flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200"><CheckCircle2 className="w-3.5 h-3.5"/>{applied.n?`Applied to ${applied.n} order${applied.n!==1?"s":""} — service preference, tags, holds and shipping options written onto those orders.`:"No matching orders to apply right now."}</div>}
+    {applied&&<div className="text-xs rounded px-3 py-2 flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200"><CheckCircle2 className="w-3.5 h-3.5"/>{applied.n?`Applied to ${applied.n} order${applied.n!==1?"s":""} — service preference, tags, holds and shipping options written onto those orders.`:"No matching orders to apply right now."}</div>}
     {apProg&&<div className="border border-emerald-200 bg-emerald-50 rounded-lg px-4 py-3 flex items-center gap-3 text-sm text-emerald-800"><Loader2 className="w-4 h-4 animate-spin"/>Autopilot is working… order {apProg.n} of {apProg.total}<div className="flex-1 h-1.5 bg-emerald-100 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 transition-all" style={{width:(apProg.n/apProg.total*100)+"%"}}/></div></div>}
     {apResults&&!apProg&&<div className="border border-stone-200 rounded-lg bg-white p-4 space-y-2">
       <div className="flex items-center gap-2 flex-wrap">
@@ -5451,7 +5451,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
     <div className="grid lg:grid-cols-2 gap-4">
       {/* pipeline */}
       <div className="space-y-2">
-        <div className="text-[11px] uppercase tracking-widest text-stone-400 flex items-center justify-between"><span>Rules pipeline</span><span>{rules.length}</span></div>
+        <div className="text-[10px] uppercase tracking-widest text-stone-400 flex items-center justify-between"><span>Rules pipeline</span><span>{rules.length}</span></div>
         {rules.length===0&&<div className="border border-dashed border-stone-300 rounded-lg bg-white p-8 text-center">
           <div className="text-stone-800 font-medium">No rules yet</div>
           <div className="text-sm text-stone-500 mt-1">Rules are simple "if this, do that" sentences — Autopilot runs them on every order.</div>
@@ -5486,8 +5486,8 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
       {/* live floor */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <div className="text-[11px] uppercase tracking-widest text-stone-400">Preview — what Autopilot will do</div>
-          <div className="flex bg-stone-100 rounded-lg p-0.5 text-[11px]">{[["all","All"],["matched","Affected"],["held","Held"],["untouched","Untouched"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-2 py-1 rounded-md ${view===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}</div>
+          <div className="text-[10px] uppercase tracking-widest text-stone-400">Preview — what Autopilot will do</div>
+          <div className="flex bg-stone-100 rounded-lg p-0.5 text-[11px]">{[["all","All"],["matched","Affected"],["held","Held"],["untouched","Untouched"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-2 py-1 rounded-lg ${view===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}</div>
         </div>
         {ords.length===0&&<div className="border border-dashed border-stone-300 rounded-lg bg-white p-8 text-center text-sm text-stone-400">No orders on the floor. Sync or add orders to see rules act on them.</div>}
         {ords.length>0&&viewResults.length===0&&<div className="border border-dashed border-stone-200 rounded-lg bg-white p-6 text-center text-sm text-stone-400">Nothing matches this view.</div>}
@@ -5502,16 +5502,16 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
                 <span className="text-[11px] font-mono text-stone-500">${o.total} · {o.weight||"?"}lb{res.view.zone?` · zone ${res.view.zone}`:""}</span>
               </div>
               {res.fires.length===0
-                ? <div className="text-[12px] text-stone-400">No rules matched — ships normally at the best rate.</div>
+                ? <div className="text-xs text-stone-400">No rules matched — ships normally at the best rate.</div>
                 : <div className="space-y-1">
-                    {res.fires.map((f,fi)=>(<div key={fi} className="flex items-start gap-2 text-[12px]">
+                    {res.fires.map((f,fi)=>(<div key={fi} className="flex items-start gap-2 text-xs">
                       <Zap className="w-3.5 h-3.5 text-[#0086E0] shrink-0 mt-0.5"/>
                       <span className="font-medium text-stone-700 shrink-0">{f.ruleName}</span>
                       <span className="text-stone-400">→</span>
                       <span className="text-stone-600 flex-1">{f.effects.join(" · ")}{f.stop?" · then stop":""}</span>
                     </div>))}
                     {res.changed.length>0&&<div className="flex flex-wrap gap-1 pt-1">{res.changed.map(c=><Badge key={c} tone={chgTone[c]||"stone"}>{c}</Badge>)}</div>}
-                    {res.view.hold&&<div className="text-[12px] text-rose-600 flex items-center gap-1.5 mt-1"><AlertTriangle className="w-3.5 h-3.5"/>Held: {res.view.hold}</div>}
+                    {res.view.hold&&<div className="text-xs text-rose-600 flex items-center gap-1.5 mt-1"><AlertTriangle className="w-3.5 h-3.5"/>Held: {res.view.hold}</div>}
                   </div>}
             </div>);
           })}
@@ -5556,8 +5556,8 @@ function AddressBook({settings,setSettings}){
   return (<div className="max-w-3xl space-y-3">
     <div className="flex flex-wrap items-center gap-3">
       <p className="text-sm text-stone-500 flex-1">Saved contacts for fast ship-to / ship-from. Import your whole list from a CSV.</p>
-      <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Save this address: "}}))} title="Dictate a contact and Claude saves it" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded px-3 py-2 font-medium hover:bg-[#f5e6de]"><Sparkles className="w-4 h-4"/>Ask Claude to add one</button>
-      <label className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded px-3 py-2 font-medium hover:bg-stone-800 cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
+      <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Save this address: "}}))} title="Dictate a contact and Claude saves it" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded-lg px-3 py-2 font-medium hover:bg-[#f5e6de]"><Sparkles className="w-4 h-4"/>Ask Claude to add one</button>
+      <label className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
     </div>
     {msg&&<div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{msg}</div>}
     <div className="text-[11px] text-stone-400">CSV columns recognized: name, company, address, city, state, zip, phone (header row optional).</div>
@@ -5565,17 +5565,17 @@ function AddressBook({settings,setSettings}){
     <Panel title="Add address">
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2"><Field label="Name"><Input value={f.name} onChange={e=>setF({...f,name:e.target.value})}/></Field><Field label="Company"><Input value={f.company} onChange={e=>setF({...f,company:e.target.value})}/></Field><Field label="Phone"><Input value={f.phone} onChange={e=>setF({...f,phone:e.target.value})}/></Field><div className="col-span-2 sm:col-span-3"><Field label="Street"><Input value={f.address1} onChange={e=>setF({...f,address1:e.target.value})}/></Field></div><Field label="City"><Input value={f.city} onChange={e=>setF({...f,city:e.target.value})}/></Field><Field label="State"><Input value={f.state} onChange={e=>setF({...f,state:e.target.value})}/></Field><Field label="ZIP"><Input value={f.zip} onChange={e=>setF({...f,zip:e.target.value})}/></Field></div>
       <div className="border-t border-stone-100 pt-3 mt-1">
-        <div className="text-[11px] uppercase tracking-widest text-stone-400 mb-1.5">Third-party billing account <span className="normal-case tracking-normal text-stone-400">(optional)</span></div>
+        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Third-party billing account <span className="normal-case tracking-normal text-stone-400">(optional)</span></div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           <Field label="Bill carrier"><Select value={f.acctCarrier} onChange={e=>setF({...f,acctCarrier:e.target.value})}><option value="">—</option><option>FedEx</option><option>UPS</option></Select></Field>
           <div className="col-span-1 sm:col-span-2"><Field label="Account number"><Input value={f.acctNum} onChange={e=>setF({...f,acctNum:e.target.value})} placeholder="bill shipments to this account"/></Field></div>
         </div>
         <div className="text-[11px] text-stone-400 mt-1">When this contact is selected on the Ship page, shipments auto-bill to this {f.acctCarrier||"carrier"} account instead of you.</div>
       </div>
-      <button onClick={add} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium">Save address</button>
+      <button onClick={add} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Save address</button>
     </Panel>
     <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
-      <div className="px-4 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400 flex items-center justify-between"><span>{filtered.length} address{filtered.length===1?"":"es"}</span></div>
+      <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 flex items-center justify-between"><span>{filtered.length} address{filtered.length===1?"":"es"}</span></div>
       {filtered.length===0&&<div className="p-6 text-center text-sm text-stone-400">No addresses{q?" match your search":" yet"}.</div>}
       {filtered.map(adr=>(<div key={adr.id}>
         <div onClick={()=>editId===adr.id?(setEditId(null),setEf(null)):startEdit(adr)} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer ${editId===adr.id?"bg-[#E6F4FF]/40":"hover:bg-stone-50"}`}>
@@ -5598,7 +5598,7 @@ function AddressBook({settings,setSettings}){
             <div className="col-span-1 sm:col-span-2"><Field label="Third-party billing account #"><Input value={ef.acctNum||""} onChange={e=>setEf({...ef,acctNum:e.target.value})}/></Field></div>
           </div>
           <div className="flex items-center gap-2 mt-3">
-            <button onClick={saveEdit} className="text-sm bg-[#0086E0] text-white rounded px-4 py-1.5 font-medium hover:bg-[#0072BE]">Save changes</button>
+            <button onClick={saveEdit} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-1.5 font-medium hover:bg-[#0072BE]">Save changes</button>
             <button onClick={()=>{setEditId(null);setEf(null);}} className="text-sm text-stone-500 hover:text-stone-700 px-2 py-1.5">Cancel</button>
           </div>
         </div>}
@@ -5644,25 +5644,25 @@ function ConnectorModal({c,settings,setSettings,orders,setOrders,onClose}){
               {c.instr.map((s,i)=><li key={i} className="flex gap-2 text-[13px] text-stone-600"><span className="shrink-0 w-4 h-4 rounded-full bg-stone-200 text-stone-600 text-[10px] flex items-center justify-center font-semibold mt-0.5">{i+1}</span><span>{s}</span></li>)}
             </ol>
           </div>
-          {c.env&&<div className="text-[11px] bg-amber-50 border border-amber-200 text-amber-700 rounded px-2 py-1.5">Requires these Netlify env vars: <b>{c.env.join(", ")}</b>. Ask your admin to set them (or share the keys and they’ll be added).</div>}
+          {c.env&&<div className="text-[11px] bg-amber-50 border border-amber-200 text-amber-700 rounded-lg px-2 py-1.5">Requires these Netlify env vars: <b>{c.env.join(", ")}</b>. Ask your admin to set them (or share the keys and they’ll be added).</div>}
 
           {c.auth==="token"&&(<div className="space-y-2 pt-1">
             {(c.fields||[]).map(([k,label,ph])=>(<div key={k}><div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">{label}</div><Input value={form[k]||""} onChange={e=>setForm({...form,[k]:e.target.value})} placeholder={ph}/></div>))}
-            <button onClick={saveToken} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Check className="w-4 h-4"/>Save credentials</button>
+            <button onClick={saveToken} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Check className="w-4 h-4"/>Save credentials</button>
           </div>)}
 
           {c.auth==="oauth"&&(<div className="pt-1 space-y-2">
-            <button onClick={startOAuth} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Plug className="w-4 h-4"/>Connect with {c.name}</button>
+            <button onClick={startOAuth} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Plug className="w-4 h-4"/>Connect with {c.name}</button>
             {c.postShopId&&<div className="pt-1"><div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">Etsy Shop ID (after connecting)</div><div className="flex gap-2"><Input value={shopId} onChange={e=>setShopId(e.target.value)} placeholder="e.g. 12345678"/><button onClick={saveShopId} className="text-sm border border-stone-200 rounded px-3 hover:bg-stone-50">Save</button></div></div>}
           </div>)}
 
-          {c.auth==="qwc"&&(<div className="pt-1"><button onClick={downloadQwc} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Download className="w-4 h-4"/>Download .qwc file</button></div>)}
+          {c.auth==="qwc"&&(<div className="pt-1"><button onClick={downloadQwc} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Download className="w-4 h-4"/>Download .qwc file</button></div>)}
 
-          {msg&&<div className={`text-[12px] rounded px-2 py-1.5 flex items-center gap-1.5 ${msg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{msg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{msg.err||msg.ok}</div>}
+          {msg&&<div className={`text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${msg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{msg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{msg.err||msg.ok}</div>}
         </div>
         <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-stone-200">
           <div>{connected&&<button onClick={disconnect} className="text-sm border border-stone-200 text-stone-500 rounded px-3 py-2 hover:bg-stone-50">Disconnect</button>}</div>
-          {c.orders&&connected&&<button onClick={sync} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>Sync orders now</>}</button>}
+          {c.orders&&connected&&<button onClick={sync} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>Sync orders now</>}</button>}
         </div>
       </div>
     </div>
@@ -5701,16 +5701,16 @@ function Integrations({settings,setSettings,orders,setOrders}){
       </div>
       {connected?(
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <button onClick={sync} disabled={busy} className="text-sm bg-stone-900 text-white rounded px-3 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>Sync orders now</>}</button>
+          <button onClick={sync} disabled={busy} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>Sync orders now</>}</button>
           <button onClick={disconnect} className="text-sm border border-stone-200 text-stone-500 rounded px-3 py-2 hover:bg-stone-50">Disconnect</button>
         </div>
       ):(
         <div className="mt-3 flex flex-wrap items-end gap-2">
           <div className="flex-1 min-w-[220px]"><div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">Store domain</div><Input value={shop} onChange={e=>setShop(e.target.value)} placeholder="mystore.myshopify.com"/></div>
-          <button onClick={connect} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Plug className="w-4 h-4"/>Connect</button>
+          <button onClick={connect} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Plug className="w-4 h-4"/>Connect</button>
         </div>
       )}
-      {msg&&<div className={`mt-2 text-[12px] rounded px-2 py-1.5 flex items-center gap-1.5 ${msg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{msg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{msg.err||msg.ok}</div>}
+      {msg&&<div className={`mt-2 text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${msg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{msg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{msg.err||msg.ok}</div>}
     </div>
     {/* All other connectors */}
     <div className="grid sm:grid-cols-2 gap-2">
@@ -5736,10 +5736,10 @@ function Billing({settings,setSettings}){
   return (<div className="max-w-xl space-y-4">
     <Panel title="Prepaid balance">
       <div className="flex items-end justify-between">
-        <div><div className="text-[11px] uppercase tracking-widest text-stone-400">Available funds</div><div className="text-3xl font-semibold text-stone-900 font-mono">{money(prepaid.balance||0)}</div></div>
+        <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Available funds</div><div className="text-3xl font-semibold text-stone-900 font-mono">{money(prepaid.balance||0)}</div></div>
         <Wallet className="w-8 h-8 text-[#0099FF]"/>
       </div>
-      <p className="text-[12px] text-stone-400">Prepaid funds cover label purchases and prepaid carrier products. Top up here; each label drawn against this balance shows in the ledger.</p>
+      <p className="text-xs text-stone-400">Prepaid funds cover label purchases and prepaid carrier products. Top up here; each label drawn against this balance shows in the ledger.</p>
       <div className="flex items-end gap-2">
         <div className="flex-1"><div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">Add amount ($)</div><div className="flex gap-1.5">{[50,100,250,500].map(v=><button key={v} onClick={()=>setAmt(String(v))} className={`text-sm rounded px-2.5 py-1.5 border ${String(v)===amt?"bg-[#E6F4FF] border-[#66C1FF] text-[#006FBF]":"bg-white border-stone-200 text-stone-600 hover:bg-stone-50"}`}>${v}</button>)}<Input type="number" value={amt} onChange={e=>setAmt(e.target.value)} className="w-24"/></div></div>
         <button onClick={addFunds} className={`text-sm rounded px-4 py-2 font-medium flex items-center gap-1.5 ${added?"bg-emerald-600 text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{added?<><Check className="w-4 h-4"/>Added</>:<><Plus className="w-4 h-4"/>Add funds</>}</button>
@@ -5755,10 +5755,10 @@ function Billing({settings,setSettings}){
       <Field label="Bill shipments to"><Select value={settings.defaultBillTo} onChange={e=>setSettings({...settings,defaultBillTo:e.target.value})}><option value="sender">Sender (you)</option><option value="receiver">Receiver</option><option value="third">Third-party account</option></Select></Field>
     </Panel>
     <Panel title="Third-party carrier accounts">
-      <p className="text-[12px] text-stone-400">Bill shipping to someone else's FedEx/UPS account number.</p>
+      <p className="text-xs text-stone-400">Bill shipping to someone else's FedEx/UPS account number.</p>
       {settings.thirdPartyAccts.map(t=>(<div key={t.id} className="flex items-center gap-2 text-sm border border-stone-200 rounded px-3 py-2"><span className={`text-xs font-bold ${CARRIER_TINT[t.carrier]}`}>{t.carrier}</span><span className="flex-1 font-mono">{t.account}</span><span className="text-stone-400">{t.label}</span><button onClick={()=>setSettings({...settings,thirdPartyAccts:settings.thirdPartyAccts.filter(x=>x.id!==t.id)})} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button></div>))}
       <div className="grid grid-cols-3 gap-2"><Select value={n.carrier} onChange={e=>setN({...n,carrier:e.target.value})}><option>FedEx</option><option>UPS</option></Select><Input placeholder="Account #" value={n.account} onChange={e=>setN({...n,account:e.target.value})}/><Input placeholder="Label" value={n.label} onChange={e=>setN({...n,label:e.target.value})}/></div>
-      <button onClick={add} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium">Add account</button>
+      <button onClick={add} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Add account</button>
     </Panel>
   </div>);
 }
@@ -5869,13 +5869,13 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
         </div>
         <p className="text-[11px] text-stone-400 -mt-1">The Integration ID enables real label printing. In Webship: gear/settings → eCommerce Integrations → Add → Rest API → Save New Integration → copy the ID. Turn on auto-ship for that integration so labels book automatically. The Provider account ID tells England which carrier account to ship on — click <b>Check booking access</b> to auto-fill it, or paste it manually if England hasn't opened that endpoint on your key.</p>
         <div className="flex flex-wrap items-center gap-3">
-          <button onClick={runTest} disabled={!eng.apiKey||!eng.customerId} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{test&&test.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Testing…</>:<><ShieldCheck className="w-4 h-4"/>Test connection</>}</button>
+          <button onClick={runTest} disabled={!eng.apiKey||!eng.customerId} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{test&&test.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Testing…</>:<><ShieldCheck className="w-4 h-4"/>Test connection</>}</button>
           <button onClick={runDiag} disabled={!eng.apiKey||!eng.customerId} className="text-sm border border-stone-300 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5">{diag&&diag.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Checking…</>:<><Truck className="w-4 h-4"/>Check booking access</>}</button>
           <button onClick={runFlush} disabled={flush&&flush.loading} className="text-sm border border-stone-300 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5" title="Clear saved quotes so every rate pulls fresh from England — use after changing pricing in England's backend">{flush&&flush.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Refreshing…</>:<><RefreshCw className="w-4 h-4"/>Refresh rates</>}</button>
           {test&&!test.loading&&<span className={`text-xs flex items-center gap-1.5 ${test.ok?"text-emerald-700":"text-[#0086E0]"}`}>{test.ok?<CheckCircle2 className="w-4 h-4"/>:<AlertTriangle className="w-4 h-4"/>}{test.msg}</span>}
         </div>
-        {flush&&!flush.loading&&<div className={`text-[12px] rounded px-3 py-2 flex items-start gap-1.5 ${flush.ok?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-amber-50 text-amber-800 border border-amber-200"}`}>{flush.ok?<CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5"/>:<AlertTriangle className="w-4 h-4 shrink-0 mt-0.5"/>}<span>{flush.msg}</span></div>}
-        {diag&&!diag.loading&&<div className={`text-[12px] rounded px-3 py-2 flex items-start gap-1.5 ${diag.ok?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-amber-50 text-amber-800 border border-amber-200"}`}>{diag.ok?<CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5"/>:<AlertTriangle className="w-4 h-4 shrink-0 mt-0.5"/>}<span>{diag.msg}</span></div>}
+        {flush&&!flush.loading&&<div className={`text-xs rounded px-3 py-2 flex items-start gap-1.5 ${flush.ok?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-amber-50 text-amber-800 border border-amber-200"}`}>{flush.ok?<CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5"/>:<AlertTriangle className="w-4 h-4 shrink-0 mt-0.5"/>}<span>{flush.msg}</span></div>}
+        {diag&&!diag.loading&&<div className={`text-xs rounded px-3 py-2 flex items-start gap-1.5 ${diag.ok?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-amber-50 text-amber-800 border border-amber-200"}`}>{diag.ok?<CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5"/>:<AlertTriangle className="w-4 h-4 shrink-0 mt-0.5"/>}<span>{diag.msg}</span></div>}
         {test&&!test.loading&&!test.ok&&test.detail&&<div className="text-[11px] text-stone-500 font-mono bg-stone-100 border border-stone-200 rounded p-2 break-words whitespace-pre-wrap">England said: {typeof test.detail==="string"?test.detail:JSON.stringify(test.detail)}</div>}
         <p className="text-[11px] text-stone-400">For production, store the API key as a Netlify env var (<span className="font-mono">ENGLAND_API_KEY</span>, <span className="font-mono">ENGLAND_CUSTOMER_ID</span>) instead of here, so it never ships to the browser. England authenticates with the API key + customer ID; if you only have the FedEx account number, try it as the customer ID or confirm the key with your England rep.</p>
       </div>
@@ -5896,14 +5896,14 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
           <Field label="Environment"><Select value={ups.env||"production"} onChange={e=>setUps({env:e.target.value})}><option value="production">Production</option><option value="test">Test (CIE sandbox)</option></Select></Field>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <button onClick={runUpsTest} disabled={!ups.clientId||!ups.clientSecret} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{upsTest&&upsTest.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Testing…</>:<><ShieldCheck className="w-4 h-4"/>Test connection</>}</button>
+          <button onClick={runUpsTest} disabled={!ups.clientId||!ups.clientSecret} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{upsTest&&upsTest.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Testing…</>:<><ShieldCheck className="w-4 h-4"/>Test connection</>}</button>
           {upsTest&&!upsTest.loading&&<span className={`text-xs flex items-center gap-1.5 ${upsTest.ok?"text-emerald-700":"text-[#0086E0]"}`}>{upsTest.ok?<CheckCircle2 className="w-4 h-4"/>:<AlertTriangle className="w-4 h-4"/>}{upsTest.msg}</span>}
         </div>
         <p className="text-[11px] text-stone-400">For production, store these as Netlify env vars (<span className="font-mono">UPS_CLIENT_ID</span>, <span className="font-mono">UPS_CLIENT_SECRET</span>, <span className="font-mono">UPS_ACCOUNT</span>) instead of here, so secrets never ship to the browser.</p>
       </div>
     </div>
     <div>
-      <div className="flex items-center justify-between mb-2"><h3 className="text-sm font-semibold text-stone-700">Your own carrier accounts</h3><button onClick={()=>setAdding(v=>!v)} className="flex items-center gap-1 text-sm bg-stone-200 hover:bg-stone-300 rounded px-2.5 py-1.5"><Plus className="w-4 h-4"/>Add</button></div>
+      <div className="flex items-center justify-between mb-2"><h3 className="text-sm font-semibold text-stone-700">Your own carrier accounts</h3><button onClick={()=>setAdding(v=>!v)} className="flex items-center gap-1 text-sm bg-stone-200 hover:bg-stone-300 rounded-lg px-2.5 py-1.5"><Plus className="w-4 h-4"/>Add</button></div>
       <p className="text-sm text-stone-500 mb-3">Prefer your own negotiated rates? Connect your FedEx, UPS, or England account number.</p>
       {adding&&<Panel title="Add carrier account">
         <div className="grid grid-cols-2 gap-3"><Field label="Label"><Input value={d.label} onChange={e=>setD({...d,label:e.target.value})}/></Field><Field label="Provider"><Select value={d.provider} onChange={e=>setD({...d,provider:e.target.value})}>{PROVIDERS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field></div>
@@ -5911,7 +5911,7 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
         <Field label="API key"><Input type="password" value={d.apiKey} onChange={e=>setD({...d,apiKey:e.target.value})}/></Field>
         {d.provider==="england"&&<Field label="Customer ID"><Input value={d.customerId} onChange={e=>setD({...d,customerId:e.target.value})}/></Field>}
         {d.provider!=="england"&&<Field label="Secret"><Input type="password" value={d.secret} onChange={e=>setD({...d,secret:e.target.value})}/></Field>}
-        <button onClick={add} className="text-sm bg-stone-900 text-white rounded px-4 py-2 font-medium">Connect</button>
+        <button onClick={add} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Connect</button>
       </Panel>}
       <div className="space-y-2 mt-2">{accounts.map(a=>(<div key={a.id} className="border border-stone-200 rounded-lg bg-white p-4 flex items-center gap-3">
         <div className="w-9 h-9 rounded bg-[#E6F4FF] text-[#0086E0] flex items-center justify-center"><Wifi className="w-4 h-4"/></div>
@@ -5937,7 +5937,7 @@ function Subscription({settings,setSettings}){
           <div className="text-[11px] text-stone-400 mb-2">{p.tagline}</div>
           <div className="text-2xl font-bold">{p.price===0?"Free":<>${p.price}<span className="text-sm font-normal text-stone-400">/mo</span></>}</div>
           <div className="text-[11px] text-[#0086E0] font-medium mb-3">{p.limits}</div>
-          <ul className="space-y-1.5 flex-1">{p.features.map(f=>(<li key={f} className="flex items-start gap-1.5 text-[12px] text-stone-600"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5"/>{f}</li>))}</ul>
+          <ul className="space-y-1.5 flex-1">{p.features.map(f=>(<li key={f} className="flex items-start gap-1.5 text-xs text-stone-600"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5"/>{f}</li>))}</ul>
           <button onClick={()=>setSettings({...settings,plan:p.id})} disabled={active} className={`mt-3 text-sm rounded px-3 py-2 font-medium ${active?"bg-stone-100 text-stone-400":isUp?"bg-stone-900 text-white hover:bg-stone-800":"bg-stone-200 text-stone-700 hover:bg-stone-300"}`}>{active?"Current plan":isUp?"Upgrade":"Switch"}</button>
         </div>
       );})}
@@ -5956,7 +5956,7 @@ function Drafts({drafts,setDrafts,goShip}){
       {drafts.map(d=>(<div key={d.id} className="flex items-center gap-3 px-4 py-3 hover:bg-stone-50">
         <FileText className="w-4 h-4 text-stone-300 shrink-0"/>
         <div className="flex-1 min-w-0"><div className="text-sm font-medium text-stone-800 truncate">{d.label}</div><div className="text-[11px] text-stone-400">{d.to?`to ${d.to} · `:""}saved {d.when}</div></div>
-        <button onClick={()=>load(d)} className="text-sm bg-stone-900 text-white rounded px-3 py-1.5 font-medium hover:bg-stone-800">Open</button>
+        <button onClick={()=>load(d)} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-800">Open</button>
         <button onClick={()=>setDrafts(p=>p.filter(x=>x.id!==d.id))} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>
       </div>))}
     </div>
@@ -5969,7 +5969,7 @@ function Invoices({invoices,setInvoices,shipments,client}){
   return (<div className="max-w-5xl space-y-4">
     <div className="flex bg-stone-100 rounded-lg p-0.5 w-fit text-sm">
       {[["audit","Invoice audit"],["transit","Transit audit"]].map(([v,l])=>(
-        <button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md font-medium ${view===v?"bg-white shadow-sm text-stone-900":"text-stone-500 hover:text-stone-700"}`}>{l}</button>
+        <button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-lg font-medium ${view===v?"bg-white shadow-sm text-stone-900":"text-stone-500 hover:text-stone-700"}`}>{l}</button>
       ))}
     </div>
     {view==="audit"?<CarrierAudit shipments={shipments}/>:<TransitAudit shipments={shipments}/>}
@@ -6005,14 +6005,14 @@ function TransitAudit({shipments}){
     const moving=matched.filter(sh=>["Label created","In transit","Out for delivery"].includes(sh.status));
     return {matched,unmatched,delivered,onTime,late,exceptions,moving,pct:delivered.length?Math.round(onTime.length/delivered.length*100):null};
   },[trks,shipments]);
-  const Stat=({label,v,tone})=>(<div className="border border-stone-200 rounded-xl bg-white p-3"><div className="text-[11px] uppercase tracking-widest text-stone-400">{label}</div><div className={`text-2xl font-bold mt-0.5 ${tone||"text-stone-900"}`}>{v}</div></div>);
+  const Stat=({label,v,tone})=>(<div className="border border-stone-200 rounded-xl bg-white p-3"><div className="text-[10px] uppercase tracking-widest text-stone-400">{label}</div><div className={`text-2xl font-bold mt-0.5 ${tone||"text-stone-900"}`}>{v}</div></div>);
   return (<div className="space-y-4">
     <div>
       <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Clock className="w-4 h-4"/>Transit audit</h2>
       <p className="text-sm text-stone-500 mt-0.5">Upload a carrier invoice (PDF or CSV). We pull every tracking number on it, match them to your shipments, and grade how the carrier actually performed.</p>
     </div>
-    <label className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded px-3 py-2 font-medium hover:bg-stone-800 cursor-pointer w-fit">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<Upload className="w-4 h-4"/>}Upload invoice<input type="file" accept=".pdf,.csv,application/pdf,text/csv" onChange={onFile} className="hidden" disabled={busy}/></label>
-    {name&&!busy&&<div className="text-[12px] text-stone-400">{name}{trks?` · ${trks.length} tracking number${trks.length===1?"":"s"} found`:""}</div>}
+    <label className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 cursor-pointer w-fit">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<Upload className="w-4 h-4"/>}Upload invoice<input type="file" accept=".pdf,.csv,application/pdf,text/csv" onChange={onFile} className="hidden" disabled={busy}/></label>
+    {name&&!busy&&<div className="text-xs text-stone-400">{name}{trks?` · ${trks.length} tracking number${trks.length===1?"":"s"} found`:""}</div>}
     {err&&<div className="bg-rose-50 border border-rose-200 text-rose-600 rounded-lg px-3 py-2 text-sm">{err}</div>}
     {rep&&<>
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
@@ -6023,11 +6023,11 @@ function TransitAudit({shipments}){
         <Stat label="Exceptions" v={rep.exceptions.length} tone={rep.exceptions.length?"text-rose-600":"text-stone-900"}/>
       </div>
       {rep.late.length>0&&<div className="border border-amber-200 rounded-lg bg-white overflow-hidden">
-        <div className="px-4 py-2 bg-amber-50 text-[12px] font-semibold text-amber-800">{rep.late.length} delivered late — candidates for service-failure refunds</div>
+        <div className="px-4 py-2 bg-amber-50 text-xs font-semibold text-amber-800">{rep.late.length} delivered late — candidates for service-failure refunds</div>
         <div className="divide-y divide-stone-50">{rep.late.map(sh=>(<div key={sh.id} className="px-4 py-2 flex items-center gap-3 text-sm"><span className="font-mono text-xs text-stone-500 w-44 truncate">{sh.tracking}</span><span className="flex-1 truncate">{sh.recipient?.name} · {sh.recipient?.city}, {sh.recipient?.state}</span><span className="text-[11px] text-stone-400">{sh.service}</span></div>))}</div>
       </div>}
-      {rep.moving.length>0&&<div className="text-[12px] text-stone-500">{rep.moving.length} still in motion — not graded yet.</div>}
-      {rep.unmatched.length>0&&<div className="border border-stone-200 rounded-lg bg-white p-3 text-[12px] text-stone-500">{rep.unmatched.length} tracking number{rep.unmatched.length===1?"":"s"} on the invoice {rep.unmatched.length===1?"doesn’t":"don’t"} match any shipment here (other accounts, or older than your history): <span className="font-mono text-stone-400">{rep.unmatched.slice(0,6).join(", ")}{rep.unmatched.length>6?"…":""}</span></div>}
+      {rep.moving.length>0&&<div className="text-xs text-stone-500">{rep.moving.length} still in motion — not graded yet.</div>}
+      {rep.unmatched.length>0&&<div className="border border-stone-200 rounded-lg bg-white p-3 text-xs text-stone-500">{rep.unmatched.length} tracking number{rep.unmatched.length===1?"":"s"} on the invoice {rep.unmatched.length===1?"doesn’t":"don’t"} match any shipment here (other accounts, or older than your history): <span className="font-mono text-stone-400">{rep.unmatched.slice(0,6).join(", ")}{rep.unmatched.length>6?"…":""}</span></div>}
     </>}
     {!rep&&!err&&!busy&&<div className="border border-dashed border-stone-300 rounded-lg bg-white p-8 text-center text-sm text-stone-400">Upload an invoice to see on-time %, late deliveries, and exceptions at a glance.</div>}
   </div>);
@@ -6048,11 +6048,11 @@ function ClientInvoices({invoices,setInvoices,shipments,client}){
     <div className="flex flex-wrap items-center gap-3">
       <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Receipt className="w-4 h-4"/>Invoices</h2>
       <div className="flex-1"/>
-      <button onClick={exportCSV} className="flex items-center gap-1.5 text-sm bg-stone-200 text-stone-700 rounded px-3 py-1.5 font-medium hover:bg-stone-300"><Download className="w-4 h-4"/>Export</button>
-      <button onClick={generate} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded px-3 py-1.5 font-medium hover:bg-stone-800"><Plus className="w-4 h-4"/>Generate from shipments</button>
+      <button onClick={exportCSV} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300"><Download className="w-4 h-4"/>Export</button>
+      <button onClick={generate} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-800"><Plus className="w-4 h-4"/>Generate from shipments</button>
     </div>
     <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
-      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400"><div className="w-24">Invoice</div><div className="flex-1">Client</div><div className="w-16 text-right">Labels</div><div className="w-24 text-right">Amount</div><div className="w-20 text-right">Status</div><div className="w-16"/></div>
+      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="w-24">Invoice</div><div className="flex-1">Client</div><div className="w-16 text-right">Labels</div><div className="w-24 text-right">Amount</div><div className="w-20 text-right">Status</div><div className="w-16"/></div>
       {invoices.length===0&&<div className="p-8 text-center text-sm text-stone-400">No invoices yet.</div>}
       {invoices.map(i=>(<div key={i.id} className="flex items-center gap-3 px-4 py-3">
         <div className="w-24 font-mono text-sm font-semibold">{i.number}</div>
@@ -6233,8 +6233,8 @@ function CarrierAudit({shipments}){
     downloadCSV("shipping-cost-audit.csv",rows);
   };
   const colSel=(field,label)=>csv?(
-    <div className="flex items-center gap-1.5"><span className="text-[11px] uppercase tracking-widest text-stone-400">{label}</span>
-      <select value={map[field]} onChange={e=>setMap(m=>({...m,[field]:+e.target.value}))} className="bg-white border border-stone-300 rounded px-2 py-1 text-[13px] outline-none focus:border-[#0099FF]">
+    <div className="flex items-center gap-1.5"><span className="text-[10px] uppercase tracking-widest text-stone-400">{label}</span>
+      <select value={map[field]} onChange={e=>setMap(m=>({...m,[field]:+e.target.value}))} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-[13px] outline-none focus:border-[#0099FF]">
         <option value={-1}>—</option>
         {csv.headers.map((h,i)=><option key={i} value={i}>{h||("Column "+(i+1))}</option>)}
       </select>
@@ -6256,10 +6256,10 @@ function CarrierAudit({shipments}){
       {busy&&<div className="text-[13px] text-stone-500 mt-2">Reading the PDF…</div>}
       {err&&<div className="text-[13px] text-rose-600 mt-2">{err}</div>}
       {note&&!err&&<div className="text-[13px] text-amber-700 mt-2">{note}</div>}
-      <div className="text-[12px] text-stone-400 mt-2">CSV is the most accurate — FedEx Billing Online and the UPS Billing Center both let you download the invoice as CSV. PDF works too and is read automatically.</div>
+      <div className="text-xs text-stone-400 mt-2">CSV is the most accurate — FedEx Billing Online and the UPS Billing Center both let you download the invoice as CSV. PDF works too and is read automatically.</div>
     </div>
     {csv&&(<div className="bg-white border border-stone-200 rounded-lg p-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-      <span className="text-[11px] uppercase tracking-widest text-stone-500 font-medium">Columns</span>
+      <span className="text-[10px] uppercase tracking-widest text-stone-500 font-medium">Columns</span>
       {colSel("tracking","Tracking")}{colSel("amount","Amount")}{colSel("weight","Weight")}{colSel("dimL","Length")}{colSel("dimW","Width")}{colSel("dimH","Height")}{colSel("desc","Charge")}
     </div>)}
     {recon&&recon.entries&&recon.entries.length>0&&(<>
@@ -6272,21 +6272,21 @@ function CarrierAudit({shipments}){
       <div className="flex flex-wrap items-center gap-3">
         <div className="text-[13px] text-stone-500">You were quoted <b className="text-stone-700 font-mono">{money(recon.sum.quoted)}</b> · Invoice billed <b className="text-stone-700 font-mono">{money(recon.sum.billed)}</b>{recon.sum.unmatched>0?<> · <span className="text-stone-400">{recon.sum.unmatched} not found in your shipments</span></>:null}</div>
         <div className="flex-1"/>
-        <button onClick={exportReport} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded px-3 py-1.5 font-medium hover:bg-stone-800"><Download className="w-4 h-4"/>Export report</button>
+        <button onClick={exportReport} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-800"><Download className="w-4 h-4"/>Export report</button>
       </div>
       <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
-        <div className="flex items-center gap-3 px-3 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400"><div className="w-4"/><div className="flex-1">Tracking / shipment</div><div className="w-24 text-right">Weight</div><div className="w-24 text-right">You paid</div><div className="w-24 text-right">Billed</div><div className="w-24 text-right">Difference</div></div>
+        <div className="flex items-center gap-3 px-3 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="w-4"/><div className="flex-1">Tracking / shipment</div><div className="w-24 text-right">Weight</div><div className="w-24 text-right">You paid</div><div className="w-24 text-right">Billed</div><div className="w-24 text-right">Difference</div></div>
         {recon.entries.map(e=>{ const isO=open===e.key; return (
           <div key={e.key} className={`border-t border-stone-100 ${e.status==="disputed"?"bg-amber-50/40":e.status==="accepted"?"bg-emerald-50/30":""}`}>
             <div onClick={()=>setOpen(isO?null:e.key)} className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-stone-50">
               <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isO?"rotate-90":""}`}/>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-mono truncate flex items-center gap-2 flex-wrap">{e.tracking}{!e.matched&&<Badge tone="stone">no shipment</Badge>}{e.status==="disputed"&&<Badge tone="amber">disputing</Badge>}{e.status==="accepted"&&<Badge tone="green">accepted</Badge>}{e.reasons.map((r,i)=><Badge key={i} tone={r.t==="reweigh"||r.t==="dim"?"amber":r.t==="other"?"stone":"rose"}>{r.label}</Badge>)}</div>
-                <div className="text-[12px] text-stone-500 truncate">{e.matched?`${(e.ship.recipient&&e.ship.recipient.name)||"—"} · ${e.ship.service||""} · ${e.ship.date||""}`:"Not found in your shipment history"}</div>
+                <div className="text-xs text-stone-500 truncate">{e.matched?`${(e.ship.recipient&&e.ship.recipient.name)||"—"} · ${e.ship.service||""} · ${e.ship.date||""}`:"Not found in your shipment history"}</div>
               </div>
               <div className="w-24 text-right font-mono text-[13px] text-stone-500">{e.billedWeight!=null?(e.qWeight!=null&&e.billedWeight>e.qWeight+0.01?<span className="text-amber-600">{e.qWeight}→{e.billedWeight}</span>:e.billedWeight)+" lb":<span className="text-stone-300">—</span>}</div>
               <div className="w-24 text-right font-mono text-[13px] text-stone-600">{e.quoted!=null?money(e.quoted):<span className="text-stone-300">—</span>}</div>
-              <div className="w-24 text-right" onClick={ev=>ev.stopPropagation()}><input value={(overrides[e.key]&&overrides[e.key].billed!=null)?overrides[e.key].billed:e.billed} onChange={ev=>setBilled(e.key,ev.target.value)} className="w-20 text-right font-mono text-[13px] text-stone-800 bg-transparent border border-transparent hover:border-stone-200 focus:border-[#0099FF] rounded px-1 py-0.5 outline-none"/></div>
+              <div className="w-24 text-right" onClick={ev=>ev.stopPropagation()}><input value={(overrides[e.key]&&overrides[e.key].billed!=null)?overrides[e.key].billed:e.billed} onChange={ev=>setBilled(e.key,ev.target.value)} className="w-20 text-right font-mono text-[13px] text-stone-800 bg-transparent border border-transparent hover:border-stone-200 focus:border-[#0099FF] rounded-lg px-1 py-0.5 outline-none"/></div>
               <div className={`w-24 text-right font-mono text-sm font-semibold ${dTone(e.diff)}`}>{e.diff==null?"—":(e.diff>0?"+":e.diff<0?"−":"")+money(Math.abs(e.diff)).slice(1)}{e.diffPct!=null?<span className="block text-[10px] font-normal opacity-70">{e.diffPct>0?"+":""}{e.diffPct}%</span>:null}</div>
             </div>
             {isO&&(<div className="px-10 pb-3 pt-1 space-y-2 bg-stone-50/50">
@@ -6295,12 +6295,12 @@ function CarrierAudit({shipments}){
                 <div className="text-stone-500">Carrier billed</div><div className="font-mono text-right">{money(e.billed)}</div>
                 <div className="text-stone-500 font-medium">Difference</div><div className={`font-mono text-right font-semibold ${dTone(e.diff)}`}>{e.diff==null?"—":(e.diff>0?"+":e.diff<0?"−":"")+money(Math.abs(e.diff)).slice(1)}</div>
               </div>:<div className="text-[13px] text-stone-500 max-w-md">This tracking number isn't in your shipment history, so there's nothing to compare it against.</div>}
-              {e.reasons.length>0&&<div className="pt-1"><div className="text-[11px] uppercase tracking-widest text-stone-400 mb-1">Why it's different</div>{e.reasons.map((r,i)=><div key={i} className="text-[13px] text-stone-700">• {r.label}</div>)}</div>}
-              {e.charges.length>0&&<div className="pt-1"><div className="text-[11px] uppercase tracking-widest text-stone-400 mb-1">Billed charge lines</div>{e.charges.map((c,i)=><div key={i} className="flex justify-between text-[13px] text-stone-600 max-w-md"><span className="truncate pr-3">{c.desc}</span><span className="font-mono shrink-0">{c.amount?money(c.amount):""}</span></div>)}</div>}
+              {e.reasons.length>0&&<div className="pt-1"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Why it's different</div>{e.reasons.map((r,i)=><div key={i} className="text-[13px] text-stone-700">• {r.label}</div>)}</div>}
+              {e.charges.length>0&&<div className="pt-1"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Billed charge lines</div>{e.charges.map((c,i)=><div key={i} className="flex justify-between text-[13px] text-stone-600 max-w-md"><span className="truncate pr-3">{c.desc}</span><span className="font-mono shrink-0">{c.amount?money(c.amount):""}</span></div>)}</div>}
               {e.matched&&<div className="flex items-center gap-2 pt-1">
                 <button onClick={()=>setStatus(e.key,"accepted")} className={`text-[13px] rounded px-3 py-1 font-medium border ${e.status==="accepted"?"bg-emerald-600 text-white border-emerald-600":"bg-white text-stone-600 border-stone-300 hover:bg-stone-50"}`}>Looks right</button>
                 <button onClick={()=>setStatus(e.key,"disputed")} className={`text-[13px] rounded px-3 py-1 font-medium border ${e.status==="disputed"?"bg-amber-500 text-white border-amber-500":"bg-white text-stone-600 border-stone-300 hover:bg-stone-50"}`}>Flag to dispute</button>
-                <span className="text-[12px] text-stone-400">Edit the billed amount above if the invoice reads differently.</span>
+                <span className="text-xs text-stone-400">Edit the billed amount above if the invoice reads differently.</span>
               </div>}
             </div>)}
           </div>
@@ -6322,12 +6322,12 @@ function Ledger({ledger,addLedger}){
   let run=0; const withRun=[...ledger].reverse().map(e=>{run+=e.amount;return {...e,run};}).reverse();
   return (<div className="max-w-3xl space-y-4">
     <div className="grid sm:grid-cols-3 gap-3">
-      <div className="border border-stone-200 rounded-xl bg-white p-4 sm:col-span-1"><div className="text-[11px] uppercase tracking-widest text-stone-400">Account balance</div><div className={`text-3xl font-bold mt-1 ${balance<0?"text-rose-600":"text-stone-900"}`}>{money(balance)}</div></div>
-      <div className="border border-stone-200 rounded-xl bg-white p-4"><div className="text-[11px] uppercase tracking-widest text-stone-400 mb-1">Add funds</div><div className="flex gap-2"><div className="relative flex-1"><DollarSign className="w-4 h-4 absolute left-2 top-2.5 text-stone-400"/><input type="number" value={funds} onChange={e=>setFunds(e.target.value)} placeholder="100.00" className="w-full bg-white border border-stone-200 rounded pl-7 pr-2 py-2 text-sm font-mono outline-none focus:border-[#0099FF]"/></div><button onClick={addFunds} className="text-sm bg-stone-900 text-white rounded px-3 py-2 font-medium hover:bg-stone-800">Add</button></div></div>
-      <div className="border border-stone-200 rounded-xl bg-white p-4"><div className="text-[11px] uppercase tracking-widest text-stone-400 mb-1">Adjustment</div><div className="flex gap-2"><input type="number" value={adj.amount} onChange={e=>setAdj({...adj,amount:e.target.value})} placeholder="±0.00" className="w-20 bg-white border border-stone-200 rounded px-2 py-2 text-sm font-mono outline-none focus:border-[#0099FF]"/><input value={adj.note} onChange={e=>setAdj({...adj,note:e.target.value})} placeholder="note" className="flex-1 min-w-0 bg-white border border-stone-200 rounded px-2 py-2 text-sm outline-none focus:border-[#0099FF]"/><button onClick={addAdj} className="text-sm bg-stone-200 text-stone-700 rounded px-3 py-2 font-medium hover:bg-stone-300">Post</button></div></div>
+      <div className="border border-stone-200 rounded-xl bg-white p-4 sm:col-span-1"><div className="text-[10px] uppercase tracking-widest text-stone-400">Account balance</div><div className={`text-3xl font-bold mt-1 ${balance<0?"text-rose-600":"text-stone-900"}`}>{money(balance)}</div></div>
+      <div className="border border-stone-200 rounded-xl bg-white p-4"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Add funds</div><div className="flex gap-2"><div className="relative flex-1"><DollarSign className="w-4 h-4 absolute left-2 top-2.5 text-stone-400"/><input type="number" value={funds} onChange={e=>setFunds(e.target.value)} placeholder="100.00" className="w-full bg-white border border-stone-200 rounded pl-7 pr-2 py-2 text-sm font-mono outline-none focus:border-[#0099FF]"/></div><button onClick={addFunds} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800">Add</button></div></div>
+      <div className="border border-stone-200 rounded-xl bg-white p-4"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Adjustment</div><div className="flex gap-2"><input type="number" value={adj.amount} onChange={e=>setAdj({...adj,amount:e.target.value})} placeholder="±0.00" className="w-20 bg-white border border-stone-200 rounded-lg px-2 py-2 text-sm font-mono outline-none focus:border-[#0099FF]"/><input value={adj.note} onChange={e=>setAdj({...adj,note:e.target.value})} placeholder="note" className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2 py-2 text-sm outline-none focus:border-[#0099FF]"/><button onClick={addAdj} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-300">Post</button></div></div>
     </div>
     <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
-      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400"><div className="w-24">Date</div><div className="w-36">Type</div><div className="flex-1">Reference</div><div className="w-24 text-right">Amount</div><div className="w-24 text-right">Balance</div></div>
+      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="w-24">Date</div><div className="w-36">Type</div><div className="flex-1">Reference</div><div className="w-24 text-right">Amount</div><div className="w-24 text-right">Balance</div></div>
       {withRun.length===0&&<div className="p-8 text-center text-sm text-stone-400">No transactions yet.</div>}
       {withRun.map(e=>(<div key={e.id} className="flex items-center gap-3 px-4 py-2.5">
         <div className="w-24 text-sm font-mono text-stone-500">{e.date}</div>
@@ -6477,7 +6477,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
   // cell() is a plain render helper (NOT a component) so inputs never remount → focus is kept while typing
   const cell=(label,k,span,req)=>(
     <div key={k} className={`px-2 py-1.5 ${errorFields.includes(k)?"bg-rose-50 ring-1 ring-rose-300":(req&&!data[k]?"bg-[#E6F4FF]":"bg-white")} ${span||""} ${k==="address1"?"relative":""}`}>
-      <div className={`text-[9px] uppercase tracking-wide ${errorFields.includes(k)?"text-rose-600 font-semibold":(req&&!data[k]?"text-[#0086E0]":"text-stone-400")} flex items-center gap-1`}>{label}{errorFields.includes(k)?" • required":""}{k==="address1"&&acBusy&&<Loader2 className="w-2.5 h-2.5 animate-spin text-stone-400"/>}</div>
+      <div className={`text-[10px] uppercase tracking-wide ${errorFields.includes(k)?"text-rose-600 font-semibold":(req&&!data[k]?"text-[#0086E0]":"text-stone-400")} flex items-center gap-1`}>{label}{errorFields.includes(k)?" • required":""}{k==="address1"&&acBusy&&<Loader2 className="w-2.5 h-2.5 animate-spin text-stone-400"/>}</div>
       {k==="country"
         ? <select value={data.country||"United States"} onChange={e=>f("country",e.target.value)} className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
         : <input value={data[k]||""} onChange={e=>f(k,e.target.value)} onPaste={onSmartPaste} onFocus={k==="address1"?()=>{acFocusRef.current=true;if(acSug.length)setAcOpen(true);}:undefined} onBlur={k==="address1"?()=>setTimeout(()=>{acFocusRef.current=false;setAcOpen(false);},150):undefined} autoComplete="off" className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5 placeholder-stone-300"/>}
@@ -6502,7 +6502,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
         <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400"/>
         <input value={q} onChange={e=>{setQ(e.target.value);setOpen(true);}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder={(addresses&&addresses.length)?`Address book — ${addresses.length} saved (click to choose)…`:"Address book — empty (use Save to Address Book below)"} className="w-full bg-white border border-stone-200 rounded pl-8 pr-8 py-1.5 text-[13px] outline-none focus:border-[#0099FF] placeholder-stone-300"/>
         <button type="button" onMouseDown={(e)=>{e.preventDefault();setOpen(o=>!o);}} className="absolute right-2 top-1.5 text-stone-400 hover:text-[#0086E0]" title="Show all saved addresses"><ChevronDown className={`w-4 h-4 transition-transform ${open?"rotate-180":""}`}/></button>
-        {open&&matches.length===0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg px-3 py-2.5 text-[12px] text-stone-400">{(addresses&&addresses.length)?"No matches — try fewer letters.":"Nothing saved yet. Fill in an address and hit “Save to Address Book” — it’ll be one click next time."}</div>}
+        {open&&matches.length===0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg px-3 py-2.5 text-xs text-stone-400">{(addresses&&addresses.length)?"No matches — try fewer letters.":"Nothing saved yet. Fill in an address and hit “Save to Address Book” — it’ll be one click next time."}</div>}
         {open&&matches.length>0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-64 overflow-auto">
           <div className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50 border-b border-stone-100 sticky top-0">{q.trim()?`${matches.length} match${matches.length===1?"":"es"}`:`${addresses.length} saved address${addresses.length===1?"":"es"}`}</div>
           <div className="divide-y divide-stone-100">
@@ -6517,12 +6517,12 @@ function AddressCard({title,data,set,required,residential,setResidential,address
   </div>);
 }
 function PkgInput({label,w,req,...p}){const ww=w||"w-14";const on=req&&!String(p.value??"").trim();return <div className={ww}><div className={`text-[10px] uppercase tracking-widest text-center ${on?"text-[#0086E0]":"text-stone-500"}`}>{label}</div><input placeholder="0" {...p} type="number" className={`w-full border rounded px-2 py-1 text-sm font-mono text-stone-900 outline-none focus:border-[#0099FF] placeholder-stone-300 text-center ${on?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}/></div>;}
-function Panel({title,children}){return <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3"><div className="text-[11px] uppercase tracking-widest text-stone-400">{title}</div>{children}</div>;}
+function Panel({title,children}){return <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3"><div className="text-[10px] uppercase tracking-widest text-stone-400">{title}</div>{children}</div>;}
 function Field({label,children}){return <label className="block space-y-1"><span className="text-[11px] text-stone-500">{label}</span>{children}</label>;}
 function Input({className="",...p}){return <input {...p} className={`w-full bg-white border border-stone-200 rounded px-2.5 py-2 text-sm font-mono text-stone-900 focus:border-[#0099FF] outline-none ${className}`}/>;}
-function Select({children,...p}){return <select {...p} className="w-full bg-white border border-stone-200 rounded px-2.5 py-2 text-sm focus:border-[#0099FF] outline-none">{children}</select>;}
+function Select({children,...p}){return <select {...p} className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm focus:border-[#0099FF] outline-none">{children}</select>;}
 function Toggle({on,set,label}){return <button onClick={()=>set(!on)} className={`flex items-center gap-1.5 text-xs rounded px-2.5 py-1.5 border ${on?"bg-[#E6F4FF] border-[#99D6FF] text-[#0086E0]":"bg-white border-stone-200 text-stone-400"}`}><span className={`w-2 h-2 rounded-full ${on?"bg-[#0086E0]":"bg-stone-300"}`}/>{label}</button>;}
 function Badge({children,tone="stone"}){const t={stone:"bg-stone-100 text-stone-500 border-stone-200",green:"bg-emerald-50 text-emerald-700 border-emerald-200",amber:"bg-amber-50 text-amber-700 border-amber-200",blue:"bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]",rose:"bg-rose-50 text-rose-600 border-rose-200"}[tone];return <span className={`text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 border ${t}`}>{children}</span>;}
 function Empty({icon:Icon,title,body}){return <div className="border border-dashed border-stone-300 rounded-lg p-12 text-center"><Icon className="w-8 h-8 text-stone-300 mx-auto mb-3"/><div className="text-stone-700 font-medium">{title}</div><div className="text-sm text-stone-400 mt-1 max-w-sm mx-auto">{body}</div></div>;}
-function EditField({label,v,on}){return <label className="block"><span className="text-[10px] uppercase tracking-wide text-stone-400">{label}</span><input value={v} onChange={e=>on(e.target.value)} className="w-full bg-white border border-stone-200 rounded px-2 py-1 text-sm mt-0.5 outline-none focus:border-[#0099FF]"/></label>;}
+function EditField({label,v,on}){return <label className="block"><span className="text-[10px] uppercase tracking-wide text-stone-400">{label}</span><input value={v} onChange={e=>on(e.target.value)} className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm mt-0.5 outline-none focus:border-[#0099FF]"/></label>;}
 function Info({k,v}){return <div className="flex justify-between gap-4 py-0.5 border-b border-stone-100"><span className="text-stone-400">{k}</span><span className="text-stone-800 text-right">{v}</span></div>;}

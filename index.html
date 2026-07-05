@@ -15,6 +15,42 @@
       tailwind.config = { theme: { extend: { fontFamily: { sans: ["Inter","system-ui","sans-serif"] } } } };
     </script>
     <style>
+      /* ── v159: dark mode (v1) — overrides the app's finite stone palette ── */
+      html.dark body{background:#171412;color:#e7e5e4}
+      .dark .bg-white{background-color:#201d1b!important}
+      .dark .bg-white\/90{background-color:rgba(32,29,27,.92)!important}
+      .dark .bg-stone-50{background-color:#242120!important}
+      .dark .bg-stone-100{background-color:#2b2725!important}
+      .dark .bg-stone-200{background-color:#37322f!important}
+      .dark .bg-stone-900{background-color:#0c0a09!important}
+      .dark .text-stone-900,.dark .text-stone-800{color:#f5f5f4!important}
+      .dark .text-stone-700,.dark .text-stone-600{color:#d6d3d1!important}
+      .dark .text-stone-500{color:#a8a29e!important}
+      .dark .text-stone-400{color:#8a847e!important}
+      .dark .border-stone-100,.dark .border-stone-200,.dark .border-stone-300{border-color:#3d3835!important}
+      .dark .divide-stone-100>:not([hidden])~:not([hidden]),.dark .divide-stone-200>:not([hidden])~:not([hidden]){border-color:#3d3835!important}
+      .dark .hover\:bg-stone-50:hover,.dark .hover\:bg-stone-100:hover{background-color:#2e2a27!important}
+      .dark .hover\:bg-stone-200:hover,.dark .hover\:bg-stone-300:hover{background-color:#3d3835!important}
+      .dark .bg-\[\#E6F4FF\]{background-color:#0d2c44!important}
+      .dark .hover\:bg-\[\#CCEAFF\]:hover{background-color:#123a5a!important}
+      .dark .border-\[\#99D6FF\]{border-color:#164e78!important}
+      .dark .bg-amber-50{background-color:#2e2410!important}.dark .border-amber-200{border-color:#5c4a1e!important}
+      .dark .bg-emerald-50{background-color:#0d2b1e!important}.dark .border-emerald-200{border-color:#1e5c42!important}
+      .dark .bg-rose-50{background-color:#331417!important}.dark .border-rose-300,.dark .border-rose-200{border-color:#6b2830!important}
+      .dark input,.dark select,.dark textarea{color:#e7e5e4;color-scheme:dark}
+      .dark .placeholder-stone-300::placeholder{color:#57534e}
+      .dark img[alt*="logo" i],.dark img[alt*="Logo"]{filter:none}
+      /* ── accent color: recolors the three brand blues everywhere ── */
+      html[data-accent] .bg-\[\#0086E0\]{background-color:var(--acc)!important}
+      html[data-accent] .text-\[\#0086E0\],html[data-accent] .text-\[\#006FBF\]{color:var(--acc)!important}
+      html[data-accent] .border-\[\#0086E0\],html[data-accent] .border-\[\#33ABFF\]{border-color:var(--acc)!important}
+      html[data-accent] .hover\:bg-\[\#0072BE\]:hover{background-color:var(--accD)!important}
+      html[data-accent] .hover\:text-\[\#0086E0\]:hover{color:var(--acc)!important}
+      html[data-accent] .focus\:border-\[\#0099FF\]:focus{border-color:var(--accL)!important}
+      html[data-accent] .accent-\[\#0086E0\]{accent-color:var(--acc)!important}
+      html[data-accent] .border-b-\[\#0086E0\]{border-bottom-color:var(--acc)!important}
+    </style>
+    <style>
       /* Mobile: iOS Safari auto-zooms any input under 16px on focus. Bump form controls to 16px
          on small screens only — desktop rendering is untouched. */
       @media (max-width: 640px){

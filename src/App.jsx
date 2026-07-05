@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v156";
+const BUILD_TAG="addr-v157";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -739,7 +739,7 @@ const CUSTOM_DEFAULTS={
   slipThanks:"",slipFooter:"",
   density:"comfortable",stuckDays:0,
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
-  logoScale:100,hotkeys:true,spendCap:0,orderCols:[],
+  logoScale:100,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
 const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
@@ -2477,7 +2477,7 @@ function AppInner(){
           {tab==="dashboard"&&<Dashboard shipments={shipments} orders={orders} returns={returns} goTab={setTab}/>}
           {tab==="ship"&&<Ship client={client} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={rules} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders}/>}
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
-          {tab==="orders"&&<Orders orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} onShipped={onShipped}/>}
+          {tab==="orders"&&<Orders orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} setSettings={setSettings} onShipped={onShipped}/>}
           {tab==="batch"&&<Batch orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
           {tab==="shipments"&&<Shipments shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels} settings={settings}/>}
           {hkHelp&&<div onClick={()=>setHkHelp(false)} className="fixed bottom-4 right-4 z-50 bg-stone-900 text-white rounded-xl shadow-lg p-4 text-xs space-y-1.5 cursor-pointer">
@@ -3078,10 +3078,17 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
 }
 
 /* ════════ ORDERS ════════ */
-function Orders({orders,setOrders,goShip,client,settings,onShipped}){
+function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped}){
   const custom=cz(settings||{});
   const ordPad=custom.density==="compact"?"px-3 py-1":"px-3 py-2.5";
   const hideCol=new Set(custom.orderCols||[]);
+  const views=custom.orderViews||[];
+  const saveView=()=>{ if(!setSettings)return; let name=""; try{name=window.prompt("Name this view (current search, filters, sort & columns will be saved):","");}catch(e){} if(!name)return;
+    const v={id:"v"+Date.now(),name:String(name).slice(0,24),q,filter,storeFilter,sort,cols:custom.orderCols||[]};
+    setSettings(pp=>{const cc=cz(pp);return {...pp,custom:{...cc,orderViews:[...(cc.orderViews||[]),v]}};}); };
+  const applyView=(v)=>{ setQ(v.q||"");setFilter(v.filter||"all");setStoreFilter(v.storeFilter||"all");setSort(v.sort||"date");
+    if(setSettings)setSettings(pp=>({...pp,custom:{...cz(pp),orderCols:v.cols||[]}})); };
+  const delView=(id)=>{ if(setSettings)setSettings(pp=>{const cc=cz(pp);return {...pp,custom:{...cc,orderViews:(cc.orderViews||[]).filter(x=>x.id!==id)}};}); };
   const [filter,setFilter]=useState("all");
   const [q,setQ]=useState("");
   const [open,setOpen]=useState(null);
@@ -3164,6 +3171,15 @@ function Orders({orders,setOrders,goShip,client,settings,onShipped}){
             <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Batch "}}))} title="e.g. ‘batch everything going to Texas under 5 lb as cheapest ground’" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded-lg px-3 py-2 font-medium hover:bg-[#f5e6de]"><Sparkles className="w-4 h-4"/>Ask Claude to batch these</button>
             {orderSources.length>0&&<button onClick={syncAll} disabled={syncing} title={orderSources.length>1?`Syncs: ${orderSources.map(s=>s.name).join(", ")}`:undefined} className="flex items-center gap-1.5 text-sm border border-[#0086E0]/30 bg-[#E6F4FF] text-[#006FBF] rounded-lg px-3 py-2 font-medium hover:bg-[#CDE9FF] disabled:opacity-40">{syncing?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>{syncLabel}</>}</button>}
             <button onClick={()=>setAdding(true)} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800"><Plus className="w-4 h-4"/>New order</button>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            {views.map(v=>(<span key={v.id} className="group inline-flex items-center gap-1 bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-full pl-2.5 pr-1.5 py-1 font-medium">
+              <button onClick={()=>applyView(v)} className="hover:underline">{v.name}</button>
+              <button onClick={()=>delView(v.id)} title="Delete view" className="text-[#66C2FF] hover:text-rose-500 leading-none px-0.5">×</button>
+            </span>))}
+            <button onClick={saveView} className="inline-flex items-center gap-1 border border-dashed border-stone-300 text-stone-400 hover:text-[#0086E0] hover:border-[#99D6FF] rounded-full px-2.5 py-1 font-medium">+ Save view</button>
+            <span className="flex-1"/>
+            <button onClick={()=>printPickList(sorted.filter(o=>o.status!=="fulfilled"))} disabled={!sorted.some(o=>o.status!=="fulfilled")} title="One sheet: every item across the open orders in this view, with checkboxes" className="inline-flex items-center gap-1.5 bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40"><ClipboardList className="w-3.5 h-3.5"/>Pick list</button>
           </div>
           <div className="border border-stone-200 rounded-lg overflow-hidden bg-white">
             <div className="overflow-x-auto">
@@ -5964,7 +5980,7 @@ function Customize({settings,setSettings}){
     </Panel>
 
     <div className="border border-dashed border-stone-300 rounded-lg p-3 text-[12px] text-stone-400">
-      Coming soon: dark mode &amp; accent colors, saved filters &amp; views, custom email wording, manager approvals, branded tracking pages.
+      Coming soon: dark mode &amp; accent colors, custom email wording, manager approvals, branded tracking pages.
     </div>
   </div>);
 }

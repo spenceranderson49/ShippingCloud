@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, MessageCircle, Sparkles, ClipboardList, Ban } from "lucide-react";
+import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, MessageCircle, Sparkles, ClipboardList, Ban ,Sliders} from "lucide-react";
 const FW_BLUE="#0099FF";
 const FW_DARK="#111418";
 function BrandCloud({className,color}){return (
@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v152";
+const BUILD_TAG="addr-v153";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -503,6 +503,7 @@ function slipFromShipment(sh){
     items:parseItemsList({items:sh.items||""}),note:sh.note||"",tracking:sh.tracking||"",service:sh.service||""};
 }
 function packingSlipHTML(slips){
+  /* custom thank-you + footer come from Settings → Customizations via SLIP_OPTS */
   const esc=(x)=>String(x||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
   const one=(sl)=>`<div class="slip">
     <div class="hd"><div class="brand">${esc(sl.company)}</div><div class="meta">${sl.orderName?"Order "+esc(sl.orderName)+" · ":""}${esc(sl.date)}</div></div>
@@ -510,7 +511,10 @@ function packingSlipHTML(slips){
     ${sl.items.length?`<table><thead><tr><th>Item</th><th class="q">Qty</th></tr></thead><tbody>${sl.items.map(it=>`<tr><td>${esc(it.name)}</td><td class="q">${it.qty}</td></tr>`).join("")}</tbody></table>`:""}
     ${sl.note?`<div style="margin-top:16px;border:1px solid #e7e5e4;border-radius:8px;padding:10px 12px;font-size:13px;"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#a8a29e;margin-bottom:3px;">Note</div>${esc(sl.note)}</div>`:""}
     <div class="ft">${sl.tracking?"Tracking "+esc(sl.tracking):""}${sl.service?" · "+esc(sl.service):""}<span class="thanks">Thank you for your order!</span></div>
-  </div>`;
+  </div>
+    ${SLIP_OPTS.thanks?`<div class="thanks">${esc(SLIP_OPTS.thanks)}</div>`:""}
+    ${SLIP_OPTS.footer?`<div class="foot">${esc(SLIP_OPTS.footer)}</div>`:""}
+  `;
   return `<!doctype html><html><head><title>Packing slips</title><style>
     body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;margin:0;}
     .slip{padding:36px 40px;page-break-after:always;max-width:640px;}
@@ -520,7 +524,7 @@ function packingSlipHTML(slips){
     table{width:100%;border-collapse:collapse;margin-top:18px;font-size:13px;}
     th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#a8a29e;border-bottom:1px solid #e7e5e4;padding:6px 0;}
     td{padding:7px 0;border-bottom:1px solid #f5f5f4;} .q{text-align:right;width:56px;}
-    .ft{margin-top:22px;font-size:11px;color:#78716c;display:flex;justify-content:space-between;} .thanks{color:#1c1917;font-weight:600;}
+    .ft{margin-top:22px;font-size:11px;color:#78716c;display:flex;justify-content:space-between;} .thanks{color:#1c1917;font-weight:600;margin-top:14px;} .foot{margin-top:8px;font-size:10.5px;color:#78716c;border-top:1px solid #e7e5e4;padding-top:8px;}
     @media print{.slip{padding:24px 8px;}}
   </style></head><body>${slips.map(one).join("")}<script>window.onload=()=>window.print();</` + `script></body></html>`;
 }
@@ -726,6 +730,19 @@ function downloadCSV(name,rows){
 /* ════════ EMAIL SEED ════════ */
 const SEED_EMAILS=[];
 const NOTIFY_DEFAULTS={orderConfirm:true,shipped:true,delivered:true,returnLabel:true,exception:true};
+/* v153: user customizations — every knob here is wired to a real behavior */
+const CUSTOM_DEFAULTS={
+  hideInvoice:false,hidePO:false,hideAddr23:false,hideOz:false,hideInsure:false,
+  phoneRequired:true,emailRequired:true,
+  defaultSignature:"none",autoInsurePct:0,
+  defaultView:"cheapest",hiddenServices:[],priceWarn:0,transitStyle:"date",aliases:{},
+  slipThanks:"",slipFooter:"",
+  density:"comfortable",stuckDays:0,
+  fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
+};
+const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
+const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
+const SLIP_OPTS={thanks:"",footer:""};   // synced from settings by AppInner; read by packingSlipHTML
 
 /* ════════ INTERNATIONAL ════════ */
 const COUNTRIES=["United States","Canada","Mexico","United Kingdom","Germany","France","Australia","Japan","South Korea","Brazil","Netherlands","Spain"];
@@ -2144,6 +2161,10 @@ function AppInner(){
   const [settingsRaw,setSettingsRaw]=usePersist("settings",{company:"Freightwire",sender:{name:"",company:"",zip:"",state:"",city:"",address1:"",phone:"",email:""},defaultBillTo:"sender",thirdPartyAccts:[{id:"tp1",carrier:"FedEx",account:"20601652",label:"England FedEx"}],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,products:SEED_PRODUCTS,checkout:CHECKOUT_DEFAULTS,platforms:PLATFORM_DEFAULTS,plan:"starter",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:"20601652"},addresses:[],warehouses:[],autoRunRules:false,brand:DEFAULT_BRAND,domains:[],companyLogo:""});
   const settings=useMemo(()=>scrubLegacyDefaults(settingsRaw),[settingsRaw]);
   const setSettings=(v)=>setSettingsRaw(p=>scrubLegacyDefaults(typeof v==="function"?v(scrubLegacyDefaults(p)):v));
+  const custom=cz(settings);
+  useEffect(()=>{ try{document.documentElement.style.fontSize=(custom.fontScale&&custom.fontScale!==100)?(custom.fontScale/100*16)+"px":"";}catch(e){} },[custom.fontScale]);
+  useEffect(()=>{ SLIP_OPTS.thanks=custom.slipThanks||""; SLIP_OPTS.footer=custom.slipFooter||""; },[custom.slipThanks,custom.slipFooter]);
+  useEffect(()=>{ const st=custom.startTab; if(st&&st!=="ship"&&ALL_TABS.some(x=>x[0]===st))setTab(st); },[]);   // land on the user's chosen start page
 
   useEffect(()=>{ if(currentUser&&currentUser.role==="customer"&&currentUser.clientId) setClientId(currentUser.clientId); },[currentUser]);
   // Auto-run rules on newly imported/synced orders (any import path) when the toggle is on.
@@ -2282,7 +2303,6 @@ function AppInner(){
   };
 
   const isAdmin=currentUser&&currentUser.role==="admin";
-  const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
   const isDemo=!!(currentUser&&currentUser.id==="demo");
   const myFlags=isDemo?{pickups:true,batch:true,invoices:true,rules:true,scan:true,settings:true}:(isAdmin?{}:((featureFlags&&featureFlags[currentUser&&currentUser.id])||(CLOUD.mode==="cloud"?myFeatures:{})));
   const [batchCmd,setBatchCmd]=useState(null);
@@ -2347,11 +2367,18 @@ function AppInner(){
   };
   const isCompanyAdmin=!isAdmin&&!isDemo&&!!(myAccess&&myAccess.companyAdmin);
   const TABS=useMemo(()=>{
-    if(isAdmin)return ALL_TABS;
+    const applyPrefs=(list)=>{
+      const hide=new Set((custom.hiddenTabs||[]).filter(k=>!["ship","settings","admin","companyadmin"].includes(k)));
+      let out=list.filter(x=>!hide.has(x[0]));
+      const ord=custom.tabOrder||[];
+      if(ord.length){ const rank=(k)=>{const i2=ord.indexOf(k);return i2<0?999:i2;}; out=[...out].sort((a,b)=>rank(a[0])-rank(b[0])); }
+      return out;
+    };
+    if(isAdmin)return applyPrefs(ALL_TABS);
     const t=ALL_TABS.filter(x=>x[0]!=="admin"&&(x[0]==="ship"||featureOn(x[0],currentUser,myFlags)));
     if(isCompanyAdmin){const entry=["companyadmin","Company admin",Building2];const i=t.findIndex(x=>x[0]==="settings");i>=0?t.splice(i,0,entry):t.push(entry);}
-    return t;
-  },[isAdmin,isCompanyAdmin,currentUser,myFlags]);
+    return applyPrefs(t);
+  },[isAdmin,isCompanyAdmin,currentUser,myFlags,custom.hiddenTabs,custom.tabOrder]);
   const unfulfilled=orders.filter(o=>o.status==="unfulfilled").length;
 
   if(!currentUser) return <Login users={users} brand={{...DEFAULT_BRAND,...(settings.brand||{})}} onLogin={(u)=>{ const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }}/>;
@@ -2437,7 +2464,7 @@ function AppInner(){
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
           {tab==="orders"&&<Orders orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} onShipped={onShipped}/>}
           {tab==="batch"&&<Batch orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
-          {tab==="shipments"&&<Shipments shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels}/>}
+          {tab==="shipments"&&<Shipments shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels} settings={settings}/>}
           {tab==="drafts"&&<Drafts drafts={drafts} setDrafts={setDrafts} goShip={goShip}/>}
           {tab==="returns"&&<Returns returns={returns} setReturns={setReturns} orders={orders} settings={settings} logEmail={logEmail}/>}
           {tab==="pickups"&&<Pickups pickups={pickups} setPickups={setPickups} settings={settings}/>}
@@ -2484,6 +2511,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const [shipDate,setShipDate]=useState(()=>new Date().toISOString().slice(0,10));
   const orBox=oneRateBoxFor(pieces[0]&&pieces[0].L,pieces[0]&&pieces[0].W,pieces[0]&&pieces[0].H,(+(pieces[0]&&pieces[0].weight)||0)+(+(pieces[0]&&pieces[0].oz)||0)/16);
   const [recErrors,setRecErrors]=useState([]);
+  const custom=cz(settings);
   const [selectedOrder,setSelectedOrder]=usePersist("ship.selectedOrder",null);
   const [verify,setVerify]=useState(null);
   const [verifyNonce,setVerifyNonce]=useState(0);
@@ -2553,6 +2581,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     const pk=packOrder(o,settings.products||SEED_PRODUCTS,settings.boxes||SEED_BOXES,settings.boxLogic);
     if(pk&&pk.pieces.length){ setPieces(pk.pieces.map(x=>({weight:x.weight,L:x.L,W:x.W,H:x.H}))); setPackNote(pk); }
     else { setPieces([{weight:o.weight||1,L:12,W:9,H:4}]); setPackNote(null); }
+    if(custom.autoInsurePct>0&&o.total){const v=Math.round((+o.total||0)*custom.autoInsurePct)/100;if(v>0)setInsurance(String(v));}   // auto-insure % of order value
   };
   useEffect(()=>{ if(!prefill)return;
     if(prefill.draft){const s=prefill.draft;setSender(s.sender);setReceiver(s.receiver);setReference(s.reference||"");setInvoiceNo(s.invoiceNo||"");setPoNo(s.poNo||"");setPieces(s.pieces||[{weight:3,L:12,W:9,H:4}]);setRes(s.residential);setSig(s.signature);setBillTo(s.billTo);setThirdAcct(s.thirdAcct||"");setInsurance(s.insurance||"");setSelectedOrder(s.selectedOrder||null);if(s.customs)setCustoms(s.customs);clearPrefill();return;}
@@ -2603,6 +2632,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     let list=rates.length?rates:FEDEX_SKELETON.slice();   // skeleton (blank prices) until live rates arrive
     list=list.concat((orRates||[]).filter(q=>q.carrier==="FedEx"));   // One Rate services auto-appear when the box qualifies
     list=list.filter(q=>!/first\s*overnight/i.test(q.label||""));   // never offer First Overnight
+    if(custom.hiddenServices&&custom.hiddenServices.length){const hs=new Set(custom.hiddenServices);list=list.filter(q=>!hs.has(canonSvc(q.label)));}   // user-hidden services
     if(addrClassified){
       list=list.filter(q=>{const k=canonSvc(q.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;});
     }
@@ -2623,8 +2653,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(!receiver.city)need.push("city");
     if(!receiver.state)need.push("state");
     if(canBook){
-      if(String(receiver.phone||"").replace(/\D/g,"").length<10)need.push("phone");
-      if(!receiver.email)need.push("email");
+      if(custom.phoneRequired!==false&&String(receiver.phone||"").replace(/\D/g,"").length<10)need.push("phone");
+      if(custom.emailRequired!==false&&!receiver.email)need.push("email");
     }
     if(need.length){
       setRecErrors(need);
@@ -2685,7 +2715,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const saveDraft=()=>{setDraftName(reference||receiver.name||receiver.city||"");setNaming(true);};
   /* box-logic explanation banner shown while a packed order is loaded */
   const PackNote=()=>packNote?(<div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800 flex items-center gap-2"><Boxes className="w-3.5 h-3.5 shrink-0"/><span className="flex-1">Box logic packed this order: <b>{packNote.boxNames}</b> · {packNote.totalWt} lb billable{packNote.unresolved.length?` · ${packNote.unresolved.length} item${packNote.unresolved.length===1?"":"s"} not in your catalog (weight may be low)`:""} — dims are editable below.</span><button onClick={()=>setPackNote(null)} className="text-emerald-500 hover:text-emerald-700"><X className="w-3.5 h-3.5"/></button></div>):null;
-  const newShipment=()=>{setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setRes(true);setResTouched(false);setSig(false);setSigOption("none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");};
+  const newShipment=()=>{setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setRes(true);setResTouched(false);setSig(custom.defaultSignature&&custom.defaultSignature!=="none");setSigOption(custom.defaultSignature||"none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");};
   const addressCheck=(
     <div className="text-xs space-y-2">
       <div className="text-[10px] uppercase tracking-widest text-stone-500 font-semibold flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5"/>Address check</div>
@@ -2761,9 +2791,9 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           </div>
         </div>
         <div className="relative grid lg:grid-cols-3 gap-4">
-          <div className="min-w-0"><AddressCard title="Sender" data={sender} set={setSender} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }}/></div>
+          <div className="min-w-0"><AddressCard title="Sender" data={sender} set={setSender} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} hideAddr23={custom.hideAddr23}/></div>
           <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-1/3 top-11 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-4 h-4"/></button>
-          <div className="min-w-0 lg:col-span-2"><AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} contactFallback={{phone:sender.phone,email:sender.email}} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }} side={addressCheck}/></div>
+          <div className="min-w-0 lg:col-span-2"><AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} contactFallback={{phone:sender.phone,email:sender.email}} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }} hideAddr23={custom.hideAddr23} reqOverrides={{phone:custom.phoneRequired!==false,email:custom.emailRequired!==false}} side={addressCheck}/></div>
         </div>
         {!(sender.name||sender.company||sender.address1||sender.zip)&&<div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No sender on file — fill in the Sender card above, or set your default sender in Settings → Company.</div>}
         {billTo==="third"&&thirdAcct&&<div className="flex flex-wrap items-center gap-2 text-xs -mt-1">
@@ -2777,12 +2807,12 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">Packages · {pieces.length}</div>
               <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Ship date</span><input type="date" value={shipDate} onChange={e=>setShipDate(e.target.value)} className="text-sm font-mono text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-[#0099FF]"/></div>
               <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Ref #</span><input value={reference} onChange={e=>setReference(e.target.value)} placeholder="order / ref" className="w-44 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
-              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Invoice #</span><input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} placeholder="INV-…" className="w-36 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
-              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">PO #</span><input value={poNo} onChange={e=>setPoNo(e.target.value)} placeholder="PO-…" className="w-36 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
+              {!custom.hideInvoice&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Invoice #</span><input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} placeholder="INV-…" className="w-36 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>}
+              {!custom.hidePO&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">PO #</span><input value={poNo} onChange={e=>setPoNo(e.target.value)} placeholder="PO-…" className="w-36 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>}
             </div>
             <div className="flex flex-wrap items-center gap-4">
               <span className="text-[11px] text-stone-400 font-mono">total {totalWeight} lb</span>
-              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Insure $</span><input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0" className="w-16 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
+              {!custom.hideInsure&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Insure $</span><input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0" className="w-16 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>}
               <div className="flex items-center gap-1.5"><span className="text-[10px] uppercase tracking-widest text-stone-500">Signature</span><select value={sigOption} onChange={e=>{setSigOption(e.target.value);setSig(e.target.value!=="none");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="none">None</option><option value="direct">Direct signature</option><option value="indirect">Indirect signature</option><option value="adult">Adult signature</option></select></div>
               {quotes.some(q=>{const l=String(q.label||"").toLowerCase();return l.includes("fedex")&&/(overnight|2\s?day|express saver)/.test(l);})&&<label className="flex items-center gap-1.5 text-[11px] text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSat(e.target.checked)} className="accent-[#0086E0]"/><span className="uppercase tracking-widest text-stone-500">Saturday delivery <span className="normal-case text-stone-400">(Express only)</span></span></label>}
             </div>
@@ -2799,7 +2829,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <PkgInput label="W" req value={p.W} onChange={e=>setPiece(i,{W:e.target.value})}/>
               <PkgInput label="H" req value={p.H} onChange={e=>setPiece(i,{H:e.target.value})}/>
               <PkgInput label="Weight (lb)" req value={p.weight} onChange={e=>setPiece(i,{weight:e.target.value})} w="w-20"/>
-              <PkgInput label="oz" value={p.oz} onChange={e=>setPiece(i,{oz:e.target.value})}/>
+              {!custom.hideOz&&<PkgInput label="oz" value={p.oz} onChange={e=>setPiece(i,{oz:e.target.value})}/>}
               {pieces.length>1&&<button onClick={()=>delPiece(i)} className="text-stone-300 hover:text-rose-500 mb-1"><Trash2 className="w-4 h-4"/></button>}
               {i===pieces.length-1&&<button onClick={addPiece} className="flex items-center gap-1 text-xs bg-stone-200 hover:bg-stone-300 rounded-lg px-2.5 py-1.5 font-medium text-stone-700 ml-1"><Plus className="w-3.5 h-3.5"/>Add package</button>}
             </div>
@@ -2843,7 +2873,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           :rateSrc.live?<><Wifi className="w-3.5 h-3.5"/>Live rates from your England account</>
           :<><Calculator className="w-3.5 h-3.5"/>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""} — connect your England account in Settings → Carrier accounts for live pricing</>}
         </div>}
-        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} onOneRate={applyOneRateBox}/>
+        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} onOneRate={applyOneRateBox} custom={custom}/>
         {labelPreview&&<LabelPreviewModal data={labelPreview} onClose={()=>setLabelPreview(null)}/>}
         {naming&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setNaming(false)}><div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-sm space-y-3" onClick={e=>e.stopPropagation()}><div className="text-sm font-semibold text-stone-800">Name this draft</div><input autoFocus value={draftName} onChange={e=>setDraftName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")commitDraft(draftName.trim());}} placeholder="e.g. Dana Cole – Miami" className="w-full bg-white border border-stone-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><div className="flex justify-end gap-2"><button onClick={()=>setNaming(false)} className="text-sm px-3 py-1.5 rounded text-stone-600 hover:bg-stone-100">Cancel</button><button onClick={()=>commitDraft(draftName.trim())} className="text-sm px-3 py-1.5 rounded bg-stone-900 text-white font-medium hover:bg-stone-800">Save draft</button></div></div></div>}
         {shipStatus&&<div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2.5 ${shipStatus.state==="error"?"bg-rose-50 text-rose-700 border border-rose-200":shipStatus.state==="booked"?"bg-emerald-50 text-emerald-700 border border-emerald-200":shipStatus.state==="pending_timeout"?"bg-amber-50 text-amber-700 border border-amber-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
@@ -2960,8 +2990,8 @@ function CarrierMark({carrier,className}){
   if(carrier==="FedEx") return <img src={FEDEX_LOGO} alt="FedEx" className={className||"h-6 w-auto"}/>;
   return <span className={`font-bold ${CARRIER_TINT[carrier]||"text-stone-700"} ${className||""}`}>{carrier}</span>;
 }
-function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=true,onOneRate}){
-  const [view,setView]=useState("cheapest");
+function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=true,onOneRate,custom=CUSTOM_DEFAULTS}){
+  const [view,setView]=useState(custom.defaultView||"cheapest");
   const [open,setOpen]=useState(null);
   const Row=(q)=>{
     const isOpen=open===q.key;
@@ -2989,10 +3019,10 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
         <div onClick={()=>{setOpen(isOpen?null:q.key); if(q._oneRate&&q.packageTypeCode&&onOneRate)onOneRate(q.packageTypeCode);}} className="px-3 py-2 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
           <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isOpen?"rotate-90":""}`}/>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2"><span className="text-sm truncate">{q.label}</span></div>
-            <div className="text-[11px] text-stone-500 flex items-center gap-1"><Calendar className="w-3 h-3"/>Transit Time: {days?(<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}{fxLive&&days?<span className="text-[#0086E0] font-medium ml-1">FedEx</span>:""}</div>
+            <div className="flex items-center gap-2"><span className="text-sm truncate">{(custom.aliases&&custom.aliases[canonSvc(q.label)])||q.label}</span></div>
+            <div className="text-[11px] text-stone-500 flex items-center gap-1"><Calendar className="w-3 h-3"/>Transit Time: {days?(custom.transitStyle==="days"?<>{days} business day{days>1?"s":""}</>:<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}{fxLive&&days?<span className="text-[#0086E0] font-medium ml-1">FedEx</span>:""}</div>
           </div>
-          <div className="text-right font-mono"><div className="text-base font-semibold text-stone-900">{ready&&hasPrice?money(sell):<span className="text-stone-300">—</span>}</div></div>
+          <div className="text-right font-mono">{!!(custom.priceWarn>0&&ready&&hasPrice&&sell>custom.priceWarn)&&<div className="text-[10px] text-amber-600 flex items-center justify-end gap-0.5" title={"Above your $"+custom.priceWarn+" price alert"}><AlertTriangle className="w-3 h-3"/>over limit</div>}<div className="text-base font-semibold text-stone-900">{ready&&hasPrice?money(sell):<span className="text-stone-300">—</span>}</div></div>
           {action&&<button onClick={(e)=>{e.stopPropagation();action(q);}} disabled={!ready||!hasPrice} className={`shrink-0 w-32 text-sm rounded px-3 py-2 font-medium flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed ${bought===q.key?"bg-[#0086E0] text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{bought===q.key?<><Check className="w-4 h-4"/>{doneLabel}</>:<><Printer className="w-4 h-4"/>{label}</>}</button>}
         </div>
         {isOpen&&ready&&hasPrice&&<div className="px-4 pb-3 pt-1 border-t border-stone-100">
@@ -3027,6 +3057,8 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
 
 /* ════════ ORDERS ════════ */
 function Orders({orders,setOrders,goShip,client,settings,onShipped}){
+  const custom=cz(settings||{});
+  const ordPad=custom.density==="compact"?"px-3 py-1":"px-3 py-2.5";
   const [filter,setFilter]=useState("all");
   const [q,setQ]=useState("");
   const [open,setOpen]=useState(null);
@@ -3131,15 +3163,15 @@ function Orders({orders,setOrders,goShip,client,settings,onShipped}){
                   {sorted.length===0&&<tr><td colSpan={10} className="p-8 text-center text-stone-400">No orders{(storeFilter!=="all"||filter!=="all"||q)?" match this view":" yet"}.</td></tr>}
                   {sorted.map(o=>(
                     <tr key={o.id} className="hover:bg-stone-50 cursor-pointer" onClick={()=>setOpen(o)}>
-                      <td className="px-3 py-2.5 whitespace-nowrap"><div className="font-semibold text-stone-800 flex items-center gap-1.5">{o.name}{o.source&&<Badge tone={SOURCE_TONE[o.source]||"stone"}>{o.source}</Badge>}</div></td>
+                      <td className={ordPad+" whitespace-nowrap"}><div className="font-semibold text-stone-800 flex items-center gap-1.5">{o.name}{o.source&&<Badge tone={SOURCE_TONE[o.source]||"stone"}>{o.source}</Badge>}</div></td>
                       <td className="px-3 py-2.5 text-stone-500 whitespace-nowrap">{orderAge(o)}</td>
                       <td className="px-3 py-2.5 text-stone-500 whitespace-nowrap">{o.date||"—"}</td>
-                      <td className="px-3 py-2.5"><div className="text-stone-700 truncate max-w-[220px]">{o.items||"—"}</div>{o.lineItems&&o.lineItems[0]&&o.lineItems[0].sku?<div className="text-[11px] text-stone-400 truncate max-w-[220px]">SKU {o.lineItems[0].sku}</div>:null}</td>
-                      <td className="px-3 py-2.5"><div className="text-stone-800 truncate max-w-[160px]">{o.customer||"—"}</div><div className="text-[11px] text-stone-400 truncate max-w-[160px]">{o.city}{o.state?`, ${o.state}`:""}</div></td>
+                      <td className={ordPad}><div className="text-stone-700 truncate max-w-[220px]">{o.items||"—"}</div>{o.lineItems&&o.lineItems[0]&&o.lineItems[0].sku?<div className="text-[11px] text-stone-400 truncate max-w-[220px]">SKU {o.lineItems[0].sku}</div>:null}</td>
+                      <td className={ordPad}><div className="text-stone-800 truncate max-w-[160px]">{o.customer||"—"}</div><div className="text-[11px] text-stone-400 truncate max-w-[160px]">{o.city}{o.state?`, ${o.state}`:""}</div></td>
                       <td className="px-3 py-2.5 text-stone-500 whitespace-nowrap">{o.shippingService||"—"}</td>
                       <td className="px-3 py-2.5 text-right text-stone-600">{o.itemCount||"—"}</td>
                       <td className="px-3 py-2.5 text-right font-mono text-stone-800 whitespace-nowrap">${o.total}</td>
-                      <td className="px-3 py-2.5"><div className="flex items-center gap-1 flex-wrap"><Badge tone={o.status==="fulfilled"?"green":"amber"}>{o.status==="fulfilled"?"Shipped":"Awaiting"}</Badge>{o.hold&&<span title={o.hold}><Badge tone="rose">Held</Badge></span>}{o.gift&&<span title={o.giftMessage||"Gift"}><Badge tone="blue">Gift</Badge></span>}{o.assignee&&<span title={"Assigned to "+o.assignee}><Badge tone="stone">{o.assignee}</Badge></span>}</div></td>
+                      <td className={ordPad}><div className="flex items-center gap-1 flex-wrap"><Badge tone={o.status==="fulfilled"?"green":"amber"}>{o.status==="fulfilled"?"Shipped":"Awaiting"}</Badge>{o.hold&&<span title={o.hold}><Badge tone="rose">Held</Badge></span>}{o.gift&&<span title={o.giftMessage||"Gift"}><Badge tone="blue">Gift</Badge></span>}{o.assignee&&<span title={"Assigned to "+o.assignee}><Badge tone="stone">{o.assignee}</Badge></span>}</div></td>
                       <td className="px-3 py-2.5 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button onClick={(e)=>{e.stopPropagation();setOpen(o);}} className={`text-sm rounded px-3 py-1.5 font-medium ${o.status==="fulfilled"?"bg-stone-100 text-stone-600 hover:bg-stone-200":"bg-stone-900 text-white hover:bg-stone-800"}`}>{o.status==="fulfilled"?"View":"Ship"}</button>
@@ -3271,7 +3303,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
         </div>
         {oneRate&&<div className={`text-xs rounded px-3 py-2 flex items-center gap-2 ${orBox?"bg-[#E6F4FF] text-[#0072BE] border border-[#99D6FF]":"bg-amber-50 text-amber-700 border border-amber-200"}`}><Boxes className="w-4 h-4 shrink-0"/>{orBox?<span>Qualifies for <b>{orBox.name}</b> — pricing this box only.</span>:<span>Set a box size within One Rate limits (≤2,200 cu in, ≤50 lb).</span>}</div>}
         {(o.shippingService||o.source)&&<div className="text-xs text-stone-500 flex items-center gap-1.5 -mt-1"><Truck className="w-3.5 h-3.5 text-stone-400"/>Buyer selected <b className="text-stone-700">{o.shippingService||"Standard"}</b>{o.source?` from ${o.source}`:""} — match it or pick the best rate below.</div>}
-        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?printHere:null} label="Buy & print" doneLabel="Printed" ready={ready}/>
+        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?printHere:null} label="Buy & print" doneLabel="Printed" ready={ready} custom={cz(settings||{})}/>
         {status&&<div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2 ${status.state==="error"?"text-rose-600 bg-rose-50 border border-rose-200":status.state==="booking"?"text-stone-600 bg-stone-50 border border-stone-200":"text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF]"}`}>{status.state==="booking"?<Loader2 className="w-4 h-4 animate-spin"/>:status.state==="error"?<AlertTriangle className="w-4 h-4"/>:<CheckCircle2 className="w-4 h-4"/>}{status.msg}</div>}
       </>)}
       {labelPreview&&<LabelPreviewModal data={labelPreview} onClose={()=>setLabelPreview(null)}/>}
@@ -3509,7 +3541,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
               </div>
             </div>
             {!shipped&&<div className="bg-white border border-stone-200 rounded-lg p-4">
-              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} onOneRate={applyORBox}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
+              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} onOneRate={applyORBox} custom={cz(settings||{})}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
               {ready&&rateSrc.loading&&<div className="text-xs text-stone-400 flex items-center gap-1.5 mt-2"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Loading rates…</div>}
               {status&&<div className={`mt-2 text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${status.state==="error"?"text-rose-600 bg-rose-50 border border-rose-200":status.state==="booking"?"text-stone-600 bg-stone-50 border border-stone-200":"text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF]"}`}>{status.state==="error"?<AlertTriangle className="w-3.5 h-3.5"/>:status.state==="booking"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{status.msg}</div>}
             </div>}
@@ -3521,7 +3553,9 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
   );
 }
 
-function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels}){
+function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,settings}){
+  const custom=cz(settings||{});
+  const stuck=(sh)=>{ if(!custom.stuckDays)return false; if(!/in transit/i.test(sh.status||""))return false; const t=new Date(sh.date).getTime(); return t&&(Date.now()-t)>custom.stuckDays*864e5; };
   const [open,setOpen]=useState(null);
   const [q,setQ]=useState("");
   const [checking,setChecking]=useState(false);
@@ -3553,7 +3587,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels}
         {list.length===0&&<div className="p-8 text-center text-sm text-stone-400">No shipments match “{q}”.</div>}
         {list.map(s=>(
         <div key={s.id}>
-          <div onClick={()=>setOpen(open===s.id?null:s.id)} className="flex items-center gap-3 px-4 py-3 hover:bg-stone-50 cursor-pointer">
+          <div onClick={()=>setOpen(open===s.id?null:s.id)} className={`flex items-center gap-3 px-4 ${custom.density==="compact"?"py-1.5":"py-3"} hover:bg-stone-50 cursor-pointer ${stuck(r)?"border-l-2 border-amber-400":""}`} title={stuck(r)?"No delivery after "+custom.stuckDays+"+ days in transit — possibly stuck":undefined}>
             <button className="text-stone-400"><ChevronRight className={`w-4 h-4 transition-transform ${open===s.id?"rotate-90":""}`}/></button>
             <div className="w-24"><div className="text-sm font-mono text-stone-500">{s.date}</div><div className="text-[10px] text-stone-400">{s.time||""}</div></div>
             <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{s.recipient?.name||"—"}</div><div className="text-[11px] text-stone-400 truncate">{s.service}</div></div>
@@ -4544,7 +4578,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
 /* ════════ SETTINGS ════════ */
 function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,audit=[]}){
   const [sec,setSec]=useState("carriers");
-  const secs=[["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["catalog","Product catalog",Boxes],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["reference","Reference fields",Receipt],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["ledger","Ledger",Wallet],["integrations","Integrations",Layers],["subscription","Subscription",Star],["company","Company",Building2]];
+  const secs=[["customize","Customizations",Sliders],["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["catalog","Product catalog",Boxes],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["reference","Reference fields",Receipt],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["ledger","Ledger",Wallet],["integrations","Integrations",Layers],["subscription","Subscription",Star],["company","Company",Building2]];
   return (
     <div className="flex flex-col md:flex-row gap-6">
       <aside className="md:w-56 shrink-0 space-y-1">{secs.map(([id,l,Icon])=><button key={id} onClick={()=>setSec(id)} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}</button>)}</aside>
@@ -4560,6 +4594,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="manifests"&&<Manifests shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests}/>}
         {sec==="reports"&&<Reports shipments={shipments}/>}
         {sec==="notifications"&&<Notifications settings={settings} setSettings={setSettings} emails={emails}/>}
+        {sec==="customize"&&<Customize settings={settings} setSettings={setSettings}/>}
         {sec==="clients"&&<Clients clients={clients} setClients={setClients}/>}
         {sec==="billing"&&<Billing settings={settings} setSettings={setSettings}/>}
         {sec==="ledger"&&<Ledger ledger={ledger} addLedger={addLedger}/>}
@@ -5765,6 +5800,113 @@ function Billing({settings,setSettings}){
     </Panel>
   </div>);
 }
+function Customize({settings,setSettings}){
+  const c=cz(settings);
+  const set=(k,v)=>setSettings(p=>({...p,custom:{...cz(p),[k]:v}}));
+  const Tog=({k,label,hint,invert})=>(<label className="flex items-start gap-2 text-sm text-stone-700 cursor-pointer">
+    <input type="checkbox" checked={invert?c[k]===false:!!c[k]} onChange={e=>set(k,invert?!e.target.checked:e.target.checked)} className="accent-[#0086E0] mt-0.5"/>
+    <span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span></label>);
+  const Sel=({k,label,opts})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>{label}</span>
+    <select value={c[k]} onChange={e=>set(k,e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]">{opts.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>);
+  const Num=({k,label,hint,step,suffix})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span>
+    <span className="flex items-center gap-1"><input type="number" min="0" step={step||1} value={c[k]||""} placeholder="0" onChange={e=>set(k,+e.target.value||0)} className="w-20 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF] text-right"/>{suffix&&<span className="text-xs text-stone-400">{suffix}</span>}</span></label>);
+  const SVC=[["ground","FedEx Ground®"],["home","FedEx Home Delivery®"],["express_saver","FedEx Express Saver®"],["2day","FedEx 2Day®"],["standard_overnight","FedEx Standard Overnight®"],["priority_overnight","FedEx Priority Overnight®"],["intl_priority","FedEx International Priority®"]];
+  const svcHidden=new Set(c.hiddenServices||[]);
+  const togSvc=(k)=>{const nx=new Set(svcHidden); nx.has(k)?nx.delete(k):nx.add(k); set("hiddenServices",[...nx]);};
+  const setAlias=(k,v)=>set("aliases",{...(c.aliases||{}),[k]:v});
+  const tabChoices=ALL_TABS.filter(x=>x[0]!=="admin");
+  const hiddenTabs=new Set(c.hiddenTabs||[]);
+  const togTab=(k)=>{const nx=new Set(hiddenTabs); nx.has(k)?nx.delete(k):nx.add(k); set("hiddenTabs",[...nx]);};
+  const order=(c.tabOrder&&c.tabOrder.length)?c.tabOrder:tabChoices.map(x=>x[0]);
+  const move=(k,dir)=>{const a=[...order];const i=a.indexOf(k);const j=i+dir;if(i<0||j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];set("tabOrder",a);};
+  const speedMode=()=>setSettings(p=>({...p,custom:{...cz(p),hideInvoice:true,hidePO:true,hideAddr23:true,hideOz:true,hideInsure:true}}));
+  const fullMode=()=>setSettings(p=>({...p,custom:{...cz(p),hideInvoice:false,hidePO:false,hideAddr23:false,hideOz:false,hideInsure:false}}));
+  return (<div className="max-w-2xl space-y-4">
+    <div className="text-sm text-stone-500">Make ShippingCloud yours. Every option here changes the app immediately for <b>your login only</b>.</div>
+
+    <Panel title="Ship screen">
+      <div className="flex gap-2 mb-3">
+        <button onClick={speedMode} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">⚡ Speed mode — hide everything optional</button>
+        <button onClick={fullMode} className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200">Full detail — show it all</button>
+      </div>
+      <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
+        <Tog k="hideInvoice" label="Hide Invoice # field"/>
+        <Tog k="hidePO" label="Hide PO # field"/>
+        <Tog k="hideAddr23" label="Hide Address 2 & 3" hint="On both sender and receiver cards"/>
+        <Tog k="hideOz" label="Hide the oz box" hint="Whole pounds are enough for most shops"/>
+        <Tog k="hideInsure" label="Hide the Insure $ field"/>
+      </div>
+      <div className="border-t border-stone-100 mt-3 pt-3 grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
+        <Tog k="phoneRequired" label="Require receiver phone to book" hint="Uncheck to make phone optional"/>
+        <Tog k="emailRequired" label="Require receiver email to book" hint="Uncheck to make email optional"/>
+        <Sel k="defaultSignature" label="Default signature on new shipments" opts={[["none","None"],["indirect","Indirect"],["direct","Direct"],["adult","Adult"]]}/>
+        <Num k="autoInsurePct" label="Auto-insure orders" hint="% of order value, applied when you load an order. 0 = off" suffix="%"/>
+      </div>
+    </Panel>
+
+    <Panel title="Rates & services">
+      <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
+        <Sel k="defaultView" label="Default rate view" opts={[["cheapest","Cheapest first"],["carrier","Grouped by carrier"]]}/>
+        <Sel k="transitStyle" label="Transit display" opts={[["date","Days + arrival date"],["days","Day count only"]]}/>
+        <Num k="priceWarn" label="Price alert" hint="Flag any rate above this amount. 0 = off" step="1" suffix="$"/>
+      </div>
+      <div className="border-t border-stone-100 mt-3 pt-3">
+        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Services — hide ones you never use, rename the rest</div>
+        <div className="space-y-1.5">
+          {SVC.map(([k,l])=>(<div key={k} className="flex items-center gap-3">
+            <label className="flex items-center gap-1.5 text-sm text-stone-700 w-56 shrink-0 cursor-pointer"><input type="checkbox" checked={!svcHidden.has(k)} onChange={()=>togSvc(k)} className="accent-[#0086E0]"/><span className={svcHidden.has(k)?"line-through text-stone-300":""}>{l}</span></label>
+            <input value={(c.aliases||{})[k]||""} onChange={e=>setAlias(k,e.target.value)} placeholder={"rename — e.g. "+(k==="ground"?"Standard":k==="2day"?"Fast":"…")} disabled={svcHidden.has(k)} className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 disabled:opacity-40"/>
+          </div>))}
+        </div>
+        <div className="text-[11px] text-stone-400 mt-2">Renames are display-only on the Ship screen — labels and carrier paperwork keep the real FedEx name.</div>
+      </div>
+    </Panel>
+
+    <Panel title="Packing slips">
+      <div className="space-y-2.5">
+        <label className="block text-sm text-stone-700">Thank-you message<textarea value={c.slipThanks} onChange={e=>set("slipThanks",e.target.value)} rows={2} placeholder="Thanks for your order! We appreciate you." className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></label>
+        <label className="block text-sm text-stone-700">Footer line<input value={c.slipFooter} onChange={e=>set("slipFooter",e.target.value)} placeholder="Returns within 30 days · support@yourstore.com" className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></label>
+        <div className="text-[11px] text-stone-400">Prints on every packing slip — Ship, Batch, and Orders.</div>
+      </div>
+    </Panel>
+
+    <Panel title="Lists & alerts">
+      <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
+        <Sel k="density" label="List density" opts={[["comfortable","Comfortable"],["compact","Compact — more rows per screen"]]}/>
+        <Num k="stuckDays" label="Stuck-shipment flag" hint="Highlight in-transit shipments older than this many days. 0 = off" suffix="days"/>
+      </div>
+    </Panel>
+
+    <Panel title="Appearance & navigation">
+      <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
+        <Sel k="fontScale" label="Text size" opts={[[94,"Small"],[100,"Normal"],[107,"Large"]]}/>
+        <Sel k="startTab" label="Start page after login" opts={tabChoices.map(x=>[x[0],x[1]])}/>
+      </div>
+      <div className="border-t border-stone-100 mt-3 pt-3 grid sm:grid-cols-2 gap-6">
+        <div>
+          <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Hide tabs you don't use</div>
+          <div className="space-y-1">{tabChoices.filter(x=>!["ship","settings","companyadmin"].includes(x[0])).map(x=>(
+            <label key={x[0]} className="flex items-center gap-1.5 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!hiddenTabs.has(x[0])} onChange={()=>togTab(x[0])} className="accent-[#0086E0]"/>{x[1]}</label>))}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Tab order</div>
+          <div className="space-y-1">{order.filter(k=>tabChoices.some(x=>x[0]===k)).map(k=>{const t=tabChoices.find(x=>x[0]===k);return (
+            <div key={k} className="flex items-center gap-2 text-sm text-stone-700"><span className="flex-1">{t?t[1]:k}</span>
+              <button onClick={()=>move(k,-1)} className="text-stone-300 hover:text-[#0086E0] px-1">↑</button>
+              <button onClick={()=>move(k,1)} className="text-stone-300 hover:text-[#0086E0] px-1">↓</button>
+            </div>);})}
+          </div>
+        </div>
+      </div>
+    </Panel>
+
+    <div className="border border-dashed border-stone-300 rounded-lg p-3 text-[12px] text-stone-400">
+      Coming soon: dark mode &amp; accent colors, column chooser on Orders, saved filters &amp; views, custom email wording, spending limits &amp; approvals, keyboard shortcuts.
+    </div>
+  </div>);
+}
+
 function Company({settings,setSettings}){
   const sn=settings.sender; const set=(k,v)=>setSettings({...settings,sender:{...sn,[k]:v}});
   return (<div className="max-w-xl space-y-4">
@@ -6411,7 +6553,7 @@ function parseAddressBlob(raw){
   if(out.address1&&out.city) out.address1=stripTrailingCity(out.address1,out.city);
   return out;
 }
-function AddressCard({title,data,set,required,residential,setResidential,addresses,onPick,onSave,errorFields=[],contactFallback,side}){
+function AddressCard({title,data,set,required,residential,setResidential,addresses,onPick,onSave,errorFields=[],contactFallback,side,hideAddr23,reqOverrides={}}){
   const f=(k,v)=>set({...data,[k]:v});
   // Smart paste: if the pasted text parses into 2+ fields, distribute it across the whole form instead of one field
   const onSmartPaste=(e)=>{
@@ -6518,7 +6660,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
     )}
     <div className={side?"flex flex-col lg:flex-row border border-stone-200 rounded-lg overflow-hidden":""}>
     <div className={side?"flex-1 min-w-0 grid grid-cols-6 gap-px bg-stone-200":"grid grid-cols-6 gap-px bg-stone-200 border border-stone-200 rounded-lg overflow-hidden"}>
-      {cell("Country","country","col-span-6")}{cell("Name","name","col-span-6 sm:col-span-3",required)}{cell("Company","company","col-span-6 sm:col-span-3")}{cell("Address 1","address1","col-span-6",required)}{cell("Zip","zip","col-span-3 sm:col-span-2",required)}{cell("State","state","col-span-3 sm:col-span-2",required)}{cell("City","city","col-span-6 sm:col-span-2",required)}{cell("Address 2","address2","col-span-6 sm:col-span-3")}{cell("Address 3","address3","col-span-6 sm:col-span-3")}{cell("Phone","phone","col-span-6 sm:col-span-3",required)}{cell("Email","email","col-span-6 sm:col-span-3",required)}
+      {cell("Country","country","col-span-6")}{cell("Name","name","col-span-6 sm:col-span-3",required)}{cell("Company","company","col-span-6 sm:col-span-3")}{cell("Address 1","address1","col-span-6",required)}{cell("Zip","zip","col-span-3 sm:col-span-2",required)}{cell("State","state","col-span-3 sm:col-span-2",required)}{cell("City","city","col-span-6 sm:col-span-2",required)}{!hideAddr23&&<>{cell("Address 2","address2","col-span-6 sm:col-span-3")}{cell("Address 3","address3","col-span-6 sm:col-span-3")}</>}{cell("Phone","phone","col-span-6 sm:col-span-3",required&&reqOverrides.phone!==false)}{cell("Email","email","col-span-6 sm:col-span-3",required&&reqOverrides.email!==false)}
     </div>
     {side&&<div className="lg:w-[250px] xl:w-[290px] shrink-0 bg-stone-50 border-t lg:border-t-0 lg:border-l border-stone-200 p-3">{side}</div>}
     </div>

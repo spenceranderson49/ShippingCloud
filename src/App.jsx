@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v165";
+const BUILD_TAG="addr-v167";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -596,22 +596,25 @@ function printPickList(orderList){
 }
 
 /* ── commercial invoice for international shipments (3 copies convention: print thrice) ── */
-function printCommercialInvoice(o,catalog,sender){
+function printCommercialInvoice(o,catalog,sender,opts={}){
+  /* opts.rows: explicit [{name,qty,unit,hs,origin}] overrides catalog-derived lines (CI editor) */
   const esc=(x)=>String(x||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
   const bySku={},byName={};(catalog||[]).forEach(p=>{if(p.sku)bySku[String(p.sku).toLowerCase()]=p;if(p.name)byName[String(p.name).toLowerCase()]=p;});
-  const rows=parseItemsList(o).map(it=>{const pr=byName[String(it.name).toLowerCase()]||bySku[String(it.name).toLowerCase()];return {name:it.name,qty:it.qty,hs:pr&&pr.hs||"",origin:pr&&pr.origin||"US",unit:pr&&+pr.value||0};});
+  const rows=(opts.rows&&opts.rows.length)?opts.rows:parseItemsList(o).map(it=>{const pr=byName[String(it.name).toLowerCase()]||bySku[String(it.name).toLowerCase()];return {name:it.name,qty:it.qty,hs:pr&&pr.hs||"",origin:pr&&pr.origin||"US",unit:pr&&+pr.value||0};});
   const total=rows.reduce((a,r)=>a+r.unit*r.qty,0);
   const sn=(sender||{});
   const html=`<!doctype html><html><head><title>Commercial invoice</title><style>body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;padding:32px 40px;font-size:13px;}h1{font-size:17px;letter-spacing:.02em;border-bottom:2px solid #1c1917;padding-bottom:8px;}.grid{display:flex;gap:32px;margin-top:14px;}.col{flex:1;}.lbl{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:#a8a29e;}table{width:100%;border-collapse:collapse;margin-top:16px;}th{text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#a8a29e;border-bottom:1px solid #e7e5e4;padding:5px 0;}td{padding:6px 0;border-bottom:1px solid #f5f5f4;}.r{text-align:right;}.tot{margin-top:10px;text-align:right;font-weight:700;}.sig{margin-top:34px;display:flex;gap:40px;font-size:11px;color:#78716c;}.line{border-top:1px solid #a8a29e;padding-top:4px;flex:1;}</style></head><body>
   <h1>COMMERCIAL INVOICE</h1>
+  ${opts.samples?`<div style="margin-top:10px;border:2.5px solid #1c1917;text-align:center;padding:9px 6px;font-weight:800;font-size:15px;letter-spacing:.06em;">SAMPLES — NOT FOR RESALE · VALUE FOR CUSTOMS PURPOSES ONLY</div>`:""}
   <div class="grid"><div class="col"><div class="lbl">Exporter / shipper</div><div>${esc(sn.company||sn.name||"")}</div><div>${esc(sn.address1||"")}</div><div>${esc([sn.city,sn.state,sn.zip].filter(Boolean).join(", "))}, US</div></div>
   <div class="col"><div class="lbl">Consignee</div><div>${esc(o.customer||"")}</div>${o.company?`<div>${esc(o.company)}</div>`:""}<div>${esc(o.address1||"")}</div><div>${esc([o.city,o.state,o.zip].filter(Boolean).join(", "))}, ${esc(o.country||"")}</div></div>
-  <div class="col"><div class="lbl">Details</div><div>Invoice # ${esc(o.name||"")}</div><div>Date ${new Date().toLocaleDateString()}</div><div>Reason for export: Sale of goods</div><div>Incoterms: DAP — duties &amp; taxes payable by recipient</div><div>Currency: USD</div><div>Country of destination: ${esc(o.country||"")}</div></div></div>
+  <div class="col"><div class="lbl">Details</div><div>Invoice # ${esc(o.name||"")}</div><div>Date ${new Date().toLocaleDateString()}</div><div>Reason for export: ${esc(opts.reason||"Sale of goods")}</div><div>Incoterms: ${esc(opts.incoterm||"DDP — Delivered Duty Paid")}</div><div>Currency: USD</div><div>Country of destination: ${esc(o.country||"")}</div></div></div>
   <div class="grid" style="margin-top:6px"><div class="col"><div class="lbl">Shipper contact / Tax ID</div><div>${esc(sn.phone||"")}</div><div>Tax ID / EIN: ${esc(CI_OPTS.taxId)||"______________"}</div></div><div class="col"><div class="lbl">Consignee contact</div><div>${esc(o.phone||"")}</div><div>${esc(o.email||"")}</div></div><div class="col"><div class="lbl">Shipment</div><div>Packages: 1+</div><div>Gross weight: ${esc(String(o.weight||""))} lb</div></div></div>
   <table><thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Unit value</th><th class="r">Total</th><th>HS code</th><th>Origin</th></tr></thead>
   <tbody>${rows.map(r=>`<tr><td>${esc(r.name)}</td><td class="r">${r.qty}</td><td class="r">$${r.unit.toFixed(2)}</td><td class="r">$${(r.unit*r.qty).toFixed(2)}</td><td>${esc(r.hs)||"—"}</td><td>${esc(r.origin)}</td></tr>`).join("")}</tbody></table>
   <div class="tot">Declared value: $${total.toFixed(2)} USD</div>
   ${rows.some(r=>!r.hs)?`<div style="margin-top:10px;font-size:11px;color:#b45309;">⚠ Some items are missing HS codes — add them in Settings → Product catalog to avoid customs delays.</div>`:""}
+  ${opts.notes?`<div style="margin-top:12px;"><div class="lbl">Notes</div><div style="white-space:pre-wrap;font-size:12px;">${esc(opts.notes)}</div></div>`:""}
   <div style="margin-top:14px;font-size:10.5px;color:#78716c;">I declare that the above information is true and correct to the best of my knowledge.</div>\n  <div class="sig"><div class="line">Signature of exporter — ${esc(sn.name||sn.company||"")}</div><div class="line">Date</div></div>
   <script>window.onload=()=>window.print();</`+`script></body></html>`;
   const w=window.open("","_blank");if(!w)return;w.document.write(html);w.document.close();
@@ -2211,6 +2214,7 @@ function AppInner(){
   useEffect(()=>{ try{ const el=document.documentElement;
     el.classList.toggle("dark",custom.theme==="dark");
     el.classList.toggle("grey",custom.theme==="grey");
+    el.classList.toggle("hasbg",!!custom.appBg);
     if(custom.accent){ el.setAttribute("data-accent","1"); el.style.setProperty("--acc",custom.accent); el.style.setProperty("--accD",shadeHex(custom.accent,-0.14)); el.style.setProperty("--accL",shadeHex(custom.accent,0.18)); }
     else { el.removeAttribute("data-accent"); el.style.removeProperty("--acc"); }
   }catch(e){} },[custom.theme,custom.accent]);
@@ -2466,7 +2470,7 @@ function AppInner(){
       {!isDemo&&!isAdmin&&!adminReturn&&CLOUD.mode==="cloud"&&!fedexPrompt.seen&&<FirstRunFedEx user={currentUser} onClose={()=>setFedexPrompt({seen:true})}/>}
       <AssistantChat who={isDemo?"demo":isAdmin?"admin":"customer"} getContext={assistantContext} onAction={onAssistantAction}/>
       <ConfettiHost mode={custom.confetti||"page"}/>
-      <header style={custom.headerBg?{background:custom.headerBg}:undefined} className={"border-b border-stone-200 sticky z-30 bg-white/90 backdrop-blur "+((adminReturn||isDemo)?"top-9":"top-0")}>
+      <header style={custom.headerBg?{background:custom.headerBg}:undefined} className={"border-b border-stone-200 sticky z-30 backdrop-blur "+(custom.headerBg?"":"bg-white/90 ")+((adminReturn||isDemo)?"top-9":"top-0")}>
         <div className="px-3 sm:px-4 h-14 flex items-center gap-2 sm:gap-3 relative">
           <button onClick={()=>setNavOpen(true)} className="md:hidden p-2 -ml-1 rounded-lg hover:bg-stone-100 text-stone-600" aria-label="Menu"><Layers className="w-5 h-5"/></button>
           {!BRAND.fw&&<BrandCloud className="h-10 sm:h-11 w-auto" color={custom.accent||brand.primary}/>}
@@ -2493,7 +2497,7 @@ function AppInner(){
       {appLabel&&<LabelPreviewModal data={appLabel} onClose={()=>setAppLabel(null)}/>}
       {navOpen&&<div className="md:hidden fixed inset-0 z-40 flex" role="dialog">
         <div className="absolute inset-0 bg-stone-900/40" onClick={()=>setNavOpen(false)}/>
-        <aside style={custom.navBg?{background:custom.navBg}:undefined} className="relative w-64 bg-white h-full shadow-xl overflow-y-auto">
+        <aside style={custom.navBg?{background:custom.navBg}:undefined} className={`relative w-64 ${custom.navBg?"":"bg-white"} h-full shadow-xl overflow-y-auto`}>
           <div className="flex items-center justify-between px-4 h-14 border-b border-stone-200"><button onClick={()=>{setTab("ship");setNavOpen(false);}} title="Back to Ship" className="font-extrabold tracking-tight flex items-center gap-2" style={{color:brand.dark}}>{BRAND.fw?<><img src={FW_LOGO} alt="Freightwire" className="h-6 w-7 object-cover object-left" draggable={false}/><span className="w-px h-5 bg-stone-300"/><span className="text-[15px] leading-none text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></span></>:<span>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></span>}</button><button onClick={()=>setNavOpen(false)} className="p-1.5 rounded hover:bg-stone-100"><X className="w-5 h-5 text-stone-500"/></button></div>
           <nav className="p-2 space-y-0.5">
             {TABS.map(([id,l,Icon])=>(
@@ -2510,7 +2514,7 @@ function AppInner(){
         </aside>
       </div>}
       <div className="flex">
-        <aside style={custom.navBg?{background:custom.navBg}:undefined} className="hidden md:block w-52 shrink-0 border-r border-stone-200 bg-white min-h-screen">
+        <aside style={custom.navBg?{background:custom.navBg}:undefined} className={`hidden md:block w-52 shrink-0 border-r border-stone-200 ${custom.navBg?"":"bg-white"} min-h-screen`}>
           <nav className="p-2 space-y-0.5 sticky top-14">
             {TABS.map(([id,l,Icon])=>(
               <React.Fragment key={id}>
@@ -2593,7 +2597,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const [msgSaved,setMsgSaved]=useState(false);
   const [sent,setSent]=useState("");
   useEffect(()=>{ if(receiver.email&&!String(emailTo||"").trim()) setEmailTo(receiver.email); },[receiver.email]);
-  const [customs,setCustoms]=useState({reason:"Sale",incoterm:INCOTERMS[0],dutiesBill:"receiver",lines:[{desc:"",hts:"",origin:"United States",qty:1,value:"",weight:""}]});
+  const [customs,setCustoms]=useState({reason:"Sale",incoterm:INCOTERMS[1],dutiesBill:"sender",lines:[{desc:"",hts:"",origin:"United States",qty:1,value:"",weight:""}]});
   const [showCI,setShowCI]=useState(false);
 
   const intl=!!receiver.country&&receiver.country!=="United States";
@@ -2925,10 +2929,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <div className="border border-[#99D6FF] bg-[#E6F4FF]/40 rounded-lg p-3 space-y-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-[#006FBF]"><FileText className="w-4 h-4"/>Customs · Commercial invoice</div>
             <div className="grid sm:grid-cols-3 gap-2">
-              <Field label="Reason for export"><Select value={customs.reason} onChange={e=>setCustoms({...customs,reason:e.target.value})}>{EXPORT_REASONS.map(r=><option key={r}>{r}</option>)}</Select></Field>
+              <Field label="Reason for export"><input value={customs.reason} onChange={e=>setCustoms({...customs,reason:e.target.value})} list="sc-export-reasons" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/><datalist id="sc-export-reasons">{EXPORT_REASONS.map(r=><option key={r} value={r}/>)}</datalist></Field>
               <Field label="Incoterms"><Select value={customs.incoterm} onChange={e=>setCustoms({...customs,incoterm:e.target.value})}>{INCOTERMS.map(r=><option key={r}>{r}</option>)}</Select></Field>
               <Field label="Duties & taxes to"><Select value={customs.dutiesBill} onChange={e=>setCustoms({...customs,dutiesBill:e.target.value})}><option value="receiver">Receiver (DAP)</option><option value="sender">Sender (DDP)</option></Select></Field>
             </div>
+            {customs.reason==="Sample"&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">Tip: declare at least $10 value per sample item — $0/$1 values are a top cause of customs holds.</div>}
             <div className="space-y-1.5">
               <div className="hidden sm:flex text-[10px] uppercase tracking-wide text-stone-400 px-1 gap-2"><div className="flex-1">Description</div><div className="w-28">HTS code</div><div className="w-28">Origin</div><div className="w-12">Qty</div><div className="w-16">Unit $</div><div className="w-5"/></div>
               {customs.lines.map((l,i)=>(
@@ -3322,6 +3327,7 @@ function NewOrderForm({onClose,onCreate}){
   );
 }
 function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
+  const [ciOpts,setCiOpts]=useState({reason:"Sale",incoterm:INCOTERMS[1],samples:false,notes:""});
   const commercial=!!(o.company&&o.company.trim());
   const [weight,setWeight]=useState(o.weight||1);
   const [boxIdx,setBoxIdx]=useState(-1);
@@ -3401,8 +3407,18 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
           {rateSrc.live?<span className="text-[11px] text-emerald-600 flex items-center gap-1"><Wifi className="w-3.5 h-3.5"/>Live England rates</span>:canBook?<span className="text-[11px] text-stone-400">{rateSrc.loading?"Loading rates…":""}</span>:<span className="text-[11px] text-amber-600">Demo rates — connect England</span>}
           <button onClick={()=>goShip(o)} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/>Open in Ship tab</button>
           <button onClick={()=>printPackingSlips([slipFromOrder(o,settings&&settings.sender)])} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing slip</button>
-          {o.country&&o.country!=="US"&&<button onClick={()=>printCommercialInvoice(o,(settings&&settings.products)||[],settings&&settings.sender)} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Commercial invoice</button>}
+          {o.country&&o.country!=="US"&&<button onClick={()=>printCommercialInvoice(o,(settings&&settings.products)||[],settings&&settings.sender,ciOpts)} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Commercial invoice</button>}
         </div>
+        {o.country&&o.country!=="US"&&<div className="border border-stone-200 rounded-lg p-3 space-y-2 bg-stone-50/60">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400">Commercial invoice options</div>
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <input value={ciOpts.reason} onChange={e=>setCiOpts(v=>({...v,reason:e.target.value}))} list="sc-export-reasons-m" placeholder="Reason for export" className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] w-36"/><datalist id="sc-export-reasons-m">{EXPORT_REASONS.map(r=><option key={r} value={r}/>)}</datalist>
+            <select value={ciOpts.incoterm} onChange={e=>setCiOpts(v=>({...v,incoterm:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] max-w-[240px]">{INCOTERMS.map(r=><option key={r}>{r}</option>)}</select>
+            <label className="flex items-center gap-1.5 cursor-pointer text-stone-700"><input type="checkbox" checked={!!ciOpts.samples} onChange={e=>setCiOpts(v=>({...v,samples:e.target.checked}))} className="accent-[#0086E0]"/>Print big "SAMPLES — NOT FOR RESALE" banner</label>
+          </div>
+          {(ciOpts.reason==="Sample"||ciOpts.samples)&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">Tip: declare at least $10 value per sample item — $0/$1 values are a top cause of customs holds and inspections.</div>}
+          <textarea value={ciOpts.notes} onChange={e=>setCiOpts(v=>({...v,notes:e.target.value}))} rows={2} placeholder="Custom notes printed on the invoice — e.g. 'No commercial value, samples for exhibition use only', license numbers, broker contact…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+        </div>}
         {oneRate&&<div className={`text-xs rounded px-3 py-2 flex items-center gap-2 ${orBox?"bg-[#E6F4FF] text-[#0072BE] border border-[#99D6FF]":"bg-amber-50 text-amber-700 border border-amber-200"}`}><Boxes className="w-4 h-4 shrink-0"/>{orBox?<span>Qualifies for <b>{orBox.name}</b> — pricing this box only.</span>:<span>Set a box size within One Rate limits (≤2,200 cu in, ≤50 lb).</span>}</div>}
         {(o.shippingService||o.source)&&<div className="text-xs text-stone-500 flex items-center gap-1.5 -mt-1"><Truck className="w-3.5 h-3.5 text-stone-400"/>Buyer selected <b className="text-stone-700">{o.shippingService||"Standard"}</b>{o.source?` from ${o.source}`:""} — match it or pick the best rate below.</div>}
         <ServiceList quotes={quotes} best={best} bought={bought} action={ready?printHere:null} label="Buy & print" doneLabel="Printed" ready={ready} custom={cz(settings||{})}/>
@@ -3415,6 +3431,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
 
 /* ════════ ORDER · ShipStation-style detail + ship page (modal overlay) ════════ */
 function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
+  const [ciOpts,setCiOpts]=useState({reason:"Sale",incoterm:INCOTERMS[1],samples:false,notes:""});
   const commercial=!!(o.company&&o.company.trim());
   const [rcv,setRcv]=useState({name:o.customer||"",company:o.company||"",address1:o.address1||"",address2:o.address2||"",city:o.city||"",state:o.state||"",zip:o.zip||"",country:o.country||"US",phone:o.phone||"",email:o.email||""});
   const rset=(k,v)=>setRcv(p=>({...p,[k]:v}));
@@ -3547,10 +3564,21 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {o.country&&o.country!=="United States"&&o.country!=="US"&&<button onClick={()=>printCommercialInvoice(o,(settings&&settings.products)||[],settings&&settings.sender,ciOpts)} className="text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Commercial invoice</button>}
             <button onClick={()=>{goShip&&goShip(o);onClose&&onClose();}} className="text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/>Open in Ship tab</button>
             <button onClick={onClose} className="text-stone-400 hover:text-stone-700 p-1"><X className="w-5 h-5"/></button>
           </div>
         </div>
+        {o.country&&o.country!=="United States"&&o.country!=="US"&&<div className="border border-stone-200 rounded-lg p-3 mt-3 space-y-2 bg-stone-50/60">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400">Commercial invoice options</div>
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <input value={ciOpts.reason} onChange={e=>setCiOpts(v=>({...v,reason:e.target.value}))} list="sc-export-reasons-m" placeholder="Reason for export" className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] w-36"/><datalist id="sc-export-reasons-m">{EXPORT_REASONS.map(r=><option key={r} value={r}/>)}</datalist>
+            <select value={ciOpts.incoterm} onChange={e=>setCiOpts(v=>({...v,incoterm:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] max-w-[240px]">{INCOTERMS.map(r=><option key={r}>{r}</option>)}</select>
+            <label className="flex items-center gap-1.5 cursor-pointer text-stone-700"><input type="checkbox" checked={!!ciOpts.samples} onChange={e=>setCiOpts(v=>({...v,samples:e.target.checked}))} className="accent-[#0086E0]"/>Print big "SAMPLES — NOT FOR RESALE" banner</label>
+          </div>
+          {(ciOpts.reason==="Sample"||ciOpts.samples)&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">Tip: declare at least $10 value per sample item — $0/$1 values are a top cause of customs holds and inspections.</div>}
+          <textarea value={ciOpts.notes} onChange={e=>setCiOpts(v=>({...v,notes:e.target.value}))} rows={2} placeholder="Custom notes printed on the invoice — e.g. 'Samples for exhibition use only', license numbers, broker contact…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+        </div>}
         <div className="flex-1 overflow-y-auto">
           <div className="p-4 space-y-4">
             <div className="grid lg:grid-cols-[1fr,340px] gap-4">
@@ -4680,7 +4708,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
 /* ════════ SETTINGS ════════ */
 function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,audit=[]}){
   const [sec,setSec]=useState("general");
-  const secs=[["general","General",Cog],["customize","Customizations",Sliders],["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["catalog","Product catalog",Boxes],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["reference","Reference Fields",Receipt],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["ledger","Ledger",Wallet],["integrations","Integrations",Layers],["subscription","Subscription",Star],["company","Company",Building2]];
+  const secs=[["general","General",Cog],["customize","Customizations",Sliders],["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["catalog","Product catalog",Boxes],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["reference","Reference Fields",Receipt],["cieditor","Commercial invoice",Receipt],["otherdocs","Other documents",FileText],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["ledger","Ledger",Wallet],["integrations","Integrations",Layers],["subscription","Subscription",Star],["company","Company",Building2]];
   return (
     <div className="flex flex-col md:flex-row gap-6">
       <aside className="md:w-56 shrink-0 space-y-1">{secs.map(([id,l,Icon])=><button key={id} onClick={()=>setSec(id)} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}</button>)}</aside>
@@ -4697,6 +4725,8 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="reports"&&<Reports shipments={shipments}/>}
         {sec==="notifications"&&<Notifications settings={settings} setSettings={setSettings} emails={emails}/>}
         {sec==="general"&&<GeneralSettings settings={settings} setSettings={setSettings} goSec={setSec}/>}
+        {sec==="cieditor"&&<CIEditor settings={settings} setSettings={setSettings} shipments={shipments}/>}
+        {sec==="otherdocs"&&<OtherDocs settings={settings} setSettings={setSettings}/>}
         {sec==="customize"&&<Customize settings={settings} setSettings={setSettings}/>}
         {sec==="clients"&&<Clients clients={clients} setClients={setClients}/>}
         {sec==="billing"&&<Billing settings={settings} setSettings={setSettings}/>}
@@ -5903,6 +5933,154 @@ function Billing({settings,setSettings}){
     </Panel>
   </div>);
 }
+function CIEditor({settings,setSettings,shipments}){
+  const intl=(shipments||[]).filter(sh=>sh.recipient&&sh.recipient.country&&!["US","United States"].includes(sh.recipient.country));
+  const blank=()=>({exporter:{name:(settings.sender&&settings.sender.name)||"",company:(settings.sender&&settings.sender.company)||settings.company||"",address1:(settings.sender&&settings.sender.address1)||"",city:(settings.sender&&settings.sender.city)||"",state:(settings.sender&&settings.sender.state)||"",zip:(settings.sender&&settings.sender.zip)||"",phone:(settings.sender&&settings.sender.phone)||""},
+    consignee:{name:"",company:"",address1:"",city:"",state:"",zip:"",country:"",phone:"",email:""},
+    invoiceNo:"",date:new Date().toLocaleDateString(),reason:"Sale",incoterm:INCOTERMS[1],samples:false,notes:"",weight:"",
+    rows:[{name:"",qty:1,unit:0,hs:"",origin:"United States"}]});
+  const [doc,setDoc]=useState(blank());
+  const [loadedFrom,setLoadedFrom]=useState("");
+  const loadShipment=(id)=>{
+    const sh=intl.find(x=>String(x.id)===String(id)); if(!sh)return;
+    const r=sh.recipient||{};
+    const items=(sh.lineItems&&sh.lineItems.length?sh.lineItems:[{name:sh.items||"Merchandise",quantity:1,price:sh.declaredValue||sh.insurance||"10"}]);
+    setDoc({...blank(),
+      consignee:{name:r.name||"",company:r.company||"",address1:r.address1||"",city:r.city||"",state:r.state||"",zip:r.zip||"",country:r.country||"",phone:r.phone||"",email:r.email||""},
+      invoiceNo:sh.invoiceNo||sh.reference||sh.tracking||"",weight:String(sh.weight||""),
+      rows:items.map(it=>({name:it.name||it.title||"Item",qty:+(it.quantity||1),unit:+(it.price||it.unit||0)||0,hs:it.hs||"",origin:it.origin||"United States"}))});
+    setLoadedFrom(sh.tracking||sh.reference||("#"+sh.id));
+  };
+  const setEx=(k,v)=>setDoc(d=>({...d,exporter:{...d.exporter,[k]:v}}));
+  const setCo=(k,v)=>setDoc(d=>({...d,consignee:{...d.consignee,[k]:v}}));
+  const setRow=(i,patch)=>setDoc(d=>({...d,rows:d.rows.map((r,j)=>j===i?{...r,...patch}:r)}));
+  const total=doc.rows.reduce((a,r)=>a+(+r.unit||0)*(+r.qty||0),0);
+  const print=()=>{
+    const o={name:doc.invoiceNo||"CI-"+Date.now(),customer:doc.consignee.name,company:doc.consignee.company,address1:doc.consignee.address1,city:doc.consignee.city,state:doc.consignee.state,zip:doc.consignee.zip,country:doc.consignee.country,phone:doc.consignee.phone,email:doc.consignee.email,weight:doc.weight,lineItems:doc.rows.map(r=>({name:r.name,quantity:+r.qty||1,price:String(r.unit||0)}))};
+    printCommercialInvoice(o,[],{...doc.exporter},{reason:doc.reason,incoterm:doc.incoterm,samples:doc.samples,notes:doc.notes,rows:doc.rows.map(r=>({name:r.name,qty:+r.qty||1,unit:+r.unit||0,hs:r.hs,origin:r.origin}))});
+  };
+  const In=({v,on,ph,cls})=>(<input value={v} onChange={e=>on(e.target.value)} placeholder={ph} className={`bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 ${cls||"w-full"}`}/>);
+  return (<div className="max-w-3xl space-y-4">
+    <div className="text-sm text-stone-500">Rebuild, edit, and reprint a commercial invoice — start from a past international shipment or from scratch. (There's no way to reliably parse an uploaded PDF back into editable fields, so editing starts from your shipment data instead.)</div>
+    <Panel title="Start from">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <select onChange={e=>e.target.value&&loadShipment(e.target.value)} value="" className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF]">
+          <option value="">Pick an international shipment… ({intl.length})</option>
+          {intl.map(sh=><option key={sh.id} value={sh.id}>{(sh.date||"")+" · "+((sh.recipient&&sh.recipient.name)||"")+" · "+((sh.recipient&&sh.recipient.country)||"")+" · "+(sh.tracking||sh.reference||"")}</option>)}
+        </select>
+        <button onClick={()=>{setDoc(blank());setLoadedFrom("");}} className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200">Start blank</button>
+        {loadedFrom&&<span className="text-xs text-emerald-700">Loaded from {loadedFrom} — edit anything below.</span>}
+      </div>
+    </Panel>
+    <Panel title="Exporter / shipper">
+      <div className="grid sm:grid-cols-3 gap-2">
+        <In v={doc.exporter.company} on={v=>setEx("company",v)} ph="Company"/><In v={doc.exporter.name} on={v=>setEx("name",v)} ph="Contact name"/><In v={doc.exporter.phone} on={v=>setEx("phone",v)} ph="Phone"/>
+        <In v={doc.exporter.address1} on={v=>setEx("address1",v)} ph="Address" cls="w-full sm:col-span-3"/>
+        <In v={doc.exporter.city} on={v=>setEx("city",v)} ph="City"/><In v={doc.exporter.state} on={v=>setEx("state",v)} ph="State"/><In v={doc.exporter.zip} on={v=>setEx("zip",v)} ph="ZIP"/>
+      </div>
+    </Panel>
+    <Panel title="Consignee">
+      <div className="grid sm:grid-cols-3 gap-2">
+        <In v={doc.consignee.name} on={v=>setCo("name",v)} ph="Name"/><In v={doc.consignee.company} on={v=>setCo("company",v)} ph="Company"/><In v={doc.consignee.phone} on={v=>setCo("phone",v)} ph="Phone"/>
+        <In v={doc.consignee.address1} on={v=>setCo("address1",v)} ph="Address" cls="w-full sm:col-span-2"/><In v={doc.consignee.email} on={v=>setCo("email",v)} ph="Email"/>
+        <In v={doc.consignee.city} on={v=>setCo("city",v)} ph="City"/><In v={doc.consignee.state} on={v=>setCo("state",v)} ph="State / province"/><In v={doc.consignee.zip} on={v=>setCo("zip",v)} ph="Postal code"/>
+        <label className="text-sm sm:col-span-3"><select value={doc.consignee.country} onChange={e=>setCo("country",e.target.value)} className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF]"><option value="">Country…</option>{COUNTRIES.filter(c=>c!=="United States").map(c=><option key={c}>{c}</option>)}</select></label>
+      </div>
+    </Panel>
+    <Panel title="Invoice details">
+      <div className="grid sm:grid-cols-4 gap-2">
+        <In v={doc.invoiceNo} on={v=>setDoc(d=>({...d,invoiceNo:v}))} ph="Invoice #"/>
+        <input value={doc.reason} onChange={e=>setDoc(d=>({...d,reason:e.target.value}))} list="sc-export-reasons-ci" placeholder="Reason for export" className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/>
+        <datalist id="sc-export-reasons-ci">{EXPORT_REASONS.map(r=><option key={r} value={r}/>)}</datalist>
+        <select value={doc.incoterm} onChange={e=>setDoc(d=>({...d,incoterm:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">{INCOTERMS.map(r=><option key={r}>{r}</option>)}</select>
+        <In v={doc.weight} on={v=>setDoc(d=>({...d,weight:v}))} ph="Gross weight (lb)"/>
+      </div>
+      <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700 mt-2"><input type="checkbox" checked={doc.samples} onChange={e=>setDoc(d=>({...d,samples:e.target.checked}))} className="accent-[#0086E0]"/>Print big "SAMPLES — NOT FOR RESALE" banner</label>
+      {(doc.reason==="Sample"||doc.samples)&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mt-1">Tip: declare at least $10 value per sample item.</div>}
+      <textarea value={doc.notes} onChange={e=>setDoc(d=>({...d,notes:e.target.value}))} rows={2} placeholder="Custom notes printed on the invoice…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 mt-2"/>
+    </Panel>
+    <Panel title="Line items">
+      <div className="hidden sm:flex text-[10px] uppercase tracking-wide text-stone-400 px-1 gap-2"><div className="flex-1">Description</div><div className="w-14">Qty</div><div className="w-20">Unit $</div><div className="w-24">HS code</div><div className="w-32">Origin</div><div className="w-5"/></div>
+      {doc.rows.map((r,i)=>(<div key={i} className="flex flex-wrap sm:flex-nowrap gap-2 items-center mt-1.5">
+        <In v={r.name} on={v=>setRow(i,{name:v})} ph="Item description" cls="flex-1 min-w-0"/>
+        <In v={r.qty} on={v=>setRow(i,{qty:v})} ph="1" cls="w-14"/>
+        <In v={r.unit} on={v=>setRow(i,{unit:v})} ph="0.00" cls="w-20"/>
+        <In v={r.hs} on={v=>setRow(i,{hs:v})} ph="HS" cls="w-24"/>
+        <select value={r.origin} onChange={e=>setRow(i,{origin:e.target.value})} className="w-32 bg-white border border-stone-200 rounded-lg px-1 py-1.5 text-sm outline-none focus:border-[#0099FF]">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
+        <button onClick={()=>setDoc(d=>({...d,rows:d.rows.filter((_,j)=>j!==i)}))} className="text-stone-300 hover:text-rose-500">×</button>
+      </div>))}
+      <div className="flex items-center justify-between mt-2">
+        <button onClick={()=>setDoc(d=>({...d,rows:[...d.rows,{name:"",qty:1,unit:0,hs:"",origin:"United States"}]}))} className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200">+ Add line</button>
+        <div className="text-sm font-mono text-stone-700">Declared: ${total.toFixed(2)}</div>
+      </div>
+    </Panel>
+    <button onClick={print} disabled={!doc.consignee.name&&!doc.consignee.company} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-4 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40"><Receipt className="w-4 h-4"/>Print commercial invoice</button>
+  </div>);
+}
+const DOC_TEMPLATES=[
+ {id:"sli",name:"Shipper's Letter of Instruction",title:"SHIPPER'S LETTER OF INSTRUCTION",body:"To: [Carrier / Forwarder]\n\nRe: Shipment [tracking / reference]\n\nWe, the undersigned shipper, hereby authorize you to prepare and sign any export documents necessary for the shipment described below, and to forward it in accordance with your standard conditions of carriage.\n\nShipment description: [describe goods]\nPieces: [count]   Gross weight: [weight] lb\nDestination: [city, country]\nIncoterms: DDP — Delivered Duty Paid\n\nSpecial instructions: [none]"},
+ {id:"waiver",name:"Signature Release / Driver Waiver",title:"SIGNATURE RELEASE AUTHORIZATION",body:"To: [Carrier]\n\nI authorize the release of packages addressed to me/us at the address below without obtaining a signature at the time of delivery. I accept full responsibility for any loss or damage that may occur after the package is released at this address, and I agree that the carrier's proof of delivery shall be conclusive.\n\nDelivery address: [address]\nEffective: [date] until revoked in writing."},
+ {id:"nonhaz",name:"Declaration of Non-Hazardous Goods",title:"DECLARATION OF NON-HAZARDOUS MATERIALS",body:"We hereby certify that the shipment described below does not contain hazardous materials, dangerous goods, lithium batteries, aerosols, flammable liquids, or any articles restricted under IATA/DOT regulations.\n\nShipment reference: [reference]\nContents: [describe goods]\nThis declaration is made to the best of our knowledge and belief."},
+ {id:"gift",name:"Gift / No Commercial Value Letter",title:"DECLARATION — GIFT, NO COMMERCIAL VALUE",body:"To whom it may concern:\n\nThe goods in shipment [reference] are an unsolicited gift between private individuals, are not intended for resale, and have no commercial value. Values declared are for customs purposes only.\n\nContents: [describe goods]\nDeclared value (customs only): $[value]"},
+ {id:"coo",name:"Certificate of Origin (general)",title:"CERTIFICATE OF ORIGIN",body:"The undersigned hereby declares that the following goods were produced or manufactured in the United States of America:\n\nDescription of goods: [describe goods]\nHS code(s): [codes]\nInvoice #: [invoice]\nConsignee: [name, address, country]\n\nNote: some destinations require a chamber-of-commerce-certified original — check with your broker."},
+ {id:"blank",name:"Blank letterhead",title:"",body:""},
+];
+function OtherDocs({settings,setSettings}){
+  const docs=settings.customDocs||[];
+  const [cur,setCur]=useState(null); // {id?,name,title,body,sigLines}
+  const start=(t)=>setCur({name:t.name,title:t.title,body:t.body,sigLines:true});
+  const save=()=>{ if(!cur)return; const id=cur.id||("doc"+Date.now());
+    setSettings(p=>({...p,customDocs:[{...cur,id},...((p.customDocs||[]).filter(d=>d.id!==id))]})); setCur(c=>({...c,id})); };
+  const del=(id)=>setSettings(p=>({...p,customDocs:(p.customDocs||[]).filter(d=>d.id!==id)}));
+  const print=(d)=>{
+    const esc=(x)=>String(x||"").replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]));
+    const sn=settings.sender||{};
+    const html=`<!doctype html><html><head><title>${esc(d.name)}</title><style>body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;padding:44px 52px;font-size:13.5px;line-height:1.55;}
+      .lh{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1c1917;padding-bottom:12px;}
+      .co{font-size:18px;font-weight:800;} .meta{font-size:11px;color:#78716c;text-align:right;}
+      h1{font-size:15px;letter-spacing:.08em;margin:26px 0 14px;} .body{white-space:pre-wrap;}
+      .sig{margin-top:56px;display:flex;gap:48px;font-size:11px;color:#78716c;} .line{border-top:1px solid #a8a29e;padding-top:4px;flex:1;}</style></head><body>
+      <div class="lh"><div>${settings.companyLogo?`<img src="${settings.companyLogo}" style="height:34px;"/>`:`<div class="co">${esc(settings.company||sn.company||"")}</div>`}</div>
+      <div class="meta">${esc(sn.address1||"")}<br/>${esc([sn.city,sn.state,sn.zip].filter(Boolean).join(", "))}<br/>${esc(sn.phone||"")}${settings.supportEmail?` · ${esc(settings.supportEmail)}`:""}</div></div>
+      ${d.title?`<h1>${esc(d.title)}</h1>`:""}
+      <div class="body">${esc(d.body)}</div>
+      <div style="margin-top:24px;font-size:12px;">Date: ${new Date().toLocaleDateString()}</div>
+      ${d.sigLines?`<div class="sig"><div class="line">Signature — ${esc(sn.name||settings.company||"")}</div><div class="line">Printed name & title</div></div>`:""}
+      <script>window.onload=()=>window.print();</`+`script></body></html>`;
+    const w=window.open("","_blank"); if(!w)return; w.document.write(html); w.document.close();
+  };
+  return (<div className="max-w-3xl space-y-4">
+    <div className="text-sm text-stone-500">Build, save, and print letterheaded documents — shipper waivers, declarations, letters of instruction. Printing uses your browser's print dialog: choose "Save as PDF" there for a file.</div>
+    <Panel title="Start from a template">
+      <div className="grid sm:grid-cols-3 gap-2">
+        {DOC_TEMPLATES.map(t=>(<button key={t.id} onClick={()=>start(t)} className="text-left border border-stone-200 rounded-lg px-3 py-2 hover:border-[#99D6FF] hover:bg-[#E6F4FF]/40">
+          <div className="text-sm font-medium text-stone-800">{t.name}</div></button>))}
+      </div>
+    </Panel>
+    {docs.length>0&&<Panel title="Saved documents">
+      <div className="space-y-1.5">{docs.map(d=>(<div key={d.id} className="flex items-center gap-2 text-sm">
+        <span className="flex-1 text-stone-800">{d.name}</span>
+        <button onClick={()=>setCur(d)} className="text-xs text-[#006FBF] hover:underline">Edit</button>
+        <button onClick={()=>print(d)} className="text-xs text-[#006FBF] hover:underline">Print</button>
+        <button onClick={()=>del(d.id)} className="text-xs text-stone-400 hover:text-rose-600">Delete</button>
+      </div>))}</div>
+    </Panel>}
+    {cur&&<Panel title={cur.id?"Edit document":"New document"}>
+      <div className="space-y-2">
+        <input value={cur.name} onChange={e=>setCur(c=>({...c,name:e.target.value}))} placeholder="Document name (for your list)" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+        <input value={cur.title} onChange={e=>setCur(c=>({...c,title:e.target.value}))} placeholder="Printed title (e.g. SIGNATURE RELEASE AUTHORIZATION)" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+        <textarea value={cur.body} onChange={e=>setCur(c=>({...c,body:e.target.value}))} rows={12} placeholder="Body text — [bracketed] placeholders are just prompts, replace them with your details." className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 font-mono"/>
+        <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700"><input type="checkbox" checked={!!cur.sigLines} onChange={e=>setCur(c=>({...c,sigLines:e.target.checked}))} className="accent-[#0086E0]"/>Include signature lines</label>
+        <div className="flex gap-2">
+          <button onClick={save} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200">Save</button>
+          <button onClick={()=>print(cur)} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-3.5 py-1.5 font-medium flex items-center gap-1.5"><FileText className="w-4 h-4"/>Print / Save as PDF</button>
+          <button onClick={()=>setCur(null)} className="text-sm text-stone-400 hover:text-stone-600 px-2">Close</button>
+        </div>
+      </div>
+    </Panel>}
+  </div>);
+}
+
 function GeneralSettings({settings,setSettings,goSec}){
   const set=(k,v)=>setSettings(p=>({...p,[k]:v}));
   const F=({k,label,ph,hint,type})=>(<label className="block text-sm text-stone-700">{label}
@@ -6931,6 +7109,12 @@ function AddressCard({title,data,set,required,residential,setResidential,address
   const matches=(addresses||[]).filter(a=>!q.trim()||[a.name,a.company,a.city,a.zip,a.address1].filter(Boolean).some(v=>String(v).toLowerCase().includes(q.toLowerCase()))).slice(0,12);
   const pick=(a)=>{const cf=contactFallback||{};set({...data,name:a.name||"",company:a.company||"",address1:a.address1||"",address2:a.address2||"",city:a.city||"",state:a.state||"",zip:a.zip||"",country:a.country||data.country||"United States",phone:a.phone||cf.phone||"",email:a.email||cf.email||""});setQ("");setOpen(false);onPick&&onPick(a);};
   // cell() is a plain render helper (NOT a component) so inputs never remount → focus is kept while typing
+  const abList=Array.isArray(addresses)?addresses:[];
+  const abKey=(title||"").replace(/\s/g,"");
+  const abDatalists=abList.length?(<>
+    <datalist id={"sc-ab-name-"+abKey}>{abList.filter(a=>a.name).map(a=><option key={"n"+a.id} value={a.name}>{a.company?a.company+" · ":""}{a.city||""}</option>)}</datalist>
+    <datalist id={"sc-ab-company-"+abKey}>{abList.filter(a=>a.company).map(a=><option key={"c"+a.id} value={a.company}>{a.name?a.name+" · ":""}{a.city||""}</option>)}</datalist>
+  </>):null;
   const cell=(label,k,span,req)=>(
     <div key={k} className={`px-2 py-1.5 ${errorFields.includes(k)?"bg-rose-50 ring-1 ring-rose-300":(req&&!data[k]?"bg-[#E6F4FF]":"bg-white")} ${span||""} ${k==="address1"?"relative":""}`}>
       {!(k==="country"||k==="address2"||k==="address3")&&<div className={`text-[10px] uppercase tracking-wide ${errorFields.includes(k)?"text-rose-600 font-semibold":(req&&!data[k]?"text-[#0086E0]":"text-stone-400")} flex items-center gap-1`}>{label}{errorFields.includes(k)?" • required":""}{k==="address1"&&acBusy&&<Loader2 className="w-2.5 h-2.5 animate-spin text-stone-400"/>}</div>}
@@ -6938,7 +7122,10 @@ function AddressCard({title,data,set,required,residential,setResidential,address
         ? <div className="flex items-center gap-2"><span className="text-[10px] uppercase tracking-wide text-stone-400 shrink-0">{label}</span><select value={data.country||"United States"} onChange={e=>f("country",e.target.value)} className="flex-1 bg-transparent text-[13px] text-stone-900 outline-none">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select></div>
         : (k==="address2"||k==="address3")
         ? <div className="flex items-center gap-2"><span className="text-[10px] uppercase tracking-wide text-stone-400 shrink-0">{label}</span><input value={data[k]||""} onChange={e=>f(k,e.target.value)} onPaste={onSmartPaste} autoComplete="off" className="flex-1 bg-transparent text-[13px] text-stone-900 outline-none placeholder-stone-300"/></div>
-        : <input value={data[k]||""} onChange={e=>f(k,e.target.value)} onPaste={onSmartPaste} onFocus={k==="address1"?()=>{acFocusRef.current=true;if(acSug.length)setAcOpen(true);}:undefined} onBlur={k==="address1"?()=>setTimeout(()=>{acFocusRef.current=false;setAcOpen(false);},150):undefined} autoComplete="off" className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5 placeholder-stone-300"/>}
+        : <input value={data[k]||""} onChange={e=>{const v=e.target.value;f(k,v);
+            if((k==="name"||k==="company")&&Array.isArray(addresses)&&v.length>1){const hit=addresses.find(a=>(a.name&&a.name===v)||(a.company&&a.company===v));
+              if(hit){set({...data,name:hit.name||"",company:hit.company||"",address1:hit.address1||"",address2:hit.address2||"",city:hit.city||"",state:hit.state||"",zip:hit.zip||"",country:hit.country||"United States",phone:hit.phone||data.phone||"",email:hit.email||data.email||""});if(onPick)onPick(hit);}}
+          }} list={(k==="name"||k==="company")&&Array.isArray(addresses)&&addresses.length?("sc-ab-"+k+"-"+(title||"").replace(/\s/g,"")):undefined} onPaste={onSmartPaste} onFocus={k==="address1"?()=>{acFocusRef.current=true;if(acSug.length)setAcOpen(true);}:undefined} onBlur={k==="address1"?()=>setTimeout(()=>{acFocusRef.current=false;setAcOpen(false);},150):undefined} autoComplete="off" className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5 placeholder-stone-300"/>}
       {k==="address1"&&acOpen&&acSug.length>0&&<div className="absolute z-40 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-60 overflow-auto">
         <div className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50 border-b border-stone-100 flex items-center gap-1"><MapPin className="w-3 h-3"/>Google Maps suggestions</div>
         <div className="divide-y divide-stone-100">
@@ -6948,6 +7135,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
     </div>
   );
   return (<div className="relative">
+    {abDatalists}
     <div className="flex items-center justify-between mb-1.5">
       <span className="text-[#0086E0] font-semibold text-sm">{title}</span>
       <div className="flex items-center gap-2">

@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v150";
+const BUILD_TAG="addr-v151";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -2457,7 +2457,6 @@ function AppInner(){
 function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,drafts,setDrafts,prefill,clearPrefill,onShipped,onPending,logEmail,onQuickQuote,onRefresh,syncing}){
   const empty={country:"United States",name:"",company:"",zip:"",state:"",city:"",address1:"",address2:"",address3:"",phone:"",email:""};
   const [sender,setSender]=useState({country:"United States",...settings.sender,address2:"",address3:""});
-  const [senderOpen,setSenderOpen]=useState(()=>{const s0=settings.sender||{};return !((s0.name||s0.company)&&s0.zip);}); // Webship-style: collapse the rarely-edited side
   // Persist any sender edits made here back into saved settings, so the ship-from sticks across reloads/logins (no more reverting to the seed).
   useEffect(()=>{ setSettings&&setSettings(s=>({...s,sender:{name:sender.name||"",company:sender.company||"",address1:sender.address1||"",city:sender.city||"",state:sender.state||"",zip:sender.zip||"",phone:sender.phone||"",email:sender.email||""}})); },[sender.name,sender.company,sender.address1,sender.city,sender.state,sender.zip,sender.phone,sender.email]);
   const [receiver,setReceiver]=usePersist("ship.receiver",empty);
@@ -2733,33 +2732,10 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Ship "}}))} title="Describe a shipment in plain English and Claude fills the form" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded-lg px-3 py-1.5 font-medium hover:bg-[#f5e6de] whitespace-nowrap"><Sparkles className="w-4 h-4"/><span className="sm:hidden">Ask Claude</span><span className="hidden sm:inline">Ask Claude to help</span></button>
           </div>
         </div>
-        <div className={`relative grid gap-4 ${senderOpen?"lg:grid-cols-2":"lg:grid-cols-5"}`}>
-          <div className={senderOpen?"min-w-0":"min-w-0 lg:col-span-2"}>
-            {senderOpen?<>
-          <AddressCard title="Sender" data={sender} set={setSender} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }}/>
-              {!!((sender.name||sender.company)&&sender.zip)&&<button onClick={()=>setSenderOpen(false)} className="mt-1.5 flex items-center gap-1 text-[11px] text-stone-400 hover:text-[#0086E0]"><ChevronDown className="w-3 h-3 rotate-180"/>Done — collapse sender</button>}
-            </>:
-            <div className="border border-stone-200 rounded-lg bg-white p-4 h-full">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-sm font-semibold text-[#0086E0]">Sender</span>
-                <button onClick={()=>setSenderOpen(true)} className="flex items-center gap-1 text-xs text-stone-400 hover:text-[#0086E0]"><Edit3 className="w-3.5 h-3.5"/>Edit</button>
-              </div>
-              <div className="text-sm text-stone-800 space-y-0.5">
-                {sender.name&&<div className="font-medium">{sender.name}</div>}
-                {sender.company&&sender.company!==sender.name&&<div>{sender.company}</div>}
-                {sender.address1&&<div>{sender.address1}</div>}
-                {(sender.city||sender.state||sender.zip)&&<div>{[sender.city,sender.state].filter(Boolean).join(", ")} {sender.zip}</div>}
-                {sender.country&&sender.country!=="United States"&&<div>{sender.country}</div>}
-                {sender.phone&&<div className="text-stone-500 text-[13px]">{sender.phone}</div>}
-              </div>
-            </div>}
-          </div>
-          {senderOpen&&<>
-          <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-1/2 top-11 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-4 h-4"/></button>
-          </>}
-          <div className={senderOpen?"min-w-0":"min-w-0 lg:col-span-3"}>
-          <AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} contactFallback={{phone:sender.phone,email:sender.email}} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }}/>
-          </div>
+        <div className="relative grid lg:grid-cols-3 gap-4">
+          <div className="min-w-0"><AddressCard title="Sender" data={sender} set={setSender} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }}/></div>
+          <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-1/3 top-11 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-4 h-4"/></button>
+          <div className="min-w-0 lg:col-span-2"><AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} contactFallback={{phone:sender.phone,email:sender.email}} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }}/></div>
         </div>
         {!(sender.name||sender.company||sender.address1||sender.zip)&&<div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No sender on file — fill in the Sender card above, or set your default sender in Settings → Company.</div>}
         {billTo==="third"&&thirdAcct&&<div className="flex flex-wrap items-center gap-2 text-xs -mt-1">

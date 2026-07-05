@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v137";
+const BUILD_TAG="addr-v138";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -2308,12 +2308,12 @@ function AppInner(){
           {!BRAND.fw&&<BrandCloud className="h-10 sm:h-11 w-auto" color={brand.primary}/>}
           {BRAND.fw?(<>
             <button onClick={()=>setTab("ship")} title="Back to Ship" className="flex items-center gap-2.5 cursor-pointer select-none shrink-0">
-              <img src={FW_LOGO} alt="Freightwire" className="h-8 w-auto" draggable={false}/>
+              <img src={FW_LOGO} alt="Freightwire" className="h-8 w-9 object-cover object-left sm:w-auto sm:object-contain" draggable={false}/>
               <span className="w-px h-6 bg-stone-300 hidden sm:block"/>
               <span className="hidden sm:inline text-[19px] leading-none text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></span>
             </button>
             {settings.companyLogo
-              ?<span className="flex items-center gap-2.5 sm:gap-3 mt-1.5 min-w-0"><span className="w-px h-6 bg-stone-200 shrink-0 hidden sm:block"/><img src={settings.companyLogo} alt={settings.company||"Company logo"} className="h-7 w-auto max-w-[180px] object-contain" draggable={false}/></span>
+              ?<span className="flex items-center gap-2.5 sm:gap-3 mt-1.5 min-w-0"><span className="w-px h-6 bg-stone-200 shrink-0 hidden sm:block"/><img src={settings.companyLogo} alt={settings.company||"Company logo"} className="h-7 w-auto max-w-[110px] sm:max-w-[180px] object-contain" draggable={false}/></span>
               :<span className="hidden md:flex items-center gap-2.5 mt-1.5"><span className="w-px h-6 bg-stone-200"/><button onClick={()=>setTab("settings")} title="Upload your company logo in Settings → Company" className="text-[11px] font-medium text-stone-300 border border-dashed border-stone-300 rounded px-2.5 py-1 hover:text-stone-400 hover:border-stone-400">Your logo here</button></span>}
           </>):(
           <button onClick={()=>setTab("ship")} title="Back to Ship" className="font-extrabold tracking-tight text-[20px] sm:text-[26px] cursor-pointer flex items-center gap-2" style={{color:brand.dark}}><>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></></button>)}
@@ -2331,7 +2331,7 @@ function AppInner(){
       {navOpen&&<div className="md:hidden fixed inset-0 z-40 flex" role="dialog">
         <div className="absolute inset-0 bg-stone-900/40" onClick={()=>setNavOpen(false)}/>
         <aside className="relative w-64 bg-white h-full shadow-xl overflow-y-auto">
-          <div className="flex items-center justify-between px-4 h-14 border-b border-stone-200"><button onClick={()=>{setTab("ship");setNavOpen(false);}} title="Back to Ship" className="font-extrabold tracking-tight flex items-center gap-2" style={{color:brand.dark}}>{BRAND.fw?<><img src={FW_LOGO} alt="Freightwire" className="h-6 w-auto" draggable={false}/><span className="w-px h-5 bg-stone-300"/><span className="text-[15px] leading-none text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></span></>:<>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></>}</button><button onClick={()=>setNavOpen(false)} className="p-1.5 rounded hover:bg-stone-100"><X className="w-5 h-5 text-stone-500"/></button></div>
+          <div className="flex items-center justify-between px-4 h-14 border-b border-stone-200"><button onClick={()=>{setTab("ship");setNavOpen(false);}} title="Back to Ship" className="font-extrabold tracking-tight flex items-center gap-2" style={{color:brand.dark}}>{BRAND.fw?<><img src={FW_LOGO} alt="Freightwire" className="h-6 w-7 object-cover object-left" draggable={false}/><span className="w-px h-5 bg-stone-300"/><span className="text-[15px] leading-none text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></span></>:<>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></>}</button><button onClick={()=>setNavOpen(false)} className="p-1.5 rounded hover:bg-stone-100"><X className="w-5 h-5 text-stone-500"/></button></div>
           <nav className="p-2 space-y-0.5">
             {TABS.map(([id,l,Icon])=>(
               <React.Fragment key={id}>
@@ -2820,7 +2820,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
 
 function CommercialInvoice({sender,receiver,customs,total,reference,pieces,totalWeight}){
   return (
-    <div className="bg-white border border-stone-300 rounded-lg p-5 text-[12px] text-stone-700" style={{fontFamily:"ui-sans-serif,system-ui"}}>
+    <div className="overflow-x-auto"><div className="bg-white border border-stone-300 rounded-lg p-5 text-[12px] text-stone-700 min-w-[520px]" style={{fontFamily:"ui-sans-serif,system-ui"}}>
       <div className="flex items-start justify-between border-b border-stone-300 pb-3 mb-3">
         <div><div className="text-lg font-bold tracking-tight text-stone-900">COMMERCIAL INVOICE</div><div className="text-stone-400">ShippingCloud · for customs clearance</div></div>
         <div className="text-right"><div>Invoice # <span className="font-mono">{customs.ci||"CI-PREVIEW"}</span></div><div>Date {new Date().toLocaleDateString()}</div><div>Ref {reference||"—"}</div></div>
@@ -2842,7 +2842,7 @@ function CommercialInvoice({sender,receiver,customs,total,reference,pieces,total
       <div className="flex justify-between text-[11px] text-stone-500 mt-2"><span>{pieces.length} package(s) · {totalWeight} lb total</span><span>Currency: USD</span></div>
       <div className="mt-4 pt-3 border-t border-stone-200 text-[11px] text-stone-500">I declare the information on this invoice to be true and correct to the best of my knowledge.</div>
       <div className="mt-6 flex justify-between text-[11px]"><div className="border-t border-stone-400 w-48 pt-1 text-stone-400">Signature</div><div className="border-t border-stone-400 w-32 pt-1 text-stone-400">Date</div></div>
-    </div>
+    </div></div>
   );
 }
 
@@ -4343,7 +4343,7 @@ function Reports({shipments}){
   );
 }
 function Stat2({label,v,tone}){return <div className="border border-stone-200 rounded-xl bg-white p-4"><div className="text-[11px] uppercase tracking-widest text-stone-400">{label}</div><div className={`text-xl font-bold mt-1 ${tone||"text-stone-900"}`}>{v}</div></div>;}
-function ReportTable({title,head,rows}){return (<div className="border border-stone-200 rounded-lg bg-white overflow-hidden"><div className="px-4 py-2.5 text-sm font-semibold text-stone-700 border-b border-stone-100">{title}</div><table className="w-full text-sm"><thead><tr className="text-[11px] uppercase tracking-widest text-stone-400">{head.map(h=><th key={h} className="text-left font-normal px-4 py-2">{h}</th>)}</tr></thead><tbody>{rows.length===0?<tr><td colSpan={head.length} className="px-4 py-4 text-stone-400">No data.</td></tr>:rows.map((r,i)=><tr key={i} className="border-t border-stone-50">{r.map((c,j)=><td key={j} className="px-4 py-2 font-mono text-stone-700">{c}</td>)}</tr>)}</tbody></table></div>);}
+function ReportTable({title,head,rows}){return (<div className="border border-stone-200 rounded-lg bg-white overflow-hidden"><div className="px-4 py-2.5 text-sm font-semibold text-stone-700 border-b border-stone-100">{title}</div><div className="overflow-x-auto"><table className="w-full text-sm min-w-[480px]"><thead><tr className="text-[11px] uppercase tracking-widest text-stone-400">{head.map(h=><th key={h} className="text-left font-normal px-4 py-2">{h}</th>)}</tr></thead><tbody>{rows.length===0?<tr><td colSpan={head.length} className="px-4 py-4 text-stone-400">No data.</td></tr>:rows.map((r,i)=><tr key={i} className="border-t border-stone-50">{r.map((c,j)=><td key={j} className="px-4 py-2 font-mono text-stone-700">{c}</td>)}</tr>)}</tbody></table></div></div>);}
 
 
 /* ════════ CHECKOUT RATES (Shopify) ════════ */
@@ -5995,7 +5995,7 @@ function ClientInvoices({invoices,setInvoices,shipments,client}){
   const open=invoices.filter(i=>i.status==="Open").reduce((a,i)=>a+i.amount,0);
   const exportCSV=()=>downloadCSV("shippingcloud-invoices.csv",[["Invoice","Client","Date","Labels","Amount","Status"],...invoices.map(i=>[i.number,i.client,i.date,i.labels,i.amount,i.status])]);
   return (<div className="max-w-3xl space-y-4">
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
       <Stat2 label="Invoices" v={invoices.length}/>
       <Stat2 label="Open balance" v={money(open)} tone={open?"text-[#0086E0]":""}/>
       <Stat2 label="Billed all-time" v={money(invoices.reduce((a,i)=>a+i.amount,0))}/>
@@ -6467,7 +6467,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
       </div>
     )}
     <div className="grid grid-cols-6 gap-px bg-stone-200 border border-stone-200 rounded-lg overflow-hidden">
-      {cell("Country","country","col-span-6")}{cell("Name","name","col-span-3",required)}{cell("Company","company","col-span-3")}{cell("Address 1","address1","col-span-6",required)}{cell("Zip","zip","col-span-2",required)}{cell("State","state","col-span-2",required)}{cell("City","city","col-span-2",required)}{cell("Address 2","address2","col-span-3")}{cell("Address 3","address3","col-span-3")}{cell("Phone","phone","col-span-3",required)}{cell("Email","email","col-span-3",required)}
+      {cell("Country","country","col-span-6")}{cell("Name","name","col-span-6 sm:col-span-3",required)}{cell("Company","company","col-span-6 sm:col-span-3")}{cell("Address 1","address1","col-span-6",required)}{cell("Zip","zip","col-span-3 sm:col-span-2",required)}{cell("State","state","col-span-3 sm:col-span-2",required)}{cell("City","city","col-span-6 sm:col-span-2",required)}{cell("Address 2","address2","col-span-6 sm:col-span-3")}{cell("Address 3","address3","col-span-6 sm:col-span-3")}{cell("Phone","phone","col-span-6 sm:col-span-3",required)}{cell("Email","email","col-span-6 sm:col-span-3",required)}
     </div>
   </div>);
 }

@@ -22,12 +22,12 @@ const FEATURE_CATALOG=[
   {id:"returns",label:"Returns",desc:"Return labels",default:true},
   {id:"dashboard",label:"Dashboard",desc:"Spend & volume overview",default:true},
   {id:"addresses",label:"Address Book",desc:"Saved contacts",default:true},
-  {id:"pickups",label:"Pickups",desc:"Schedule carrier pickups",default:false},
-  {id:"batch",label:"Batch",desc:"Rate & print in bulk",default:false},
-  {id:"invoices",label:"Invoice Audit",desc:"Carrier invoice auditing",default:false},
-  {id:"rules",label:"Autopilot",desc:"Autopilot Mode — automation rules",default:false},
-  {id:"scan",label:"Scan",desc:"Barcode scan station",default:false},
-  {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:false},
+  {id:"pickups",label:"Pickups",desc:"Schedule carrier pickups",default:true},
+  {id:"batch",label:"Batch",desc:"Rate & print in bulk",default:true},
+  {id:"invoices",label:"Invoice Audit",desc:"Carrier invoice auditing",default:true},
+  {id:"rules",label:"Autopilot",desc:"Autopilot Mode — automation rules",default:true},
+  {id:"scan",label:"Scan",desc:"Barcode scan station",default:true},
+  {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:true},
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own UPS / other carrier accounts on the Connections page (England always shows; admins always have this)",default:false},
 ];
 const ADMIN_SECTIONS=[["overview","Overview"],["customers","Customers"],["users","Users & logins"],["customizations","Customizations"],["platforms","Platform accounts"],["branding","Branding"],["domains","Domains"]];
@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v140";
+const BUILD_TAG="addr-v141";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1184,6 +1184,31 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
                   <span><span className="font-medium text-stone-700">{f.label}</span><span className="text-[11px] text-stone-400 block leading-tight">{f.desc}</span></span>
                 </label>);})}
             </div>
+            <div className="mt-3 pt-3 border-t border-stone-100">
+              <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Header logo for this login</div>
+              <div className="flex items-center gap-3 flex-wrap">
+                {(featureFlags[u.id]||{})._logoB64?<img src={(featureFlags[u.id]||{})._logoB64} alt="Logo" className="h-8 w-auto max-w-[180px] object-contain border border-stone-200 rounded bg-white px-2 py-1"/>:<span className="text-[11px] text-stone-300 border border-dashed border-stone-300 rounded px-2.5 py-1.5">No logo</span>}
+                <label className="text-[11px] bg-stone-100 border border-stone-200 text-stone-700 rounded px-2.5 py-1 font-medium hover:bg-stone-200 cursor-pointer">Upload<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(e)=>{const file=e.target.files&&e.target.files[0]; if(!file)return; e.target.value="";
+                  const done=(b64)=>setFlag(u.id,"_logoB64",b64);
+                  const rd=new FileReader();
+                  rd.onload=()=>{const url=String(rd.result||"");
+                    if(/^data:image\/svg/.test(url)&&url.length<120000){done(url);return;}
+                    const img=new Image();
+                    img.onload=()=>{try{
+                      const scale=Math.min(1,360/img.width,120/img.height);
+                      const w2=Math.max(1,Math.round(img.width*scale)),h2=Math.max(1,Math.round(img.height*scale));
+                      const c=document.createElement("canvas");c.width=w2;c.height=h2;
+                      c.getContext("2d").drawImage(img,0,0,w2,h2);
+                      let out=c.toDataURL("image/png");
+                      if(out.length>160000){const c2=document.createElement("canvas");const s2=Math.min(1,240/w2);c2.width=Math.max(1,Math.round(w2*s2));c2.height=Math.max(1,Math.round(h2*s2));c2.getContext("2d").drawImage(img,0,0,c2.width,c2.height);out=c2.toDataURL("image/png");}
+                      done(out);
+                    }catch(err){}};
+                    img.src=url;};
+                  rd.readAsDataURL(file);}} className="hidden"/></label>
+                {(featureFlags[u.id]||{})._logoB64&&<button onClick={()=>setFlag(u.id,"_logoB64","")} className="text-[11px] text-stone-400 hover:text-rose-600">Remove</button>}
+                <span className="text-[11px] text-stone-400">Shows in their header next to the brand. PNG/JPG/SVG, auto-resized.</span>
+              </div>
+            </div>
             <p className="text-[11px] text-stone-400 mt-2">Changes apply the next time this person loads the app. Custom features we build for one customer appear in this list too — enabling them for someone else is one checkbox.</p>
           </div>}
           {accessOpen===u.id&&u.role==="admin"&&<div className="w-full mt-2 border-t border-stone-100 pt-3">
@@ -2312,9 +2337,7 @@ function AppInner(){
               <span className="w-px h-6 bg-stone-300 hidden sm:block"/>
               <span className="hidden sm:inline text-[19px] leading-none text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></span>
             </button>
-            {settings.companyLogo
-              ?<span className="flex items-center gap-2.5 sm:gap-3 mt-1.5 min-w-0"><span className="w-px h-6 bg-stone-200 shrink-0 hidden sm:block"/><img src={settings.companyLogo} alt={settings.company||"Company logo"} className="h-7 w-auto max-w-[110px] sm:max-w-[180px] object-contain" draggable={false}/></span>
-              :<span className="hidden md:flex items-center gap-2.5 mt-1.5"><span className="w-px h-6 bg-stone-200"/><button onClick={()=>setTab("settings")} title="Upload your company logo in Settings → Company" className="text-[11px] font-medium text-stone-300 border border-dashed border-stone-300 rounded px-2.5 py-1 hover:text-stone-400 hover:border-stone-400">Your logo here</button></span>}
+            {(()=>{const cl=(myFlags&&myFlags._logoB64)||settings.companyLogo||"";return cl?<span className="flex items-center gap-2.5 sm:gap-3 mt-1.5 min-w-0"><span className="w-px h-6 bg-stone-200 shrink-0 hidden sm:block"/><img src={cl} alt={settings.company||"Company logo"} className="h-7 w-auto max-w-[110px] sm:max-w-[180px] object-contain" draggable={false}/></span>:null;})()}
           </>):(
           <button onClick={()=>setTab("ship")} title="Back to Ship" className="font-extrabold tracking-tight text-[20px] sm:text-[26px] cursor-pointer flex items-center gap-2" style={{color:brand.dark}}><span>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></span></button>)}
           {brand.showLogo&&brand.logo&&<span className="hidden sm:flex items-center gap-1.5 text-stone-400 text-xs"><span className="w-px h-5 bg-stone-200"/>{brand.partnerLabel}<img src={brand.logo} alt="partner" className="h-3 w-auto object-contain"/></span>}
@@ -2659,7 +2682,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-200 text-stone-700 rounded px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New shipment</button>
             {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}
-            <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Ship "}}))} title="Describe a shipment in plain English and Claude fills the form" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded px-3 py-1.5 font-medium hover:bg-[#f5e6de] whitespace-nowrap"><Sparkles className="w-4 h-4"/><span className="sm:hidden">Ask Claude</span><span className="hidden sm:inline">Ask Claude to fill this</span></button>
+            <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Ship "}}))} title="Describe a shipment in plain English and Claude fills the form" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded px-3 py-1.5 font-medium hover:bg-[#f5e6de] whitespace-nowrap"><Sparkles className="w-4 h-4"/><span className="sm:hidden">Ask Claude</span><span className="hidden sm:inline">Ask Claude to help</span></button>
           </div>
         </div>
         <div className="relative grid lg:grid-cols-2 gap-4">
@@ -5694,33 +5717,8 @@ function Billing({settings,setSettings}){
 }
 function Company({settings,setSettings}){
   const sn=settings.sender; const set=(k,v)=>setSettings({...settings,sender:{...sn,[k]:v}});
-  const uploadLogo=(e)=>{const f=e.target.files&&e.target.files[0]; if(!f)return; e.target.value="";
-    const done=(b64)=>setSettings(s=>({...s,companyLogo:b64}));
-    const rd=new FileReader();
-    rd.onload=()=>{const url=String(rd.result||"");
-      if(/^data:image\/svg/.test(url)&&url.length<120000){done(url);return;}
-      const img=new Image();
-      img.onload=()=>{try{
-        const scale=Math.min(1,360/img.width,120/img.height);
-        const w=Math.max(1,Math.round(img.width*scale)),h=Math.max(1,Math.round(img.height*scale));
-        const c=document.createElement("canvas");c.width=w;c.height=h;
-        c.getContext("2d").drawImage(img,0,0,w,h);
-        let out=c.toDataURL("image/png");
-        if(out.length>160000){const c2=document.createElement("canvas");const s2=Math.min(1,240/w);c2.width=Math.max(1,Math.round(w*s2));c2.height=Math.max(1,Math.round(h*s2));c2.getContext("2d").drawImage(img,0,0,c2.width,c2.height);out=c2.toDataURL("image/png");}
-        done(out);
-      }catch(err){}};
-      img.src=url;};
-    rd.readAsDataURL(f);};
   return (<div className="max-w-xl space-y-4">
     <Panel title="Company"><Field label="Company name"><Input value={settings.company} onChange={e=>setSettings({...settings,company:e.target.value})}/></Field></Panel>
-    {BRAND.fw&&<Panel title="Company logo">
-      <p className="text-xs text-stone-500 mb-2">Shows in the header, next to the FreightwireShip brand. PNG, JPG, or SVG — resized automatically.</p>
-      <div className="flex items-center gap-3 flex-wrap">
-        {settings.companyLogo?<img src={settings.companyLogo} alt="Company logo" className="h-9 w-auto max-w-[200px] object-contain border border-stone-200 rounded bg-white px-2 py-1"/>:<span className="text-[11px] text-stone-300 border border-dashed border-stone-300 rounded px-2.5 py-1.5">No logo yet</span>}
-        <label className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded px-3 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload logo<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={uploadLogo} className="hidden"/></label>
-        {settings.companyLogo&&<button onClick={()=>setSettings(s=>({...s,companyLogo:""}))} className="text-sm text-stone-400 hover:text-rose-600">Remove</button>}
-      </div>
-    </Panel>}
     <Panel title="Default sender (ship-from)">
       <div className="grid grid-cols-2 gap-2">
         <Field label="Name"><Input value={sn.name} onChange={e=>set("name",e.target.value)}/></Field>
@@ -6431,8 +6429,8 @@ function AddressCard({title,data,set,required,residential,setResidential,address
   const pick=(a)=>{const cf=contactFallback||{};set({...data,name:a.name||"",company:a.company||"",address1:a.address1||"",address2:a.address2||"",city:a.city||"",state:a.state||"",zip:a.zip||"",country:a.country||data.country||"United States",phone:a.phone||cf.phone||"",email:a.email||cf.email||""});setQ("");setOpen(false);onPick&&onPick(a);};
   // cell() is a plain render helper (NOT a component) so inputs never remount → focus is kept while typing
   const cell=(label,k,span,req)=>(
-    <div key={k} className={`px-2 py-1.5 ${errorFields.includes(k)?"bg-rose-50 ring-1 ring-rose-300":(req&&!data[k]?"bg-[#E6F4FF]":"bg-white")} ${span||""} ${k==="address1"?"relative":""}`}>
-      <div className={`text-[9px] uppercase tracking-wide ${errorFields.includes(k)?"text-rose-600 font-semibold":(req&&!data[k]?"text-[#0086E0]":"text-stone-400")} flex items-center gap-1`}>{label}{errorFields.includes(k)?" • required":""}{k==="address1"&&acBusy&&<Loader2 className="w-2.5 h-2.5 animate-spin text-stone-400"/>}</div>
+    <div key={k} className={`px-2 py-1.5 ${errorFields.includes(k)?"bg-rose-50 ring-1 ring-rose-300":(req&&!data[k]?"bg-[#FAF3EF]":"bg-white")} ${span||""} ${k==="address1"?"relative":""}`}>
+      <div className={`text-[9px] uppercase tracking-wide ${errorFields.includes(k)?"text-rose-600 font-semibold":(req&&!data[k]?"text-[#C2410C]":"text-stone-400")} flex items-center gap-1`}>{label}{errorFields.includes(k)?" • required":""}{k==="address1"&&acBusy&&<Loader2 className="w-2.5 h-2.5 animate-spin text-stone-400"/>}</div>
       {k==="country"
         ? <select value={data.country||"United States"} onChange={e=>f("country",e.target.value)} className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
         : <input value={data[k]||""} onChange={e=>f(k,e.target.value)} onPaste={onSmartPaste} onFocus={k==="address1"?()=>{acFocusRef.current=true;if(acSug.length)setAcOpen(true);}:undefined} onBlur={k==="address1"?()=>setTimeout(()=>{acFocusRef.current=false;setAcOpen(false);},150):undefined} autoComplete="off" className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5 placeholder-stone-300"/>}
@@ -6471,7 +6469,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
     </div>
   </div>);
 }
-function PkgInput({label,w,req,...p}){const ww=w||"w-14";const on=req&&!String(p.value??"").trim();return <div className={ww}><div className={`text-[10px] uppercase tracking-widest text-center ${on?"text-[#0086E0]":"text-stone-500"}`}>{label}</div><input placeholder="0" {...p} type="number" className={`w-full border rounded px-2 py-1 text-sm font-mono text-stone-900 outline-none focus:border-[#0099FF] placeholder-stone-300 text-center ${on?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}/></div>;}
+function PkgInput({label,w,req,...p}){const ww=w||"w-14";const on=req&&!String(p.value??"").trim();return <div className={ww}><div className={`text-[10px] uppercase tracking-widest text-center ${on?"text-[#C2410C]":"text-stone-500"}`}>{label}</div><input placeholder="0" {...p} type="number" className={`w-full border rounded px-2 py-1 text-sm font-mono text-stone-900 outline-none focus:border-[#0099FF] placeholder-stone-300 text-center ${on?"bg-[#FAF3EF] border-[#D97757]/40":"bg-white border-stone-300"}`}/></div>;}
 function Panel({title,children}){return <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3"><div className="text-[11px] uppercase tracking-widest text-stone-400">{title}</div>{children}</div>;}
 function Field({label,children}){return <label className="block space-y-1"><span className="text-[11px] text-stone-500">{label}</span>{children}</label>;}
 function Input({className="",...p}){return <input {...p} className={`w-full bg-white border border-stone-200 rounded px-2.5 py-2 text-sm font-mono text-stone-900 focus:border-[#0099FF] outline-none ${className}`}/>;}

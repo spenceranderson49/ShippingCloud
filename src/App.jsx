@@ -30,7 +30,7 @@ const FEATURE_CATALOG=[
   {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:true},
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own UPS / other carrier accounts on the Connections page (England always shows; admins always have this)",default:false},
 ];
-const ADMIN_SECTIONS=[["overview","Overview"],["customers","Customers"],["users","Users & logins"],["customizations","Customizations"],["platforms","Platform accounts"],["branding","Branding"],["domains","Domains"]];
+const ADMIN_SECTIONS=[["overview","Overview"],["users","Users & logins"],["customizations","Customizations"],["platforms","Platform accounts"],["branding","Branding"],["domains","Domains"]];
 const adminSectionsFor=(user)=>(user&&user.role==="admin"&&user.adminPerms&&Array.isArray(user.adminPerms.sections))?ADMIN_SECTIONS.filter(s=>user.adminPerms.sections.includes(s[0])):ADMIN_SECTIONS;
 const featureOn=(id,user,flagsForUser)=>{
   if(!user)return false;
@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v142";
+const BUILD_TAG="addr-v143";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -913,10 +913,36 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
   const [sec,setSec]=useState("overview");
   const ALLOWED=adminSectionsFor(currentUser);
   if(ALLOWED.length&&!ALLOWED.some(x=>x[0]===sec))setSec(ALLOWED[0][0]);
-  const [openC,setOpenC]=useState(null);
-  const statsFor=(cName)=>{const sh=shipments.filter(s=>s.client===cName);const spend=sh.reduce((a,s)=>a+(s.sell||0),0);return {count:sh.length,spend};};
-  const totalRev=shipments.reduce((a,s)=>a+(s.sell||0),0);
-  const SOURCE_TONE={active:"green",inactive:"stone",pending:"amber"};
+  /* v143: platform-wide numbers. Admin's cloud snapshot contains every login's stores
+     (u/<uid>/shipments, u/<uid>/orders); fall back to the admin's own stores in local mode. */
+  const platform=useMemo(()=>{
+    const snap=(CLOUD&&CLOUD.snapshot)||{};
+    let ships=[],openOrders=0;const shippers=new Set();
+    let sawCloud=false;
+    for(const k of Object.keys(snap)){
+      const m=/^u\/([^/]+)\/(shipments|orders)$/.exec(k);
+      if(!m||m[1]==="demo")continue;
+      const v=snap[k]; if(!Array.isArray(v))continue;
+      sawCloud=true;
+      if(m[2]==="shipments"&&v.length){ships=ships.concat(v.map(x=>({...x,_uid:m[1]})));shippers.add(m[1]);}
+      if(m[2]==="orders")openOrders+=v.filter(o=>o&&o.status==="unfulfilled").length;
+    }
+    if(!sawCloud){ships=(shipments||[]).map(x=>({...x,_uid:currentUser&&currentUser.id}));openOrders=(orders||[]).filter(o=>o.status==="unfulfilled").length;}
+    const now=Date.now();
+    const t30=ships.filter(x=>{const t=new Date(x.date).getTime();return t&&(now-t)<30*864e5;}).length;
+    const rev=ships.reduce((a,x)=>a+(+x.sell||0),0);
+    const cost=ships.reduce((a,x)=>a+(+x.cost||0),0);
+    const latest=[...ships].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,8);
+    return {total:ships.length,t30,rev,margin:rev-cost,openOrders,shippers:shippers.size,latest};
+  },[shipments,orders,users]);
+  const loginStats=useMemo(()=>{
+    const real=users.filter(u=>u&&u.id!=="demo");
+    const active=real.filter(u=>u.status==="active").length;
+    const week=real.filter(u=>{const t=new Date(u.lastLogin).getTime();return t&&(Date.now()-t)<7*864e5;}).length;
+    const recent=[...real].sort((a,b)=>(new Date(b.lastLogin).getTime()||0)-(new Date(a.lastLogin).getTime()||0)).slice(0,6);
+    return {total:real.length,active,week,recent};
+  },[users]);
+  const uEmail=(uid)=>{const u=users.find(x=>x&&x.id===uid);return u?(u.name||u.email):uid;};
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-[#0086E0]"/><h1 className="text-lg font-semibold text-stone-800">Admin portal</h1></div>
@@ -928,25 +954,43 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
       {sec==="domains"&&<Domains settings={settings} setSettings={setSettings} clients={clients}/>}
       {sec==="platforms"&&<PlatformAccountsAdmin settings={settings} setSettings={setSettings}/>}
 
-      {sec==="overview"&&<div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat2 label="Customers" value={clients.length}/>
-        <Stat2 label="User logins" value={users.length}/>
-        <Stat2 label="Shipments" value={shipments.length}/>
-        <Stat2 label="Revenue (billed)" value={money(totalRev)}/>
-      </div>}
-      {sec==="overview"&&<div className="border border-stone-200 rounded-lg bg-white p-4">
-        <div className="text-sm font-semibold text-stone-700 mb-2">Customers at a glance</div>
-        <div className="divide-y divide-stone-100">{clients.map(c=>{const st=statsFor(c.name);return (
-          <div key={c.id} className="flex items-center gap-3 py-2.5 text-sm">
-            <div className="flex-1 min-w-0"><div className="font-medium text-stone-800 truncate">{c.name}</div><div className="text-[11px] text-stone-400">markup {c.markup}% · origin {c.origin}</div></div>
-            <div className="text-xs text-stone-500 w-24 text-right">{st.count} shipments</div>
-            <div className="font-mono text-sm w-20 text-right">{money(st.spend)}</div>
-            <Badge tone={SOURCE_TONE[c.status]||"stone"}>{c.status||"active"}</Badge>
+      {sec==="overview"&&<><div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Stat2 label="Shipments created" v={platform.total}/>
+        <Stat2 label="Shipments · last 30 days" v={platform.t30}/>
+        <Stat2 label="Revenue billed" v={money(platform.rev)}/>
+        <Stat2 label="Margin" v={money(platform.margin)} tone={platform.margin>=0?"text-emerald-600":"text-rose-600"}/>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Stat2 label="Logins created" v={loginStats.total}/>
+        <Stat2 label="Active logins" v={loginStats.active}/>
+        <Stat2 label="Signed in · last 7 days" v={loginStats.week}/>
+        <Stat2 label="Open orders (all logins)" v={platform.openOrders}/>
+      </div></>}
+      {sec==="overview"&&<div className="grid lg:grid-cols-2 gap-3">
+        <div className="border border-stone-200 rounded-lg bg-white p-4">
+          <div className="text-sm font-semibold text-stone-700 mb-2">Latest shipments — all logins</div>
+          {platform.latest.length===0&&<div className="text-sm text-stone-400 py-4 text-center">No shipments yet.</div>}
+          <div className="divide-y divide-stone-100">{platform.latest.map((x,i2)=>(
+            <div key={i2} className="flex items-center gap-3 py-2 text-sm">
+              <div className="flex-1 min-w-0"><div className="text-stone-800 truncate">{(x.recipient&&x.recipient.name)||"—"} · {(x.recipient&&x.recipient.city)||""} {(x.recipient&&x.recipient.state)||""}</div><div className="text-[11px] text-stone-400 truncate">{x.date} · {x.service||x.carrier||""} · by {uEmail(x._uid)}</div></div>
+              <div className="font-mono text-sm w-20 text-right">{money(x.sell||0)}</div>
+              <Badge tone={x.status==="Delivered"?"green":(x.status==="Voided"?"stone":"blue")}>{x.status||"—"}</Badge>
+            </div>))}
           </div>
-        );})}</div>
+        </div>
+        <div className="border border-stone-200 rounded-lg bg-white p-4">
+          <div className="text-sm font-semibold text-stone-700 mb-2">Recent logins</div>
+          {loginStats.recent.length===0&&<div className="text-sm text-stone-400 py-4 text-center">No logins yet.</div>}
+          <div className="divide-y divide-stone-100">{loginStats.recent.map(u=>(
+            <div key={u.id} className="flex items-center gap-3 py-2 text-sm">
+              <div className="flex-1 min-w-0"><div className="font-medium text-stone-800 truncate">{u.name||u.email}</div><div className="text-[11px] text-stone-400 truncate">{u.email}</div></div>
+              <div className="text-xs text-stone-400 w-24 text-right">{u.lastLogin||"never"}</div>
+              <Badge tone={u.status==="active"?"green":"stone"}>{u.status||"active"}</Badge>
+            </div>))}
+          </div>
+        </div>
       </div>}
 
-      {sec==="customers"&&<CustomersAdmin clients={clients} setClients={setClients} statsFor={statsFor} openC={openC} setOpenC={setOpenC}/>}
       {sec==="users"&&<UsersAdmin users={users} setUsers={setUsers} clients={clients} currentUser={currentUser} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
       {sec==="customizations"&&<CustomizationsAdmin users={users} clients={clients} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures}/>}
     </div>
@@ -1108,7 +1152,10 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
   const toggle=(id)=>setUsers(us=>us.map(u=>u.id===id?{...u,status:u.status==="active"?"inactive":"active"}:u));
   const del=(id)=>setUsers(us=>us.filter(u=>u.id!==id));
   return (<div className="space-y-3">
-    <div className="text-sm text-stone-500">Create and manage logins. Customer logins are scoped to one customer account. Admin logins run the whole portal — use the <b>access</b> button to limit which Admin sections another admin can open.</div>
+    <div className="text-sm text-stone-500 space-y-1">
+      <p>Create and manage every login on the platform. <b>Customer</b> logins see only their own data and the tabs you give them; <b>admin</b> logins run this portal.</p>
+      <p className="text-[12px] text-stone-400">Per-login buttons: <b>Log in as</b> opens the app exactly as that person sees it (sign out to come back) · <b>Company admin</b> lets them manage their own company's logins · <b>Tabs &amp; logo</b> sets which tabs they see and their header logo · <b>Password</b> resets it · <b>Active/Deactivated</b> controls whether they can sign in.</p>
+    </div>
     {companyAdminRequests.length>0&&<div className="border border-violet-200 rounded-lg bg-violet-50/50 p-4 space-y-2">
       <div className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Building2 className="w-4 h-4 text-violet-600"/>Company admin requests<Badge tone="stone">{companyAdminRequests.length}</Badge></div>
       {companyAdminRequests.map(r=>{const co=clients.find(c=>c.id===r.clientId);return (
@@ -1159,24 +1206,24 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
       <button onClick={create} className={`text-sm rounded px-4 py-2 font-medium flex items-center gap-1.5 ${added?"bg-emerald-600 text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{added?<><Check className="w-4 h-4"/>Created</>:<><Plus className="w-4 h-4"/>Create login</>}</button>
     </div>
     <div className="border border-stone-200 rounded-lg bg-white overflow-hidden divide-y divide-stone-100">
-      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400"><div className="flex-1">User</div><div className="w-24">Role</div><div className="w-32 hidden sm:block">Customer</div><div className="w-20">Last login</div><div className="w-44 text-right">Actions</div></div>
+      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[11px] uppercase tracking-widest text-stone-400"><div className="flex-1">Login</div><div className="w-24">Role</div><div className="w-32 hidden sm:block">Company</div><div className="w-24 hidden sm:block">Last login</div><div className="text-right flex-1 hidden lg:block">Actions</div></div>
       {users.map(u=>(
-        <div key={u.id} className="flex items-center gap-3 px-4 py-3 text-sm">
+        <div key={u.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
           <div className="flex-1 min-w-0"><div className="font-medium truncate">{u.name}</div><div className="text-[11px] text-stone-400 truncate">{u.email}</div></div>
           <div className="w-24"><Badge tone={u.role==="admin"?"blue":"stone"}>{u.role}</Badge></div>
           <div className="w-32 hidden sm:block text-xs text-stone-500 truncate">{u.role==="admin"?"— all —":(clients.find(c=>c.id===u.clientId)||{}).name||"—"}</div>
-          <div className="w-20 text-xs text-stone-400">{u.lastLogin||"—"}</div>
-          <div className="w-44 flex items-center justify-end gap-1.5">
-            {u.role==="admin"&&u.id!=="u1"&&u.id!==currentUser.id&&fullAdmin&&<button onClick={()=>setAccessOpen(accessOpen===u.id?null:u.id)} title="Which Admin sections this login can open" className={`text-[11px] rounded px-2 py-1 ${accessOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>access</button>}
-            {u.role!=="admin"&&<button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }} title="Open the app exactly as this person sees it" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">view as</button>}
-            {u.role!=="admin"&&<button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))} title={u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins"} className={`text-[11px] rounded px-2 py-1 ${u.companyAdmin?"bg-violet-600 text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>co-admin</button>}
-            {u.role!=="admin"&&<button onClick={()=>setFeatOpen(featOpen===u.id?null:u.id)} title="Features for this login" className={`text-[11px] rounded px-2 py-1 ${featOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>features</button>}
-            {CLOUD.mode==="cloud"&&(u.role!=="admin"||fullAdmin)&&<button onClick={async()=>{const np=window.prompt("New password for "+u.email+" (min 4 characters):");if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});window.alert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}} title="Reset password" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">pw</button>}
-            <button onClick={()=>toggle(u.id)} title={u.status==="active"?"Deactivate":"Activate"} className={`text-[11px] rounded px-2 py-1 ${u.status==="active"?"bg-emerald-50 text-emerald-700":"bg-stone-100 text-stone-500"}`}>{u.status==="active"?"active":"off"}</button>
+          <div className="w-24 hidden sm:block text-xs text-stone-400">{u.lastLogin||"—"}</div>
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            {u.role==="admin"&&u.id!=="u1"&&u.id!==currentUser.id&&fullAdmin&&<button onClick={()=>setAccessOpen(accessOpen===u.id?null:u.id)} title="Which Admin sections this login can open" className={`text-[11px] rounded px-2 py-1 ${accessOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>Portal access</button>}
+            {u.role!=="admin"&&<button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }} title="Open the app exactly as this person sees it" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Log in as</button>}
+            {u.role!=="admin"&&<button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))} title={u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins"} className={`text-[11px] rounded px-2 py-1 ${u.companyAdmin?"bg-violet-600 text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>{u.companyAdmin?"Company admin ✓":"Company admin"}</button>}
+            {u.role!=="admin"&&<button onClick={()=>setFeatOpen(featOpen===u.id?null:u.id)} title="Features for this login" className={`text-[11px] rounded px-2 py-1 ${featOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>Tabs &amp; logo</button>}
+            {CLOUD.mode==="cloud"&&(u.role!=="admin"||fullAdmin)&&<button onClick={async()=>{const np=window.prompt("New password for "+u.email+" (min 4 characters):");if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});window.alert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}} title="Reset password" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Password</button>}
+            <button onClick={()=>toggle(u.id)} title={u.status==="active"?"Deactivate":"Activate"} className={`text-[11px] rounded px-2 py-1 ${u.status==="active"?"bg-emerald-50 text-emerald-700":"bg-stone-100 text-stone-500"}`}>{u.status==="active"?"Active":"Deactivated"}</button>
             {u.id!==currentUser.id&&(u.role!=="admin"||(fullAdmin&&u.id!=="u1"))&&<button onClick={()=>del(u.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
           </div>
           {featOpen===u.id&&u.role!=="admin"&&<div className="w-full mt-2 border-t border-stone-100 pt-3">
-            <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Features for {u.name||u.email} — flip anything on or off for this login only</div>
+            <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Tabs &amp; features for {u.name||u.email} — anything you flip here applies to this login only</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1.5">
               {CATALOG.map(f=>{const on=featureOn(f.id,u,featureFlags[u.id]);return (
                 <label key={f.id} className="flex items-start gap-2 text-sm cursor-pointer py-0.5">

@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v153";
+const BUILD_TAG="addr-v154";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -739,6 +739,7 @@ const CUSTOM_DEFAULTS={
   slipThanks:"",slipFooter:"",
   density:"comfortable",stuckDays:0,
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
+  logoScale:100,
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
 const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
@@ -2411,7 +2412,7 @@ function AppInner(){
               <span className="w-px h-6 bg-stone-300 hidden sm:block"/>
               <span className="hidden sm:inline text-[19px] leading-none text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></span>
             </button>
-            {(()=>{const cl=(myFlags&&myFlags._logoB64)||settings.companyLogo||"";return cl?<span className="flex items-center gap-2.5 sm:gap-3 mt-1.5 min-w-0"><span className="w-px h-6 bg-stone-200 shrink-0 hidden sm:block"/><img src={cl} alt={settings.company||"Company logo"} className="h-7 w-auto max-w-[110px] sm:max-w-[180px] object-contain" draggable={false}/></span>:null;})()}
+            {(()=>{const cl=(myFlags&&myFlags._logoB64)||settings.companyLogo||"";return cl?<span className="flex items-center gap-2.5 sm:gap-3 mt-1.5 min-w-0"><span className="w-px h-6 bg-stone-200 shrink-0 hidden sm:block"/><img src={cl} alt={settings.company||"Company logo"} style={{height:Math.round(28*((custom.logoScale||100)/100))+"px"}} className="w-auto max-w-[110px] sm:max-w-[200px] object-contain" draggable={false}/></span>:null;})()}
           </>):(
           <button onClick={()=>setTab("ship")} title="Back to Ship" className="font-extrabold tracking-tight text-[20px] sm:text-[26px] cursor-pointer flex items-center gap-2" style={{color:brand.dark}}><span>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></span></button>)}
           {brand.showLogo&&brand.logo&&<span className="hidden sm:flex items-center gap-1.5 text-stone-400 text-xs"><span className="w-px h-5 bg-stone-200"/>{brand.partnerLabel}<img src={brand.logo} alt="partner" className="h-3 w-auto object-contain"/></span>}
@@ -5875,6 +5876,33 @@ function Customize({settings,setSettings}){
         <Sel k="density" label="List density" opts={[["comfortable","Comfortable"],["compact","Compact — more rows per screen"]]}/>
         <Num k="stuckDays" label="Stuck-shipment flag" hint="Highlight in-transit shipments older than this many days. 0 = off" suffix="days"/>
       </div>
+    </Panel>
+
+    <Panel title="Company logo">
+      <div className="flex items-center gap-4">
+        {settings.companyLogo
+          ?<img src={settings.companyLogo} alt="Company logo" style={{height:Math.round(28*((c.logoScale||100)/100))+"px"}} className="w-auto max-w-[200px] object-contain border border-stone-200 rounded-lg bg-white px-2 py-1"/>
+          :<span className="text-[11px] text-stone-300 border border-dashed border-stone-300 rounded-lg px-3 py-2">No logo yet</span>}
+        <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload logo
+          <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={e=>{
+            const f=e.target.files&&e.target.files[0]; if(!f)return;
+            const rd=new FileReader();
+            rd.onload=()=>{ const img=new Image(); img.onload=()=>{ try{
+              const maxW=360,scale=Math.min(1,maxW/img.width);
+              const cv=document.createElement("canvas"); cv.width=Math.round(img.width*scale); cv.height=Math.round(img.height*scale);
+              cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);
+              const b64=cv.toDataURL("image/png");
+              setSettings(p=>({...p,companyLogo:b64.length<220000?b64:String(rd.result)}));
+            }catch(_){ setSettings(p=>({...p,companyLogo:String(rd.result)})); } }; img.src=String(rd.result); };
+            rd.readAsDataURL(f); e.target.value="";
+          }}/>
+        </label>
+        {settings.companyLogo&&<button onClick={()=>setSettings(p=>({...p,companyLogo:""}))} className="text-[11px] text-stone-400 hover:text-rose-600">Remove</button>}
+      </div>
+      <label className="block text-sm text-stone-700 mt-1">Logo size <span className="text-[11px] text-stone-400">· {c.logoScale||100}%</span>
+        <input type="range" min="50" max="150" step="5" value={c.logoScale||100} onChange={e=>set("logoScale",+e.target.value)} className="mt-1 w-full accent-[#0086E0]"/>
+      </label>
+      <div className="text-[11px] text-stone-400">Shows in the header next to the brand — the live preview above is exactly the size it will render.</div>
     </Panel>
 
     <Panel title="Appearance & navigation">

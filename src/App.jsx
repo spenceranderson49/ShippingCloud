@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v157";
+const BUILD_TAG="addr-v158";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -2426,9 +2426,9 @@ function AppInner(){
               <span className="w-px h-6 bg-stone-300 hidden sm:block"/>
               <span className="hidden sm:inline text-[19px] leading-none text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></span>
             </button>
-            {(()=>{const cl=(myFlags&&myFlags._logoB64)||settings.companyLogo||"";return cl?<span className="flex items-center gap-2.5 sm:gap-3 mt-1.5 min-w-0"><span className="w-px h-6 bg-stone-200 shrink-0 hidden sm:block"/><img src={cl} alt={settings.company||"Company logo"} style={{height:Math.round(28*((custom.logoScale||100)/100))+"px"}} className="w-auto max-w-[110px] sm:max-w-[200px] object-contain" draggable={false}/></span>:null;})()}
           </>):(
           <button onClick={()=>setTab("ship")} title="Back to Ship" className="font-extrabold tracking-tight text-[20px] sm:text-[26px] cursor-pointer flex items-center gap-2" style={{color:brand.dark}}><span>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></span></button>)}
+          {(()=>{const cl=(myFlags&&myFlags._logoB64)||settings.companyLogo||"";return cl?<span className="flex items-center gap-2.5 sm:gap-3 min-w-0 self-center"><span className="w-px h-6 bg-stone-200 shrink-0 hidden sm:block"/><img src={cl} alt={settings.company||"Company logo"} style={{height:Math.round(28*((custom.logoScale||100)/100))+"px"}} className="w-auto max-w-[110px] sm:max-w-[200px] object-contain block" draggable={false}/></span>:null;})()}
           {brand.showLogo&&brand.logo&&<span className="hidden sm:flex items-center gap-1.5 text-stone-400 text-xs"><span className="w-px h-5 bg-stone-200"/>{brand.partnerLabel}<img src={brand.logo} alt="partner" className="h-3 w-auto object-contain"/></span>}
           <div className="flex-1"/>
           <div className="flex items-center gap-2 sm:gap-3">

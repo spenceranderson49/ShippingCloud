@@ -6,6 +6,13 @@
     <title>ShippingCloud</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='white'/%3E%3Cg transform='translate(4 4)' fill='none' stroke='%230099FF' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z'/%3E%3C/g%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      /* Mobile: iOS Safari auto-zooms any input under 16px on focus. Bump form controls to 16px
+         on small screens only — desktop rendering is untouched. */
+      @media (max-width: 640px){
+        input, select, textarea { font-size: 16px !important; }
+      }
+    </style>
   </head>
   <body class="bg-neutral-950">
     <div id="root"></div>

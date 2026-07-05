@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v154";
+const BUILD_TAG="addr-v156";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -739,7 +739,7 @@ const CUSTOM_DEFAULTS={
   slipThanks:"",slipFooter:"",
   density:"comfortable",stuckDays:0,
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
-  logoScale:100,
+  logoScale:100,hotkeys:true,spendCap:0,orderCols:[],
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
 const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
@@ -2166,6 +2166,20 @@ function AppInner(){
   useEffect(()=>{ try{document.documentElement.style.fontSize=(custom.fontScale&&custom.fontScale!==100)?(custom.fontScale/100*16)+"px":"";}catch(e){} },[custom.fontScale]);
   useEffect(()=>{ SLIP_OPTS.thanks=custom.slipThanks||""; SLIP_OPTS.footer=custom.slipFooter||""; },[custom.slipThanks,custom.slipFooter]);
   useEffect(()=>{ const st=custom.startTab; if(st&&st!=="ship"&&ALL_TABS.some(x=>x[0]===st))setTab(st); },[]);   // land on the user's chosen start page
+  const [hkHelp,setHkHelp]=useState(false);
+  useEffect(()=>{ if(custom.hotkeys===false)return;
+    let pend=null,timer=null;
+    const MAP={s:"ship",o:"orders",h:"shipments",b:"batch",i:"invoices",d:"dashboard",a:"addresses",t:"settings"};
+    const onKey=(e)=>{ const t=e.target; if(t&&(/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)||t.isContentEditable))return; if(e.metaKey||e.ctrlKey||e.altKey)return;
+      const k=e.key.toLowerCase();
+      if(k==="?"){setHkHelp(v=>!v);return;}
+      if(pend==="g"&&MAP[k]){setTab(MAP[k]);setHkHelp(false);pend=null;clearTimeout(timer);e.preventDefault();return;}
+      if(k==="g"){pend="g";clearTimeout(timer);timer=setTimeout(()=>{pend=null;},900);}
+      if(k==="escape")setHkHelp(false);
+    };
+    window.addEventListener("keydown",onKey);
+    return ()=>{window.removeEventListener("keydown",onKey);clearTimeout(timer);};
+  },[custom.hotkeys]);
 
   useEffect(()=>{ if(currentUser&&currentUser.role==="customer"&&currentUser.clientId) setClientId(currentUser.clientId); },[currentUser]);
   // Auto-run rules on newly imported/synced orders (any import path) when the toggle is on.
@@ -2466,6 +2480,12 @@ function AppInner(){
           {tab==="orders"&&<Orders orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} onShipped={onShipped}/>}
           {tab==="batch"&&<Batch orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
           {tab==="shipments"&&<Shipments shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels} settings={settings}/>}
+          {hkHelp&&<div onClick={()=>setHkHelp(false)} className="fixed bottom-4 right-4 z-50 bg-stone-900 text-white rounded-xl shadow-lg p-4 text-xs space-y-1.5 cursor-pointer">
+            <div className="font-semibold text-sm mb-1">Keyboard shortcuts</div>
+            <div><span className="font-mono bg-stone-700 rounded px-1">g</span> then <span className="font-mono bg-stone-700 rounded px-1">s</span> Ship · <span className="font-mono bg-stone-700 rounded px-1">o</span> Orders · <span className="font-mono bg-stone-700 rounded px-1">h</span> Shipments</div>
+            <div><span className="font-mono bg-stone-700 rounded px-1">b</span> Batch · <span className="font-mono bg-stone-700 rounded px-1">i</span> Invoices · <span className="font-mono bg-stone-700 rounded px-1">d</span> Dashboard · <span className="font-mono bg-stone-700 rounded px-1">a</span> Addresses · <span className="font-mono bg-stone-700 rounded px-1">t</span> Settings</div>
+            <div className="text-stone-400"><span className="font-mono bg-stone-700 rounded px-1">?</span> toggles this · click to close</div>
+          </div>}
           {tab==="drafts"&&<Drafts drafts={drafts} setDrafts={setDrafts} goShip={goShip}/>}
           {tab==="returns"&&<Returns returns={returns} setReturns={setReturns} orders={orders} settings={settings} logEmail={logEmail}/>}
           {tab==="pickups"&&<Pickups pickups={pickups} setPickups={setPickups} settings={settings}/>}
@@ -2664,6 +2684,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       setTimeout(()=>setShipStatus(null),4000);return;
     }
     setRecErrors([]);
+    if(custom.spendCap>0&&(q.sell??q.cost)>custom.spendCap){setShipStatus({state:"error",key:q.key,msg:`This rate is over your $${custom.spendCap} spending cap (Settings → Customizations).`});setTimeout(()=>setShipStatus(null),5000);return;}
     if(!canBook){
       onShipped(buildRec(q,carrier),selectedOrder);
       setBought(q.key);setTimeout(()=>setBought(null),1800);
@@ -3060,6 +3081,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
 function Orders({orders,setOrders,goShip,client,settings,onShipped}){
   const custom=cz(settings||{});
   const ordPad=custom.density==="compact"?"px-3 py-1":"px-3 py-2.5";
+  const hideCol=new Set(custom.orderCols||[]);
   const [filter,setFilter]=useState("all");
   const [q,setQ]=useState("");
   const [open,setOpen]=useState(null);
@@ -3149,14 +3171,14 @@ function Orders({orders,setOrders,goShip,client,settings,onShipped}){
                 <thead>
                   <tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 border-b border-stone-200">
                     <th className="text-left font-medium px-3 py-2 whitespace-nowrap">Order #</th>
-                    <th className="text-left font-medium px-3 py-2 whitespace-nowrap">Age</th>
-                    <th className="text-left font-medium px-3 py-2 whitespace-nowrap">Order date</th>
-                    <th className="text-left font-medium px-3 py-2">Items</th>
-                    <th className="text-left font-medium px-3 py-2">Recipient</th>
-                    <th className="text-left font-medium px-3 py-2 whitespace-nowrap">Requested</th>
-                    <th className="text-right font-medium px-3 py-2">Qty</th>
-                    <th className="text-right font-medium px-3 py-2 whitespace-nowrap">Order total</th>
-                    <th className="text-left font-medium px-3 py-2">Status</th>
+                    {!hideCol.has("age")&&<th className="text-left font-medium px-3 py-2 whitespace-nowrap">Age</th>}
+                    {!hideCol.has("date")&&<th className="text-left font-medium px-3 py-2 whitespace-nowrap">Order date</th>}
+                    {!hideCol.has("items")&&<th className="text-left font-medium px-3 py-2">Items</th>}
+                    {!hideCol.has("recipient")&&<th className="text-left font-medium px-3 py-2">Recipient</th>}
+                    {!hideCol.has("requested")&&<th className="text-left font-medium px-3 py-2 whitespace-nowrap">Requested</th>}
+                    {!hideCol.has("qty")&&<th className="text-right font-medium px-3 py-2">Qty</th>}
+                    {!hideCol.has("total")&&<th className="text-right font-medium px-3 py-2 whitespace-nowrap">Order total</th>}
+                    {!hideCol.has("status")&&<th className="text-left font-medium px-3 py-2">Status</th>}
                     <th className="px-3 py-2"/>
                   </tr>
                 </thead>
@@ -3165,14 +3187,14 @@ function Orders({orders,setOrders,goShip,client,settings,onShipped}){
                   {sorted.map(o=>(
                     <tr key={o.id} className="hover:bg-stone-50 cursor-pointer" onClick={()=>setOpen(o)}>
                       <td className={ordPad+" whitespace-nowrap"}><div className="font-semibold text-stone-800 flex items-center gap-1.5">{o.name}{o.source&&<Badge tone={SOURCE_TONE[o.source]||"stone"}>{o.source}</Badge>}</div></td>
-                      <td className="px-3 py-2.5 text-stone-500 whitespace-nowrap">{orderAge(o)}</td>
-                      <td className="px-3 py-2.5 text-stone-500 whitespace-nowrap">{o.date||"—"}</td>
-                      <td className={ordPad}><div className="text-stone-700 truncate max-w-[220px]">{o.items||"—"}</div>{o.lineItems&&o.lineItems[0]&&o.lineItems[0].sku?<div className="text-[11px] text-stone-400 truncate max-w-[220px]">SKU {o.lineItems[0].sku}</div>:null}</td>
-                      <td className={ordPad}><div className="text-stone-800 truncate max-w-[160px]">{o.customer||"—"}</div><div className="text-[11px] text-stone-400 truncate max-w-[160px]">{o.city}{o.state?`, ${o.state}`:""}</div></td>
-                      <td className="px-3 py-2.5 text-stone-500 whitespace-nowrap">{o.shippingService||"—"}</td>
-                      <td className="px-3 py-2.5 text-right text-stone-600">{o.itemCount||"—"}</td>
-                      <td className="px-3 py-2.5 text-right font-mono text-stone-800 whitespace-nowrap">${o.total}</td>
-                      <td className={ordPad}><div className="flex items-center gap-1 flex-wrap"><Badge tone={o.status==="fulfilled"?"green":"amber"}>{o.status==="fulfilled"?"Shipped":"Awaiting"}</Badge>{o.hold&&<span title={o.hold}><Badge tone="rose">Held</Badge></span>}{o.gift&&<span title={o.giftMessage||"Gift"}><Badge tone="blue">Gift</Badge></span>}{o.assignee&&<span title={"Assigned to "+o.assignee}><Badge tone="stone">{o.assignee}</Badge></span>}</div></td>
+                      {!hideCol.has("age")&&<td className="px-3 py-2.5 text-stone-500 whitespace-nowrap">{orderAge(o)}</td>}
+                      {!hideCol.has("date")&&<td className="px-3 py-2.5 text-stone-500 whitespace-nowrap">{o.date||"—"}</td>}
+                      {!hideCol.has("items")&&<td className={ordPad}><div className="text-stone-700 truncate max-w-[220px]">{o.items||"—"}</div>{o.lineItems&&o.lineItems[0]&&o.lineItems[0].sku?<div className="text-[11px] text-stone-400 truncate max-w-[220px]">SKU {o.lineItems[0].sku}</div>:null}</td>}
+                      {!hideCol.has("recipient")&&<td className={ordPad}><div className="text-stone-800 truncate max-w-[160px]">{o.customer||"—"}</div><div className="text-[11px] text-stone-400 truncate max-w-[160px]">{o.city}{o.state?`, ${o.state}`:""}</div></td>}
+                      {!hideCol.has("requested")&&<td className="px-3 py-2.5 text-stone-500 whitespace-nowrap">{o.shippingService||"—"}</td>}
+                      {!hideCol.has("qty")&&<td className="px-3 py-2.5 text-right text-stone-600">{o.itemCount||"—"}</td>}
+                      {!hideCol.has("total")&&<td className="px-3 py-2.5 text-right font-mono text-stone-800 whitespace-nowrap">${o.total}</td>}
+                      {!hideCol.has("status")&&<td className={ordPad}><div className="flex items-center gap-1 flex-wrap"><Badge tone={o.status==="fulfilled"?"green":"amber"}>{o.status==="fulfilled"?"Shipped":"Awaiting"}</Badge>{o.hold&&<span title={o.hold}><Badge tone="rose">Held</Badge></span>}{o.gift&&<span title={o.giftMessage||"Gift"}><Badge tone="blue">Gift</Badge></span>}{o.assignee&&<span title={"Assigned to "+o.assignee}><Badge tone="stone">{o.assignee}</Badge></span>}</div></td>}
                       <td className="px-3 py-2.5 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button onClick={(e)=>{e.stopPropagation();setOpen(o);}} className={`text-sm rounded px-3 py-1.5 font-medium ${o.status==="fulfilled"?"bg-stone-100 text-stone-600 hover:bg-stone-200":"bg-stone-900 text-white hover:bg-stone-800"}`}>{o.status==="fulfilled"?"View":"Ship"}</button>
@@ -5874,6 +5896,18 @@ function Customize({settings,setSettings}){
     <Panel title="Lists & alerts">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         <Sel k="density" label="List density" opts={[["comfortable","Comfortable"],["compact","Compact — more rows per screen"]]}/>
+        <Num k="spendCap" label="Spending cap" hint="Hard-blocks booking any label above this. 0 = off" suffix="$"/>
+        <Tog k="hotkeys" label="Keyboard shortcuts" hint="Press ? anywhere for the list — g then o jumps to Orders, etc."/>
+      </div>
+      <div className="border-t border-stone-100 mt-3 pt-3">
+        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Orders table columns</div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+          {[["age","Age"],["date","Order date"],["items","Items"],["recipient","Recipient"],["requested","Requested"],["qty","Qty"],["total","Order total"],["status","Status"]].map(([k,l])=>{
+            const hidden=(c.orderCols||[]).includes(k);
+            return <label key={k} className="flex items-center gap-1.5 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!hidden} onChange={()=>{const nx=new Set(c.orderCols||[]);hidden?nx.delete(k):nx.add(k);set("orderCols",[...nx]);}} className="accent-[#0086E0]"/><span className={hidden?"text-stone-300":""}>{l}</span></label>;
+          })}
+        </div>
+        <div className="text-[11px] text-stone-400 mt-1.5">Order # and actions always show.</div>
         <Num k="stuckDays" label="Stuck-shipment flag" hint="Highlight in-transit shipments older than this many days. 0 = off" suffix="days"/>
       </div>
     </Panel>
@@ -5930,7 +5964,7 @@ function Customize({settings,setSettings}){
     </Panel>
 
     <div className="border border-dashed border-stone-300 rounded-lg p-3 text-[12px] text-stone-400">
-      Coming soon: dark mode &amp; accent colors, column chooser on Orders, saved filters &amp; views, custom email wording, spending limits &amp; approvals, keyboard shortcuts.
+      Coming soon: dark mode &amp; accent colors, saved filters &amp; views, custom email wording, manager approvals, branded tracking pages.
     </div>
   </div>);
 }

@@ -49,6 +49,35 @@
       html[data-accent] .focus\:border-\[\#0099FF\]:focus{border-color:var(--accL)!important}
       html[data-accent] .accent-\[\#0086E0\]{accent-color:var(--acc)!important}
       html[data-accent] .border-b-\[\#0086E0\]{border-bottom-color:var(--acc)!important}
+      /* accent tints the required-field highlight (address cells + refs) */
+      html[data-accent] .bg-\[\#E6F4FF\]{background-color:color-mix(in srgb,var(--acc) 12%,#fff)!important}
+      html[data-accent] .border-\[\#99D6FF\]{border-color:color-mix(in srgb,var(--acc) 45%,#fff)!important}
+      html.dark[data-accent] .bg-\[\#E6F4FF\]{background-color:color-mix(in srgb,var(--acc) 24%,#1c1917)!important}
+      html.dark[data-accent] .border-\[\#99D6FF\]{border-color:color-mix(in srgb,var(--acc) 45%,#1c1917)!important}
+      /* ── grey mode: soft charcoal in-between ── */
+      html.grey body{background:#3c3937;color:#e7e5e4}
+      .grey .bg-white{background-color:#4a4643!important}
+      .grey .bg-white\/90{background-color:rgba(74,70,67,.92)!important}
+      .grey .bg-stone-50{background-color:#504b48!important}
+      .grey .bg-stone-100{background-color:#57524e!important}
+      .grey .bg-stone-200{background-color:#635d59!important}
+      .grey .text-stone-900,.grey .text-stone-800{color:#fafaf9!important}
+      .grey .text-stone-700,.grey .text-stone-600{color:#e7e5e4!important}
+      .grey .text-stone-500{color:#c7c2be!important}
+      .grey .text-stone-400{color:#aaa49f!important}
+      .grey .border-stone-100,.grey .border-stone-200,.grey .border-stone-300{border-color:#6b6560!important}
+      .grey .divide-stone-100>:not([hidden])~:not([hidden]),.grey .divide-stone-200>:not([hidden])~:not([hidden]){border-color:#6b6560!important}
+      .grey .hover\:bg-stone-50:hover,.grey .hover\:bg-stone-100:hover{background-color:#5a5551!important}
+      .grey .hover\:bg-stone-200:hover{background-color:#6b6560!important}
+      .grey .bg-\[\#E6F4FF\]{background-color:#2e4a63!important}
+      .grey .border-\[\#99D6FF\]{border-color:#4a7195!important}
+      .grey .bg-amber-50{background-color:#5c4a24!important}.grey .border-amber-200{border-color:#8a6f36!important}
+      .grey .bg-emerald-50{background-color:#24503c!important}.grey .border-emerald-200{border-color:#3a7a5e!important}
+      .grey .bg-rose-50{background-color:#5c2e33!important}.grey .border-rose-300,.grey .border-rose-200{border-color:#8a4a52!important}
+      .grey input,.grey select,.grey textarea{color:#f5f5f4;color-scheme:dark}
+      .grey .placeholder-stone-300::placeholder{color:#8a847e}
+      html.grey[data-accent] .bg-\[\#E6F4FF\]{background-color:color-mix(in srgb,var(--acc) 26%,#3c3937)!important}
+      html.grey[data-accent] .border-\[\#99D6FF\]{border-color:color-mix(in srgb,var(--acc) 50%,#3c3937)!important}
     </style>
     <style>
       /* Mobile: iOS Safari auto-zooms any input under 16px on focus. Bump form controls to 16px

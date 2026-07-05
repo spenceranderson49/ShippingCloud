@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v151";
+const BUILD_TAG="addr-v152";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -2686,6 +2686,34 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   /* box-logic explanation banner shown while a packed order is loaded */
   const PackNote=()=>packNote?(<div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800 flex items-center gap-2"><Boxes className="w-3.5 h-3.5 shrink-0"/><span className="flex-1">Box logic packed this order: <b>{packNote.boxNames}</b> · {packNote.totalWt} lb billable{packNote.unresolved.length?` · ${packNote.unresolved.length} item${packNote.unresolved.length===1?"":"s"} not in your catalog (weight may be low)`:""} — dims are editable below.</span><button onClick={()=>setPackNote(null)} className="text-emerald-500 hover:text-emerald-700"><X className="w-3.5 h-3.5"/></button></div>):null;
   const newShipment=()=>{setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setRes(true);setResTouched(false);setSig(false);setSigOption("none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");};
+  const addressCheck=(
+    <div className="text-xs space-y-2">
+      <div className="text-[10px] uppercase tracking-widest text-stone-500 font-semibold flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5"/>Address check</div>
+      {!(receiver.address1&&/^\d{5}/.test(receiver.zip||""))
+        ?<div className="text-stone-400 leading-relaxed">Enter a street + ZIP and FedEx verifies the address here.</div>
+        :(!verify||verify.loading)
+          ?<div className="flex items-center gap-1.5 text-stone-400"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Checking with FedEx…</div>
+          :<div className="space-y-1.5">
+            {resTouched
+              ?<span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium border ${residential?"text-[#006FBF] bg-[#E6F4FF] border-[#99D6FF]":"text-stone-700 bg-stone-100 border-stone-200"}`} title="Manually overridden classification">{residential?<Home className="w-3.5 h-3.5"/>:<Building2 className="w-3.5 h-3.5"/>}{residential?"Residential":"Commercial"} · manual</span>
+              :(verify.type
+                ?<span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium border ${verify.type==="Residential"?"text-[#006FBF] bg-[#E6F4FF] border-[#99D6FF]":"text-stone-700 bg-stone-100 border-stone-200"}`} title={"FedEx classifies this as a "+verify.type.toLowerCase()+" address"}>{verify.type==="Residential"?<Home className="w-3.5 h-3.5"/>:<Building2 className="w-3.5 h-3.5"/>}{verify.type}</span>
+                :<span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium border text-stone-400 bg-stone-50 border-stone-200" title="FedEx didn’t classify this address — use Override to set it">Type unknown</span>)}
+            {verify.deliverable===true&&<div><span className="inline-flex items-center gap-1.5 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1 font-medium" title="FedEx verified this is a deliverable address"><CheckCircle2 className="w-3.5 h-3.5"/>Verified</span></div>}
+            {verify.deliverable===false&&<div className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 font-medium leading-snug" title="FedEx couldn’t verify this address"><span className="inline-flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>Not verified</span>{verify.issues&&<div className="font-normal mt-0.5">{verify.issues.join(" · ")}</div>}</div>}
+            {verify.deliverable==null&&verify.error&&<div className="text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5 font-medium leading-snug" title={verify.error}><span className="inline-flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>FedEx error</span><div className="font-normal mt-0.5">{String(verify.error).slice(0,80)}</div></div>}
+            {suggestDiffers&&<button onClick={applySuggestion} className="w-full text-left text-[#0086E0] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF] leading-snug" title="Click to use FedEx’s standardized version of this address"><span className="inline-flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5"/>Use FedEx suggested</span><div className="font-normal mt-0.5">{suggestion}</div></button>}
+          </div>}
+      <div className="pt-2 border-t border-stone-200 space-y-1.5">
+        <label className="flex items-center gap-1.5 cursor-pointer text-stone-500" title="Override FedEx’s residential/commercial classification"><input type="checkbox" checked={resTouched} onChange={e=>setOverride(e.target.checked)} className="accent-[#0086E0]"/>Override classification</label>
+        {resTouched&&<div className="flex items-center rounded-full border border-stone-200 overflow-hidden bg-white">
+          <button onClick={()=>setRes(true)} className={`flex-1 flex items-center justify-center gap-1 px-2 py-1 ${residential?"bg-[#E6F4FF] text-[#006FBF] font-medium":"bg-white text-stone-500"}`}><Home className="w-3.5 h-3.5"/>Residential</button>
+          <button onClick={()=>setRes(false)} className={`flex-1 flex items-center justify-center gap-1 px-2 py-1 border-l border-stone-200 ${!residential?"bg-stone-100 text-stone-800 font-medium":"bg-white text-stone-500"}`}><Building2 className="w-3.5 h-3.5"/>Commercial</button>
+        </div>}
+        {receiver.address1&&/^\d{5}/.test(receiver.zip||"")&&<button onClick={()=>setVerifyNonce(n=>n+1)} className="flex items-center gap-1 text-stone-400 hover:text-[#0086E0] underline" title="Re-check this address with FedEx"><ShieldCheck className="w-3.5 h-3.5"/>Re-check address</button>}
+      </div>
+    </div>
+  );
   return (
     <div className="flex flex-row gap-4 items-start">
       {ordersOpen?(
@@ -2735,38 +2763,13 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         <div className="relative grid lg:grid-cols-3 gap-4">
           <div className="min-w-0"><AddressCard title="Sender" data={sender} set={setSender} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }}/></div>
           <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-1/3 top-11 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-4 h-4"/></button>
-          <div className="min-w-0 lg:col-span-2"><AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} contactFallback={{phone:sender.phone,email:sender.email}} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }}/></div>
+          <div className="min-w-0 lg:col-span-2"><AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} contactFallback={{phone:sender.phone,email:sender.email}} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }} side={addressCheck}/></div>
         </div>
         {!(sender.name||sender.company||sender.address1||sender.zip)&&<div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No sender on file — fill in the Sender card above, or set your default sender in Settings → Company.</div>}
         {billTo==="third"&&thirdAcct&&<div className="flex flex-wrap items-center gap-2 text-xs -mt-1">
           <span className="flex items-center gap-1.5 text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-1.5"><CreditCard className="w-3.5 h-3.5"/>Auto-billing to third-party account <b className="font-mono">{thirdAcct}</b><button onClick={()=>{setBillTo("sender");setThirdAcct("");}} className="ml-1 text-[#0086E0] hover:text-[#006FBF] underline">bill sender instead</button></span>
         </div>}
         {intl&&<div className="flex items-center gap-2 text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2"><MapPin className="w-4 h-4"/>International shipment to <b>{receiver.country}</b> — FedEx &amp; DHL rates shown, customs info required below.</div>}
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          {!verify||verify.loading
-            ?<span className="flex items-center gap-1.5 text-stone-400"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Checking address with FedEx…</span>
-            :<>
-              {/* residential / commercial */}
-              {resTouched
-                ?<span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium border ${residential?"text-[#006FBF] bg-[#E6F4FF] border-[#99D6FF]":"text-stone-700 bg-stone-100 border-stone-200"}`} title="Manually overridden classification">{residential?<Home className="w-3.5 h-3.5"/>:<Building2 className="w-3.5 h-3.5"/>}{residential?"Residential":"Commercial"} · manual</span>
-                :(verify.type
-                  ?<span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium border ${verify.type==="Residential"?"text-[#006FBF] bg-[#E6F4FF] border-[#99D6FF]":"text-stone-700 bg-stone-100 border-stone-200"}`} title={"FedEx classifies this as a "+verify.type.toLowerCase()+" address"}>{verify.type==="Residential"?<Home className="w-3.5 h-3.5"/>:<Building2 className="w-3.5 h-3.5"/>}{verify.type}</span>
-                  :<span className="flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium border text-stone-400 bg-stone-50 border-stone-200" title="FedEx didn’t classify this address — use Override to set it">Type unknown</span>)}
-              {/* verified / not verified */}
-              {verify.deliverable===true&&<span className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1 font-medium" title="FedEx verified this is a deliverable address"><CheckCircle2 className="w-3.5 h-3.5"/>Verified</span>}
-              {verify.deliverable===false&&<span className="flex items-center gap-1.5 text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1 font-medium" title={verify.issues?verify.issues.join(" · "):"FedEx couldn’t verify this address"}><AlertTriangle className="w-3.5 h-3.5"/>Not verified{verify.issues?" · "+verify.issues.join(" · "):""}</span>}
-              {verify.deliverable==null&&verify.error&&<span className="flex items-center gap-1.5 text-rose-600 bg-rose-50 border border-rose-200 rounded-full px-2.5 py-1 font-medium" title={verify.error}><AlertTriangle className="w-3.5 h-3.5"/>FedEx: {String(verify.error).slice(0,60)}</span>}
-              {/* clickable suggested (FedEx-normalized) address */}
-              {suggestDiffers&&<button onClick={applySuggestion} className="flex items-center gap-1.5 text-[#0086E0] bg-[#E6F4FF] border border-[#99D6FF] rounded-full px-2.5 py-1 font-medium hover:bg-[#CCEAFF]" title="Click to use FedEx’s standardized version of this address"><MapPin className="w-3.5 h-3.5"/>Use: {suggestion}</button>}
-            </>}
-          {/* override classification */}
-          <label className="flex items-center gap-1.5 cursor-pointer text-stone-500 ml-1" title="Override FedEx’s residential/commercial classification"><input type="checkbox" checked={resTouched} onChange={e=>setOverride(e.target.checked)} className="accent-[#0086E0]"/>Override</label>
-          {resTouched&&<div className="flex items-center rounded-full border border-stone-200 overflow-hidden">
-            <button onClick={()=>setRes(true)} className={`flex items-center gap-1 px-2.5 py-1 ${residential?"bg-[#E6F4FF] text-[#006FBF] font-medium":"bg-white text-stone-500"}`}><Home className="w-3.5 h-3.5"/>Residential</button>
-            <button onClick={()=>setRes(false)} className={`flex items-center gap-1 px-2.5 py-1 border-l border-stone-200 ${!residential?"bg-stone-100 text-stone-800 font-medium":"bg-white text-stone-500"}`}><Building2 className="w-3.5 h-3.5"/>Commercial</button>
-          </div>}
-          {receiver.address1&&/^\d{5}/.test(receiver.zip||"")&&<button onClick={()=>setVerifyNonce(n=>n+1)} className="flex items-center gap-1 text-stone-400 hover:text-[#0086E0] underline ml-1" title="Re-check this address with FedEx"><ShieldCheck className="w-3.5 h-3.5"/>Re-check</button>}
-        </div>
 
         <div className="bg-stone-100 border border-stone-200 rounded-lg p-3 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -6408,7 +6411,7 @@ function parseAddressBlob(raw){
   if(out.address1&&out.city) out.address1=stripTrailingCity(out.address1,out.city);
   return out;
 }
-function AddressCard({title,data,set,required,residential,setResidential,addresses,onPick,onSave,errorFields=[],contactFallback}){
+function AddressCard({title,data,set,required,residential,setResidential,addresses,onPick,onSave,errorFields=[],contactFallback,side}){
   const f=(k,v)=>set({...data,[k]:v});
   // Smart paste: if the pasted text parses into 2+ fields, distribute it across the whole form instead of one field
   const onSmartPaste=(e)=>{
@@ -6513,8 +6516,11 @@ function AddressCard({title,data,set,required,residential,setResidential,address
         </div>}
       </div>
     )}
-    <div className="grid grid-cols-6 gap-px bg-stone-200 border border-stone-200 rounded-lg overflow-hidden">
+    <div className={side?"flex flex-col lg:flex-row border border-stone-200 rounded-lg overflow-hidden":""}>
+    <div className={side?"flex-1 min-w-0 grid grid-cols-6 gap-px bg-stone-200":"grid grid-cols-6 gap-px bg-stone-200 border border-stone-200 rounded-lg overflow-hidden"}>
       {cell("Country","country","col-span-6")}{cell("Name","name","col-span-6 sm:col-span-3",required)}{cell("Company","company","col-span-6 sm:col-span-3")}{cell("Address 1","address1","col-span-6",required)}{cell("Zip","zip","col-span-3 sm:col-span-2",required)}{cell("State","state","col-span-3 sm:col-span-2",required)}{cell("City","city","col-span-6 sm:col-span-2",required)}{cell("Address 2","address2","col-span-6 sm:col-span-3")}{cell("Address 3","address3","col-span-6 sm:col-span-3")}{cell("Phone","phone","col-span-6 sm:col-span-3",required)}{cell("Email","email","col-span-6 sm:col-span-3",required)}
+    </div>
+    {side&&<div className="lg:w-[250px] xl:w-[290px] shrink-0 bg-stone-50 border-t lg:border-t-0 lg:border-l border-stone-200 p-3">{side}</div>}
     </div>
   </div>);
 }

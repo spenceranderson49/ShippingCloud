@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v141";
+const BUILD_TAG="addr-v142";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -6429,8 +6429,8 @@ function AddressCard({title,data,set,required,residential,setResidential,address
   const pick=(a)=>{const cf=contactFallback||{};set({...data,name:a.name||"",company:a.company||"",address1:a.address1||"",address2:a.address2||"",city:a.city||"",state:a.state||"",zip:a.zip||"",country:a.country||data.country||"United States",phone:a.phone||cf.phone||"",email:a.email||cf.email||""});setQ("");setOpen(false);onPick&&onPick(a);};
   // cell() is a plain render helper (NOT a component) so inputs never remount → focus is kept while typing
   const cell=(label,k,span,req)=>(
-    <div key={k} className={`px-2 py-1.5 ${errorFields.includes(k)?"bg-rose-50 ring-1 ring-rose-300":(req&&!data[k]?"bg-[#FAF3EF]":"bg-white")} ${span||""} ${k==="address1"?"relative":""}`}>
-      <div className={`text-[9px] uppercase tracking-wide ${errorFields.includes(k)?"text-rose-600 font-semibold":(req&&!data[k]?"text-[#C2410C]":"text-stone-400")} flex items-center gap-1`}>{label}{errorFields.includes(k)?" • required":""}{k==="address1"&&acBusy&&<Loader2 className="w-2.5 h-2.5 animate-spin text-stone-400"/>}</div>
+    <div key={k} className={`px-2 py-1.5 ${errorFields.includes(k)?"bg-rose-50 ring-1 ring-rose-300":(req&&!data[k]?"bg-[#E6F4FF]":"bg-white")} ${span||""} ${k==="address1"?"relative":""}`}>
+      <div className={`text-[9px] uppercase tracking-wide ${errorFields.includes(k)?"text-rose-600 font-semibold":(req&&!data[k]?"text-[#0086E0]":"text-stone-400")} flex items-center gap-1`}>{label}{errorFields.includes(k)?" • required":""}{k==="address1"&&acBusy&&<Loader2 className="w-2.5 h-2.5 animate-spin text-stone-400"/>}</div>
       {k==="country"
         ? <select value={data.country||"United States"} onChange={e=>f("country",e.target.value)} className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
         : <input value={data[k]||""} onChange={e=>f(k,e.target.value)} onPaste={onSmartPaste} onFocus={k==="address1"?()=>{acFocusRef.current=true;if(acSug.length)setAcOpen(true);}:undefined} onBlur={k==="address1"?()=>setTimeout(()=>{acFocusRef.current=false;setAcOpen(false);},150):undefined} autoComplete="off" className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5 placeholder-stone-300"/>}
@@ -6469,7 +6469,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
     </div>
   </div>);
 }
-function PkgInput({label,w,req,...p}){const ww=w||"w-14";const on=req&&!String(p.value??"").trim();return <div className={ww}><div className={`text-[10px] uppercase tracking-widest text-center ${on?"text-[#C2410C]":"text-stone-500"}`}>{label}</div><input placeholder="0" {...p} type="number" className={`w-full border rounded px-2 py-1 text-sm font-mono text-stone-900 outline-none focus:border-[#0099FF] placeholder-stone-300 text-center ${on?"bg-[#FAF3EF] border-[#D97757]/40":"bg-white border-stone-300"}`}/></div>;}
+function PkgInput({label,w,req,...p}){const ww=w||"w-14";const on=req&&!String(p.value??"").trim();return <div className={ww}><div className={`text-[10px] uppercase tracking-widest text-center ${on?"text-[#0086E0]":"text-stone-500"}`}>{label}</div><input placeholder="0" {...p} type="number" className={`w-full border rounded px-2 py-1 text-sm font-mono text-stone-900 outline-none focus:border-[#0099FF] placeholder-stone-300 text-center ${on?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}/></div>;}
 function Panel({title,children}){return <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3"><div className="text-[11px] uppercase tracking-widest text-stone-400">{title}</div>{children}</div>;}
 function Field({label,children}){return <label className="block space-y-1"><span className="text-[11px] text-stone-500">{label}</span>{children}</label>;}
 function Input({className="",...p}){return <input {...p} className={`w-full bg-white border border-stone-200 rounded px-2.5 py-2 text-sm font-mono text-stone-900 focus:border-[#0099FF] outline-none ${className}`}/>;}

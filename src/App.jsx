@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v158";
+const BUILD_TAG="addr-v159";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -606,12 +606,13 @@ function printCommercialInvoice(o,catalog,sender){
   <h1>COMMERCIAL INVOICE</h1>
   <div class="grid"><div class="col"><div class="lbl">Exporter / shipper</div><div>${esc(sn.company||sn.name||"")}</div><div>${esc(sn.address1||"")}</div><div>${esc([sn.city,sn.state,sn.zip].filter(Boolean).join(", "))}, US</div></div>
   <div class="col"><div class="lbl">Consignee</div><div>${esc(o.customer||"")}</div>${o.company?`<div>${esc(o.company)}</div>`:""}<div>${esc(o.address1||"")}</div><div>${esc([o.city,o.state,o.zip].filter(Boolean).join(", "))}, ${esc(o.country||"")}</div></div>
-  <div class="col"><div class="lbl">Details</div><div>Order ${esc(o.name||"")}</div><div>Date ${new Date().toLocaleDateString()}</div><div>Reason: Sale of goods</div><div>Currency: USD</div></div></div>
+  <div class="col"><div class="lbl">Details</div><div>Invoice # ${esc(o.name||"")}</div><div>Date ${new Date().toLocaleDateString()}</div><div>Reason for export: Sale of goods</div><div>Incoterms: DAP — duties &amp; taxes payable by recipient</div><div>Currency: USD</div><div>Country of destination: ${esc(o.country||"")}</div></div></div>
+  <div class="grid" style="margin-top:6px"><div class="col"><div class="lbl">Shipper contact / Tax ID</div><div>${esc(sn.phone||"")}</div><div>Tax ID / EIN: ______________</div></div><div class="col"><div class="lbl">Consignee contact</div><div>${esc(o.phone||"")}</div><div>${esc(o.email||"")}</div></div><div class="col"><div class="lbl">Shipment</div><div>Packages: 1+</div><div>Gross weight: ${esc(String(o.weight||""))} lb</div></div></div>
   <table><thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Unit value</th><th class="r">Total</th><th>HS code</th><th>Origin</th></tr></thead>
   <tbody>${rows.map(r=>`<tr><td>${esc(r.name)}</td><td class="r">${r.qty}</td><td class="r">$${r.unit.toFixed(2)}</td><td class="r">$${(r.unit*r.qty).toFixed(2)}</td><td>${esc(r.hs)||"—"}</td><td>${esc(r.origin)}</td></tr>`).join("")}</tbody></table>
   <div class="tot">Declared value: $${total.toFixed(2)} USD</div>
   ${rows.some(r=>!r.hs)?`<div style="margin-top:10px;font-size:11px;color:#b45309;">⚠ Some items are missing HS codes — add them in Settings → Product catalog to avoid customs delays.</div>`:""}
-  <div class="sig"><div class="line">Signature of exporter</div><div class="line">Date</div></div>
+  <div style="margin-top:14px;font-size:10.5px;color:#78716c;">I declare that the above information is true and correct to the best of my knowledge.</div>\n  <div class="sig"><div class="line">Signature of exporter — ${esc(sn.name||sn.company||"")}</div><div class="line">Date</div></div>
   <script>window.onload=()=>window.print();</`+`script></body></html>`;
   const w=window.open("","_blank");if(!w)return;w.document.write(html);w.document.close();
 }
@@ -739,11 +740,12 @@ const CUSTOM_DEFAULTS={
   slipThanks:"",slipFooter:"",
   density:"comfortable",stuckDays:0,
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
-  logoScale:100,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],
+  logoScale:100,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],theme:"light",accent:"",
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
 const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
 const SLIP_OPTS={thanks:"",footer:""};   // synced from settings by AppInner; read by packingSlipHTML
+const shadeHex=(hex,amt)=>{try{const h=hex.replace("#","");const f=parseInt(h.length===3?h.split("").map(c=>c+c).join(""):h,16);const cl=(v)=>Math.max(0,Math.min(255,Math.round(v)));const r=cl(((f>>16)&255)*(1+amt)),g=cl(((f>>8)&255)*(1+amt)),b=cl((f&255)*(1+amt));return "#"+((r<<16)|(g<<8)|b).toString(16).padStart(6,"0");}catch(e){return hex;}};
 
 /* ════════ INTERNATIONAL ════════ */
 const COUNTRIES=["United States","Canada","Mexico","United Kingdom","Germany","France","Australia","Japan","South Korea","Brazil","Netherlands","Spain"];
@@ -2165,6 +2167,11 @@ function AppInner(){
   const custom=cz(settings);
   useEffect(()=>{ try{document.documentElement.style.fontSize=(custom.fontScale&&custom.fontScale!==100)?(custom.fontScale/100*16)+"px":"";}catch(e){} },[custom.fontScale]);
   useEffect(()=>{ SLIP_OPTS.thanks=custom.slipThanks||""; SLIP_OPTS.footer=custom.slipFooter||""; },[custom.slipThanks,custom.slipFooter]);
+  useEffect(()=>{ try{ const el=document.documentElement;
+    el.classList.toggle("dark",custom.theme==="dark");
+    if(custom.accent){ el.setAttribute("data-accent","1"); el.style.setProperty("--acc",custom.accent); el.style.setProperty("--accD",shadeHex(custom.accent,-0.14)); el.style.setProperty("--accL",shadeHex(custom.accent,0.18)); }
+    else { el.removeAttribute("data-accent"); el.style.removeProperty("--acc"); }
+  }catch(e){} },[custom.theme,custom.accent]);
   useEffect(()=>{ const st=custom.startTab; if(st&&st!=="ship"&&ALL_TABS.some(x=>x[0]===st))setTab(st); },[]);   // land on the user's chosen start page
   const [hkHelp,setHkHelp]=useState(false);
   useEffect(()=>{ if(custom.hotkeys===false)return;
@@ -2825,12 +2832,15 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
 
         <div className="bg-stone-100 border border-stone-200 rounded-lg p-3 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
+            <datalist id="sc-ref-list">{[...((settings.fieldLists||{}).department||[]),...((settings.fieldLists||{}).reference||[])].map(v=><option key={v} value={v}/>)}</datalist>
+            <datalist id="sc-inv-list">{(((settings.fieldLists||{}).invoice)||[]).map(v=><option key={v} value={v}/>)}</datalist>
+            <datalist id="sc-po-list">{(((settings.fieldLists||{}).po)||[]).map(v=><option key={v} value={v}/>)}</datalist>
             <div className="flex flex-wrap items-center gap-3">
               <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">Packages · {pieces.length}</div>
               <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Ship date</span><input type="date" value={shipDate} onChange={e=>setShipDate(e.target.value)} className="text-sm font-mono text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-[#0099FF]"/></div>
-              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Ref #</span><input value={reference} onChange={e=>setReference(e.target.value)} placeholder="order / ref" className="w-44 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
-              {!custom.hideInvoice&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Invoice #</span><input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} placeholder="INV-…" className="w-36 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>}
-              {!custom.hidePO&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">PO #</span><input value={poNo} onChange={e=>setPoNo(e.target.value)} placeholder="PO-…" className="w-36 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>}
+              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Ref #</span><input value={reference} onChange={e=>setReference(e.target.value)} list="sc-ref-list" placeholder="order / ref" className="w-44 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
+              {!custom.hideInvoice&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Invoice #</span><input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} list="sc-inv-list" placeholder="INV-…" className="w-36 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>}
+              {!custom.hidePO&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">PO #</span><input value={poNo} onChange={e=>setPoNo(e.target.value)} list="sc-po-list" placeholder="PO-…" className="w-36 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>}
             </div>
             <div className="flex flex-wrap items-center gap-4">
               <span className="text-[11px] text-stone-400 font-mono">total {totalWeight} lb</span>
@@ -4617,7 +4627,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
 /* ════════ SETTINGS ════════ */
 function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,audit=[]}){
   const [sec,setSec]=useState("carriers");
-  const secs=[["customize","Customizations",Sliders],["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["catalog","Product catalog",Boxes],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["reference","Reference fields",Receipt],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["ledger","Ledger",Wallet],["integrations","Integrations",Layers],["subscription","Subscription",Star],["company","Company",Building2]];
+  const secs=[["customize","Customizations",Sliders],["fields","Departments & fields",ClipboardList],["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["catalog","Product catalog",Boxes],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["reference","Reference fields",Receipt],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["ledger","Ledger",Wallet],["integrations","Integrations",Layers],["subscription","Subscription",Star],["company","Company",Building2]];
   return (
     <div className="flex flex-col md:flex-row gap-6">
       <aside className="md:w-56 shrink-0 space-y-1">{secs.map(([id,l,Icon])=><button key={id} onClick={()=>setSec(id)} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}</button>)}</aside>
@@ -4634,6 +4644,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="reports"&&<Reports shipments={shipments}/>}
         {sec==="notifications"&&<Notifications settings={settings} setSettings={setSettings} emails={emails}/>}
         {sec==="customize"&&<Customize settings={settings} setSettings={setSettings}/>}
+        {sec==="fields"&&<FieldLists settings={settings} setSettings={setSettings}/>}
         {sec==="clients"&&<Clients clients={clients} setClients={setClients}/>}
         {sec==="billing"&&<Billing settings={settings} setSettings={setSettings}/>}
         {sec==="ledger"&&<Ledger ledger={ledger} addLedger={addLedger}/>}
@@ -5839,6 +5850,33 @@ function Billing({settings,setSettings}){
     </Panel>
   </div>);
 }
+function FieldLists({settings,setSettings}){
+  const fl={department:[],reference:[],invoice:[],po:[],...(settings.fieldLists||{})};
+  const setList=(k,arr)=>setSettings(p=>({...p,fieldLists:{...(p.fieldLists||{}),[k]:arr}}));
+  const Ed=({k,title,hint,ph})=>{
+    const [v,setV]=React.useState("");
+    const add=()=>{const t=v.trim();if(!t)return;if(!fl[k].includes(t))setList(k,[...fl[k],t]);setV("");};
+    return (<Panel title={title}>
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {fl[k].length===0&&<span className="text-[11px] text-stone-300">Nothing here yet.</span>}
+        {fl[k].map(x=>(<span key={x} className="inline-flex items-center gap-1 bg-stone-100 border border-stone-200 text-stone-700 rounded-full pl-2.5 pr-1.5 py-1 text-xs font-medium">{x}
+          <button onClick={()=>setList(k,fl[k].filter(y=>y!==x))} className="text-stone-300 hover:text-rose-500 leading-none px-0.5">×</button></span>))}
+      </div>
+      <div className="flex gap-2">
+        <input value={v} onChange={e=>setV(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")add();}} placeholder={ph} className="flex-1 bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+        <button onClick={add} className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200">Add</button>
+      </div>
+      {hint&&<div className="text-[11px] text-stone-400 mt-1.5">{hint}</div>}
+    </Panel>);
+  };
+  return (<div className="max-w-2xl space-y-4">
+    <div className="text-sm text-stone-500">Build pick-lists for the Ship screen. Once a list has values, the matching field becomes a type-ahead: start typing on the Ship tab and your saved values appear to click, or open the dropdown arrow to pick one. Free typing still works.</div>
+    <Ed k="department" title="Departments" ph="e.g. Warehouse, Sales, Returns…" hint="Departments appear in the Ref # suggestions — a common way to tag who a shipment belongs to."/>
+    <Ed k="reference" title="Reference values" ph="e.g. WHOLESALE, SAMPLE, RUSH…" hint="Shown in the Ref # field suggestions along with departments."/>
+    <Ed k="invoice" title="Invoice # values" ph="e.g. INV-2026-…"/>
+    <Ed k="po" title="PO # values" ph="e.g. PO-GILLETTE-…"/>
+  </div>);
+}
 function Customize({settings,setSettings}){
   const c=cz(settings);
   const set=(k,v)=>setSettings(p=>({...p,custom:{...cz(p),[k]:v}}));
@@ -5950,7 +5988,7 @@ function Customize({settings,setSettings}){
         {settings.companyLogo&&<button onClick={()=>setSettings(p=>({...p,companyLogo:""}))} className="text-[11px] text-stone-400 hover:text-rose-600">Remove</button>}
       </div>
       <label className="block text-sm text-stone-700 mt-1">Logo size <span className="text-[11px] text-stone-400">· {c.logoScale||100}%</span>
-        <input type="range" min="50" max="150" step="5" value={c.logoScale||100} onChange={e=>set("logoScale",+e.target.value)} className="mt-1 w-full accent-[#0086E0]"/>
+        <input type="range" min="50" max="250" step="5" value={c.logoScale||100} onChange={e=>set("logoScale",+e.target.value)} className="mt-1 w-full accent-[#0086E0]"/>
       </label>
       <div className="text-[11px] text-stone-400">Shows in the header next to the brand — the live preview above is exactly the size it will render.</div>
     </Panel>
@@ -5958,7 +5996,20 @@ function Customize({settings,setSettings}){
     <Panel title="Appearance & navigation">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         <Sel k="fontScale" label="Text size" opts={[[94,"Small"],[100,"Normal"],[107,"Large"]]}/>
+        <Sel k="theme" label="Theme" opts={[["light","Light"],["dark","Dark"]]}/>
         <Sel k="startTab" label="Start page after login" opts={tabChoices.map(x=>[x[0],x[1]])}/>
+      </div>
+      <div className="border-t border-stone-100 mt-3 pt-3">
+        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Accent color</div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {[["","#0086E0"],["#7C3AED","#7C3AED"],["#059669","#059669"],["#DC2626","#DC2626"],["#EA580C","#EA580C"],["#0F766E","#0F766E"],["#DB2777","#DB2777"]].map(([v,hex])=>(
+            <button key={hex+v} onClick={()=>set("accent",v)} title={v?v:"Default blue"} className={`w-7 h-7 rounded-full border-2 ${((c.accent||"")===v)?"border-stone-800 scale-110":"border-white shadow"}`} style={{background:hex}}/>
+          ))}
+          <label className="flex items-center gap-1.5 text-xs text-stone-500 ml-1 cursor-pointer">Custom
+            <input type="color" value={c.accent||"#0086E0"} onChange={e=>set("accent",e.target.value)} className="w-7 h-7 rounded border border-stone-200 bg-white p-0.5 cursor-pointer"/>
+          </label>
+        </div>
+        <div className="text-[11px] text-stone-400 mt-1.5">Recolors buttons, links, active tabs and highlights across the app. Dark mode is a first version — if any screen looks off in the dark, tell us.</div>
       </div>
       <div className="border-t border-stone-100 mt-3 pt-3 grid sm:grid-cols-2 gap-6">
         <div>
@@ -5980,7 +6031,7 @@ function Customize({settings,setSettings}){
     </Panel>
 
     <div className="border border-dashed border-stone-300 rounded-lg p-3 text-[12px] text-stone-400">
-      Coming soon: dark mode &amp; accent colors, custom email wording, manager approvals, branded tracking pages.
+      Coming soon: custom email wording, company-wide customization deployment, manager approvals, branded tracking pages.
     </div>
   </div>);
 }

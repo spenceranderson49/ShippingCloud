@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v161";
+const BUILD_TAG="addr-v165";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -742,15 +742,46 @@ const CUSTOM_DEFAULTS={
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
   logoScale:100,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],theme:"light",accent:"",
   refRequired:false,invRequired:false,poRequired:false,refLocked:false,invLocked:false,poLocked:false,
+  confetti:"page",seasonal:true,loginBg:"",appBg:"",headerBg:"",pageBg:"",navBg:"",
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
 const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
 const SLIP_OPTS={thanks:"",footer:""};   // synced from settings by AppInner; read by packingSlipHTML
 const CI_OPTS={taxId:""};                 // Tax ID / EIN printed on commercial invoices, from Settings → General
+const fireConfetti=()=>{try{window.dispatchEvent(new CustomEvent("sc-confetti"));}catch(e){}};
+const seasonalEmoji=()=>{const d=new Date(),m=d.getMonth(),dd=d.getDate();if(m===11&&dd<=27)return "🎅";if(m===9&&dd>=24)return "🎃";if(m===1&&dd>=10&&dd<=15)return "❤️";if(m===6&&dd<=5)return "🎆";if(m===2&&dd>=15&&dd<=18)return "🍀";if(m===10&&dd>=23&&dd<=29)return "🦃";return "";};
+function ConfettiHost({mode}){
+  const [bursts,setBursts]=useState([]);
+  useEffect(()=>{ if(mode==="off")return;
+    const ptr={x:(typeof window!=="undefined"?window.innerWidth/2:400),y:300};
+    const onDown=(e)=>{ptr.x=e.clientX;ptr.y=e.clientY;};
+    const COLORS=["#0086E0","#F59E0B","#10B981","#EF4444","#8B5CF6","#EC4899","#F97316"];
+    const onFire=()=>{ const id=Date.now()+Math.random();
+      const btn=mode==="button";
+      const parts=Array.from({length:btn?28:90},(_,i)=>({i,c:COLORS[i%COLORS.length],
+        x:btn?ptr.x:Math.random()*100, y:btn?ptr.y:-20,
+        dx:(Math.random()-0.5)*(btn?260:160)+"px", dy:btn?(Math.random()*260-90)+"px":"105vh",
+        dur:(btn?0.9+Math.random()*0.5:1.6+Math.random()*1.2).toFixed(2), del:(Math.random()*0.25).toFixed(2), r:Math.round(Math.random()*360)}));
+      setBursts(b=>[...b,{id,btn,parts}]);
+      setTimeout(()=>setBursts(b=>b.filter(x=>x.id!==id)),3200);
+    };
+    window.addEventListener("pointerdown",onDown,true);
+    window.addEventListener("sc-confetti",onFire);
+    return ()=>{window.removeEventListener("pointerdown",onDown,true);window.removeEventListener("sc-confetti",onFire);};
+  },[mode]);
+  if(mode==="off"||!bursts.length)return null;
+  return (<div className="fixed inset-0 pointer-events-none z-[120] overflow-hidden">
+    {bursts.map(b=>b.parts.map(pt=>(<span key={b.id+"-"+pt.i} className={b.btn?"sc-conf sc-conf-pop":"sc-conf sc-conf-fall"}
+      style={{left:b.btn?pt.x+"px":pt.x+"%",top:b.btn?pt.y+"px":pt.y+"px",background:pt.c,
+        "--dx":pt.dx,"--dy":pt.dy,animationDuration:pt.dur+"s",animationDelay:pt.del+"s",transform:`rotate(${pt.r}deg)`}}/>)))}
+  </div>);
+}
+const hslToHex=(h,sat,l)=>{sat/=100;l/=100;const k=(nn)=>(nn+h/30)%12;const a=sat*Math.min(l,1-l);const f=(nn)=>l-a*Math.max(-1,Math.min(k(nn)-3,Math.min(9-k(nn),1)));const c=(v)=>Math.round(255*v).toString(16).padStart(2,"0");return "#"+c(f(0))+c(f(8))+c(f(4));};
+const hexToHsl=(hex)=>{try{const hh=hex.replace("#","");const f=parseInt(hh.length===3?hh.split("").map(x=>x+x).join(""):hh,16);const r=((f>>16)&255)/255,g=((f>>8)&255)/255,b=(f&255)/255;const mx=Math.max(r,g,b),mn=Math.min(r,g,b);let h=0;const l=(mx+mn)/2;const d=mx-mn;const sat=d===0?0:d/(1-Math.abs(2*l-1));if(d!==0){if(mx===r)h=60*(((g-b)/d)%6);else if(mx===g)h=60*((b-r)/d+2);else h=60*((r-g)/d+4);}if(h<0)h+=360;return [Math.round(h),Math.round(sat*100),Math.round(l*100)];}catch(e){return [203,100,44];}};
 const shadeHex=(hex,amt)=>{try{const h=hex.replace("#","");const f=parseInt(h.length===3?h.split("").map(c=>c+c).join(""):h,16);const cl=(v)=>Math.max(0,Math.min(255,Math.round(v)));const r=cl(((f>>16)&255)*(1+amt)),g=cl(((f>>8)&255)*(1+amt)),b=cl((f&255)*(1+amt));return "#"+((r<<16)|(g<<8)|b).toString(16).padStart(6,"0");}catch(e){return hex;}};
 
 /* ════════ INTERNATIONAL ════════ */
-const COUNTRIES=["United States","Canada","Mexico","United Kingdom","Germany","France","Australia","Japan","South Korea","Brazil","Netherlands","Spain"];
+const COUNTRIES=["United States","Afghanistan","Albania","Algeria","American Samoa","Andorra","Angola","Anguilla","Antigua and Barbuda","Argentina","Armenia","Aruba","Australia","Austria","Azerbaijan","Bahamas","Bahrain","Bangladesh","Barbados","Belarus","Belgium","Belize","Benin","Bermuda","Bhutan","Bolivia","Bonaire","Bosnia and Herzegovina","Botswana","Brazil","British Virgin Islands","Brunei","Bulgaria","Burkina Faso","Burundi","Cambodia","Cameroon","Canada","Cape Verde","Cayman Islands","Chad","Chile","China","Colombia","Congo","Congo (DRC)","Cook Islands","Costa Rica","Croatia","Curacao","Cyprus","Czech Republic","Denmark","Djibouti","Dominica","Dominican Republic","Ecuador","Egypt","El Salvador","Equatorial Guinea","Eritrea","Estonia","Eswatini","Ethiopia","Faroe Islands","Fiji","Finland","France","French Guiana","French Polynesia","Gabon","Gambia","Georgia","Germany","Ghana","Gibraltar","Greece","Greenland","Grenada","Guadeloupe","Guam","Guatemala","Guinea","Guinea-Bissau","Guyana","Haiti","Honduras","Hong Kong","Hungary","Iceland","India","Indonesia","Iraq","Ireland","Israel","Italy","Ivory Coast","Jamaica","Japan","Jordan","Kazakhstan","Kenya","Kiribati","Kosovo","Kuwait","Kyrgyzstan","Laos","Latvia","Lebanon","Lesotho","Liberia","Libya","Liechtenstein","Lithuania","Luxembourg","Macau","Madagascar","Malawi","Malaysia","Maldives","Mali","Malta","Marshall Islands","Martinique","Mauritania","Mauritius","Mexico","Micronesia","Moldova","Monaco","Mongolia","Montenegro","Montserrat","Morocco","Mozambique","Namibia","Nepal","Netherlands","New Caledonia","New Zealand","Nicaragua","Niger","Nigeria","North Macedonia","Norway","Oman","Pakistan","Palau","Panama","Papua New Guinea","Paraguay","Peru","Philippines","Poland","Portugal","Puerto Rico","Qatar","Reunion","Romania","Rwanda","Saint Kitts and Nevis","Saint Lucia","Saint Vincent and the Grenadines","Saipan","Samoa","San Marino","Saudi Arabia","Senegal","Serbia","Seychelles","Sierra Leone","Singapore","Sint Maarten","Slovakia","Slovenia","Solomon Islands","South Africa","South Korea","South Sudan","Spain","Sri Lanka","Suriname","Sweden","Switzerland","Taiwan","Tajikistan","Tanzania","Thailand","Timor-Leste","Togo","Tonga","Trinidad and Tobago","Tunisia","Turkey","Turkmenistan","Turks and Caicos Islands","Uganda","Ukraine","United Arab Emirates","United Kingdom","Uruguay","US Virgin Islands","Uzbekistan","Vanuatu","Vatican City","Venezuela","Vietnam","Yemen","Zambia","Zimbabwe"];   // FedEx-served destinations (embargoed markets excluded)
 const INCOTERMS=["DAP — Delivered at Place","DDP — Delivered Duty Paid","EXW — Ex Works","FCA — Free Carrier","CPT — Carriage Paid To"];
 const EXPORT_REASONS=["Sale","Gift","Sample","Return","Repair","Personal use"];
 const HTS_SUGGEST=[
@@ -785,7 +816,7 @@ function Login({users,onLogin,brand}){
     setMode("signin");
   };
   return (
-    <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4" style={{fontFamily:"ui-sans-serif,system-ui,sans-serif"}}>
+    <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4" style={{fontFamily:"ui-sans-serif,system-ui,sans-serif",...(lsGet("loginBg","")?{backgroundImage:`url(${lsGet("loginBg","")})`,backgroundSize:"cover",backgroundPosition:"center"}:{})}}>
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center gap-2 mb-6">
           <div className="flex items-center gap-2">
@@ -1687,7 +1718,7 @@ function Landing({onAuth}){
     <div className="font-semibold text-white mb-1.5">{title}</div>
     <div className="text-sm text-stone-400 leading-relaxed">{children}</div>
   </div>);
-  if(BRAND.fw) return (<div className="min-h-screen relative overflow-hidden flex flex-col items-center justify-center px-5 py-10" style={{background:"#faf8f4"}}>
+  if(BRAND.fw) return (<div className="min-h-screen relative overflow-hidden flex flex-col items-center justify-center px-5 py-10" style={{background:"#faf8f4",...(lsGet("loginBg","")?{backgroundImage:`url(${lsGet("loginBg","")})`,backgroundSize:"cover",backgroundPosition:"center"}:{})}}>
     <style>{`@keyframes fwRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}@keyframes fwDrift{0%,100%{transform:translate(-50%,0)}50%{transform:translate(calc(-50% + 18px),-12px)}}`}</style>
     <div className="absolute inset-0 pointer-events-none" style={{background:"repeating-linear-gradient(-35deg,transparent 0 70px,rgba(30,155,240,.05) 70px 72px)"}}/>
     <div className="absolute pointer-events-none" style={{width:640,height:640,borderRadius:"50%",top:-180,left:"50%",background:"radial-gradient(circle,rgba(30,155,240,.14),transparent 65%)",animation:"fwDrift 12s ease-in-out infinite"}}/>
@@ -2176,6 +2207,7 @@ function AppInner(){
   const custom=cz(settings);
   useEffect(()=>{ try{document.documentElement.style.fontSize=(custom.fontScale&&custom.fontScale!==100)?(custom.fontScale/100*16)+"px":"";}catch(e){} },[custom.fontScale]);
   useEffect(()=>{ SLIP_OPTS.thanks=custom.slipThanks||""; SLIP_OPTS.footer=custom.slipFooter||""; CI_OPTS.taxId=settings.taxId||""; },[custom.slipThanks,custom.slipFooter,settings.taxId]);
+  useEffect(()=>{ try{ if(custom.loginBg)lsSet("loginBg",custom.loginBg); }catch(e){} },[custom.loginBg]);
   useEffect(()=>{ try{ const el=document.documentElement;
     el.classList.toggle("dark",custom.theme==="dark");
     el.classList.toggle("grey",custom.theme==="grey");
@@ -2433,19 +2465,21 @@ function AppInner(){
       </div>}
       {!isDemo&&!isAdmin&&!adminReturn&&CLOUD.mode==="cloud"&&!fedexPrompt.seen&&<FirstRunFedEx user={currentUser} onClose={()=>setFedexPrompt({seen:true})}/>}
       <AssistantChat who={isDemo?"demo":isAdmin?"admin":"customer"} getContext={assistantContext} onAction={onAssistantAction}/>
-      <header className={"border-b border-stone-200 sticky z-30 bg-white/90 backdrop-blur "+((adminReturn||isDemo)?"top-9":"top-0")}>
+      <ConfettiHost mode={custom.confetti||"page"}/>
+      <header style={custom.headerBg?{background:custom.headerBg}:undefined} className={"border-b border-stone-200 sticky z-30 bg-white/90 backdrop-blur "+((adminReturn||isDemo)?"top-9":"top-0")}>
         <div className="px-3 sm:px-4 h-14 flex items-center gap-2 sm:gap-3 relative">
           <button onClick={()=>setNavOpen(true)} className="md:hidden p-2 -ml-1 rounded-lg hover:bg-stone-100 text-stone-600" aria-label="Menu"><Layers className="w-5 h-5"/></button>
           {!BRAND.fw&&<BrandCloud className="h-10 sm:h-11 w-auto" color={custom.accent||brand.primary}/>}
           {BRAND.fw?(<>
             <button onClick={()=>setTab("ship")} title="Back to Ship" className="flex items-center gap-2.5 cursor-pointer select-none shrink-0">
-              <img src={FW_LOGO} alt="Freightwire" className="h-8 w-9 object-cover object-left sm:w-auto sm:object-contain" draggable={false}/>
+              <img src={FW_LOGO} alt="Freightwire" style={custom.accent?{filter:`hue-rotate(${hexToHsl(custom.accent)[0]-205}deg) saturate(${Math.max(0.6,hexToHsl(custom.accent)[1]/95)})`}:undefined} className={`h-8 w-9 object-cover object-left sm:w-auto sm:object-contain ${(custom.theme==="dark"||custom.theme==="grey")?"bg-white rounded-md px-1 py-0.5 box-content":""}`} draggable={false}/>
               <span className="w-px h-6 bg-stone-300 hidden sm:block"/>
-              <span className="hidden sm:inline text-[19px] leading-none text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></span>
+              <span className="hidden sm:inline text-[19px] leading-none text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:custom.accent||"#1E9BF0"}}>Ship</span></span>
             </button>
           </>):(
           <button onClick={()=>setTab("ship")} title="Back to Ship" className="font-extrabold tracking-tight text-[20px] sm:text-[26px] cursor-pointer flex items-center gap-2" style={{color:(custom.theme==="dark"||custom.theme==="grey")?"#F5F5F4":brand.dark}}><span>{brand.name1}<span style={{color:custom.accent||brand.primary}}>{brand.name2}</span></span></button>)}
-          {(()=>{const cl=(myFlags&&myFlags._logoB64)||settings.companyLogo||"";return cl?<span className="flex items-center gap-2.5 sm:gap-3 min-w-0 self-center"><span className="w-px h-6 bg-stone-200 shrink-0 hidden sm:block"/><img src={cl} alt={settings.company||"Company logo"} style={{height:Math.round(28*((custom.logoScale||100)/100))+"px"}} className="w-auto max-w-[110px] sm:max-w-[200px] object-contain block" draggable={false}/></span>:null;})()}
+          {custom.seasonal!==false&&seasonalEmoji()&&<span className="text-base select-none shrink-0 -ml-0.5" title="Seasonal touch — turn off in Customizations">{seasonalEmoji()}</span>}
+          {(()=>{const cl=(myFlags&&myFlags._logoB64)||settings.companyLogo||"";return cl?<span className="flex items-center gap-2.5 sm:gap-3 min-w-0 self-center"><span className="w-px h-6 bg-stone-200 shrink-0 hidden sm:block"/><img src={cl} alt={settings.company||"Company logo"} style={{height:Math.round(28*((custom.logoScale||100)/100))+"px"}} className={`w-auto max-w-[110px] sm:max-w-[200px] object-contain block ${(custom.theme==="dark"||custom.theme==="grey")?"bg-white rounded-md px-1.5 py-0.5 box-content":""}`} draggable={false}/></span>:null;})()}
           {brand.showLogo&&brand.logo&&<span className="hidden sm:flex items-center gap-1.5 text-stone-400 text-xs"><span className="w-px h-5 bg-stone-200"/>{brand.partnerLabel}<img src={brand.logo} alt="partner" className="h-3 w-auto object-contain"/></span>}
           <div className="flex-1"/>
           <div className="flex items-center gap-2 sm:gap-3">
@@ -2459,7 +2493,7 @@ function AppInner(){
       {appLabel&&<LabelPreviewModal data={appLabel} onClose={()=>setAppLabel(null)}/>}
       {navOpen&&<div className="md:hidden fixed inset-0 z-40 flex" role="dialog">
         <div className="absolute inset-0 bg-stone-900/40" onClick={()=>setNavOpen(false)}/>
-        <aside className="relative w-64 bg-white h-full shadow-xl overflow-y-auto">
+        <aside style={custom.navBg?{background:custom.navBg}:undefined} className="relative w-64 bg-white h-full shadow-xl overflow-y-auto">
           <div className="flex items-center justify-between px-4 h-14 border-b border-stone-200"><button onClick={()=>{setTab("ship");setNavOpen(false);}} title="Back to Ship" className="font-extrabold tracking-tight flex items-center gap-2" style={{color:brand.dark}}>{BRAND.fw?<><img src={FW_LOGO} alt="Freightwire" className="h-6 w-7 object-cover object-left" draggable={false}/><span className="w-px h-5 bg-stone-300"/><span className="text-[15px] leading-none text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></span></>:<span>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></span>}</button><button onClick={()=>setNavOpen(false)} className="p-1.5 rounded hover:bg-stone-100"><X className="w-5 h-5 text-stone-500"/></button></div>
           <nav className="p-2 space-y-0.5">
             {TABS.map(([id,l,Icon])=>(
@@ -2476,7 +2510,7 @@ function AppInner(){
         </aside>
       </div>}
       <div className="flex">
-        <aside className="hidden md:block w-52 shrink-0 border-r border-stone-200 bg-white min-h-screen">
+        <aside style={custom.navBg?{background:custom.navBg}:undefined} className="hidden md:block w-52 shrink-0 border-r border-stone-200 bg-white min-h-screen">
           <nav className="p-2 space-y-0.5 sticky top-14">
             {TABS.map(([id,l,Icon])=>(
               <React.Fragment key={id}>
@@ -2490,7 +2524,7 @@ function AppInner(){
             <div className="px-3 pt-3 text-[9px] text-stone-300 select-none">{BUILD_TAG}</div>
           </nav>
         </aside>
-        <main className="flex-1 min-w-0 overflow-x-clip px-3 sm:px-6 py-4 sm:py-6">
+        <main className="flex-1 min-w-0 overflow-x-clip px-3 sm:px-6 py-4 sm:py-6" style={(custom.appBg||custom.pageBg)?{...(custom.pageBg?{backgroundColor:custom.pageBg}:{}),...(custom.appBg?{backgroundImage:`url(${custom.appBg})`,backgroundSize:"cover",backgroundPosition:"center",backgroundAttachment:"fixed"}:{})}:undefined}>
           {tab==="dashboard"&&<Dashboard shipments={shipments} orders={orders} returns={returns} goTab={setTab}/>}
           {tab==="ship"&&<Ship client={client} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={rules} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders}/>}
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
@@ -2707,7 +2741,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(custom.spendCap>0&&(q.sell??q.cost)>custom.spendCap){setShipStatus({state:"error",key:q.key,msg:`This rate is over your $${custom.spendCap} spending cap (Settings → Customizations).`});setTimeout(()=>setShipStatus(null),5000);return;}
     if(!canBook){
       onShipped(buildRec(q,carrier),selectedOrder);
-      setBought(q.key);setTimeout(()=>setBought(null),1800);
+      setBought(q.key);fireConfetti();setTimeout(()=>setBought(null),1800);
       return;
     }
     setBought(q.key);setShipStatus({state:"booking",key:q.key});
@@ -2722,7 +2756,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       pieces:pieces.map(p=>({weight:pw(p),length:p.L,width:p.W,height:p.H,declaredValue:intl?(p.value||null):null}))};
     const res=await shipCall({action:"ship",account:acctOf(eng),order});
     if(!res||!res.ok){setShipStatus({state:"error",key:q.key,msg:(res&&res.error)||"Booking failed"});setBought(null);return;}
-    const done=(st)=>{ onShipped(buildRec(q,carrier,st),selectedOrder); if(st.labelPdfBase64){setLabelPreview({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier});} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
+    const done=(st)=>{ onShipped(buildRec(q,carrier,st),selectedOrder); if(st.labelPdfBase64){setLabelPreview({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier});} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); fireConfetti(); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
     if(res.booked){done(res);return;}
     setShipStatus({state:"pending",key:q.key,orderId:res.orderId});
     pollLabel(eng,res.orderId,done).then(r=>{ if(r&&r.timedOut){ onPending&&onPending({orderId:res.orderId,rec:buildRec(q,carrier,{}),service:q.label,carrier,orderRef:selectedOrder}); setShipStatus({state:"pending_timeout",key:q.key});setBought(null);} });
@@ -3335,7 +3369,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
     const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:qq.label,recipient:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings?.sender||{})},fromZip,toZip:o.zip,weight:+weight,pieces:[{weight:+weight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference:o.name,bookNumber:res.bookNumber};
     onShipped(rec,o.id);
     if(res.labelPdfBase64) setLabelPreview({pdf:res.labelPdfBase64,tracking:res.tracking,service:qq.label,carrier});
-    setStatus({state:"booked",msg:"Label created — saved to Shipments."});
+    setStatus({state:"booked",msg:"Label created — saved to Shipments."});fireConfetti();
   };
   const Info=({k,v})=>(<div className="min-w-0"><div className="text-[10px] uppercase tracking-widest text-stone-400">{k}</div><div className="text-sm text-stone-800 truncate">{v||"—"}</div></div>);
   return (
@@ -3492,7 +3526,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
     const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,...baseRec,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,bookNumber:res.bookNumber};
     onShipped(rec,o.id);
     if(res.labelPdfBase64) setLabelPreview({pdf:res.labelPdfBase64,tracking:res.tracking,service:qq.label,carrier});
-    setStatus({state:"booked",msg:"Label created — saved to Shipments."});
+    setStatus({state:"booked",msg:"Label created — saved to Shipments."});fireConfetti();
   };
   const items=(o.lineItems&&o.lineItems.length)?o.lineItems:String(o.items||"").split(",").map(s=>s.trim()).filter(Boolean).map((s,i)=>{const m=s.match(/^(\d+)\s*[×x]\s*(.+)$/);return {id:"i"+i,title:m?m[2]:s,quantity:m?+m[1]:1,price:"",sku:""};});
   const m2=(v)=>(v!==""&&v!=null&&!isNaN(+v))?`$${(+v).toFixed(2)}`:"—";
@@ -6091,6 +6125,8 @@ function Customize({settings,setSettings,deployMode}){
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         <Sel k="fontScale" label="Text size" opts={[[94,"Small"],[100,"Normal"],[107,"Large"]]}/>
         <Sel k="theme" label="Theme" opts={[["light","Light"],["grey","Grey"],["dark","Dark"]]}/>
+        <Sel k="confetti" label="Booking confetti 🎉" opts={[["page","Everywhere — full-page drop"],["button","Just around the button"],["off","Off"]]}/>
+        <Tog k="seasonal" label="Seasonal touches" hint="A little 🎅 🎃 ❤️ on the logo around the holidays"/>
         <Sel k="startTab" label="Start page after login" opts={tabChoices.map(x=>[x[0],x[1]])}/>
       </div>
       <div className="border-t border-stone-100 mt-3 pt-3">
@@ -6099,10 +6135,62 @@ function Customize({settings,setSettings,deployMode}){
           {[["","#0086E0"],["#7C3AED","#7C3AED"],["#059669","#059669"],["#DC2626","#DC2626"],["#EA580C","#EA580C"],["#0F766E","#0F766E"],["#DB2777","#DB2777"]].map(([v,hex])=>(
             <button key={hex+v} onClick={()=>set("accent",v)} title={v?v:"Default blue"} className={`w-7 h-7 rounded-full border-2 ${((c.accent||"")===v)?"border-stone-800 scale-110":"border-white shadow"}`} style={{background:hex}}/>
           ))}
-          <label className="flex items-center gap-1.5 text-xs text-stone-500 ml-1 cursor-pointer">Custom
+          <label className="flex items-center gap-1.5 text-xs text-stone-500 ml-1 cursor-pointer">Eyedropper
             <input type="color" value={c.accent||"#0086E0"} onChange={e=>set("accent",e.target.value)} className="w-7 h-7 rounded border border-stone-200 bg-white p-0.5 cursor-pointer"/>
           </label>
         </div>
+        {(()=>{const [hh,ss,ll]=hexToHsl(c.accent||"#0086E0");return (
+        <div className="mt-3 space-y-2 max-w-sm">
+          <div className="flex items-center gap-3">
+            <input type="range" min="0" max="360" value={hh} onChange={e=>set("accent",hslToHex(+e.target.value,Math.max(ss,40),Math.min(Math.max(ll,25),65)))}
+              className="flex-1 h-3 rounded-full appearance-none cursor-pointer accent-picker-hue" style={{background:"linear-gradient(to right,#f00,#ff8000,#ff0,#0f0,#0ff,#00f,#f0f,#f00)"}}/>
+            <span className="w-7 h-7 rounded-full border-2 border-white shadow shrink-0" style={{background:c.accent||"#0086E0"}}/>
+          </div>
+          <div className="flex items-center gap-3">
+            <input type="range" min="20" max="70" value={Math.min(Math.max(ll,20),70)} onChange={e=>set("accent",hslToHex(hh,Math.max(ss,40),+e.target.value))}
+              className="flex-1 h-3 rounded-full appearance-none cursor-pointer" style={{background:`linear-gradient(to right,${hslToHex(hh,Math.max(ss,40),20)},${hslToHex(hh,Math.max(ss,40),45)},${hslToHex(hh,Math.max(ss,40),70)})`}}/>
+            <span className="text-[10px] uppercase tracking-widest text-stone-400 w-7 text-center">lt</span>
+          </div>
+          <div className="text-[11px] text-stone-400">Drag the rainbow for the hue, the second bar for light/dark — or use a preset above.</div>
+        </div>);})()}
+      <div className="border-t border-stone-100 mt-3 pt-3">
+        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Surface colors</div>
+        <div className="grid sm:grid-cols-3 gap-3">
+          {[["headerBg","Header fill"],["navBg","Left tabs"],["pageBg","Page background"]].map(([k,l])=>(
+            <div key={k} className="flex items-center justify-between gap-2 text-sm text-stone-700 border border-stone-200 rounded-lg px-2.5 py-2">
+              <span>{l}</span>
+              <span className="flex items-center gap-1.5">
+                <input type="color" value={c[k]||"#ffffff"} onChange={e=>set(k,e.target.value)} className="w-7 h-7 rounded border border-stone-200 bg-white p-0.5 cursor-pointer"/>
+                {c[k]&&<button onClick={()=>set(k,"")} title="Back to default" className="text-stone-300 hover:text-rose-500 leading-none">×</button>}
+              </span>
+            </div>))}
+        </div>
+        <div className="text-[11px] text-stone-400 mt-1.5">Tip: pick light shades in light theme (dark text stays dark). × resets a surface to the theme default.</div>
+      </div>
+      {!deployMode&&<div className="border-t border-stone-100 mt-3 pt-3 grid sm:grid-cols-2 gap-4">
+        {[["appBg","App background","Shows behind your pages — panels stay solid on top."],["loginBg","Login background","Shows on this device's sign-in screen after your next sign-out."]].map(([k,l,hint])=>(
+          <div key={k}>
+            <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">{l}</div>
+            <div className="flex items-center gap-3">
+              {c[k]?<img src={c[k]} alt={l} className="h-12 w-20 object-cover rounded-lg border border-stone-200"/>:<span className="text-[11px] text-stone-300 border border-dashed border-stone-300 rounded-lg px-3 py-3">None</span>}
+              <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload
+                <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={e=>{
+                  const f=e.target.files&&e.target.files[0]; if(!f)return;
+                  const rd=new FileReader();
+                  rd.onload=()=>{ const img=new Image(); img.onload=()=>{ try{
+                    const maxW=1600,sc=Math.min(1,maxW/img.width);
+                    const cv=document.createElement("canvas"); cv.width=Math.round(img.width*sc); cv.height=Math.round(img.height*sc);
+                    cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);
+                    set(k,cv.toDataURL("image/jpeg",0.72));
+                  }catch(_){ set(k,String(rd.result)); } }; img.src=String(rd.result); };
+                  rd.readAsDataURL(f); e.target.value="";
+                }}/>
+              </label>
+              {c[k]&&<button onClick={()=>{set(k,"");if(k==="loginBg")try{lsSet("loginBg","");}catch(e){}}} className="text-[11px] text-stone-400 hover:text-rose-600">Remove</button>}
+            </div>
+            <div className="text-[11px] text-stone-400 mt-1">{hint}</div>
+          </div>))}
+      </div>}
         <div className="text-[11px] text-stone-400 mt-1.5">Recolors buttons, links, active tabs and highlights across the app. Dark mode is a first version — if any screen looks off in the dark, tell us.</div>
       </div>
       <div className="border-t border-stone-100 mt-3 pt-3 grid sm:grid-cols-2 gap-6">

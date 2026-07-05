@@ -2472,7 +2472,7 @@ function AppInner(){
           {!BRAND.fw&&<BrandCloud className="h-10 sm:h-11 w-auto" color={custom.accent||brand.primary}/>}
           {BRAND.fw?(<>
             <button onClick={()=>setTab("ship")} title="Back to Ship" className="flex items-center gap-2.5 cursor-pointer select-none shrink-0">
-              <img src={FW_LOGO} alt="Freightwire" style={custom.accent?{filter:`hue-rotate(${hexToHsl(custom.accent)[0]-205}deg) saturate(${Math.max(0.6,hexToHsl(custom.accent)[1]/95)})`}:undefined} className={`h-8 w-9 object-cover object-left sm:w-auto sm:object-contain ${(custom.theme==="dark"||custom.theme==="grey")?"bg-white rounded-md px-1 py-0.5 box-content":""}`} draggable={false}/>
+              <img src={FW_LOGO} alt="Freightwire" style={custom.accent?{filter:`hue-rotate(${hexToHsl(custom.accent)[0]-205}deg) saturate(${Math.max(0.6,hexToHsl(custom.accent)[1]/95)})`}:undefined} className={`h-8 w-9 object-cover object-left sm:w-auto sm:object-contain ${(custom.theme==="dark"||custom.theme==="grey")?"bg-[#FFFFFF] rounded-md px-1.5 py-1 box-content shadow-sm":""}`} draggable={false}/>
               <span className="w-px h-6 bg-stone-300 hidden sm:block"/>
               <span className="hidden sm:inline text-[19px] leading-none text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:custom.accent||"#1E9BF0"}}>Ship</span></span>
             </button>

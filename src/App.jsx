@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v138";
+const BUILD_TAG="addr-v135";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -48,41 +48,6 @@ const BRAND=(()=>{ let k="shippingcloud"; try{ k=(import.meta.env&&import.meta.e
   return k==="freightwire"
     ?{key:"freightwire",fw:true,name:"Freightwire Ship",short:"Freightwire",accent:"#1e3a5f",accent2:"#2d5a8e"}
     :{key:"shippingcloud",fw:false,name:"ShippingCloud",short:"ShippingCloud",accent:"#0086E0",accent2:"#0072BE"}; })();
-/* v137: on the Freightwire build, the browser tab shows the FW "F" mark (auto-cropped out of FW_LOGO
-   by scanning for the transparent gap before the wordmark) instead of the ShippingCloud cloud, plus
-   the FreightwireShip tab title. Crop bounds verified against the shipped asset: mark = 78x78 at x5,y2. */
-if(typeof window!=="undefined"&&BRAND.fw){
-  try{ document.title="FreightwireShip"; }catch(e){}
-  try{
-    const setIcon=(href)=>{ try{
-      document.querySelectorAll('link[rel*="icon"]').forEach(l=>l.parentNode&&l.parentNode.removeChild(l));
-      const l=document.createElement("link"); l.rel="icon"; l.type="image/png"; l.href=href; document.head.appendChild(l);
-    }catch(e){} };
-    const img=new window.Image();
-    img.onload=function(){ try{
-      const W=img.width,H=img.height;
-      const c=document.createElement("canvas"); c.width=W; c.height=H;
-      const x=c.getContext("2d"); x.drawImage(img,0,0);
-      const d=x.getImageData(0,0,W,H).data;
-      const colHas=[];
-      for(let px=0;px<W;px++){ let has=false; for(let py=0;py<H;py++){ if(d[(py*W+px)*4+3]>16){has=true;break;} } colHas.push(has); }
-      let start=colHas.indexOf(true); if(start<0){ setIcon(FW_LOGO); return; }
-      const gap=Math.max(4,Math.round(W*0.02));
-      let end=W,run=0;
-      for(let i2=start;i2<W;i2++){ if(!colHas[i2]){ run++; if(run>=gap){ end=i2-run+1; break; } } else run=0; }
-      let top=-1,bot=-1;
-      for(let py=0;py<H;py++){ let has=false; for(let px=start;px<end;px++){ if(d[(py*W+px)*4+3]>16){has=true;break;} } if(has){ if(top<0)top=py; bot=py; } }
-      if(top<0){ setIcon(FW_LOGO); return; }
-      const w=end-start,h=bot-top+1;
-      const out=document.createElement("canvas"); out.width=64; out.height=64;
-      const ox=out.getContext("2d");
-      const pad=3,box=64-pad*2,sc=Math.min(box/w,box/h);
-      ox.drawImage(c,start,top,w,h,(64-w*sc)/2,(64-h*sc)/2,w*sc,h*sc);
-      setIcon(out.toDataURL("image/png"));
-    }catch(e){ setIcon(FW_LOGO); } };
-    img.src=FW_LOGO;
-  }catch(e){}
-}
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
@@ -1068,7 +1033,7 @@ function CustomizationsAdmin({users,clients,featureFlags={},setFeatureFlags,cust
       <div className="grid sm:grid-cols-3 gap-3">
         <Field label="Name"><Input value={draft.label} onChange={e=>setDraft({...draft,label:e.target.value})} placeholder="e.g. Weekly cost report"/></Field>
         <Field label="What it does"><Input value={draft.desc} onChange={e=>setDraft({...draft,desc:e.target.value})} placeholder="Short description"/></Field>
-        <Field label="Built for (optional)"><Input value={draft.clientNote} onChange={e=>setDraft({...draft,clientNote:e.target.value})} placeholder="e.g. Acme Outfitters"/></Field>
+        <Field label="Built for (optional)"><Input value={draft.clientNote} onChange={e=>setDraft({...draft,clientNote:e.target.value})} placeholder="e.g. Riley Blake"/></Field>
       </div>
       <div className="flex items-center gap-2">
         <button onClick={addCustom} disabled={!(draft.label||"").trim()} className="text-sm bg-[#0086E0] text-white rounded px-4 py-2 font-medium disabled:opacity-40">Add to registry</button>
@@ -1330,17 +1295,6 @@ function enterDemo(){
     lsSet("session",DEMO_USER);
     window.location.reload();
   }catch(e){}
-}
-/* v135: the old seed shipped with a hardcoded sender (Matt Goeckeritz / Riley Blake Designs).
-   Accounts that persisted it still carry it — scrub it from every read and write. */
-function scrubLegacyDefaults(s){
-  if(!s)return s;
-  let next=s,changed=false;
-  const sn=s.sender||{};
-  if(sn.name==="Matt Goeckeritz"||sn.company==="Riley Blake Designs"){ next={...next,sender:{name:"",company:"",address1:"",city:"",state:"",zip:"",phone:"",email:""}}; changed=true; }
-  const wh=(next.warehouses||[]).filter(w=>!(w&&(w.company==="Riley Blake Designs"||(w.address==="4060 W 2100 N"&&w.zip==="84003"))));
-  if(wh.length!==(next.warehouses||[]).length){ next={...next,warehouses:wh}; changed=true; }
-  return changed?next:s;
 }
 function usePersist(key,initial){
   const nsKey=GLOBAL_KEYS[key]?key:("u/"+activeUid()+"/"+key);
@@ -1605,7 +1559,6 @@ function Landing({onAuth}){
     <div className="relative w-full flex justify-center py-4" style={{animation:"fwRise .6s .14s ease both",transform:"scale(1.2)",transformOrigin:"top center"}}>
       <CloudAuth onDone={()=>window.location.reload()} initialMode="login"/>
     </div>
-    <button onClick={enterDemo} className="relative mt-4 text-[13px] text-stone-500 hover:text-stone-700 underline underline-offset-4 decoration-stone-300" style={{animation:"fwRise .6s .18s ease both"}}>Just looking? Take a peek →</button>
     <div className="relative mt-16 w-full max-w-3xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" style={{animation:"fwRise .6s .22s ease both",transform:"scale(0.85)",transformOrigin:"top center"}}>
       {[[Zap,"Autopilot & batch","Rules + one-click batch printing"],[Boxes,"Smart box logic","Packs every order automatically"],[ShoppingBag,"Cart sync","Shopify & other shopping carts"],[Receipt,"Invoice auditing","Catches overcharges & mistakes"],[Sparkles,"Powered by Claude","An AI assistant does the busywork"],[Cog,"Made yours","Customizable to how you ship"],[FileText,"All the paperwork","Slips, pick lists, commercial invoices"],[DollarSign,"Best rates","Industry-best shipping rates"]].map(([Ic,h,sub],i)=>
         <div key={i} className="rounded-xl border p-3.5 flex flex-col gap-2.5 transition-all hover:-translate-y-0.5" style={{background:"rgba(255,255,255,.75)",borderColor:"#ece8e1"}}>
@@ -2069,9 +2022,7 @@ function AppInner(){
   const [qq,setQQ]=useState(false);
   const [navOpen,setNavOpen]=useState(false);
   const [prefill,setPrefill]=useState(null);
-  const [settingsRaw,setSettingsRaw]=usePersist("settings",{company:"Freightwire",sender:{name:"",company:"",zip:"",state:"",city:"",address1:"",phone:"",email:""},defaultBillTo:"sender",thirdPartyAccts:[{id:"tp1",carrier:"FedEx",account:"20601652",label:"England FedEx"}],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,products:SEED_PRODUCTS,checkout:CHECKOUT_DEFAULTS,platforms:PLATFORM_DEFAULTS,plan:"starter",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:"20601652"},addresses:[],warehouses:[],autoRunRules:false,brand:DEFAULT_BRAND,domains:[],companyLogo:""});
-  const settings=useMemo(()=>scrubLegacyDefaults(settingsRaw),[settingsRaw]);
-  const setSettings=(v)=>setSettingsRaw(p=>scrubLegacyDefaults(typeof v==="function"?v(scrubLegacyDefaults(p)):v));
+  const [settings,setSettings]=usePersist("settings",{company:"Freightwire",sender:{name:"Matt Goeckeritz",company:"Riley Blake Designs",zip:"84003",state:"UT",city:"Lehi",address1:"4060 W 2100 N",phone:"801-816-0540",email:"spencertesttes@test.com"},defaultBillTo:"sender",thirdPartyAccts:[{id:"tp1",carrier:"FedEx",account:"20601652",label:"England FedEx"}],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,products:SEED_PRODUCTS,checkout:CHECKOUT_DEFAULTS,platforms:PLATFORM_DEFAULTS,plan:"starter",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:"20601652"},addresses:[],warehouses:[{name:"Main Warehouse",company:"Riley Blake Designs",address:"4060 W 2100 N",city:"Lehi",state:"UT",zip:"84003",phone:"801-816-0540"}],autoRunRules:false,brand:DEFAULT_BRAND,domains:[]});
 
   useEffect(()=>{ if(currentUser&&currentUser.role==="customer"&&currentUser.clientId) setClientId(currentUser.clientId); },[currentUser]);
   // Auto-run rules on newly imported/synced orders (any import path) when the toggle is on.
@@ -2082,7 +2033,7 @@ function AppInner(){
     const done=s=>{ s=String(s||"").toLowerCase(); return s==="fulfilled"||s==="shipped"||s==="cancelled"||s==="canceled"; };
     const candidates=(orders||[]).filter(o=>!o._ruled&&!done(o.status));
     if(!candidates.length) return;
-    const originZip=(settings.sender&&settings.sender.zip)||"";
+    const originZip=(settings.sender&&settings.sender.zip)||"84003";
     const patches=rulePatchesFor(runRuleEngine(ruleset||[],candidates,originZip));
     const ids=new Set(candidates.map(o=>o.id));
     setOrders(os=>os.map(o=>ids.has(o.id)?{...o,...(patches[o.id]||{}),_ruled:true}:o));
@@ -2306,17 +2257,8 @@ function AppInner(){
         <div className="px-3 sm:px-4 h-14 flex items-center gap-2 sm:gap-3 relative">
           <button onClick={()=>setNavOpen(true)} className="md:hidden p-2 -ml-1 rounded-lg hover:bg-stone-100 text-stone-600" aria-label="Menu"><Layers className="w-5 h-5"/></button>
           {!BRAND.fw&&<BrandCloud className="h-10 sm:h-11 w-auto" color={brand.primary}/>}
-          {BRAND.fw?(<>
-            <button onClick={()=>setTab("ship")} title="Back to Ship" className="flex items-center gap-2.5 cursor-pointer select-none shrink-0">
-              <img src={FW_LOGO} alt="Freightwire" className="h-8 w-9 object-cover object-left sm:w-auto sm:object-contain" draggable={false}/>
-              <span className="w-px h-6 bg-stone-300 hidden sm:block"/>
-              <span className="hidden sm:inline text-[19px] leading-none text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></span>
-            </button>
-            {settings.companyLogo
-              ?<span className="flex items-center gap-2.5 sm:gap-3 mt-1.5 min-w-0"><span className="w-px h-6 bg-stone-200 shrink-0 hidden sm:block"/><img src={settings.companyLogo} alt={settings.company||"Company logo"} className="h-7 w-auto max-w-[110px] sm:max-w-[180px] object-contain" draggable={false}/></span>
-              :<span className="hidden md:flex items-center gap-2.5 mt-1.5"><span className="w-px h-6 bg-stone-200"/><button onClick={()=>setTab("settings")} title="Upload your company logo in Settings → Company" className="text-[11px] font-medium text-stone-300 border border-dashed border-stone-300 rounded px-2.5 py-1 hover:text-stone-400 hover:border-stone-400">Your logo here</button></span>}
-          </>):(
-          <button onClick={()=>setTab("ship")} title="Back to Ship" className="font-extrabold tracking-tight text-[20px] sm:text-[26px] cursor-pointer flex items-center gap-2" style={{color:brand.dark}}><>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></></button>)}
+          {BRAND.fw&&<div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2.5 pointer-events-none select-none"><img src={FW_LOGO} alt="Freightwire" className="h-8 w-auto" draggable={false}/><span className="hidden md:inline text-[19px] text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></span></div>}
+          <button onClick={()=>setTab("ship")} title="Back to Ship" className="font-extrabold tracking-tight text-[20px] sm:text-[26px] cursor-pointer flex items-center gap-2" style={{color:brand.dark}}>{BRAND.fw?(settings.brand&&settings.brand.name1?<>{settings.brand.name1}<span style={{color:(settings.brand.primary)||brand.primary}}>{settings.brand.name2||""}</span></>:<span className="text-[12px] font-medium text-stone-300 border border-dashed border-stone-300 rounded px-2.5 py-1">Your logo here</span>):<span>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></span>}</button>
           {brand.showLogo&&brand.logo&&<span className="hidden sm:flex items-center gap-1.5 text-stone-400 text-xs"><span className="w-px h-5 bg-stone-200"/>{brand.partnerLabel}<img src={brand.logo} alt="partner" className="h-3 w-auto object-contain"/></span>}
           <div className="flex-1"/>
           <div className="flex items-center gap-2 sm:gap-3">
@@ -2326,12 +2268,12 @@ function AppInner(){
           </div>
         </div>
       </header>
-      {qq&&<QuickQuote onClose={()=>setQQ(false)} client={client} england={englandFor(client,settings)} senderZip={settings?.sender?.zip||""}/>}
+      {qq&&<QuickQuote onClose={()=>setQQ(false)} client={client} england={englandFor(client,settings)}/>}
       {appLabel&&<LabelPreviewModal data={appLabel} onClose={()=>setAppLabel(null)}/>}
       {navOpen&&<div className="md:hidden fixed inset-0 z-40 flex" role="dialog">
         <div className="absolute inset-0 bg-stone-900/40" onClick={()=>setNavOpen(false)}/>
         <aside className="relative w-64 bg-white h-full shadow-xl overflow-y-auto">
-          <div className="flex items-center justify-between px-4 h-14 border-b border-stone-200"><button onClick={()=>{setTab("ship");setNavOpen(false);}} title="Back to Ship" className="font-extrabold tracking-tight flex items-center gap-2" style={{color:brand.dark}}>{BRAND.fw?<><img src={FW_LOGO} alt="Freightwire" className="h-6 w-7 object-cover object-left" draggable={false}/><span className="w-px h-5 bg-stone-300"/><span className="text-[15px] leading-none text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></span></>:<>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></>}</button><button onClick={()=>setNavOpen(false)} className="p-1.5 rounded hover:bg-stone-100"><X className="w-5 h-5 text-stone-500"/></button></div>
+          <div className="flex items-center justify-between px-4 h-14 border-b border-stone-200"><button onClick={()=>{setTab("ship");setNavOpen(false);}} title="Back to Ship" className="font-extrabold tracking-tight flex items-center gap-2" style={{color:brand.dark}}>{BRAND.fw?<><img src={FW_LOGO} alt="Freightwire" className="h-6 w-auto" draggable={false}/></>:<span>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></span>}</button><button onClick={()=>setNavOpen(false)} className="p-1.5 rounded hover:bg-stone-100"><X className="w-5 h-5 text-stone-500"/></button></div>
           <nav className="p-2 space-y-0.5">
             {TABS.map(([id,l,Icon])=>(
               <React.Fragment key={id}>
@@ -2456,7 +2398,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     let cancel=false;
     setVerify({loading:true});
     const t=setTimeout(async()=>{
-      const fromZip=sender.zip||client.origin||(settings.sender&&settings.sender.zip)||"";
+      const fromZip=sender.zip||client.origin||(settings.sender&&settings.sender.zip)||"84003";
       const res=await fedexValidateAddress(receiver, fromZip);
       try{console.log("[verify] fromZip="+fromZip+" classification="+(res&&res.classification)+" deliverable="+(res&&res.deliverable)+" err="+(res&&res.error||"")+" debug="+JSON.stringify(res&&res.debug||{}));}catch(e){}
       if(cancel)return;
@@ -2667,7 +2609,6 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-1/2 top-11 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-4 h-4"/></button>
           <AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} contactFallback={{phone:sender.phone,email:sender.email}} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }}/>
         </div>
-        {!(sender.name||sender.company||sender.address1||sender.zip)&&<div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No sender on file — fill in the Sender card above, or set your default sender in Settings → Company.</div>}
         {billTo==="third"&&thirdAcct&&<div className="flex flex-wrap items-center gap-2 text-xs -mt-1">
           <span className="flex items-center gap-1.5 text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-1.5"><CreditCard className="w-3.5 h-3.5"/>Auto-billing to third-party account <b className="font-mono">{thirdAcct}</b><button onClick={()=>{setBillTo("sender");setThirdAcct("");}} className="ml-1 text-[#0086E0] hover:text-[#006FBF] underline">bill sender instead</button></span>
         </div>}
@@ -2820,7 +2761,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
 
 function CommercialInvoice({sender,receiver,customs,total,reference,pieces,totalWeight}){
   return (
-    <div className="overflow-x-auto"><div className="bg-white border border-stone-300 rounded-lg p-5 text-[12px] text-stone-700 min-w-[520px]" style={{fontFamily:"ui-sans-serif,system-ui"}}>
+    <div className="bg-white border border-stone-300 rounded-lg p-5 text-[12px] text-stone-700" style={{fontFamily:"ui-sans-serif,system-ui"}}>
       <div className="flex items-start justify-between border-b border-stone-300 pb-3 mb-3">
         <div><div className="text-lg font-bold tracking-tight text-stone-900">COMMERCIAL INVOICE</div><div className="text-stone-400">ShippingCloud · for customs clearance</div></div>
         <div className="text-right"><div>Invoice # <span className="font-mono">{customs.ci||"CI-PREVIEW"}</span></div><div>Date {new Date().toLocaleDateString()}</div><div>Ref {reference||"—"}</div></div>
@@ -2842,7 +2783,7 @@ function CommercialInvoice({sender,receiver,customs,total,reference,pieces,total
       <div className="flex justify-between text-[11px] text-stone-500 mt-2"><span>{pieces.length} package(s) · {totalWeight} lb total</span><span>Currency: USD</span></div>
       <div className="mt-4 pt-3 border-t border-stone-200 text-[11px] text-stone-500">I declare the information on this invoice to be true and correct to the best of my knowledge.</div>
       <div className="mt-6 flex justify-between text-[11px]"><div className="border-t border-stone-400 w-48 pt-1 text-stone-400">Signature</div><div className="border-t border-stone-400 w-32 pt-1 text-stone-400">Date</div></div>
-    </div></div>
+    </div>
   );
 }
 
@@ -3128,7 +3069,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
   const box=boxIdx>=0?boxes[boxIdx]:{L:12,W:9,H:4};
   const eng=englandFor(client,settings);
   const canBook=eng&&eng.enabled&&eng.apiKey&&eng.customerId;
-  const fromZip=settings?.sender?.zip||client?.origin||"";
+  const fromZip=settings?.sender?.zip||client?.origin||"84003";
   const ready=/^\d{5}/.test(o.zip||"")&&(+weight>0);
   const orBox=oneRate?oneRateBoxFor(box.L,box.W,box.H,+weight||0):null;
   // live England rates (fall back to demo quoteRates when England isn't connected)
@@ -3242,7 +3183,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
   const boxes=settings?.boxes||SEED_BOXES;
   const eng=englandFor(client,settings);
   const canBook=eng&&eng.enabled&&eng.apiKey&&eng.customerId;
-  const fromZip=settings?.sender?.zip||client?.origin||"";
+  const fromZip=settings?.sender?.zip||client?.origin||"84003";
   const box={L:+dims.L||12,W:+dims.W||9,H:+dims.H||4};
   const totalWeight=Math.round(((+weight||0)+(+oz||0)/16)*100)/100;
   const ready=/^\d{5}/.test(rcv.zip||"")&&totalWeight>0;
@@ -3411,7 +3352,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
                   {shipped?(
                     <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2"><CheckCircle2 className="w-4 h-4"/>Shipped{o.tracking?<> · <span className="font-mono">{o.tracking}</span></>:""}</div>
                   ):(<>
-                    <div>{lbl("Ship from")}{(settings?.sender?.zip||settings?.sender?.company||settings?.sender?.name)?<div className="text-[13px] text-stone-600">{settings?.sender?.company||settings?.sender?.name||"Your address"} · {settings?.sender?.city} {settings?.sender?.state} {settings?.sender?.zip}</div>:<div className="text-[13px] text-amber-700">No sender set — set your default sender in Settings → Company.</div>}</div>
+                    <div>{lbl("Ship from")}<div className="text-[13px] text-stone-600">{settings?.sender?.company||settings?.sender?.name||"Your address"} · {settings?.sender?.city} {settings?.sender?.state} {settings?.sender?.zip}</div></div>
                     <div className="grid grid-cols-3 gap-2">
                       <div>{lbl("Reference")}<input value={reference} onChange={e=>setReference(e.target.value)} placeholder="order / ref" className={inC+" w-full"}/></div>
                       <div>{lbl("PO #")}<input value={poNo} onChange={e=>setPoNo(e.target.value)} placeholder="PO-…" className={inC+" w-full"}/></div>
@@ -3569,8 +3510,8 @@ function Pickups({pickups,setPickups,settings}){
 }
 
 /* ════════ QUICK QUOTE ════════ */
-function QuickQuote({onClose,client,england,senderZip}){
-  const [fromZip,setFromZip]=useState(senderZip||client?.origin||"");
+function QuickQuote({onClose,client,england}){
+  const [fromZip,setFromZip]=useState(client?.origin||"84003");
   const [toZip,setToZip]=useState("90210");
   const [residential,setResidential]=useState(true);
   const [pieces,setPieces]=useState([{weight:3,L:12,W:9,H:4,oz:""}]);
@@ -4111,7 +4052,6 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         <label className="flex items-center gap-1.5 text-sm bg-stone-200 text-stone-700 rounded px-2.5 py-1.5 font-medium hover:bg-stone-300 cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
       </div>
       {msg&&<div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{msg}</div>}
-      {!originZip&&<div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No ship-from ZIP — set your default sender in Settings → Company so batch rates and zone rules use the right origin.</div>}
 
       {/* command bar */}
       <div className="border border-stone-200 rounded-lg bg-white p-3 space-y-3">
@@ -4343,7 +4283,7 @@ function Reports({shipments}){
   );
 }
 function Stat2({label,v,tone}){return <div className="border border-stone-200 rounded-xl bg-white p-4"><div className="text-[11px] uppercase tracking-widest text-stone-400">{label}</div><div className={`text-xl font-bold mt-1 ${tone||"text-stone-900"}`}>{v}</div></div>;}
-function ReportTable({title,head,rows}){return (<div className="border border-stone-200 rounded-lg bg-white overflow-hidden"><div className="px-4 py-2.5 text-sm font-semibold text-stone-700 border-b border-stone-100">{title}</div><div className="overflow-x-auto"><table className="w-full text-sm min-w-[480px]"><thead><tr className="text-[11px] uppercase tracking-widest text-stone-400">{head.map(h=><th key={h} className="text-left font-normal px-4 py-2">{h}</th>)}</tr></thead><tbody>{rows.length===0?<tr><td colSpan={head.length} className="px-4 py-4 text-stone-400">No data.</td></tr>:rows.map((r,i)=><tr key={i} className="border-t border-stone-50">{r.map((c,j)=><td key={j} className="px-4 py-2 font-mono text-stone-700">{c}</td>)}</tr>)}</tbody></table></div></div>);}
+function ReportTable({title,head,rows}){return (<div className="border border-stone-200 rounded-lg bg-white overflow-hidden"><div className="px-4 py-2.5 text-sm font-semibold text-stone-700 border-b border-stone-100">{title}</div><table className="w-full text-sm"><thead><tr className="text-[11px] uppercase tracking-widest text-stone-400">{head.map(h=><th key={h} className="text-left font-normal px-4 py-2">{h}</th>)}</tr></thead><tbody>{rows.length===0?<tr><td colSpan={head.length} className="px-4 py-4 text-stone-400">No data.</td></tr>:rows.map((r,i)=><tr key={i} className="border-t border-stone-50">{r.map((c,j)=><td key={j} className="px-4 py-2 font-mono text-stone-700">{c}</td>)}</tr>)}</tbody></table></div>);}
 
 
 /* ════════ CHECKOUT RATES (Shopify) ════════ */
@@ -5244,7 +5184,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
   const [apProg,setApProg]=useState(null);
   const [apResults,setApResults]=useState(null);
   const ords=orders||[];
-  const originZip=(settings&&settings.sender&&settings.sender.zip)||"";
+  const originZip=(settings&&settings.sender&&settings.sender.zip)||"84003";
   const warehouses=(settings&&settings.warehouses)||[];
   const autoRun=!!(settings&&settings.autoRunRules);
   const run=useMemo(()=>runRuleEngine(rules||[],ords,originZip),[rules,ords,originZip]);
@@ -5694,33 +5634,8 @@ function Billing({settings,setSettings}){
 }
 function Company({settings,setSettings}){
   const sn=settings.sender; const set=(k,v)=>setSettings({...settings,sender:{...sn,[k]:v}});
-  const uploadLogo=(e)=>{const f=e.target.files&&e.target.files[0]; if(!f)return; e.target.value="";
-    const done=(b64)=>setSettings(s=>({...s,companyLogo:b64}));
-    const rd=new FileReader();
-    rd.onload=()=>{const url=String(rd.result||"");
-      if(/^data:image\/svg/.test(url)&&url.length<120000){done(url);return;}
-      const img=new Image();
-      img.onload=()=>{try{
-        const scale=Math.min(1,360/img.width,120/img.height);
-        const w=Math.max(1,Math.round(img.width*scale)),h=Math.max(1,Math.round(img.height*scale));
-        const c=document.createElement("canvas");c.width=w;c.height=h;
-        c.getContext("2d").drawImage(img,0,0,w,h);
-        let out=c.toDataURL("image/png");
-        if(out.length>160000){const c2=document.createElement("canvas");const s2=Math.min(1,240/w);c2.width=Math.max(1,Math.round(w*s2));c2.height=Math.max(1,Math.round(h*s2));c2.getContext("2d").drawImage(img,0,0,c2.width,c2.height);out=c2.toDataURL("image/png");}
-        done(out);
-      }catch(err){}};
-      img.src=url;};
-    rd.readAsDataURL(f);};
   return (<div className="max-w-xl space-y-4">
     <Panel title="Company"><Field label="Company name"><Input value={settings.company} onChange={e=>setSettings({...settings,company:e.target.value})}/></Field></Panel>
-    {BRAND.fw&&<Panel title="Company logo">
-      <p className="text-xs text-stone-500 mb-2">Shows in the header, next to the FreightwireShip brand. PNG, JPG, or SVG — resized automatically.</p>
-      <div className="flex items-center gap-3 flex-wrap">
-        {settings.companyLogo?<img src={settings.companyLogo} alt="Company logo" className="h-9 w-auto max-w-[200px] object-contain border border-stone-200 rounded bg-white px-2 py-1"/>:<span className="text-[11px] text-stone-300 border border-dashed border-stone-300 rounded px-2.5 py-1.5">No logo yet</span>}
-        <label className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded px-3 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload logo<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={uploadLogo} className="hidden"/></label>
-        {settings.companyLogo&&<button onClick={()=>setSettings(s=>({...s,companyLogo:""}))} className="text-sm text-stone-400 hover:text-rose-600">Remove</button>}
-      </div>
-    </Panel>}
     <Panel title="Default sender (ship-from)">
       <div className="grid grid-cols-2 gap-2">
         <Field label="Name"><Input value={sn.name} onChange={e=>set("name",e.target.value)}/></Field>
@@ -5769,7 +5684,7 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
   };
   const runTest=async()=>{
     setTest({loading:true});
-    const res=await getLiveRates({fromZip:settings.sender?.zip||"84101",toZip:"90210",residential:true,pieces:[{weight:3,L:12,W:9,H:4}]},{...eng,enabled:true});
+    const res=await getLiveRates({fromZip:settings.sender?.zip||"84003",toZip:"90210",residential:true,pieces:[{weight:3,L:12,W:9,H:4}]},{...eng,enabled:true});
     if(res&&res.live&&res.rates&&res.rates.length) setTest({ok:true,msg:`Connected — ${res.rates.length} live services returned (cheapest ${money(res.rates[0].cost)}).`});
     else setTest({ok:false,msg:(res&&res.error)||"No live rates returned.",detail:res&&(res.england_response||res.detail)});
   };
@@ -5995,7 +5910,7 @@ function ClientInvoices({invoices,setInvoices,shipments,client}){
   const open=invoices.filter(i=>i.status==="Open").reduce((a,i)=>a+i.amount,0);
   const exportCSV=()=>downloadCSV("shippingcloud-invoices.csv",[["Invoice","Client","Date","Labels","Amount","Status"],...invoices.map(i=>[i.number,i.client,i.date,i.labels,i.amount,i.status])]);
   return (<div className="max-w-3xl space-y-4">
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <div className="grid grid-cols-3 gap-3">
       <Stat2 label="Invoices" v={invoices.length}/>
       <Stat2 label="Open balance" v={money(open)} tone={open?"text-[#0086E0]":""}/>
       <Stat2 label="Billed all-time" v={money(invoices.reduce((a,i)=>a+i.amount,0))}/>
@@ -6467,7 +6382,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
       </div>
     )}
     <div className="grid grid-cols-6 gap-px bg-stone-200 border border-stone-200 rounded-lg overflow-hidden">
-      {cell("Country","country","col-span-6")}{cell("Name","name","col-span-6 sm:col-span-3",required)}{cell("Company","company","col-span-6 sm:col-span-3")}{cell("Address 1","address1","col-span-6",required)}{cell("Zip","zip","col-span-3 sm:col-span-2",required)}{cell("State","state","col-span-3 sm:col-span-2",required)}{cell("City","city","col-span-6 sm:col-span-2",required)}{cell("Address 2","address2","col-span-6 sm:col-span-3")}{cell("Address 3","address3","col-span-6 sm:col-span-3")}{cell("Phone","phone","col-span-6 sm:col-span-3",required)}{cell("Email","email","col-span-6 sm:col-span-3",required)}
+      {cell("Country","country","col-span-6")}{cell("Name","name","col-span-3",required)}{cell("Company","company","col-span-3")}{cell("Address 1","address1","col-span-6",required)}{cell("Zip","zip","col-span-2",required)}{cell("State","state","col-span-2",required)}{cell("City","city","col-span-2",required)}{cell("Address 2","address2","col-span-3")}{cell("Address 3","address3","col-span-3")}{cell("Phone","phone","col-span-3",required)}{cell("Email","email","col-span-3",required)}
     </div>
   </div>);
 }

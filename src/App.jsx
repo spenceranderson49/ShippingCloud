@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v145";
+const BUILD_TAG="addr-v146";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -2768,18 +2768,18 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           {receiver.address1&&/^\d{5}/.test(receiver.zip||"")&&<button onClick={()=>setVerifyNonce(n=>n+1)} className="flex items-center gap-1 text-stone-400 hover:text-[#0086E0] underline ml-1" title="Re-check this address with FedEx"><ShieldCheck className="w-3.5 h-3.5"/>Re-check</button>}
         </div>
 
-        <div className="bg-stone-100 border border-stone-200 rounded-lg p-4 space-y-2.5">
+        <div className="bg-stone-100 border border-stone-200 rounded-lg p-3 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
               <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">Packages · {pieces.length}</div>
               <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Ship date</span><input type="date" value={shipDate} onChange={e=>setShipDate(e.target.value)} className="text-sm font-mono text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-[#0099FF]"/></div>
-              <div className="flex items-center gap-1 flex-1 min-w-[160px] max-w-[360px]"><span className="text-[10px] uppercase tracking-widest text-stone-500">Ref #</span><input value={reference} onChange={e=>setReference(e.target.value)} placeholder="order / ref" className="w-full bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
-              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Invoice #</span><input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} placeholder="INV-…" className="w-32 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
-              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">PO #</span><input value={poNo} onChange={e=>setPoNo(e.target.value)} placeholder="PO-…" className="w-32 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
+              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Ref #</span><input value={reference} onChange={e=>setReference(e.target.value)} placeholder="order / ref" className="w-44 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
+              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Invoice #</span><input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} placeholder="INV-…" className="w-36 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
+              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">PO #</span><input value={poNo} onChange={e=>setPoNo(e.target.value)} placeholder="PO-…" className="w-36 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
             </div>
             <div className="flex flex-wrap items-center gap-4">
               <span className="text-[11px] text-stone-400 font-mono">total {totalWeight} lb</span>
-              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Insure $</span><input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0" className="w-20 bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
+              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Insure $</span><input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0" className="w-16 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
               <div className="flex items-center gap-1.5"><span className="text-[10px] uppercase tracking-widest text-stone-500">Signature</span><select value={sigOption} onChange={e=>{setSigOption(e.target.value);setSig(e.target.value!=="none");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="none">None</option><option value="direct">Direct signature</option><option value="indirect">Indirect signature</option><option value="adult">Adult signature</option></select></div>
               {quotes.some(q=>{const l=String(q.label||"").toLowerCase();return l.includes("fedex")&&/(overnight|2\s?day|express saver)/.test(l);})&&<label className="flex items-center gap-1.5 text-[11px] text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSat(e.target.checked)} className="accent-[#0086E0]"/><span className="uppercase tracking-widest text-stone-500">Saturday delivery <span className="normal-case text-stone-400">(Express only)</span></span></label>}
             </div>
@@ -2789,7 +2789,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           {(()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);return so&&orderHasHazmat(so,settings.products||[])?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Contains a hazmat / lithium-battery item — ship ground only; air services aren’t allowed.</div>:null;})()}
           {(()=>{const d=dupShipment(reference,shipments);return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}). Booking again creates a second charge.</div>:null;})()}
           {pieces.map((p,i)=>(
-            <div key={i} className="flex flex-wrap items-end gap-2.5 bg-white border border-stone-200 rounded-lg px-3 py-2.5">
+            <div key={i} className="flex flex-wrap items-end gap-2 bg-white border border-stone-200 rounded-lg px-2 py-2">
               <div className="text-[11px] text-stone-400 font-mono w-6">#{i+1}</div>
               <div><div className="text-[10px] uppercase tracking-widest text-stone-500">Box</div><select value={p.boxIdx??-1} onChange={e=>{const j=+e.target.value;const pr=(settings.boxes||SEED_BOXES)[j];if(pr)setPiece(i,{L:pr.L,W:pr.W,H:pr.H,boxIdx:j,orBox:""});else setPiece(i,{boxIdx:-1});}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]">{p.orBox?<option value="-1">{p.orBox}</option>:<option value="-1">Custom</option>}{(settings.boxes||SEED_BOXES).map((pr,j)=><option key={pr.id} value={j}>{pr.name}</option>)}</select></div>
               <PkgInput label="L" req value={p.L} onChange={e=>setPiece(i,{L:e.target.value})}/>
@@ -6476,11 +6476,11 @@ function AddressCard({title,data,set,required,residential,setResidential,address
   const pick=(a)=>{const cf=contactFallback||{};set({...data,name:a.name||"",company:a.company||"",address1:a.address1||"",address2:a.address2||"",city:a.city||"",state:a.state||"",zip:a.zip||"",country:a.country||data.country||"United States",phone:a.phone||cf.phone||"",email:a.email||cf.email||""});setQ("");setOpen(false);onPick&&onPick(a);};
   // cell() is a plain render helper (NOT a component) so inputs never remount → focus is kept while typing
   const cell=(label,k,span,req)=>(
-    <div key={k} className={`px-2.5 py-2 ${errorFields.includes(k)?"bg-rose-50 ring-1 ring-rose-300":(req&&!data[k]?"bg-[#E6F4FF]":"bg-white")} ${span||""} ${k==="address1"?"relative":""}`}>
+    <div key={k} className={`px-2 py-1.5 ${errorFields.includes(k)?"bg-rose-50 ring-1 ring-rose-300":(req&&!data[k]?"bg-[#E6F4FF]":"bg-white")} ${span||""} ${k==="address1"?"relative":""}`}>
       <div className={`text-[10px] uppercase tracking-wide ${errorFields.includes(k)?"text-rose-600 font-semibold":(req&&!data[k]?"text-[#0086E0]":"text-stone-400")} flex items-center gap-1`}>{label}{errorFields.includes(k)?" • required":""}{k==="address1"&&acBusy&&<Loader2 className="w-2.5 h-2.5 animate-spin text-stone-400"/>}</div>
       {k==="country"
-        ? <select value={data.country||"United States"} onChange={e=>f("country",e.target.value)} className="w-full bg-transparent text-sm text-stone-900 outline-none mt-0.5">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
-        : <input value={data[k]||""} onChange={e=>f(k,e.target.value)} onPaste={onSmartPaste} onFocus={k==="address1"?()=>{acFocusRef.current=true;if(acSug.length)setAcOpen(true);}:undefined} onBlur={k==="address1"?()=>setTimeout(()=>{acFocusRef.current=false;setAcOpen(false);},150):undefined} autoComplete="off" className="w-full bg-transparent text-sm text-stone-900 outline-none mt-0.5 placeholder-stone-300"/>}
+        ? <select value={data.country||"United States"} onChange={e=>f("country",e.target.value)} className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
+        : <input value={data[k]||""} onChange={e=>f(k,e.target.value)} onPaste={onSmartPaste} onFocus={k==="address1"?()=>{acFocusRef.current=true;if(acSug.length)setAcOpen(true);}:undefined} onBlur={k==="address1"?()=>setTimeout(()=>{acFocusRef.current=false;setAcOpen(false);},150):undefined} autoComplete="off" className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5 placeholder-stone-300"/>}
       {k==="address1"&&acOpen&&acSug.length>0&&<div className="absolute z-40 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-60 overflow-auto">
         <div className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50 border-b border-stone-100 flex items-center gap-1"><MapPin className="w-3 h-3"/>Google Maps suggestions</div>
         <div className="divide-y divide-stone-100">
@@ -6516,7 +6516,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
     </div>
   </div>);
 }
-function PkgInput({label,w,req,...p}){const ww=w||"w-20";const on=req&&!String(p.value??"").trim();return <div className={ww}><div className={`text-[10px] uppercase tracking-widest text-center ${on?"text-[#0086E0]":"text-stone-500"}`}>{label}</div><input placeholder="0" {...p} type="number" className={`w-full border rounded-lg px-2 py-2 text-[15px] font-mono text-stone-900 outline-none focus:border-[#0099FF] placeholder-stone-300 text-center ${on?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}/></div>;}
+function PkgInput({label,w,req,...p}){const ww=w||"w-16";const on=req&&!String(p.value??"").trim();return <div className={ww}><div className={`text-[10px] uppercase tracking-widest text-center ${on?"text-[#0086E0]":"text-stone-500"}`}>{label}</div><input placeholder="0" {...p} type="number" className={`w-full border rounded-lg px-2 py-1.5 text-sm font-mono text-stone-900 outline-none focus:border-[#0099FF] placeholder-stone-300 text-center ${on?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}/></div>;}
 function Panel({title,children}){return <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3"><div className="text-[10px] uppercase tracking-widest text-stone-400">{title}</div>{children}</div>;}
 function Field({label,children}){return <label className="block space-y-1"><span className="text-[11px] text-stone-500">{label}</span>{children}</label>;}
 function Input({className="",...p}){return <input {...p} className={`w-full bg-white border border-stone-200 rounded px-2.5 py-2 text-sm font-mono text-stone-900 focus:border-[#0099FF] outline-none ${className}`}/>;}

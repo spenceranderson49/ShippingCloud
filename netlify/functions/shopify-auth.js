@@ -16,7 +16,11 @@
 const crypto = require("crypto");
 
 const SCOPES = [
-  "read_orders", "write_orders",
+  // Minimal scopes for App Store review: no write_orders (we never modify orders,
+  // only fulfill via the fulfillment-orders APIs below).
+  "read_orders",
+  "read_products",                     // product catalog pull (weights/dims/SKUs)
+  "write_shipping",                    // carrier service = live checkout rates
   "read_fulfillments", "write_fulfillments",
   "read_assigned_fulfillment_orders", "write_assigned_fulfillment_orders",
   "read_merchant_managed_fulfillment_orders", "write_merchant_managed_fulfillment_orders",

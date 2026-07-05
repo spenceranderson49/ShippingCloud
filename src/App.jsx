@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v147";
+const BUILD_TAG="addr-v148";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -2723,7 +2723,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       ):(
         <button onClick={()=>setOrdersOpen(true)} title="Show orders" className="shrink-0 self-start flex flex-col items-center gap-1 text-stone-500 hover:text-stone-700 hover:border-stone-300 border border-stone-200 bg-white rounded-lg px-1.5 py-2 w-9"><ChevronRight className="w-4 h-4"/><ShoppingBag className="w-4 h-4"/>{ordersToShow.length?<span className="text-[10px] font-bold text-[#0086E0] leading-none">{ordersToShow.length}</span>:null}</button>
       )}
-      <div className="flex-1 min-w-0 space-y-4">
+      <div className="flex-1 min-w-0 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-base font-semibold text-stone-800 flex items-center gap-2 whitespace-nowrap"><Package className="w-4 h-4 text-[#0086E0]"/>Create shipment</h1>
           <div className="flex flex-wrap items-center gap-2">
@@ -2773,9 +2773,9 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             <div className="flex flex-wrap items-center gap-3">
               <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">Packages · {pieces.length}</div>
               <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Ship date</span><input type="date" value={shipDate} onChange={e=>setShipDate(e.target.value)} className="text-sm font-mono text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-[#0099FF]"/></div>
-              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Ref #</span><input value={reference} onChange={e=>setReference(e.target.value)} placeholder="order / ref" className="w-28 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
-              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Invoice #</span><input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} placeholder="INV-…" className="w-24 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
-              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">PO #</span><input value={poNo} onChange={e=>setPoNo(e.target.value)} placeholder="PO-…" className="w-24 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
+              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Ref #</span><input value={reference} onChange={e=>setReference(e.target.value)} placeholder="order / ref" className="w-44 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
+              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Invoice #</span><input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} placeholder="INV-…" className="w-36 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
+              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">PO #</span><input value={poNo} onChange={e=>setPoNo(e.target.value)} placeholder="PO-…" className="w-36 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
             </div>
             <div className="flex flex-wrap items-center gap-4">
               <span className="text-[11px] text-stone-400 font-mono">total {totalWeight} lb</span>
@@ -2983,7 +2983,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
     const hasPrice=sell!=null;
     return (
       <div key={q.key} className="border rounded-lg border-stone-200 bg-white">
-        <div onClick={()=>{setOpen(isOpen?null:q.key); if(q._oneRate&&q.packageTypeCode&&onOneRate)onOneRate(q.packageTypeCode);}} className="px-3 py-2.5 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
+        <div onClick={()=>{setOpen(isOpen?null:q.key); if(q._oneRate&&q.packageTypeCode&&onOneRate)onOneRate(q.packageTypeCode);}} className="px-3 py-2 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
           <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isOpen?"rotate-90":""}`}/>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2"><span className="text-sm truncate">{q.label}</span></div>
@@ -3016,7 +3016,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
         </div>
       </div>
       {view==="cheapest"
-        ? <div className="space-y-1.5">{[...quotes].sort((a,b)=>(((a.sell??a.cost)||1e9))-(((b.sell??b.cost)||1e9))).map(Row)}</div>
+        ? <div className="space-y-1">{[...quotes].sort((a,b)=>(((a.sell??a.cost)||1e9))-(((b.sell??b.cost)||1e9))).map(Row)}</div>
         : CARRIER_ORDER.map(c=>{const list=quotes.filter(q=>q.carrier===c);if(!list.length)return null;return (<div key={c} className="mb-4"><div className="mb-2 pb-1.5 border-b border-stone-200"><CarrierMark carrier={c}/></div><div className="space-y-1.5">{list.map(Row)}</div></div>);})}
     </div>
   );
@@ -6512,7 +6512,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
       </div>
     )}
     <div className="grid grid-cols-6 gap-px bg-stone-200 border border-stone-200 rounded-lg overflow-hidden">
-      {cell("Country","country","col-span-6")}{cell("Name","name","col-span-6 sm:col-span-3",required)}{cell("Company","company","col-span-6 sm:col-span-3")}{cell("Address 1","address1","col-span-6",required)}{cell("Zip","zip","col-span-3 sm:col-span-2",required)}{cell("State","state","col-span-3 sm:col-span-2",required)}{cell("City","city","col-span-6 sm:col-span-2",required)}{cell("Address 2","address2","col-span-6 sm:col-span-3")}{cell("Address 3","address3","col-span-6 sm:col-span-3")}{cell("Phone","phone","col-span-6 sm:col-span-3",required)}{cell("Email","email","col-span-6 sm:col-span-3",required)}
+      {cell("Country","country","col-span-6 sm:col-span-2")}{cell("Name","name","col-span-6 sm:col-span-2",required)}{cell("Company","company","col-span-6 sm:col-span-2")}{cell("Address 1","address1","col-span-6",required)}{cell("Zip","zip","col-span-3 sm:col-span-2",required)}{cell("State","state","col-span-3 sm:col-span-2",required)}{cell("City","city","col-span-6 sm:col-span-2",required)}{cell("Address 2","address2","col-span-6 sm:col-span-3")}{cell("Address 3","address3","col-span-6 sm:col-span-3")}{cell("Phone","phone","col-span-6 sm:col-span-3",required)}{cell("Email","email","col-span-6 sm:col-span-3",required)}
     </div>
   </div>);
 }

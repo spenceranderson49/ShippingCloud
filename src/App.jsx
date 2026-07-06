@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v170";
+const BUILD_TAG="addr-v171";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -611,7 +611,7 @@ function printCommercialInvoice(o,catalog,sender,opts={}){
   <div class="grid"><div class="col"><div class="lbl">Exporter / shipper</div><div>${esc(sn.company||sn.name||"")}</div><div>${esc(sn.address1||"")}</div><div>${esc([sn.city,sn.state,sn.zip].filter(Boolean).join(", "))}, US</div></div>
   <div class="col"><div class="lbl">Consignee</div><div>${esc(o.customer||"")}</div>${o.company?`<div>${esc(o.company)}</div>`:""}<div>${esc(o.address1||"")}</div><div>${esc([o.city,o.state,o.zip].filter(Boolean).join(", "))}, ${esc(o.country||"")}</div></div>
   <div class="col"><div class="lbl">Details</div><div>Invoice # ${esc(o.name||"")}</div><div>Date ${new Date().toLocaleDateString()}</div><div>Reason for export: ${esc(opts.reason||"Sale of goods")}</div><div>Incoterms: ${esc(opts.incoterm||"DDP — Delivered Duty Paid")}</div><div>Currency: ${esc(opts.currency||"USD")}</div><div>Country of destination: ${esc(o.country||"")}</div></div></div>
-  <div class="grid" style="margin-top:6px"><div class="col"><div class="lbl">Shipper contact / Tax ID</div><div>${esc(sn.phone||"")}</div><div>Tax ID / EIN: ${esc(CI_OPTS.taxId)||"______________"}</div></div><div class="col"><div class="lbl">Consignee contact</div><div>${esc(o.phone||"")}</div><div>${esc(o.email||"")}</div></div><div class="col"><div class="lbl">Shipment</div><div>Packages: ${esc(String(opts.packages||"1"))}</div><div>Gross weight: ${esc(String(o.weight||""))} lb</div>${opts.marks?`<div>Marks & nos: ${esc(opts.marks)}</div>`:""}</div></div>
+  <div class="grid" style="margin-top:6px"><div class="col"><div class="lbl">Shipper contact / Tax ID</div><div>${esc(sn.phone||"")}</div><div>Tax ID / EIN: ${esc(opts.senderTax||CI_OPTS.taxId)||"______________"}${opts.senderTaxCountry?` (${esc(opts.senderTaxCountry)})`:""}</div></div><div class="col"><div class="lbl">Consignee contact</div><div>${esc(o.phone||"")}</div><div>${esc(o.email||"")}</div>${opts.receiverTax?`<div>Tax ID / VAT / EORI: ${esc(opts.receiverTax)}</div>`:""}</div><div class="col"><div class="lbl">Shipment</div><div>Packages: ${esc(String(opts.packages||"1"))}</div><div>Gross weight: ${esc(String(o.weight||""))} lb</div>${opts.marks?`<div>Marks & nos: ${esc(opts.marks)}</div>`:""}</div></div>
   <table><thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Unit value</th><th class="r">Total</th><th>HS code</th><th>Origin</th></tr></thead>
   <tbody>${rows.map(r=>`<tr><td>${esc(r.name)}</td><td class="r">${r.qty}</td><td class="r">$${r.unit.toFixed(2)}</td><td class="r">$${(r.unit*r.qty).toFixed(2)}</td><td>${esc(r.hs)||"—"}</td><td>${esc(r.origin)}</td></tr>`).join("")}</tbody></table>
   <div class="tot">Declared value: $${total.toFixed(2)} ${esc(opts.currency||"USD")}</div>
@@ -2604,6 +2604,17 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const [msgSaved,setMsgSaved]=useState(false);
   const [sent,setSent]=useState("");
   useEffect(()=>{ if(receiver.email&&!String(emailTo||"").trim()) setEmailTo(receiver.email); },[receiver.email]);
+  const [shipHsBusy,setShipHsBusy]=useState(-1);
+  const [shipHsMsg,setShipHsMsg]=useState(null);
+  const shipSuggestHS=async(i)=>{ const l0=customs.lines[i]; if(!l0||!l0.desc)return;
+    setShipHsBusy(i); setShipHsMsg(null);
+    try{ const rs=await fetch("/.netlify/functions/hs-lookup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({description:l0.desc,destination:receiver.country||""})});
+      const d=await rs.json();
+      if(d&&d.ok&&d.code){ setLine(i,{hts:d.code}); setShipHsMsg({ok:`${d.code} — ${d.reason||"suggested"} (verify before filing; classification is the shipper's responsibility)`}); }
+      else setShipHsMsg({err:(d&&d.error)||"Lookup failed — is ANTHROPIC_API_KEY set on Netlify?"});
+    }catch(e){ setShipHsMsg({err:"Lookup failed — is ANTHROPIC_API_KEY set on Netlify?"}); }
+    setShipHsBusy(-1);
+  };
   const [customs,setCustoms]=useState({reason:"Sale",incoterm:INCOTERMS[1],dutiesBill:"sender",lines:[{desc:"",hts:"",origin:"United States",qty:1,value:"",weight:""}]});
   const [showCI,setShowCI]=useState(false);
 
@@ -2937,16 +2948,29 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             <div className="flex items-center gap-2 text-sm font-semibold text-[#006FBF]"><FileText className="w-4 h-4"/>Customs · Commercial invoice</div>
             <datalist id="sc-prod-list">{((settings&&settings.products)||[]).map(pr=><option key={pr.id} value={pr.name}>{(pr.sku?pr.sku+" · ":"")+(pr.hs?("HS "+pr.hs):"no HS yet")}</option>)}</datalist>
             <div className="grid sm:grid-cols-3 gap-2">
-              <Field label="Reason for export"><input value={customs.reason} onChange={e=>setCustoms({...customs,reason:e.target.value})} list="sc-export-reasons" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/><datalist id="sc-export-reasons">{EXPORT_REASONS.map(r=><option key={r} value={r}/>)}</datalist></Field>
+              <Field label="Reason for export"><div className="flex gap-1"><Select value={EXPORT_REASONS.includes(customs.reason)?customs.reason:"__other"} onChange={e=>{const v=e.target.value;setCustoms({...customs,reason:v==="__other"?"":v});}}>{EXPORT_REASONS.map(r=><option key={r}>{r}</option>)}<option value="__other">Other…</option></Select>{!EXPORT_REASONS.includes(customs.reason)&&<input value={customs.reason} onChange={e=>setCustoms({...customs,reason:e.target.value})} placeholder="type reason" className="w-28 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/>}</div></Field>
               <Field label="Incoterms"><Select value={customs.incoterm} onChange={e=>setCustoms({...customs,incoterm:e.target.value})}>{INCOTERMS.map(r=><option key={r}>{r}</option>)}</Select></Field>
               <Field label="Duties & taxes to"><Select value={customs.dutiesBill} onChange={e=>setCustoms({...customs,dutiesBill:e.target.value})}><option value="receiver">Receiver (DAP)</option><option value="sender">Sender (DDP)</option></Select></Field>
             </div>
-            {customs.reason==="Sample"&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">Tip: declare at least $10 value per sample item — $0/$1 values are a top cause of customs holds.</div>}
+            <div className="grid sm:grid-cols-4 gap-2">
+              <Field label="Sender Tax ID / EIN"><input value={customs.senderTaxId??(settings.taxId||"")} onChange={e=>setCustoms({...customs,senderTaxId:e.target.value})} placeholder="12-3456789" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
+              <Field label="EIN issuer country"><Select value={customs.senderTaxCountry||"United States"} onChange={e=>setCustoms({...customs,senderTaxCountry:e.target.value})}>{COUNTRIES.map(c=><option key={c}>{c}</option>)}</Select></Field>
+              <Field label="Receiver Tax / VAT / EORI"><input value={customs.receiverTaxId||""} onChange={e=>setCustoms({...customs,receiverTaxId:e.target.value})} placeholder="EU: EORI / VAT nr" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
+              <Field label="FTR / EEI"><input value={customs.ftr||""} onChange={e=>setCustoms({...customs,ftr:e.target.value})} list="sc-ftr-list" placeholder="NOEEI 30.37(a)" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/><datalist id="sc-ftr-list"><option value="NOEEI 30.37(a)">Under $2,500 per HS class</option><option value="NOEEI 30.36">To Canada</option><option value="NOEEI 30.37(h)">Gift / humanitarian</option><option value="AES ITN: X2026________">Filed — paste ITN</option></datalist></Field>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Field label="Package marks"><input value={customs.marks||""} onChange={e=>setCustoms({...customs,marks:e.target.value})} placeholder="Carton 1 of 3" className="w-40 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
+              <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700 mt-4"><input type="checkbox" checked={!!customs.samples} onChange={e=>setCustoms({...customs,samples:e.target.checked})} className="accent-[#0086E0]"/>Print big "SAMPLES — NOT FOR RESALE" banner</label>
+              <button onClick={()=>{const o2={name:reference||invoiceNo||"CI-"+Date.now(),customer:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip,country:receiver.country,phone:receiver.phone,email:receiver.email,weight:totalWeight,lineItems:customs.lines.map(l=>({name:l.desc,quantity:+l.qty||1,price:String(l.value||0)}))};printCommercialInvoice(o2,(settings&&settings.products)||[],settings.sender,{reason:customs.reason,incoterm:customs.incoterm,samples:customs.samples,marks:customs.marks,senderTax:customs.senderTaxId??settings.taxId,senderTaxCountry:customs.senderTaxCountry,receiverTax:customs.receiverTaxId,eei:customs.ftr,rows:customs.lines.map(l=>({name:l.desc,qty:+l.qty||1,unit:+l.value||0,hs:l.hts,origin:l.origin}))});}} className="mt-4 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Print commercial invoice</button>
+            </div>
+            {(customs.reason==="Sample"||customs.samples)&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">Tip: declare at least $10 value per sample item — $0/$1 values are a top cause of customs holds.</div>}
+            {shipHsMsg&&<div className={`text-[11px] rounded px-2 py-1 border ${shipHsMsg.err?"text-rose-700 bg-rose-50 border-rose-200":"text-emerald-700 bg-emerald-50 border-emerald-200"}`}>{shipHsMsg.err||shipHsMsg.ok}</div>}
             <div className="space-y-1.5">
               <div className="hidden sm:flex text-[10px] uppercase tracking-wide text-stone-400 px-1 gap-2"><div className="flex-1">Description</div><div className="w-28">HTS code</div><div className="w-28">Origin</div><div className="w-12">Qty</div><div className="w-16">Unit $</div><div className="w-5"/></div>
               {customs.lines.map((l,i)=>(
                 <div key={i} className="flex flex-wrap sm:flex-nowrap gap-2 items-center">
                   <input value={l.desc} onChange={e=>{const v=e.target.value;const hit=((settings&&settings.products)||[]).find(pr=>pr.name===v||pr.sku===v);if(hit){setLine(i,{desc:hit.name,hts:hit.hs||l.hts,origin:hit.origin==="US"?"United States":(hit.origin||l.origin),value:l.value||String(hit.value||"")});}else setLine(i,{desc:v});}} list="sc-prod-list" placeholder="Item description — type or pick a product" className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/>
+                  <button onClick={()=>shipSuggestHS(i)} disabled={!l.desc||shipHsBusy===i} title="Ask Claude to classify this item" className="text-xs text-[#006FBF] hover:underline disabled:opacity-40 whitespace-nowrap self-center">{shipHsBusy===i?"…":"✨"}</button>
                   <input value={l.hts} onChange={e=>setLine(i,{hts:e.target.value})} list="htscodes" placeholder="HTS" className="w-28 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
                   <select value={l.origin} onChange={e=>setLine(i,{origin:e.target.value})} className="w-28 bg-white border border-stone-200 rounded-lg px-1 py-1.5 text-sm outline-none focus:border-[#0099FF]">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
                   <input type="number" value={l.qty} onChange={e=>setLine(i,{qty:+e.target.value})} className="w-12 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>

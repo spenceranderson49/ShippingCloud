@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v218";
+const BUILD_TAG="addr-v219";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -8782,10 +8782,13 @@ function AddressCard({title,data,set,required,residential,setResidential,address
   );
   return (<div className="relative">
     {abDatalists}
-    <div className="flex items-center justify-between mb-1.5">
-      <span className="text-[#0086E0] font-semibold text-sm shrink-0">{title}</span>
+    <div className="flex items-stretch mb-1.5">
+      <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
+        <span className="text-[#0086E0] font-semibold text-sm shrink-0">{title}</span>
+        {onSave&&<button type="button" onClick={saveToBook} disabled={!data.name&&!data.company} className={`flex items-center gap-1 text-[10px] rounded px-1.5 py-0.5 border shrink-0 ${savedOk?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-white border-stone-200 text-stone-500 hover:text-[#0086E0] hover:border-[#99D6FF] disabled:opacity-40"}`} title="Save this address to your address book">{savedOk?<CheckCircle2 className="w-3 h-3"/>:<Plus className="w-3 h-3"/>}{savedOk?"Saved":"Save to Address Book"}</button>}
+      </div>
+      {side&&<div className="hidden lg:block lg:w-[250px] xl:w-[290px] shrink-0"/>}
       <div className="flex items-center gap-2">
-        {onSave&&<button type="button" onClick={saveToBook} disabled={!data.name&&!data.company} className={`flex items-center gap-1 text-[10px] rounded px-1.5 py-0.5 border ${savedOk?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-white border-stone-200 text-stone-500 hover:text-[#0086E0] hover:border-[#99D6FF] disabled:opacity-40"}`} title="Save this address to your address book">{savedOk?<CheckCircle2 className="w-3 h-3"/>:<Plus className="w-3 h-3"/>}{savedOk?"Saved":"Save to Address Book"}</button>}
         {setResidential&&<label className="flex items-center gap-1.5 text-[11px] cursor-pointer"><input type="checkbox" checked={residential} onChange={e=>setResidential(e.target.checked)} className="accent-[#0086E0]"/>{residential?<span className="flex items-center gap-1 text-[#006FBF]"><Home className="w-3.5 h-3.5"/>Residential</span>:<span className="flex items-center gap-1 text-stone-600"><Building2 className="w-3.5 h-3.5"/>Commercial</span>}</label>}
       </div>
     </div>

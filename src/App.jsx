@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v176";
+const BUILD_TAG="addr-v177";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -651,7 +651,7 @@ function printCommercialInvoice(o,catalog,sender,opts={}){
   ${box("Shipper / Exporter",`<div class="two"><div><div class="nm">${esc(sn.company||"")}</div>${esc(sn.name||"")}<br/>${esc(sn.address1||"")}<br/>${esc([sn.city,sn.state,sn.zip].filter(Boolean).join(", "))}<br/>United States</div>
     <div>${sn.phone?`Phone: ${esc(sn.phone)}<br/>`:""}Tax ID / EIN: <b>${esc(opts.senderTax||CI_OPTS.taxId)||"______________"}</b>${opts.senderTaxCountry&&opts.senderTaxCountry!=="United States"?` (${esc(opts.senderTaxCountry)})`:""}</div></div>`)}
   ${box("Consignee / Ship To",`<div class="two"><div><div class="nm">${esc(o.company||o.customer||"")}</div>${o.company?esc(o.customer||"")+"<br/>":""}${esc(o.address1||"")}<br/>${esc([o.city,o.state,o.zip].filter(Boolean).join(", "))}<br/><b>${esc(o.country||"")}</b></div>
-    <div>${o.phone?`Phone: ${esc(o.phone)}<br/>`:""}${o.email?`${esc(o.email)}<br/>`:""}${opts.receiverTax?`VAT / Tax ID: <b>${esc(opts.receiverTax)}</b><br/>`:""}${opts.receiverEori?`EORI: <b>${esc(opts.receiverEori)}</b>`:""}</div></div>`)}
+    <div>${o.phone?`Phone: ${esc(o.phone)}<br/>`:""}${o.email?`${esc(o.email)}<br/>`:""}${opts.receiverTax?`VAT / Tax ID: <b>${esc(opts.receiverTax)}</b><br/>`:""}${opts.receiverEori?`EORI: <b>${esc(opts.receiverEori)}</b><br/>`:""}${opts.receiverContact2?`Also contact: ${esc(opts.receiverContact2)}`:""}</div></div>`)}
   <div class="band">
     <div class="cell"><div class="k">Reason for export</div><div class="v">${esc(opts.reason||"Sale of goods")}</div></div>
     <div class="cell"><div class="k">Incoterms</div><div class="v">${esc(opts.incoterm||"DDP — Delivered Duty Paid")}</div></div>
@@ -2665,16 +2665,23 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const [sent,setSent]=useState("");
   useEffect(()=>{ if(receiver.email&&!String(emailTo||"").trim()) setEmailTo(receiver.email); },[receiver.email]);
   const [shipHsBusy,setShipHsBusy]=useState(-1);
+  const [shipHsOpts,setShipHsOpts]=useState(null);
+  const saveHtsToCatalog=(l)=>{ if(!l.desc||!l.hts)return;
+    setSettings(pp=>{const prods=[...(pp.products||[])];const ix=prods.findIndex(pr=>String(pr.name).toLowerCase()===String(l.desc).toLowerCase());
+      if(ix>=0)prods[ix]={...prods[ix],hs:l.hts,origin:l.origin==="United States"?"US":(l.origin||prods[ix].origin),value:+l.value||prods[ix].value};
+      else prods.push({id:"pr"+Date.now(),sku:"",name:l.desc,l:0,w:0,h:0,wt:0,value:+l.value||0,origin:l.origin==="United States"?"US":(l.origin||"US"),hs:l.hts});
+      return {...pp,products:prods};});
+    setShipHsMsg({ok:`Saved "${l.desc}" with HS ${l.hts} to your product catalog — it'll auto-fill next time.`}); };
   const [shipPad,setShipPad]=useState(false);
   const printShipCI=(preview)=>{const o2={name:reference||invoiceNo||"CI-"+Date.now(),customer:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip,country:receiver.country,phone:receiver.phone,email:receiver.email,weight:totalWeight,lineItems:customs.lines.map(l=>({name:l.desc,quantity:+l.qty||1,price:String(l.value||0)}))};
-    printCommercialInvoice(o2,(settings&&settings.products)||[],settings.sender,{reason:customs.reason,incoterm:customs.incoterm,samples:customs.samples,marks:customs.marks,notes:customs.notes,senderTax:customs.senderTaxId??settings.taxId,senderTaxCountry:customs.senderTaxCountry,receiverTax:customs.receiverTaxId,receiverEori:customs.receiverEori,eei:customs.ftr??"NOEEI 30.37(a)",signature:customs.signature,letterhead:customs.letterhead,preview:!!preview,attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(customs.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data})),rows:customs.lines.map(l=>({name:l.desc,qty:+l.qty||1,unit:+l.value||0,hs:l.hts,origin:l.origin}))});};
+    printCommercialInvoice(o2,(settings&&settings.products)||[],settings.sender,{reason:customs.reason,incoterm:customs.incoterm,samples:customs.samples,marks:customs.marks,notes:customs.notes,senderTax:customs.senderTaxId??settings.taxId,senderTaxCountry:customs.senderTaxCountry,receiverTax:customs.receiverTaxId,receiverEori:customs.receiverEori,receiverContact2:customs.altContact,eei:customs.ftr??"NOEEI 30.37(a)",signature:customs.signature,letterhead:customs.letterhead,preview:!!preview,attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(customs.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data})),rows:customs.lines.map(l=>({name:l.desc,qty:+l.qty||1,unit:+l.value||0,hs:l.hts,origin:l.origin}))});};
   const [shipHsMsg,setShipHsMsg]=useState(null);
   const shipSuggestHS=async(i)=>{ const l0=customs.lines[i]; if(!l0||!l0.desc)return;
     setShipHsBusy(i); setShipHsMsg(null);
     try{ const rs=await fetch("/.netlify/functions/hs-lookup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({description:l0.desc,destination:receiver.country||""})});
       if(rs.status===404){setShipHsMsg({err:"The AI lookup isn't deployed yet: commit netlify/functions/hs-lookup.js to the repo, then add ANTHROPIC_API_KEY on Netlify and redeploy."});setShipHsBusy(-1);return;}
       const d=await rs.json();
-      if(d&&d.ok&&d.code){ setLine(i,{hts:d.code}); setShipHsMsg({ok:`${d.code} — ${d.reason||"suggested"} (verify before filing; classification is the shipper's responsibility)`}); }
+      if(d&&d.ok&&(d.options||d.code)){ const opts=(d.options&&d.options.length)?d.options:[{code:d.code,reason:d.reason||""}]; setShipHsOpts({line:i,opts}); setShipHsMsg({ok:"Claude suggests — pick the code that fits best (verify before filing; classification is the shipper's responsibility):"}); }
       else setShipHsMsg({err:(d&&d.error)||"Lookup failed — is ANTHROPIC_API_KEY set on Netlify (non-secret) with a redeploy after?"});
     }catch(e){ setShipHsMsg({err:"Lookup failed — likely hs-lookup.js isn't committed or ANTHROPIC_API_KEY isn't set on Netlify."}); }
     setShipHsBusy(-1);
@@ -3026,14 +3033,22 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                   <select value={l.origin} onChange={e=>setLine(i,{origin:e.target.value})} className="w-28 bg-white border border-stone-200 rounded-lg px-1 py-1.5 text-sm outline-none focus:border-[#0099FF]">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
                   <input type="number" value={l.qty} onChange={e=>setLine(i,{qty:+e.target.value})} className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
                   <input type="number" value={l.value} onChange={e=>setLine(i,{value:e.target.value})} placeholder="0.00" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
+                  {!!(l.desc&&l.hts)&&<button onClick={()=>saveHtsToCatalog(l)} title="Save this HTS code to your product catalog for next time" className="text-xs text-[#006FBF] hover:underline whitespace-nowrap self-center">💾 Save</button>}
                   <button onClick={()=>delLine(i)} className="text-stone-300 hover:text-rose-500 w-5"><X className="w-4 h-4"/></button>
                 </div>
               ))}
               {shipHsMsg&&<div className={`text-[11px] rounded px-2 py-1 border ${shipHsMsg.err?"text-rose-700 bg-rose-50 border-rose-200":"text-emerald-700 bg-emerald-50 border-emerald-200"}`}>{shipHsMsg.err||shipHsMsg.ok}</div>}
+              {shipHsOpts&&<div className="flex flex-wrap gap-1.5">{shipHsOpts.opts.map(op=>(
+                <button key={op.code} onClick={()=>{setLine(shipHsOpts.line,{hts:op.code});setShipHsOpts(null);setShipHsMsg({ok:`Applied ${op.code}. Click 💾 Save on the line to remember it for this product.`});}} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-full px-2.5 py-1 font-medium hover:bg-[#CCEAFF]">
+                  <span className="font-mono font-semibold">{op.code}</span>{op.reason?` — ${op.reason}`:""}{op.confidence?` (${op.confidence})`:""}
+                </button>))}
+                <button onClick={()=>setShipHsOpts(null)} className="text-[11px] text-stone-400 hover:text-stone-600 px-1">dismiss</button></div>}
+              {customs.lines.reduce((a,l)=>a+(+l.value||0)*(+l.qty||0),0)>2500&&<div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-300 rounded px-2 py-1.5">⚠ Declared value is over <b>$2,500</b> — an <b>EEI filing is likely required</b> (the NOEEI 30.37(a) exemption no longer applies). <a href="https://ace.cbp.gov" target="_blank" rel="noreferrer" className="underline font-semibold">File via AESDirect on the CBP ACE portal →</a> then paste the ITN into the FTR / EEI box.</div>}
 <div className="grid sm:grid-cols-4 gap-2">
               <Field label="Sender Tax ID / EIN"><input value={customs.senderTaxId??(settings.taxId||"")} onChange={e=>setCustoms({...customs,senderTaxId:e.target.value})} placeholder="12-3456789" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
               <Field label="EIN issuer country"><Select value={customs.senderTaxCountry||"United States"} onChange={e=>setCustoms({...customs,senderTaxCountry:e.target.value})}>{COUNTRIES.map(c=><option key={c}>{c}</option>)}</Select></Field>
               <Field label="Receiver VAT / Tax ID"><input value={customs.receiverTaxId||""} onChange={e=>setCustoms({...customs,receiverTaxId:e.target.value})} placeholder="VAT nr" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
+              <Field label="Additional receiver contact"><input value={customs.altContact||""} onChange={e=>setCustoms({...customs,altContact:e.target.value})} placeholder="Broker / consignee alt — name & phone" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
               <Field label="Receiver EORI"><input value={customs.receiverEori||""} onChange={e=>setCustoms({...customs,receiverEori:e.target.value})} placeholder="EU/UK EORI" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
               <Field label="FTR / EEI"><input value={customs.ftr??"NOEEI 30.37(a)"} onChange={e=>setCustoms({...customs,ftr:e.target.value})} list="sc-ftr-list" placeholder="NOEEI 30.37(a)" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/><datalist id="sc-ftr-list"><option value="NOEEI 30.37(a)">Under $2,500 per HS class</option><option value="NOEEI 30.36">To Canada</option><option value="NOEEI 30.37(h)">Gift / humanitarian</option><option value="AES ITN: X2026________">Filed — paste ITN</option></datalist></Field>
             </div>

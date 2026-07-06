@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v178";
+const BUILD_TAG="addr-v179";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -2676,6 +2676,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       return {...pp,products:prods};});
     setShipHsMsg({ok:`Saved "${l.desc}" with HS ${l.hts} to your product catalog — it'll auto-fill next time.`}); };
   const [shipPad,setShipPad]=useState(false);
+  const [bookedLock,setBookedLock]=useState(null);
   const printShipCI=(preview)=>{const o2={name:reference||invoiceNo||"CI-"+Date.now(),customer:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip,country:receiver.country,phone:receiver.phone,email:receiver.email,weight:totalWeight,lineItems:customs.lines.map(l=>({name:l.desc,quantity:+l.qty||1,price:String(l.value||0)}))};
     printCommercialInvoice(o2,(settings&&settings.products)||[],settings.sender,{reason:customs.reason,incoterm:customs.incoterm,samples:customs.samples,marks:customs.marks,notes:customs.notes,senderTax:customs.senderTaxId??settings.taxId,senderTaxCountry:customs.senderTaxCountry,receiverTax:customs.receiverTaxId,receiverEori:customs.receiverEori,receiverContact2:customs.altContact,eei:customs.ftr??"NOEEI 30.37(a)",signature:customs.signature||defaultSig(settings),letterhead:customs.letterhead,preview:!!preview,attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(customs.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data})),rows:customs.lines.map(l=>({name:l.desc,qty:+l.qty||1,unit:+l.value||0,hs:l.hts,origin:l.origin}))});};
   const [shipHsMsg,setShipHsMsg]=useState(null);
@@ -2837,7 +2838,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(custom.spendCap>0&&(q.sell??q.cost)>custom.spendCap){setShipStatus({state:"error",key:q.key,msg:`This rate is over your $${custom.spendCap} spending cap (Settings → Customizations).`});setTimeout(()=>setShipStatus(null),5000);return;}
     if(!canBook){
       onShipped(buildRec(q,carrier),selectedOrder);
-      setBought(q.key);fireConfetti();setTimeout(()=>setBought(null),1800);
+      setBought(q.key);setBookedLock({tracking:""});fireConfetti();setTimeout(()=>setBought(null),1800);
       return;
     }
     setBought(q.key);setShipStatus({state:"booking",key:q.key});
@@ -2852,7 +2853,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       pieces:pieces.map(p=>({weight:pw(p),length:p.L,width:p.W,height:p.H,declaredValue:intl?(p.value||null):null}))};
     const res=await shipCall({action:"ship",account:acctOf(eng),order});
     if(!res||!res.ok){setShipStatus({state:"error",key:q.key,msg:(res&&res.error)||"Booking failed"});setBought(null);return;}
-    const done=(st)=>{ onShipped(buildRec(q,carrier,st),selectedOrder); if(st.labelPdfBase64){setLabelPreview({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier});} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
+    const done=(st)=>{ onShipped(buildRec(q,carrier,st),selectedOrder); if(st.labelPdfBase64){setLabelPreview({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier});} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setBookedLock({tracking:st.tracking}); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
     if(res.booked){done(res);return;}
     setShipStatus({state:"pending",key:q.key,orderId:res.orderId});
     pollLabel(eng,res.orderId,done).then(r=>{ if(r&&r.timedOut){ onPending&&onPending({orderId:res.orderId,rec:buildRec(q,carrier,{}),service:q.label,carrier,orderRef:selectedOrder}); setShipStatus({state:"pending_timeout",key:q.key});setBought(null);} });
@@ -2887,7 +2888,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const saveDraft=()=>{setDraftName(reference||receiver.name||receiver.city||"");setNaming(true);};
   /* box-logic explanation banner shown while a packed order is loaded */
   const PackNote=()=>packNote?(<div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800 flex items-center gap-2"><Boxes className="w-3.5 h-3.5 shrink-0"/><span className="flex-1">Box logic packed this order: <b>{packNote.boxNames}</b> · {packNote.totalWt} lb billable{packNote.unresolved.length?` · ${packNote.unresolved.length} item${packNote.unresolved.length===1?"":"s"} not in your catalog (weight may be low)`:""} — dims are editable below.</span><button onClick={()=>setPackNote(null)} className="text-emerald-500 hover:text-emerald-700"><X className="w-3.5 h-3.5"/></button></div>):null;
-  const newShipment=()=>{setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setRes(true);setResTouched(false);setSig(custom.defaultSignature&&custom.defaultSignature!=="none");setSigOption(custom.defaultSignature||"none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");};
+  const newShipment=()=>{setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setRes(true);setResTouched(false);setBookedLock(null);setSig(custom.defaultSignature&&custom.defaultSignature!=="none");setSigOption(custom.defaultSignature||"none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");};
   const addressCheck=(
     <div className="text-xs space-y-2">
       <div className="text-[10px] uppercase tracking-widest text-stone-500 font-semibold flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5"/>Address check</div>
@@ -2917,7 +2918,15 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     </div>
   );
   return (
-    <div className="flex flex-row gap-4 items-start">
+    <div className="relative flex flex-row gap-4 items-start">
+      {bookedLock&&<div className="absolute inset-0 z-40 bg-white/50 backdrop-blur-[1px] flex items-start justify-center pt-14">
+        <div className="bg-white border border-emerald-300 shadow-xl rounded-xl px-5 py-4 text-center space-y-2 pointer-events-auto">
+          <div className="text-emerald-700 font-semibold text-lg flex items-center gap-2 justify-center"><CheckCircle2 className="w-5 h-5"/>Booked!</div>
+          {bookedLock.tracking&&<div className="text-sm text-stone-600">Tracking <span className="font-mono font-semibold">{bookedLock.tracking}</span></div>}
+          <div className="text-xs text-stone-400">This shipment is locked — no more edits.</div>
+          <button onClick={()=>newShipment()} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-4 py-2 font-medium">Start new shipment</button>
+        </div>
+      </div>}
       {ordersOpen?(
       <aside className="w-60 shrink-0 space-y-2">
         <div className="flex items-center justify-between gap-2">
@@ -3041,24 +3050,19 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             {(customs.reason==="Sample"||customs.samples)&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">Tip: declare at least $10 value per sample item — $0/$1 values are a top cause of customs holds.</div>}
 
             <Field label="Invoice notes"><textarea value={customs.notes||""} onChange={e=>setCustoms({...customs,notes:e.target.value})} rows={2} placeholder="Custom notes printed on the invoice — license numbers, 'samples for exhibition use only'…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
-            <AssetChips settings={settings||{}} sel={customs} onSel={(v)=>setCustoms(c=>({...c,...v}))}/>
-            <div className="flex flex-wrap gap-2">
-              <button onClick={()=>setShipPad(v=>!v)} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">✍️ Draw a signature</button>
-              <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload signature<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"signature",name:f.name.replace(/\.[a-z]+$/i,""),data:b},...(pp.docAssets||[])]})),500);e.target.value="";}}/></label>
-              <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Change letterhead<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"letterhead",name:f.name.replace(/\.[a-z]+$/i,""),data:b},...(pp.docAssets||[])]})),1400);e.target.value="";}}/></label>
-            </div>
-            {shipPad&&<SignaturePad onSave={(b64)=>{setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"signature",name:"Signature "+new Date().toLocaleDateString(),data:b64},...(pp.docAssets||[])]}));setShipPad(false);}} onClose={()=>setShipPad(false)}/>}
-            <div className="space-y-1.5">
-              <div className="hidden sm:flex text-[10px] uppercase tracking-wide text-stone-400 px-1 gap-2"><div className="flex-1">Description</div><div className="w-36">HTS code</div><div className="w-28">Origin</div><div className="w-16">Qty</div><div className="w-24">Unit $</div><div className="w-5"/></div>
+                        <div className="space-y-1.5">
+              <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold mb-1">Add products</div>
+              <div className="hidden sm:flex text-[10px] uppercase tracking-wide text-stone-400 px-1 gap-2"><div className="flex-1 max-w-[340px]">Description</div><div className="w-36">HTS code</div><div className="w-28">Origin</div><div className="w-16">Qty</div><div className="w-24">Unit $</div><div className="flex-1"/></div>
               {customs.lines.map((l,i)=>(
                 <div key={i} className="flex flex-wrap sm:flex-nowrap gap-2 items-center">
                   <input value={l.desc} onChange={e=>{const v=e.target.value;const hit=((settings&&settings.products)||[]).find(pr=>pr.name===v||pr.sku===v);if(hit){setLine(i,{desc:hit.name,hts:hit.hs||l.hts,origin:hit.origin==="US"?"United States":(hit.origin||l.origin),value:l.value||String(hit.value||"")});}else setLine(i,{desc:v});}} list="sc-prod-list" placeholder="Item description — type or pick a product" className="flex-1 min-w-0 max-w-[340px] bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-                  <button onClick={()=>shipSuggestHS(i)} disabled={!l.desc||shipHsBusy===i} title="Claude reads the item description and suggests an HTS code" className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap self-center">{shipHsBusy===i?"Searching…":"✨ Search HTS codes"}</button>
+                  
                   <input value={l.hts} onChange={e=>setLine(i,{hts:e.target.value})} list="htscodes" placeholder="HTS code" className="w-36 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
                   <select value={l.origin} onChange={e=>setLine(i,{origin:e.target.value})} className="w-28 bg-white border border-stone-200 rounded-lg px-1 py-1.5 text-sm outline-none focus:border-[#0099FF]">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
                   <input type="number" value={l.qty} onChange={e=>setLine(i,{qty:+e.target.value})} className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
                   <input type="number" value={l.value} onChange={e=>setLine(i,{value:e.target.value})} placeholder="0.00" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
-                  {!!(l.desc&&l.hts)&&<button onClick={()=>saveHtsToCatalog(l)} title="Save this HTS code to your product catalog for next time" className="text-xs text-[#006FBF] hover:underline whitespace-nowrap self-center">💾 Save</button>}
+                  <button onClick={()=>shipSuggestHS(i)} disabled={!l.desc||shipHsBusy===i} title="Claude reads the item description and suggests an HTS code" className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap self-center">{shipHsBusy===i?"Searching…":"✨ Search HTS codes"}</button>
+                  {!!(l.desc&&l.hts)&&<button onClick={()=>saveHtsToCatalog(l)} title="Save this HTS code to your product catalog for next time" className="text-xs text-[#006FBF] hover:underline whitespace-nowrap self-center">💾 Save to catalog</button>}
                   <button onClick={()=>delLine(i)} className="text-stone-300 hover:text-rose-500 w-5"><X className="w-4 h-4"/></button>
                 </div>
               ))}
@@ -3069,20 +3073,27 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 </button>))}
                 <button onClick={()=>setShipHsOpts(null)} className="text-[11px] text-stone-400 hover:text-stone-600 px-1">dismiss</button></div>}
               {customs.lines.reduce((a,l)=>a+(+l.value||0)*(+l.qty||0),0)>2500&&<div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-300 rounded px-2 py-1.5">⚠ Declared value is over <b>$2,500</b> — an <b>EEI filing is likely required</b> (the NOEEI 30.37(a) exemption no longer applies). <a href="https://ace.cbp.gov" target="_blank" rel="noreferrer" className="underline font-semibold">File via AESDirect on the CBP ACE portal →</a> then paste the ITN into the FTR / EEI box.</div>}
-            <div className="flex flex-wrap items-center gap-2 border-t border-stone-100 pt-3 mt-1">
-              <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700"><input type="checkbox" checked={!!customs.autoPrint} onChange={e=>setCustoms({...customs,autoPrint:e.target.checked})} className="accent-[#0086E0]"/>Auto-print after the label</label>
+            <AssetChips settings={settings||{}} sel={customs} onSel={(v)=>setCustoms(c=>({...c,...v}))}/>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={()=>setShipPad(v=>!v)} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">✍️ Draw a signature</button>
+              <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload signature<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"signature",name:f.name.replace(/\.[a-z]+$/i,""),data:b},...(pp.docAssets||[])]})),500);e.target.value="";}}/></label>
+              <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Change letterhead<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"letterhead",name:f.name.replace(/\.[a-z]+$/i,""),data:b},...(pp.docAssets||[])]})),1400);e.target.value="";}}/></label>
+            </div>
+            {shipPad&&<SignaturePad onSave={(b64)=>{setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"signature",name:"Signature "+new Date().toLocaleDateString(),data:b64},...(pp.docAssets||[])]}));setShipPad(false);}} onClose={()=>setShipPad(false)}/>}
+            <div className="flex flex-wrap items-end gap-2 border-t border-stone-100 pt-3 mt-1">
               <span className="flex-1"/>
+              <div className="flex flex-col items-end gap-2">
+              <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700"><input type="checkbox" checked={!!customs.autoPrint} onChange={e=>setCustoms({...customs,autoPrint:e.target.checked})} className="accent-[#0086E0]"/>Auto-print invoice after the label</label>
+              <div className="flex gap-2">
               <button onClick={()=>printShipCI(true)} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3.5 py-2 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-4 h-4"/>View invoice</button>
-              <button onClick={()=>printShipCI()} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5"><Receipt className="w-4 h-4"/>Print commercial invoice</button>
+              <button onClick={()=>printShipCI()} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5"><Receipt className="w-4 h-4"/>Print commercial invoice</button></div></div>
             </div>
                           <datalist id="htscodes">{[...new Set(((settings&&settings.products)||[]).map(pr=>pr.hs).filter(Boolean))].map(c=><option key={"p"+c} value={c}/>)}{HTS_SUGGEST.map(h=><option key={h.code} value={h.code}>{h.desc}</option>)}</datalist>
               <button onClick={addLine} className="flex items-center gap-1 text-xs bg-white border border-stone-200 hover:bg-stone-100 rounded-lg px-2.5 py-1.5 font-medium text-stone-700"><Plus className="w-3.5 h-3.5"/>Add item</button>
             </div>
             <div className="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-[#99D6FF]">
               <div className="text-sm">Declared value <span className="font-mono font-semibold">{money(customsTotal)}</span></div>
-              <button onClick={()=>setShowCI(s=>!s)} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium flex items-center gap-1.5 hover:bg-stone-800"><FileText className="w-4 h-4"/>{showCI?"Hide":"View"} commercial invoice</button>
             </div>
-            {showCI&&<CommercialInvoice sender={sender} receiver={receiver} customs={customs} total={customsTotal} reference={reference} pieces={pieces} totalWeight={totalWeight}/>}
           </div>
         )}
 

@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v209";
+const BUILD_TAG="addr-v211";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -173,7 +173,13 @@ function acctOf(england){return {base:england.base,apiKey:england.apiKey,custome
    (England bakes their markup into that account's rates), quotes and bookings run on THEIR
    account. Otherwise they fall back to the main account in Settings. The global "Use live
    England rates" toggle stays the master switch; base URL is inherited unless overridden. */
-function englandFor(client,settings){const g=(settings&&settings.england)||{};const c=client&&client.england;if(c&&c.customerId&&c.apiKey)return {...g,...c,enabled:!!g.enabled};return g;}
+function englandFor(client,settings){
+  // Single-account model: everything ships on the one England account entered in
+  // Settings → Carrier accounts. Per-customer England fields are ignored so a stray
+  // customer entry can never shadow the working account.
+  const g=(settings&&settings.england)||{};
+  return {...g,_src:"main"};
+}
 /* ── shared per-order shipping helpers (used by Orders individual ship + Batch) ── */
 async function ratesForOrder(o,opts,eng){
   const box=opts.box||{L:12,W:9,H:4};
@@ -1849,13 +1855,11 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
     </div>}
 
     {tab==="creds"&&<div className="space-y-3">
-      <div className="text-[10px] uppercase tracking-widest text-stone-400 flex items-center gap-2">England account — this customer's own rates{(c.england&&c.england.customerId&&c.england.apiKey)?<Badge tone="green">own account</Badge>:<Badge tone="stone">using your main account</Badge>}</div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <Field label="England customer ID"><Input value={(c.england&&c.england.customerId)||""} onChange={e=>upEng({customerId:e.target.value.trim()})} placeholder="e.g. 20605511"/></Field>
-        <Field label="England API key"><Input type="password" value={(c.england&&c.england.apiKey)||""} onChange={e=>upEng({apiKey:e.target.value.trim()})} placeholder="this customer's key"/></Field>
-        <Field label="Integration ID (labels)"><Input value={(c.england&&c.england.integrationId)||""} onChange={e=>upEng({integrationId:e.target.value.trim()})} placeholder="optional"/></Field>
+      <div className="text-[10px] uppercase tracking-widest text-stone-400">England account</div>
+      <div className="border border-stone-200 rounded-lg bg-stone-50 p-4 flex items-start gap-3">
+        <Wifi className="w-4 h-4 text-[#0086E0] shrink-0 mt-0.5"/>
+        <div className="text-sm text-stone-600">All shipping runs on your one England account, entered in <b>Settings → Carrier accounts</b>. There's nothing to enter per-customer — every quote and label uses that account automatically.</div>
       </div>
-      <p className="text-[11px] text-stone-400">Fill once — every login under {c.name} quotes and books on this account automatically and never sees a credential. Leave blank to use your main account.</p>
     </div>}
 
     {tab==="notes"&&<div className="space-y-2">
@@ -4082,7 +4086,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(!ready){setRateSrc({rates:[],live:false,loading:false,error:null});return;}
     const eng=englandFor(client,settings);
     const mask=(v)=>{v=String(v||"");return v.length>4?"…"+v.slice(-4):(v||"(empty)");};
-    const diag={src:(client&&client.england&&client.england.customerId&&client.england.apiKey)?"customer":"main",cust:mask(eng&&eng.customerId),key:mask(eng&&eng.apiKey),base:(eng&&eng.base)||"(no base URL)",enabled:!!(eng&&eng.enabled),hasKey:!!(eng&&eng.apiKey),hasCust:!!(eng&&eng.customerId),fromZip:originZip||"(none)"};
+    const diag={src:(eng&&eng._src)||"main",cust:mask(eng&&eng.customerId),key:mask(eng&&eng.apiKey),base:(eng&&eng.base)||"(no base URL)",enabled:!!(eng&&eng.enabled),hasKey:!!(eng&&eng.apiKey),hasCust:!!(eng&&eng.customerId),fromZip:originZip||"(none)"};
     if(eng&&eng.enabled&&eng.apiKey&&eng.customerId){
       setRateSrc(s=>({...s,loading:true,error:null,diag}));
       getLiveRates(shipment,eng).then(res=>{ if(cancel)return;

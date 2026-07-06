@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v194";
+const BUILD_TAG="addr-v195";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1797,12 +1797,12 @@ function Landing({onAuth}){
     <div className="absolute inset-0 pointer-events-none" style={{background:"repeating-linear-gradient(-35deg,transparent 0 70px,rgba(30,155,240,.05) 70px 72px)"}}/>
     <div className="absolute pointer-events-none" style={{width:640,height:640,borderRadius:"50%",top:-180,left:"50%",background:"radial-gradient(circle,rgba(30,155,240,.14),transparent 65%)",animation:"fwDrift 12s ease-in-out infinite"}}/>
     <div className="relative flex flex-col items-center gap-1.5 mb-2" style={{animation:"fwRise .6s ease both"}}>
-      <img src={FW_LOGO} alt="Freightwire" style={{height:76,filter:"drop-shadow(0 6px 18px rgba(30,155,240,.22))"}} className="w-auto" draggable={false}/>
+      <img src={FW_LOGO} alt="Freightwire" style={{height:76}} className="w-auto" draggable={false}/>
       <div className="text-[27px] text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></div>
     </div>
     <div className="relative text-[15px] font-medium text-stone-600 mb-6" style={{animation:"fwRise .6s .08s ease both"}}>Your shipping platform <span className="text-stone-900">&</span> partner</div>
     <div className="relative w-full flex justify-center py-4" style={{animation:"fwRise .6s .14s ease both",transform:"scale(1.2)",transformOrigin:"top center"}}>
-      <CloudAuth onDone={()=>window.location.reload()} initialMode="login"/>
+      <CloudAuth onDone={()=>window.location.reload()} initialMode="signin"/>
     </div>
     <button onClick={enterDemo} className="relative mt-4 text-[13px] text-stone-500 hover:text-stone-700 underline underline-offset-4 decoration-stone-300" style={{animation:"fwRise .6s .18s ease both"}}>Just looking? Take a peek →</button>
     <div className="relative mt-16 w-full max-w-3xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" style={{animation:"fwRise .6s .22s ease both",transform:"scale(0.85)",transformOrigin:"top center"}}>

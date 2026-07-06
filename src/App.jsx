@@ -30,7 +30,7 @@ const FEATURE_CATALOG=[
   {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:true},
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own UPS / other carrier accounts on the Connections page (England always shows; admins always have this)",default:false},
 ];
-const ADMIN_SECTIONS=[["overview","Overview"],["users","Users & logins"],["rates","Rates"],["labelcert","Label certification"],["customizations","Customizations"],["platforms","Platform accounts"],["branding","Branding"],["domains","Domains"]];
+const ADMIN_SECTIONS=[["overview","Overview"],["users","Users & logins"],["customers","Customers"],["rates","Rates"],["labelcert","Label certification"],["customizations","Customizations"],["platforms","Platform accounts"],["branding","Branding"],["domains","Domains"]];
 const adminSectionsFor=(user)=>(user&&user.role==="admin"&&user.adminPerms&&Array.isArray(user.adminPerms.sections))?ADMIN_SECTIONS.filter(s=>user.adminPerms.sections.includes(s[0])):ADMIN_SECTIONS;
 const featureOn=(id,user,flagsForUser)=>{
   if(!user)return false;
@@ -40,11 +40,12 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v200";
+const BUILD_TAG="addr-v202";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
 const BRAND=(()=>{ let k="shippingcloud"; try{ k=(import.meta.env&&import.meta.env.VITE_BRAND)||"shippingcloud"; }catch(e){}
+  if(k==="admin")return {key:"admin",fw:false,admin:true,name:"ShippingCloud HQ",short:"HQ",accent:"#0086E0",accent2:"#0072BE"};
   return k==="freightwire"
     ?{key:"freightwire",fw:true,name:"Freightwire Ship",short:"Freightwire",accent:"#1e3a5f",accent2:"#2d5a8e"}
     :{key:"shippingcloud",fw:false,name:"ShippingCloud",short:"ShippingCloud",accent:"#0086E0",accent2:"#0072BE"}; })();
@@ -1564,6 +1565,171 @@ function FedexCertLab({settings}){
   </div>);
 }
 
+/* ════════ ADMIN → CUSTOMERS (v202) — every customer, every login, everything editable ════════ */
+function CustomersMaster({clients,setClients,users,setUsers,currentUser}){
+  const [rules,setRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
+  const [q,setQ]=useState("");
+  const [sort,setSort]=useState("name");
+  const [openC,setOpenC]=useState(null);
+  const [ctab,setCtab]=useState("overview");
+  const [adding,setAdding]=useState(false);
+  const [nf,setNf]=useState({name:"",contact:"",email:"",phone:"",origin:"",markup:15});
+  const [lf,setLf]=useState({name:"",email:"",password:""});
+  const [flash,setFlash]=useState("");
+  const profiles=(rules.profiles&&rules.profiles.length)?rules.profiles:DEFAULT_RATE_RULES.profiles;
+  const assign=rules.assign||{};
+  const upClient=(id,patch)=>setClients(cs=>cs.map(c=>c.id===id?{...c,...patch}:c));
+  const upEng=(id,patch)=>setClients(cs=>cs.map(c=>c.id===id?{...c,england:{...(c.england||{}),...patch}}:c));
+  const upRules=(patch)=>setRules(r=>({...DEFAULT_RATE_RULES,...r,...patch}));
+  const profOf=(cid)=>profiles.find(p=>p.id===(assign[cid]||"default"))||profiles[0];
+  const upProfSvc=(pid,k,patch)=>upRules({profiles:profiles.map(p=>p.id===pid?{...p,services:{...(p.services||{}),[k]:{...((p.services||{})[k]||{}),...patch}}}:p)});
+  const loginsOf=(cid)=>users.filter(u=>u.role!=="admin"&&u.clientId===cid);
+  const unassigned=users.filter(u=>u.role!=="admin"&&!u.clientId&&!u.demo);
+  const say=(m)=>{setFlash(m);setTimeout(()=>setFlash(""),2200);};
+  const list=useMemo(()=>{
+    const t=q.trim().toLowerCase();
+    let cs=clients.filter(c=>{
+      if(!t)return true;
+      if([c.name,c.contact,c.email,c.phone].some(x=>String(x||"").toLowerCase().includes(t)))return true;
+      return loginsOf(c.id).some(u=>String(u.name||"").toLowerCase().includes(t)||String(u.email||"").toLowerCase().includes(t));
+    });
+    const cmp={name:(a,b)=>String(a.name||"").localeCompare(String(b.name||"")),
+      logins:(a,b)=>loginsOf(b.id).length-loginsOf(a.id).length,
+      markup:(a,b)=>(+b.markup||0)-(+a.markup||0),
+      profile:(a,b)=>profOf(a.id).name.localeCompare(profOf(b.id).name),
+      status:(a,b)=>String(a.status||"active").localeCompare(String(b.status||"active"))}[sort];
+    return [...cs].sort(cmp||(()=>0));
+  },[clients,users,q,sort,rules]);
+  const createCustomer=()=>{if(!nf.name)return;const id="c"+Date.now();setClients(p=>[...p,{id,name:nf.name,contact:nf.contact,email:nf.email,phone:nf.phone,origin:nf.origin,markup:+nf.markup||0,status:"active",since:new Date().toISOString().slice(0,7),plan:"Standard"}]);setNf({name:"",contact:"",email:"",phone:"",origin:"",markup:15});setAdding(false);setOpenC(id);setCtab("overview");say("Customer created.");};
+  const createLogin=(c)=>{
+    if(!lf.name||!lf.email||!lf.password)return;
+    setUsers(p=>[...p,{id:"u"+Date.now(),name:lf.name,email:lf.email,role:"customer",clientId:c.id,status:"active",password:lf.password,lastLogin:"—"}]);
+    setLf({name:"",email:"",password:""});say("Login created under "+c.name+".");
+  };
+  const setPw=async(u)=>{const np=window.prompt("New password for "+u.email+" (min 4 characters):");if(!np)return;
+    if(CLOUD.mode==="cloud"){const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});window.alert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}
+    else{setUsers(us=>us.map(x=>x.id===u.id?{...x,password:np}:x));window.alert("Password updated (local mode).");}};
+  const dedicated=(c)=>{
+    const cur=profOf(c.id);
+    const id="p"+Date.now();
+    upRules({profiles:[...profiles,{id,name:c.name,services:JSON.parse(JSON.stringify(cur.services||{})),surcharges:JSON.parse(JSON.stringify(cur.surcharges||{}))}],assign:{...assign,[c.id]:id}});
+    say('Dedicated profile "'+c.name+'" created — its rules now belong to this customer alone.');
+  };
+  const num=(v)=>v==null?"":v;
+  const CTABS=[["overview","Overview"],["logins","Logins"],["rates","Rates"],["creds","Credentials"]];
+  const svcQuick=RATE_SERVICES.fedex.filter(s=>!s.or);
+  const loginRow=(u)=>(
+    <div key={u.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
+      <div className="flex-1 min-w-[180px] grid grid-cols-2 gap-2">
+        <Input value={u.name||""} onChange={e=>setUsers(us=>us.map(x=>x.id===u.id?{...x,name:e.target.value}:x))}/>
+        <Input value={u.email||""} onChange={e=>setUsers(us=>us.map(x=>x.id===u.id?{...x,email:e.target.value}:x))}/>
+      </div>
+      <span className="text-[11px] text-stone-400 w-20">{u.lastLogin||"—"}</span>
+      <button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,status:x.status==="disabled"?"active":"disabled"}:x))} className={`text-[11px] rounded px-2 py-1 ${u.status==="disabled"?"bg-rose-100 text-rose-600":"bg-emerald-50 text-emerald-700"}`}>{u.status==="disabled"?"disabled":"active"}</button>
+      <button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))} className={`text-[11px] rounded px-2 py-1 ${u.companyAdmin?"bg-violet-600 text-white":"bg-stone-100 text-stone-600"}`}>{u.companyAdmin?"Co. admin ✓":"Co. admin"}</button>
+      <button onClick={()=>setPw(u)} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Password</button>
+      <button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Log in as</button>
+      <Select value={u.clientId||""} onChange={e=>{setUsers(us=>us.map(x=>x.id===u.id?{...x,clientId:e.target.value||null}:x));say("Login moved.");}} title="Move this login to another customer">
+        <option value="">— no customer —</option>{clients.map(cc=><option key={cc.id} value={cc.id}>{cc.name}</option>)}
+      </Select>
+      {u.id!==currentUser.id&&<button onClick={()=>{if(window.confirm("Delete login "+u.email+"? This can't be undone."))setUsers(us=>us.filter(x=>x.id!==u.id));}} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button>}
+    </div>);
+  return (<div className="space-y-3">
+    <div className="flex flex-wrap items-end gap-3">
+      <Field label="Search customers & logins"><Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Company, contact, login name or email…" className="w-64"/></Field>
+      <Field label="Sort by"><Select value={sort} onChange={e=>setSort(e.target.value)}><option value="name">Name</option><option value="logins">Most logins</option><option value="markup">Highest markup</option><option value="profile">Rate profile</option><option value="status">Status</option></Select></Field>
+      <span className="flex-1"/>
+      {flash&&<span className="text-xs text-emerald-600">{flash}</span>}
+      <button onClick={()=>setAdding(a=>!a)} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800"><Plus className="w-4 h-4"/>New customer</button>
+    </div>
+    {adding&&<div className="border border-stone-200 rounded-lg bg-white p-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
+      <Field label="Company"><Input value={nf.name} onChange={e=>setNf({...nf,name:e.target.value})}/></Field>
+      <Field label="Contact"><Input value={nf.contact} onChange={e=>setNf({...nf,contact:e.target.value})}/></Field>
+      <Field label="Email"><Input value={nf.email} onChange={e=>setNf({...nf,email:e.target.value})}/></Field>
+      <Field label="Phone"><Input value={nf.phone} onChange={e=>setNf({...nf,phone:e.target.value})}/></Field>
+      <Field label="Origin ZIP"><Input value={nf.origin} onChange={e=>setNf({...nf,origin:e.target.value})}/></Field>
+      <Field label="Markup %"><Input type="number" value={nf.markup} onChange={e=>setNf({...nf,markup:e.target.value})}/></Field>
+      <div className="col-span-2 sm:col-span-3"><button onClick={createCustomer} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Create customer</button></div>
+    </div>}
+    <div className="border border-stone-200 rounded-lg bg-white overflow-hidden divide-y divide-stone-100">
+      {list.length===0&&<div className="px-4 py-8 text-sm text-stone-400 text-center">No customers match "{q}".</div>}
+      {list.map(c=>{
+        const open=openC===c.id;const lg=loginsOf(c.id);const prof=profOf(c.id);
+        return (<div key={c.id}>
+          <div className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-stone-50 cursor-pointer" onClick={()=>{setOpenC(open?null:c.id);setCtab("overview");}}>
+            <ChevronRight className={`w-4 h-4 text-stone-400 transition-transform ${open?"rotate-90":""}`}/>
+            <div className="flex-1 min-w-0"><div className="font-medium text-sm truncate">{c.name}</div><div className="text-[11px] text-stone-400 truncate">{c.contact||"—"}{c.email?` · ${c.email}`:""}</div></div>
+            <Badge tone="blue">{lg.length} login{lg.length===1?"":"s"}</Badge>
+            <Badge tone="green">Rates: {prof.name}</Badge>
+            <span className="font-mono text-xs text-stone-500 w-14 text-right">{c.markup}%</span>
+            {(c.england&&c.england.customerId&&c.england.apiKey)?<Badge tone="amber">own England acct</Badge>:null}
+            <Badge tone={c.status==="inactive"?"stone":"green"}>{c.status||"active"}</Badge>
+          </div>
+          {open&&<div className="px-4 sm:px-11 pb-4 bg-stone-50/60">
+            <div className="flex items-center gap-1 border-b border-stone-200 pb-2 mb-3 pt-1">
+              {CTABS.map(([v,l])=><button key={v} onClick={()=>setCtab(v)} className={`text-sm px-3 py-1.5 rounded-lg ${ctab===v?"bg-stone-900 text-white font-medium":"text-stone-500 hover:bg-stone-100"}`}>{l}{v==="logins"?" ("+lg.length+")":""}</button>)}
+            </div>
+            {ctab==="overview"&&<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Field label="Company"><Input value={num(c.name)} onChange={e=>upClient(c.id,{name:e.target.value})}/></Field>
+              <Field label="Contact"><Input value={num(c.contact)} onChange={e=>upClient(c.id,{contact:e.target.value})}/></Field>
+              <Field label="Email"><Input value={num(c.email)} onChange={e=>upClient(c.id,{email:e.target.value})}/></Field>
+              <Field label="Phone"><Input value={num(c.phone)} onChange={e=>upClient(c.id,{phone:e.target.value})}/></Field>
+              <Field label="Origin ZIP"><Input value={num(c.origin)} onChange={e=>upClient(c.id,{origin:e.target.value})}/></Field>
+              <Field label="Legacy flat markup %"><Input type="number" value={num(c.markup)} onChange={e=>upClient(c.id,{markup:+e.target.value||0})}/></Field>
+              <Field label="Status"><Select value={c.status||"active"} onChange={e=>upClient(c.id,{status:e.target.value})}><option value="active">active</option><option value="inactive">inactive</option></Select></Field>
+              <Field label="Plan"><Input value={num(c.plan)} onChange={e=>upClient(c.id,{plan:e.target.value})}/></Field>
+              <div className="col-span-2 sm:col-span-4"><Field label="Notes (only admins see this)"><Input value={num(c.notes)} onChange={e=>upClient(c.id,{notes:e.target.value})} placeholder="Anything worth remembering about this account…"/></Field></div>
+              <div className="col-span-2 sm:col-span-4 flex justify-end"><button onClick={()=>{if(!window.confirm('Delete customer "'+c.name+'"? Their logins stay but lose the customer link.'))return;setUsers(us=>us.map(x=>x.clientId===c.id?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==c.id));setOpenC(null);}} className="text-[11px] text-rose-500 hover:text-rose-600">Delete customer</button></div>
+            </div>}
+            {ctab==="logins"&&<div className="space-y-2">
+              <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">{lg.length?lg.map(u=>loginRow(u)):<div className="px-3 py-4 text-sm text-stone-400">No logins yet — every login created below inherits {c.name}'s rates, features, and credentials automatically.</div>}</div>
+              <div className="border border-stone-200 rounded-lg bg-white p-3 flex flex-wrap items-end gap-2">
+                <Field label="Name"><Input value={lf.name} onChange={e=>setLf({...lf,name:e.target.value})}/></Field>
+                <Field label="Email"><Input value={lf.email} onChange={e=>setLf({...lf,email:e.target.value})}/></Field>
+                <Field label="Temp password"><Input value={lf.password} onChange={e=>setLf({...lf,password:e.target.value})}/></Field>
+                <button onClick={()=>createLogin(c)} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8]">Add login for {c.name}</button>
+              </div>
+              <p className="text-[11px] text-stone-400">Per-login tabs &amp; feature flags still live in Users &amp; logins (the Tabs button) — everything else about a login is editable right here.</p>
+            </div>}
+            {ctab==="rates"&&<div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-stone-600">{c.name} prices from</span>
+                <Select value={assign[c.id]||"default"} onChange={e=>upRules({assign:{...assign,[c.id]:e.target.value}})}>{profiles.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</Select>
+                {prof.id==="default"&&<button onClick={()=>dedicated(c)} className="text-xs bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-800">Create dedicated "{c.name}" profile</button>}
+                <span className="text-[11px] text-stone-400">{prof.id==="default"?"Heads up: editing Default below changes every customer on Default — create a dedicated profile to price this customer alone.":"Changes below hit only this profile's customers."}</span>
+              </div>
+              <div className="border border-stone-200 rounded-lg bg-white overflow-x-auto"><table className="w-full text-sm min-w-[640px]"><tbody>
+                {svcQuick.map(sv=>{const r=(prof.services||{})[sv.k]||{};return (
+                  <tr key={sv.k} className="border-t border-stone-100 first:border-t-0 hover:bg-stone-50">
+                    <td className="py-1.5 pl-3 pr-1 w-6"><input type="checkbox" checked={r.on!==false} onChange={e=>upProfSvc(prof.id,sv.k,{on:e.target.checked})} className="accent-[#0086E0]"/></td>
+                    <td className="py-1.5 pr-2 font-medium text-stone-800 whitespace-nowrap">{sv.l}</td>
+                    <td className="py-1.5 pr-2"><Select value={r.basis||"pct"} onChange={e=>upProfSvc(prof.id,sv.k,{basis:e.target.value})}><option value="pct">% Markup</option><option value="list">FedEx list − %</option><option value="fixed">Fixed $ over cost</option></Select></td>
+                    <td className="py-1.5 pr-2 whitespace-nowrap"><Input type="number" value={r.pct==null?"":r.pct} onChange={e=>upProfSvc(prof.id,sv.k,{pct:e.target.value})} className="w-20 text-right"/> <span className="text-stone-400 text-xs">{r.basis==="fixed"?"$":"%"}</span></td>
+                    <td className="py-1.5 pr-3 whitespace-nowrap"><span className="text-stone-400 text-xs">Min $</span> <Input type="number" value={r.min==null?"":r.min} onChange={e=>upProfSvc(prof.id,sv.k,{min:e.target.value})} className="w-24 text-right"/></td>
+                  </tr>);})}
+              </tbody></table></div>
+              <p className="text-[11px] text-stone-400">Zone overrides, weight breaks, One Rate pricing, surcharges, and printable rate sheets for this profile live in the Rates section — this is the fast lane for the per-service numbers. Every login under {c.name} inherits automatically.</p>
+            </div>}
+            {ctab==="creds"&&<div className="space-y-3">
+              <div className="text-[10px] uppercase tracking-widest text-stone-400 flex items-center gap-2">England account — this customer's own rates{(c.england&&c.england.customerId&&c.england.apiKey)?<Badge tone="green">own account</Badge>:<Badge tone="stone">using your main account</Badge>}</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <Field label="England customer ID"><Input value={(c.england&&c.england.customerId)||""} onChange={e=>upEng(c.id,{customerId:e.target.value.trim()})} placeholder="e.g. 20605511"/></Field>
+                <Field label="England API key"><Input type="password" value={(c.england&&c.england.apiKey)||""} onChange={e=>upEng(c.id,{apiKey:e.target.value.trim()})} placeholder="this customer's key"/></Field>
+                <Field label="Integration ID (labels)"><Input value={(c.england&&c.england.integrationId)||""} onChange={e=>upEng(c.id,{integrationId:e.target.value.trim()})} placeholder="optional"/></Field>
+              </div>
+              <p className="text-[11px] text-stone-400">Fill these once and every login under {c.name} quotes and books on this England account automatically — they never see or enter credentials. Leave blank to keep them on your main account. Login passwords are set in the Logins tab.</p>
+            </div>}
+          </div>}
+        </div>);
+      })}
+    </div>
+    {unassigned.length>0&&<div className="border border-amber-200 rounded-lg bg-amber-50/40 overflow-hidden">
+      <div className="px-4 py-2.5 text-sm font-semibold text-stone-700 border-b border-amber-100">Logins with no customer ({unassigned.length}) — assign one so they inherit rates &amp; credentials</div>
+      <div className="divide-y divide-amber-100 bg-white">{unassigned.map(u=>loginRow(u))}</div>
+    </div>}
+  </div>);
+}
+
 /* ════════ ADMIN → RATES (v196) — the rate markup database ════════ */
 function RatesAdmin({clients=[],brand}){
   const [rules,setRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
@@ -1794,32 +1960,50 @@ function RatesAdmin({clients=[],brand}){
         </tbody>
       </table></div>}
 
-      {tab==="surcharges"&&<div>
-        <div className="flex flex-wrap items-center gap-3 mb-2">
-          <p className="text-[11px] text-stone-500 flex-1 min-w-[260px]">All {FEDEX_SURCHARGES.length} Service Guide surcharges, split by segment where FedEx prices them differently — Express vs Ground vs Home Delivery each get their own row. Double-click a row to edit. <Badge tone="blue">app-applied</Badge> fees change quotes immediately (they replace the hardcoded signature / Saturday / declared-value amounts). The rest are billed inside England's quote total — your service % marks them up today; per-surcharge adjustments plug in when England's per-line breakdown is wired.</p>
+      {tab==="surcharges"&&<div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-[11px] text-stone-500 flex-1 min-w-[260px]">All {FEDEX_SURCHARGES.length} Service Guide surcharges in their own boxes — Express, Ground, and Home Delivery each carry their own rates. Double-click a row to edit. <Badge tone="blue">app-applied</Badge> fees change quotes immediately; the rest are billed inside England's quote total — your service % marks them up today, and per-surcharge adjustments plug in when England's per-line breakdown is wired.</p>
           <Input value={surQ} onChange={e=>setSurQ(e.target.value)} placeholder="Search surcharges…" className="w-52"/>
         </div>
-        <div className="overflow-x-auto"><table className="w-full text-sm min-w-[760px]">
-          <thead><tr className="text-[10px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal py-2 pr-2">Description</th><th className="text-left font-normal pr-2">ID</th><th className="text-left font-normal pr-2">Charge type</th><th className="text-left font-normal pr-2">Markup type</th><th className="text-right font-normal pr-2">Amount</th><th className="text-left font-normal">Applied by</th></tr></thead>
-          <tbody>{(()=>{
-            const q=surQ.trim().toLowerCase();
-            const list=FEDEX_SURCHARGES.filter(su=>!q||su.desc.toLowerCase().includes(q)||su.id.toLowerCase().includes(q)||(su.g||"").toLowerCase().includes(q)||(su.seg||"").toLowerCase().includes(q));
-            if(!list.length)return <tr><td colSpan={6} className="py-6 text-center text-stone-400">No surcharges match "{surQ}".</td></tr>;
-            const out=[];let lastG=null;
-            list.forEach(su=>{
-              if(su.g!==lastG){lastG=su.g;out.push(<tr key={"g:"+su.g}><td colSpan={6} className="pt-4 pb-1 text-[10px] uppercase tracking-widest text-stone-400 font-semibold">{su.g}</td></tr>);}
-              const r=surRow[su.id]||{};
-              const segTone=/^Express($| &| Freight)/.test(su.seg||"")?"blue":/Home Delivery/.test(su.seg||"")&&!/Ground/.test(su.seg||"")?"amber":/Ground/.test(su.seg||"")?"green":"stone";
-              out.push(<tr key={su.id} onDoubleClick={()=>setSurEdit({...su,type:r.type||(su.app?"fixed":"percent"),amount:r.amount!=null?r.amount:(su.def!=null?su.def:"")})} className="border-t border-stone-100 hover:bg-stone-50 cursor-pointer">
-                <td className="py-2 pr-2"><span className="mr-2">{su.desc}</span><Badge tone={segTone}>{su.seg||"All"}</Badge></td><td className="pr-2 font-mono text-xs text-stone-500">{su.id}</td><td className="pr-2 text-stone-500">{su.charge}</td>
-                <td className="pr-2 text-stone-500">{r.type||(su.app?"fixed":"—")}</td>
-                <td className="pr-2 text-right font-mono">{r.amount!=null&&r.amount!==""?(+r.amount).toFixed(2):(su.def!=null?su.def.toFixed(2):"—")}</td>
-                <td>{su.app?<Badge tone="blue">app-applied</Badge>:<Badge tone="stone">England-billed</Badge>}</td>
-              </tr>);
-            });
-            return out;
-          })()}</tbody>
-        </table></div>
+        {(()=>{
+          const q=surQ.trim().toLowerCase();
+          const match=(su)=>!q||su.desc.toLowerCase().includes(q)||su.id.toLowerCase().includes(q)||(su.g||"").toLowerCase().includes(q)||(su.seg||"").toLowerCase().includes(q);
+          const boxesOf=(su)=>{
+            const sg=su.seg||"All";
+            if(sg==="Express"||sg==="Express Freight")return ["express"];
+            if(sg==="Ground"||sg==="Ground Economy")return ["ground"];
+            if(sg==="Home Delivery")return ["home"];
+            if(sg==="Ground & Home Delivery")return ["ground","home"];
+            return ["shared"];   // "Express & Ground", "All"
+          };
+          const BOXES=[["express","FedEx Express surcharges","blue"],["ground","FedEx Ground surcharges","green"],["home","FedEx Home Delivery surcharges","amber"],["shared","Shared — same rate across services","stone"]];
+          return BOXES.map(([bk,title,tone])=>{
+            const list=FEDEX_SURCHARGES.filter(su=>boxesOf(su).includes(bk)&&match(su));
+            if(!list.length)return null;
+            return (<div key={bk} className="border border-stone-200 rounded-lg overflow-hidden">
+              <div className="px-4 py-2.5 bg-stone-50 border-b border-stone-100 flex items-center gap-2"><span className="text-sm font-semibold text-stone-700">{title}</span><Badge tone={tone}>{list.length}</Badge></div>
+              <div className="overflow-x-auto px-4 pb-3"><table className="w-full text-sm min-w-[700px]">
+                <thead><tr className="text-[10px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal py-2 pr-2">Description</th><th className="text-left font-normal pr-2">ID</th><th className="text-left font-normal pr-2">Charge type</th><th className="text-left font-normal pr-2">Markup type</th><th className="text-right font-normal pr-2">Amount</th><th className="text-left font-normal">Applied by</th></tr></thead>
+                <tbody>{(()=>{
+                  const out=[];let lastG=null;
+                  list.forEach(su=>{
+                    if(su.g!==lastG){lastG=su.g;out.push(<tr key={"g:"+su.g}><td colSpan={6} className="pt-3 pb-1 text-[10px] uppercase tracking-widest text-stone-400 font-semibold">{su.g}</td></tr>);}
+                    const r=surRow[su.id]||{};
+                    out.push(<tr key={su.id} onDoubleClick={()=>setSurEdit({...su,type:r.type||(su.app?"fixed":"percent"),amount:r.amount!=null?r.amount:(su.def!=null?su.def:"")})} className="border-t border-stone-100 hover:bg-stone-50 cursor-pointer">
+                      <td className="py-2 pr-2">{su.desc}{su.seg==="Ground & Home Delivery"&&<span className="text-[10px] text-stone-400 ml-1.5">(one rate covers Ground &amp; HD)</span>}{su.seg==="Express Freight"&&<span className="text-[10px] text-stone-400 ml-1.5">(Express Freight)</span>}{su.seg==="Ground Economy"&&<span className="text-[10px] text-stone-400 ml-1.5">(Ground Economy)</span>}</td>
+                      <td className="pr-2 font-mono text-xs text-stone-500">{su.id}</td><td className="pr-2 text-stone-500">{su.charge}</td>
+                      <td className="pr-2 text-stone-500">{r.type||(su.app?"fixed":"—")}</td>
+                      <td className="pr-2 text-right font-mono">{r.amount!=null&&r.amount!==""?(+r.amount).toFixed(2):(su.def!=null?su.def.toFixed(2):"—")}</td>
+                      <td>{su.app?<Badge tone="blue">app-applied</Badge>:<Badge tone="stone">England-billed</Badge>}</td>
+                    </tr>);
+                  });
+                  return out;
+                })()}</tbody>
+              </table></div>
+            </div>);
+          });
+        })()}
+        {(()=>{const q=surQ.trim().toLowerCase();return q&&!FEDEX_SURCHARGES.some(su=>su.desc.toLowerCase().includes(q)||su.id.toLowerCase().includes(q)||(su.g||"").toLowerCase().includes(q)||(su.seg||"").toLowerCase().includes(q))?<div className="py-6 text-center text-sm text-stone-400">No surcharges match "{surQ}".</div>:null;})()}
       </div>}
 
       {tab==="base"&&<div className="space-y-3">
@@ -1935,6 +2119,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
         {ALLOWED.map(([v,l])=><button key={v} onClick={()=>setSec(v)} className={`px-3 py-1.5 rounded-lg ${sec===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}
       </div>
 
+      {sec==="customers"&&<CustomersMaster clients={clients} setClients={setClients} users={users} setUsers={setUsers} currentUser={currentUser}/>}
       {sec==="rates"&&<RatesAdmin clients={clients} brand={brand}/>}
       {sec==="labelcert"&&<FedexCertLab settings={settings}/>}
       {sec==="branding"&&<Branding settings={settings} setSettings={setSettings} brand={brand} publicBrand={publicBrand} setPublicBrand={setPublicBrand}/>}
@@ -3063,6 +3248,10 @@ function AssistantChat({who,getContext,onAction}){
 function LandingGate({onDone}){
   const [auth,setAuth]=useState(()=>{const p=lsGet("postDemo",null);if(p){lsSet("postDemo",null);return "request";}return null;}); // null | "signin" | "request" | "fedex"
   const [intake,setIntake]=useState(null);
+  if(BRAND.admin)return (<div className="min-h-screen bg-stone-100 flex flex-col items-center justify-center p-4 gap-4">
+    <div className="text-center"><div className="text-2xl font-extrabold tracking-tight text-stone-900">ShippingCloud <span className="text-[#0086E0]">HQ</span></div><div className="text-xs text-stone-400 mt-1">Administrator portal — same accounts, same data, no customer noise.</div></div>
+    <CloudAuth initialMode="signin" onDone={onDone}/>
+  </div>);
   return (<div className="relative">
     <Landing onAuth={(m)=>{if(m!=="fedex")setIntake(null);setAuth(m);}}/>
     {auth&&<div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={(e)=>{if(e.target===e.currentTarget)setAuth(null);}}>
@@ -3107,7 +3296,7 @@ function AppInner(){
   const [companyUsers,setCompanyUsers]=usePersist("companyUsers",[]);
   const [companyFlags,setCompanyFlags]=usePersist("companyFlags",{});
   const [companyAdminRequests,setCompanyAdminRequests]=usePersist("companyAdminRequests",[]);
-  const [tab,setTab]=useState("ship");
+  const [tab,setTab]=useState(BRAND.admin?"admin":"ship");
   useEffect(()=>{ try{
     if(localStorage.getItem("scPurge")!=="2"){
       ["orders","shipments","returns","ledger","invoices","emails","drafts","pendingShips","rules","accounts"].forEach(k=>localStorage.removeItem(k));
@@ -3394,6 +3583,7 @@ function AppInner(){
       if(ord.length){ const rank=(k)=>{const i2=ord.indexOf(k);return i2<0?999:i2;}; out=[...out].sort((a,b)=>rank(a[0])-rank(b[0])); }
       return out;
     };
+    if(BRAND.admin)return [["admin","Admin HQ",ShieldCheck]];
     if(isAdmin)return applyPrefs(ALL_TABS);
     const t=ALL_TABS.filter(x=>x[0]!=="admin"&&(x[0]==="ship"||featureOn(x[0],currentUser,myFlags)));
     if(isCompanyAdmin){const entry=["companyadmin","Company admin",Building2];const i=t.findIndex(x=>x[0]==="settings");i>=0?t.splice(i,0,entry):t.push(entry);}
@@ -3402,6 +3592,7 @@ function AppInner(){
   const unfulfilled=orders.filter(o=>o.status==="unfulfilled").length;
 
   if(!currentUser) return <Login users={users} brand={{...DEFAULT_BRAND,...(settings.brand||{})}} onLogin={(u)=>{ const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }}/>;
+  if(BRAND.admin&&currentUser.role!=="admin") return (<div className="min-h-screen bg-stone-100 flex items-center justify-center p-4"><div className="bg-white border border-stone-200 rounded-xl p-8 text-center max-w-sm"><ShieldCheck className="w-8 h-8 text-stone-300 mx-auto mb-3"/><div className="font-semibold text-stone-800">Administrators only</div><p className="text-sm text-stone-500 mt-1">This portal is the admin HQ. Your account works on shippingcloud.net and freightwireship.com.</p><button onClick={()=>{lsDel("session");window.location.reload();}} className="mt-4 text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Sign out</button></div></div>);
 
   const [fedexPrompt,setFedexPrompt]=usePersist("fedexPrompt",{seen:false});
   const adminReturn=lsGet("adminReturn",null);

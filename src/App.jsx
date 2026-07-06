@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v208";
+const BUILD_TAG="addr-v209";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -149,14 +149,22 @@ const RATES_ENDPOINT="/.netlify/functions/quote";
 async function getLiveRates(s,england){
   if(!england||!england.enabled) return null;
   const body={carriers:s.carriers||"fedex",fromZip:s.fromZip,toZip:s.toZip,fromCountry:s.fromCountry||"US",toCountry:s.toCountry||"US",residential:!!s.residential,signature:!!s.signature,signatureOption:s.signatureOption||(s.signature?"direct":"none"),saturdayDelivery:!!s.saturdayDelivery,insuranceAmount:s.insuranceAmount||null,packageTypeCode:s.packageTypeCode||"",pieces:(s.pieces||[]).map(p=>({weight:+p.weight||1,length:+p.L||12,width:+p.W||9,height:+p.H||4})),account:{base:england.base,apiKey:england.apiKey,customerId:england.customerId}};
+  const attempt=async(ms)=>{
+    const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),ms);
+    try{
+      const r=await fetch(RATES_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:ctrl.signal});
+      clearTimeout(t);
+      let data=null; try{data=await r.json();}catch(e){ try{data={error:await r.text()};}catch(e2){} }
+      if(data&&typeof data==="object") return data;
+      if(!r.ok) return {live:false,error:`Server ${r.status}`,rates:[]};
+      return {live:false,error:"Empty response from server",rates:[]};
+    }catch(e){ clearTimeout(t); return {live:false,_transient:true,error:(e&&e.name==="AbortError")?"England took too long to respond":((e&&e.message)||"Network error"),rates:[]}; }
+  };
   try{
-    const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),12000);
-    const r=await fetch(RATES_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:ctrl.signal});
-    clearTimeout(t);
-    let data=null; try{data=await r.json();}catch(e){ try{data={error:await r.text()};}catch(e2){} }
-    if(data&&typeof data==="object") return data;
-    if(!r.ok) return {live:false,error:`Server ${r.status}`,rates:[]};
-    return {live:false,error:"Empty response from server",rates:[]};
+    let res=await attempt(25000);
+    // one automatic retry if the first attempt timed out or hit a network error (not on a real England error like 401)
+    if(res&&res._transient&&(!res.rates||!res.rates.length)){ res=await attempt(25000); }
+    return res;
   }catch(e){ return {live:false,error:(e&&e.message)||"Network error",rates:[]}; }
 }
 const SHIP_ENDPOINT="/.netlify/functions/ship";
@@ -4045,8 +4053,9 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   },[prefill]);
 
   const swap=()=>{const s=sender;setSender(receiver);setReceiver(s);};
+  const originZip=(String(sender.zip||"").match(/\d{5}/)||[])[0]||(String(client.origin||"").match(/\d{5}/)||[])[0]||(String((settings&&settings.sender&&settings.sender.zip)||"").match(/\d{5}/)||[])[0]||"";
   const ready=/^\d{5}/.test(receiver.zip||"")&&totalWeight>0;
-  const shipment={fromZip:sender.zip||client.origin,toZip:receiver.zip,pieces:pieces.map(p=>({...p,weight:pw(p)})),residential,signature,signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null,intl,packageTypeCode:""};
+  const shipment={fromZip:originZip,toZip:receiver.zip,pieces:pieces.map(p=>({...p,weight:pw(p)})),residential,signature,signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null,intl,packageTypeCode:""};
   // Front screen shows FedEx only (until a USPS/UPS/DAP deal is added). Blank-price skeleton before rates load.
   const FEDEX_SKELETON=[
     {key:"fedex_ground",carrier:"FedEx",label:"FedEx Ground®",cost:null},
@@ -4073,7 +4082,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(!ready){setRateSrc({rates:[],live:false,loading:false,error:null});return;}
     const eng=englandFor(client,settings);
     const mask=(v)=>{v=String(v||"");return v.length>4?"…"+v.slice(-4):(v||"(empty)");};
-    const diag={src:(client&&client.england&&client.england.customerId&&client.england.apiKey)?"customer":"main",cust:mask(eng&&eng.customerId),key:mask(eng&&eng.apiKey),base:(eng&&eng.base)||"(no base URL)",enabled:!!(eng&&eng.enabled),hasKey:!!(eng&&eng.apiKey),hasCust:!!(eng&&eng.customerId)};
+    const diag={src:(client&&client.england&&client.england.customerId&&client.england.apiKey)?"customer":"main",cust:mask(eng&&eng.customerId),key:mask(eng&&eng.apiKey),base:(eng&&eng.base)||"(no base URL)",enabled:!!(eng&&eng.enabled),hasKey:!!(eng&&eng.apiKey),hasCust:!!(eng&&eng.customerId),fromZip:originZip||"(none)"};
     if(eng&&eng.enabled&&eng.apiKey&&eng.customerId){
       setRateSrc(s=>({...s,loading:true,error:null,diag}));
       getLiveRates(shipment,eng).then(res=>{ if(cancel)return;
@@ -4415,7 +4424,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           :<><Calculator className="w-3.5 h-3.5"/>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""} — connect your England account in Settings → Carrier accounts for live pricing</>}
         </div>}
         {ready&&!rateSrc.live&&!rateSrc.loading&&rateSrc.diag&&<div className="text-[11px] text-stone-400 -mt-1 px-1">
-          Tried England on your <b>{rateSrc.diag.src==="customer"?"customer's":"main"}</b> account · customer ID {rateSrc.diag.cust} · key {rateSrc.diag.key} · {rateSrc.diag.enabled?"live toggle ON":"live toggle OFF"}{!rateSrc.diag.hasKey?" · no API key found":""}{!rateSrc.diag.hasCust?" · no customer ID found":""}{rateSrc.error&&/401|invalid/i.test(rateSrc.error)?" — England rejected this key/ID pair. Re-enter it in Settings → Carrier accounts and Test again.":""}
+          Tried England on your <b>{rateSrc.diag.src==="customer"?"customer's":"main"}</b> account · from ZIP {rateSrc.diag.fromZip} · customer ID {rateSrc.diag.cust} · key {rateSrc.diag.key} · {rateSrc.diag.enabled?"live toggle ON":"live toggle OFF"}{!rateSrc.diag.hasKey?" · no API key found":""}{!rateSrc.diag.hasCust?" · no customer ID found":""}{rateSrc.diag.fromZip==="(none)"?" — no origin ZIP: set your sender ZIP or the customer's origin.":""}{rateSrc.error&&/401|invalid/i.test(rateSrc.error)?" — England rejected this key/ID pair. Re-enter it in Settings → Carrier accounts and Test again.":""}
         </div>}
         <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom}/>
         {labelPreview&&<LabelPreviewModal data={labelPreview} onClose={()=>setLabelPreview(null)}/>}

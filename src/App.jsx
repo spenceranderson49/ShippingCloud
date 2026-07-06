@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v199";
+const BUILD_TAG="addr-v200";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -3001,10 +3001,10 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         <div className="relative grid lg:grid-cols-3 gap-4">
           <div className="min-w-0"><AddressCard title="Sender" data={sender} set={setSender} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} hideAddr23={custom.hideAddr23}/></div>
           <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-1/3 top-11 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-4 h-4"/></button>
-          <div className="min-w-0 lg:col-span-2"><AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} headerExtra={<div className="flex items-center gap-1.5">
+          <div className="min-w-0 lg:col-span-2"><AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} headerExtra={<div className="flex items-center gap-1.5 flex-1 min-w-0">
               <ScanLine className="w-4 h-4 text-[#0086E0] shrink-0"/>
-              <input value={scanVal} onChange={e=>setScanVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();scanApply(scanVal);}}} placeholder="Scan order # / SKU" className="w-36 border border-dashed border-[#66C2FF] bg-[#E6F4FF]/50 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] focus:bg-white placeholder:text-stone-400"/>
-              {scanMsg&&<span className={`text-[11px] flex items-center gap-1 max-w-[150px] truncate ${scanMsg.ok?"text-emerald-600":"text-rose-500"}`}>{scanMsg.ok?<CheckCircle2 className="w-3.5 h-3.5 shrink-0"/>:<AlertTriangle className="w-3.5 h-3.5 shrink-0"/>}{scanMsg.t}</span>}
+              <input value={scanVal} onChange={e=>setScanVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();scanApply(scanVal);}}} placeholder="Scan order # / SKU" title={scanMsg&&!scanMsg.ok?scanMsg.t:undefined} className={`flex-1 min-w-0 border border-dashed rounded-lg px-2 py-1 text-sm outline-none placeholder:text-stone-400 ${scanMsg?(scanMsg.ok?"border-emerald-300 bg-emerald-50":"border-rose-300 bg-rose-50"):"border-[#66C2FF] bg-[#E6F4FF]/50 focus:border-[#0086E0] focus:bg-white"}`}/>
+              {scanMsg&&(scanMsg.ok?<CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500"/>:<AlertTriangle className="w-4 h-4 shrink-0 text-rose-400"/>)}
             </div>} contactFallback={{phone:sender.phone,email:sender.email}} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }} hideAddr23={custom.hideAddr23} reqOverrides={{phone:custom.phoneRequired!==false,email:custom.emailRequired!==false}} side={addressCheck}/></div>
         </div>
         {!(sender.name||sender.company||sender.address1||sender.zip)&&<div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No sender on file — fill in the Sender card above, or set your default sender in Settings → Company.</div>}
@@ -7479,17 +7479,15 @@ function AddressCard({title,data,set,required,residential,setResidential,address
   return (<div className="relative">
     {abDatalists}
     <div className="flex items-center justify-between mb-1.5">
-      <div className="flex items-center gap-3 min-w-0">
-        <span className="text-[#0086E0] font-semibold text-sm">{title}</span>
-        {headerExtra}
-      </div>
+      <span className="text-[#0086E0] font-semibold text-sm">{title}</span>
       <div className="flex items-center gap-2">
-        {onSave&&<button type="button" onClick={saveToBook} disabled={!data.name&&!data.company} className={`flex items-center gap-1 text-[10px] rounded px-1.5 py-0.5 border ${savedOk?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-white border-stone-200 text-stone-500 hover:text-[#0086E0] hover:border-[#99D6FF] disabled:opacity-40"}`} title="Save this address to your address book">{savedOk?<><Check className="w-3 h-3"/>Saved</>:<><Plus className="w-3 h-3"/>Save to Address Book</>}</button>}
+        {false&&onSave&&<button type="button" onClick={saveToBook} disabled={!data.name&&!data.company} className={`flex items-center gap-1 text-[10px] rounded px-1.5 py-0.5 border ${savedOk?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-white border-stone-200 text-stone-500 hover:text-[#0086E0] hover:border-[#99D6FF] disabled:opacity-40"}`} title="Save this address to your address book">{savedOk?<><Check className="w-3 h-3"/>Saved</>:<><Plus className="w-3 h-3"/>Save to Address Book</>}</button>}
         {setResidential&&<label className="flex items-center gap-1.5 text-[11px] cursor-pointer"><input type="checkbox" checked={residential} onChange={e=>setResidential(e.target.checked)} className="accent-[#0086E0]"/>{residential?<span className="flex items-center gap-1 text-[#006FBF]"><Home className="w-3.5 h-3.5"/>Residential</span>:<span className="flex items-center gap-1 text-stone-600"><Building2 className="w-3.5 h-3.5"/>Commercial</span>}</label>}
       </div>
     </div>
     {addresses!==undefined&&(
-      <div className="relative mb-1.5">
+      <div className="flex items-center gap-2 mb-1.5">
+      <div className="relative flex-1 min-w-0">
         <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400"/>
         <input value={q} onChange={e=>{setQ(e.target.value);setOpen(true);}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder={(addresses&&addresses.length)?`Address book — ${addresses.length} saved (click to choose)…`:"Address book — empty (use Save to Address Book below)"} className="w-full bg-white border border-stone-200 rounded pl-8 pr-8 py-1.5 text-[13px] outline-none focus:border-[#0099FF] placeholder-stone-300"/>
         <button type="button" onMouseDown={(e)=>{e.preventDefault();setOpen(o=>!o);}} className="absolute right-2 top-1.5 text-stone-400 hover:text-[#0086E0]" title="Show all saved addresses"><ChevronDown className={`w-4 h-4 transition-transform ${open?"rotate-180":""}`}/></button>
@@ -7500,6 +7498,9 @@ function AddressCard({title,data,set,required,residential,setResidential,address
           {matches.map(a=><button key={a.id} onMouseDown={()=>pick(a)} className="w-full text-left px-3 py-2 hover:bg-[#E6F4FF]"><div className="text-sm font-medium text-stone-800">{a.name}{a.company?` · ${a.company}`:""}</div><div className="text-[11px] text-stone-400">{a.address1}{a.address1?", ":""}{a.city} {a.state} {a.zip}{a.acctNum?` · bill ${a.acctCarrier||""} ${a.acctNum}`:""}</div></button>)}
           </div>
         </div>}
+      </div>
+      {onSave&&<button type="button" onClick={saveToBook} disabled={!data.name&&!data.company} className={`shrink-0 flex items-center gap-1 text-[10px] rounded px-1.5 py-1 border ${savedOk?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-white border-stone-200 text-stone-500 hover:text-[#0086E0] hover:border-[#99D6FF]"}`}>{savedOk?<CheckCircle2 className="w-3 h-3"/>:<Plus className="w-3 h-3"/>}{savedOk?"Saved":"Save to Address Book"}</button>}
+      {headerExtra&&<div className={side?"shrink-0 lg:w-[250px] xl:w-[290px] flex":"shrink-0 flex"}>{headerExtra}</div>}
       </div>
     )}
     <div className={side?"flex flex-col lg:flex-row border border-stone-200 rounded-lg overflow-hidden":""}>

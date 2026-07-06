@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, MessageCircle, Sparkles, ClipboardList, Ban ,Sliders} from "lucide-react";
+import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, MessageCircle, Sparkles, ClipboardList, Ban ,Sliders, Save} from "lucide-react";
 const FW_BLUE="#0099FF";
 const FW_DARK="#111418";
 function BrandCloud({className,color}){return (
@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v220";
+const BUILD_TAG="addr-v221";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -8803,7 +8803,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
           </div>
         </div>}
       </div>
-      {onSave&&<button type="button" onClick={saveToBook} disabled={!data.name&&!data.company} title={savedOk?"Saved to address book":"Save this address to your address book"} className={`shrink-0 h-[34px] w-[34px] flex items-center justify-center rounded-lg border ${savedOk?"bg-emerald-50 border-emerald-200 text-emerald-600":"bg-white border-stone-200 text-stone-400 hover:text-[#0086E0] hover:border-[#99D6FF] disabled:opacity-40"}`}>{savedOk?<Check className="w-4 h-4"/>:<Plus className="w-4 h-4"/>}</button>}
+      {onSave&&<button type="button" onClick={saveToBook} disabled={!data.name&&!data.company} title={savedOk?"Saved to address book":"Save this address to your address book"} className={`shrink-0 h-[34px] w-[34px] flex items-center justify-center rounded-lg border ${savedOk?"bg-emerald-50 border-emerald-200 text-emerald-600":"bg-white border-stone-200 text-stone-400 hover:text-[#0086E0] hover:border-[#99D6FF] disabled:opacity-40"}`}>{savedOk?<Check className="w-4 h-4"/>:<Save className="w-4 h-4"/>}</button>}
       </div>
       {scanSlot&&<div className={side?"lg:w-[250px] xl:w-[290px] shrink-0 flex flex-col gap-1.5":"flex flex-col gap-1.5"}>
         {scanSlot}

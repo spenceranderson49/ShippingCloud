@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v182";
+const BUILD_TAG="addr-v185";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -659,12 +659,13 @@ function printCommercialInvoice(o,catalog,sender,opts={}){
     <div class="cell"><div class="k">Currency</div><div class="v">${cur}</div></div>
     <div class="cell"><div class="k">Country of destination</div><div class="v">${esc(o.country||"—")}</div></div>
     <div class="cell"><div class="k">Packages</div><div class="v">${esc(String(opts.packages||"1"))}</div></div>
-    <div class="cell"><div class="k">Gross weight</div><div class="v">${esc(String(o.weight||"—"))} lb</div></div>
+    <div class="cell"><div class="k">Gross weight</div><div class="v">${opts.units==="kg"?((+o.weight||0)?((+o.weight)*0.45359).toFixed(2)+" kg":"—"):esc(String(o.weight||"—"))+" lb"}</div></div>
     <div class="cell"><div class="k">FTR / EEI</div><div class="v">${esc(opts.eei||(total<=2500?"NOEEI 30.37(a)":"AES ITN required"))}</div></div>
     <div class="cell"><div class="k">Marks &amp; numbers</div><div class="v">${esc(opts.marks||"—")}</div></div>
     <div class="cell"><div class="k">Invoice / PO reference</div><div class="v">${esc(opts.poRef||o.name||"—")}</div></div>
     <div class="cell"><div class="k">Ship date</div><div class="v">${esc(opts.shipDate||today)}</div></div>
     <div class="cell"><div class="k">Carrier / AWB</div><div class="v">${esc(opts.awb||"____________________")}</div></div>
+    <div class="cell"><div class="k">Importer of record</div><div class="v">${esc(opts.ior||"Receiver")}</div></div>
     <div class="cell"><div class="k">Parties to transaction</div><div class="v" style="font-weight:400;">☐ Related &nbsp; ☐ Not related</div></div>
   </div>
   ${samples?`<div class="samples">SAMPLES — NOT FOR RESALE · VALUE FOR CUSTOMS PURPOSES ONLY</div>`:""}
@@ -2683,7 +2684,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const [shipPad,setShipPad]=useState(false);
   const [bookedLock,setBookedLock]=useState(null);
   const printShipCI=(preview)=>{const o2={name:reference||invoiceNo||"CI-"+Date.now(),customer:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip,country:receiver.country,phone:receiver.phone,email:receiver.email,weight:totalWeight,lineItems:customs.lines.map(l=>({name:l.desc,quantity:+l.qty||1,price:String(l.value||0)}))};
-    printCommercialInvoice(o2,(settings&&settings.products)||[],settings.sender,{reason:customs.reason,incoterm:customs.incoterm,samples:customs.samples,marks:customs.marks,notes:customs.notes,senderTax:customs.senderTaxId??settings.taxId,senderTaxCountry:customs.senderTaxCountry,receiverTax:customs.receiverTaxId,receiverEori:customs.receiverEori,receiverContact2:customs.altContact,eei:customs.ftr??"NOEEI 30.37(a)",signature:customs.signature||defaultSig(settings),letterhead:customs.letterhead,preview:!!preview,attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(customs.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data})),printedName:customs.printedName,proforma:customs.proforma,awb:(bookedLock&&bookedLock.tracking)||"",rows:customs.lines.map(l=>({name:l.desc,qty:+l.qty||1,unit:+l.value||0,hs:l.hts,origin:l.origin,w:(l.wlb||l.woz)?`${+l.wlb||0} lb ${+l.woz||0} oz`:""}))});};
+    printCommercialInvoice(o2,(settings&&settings.products)||[],settings.sender,{reason:customs.reason,incoterm:customs.incoterm,samples:customs.samples,marks:customs.marks,notes:customs.notes,senderTax:customs.senderTaxId??settings.taxId,senderTaxCountry:customs.senderTaxCountry,receiverTax:customs.receiverTaxId,receiverEori:customs.receiverEori,receiverContact2:customs.altContact,eei:customs.ftr??"NOEEI 30.37(a)",signature:customs.signature||defaultSig(settings),letterhead:customs.letterhead,preview:!!preview,attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(customs.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data})),printedName:customs.printedName,proforma:customs.proforma,awb:(bookedLock&&bookedLock.tracking)||"",units:customs.units||"lb",ior:customs.ior==="Other"?(customs.iorName||"Other"):(customs.ior||"Receiver"),rows:customs.lines.map(l=>({name:l.desc,qty:+l.qty||1,unit:+l.value||0,hs:l.hts,origin:l.origin,w:(customs.units==="kg")?(l.wkg?`${+l.wkg} kg`:""):((l.wlb||l.woz)?`${+l.wlb||0} lb ${+l.woz||0} oz`:"")}))});};
   const [shipHsMsg,setShipHsMsg]=useState(null);
   const shipSuggestHS=async(i)=>{ const l0=customs.lines[i]; if(!l0||!l0.desc)return;
     setShipHsBusy(i); setShipHsMsg(null);
@@ -3048,7 +3049,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <Field label="FTR / EEI"><input value={customs.ftr??"NOEEI 30.37(a)"} onChange={e=>setCustoms({...customs,ftr:e.target.value})} list="sc-ftr-list" placeholder="NOEEI 30.37(a)" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/><datalist id="sc-ftr-list"><option value="NOEEI 30.37(a)">Under $2,500 per HS class</option><option value="NOEEI 30.36">To Canada</option><option value="NOEEI 30.37(h)">Gift / humanitarian</option><option value="AES ITN: X2026________">Filed — paste ITN</option></datalist></Field>
             </div>
             <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold mt-1">Receiver details</div>
-            <div className="grid sm:grid-cols-3 gap-2">
+            <div className="grid sm:grid-cols-4 gap-2">
+              <Field label="Importer of record"><div className="flex gap-1"><Select value={customs.ior||"Receiver"} onChange={e=>setCustoms({...customs,ior:e.target.value})}><option>Receiver</option><option>Shipper</option><option>Other</option></Select>{customs.ior==="Other"&&<input value={customs.iorName||""} onChange={e=>setCustoms({...customs,iorName:e.target.value})} placeholder="IOR name" className="w-28 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>}</div></Field>
               <Field label="Receiver VAT / Tax ID"><input value={customs.receiverTaxId||""} onChange={e=>setCustoms({...customs,receiverTaxId:e.target.value})} placeholder="VAT nr" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
               <Field label="Receiver EORI"><input value={customs.receiverEori||""} onChange={e=>setCustoms({...customs,receiverEori:e.target.value})} placeholder="EU/UK EORI" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
               <Field label="Additional receiver contact"><input value={customs.altContact||""} onChange={e=>setCustoms({...customs,altContact:e.target.value})} placeholder="Broker / consignee alt — name & phone" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
@@ -3061,24 +3063,29 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
 
             <Field label="Invoice notes"><textarea value={customs.notes||""} onChange={e=>setCustoms({...customs,notes:e.target.value})} rows={2} placeholder="Custom notes printed on the invoice — license numbers, 'samples for exhibition use only'…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
                         <div className="space-y-1.5">
-              <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold mb-1">Add products</div>
-              <div className="hidden sm:flex text-[10px] uppercase tracking-wide text-stone-400 px-1 gap-2"><div className="flex-1 max-w-[340px]">Description</div><div className="w-36">HTS code</div><div className="w-28">Origin</div><div className="w-14">Lb</div><div className="w-14">Oz</div><div className="w-16">Qty</div><div className="w-24">Unit $</div><div className="flex-1"/></div>
+              <div className="flex items-center justify-between mb-1"><div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">Add products</div>
+              <div className="flex rounded-lg border border-stone-200 overflow-hidden text-[11px] font-medium">
+                <button onClick={()=>setCustoms({...customs,units:"lb"})} className={(customs.units||"lb")==="lb"?"bg-[#0086E0] text-white px-2.5 py-1":"bg-white text-stone-500 px-2.5 py-1 hover:bg-stone-50"}>lb / oz</button>
+                <button onClick={()=>setCustoms({...customs,units:"kg"})} className={customs.units==="kg"?"bg-[#0086E0] text-white px-2.5 py-1":"bg-white text-stone-500 px-2.5 py-1 hover:bg-stone-50"}>kg</button>
+              </div></div>
+              <div className="hidden sm:flex text-[10px] uppercase tracking-wide text-stone-400 px-1 gap-2"><div className="flex-1 max-w-[340px]">Description</div><div className="w-36">HTS code</div><div className="w-28">Origin</div>{(customs.units||"lb")==="lb"?<><div className="w-14">Lb</div><div className="w-14">Oz</div></>:<div className="w-[120px]">Kg</div>}<div className="w-16">Qty</div><div className="w-24">Unit $</div><div className="flex-1"/></div>
               {customs.lines.map((l,i)=>(
                 <div key={i} className="flex flex-wrap sm:flex-nowrap gap-2 items-center">
                   <input value={l.desc} onChange={e=>{const v=e.target.value;const hit=((settings&&settings.products)||[]).find(pr=>pr.name===v||pr.sku===v);if(hit){const wt=+hit.wt||0;setLine(i,{desc:hit.name,hts:hit.hs||l.hts,origin:hit.origin==="US"?"United States":(hit.origin||l.origin),value:l.value||String(hit.value||""),wlb:l.wlb??(wt?Math.floor(wt):""),woz:l.woz??(wt?Math.round((wt%1)*16):"")});}else setLine(i,{desc:v});}} list="sc-prod-list" placeholder="Item description — type or pick a product" className="flex-1 min-w-0 max-w-[340px] bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
                   
                   <input value={l.hts} onChange={e=>setLine(i,{hts:e.target.value})} list="htscodes" placeholder="HTS code" className="w-36 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
                   <input value={l.origin} onChange={e=>setLine(i,{origin:e.target.value})} list="sc-origin-list" placeholder="Origin" className="w-28 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-                  <input type="number" value={l.wlb??""} onChange={e=>setLine(i,{wlb:e.target.value})} placeholder="lb" className="w-14 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-                  <input type="number" value={l.woz??""} onChange={e=>setLine(i,{woz:e.target.value})} placeholder="oz" className="w-14 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+                  {(customs.units||"lb")==="lb"?<><input type="number" value={l.wlb??""} onChange={e=>setLine(i,{wlb:e.target.value})} placeholder="lb" className="w-14 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+                  <input type="number" value={l.woz??""} onChange={e=>setLine(i,{woz:e.target.value})} placeholder="oz" className="w-14 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/></>:
+                  <input type="number" value={l.wkg??""} onChange={e=>setLine(i,{wkg:e.target.value})} placeholder="kg" className="w-[120px] bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/>}
                   <input type="number" value={l.qty} onChange={e=>setLine(i,{qty:+e.target.value})} className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
                   <input type="number" value={l.value} onChange={e=>setLine(i,{value:e.target.value})} placeholder="0.00" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
                   <button onClick={()=>shipSuggestHS(i)} disabled={!l.desc||shipHsBusy===i} title="Claude reads the item description and suggests an HTS code" className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap self-center">{shipHsBusy===i?"Searching…":"✨ Search HTS codes"}</button>
-                  {i===customs.lines.length-1&&<button onClick={addLine} title="Add another product line" className="flex items-center gap-1 text-xs bg-white border border-stone-200 hover:bg-stone-100 rounded-lg px-2.5 py-1.5 font-medium text-stone-700 whitespace-nowrap self-center"><Plus className="w-3.5 h-3.5"/>Add item</button>}
                   {!!(l.desc&&l.hts)&&<button onClick={()=>saveHtsToCatalog(l)} title="Save this HTS code to your product catalog for next time" className="text-xs text-[#006FBF] hover:underline whitespace-nowrap self-center">💾 Save to catalog</button>}
                   <button onClick={()=>delLine(i)} className="text-stone-300 hover:text-rose-500 w-5"><X className="w-4 h-4"/></button>
                 </div>
               ))}
+              <button onClick={addLine} className="flex items-center gap-1 text-xs bg-white border border-stone-200 hover:bg-stone-100 rounded-lg px-2.5 py-1.5 font-medium text-stone-700 mt-1"><Plus className="w-3.5 h-3.5"/>Add item</button>
               {shipHsMsg&&<div className={`text-[11px] rounded px-2 py-1 border ${shipHsMsg.err?"text-rose-700 bg-rose-50 border-rose-200":"text-emerald-700 bg-emerald-50 border-emerald-200"}`}>{shipHsMsg.err||shipHsMsg.ok}</div>}
               {shipHsOpts&&<div className="flex flex-wrap gap-1.5">{shipHsOpts.opts.map(op=>(
                 <button key={op.code} onClick={()=>{setLine(shipHsOpts.line,{hts:op.code});setShipHsOpts(null);setShipHsMsg({ok:`Applied ${op.code}. Click 💾 Save on the line to remember it for this product.`});}} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-full px-2.5 py-1 font-medium hover:bg-[#CCEAFF]">
@@ -3088,6 +3095,10 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               {customs.lines.reduce((a,l)=>a+(+l.value||0)*(+l.qty||0),0)>2500&&<div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-300 rounded px-2 py-1.5">⚠ Declared value is over <b>$2,500</b> — an <b>EEI filing is likely required</b> (the NOEEI 30.37(a) exemption no longer applies). <a href="https://ace.cbp.gov" target="_blank" rel="noreferrer" className="underline font-semibold">File via AESDirect on the CBP ACE portal →</a> then paste the ITN into the FTR / EEI box.</div>}
             <AssetChips settings={settings||{}} sel={customs} onSel={(v)=>setCustoms(c=>({...c,...v}))}/>
             <div className="flex flex-wrap gap-2">
+              <span className="flex items-center gap-1.5 border border-stone-200 rounded-lg pl-1.5 pr-1 py-1 bg-white">
+                {settings.companyLogo?<img src={settings.companyLogo} alt="logo" className="h-6 max-w-[90px] object-contain"/>:<span className="text-[11px] text-stone-400 px-1">No logo yet</span>}
+                <label className="text-[11px] text-[#006FBF] hover:underline cursor-pointer px-1 whitespace-nowrap">Change logo<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,companyLogo:b})),600);e.target.value="";}}/></label>
+              </span>
               <input value={customs.printedName??((settings.sender&&settings.sender.name)||"")} onChange={e=>setCustoms({...customs,printedName:e.target.value})} placeholder="Printed name (under signature)" className="w-52 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-[#0099FF] placeholder-stone-300"/>
               <button onClick={()=>setShipPad(v=>!v)} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">✍️ Draw a signature</button>
               <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload signature<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"signature",name:f.name.replace(/\.[a-z]+$/i,""),data:b},...(pp.docAssets||[])]})),500);e.target.value="";}}/></label>

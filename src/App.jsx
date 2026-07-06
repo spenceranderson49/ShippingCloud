@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v195";
+const BUILD_TAG="addr-v197";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1471,7 +1471,7 @@ function makeDemoData(){
   }
 
   // 18 orders — Shopify-heavy, 8 waiting to fulfill
-  const orders=Array.from({length:18},(_,i)=>{const {who,c,company,email,phone}=person(i);return {id:7000+i,name:"#1"+(140+i),customer:who,company,address1:(88+i*9)+" "+["Cedar Ave","Birch Ct","Market St","Lakeview Dr"][i%4],city:c[0],state:c[1],zip:c[2],phone,email,items:PRODUCTS[i%PRODUCTS.length]+(i%3===0?", "+PRODUCTS[(i+5)%PRODUCTS.length]:""),status:i<8?"unfulfilled":"fulfilled",source:i%5===0?"Manual":"Shopify",weight:[3,1,2,5,1,4,2,3,1,2,6,2,4,1,3,2,5,1][i],total:+((19+i*8.75).toFixed(2)),date:demoDaysAgo(i%6)};});
+  const orders=Array.from({length:18},(_,i)=>{const {who,c,company,email,phone}=person(i);return {id:7000+i,name:"#1"+(140+i),customer:who,company,address1:(88+i*9)+" "+["Cedar Ave","Birch Ct","Market St","Lakeview Dr"][i%4],city:c[0],state:c[1],zip:c[2],phone,email,items:PRODUCTS[i%PRODUCTS.length]+(i%3===0?", "+PRODUCTS[(i+5)%PRODUCTS.length]:""),status:i<8?"unfulfilled":"fulfilled",source:i%5===0?"Manual":"Shopify",shippingService:i%5===0?"":["FedEx Home Delivery","FedEx 2Day","FedEx Express Saver","FedEx Priority Overnight","Standard Shipping","FedEx Standard Overnight","FedEx 2Day","Free Shipping"][i%8],weight:[3,1,2,5,1,4,2,3,1,2,6,2,4,1,3,2,5,1][i],total:+((19+i*8.75).toFixed(2)),date:demoDaysAgo(i%6)};});
 
   // returns — FedEx only
   const returns=[
@@ -2835,7 +2835,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
   },[rateSrc,orRates,client.markup,fxTransit,residential,addrClassified,sigOption,saturday,insurance]);
   const best=null;
-  const matchedKey=useMemo(()=>{const so=selectedOrder?orders.find(x=>x.id===selectedOrder):null;return matchRequestedService(quotes,so&&so.shippingService);},[quotes,selectedOrder,orders]);
+  const matched=useMemo(()=>{const so=selectedOrder?orders.find(x=>x.id===selectedOrder):null;return matchServiceForOrder(quotes,so);},[quotes,selectedOrder,orders]);
 
   const buildRec=(q,carrier,extra)=>({id:Date.now(),date:new Date().toLocaleDateString(),tracking:(extra&&extra.tracking)||newTracking(carrier),carrier,service:q.label,recipient:{...receiver},sender:{...sender},fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,pieces:pieces.map(p=>({...p})),dims:pieces[0],insurance,cost:q.cost,sell:q.sell,billTo,thirdAcct,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference,invoiceNo,poNo,residential,intl,bookNumber:extra&&extra.bookNumber,customs:intl?{...customs,total:customsTotal,ci:"CI-"+rnd(5)}:null});
   const print=async(q)=>{
@@ -3151,7 +3151,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           :rateSrc.live?<><Wifi className="w-3.5 h-3.5"/>Live rates from your England account</>
           :<><Calculator className="w-3.5 h-3.5"/>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""} — connect your England account in Settings → Carrier accounts for live pricing</>}
         </div>}
-        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matchedKey} collapsible={true} onOneRate={applyOneRateBox} custom={custom}/>
+        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom}/>
         {labelPreview&&<LabelPreviewModal data={labelPreview} onClose={()=>setLabelPreview(null)}/>}
         {naming&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setNaming(false)}><div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-sm space-y-3" onClick={e=>e.stopPropagation()}><div className="text-sm font-semibold text-stone-800">Name this draft</div><input autoFocus value={draftName} onChange={e=>setDraftName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")commitDraft(draftName.trim());}} placeholder="e.g. Dana Cole – Miami" className="w-full bg-white border border-stone-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><div className="flex justify-end gap-2"><button onClick={()=>setNaming(false)} className="text-sm px-3 py-1.5 rounded text-stone-600 hover:bg-stone-100">Cancel</button><button onClick={()=>commitDraft(draftName.trim())} className="text-sm px-3 py-1.5 rounded bg-stone-900 text-white font-medium hover:bg-stone-800">Save draft</button></div></div></div>}
         {shipStatus&&<div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2.5 ${shipStatus.state==="error"?"bg-rose-50 text-rose-700 border border-rose-200":shipStatus.state==="booked"?"bg-emerald-50 text-emerald-700 border border-emerald-200":shipStatus.state==="pending_timeout"?"bg-amber-50 text-amber-700 border border-amber-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
@@ -3268,6 +3268,12 @@ function CarrierMark({carrier,className}){
   if(carrier==="FedEx") return <img src={FEDEX_LOGO} alt="FedEx" className={className||"h-6 w-auto"}/>;
   return <span className={`font-bold ${CARRIER_TINT[carrier]||"text-stone-700"} ${className||""}`}>{carrier}</span>;
 }
+function matchServiceForOrder(quotes,o){
+  if(!o)return null;
+  if(o.ruleService){ const hit=quotes.find(q=>canonSvc(q.label)===canonSvc(o.ruleService)&&(q.sell??q.cost)!=null); if(hit)return {key:hit.key,src:"autopilot"}; }
+  const req=matchRequestedService(quotes,o.shippingService);
+  return req?{key:req,src:"requested"}:null;
+}
 function matchRequestedService(quotes,requested){
   if(!requested)return null;
   const c=canonSvc(requested);
@@ -3276,7 +3282,7 @@ function matchRequestedService(quotes,requested){
   const hit=quotes.find(q=>canonSvc(q.label)===c&&(q.sell??q.cost)!=null);
   return hit?hit.key:null;
 }
-function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=true,onOneRate,custom=CUSTOM_DEFAULTS,matched=null,collapsible=false}){
+function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=true,onOneRate,custom=CUSTOM_DEFAULTS,matched=null,matchedSrc=null,collapsible=false}){
   const [showAll,setShowAll]=useState(false);
   const collapse=collapsible&&custom.matchedOnly&&matched&&!showAll&&quotes.some(q=>q.key===matched);
   const [view,setView]=useState(custom.defaultView||"cheapest");
@@ -3306,7 +3312,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
       <div key={q.key} className={"border rounded-lg bg-white "+(matched===q.key?"border-[#0086E0] ring-1 ring-[#0086E0]":"border-stone-200")}>
         <div onClick={()=>{setOpen(isOpen?null:q.key); if(q._oneRate&&q.packageTypeCode&&onOneRate)onOneRate(q.packageTypeCode);}} className="px-3 py-2 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
           <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isOpen?"rotate-90":""}`}/>
-          {matched===q.key&&<span className="text-[10px] font-semibold uppercase tracking-wide bg-[#E6F4FF] text-[#0086E0] border border-[#99D6FF] rounded px-1.5 py-0.5 shrink-0">Requested</span>}
+          {matched===q.key&&<span className="text-[10px] font-semibold uppercase tracking-wide bg-[#E6F4FF] text-[#0086E0] border border-[#99D6FF] rounded px-1.5 py-0.5 shrink-0 flex items-center gap-1">{matchedSrc==="autopilot"&&<Zap className="w-3 h-3"/>}{matchedSrc==="autopilot"?"Autopilot":"Requested"}</span>}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2"><span className="text-sm truncate">{(custom.aliases&&custom.aliases[canonSvc(q.label)])||q.label}</span></div>
             <div className="text-[11px] text-stone-500 flex items-center gap-1"><Calendar className="w-3 h-3"/>Transit Time: {days?(custom.transitStyle==="days"?<>{days} business day{days>1?"s":""}</>:<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}{fxLive&&days?<span className="text-[#0086E0] font-medium ml-1">FedEx</span>:""}</div>
@@ -3726,7 +3732,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
     return withTransit([...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday:sat,insurance}))).sort((a,b)=>(a.sell||0)-(b.sell||0));
   },[baseQuotes,orRates,fxTransit,sigOption,sat,insurance]);
   const best=null;
-  const matchedKey=useMemo(()=>matchRequestedService(quotes,o&&o.shippingService),[quotes,o&&o.shippingService]);
+  const matched=useMemo(()=>matchServiceForOrder(quotes,o),[quotes,o&&o.shippingService,o&&o.ruleService]);
   const applyORBox=(code)=>{const b=FEDEX_ONERATE.find(x=>x.code===code);if(!b)return;if(b.dims){setDims({L:b.dims.L,W:b.dims.W,H:b.dims.H});}setBoxIdx(-1);setOrPkg(code);const val="FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,"");const f=settings?.orBoxField||"invoice";const fill=(set)=>set(prev=>prev&&prev.trim()?prev:val);if(f==="invoice")fill(setInvoiceNo);else if(f==="po")fill(setPoNo);else if(f==="reference")fill(setReference);};
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
   const pickBox=(j)=>{ setBoxIdx(j); if(j>=0){const b=boxes[j];setDims({L:b.L,W:b.W,H:b.H});} };
@@ -3891,7 +3897,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
               </div>
             </div>
             {!shipped&&<div className="bg-white border border-stone-200 rounded-lg p-4">
-              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} matched={matchedKey} collapsible={true} onOneRate={applyORBox} custom={cz(settings||{})}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
+              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyORBox} custom={cz(settings||{})}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
               {ready&&rateSrc.loading&&<div className="text-xs text-stone-400 flex items-center gap-1.5 mt-2"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Loading rates…</div>}
               {status&&<div className={`mt-2 text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${status.state==="error"?"text-rose-600 bg-rose-50 border border-rose-200":status.state==="booking"?"text-stone-600 bg-stone-50 border border-stone-200":"text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF]"}`}>{status.state==="error"?<AlertTriangle className="w-3.5 h-3.5"/>:status.state==="booking"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{status.msg}</div>}
             </div>}

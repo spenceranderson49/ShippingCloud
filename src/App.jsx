@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v207";
+const BUILD_TAG="addr-v208";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -4072,13 +4072,15 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     let cancel=false;
     if(!ready){setRateSrc({rates:[],live:false,loading:false,error:null});return;}
     const eng=englandFor(client,settings);
+    const mask=(v)=>{v=String(v||"");return v.length>4?"…"+v.slice(-4):(v||"(empty)");};
+    const diag={src:(client&&client.england&&client.england.customerId&&client.england.apiKey)?"customer":"main",cust:mask(eng&&eng.customerId),key:mask(eng&&eng.apiKey),base:(eng&&eng.base)||"(no base URL)",enabled:!!(eng&&eng.enabled),hasKey:!!(eng&&eng.apiKey),hasCust:!!(eng&&eng.customerId)};
     if(eng&&eng.enabled&&eng.apiKey&&eng.customerId){
-      setRateSrc(s=>({...s,loading:true,error:null}));
+      setRateSrc(s=>({...s,loading:true,error:null,diag}));
       getLiveRates(shipment,eng).then(res=>{ if(cancel)return;
-        if(res&&res.live&&res.rates&&res.rates.length) setRateSrc({rates:res.rates,live:true,loading:false,error:null});
-        else setRateSrc({rates:localQuotes(),live:false,loading:false,error:(res&&res.error)||null});
+        if(res&&res.live&&res.rates&&res.rates.length) setRateSrc({rates:res.rates,live:true,loading:false,error:null,diag});
+        else setRateSrc({rates:localQuotes(),live:false,loading:false,error:(res&&res.error)||null,diag});
       });
-    } else setRateSrc({rates:localQuotes(),live:false,loading:false,error:null});
+    } else setRateSrc({rates:localQuotes(),live:false,loading:false,error:null,diag});
     return ()=>{cancel=true;};
   },[JSON.stringify(pieces),receiver.zip,sender.zip,residential,signature,sigOption,saturday,insurance,intl,settings.england,client&&client.england]);
   // address classified yet? only then do we hide the non-matching ground product
@@ -4411,6 +4413,9 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           {rateSrc.loading?<><Loader2 className="w-3.5 h-3.5 animate-spin"/>Fetching live rates…</>
           :rateSrc.live?<><Wifi className="w-3.5 h-3.5"/>Live rates from your England account</>
           :<><Calculator className="w-3.5 h-3.5"/>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""} — connect your England account in Settings → Carrier accounts for live pricing</>}
+        </div>}
+        {ready&&!rateSrc.live&&!rateSrc.loading&&rateSrc.diag&&<div className="text-[11px] text-stone-400 -mt-1 px-1">
+          Tried England on your <b>{rateSrc.diag.src==="customer"?"customer's":"main"}</b> account · customer ID {rateSrc.diag.cust} · key {rateSrc.diag.key} · {rateSrc.diag.enabled?"live toggle ON":"live toggle OFF"}{!rateSrc.diag.hasKey?" · no API key found":""}{!rateSrc.diag.hasCust?" · no customer ID found":""}{rateSrc.error&&/401|invalid/i.test(rateSrc.error)?" — England rejected this key/ID pair. Re-enter it in Settings → Carrier accounts and Test again.":""}
         </div>}
         <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom}/>
         {labelPreview&&<LabelPreviewModal data={labelPreview} onClose={()=>setLabelPreview(null)}/>}

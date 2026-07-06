@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v203";
+const BUILD_TAG="addr-v204";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1565,28 +1565,234 @@ function FedexCertLab({settings}){
   </div>);
 }
 
-/* ════════ ADMIN → CUSTOMERS (v202) — every customer, every login, everything editable ════════ */
-function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureFlags={},setFeatureFlags,customFeatures=[]}){
+/* ════════ ADMIN → DASHBOARD (extracted for the tab workspace) ════════ */
+function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection}){
+  return (<div className="space-y-4">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <Stat2 label="Shipments created" v={platform.total}/>
+      <Stat2 label="Shipments · last 30 days" v={platform.t30}/>
+      <Stat2 label="Revenue billed" v={money(platform.rev)}/>
+      <Stat2 label="Margin" v={money(platform.margin)} tone={platform.margin>=0?"text-emerald-600":"text-rose-600"}/>
+    </div>
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <Stat2 label="Logins created" v={loginStats.total}/>
+      <Stat2 label="Active logins" v={loginStats.active}/>
+      <Stat2 label="Signed in · last 7 days" v={loginStats.week}/>
+      <Stat2 label="Open orders (all logins)" v={platform.openOrders}/>
+    </div>
+    <div className="grid lg:grid-cols-2 gap-3">
+      <div className="border border-stone-200 rounded-lg bg-white p-4">
+        <div className="flex items-center justify-between mb-2"><div className="text-sm font-semibold text-stone-700">Latest shipments — all logins</div><button onClick={()=>openSection("customers")} className="text-[11px] text-[#0086E0] hover:underline">Customers →</button></div>
+        {platform.latest.length===0&&<div className="text-sm text-stone-400 py-4 text-center">No shipments yet.</div>}
+        <div className="divide-y divide-stone-100">{platform.latest.map((x,i2)=>(
+          <div key={i2} className="flex items-center gap-3 py-2 text-sm">
+            <div className="flex-1 min-w-0"><div className="text-stone-800 truncate">{(x.recipient&&x.recipient.name)||"—"} · {(x.recipient&&x.recipient.city)||""} {(x.recipient&&x.recipient.state)||""}</div><div className="text-[11px] text-stone-400 truncate">{x.date} · {x.service||x.carrier||""} · by {uEmail(x._uid)}</div></div>
+            <div className="font-mono text-sm w-20 text-right">{money(x.sell||0)}</div>
+            <Badge tone={x.status==="Delivered"?"green":(x.status==="Voided"?"stone":"blue")}>{x.status||"—"}</Badge>
+          </div>))}
+        </div>
+      </div>
+      <div className="border border-stone-200 rounded-lg bg-white p-4">
+        <div className="text-sm font-semibold text-stone-700 mb-2">Recent logins</div>
+        {(!loginStats.recent||!loginStats.recent.length)&&<div className="text-sm text-stone-400 py-4 text-center">No logins yet.</div>}
+        <div className="divide-y divide-stone-100">{(loginStats.recent||[]).map((u,i2)=>(
+          <div key={i2} className="flex items-center gap-3 py-2 text-sm">
+            <div className="flex-1 min-w-0"><div className="text-stone-800 truncate">{u.name||u.email}</div><div className="text-[11px] text-stone-400 truncate">{u.email}</div></div>
+            <Badge tone={u.role==="admin"?"blue":"stone"}>{u.role}</Badge>
+            <span className="text-[11px] text-stone-400 w-20 text-right">{u.lastLogin||"—"}</span>
+          </div>))}
+        </div>
+      </div>
+    </div>
+  </div>);
+}
+
+/* ════════ ADMIN → CUSTOMER DETAIL (opens as its own tab) ════════ */
+const SUPPLY_ITEMS=["Thermal 4×6 labels","Laser label sheets","Poly mailers","Boxes — small","Boxes — medium","Boxes — large","Packing tape","Bubble mailers","Dunnage / void fill","Thermal printer ribbon"];
+function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featureFlags={},setFeatureFlags,customFeatures=[],settings,onClose}){
   const CATALOG=[...FEATURE_CATALOG,...(customFeatures||[]).map(c=>({...c,custom:true}))];
   const [rules,setRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
-  const [q,setQ]=useState("");
-  const [sort,setSort]=useState("name");
-  const [openC,setOpenC]=useState(null);
-  const [ctab,setCtab]=useState("overview");
-  const [adding,setAdding]=useState(false);
-  const [nf,setNf]=useState({name:"",contact:"",email:"",phone:"",origin:"",markup:15});
+  const [tab,setTab]=useState("profile");
   const [lf,setLf]=useState({name:"",email:"",password:""});
   const [flash,setFlash]=useState("");
+  const c=clients.find(x=>x.id===cid);
   const profiles=(rules.profiles&&rules.profiles.length)?rules.profiles:DEFAULT_RATE_RULES.profiles;
   const assign=rules.assign||{};
-  const upClient=(id,patch)=>setClients(cs=>cs.map(c=>c.id===id?{...c,...patch}:c));
-  const upEng=(id,patch)=>setClients(cs=>cs.map(c=>c.id===id?{...c,england:{...(c.england||{}),...patch}}:c));
+  const prof=profiles.find(p=>p.id===(assign[cid]||"default"))||profiles[0];
+  const upClient=(patch)=>setClients(cs=>cs.map(x=>x.id===cid?{...x,...patch}:x));
+  const upAddr=(patch)=>setClients(cs=>cs.map(x=>x.id===cid?{...x,address:{...(x.address||{}),...patch}}:x));
+  const upPrefs=(patch)=>setClients(cs=>cs.map(x=>x.id===cid?{...x,prefs:{...(x.prefs||{}),...patch}}:x));
+  const upEng=(patch)=>setClients(cs=>cs.map(x=>x.id===cid?{...x,england:{...(x.england||{}),...patch}}:x));
   const upRules=(patch)=>setRules(r=>({...DEFAULT_RATE_RULES,...r,...patch}));
-  const profOf=(cid)=>profiles.find(p=>p.id===(assign[cid]||"default"))||profiles[0];
   const upProfSvc=(pid,k,patch)=>upRules({profiles:profiles.map(p=>p.id===pid?{...p,services:{...(p.services||{}),[k]:{...((p.services||{})[k]||{}),...patch}}}:p)});
+  const lg=users.filter(u=>u.role!=="admin"&&u.clientId===cid);
+  const say=(m)=>{setFlash(m);setTimeout(()=>setFlash(""),2200);};
+  if(!c)return <div className="text-sm text-stone-400 py-10 text-center">This customer was deleted. <button onClick={onClose} className="text-[#0086E0] hover:underline">Close tab</button></div>;
+  const A=(obj,fn)=>(k)=>({value:(obj&&obj[k])||"",onChange:(e)=>fn({[k]:e.target.value})});
+  const fa=A(c.address||{},upAddr);
+  const pf=c.prefs||{};
+  const createLogin=()=>{if(!lf.name||!lf.email||!lf.password)return;setUsers(p=>[...p,{id:"u"+Date.now(),name:lf.name,email:lf.email,role:"customer",clientId:cid,status:"active",password:lf.password,lastLogin:"—"}]);setLf({name:"",email:"",password:""});say("Login created.");};
+  const setPw=async(u)=>{const np=window.prompt("New password for "+u.email+":");if(!np)return;if(CLOUD.mode==="cloud"){const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});window.alert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update."));}else{setUsers(us=>us.map(x=>x.id===u.id?{...x,password:np}:x));window.alert("Password updated (local).");}};
+  const dedicated=()=>{const id="p"+Date.now();upRules({profiles:[...profiles,{id,name:c.name,services:JSON.parse(JSON.stringify(prof.services||{})),surcharges:JSON.parse(JSON.stringify(prof.surcharges||{}))}],assign:{...assign,[cid]:id}});say("Dedicated profile created.");};
+  const companyFeatureState=(fid)=>{if(!lg.length)return "none";const on=lg.filter(u=>featureOn(fid,u,featureFlags[u.id])).length;return on===0?"off":on===lg.length?"on":"mixed";};
+  const setCompanyFeature=(fid,val)=>{setFeatureFlags&&setFeatureFlags(ff=>{const next={...ff};lg.forEach(u=>{next[u.id]={...(next[u.id]||{}),[fid]:val};});return next;});say((val?"Enabled":"Disabled")+" for all logins.");};
+  const supplies=pf.supplies||{};
+  const TABS=[["profile","Profile"],["address","Address"],["logins","Logins ("+lg.length+")"],["rates","Rates"],["labels","Label preferences"],["supplies","Supplies"],["features","Features"],["creds","Credentials"],["notes","Notes"]];
+  const svcQuick=RATE_SERVICES.fedex.filter(s=>!s.or);
+  return (<div className="space-y-4">
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="w-11 h-11 rounded-xl bg-[#0086E0]/10 text-[#0086E0] flex items-center justify-center font-bold text-lg">{String(c.name||"?").slice(0,1).toUpperCase()}</div>
+      <div className="flex-1 min-w-0"><div className="text-lg font-semibold text-stone-900 truncate">{c.name}</div><div className="text-[11px] text-stone-400">{lg.length} login{lg.length===1?"":"s"} · Rates: {prof.name} · {c.status||"active"}{(c.england&&c.england.customerId&&c.england.apiKey)?" · own England acct":""}</div></div>
+      {flash&&<span className="text-xs text-emerald-600">{flash}</span>}
+    </div>
+    <div className="flex items-center gap-1 border-b border-stone-200 overflow-x-auto">
+      {TABS.map(([v,l])=><button key={v} onClick={()=>setTab(v)} className={`px-3 py-2 text-sm rounded-t-lg whitespace-nowrap border-b-2 -mb-px ${tab===v?"border-[#0086E0] text-stone-900 font-medium":"border-transparent text-stone-500 hover:bg-stone-50"}`}>{l}</button>)}
+    </div>
+
+    {tab==="profile"&&<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <Field label="Company"><Input value={c.name||""} onChange={e=>upClient({name:e.target.value})}/></Field>
+      <Field label="Primary contact"><Input value={c.contact||""} onChange={e=>upClient({contact:e.target.value})}/></Field>
+      <Field label="Email"><Input value={c.email||""} onChange={e=>upClient({email:e.target.value})}/></Field>
+      <Field label="Phone"><Input value={c.phone||""} onChange={e=>upClient({phone:e.target.value})}/></Field>
+      <Field label="Origin ZIP (ships from)"><Input value={c.origin||""} onChange={e=>upClient({origin:e.target.value})}/></Field>
+      <Field label="Legacy flat markup %"><Input type="number" value={c.markup==null?"":c.markup} onChange={e=>upClient({markup:+e.target.value||0})}/></Field>
+      <Field label="Status"><Select value={c.status||"active"} onChange={e=>upClient({status:e.target.value})}><option value="active">active</option><option value="inactive">inactive</option></Select></Field>
+      <Field label="Plan"><Input value={c.plan||""} onChange={e=>upClient({plan:e.target.value})}/></Field>
+      <Field label="Account number (yours)"><Input value={c.acctNo||""} onChange={e=>upClient({acctNo:e.target.value})} placeholder="internal ref"/></Field>
+      <Field label="Website"><Input value={c.website||""} onChange={e=>upClient({website:e.target.value})} placeholder="acme.com"/></Field>
+      <Field label="Customer since"><Input value={c.since||""} onChange={e=>upClient({since:e.target.value})} placeholder="2025-06"/></Field>
+      <Field label="Monthly volume (est.)"><Input value={c.volume||""} onChange={e=>upClient({volume:e.target.value})} placeholder="e.g. 400 pkgs"/></Field>
+    </div>}
+
+    {tab==="address"&&<div className="space-y-4">
+      <div><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Business address</div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="col-span-2 sm:col-span-2"><Field label="Street"><Input {...fa("street")}/></Field></div>
+          <Field label="Suite / unit"><Input {...fa("suite")}/></Field>
+          <Field label="City"><Input {...fa("city")}/></Field>
+          <Field label="State"><Input {...fa("state")}/></Field>
+          <Field label="ZIP"><Input {...fa("zip")}/></Field>
+          <Field label="Country"><Input {...fa("country")} placeholder="US"/></Field>
+        </div>
+      </div>
+      <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={!!pf.shipFromBusiness} onChange={e=>upPrefs({shipFromBusiness:e.target.checked})} className="accent-[#0086E0]"/>Use this address as their default ship-from</label>
+      <div><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Billing address (if different)</div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="col-span-2"><Field label="Street"><Input value={(c.billing&&c.billing.street)||""} onChange={e=>setClients(cs=>cs.map(x=>x.id===cid?{...x,billing:{...(x.billing||{}),street:e.target.value}}:x))}/></Field></div>
+          <Field label="City"><Input value={(c.billing&&c.billing.city)||""} onChange={e=>setClients(cs=>cs.map(x=>x.id===cid?{...x,billing:{...(x.billing||{}),city:e.target.value}}:x))}/></Field>
+          <Field label="State"><Input value={(c.billing&&c.billing.state)||""} onChange={e=>setClients(cs=>cs.map(x=>x.id===cid?{...x,billing:{...(x.billing||{}),state:e.target.value}}:x))}/></Field>
+          <Field label="ZIP"><Input value={(c.billing&&c.billing.zip)||""} onChange={e=>setClients(cs=>cs.map(x=>x.id===cid?{...x,billing:{...(x.billing||{}),zip:e.target.value}}:x))}/></Field>
+        </div>
+      </div>
+    </div>}
+
+    {tab==="logins"&&<div className="space-y-2">
+      <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">{lg.length?lg.map(u=>(
+        <div key={u.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
+          <div className="flex-1 min-w-[180px] grid grid-cols-2 gap-2"><Input value={u.name||""} onChange={e=>setUsers(us=>us.map(x=>x.id===u.id?{...x,name:e.target.value}:x))}/><Input value={u.email||""} onChange={e=>setUsers(us=>us.map(x=>x.id===u.id?{...x,email:e.target.value}:x))}/></div>
+          <span className="text-[11px] text-stone-400 w-20">{u.lastLogin||"—"}</span>
+          <button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,status:x.status==="disabled"?"active":"disabled"}:x))} className={`text-[11px] rounded px-2 py-1 ${u.status==="disabled"?"bg-rose-100 text-rose-600":"bg-emerald-50 text-emerald-700"}`}>{u.status==="disabled"?"disabled":"active"}</button>
+          <button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))} className={`text-[11px] rounded px-2 py-1 ${u.companyAdmin?"bg-violet-600 text-white":"bg-stone-100 text-stone-600"}`}>{u.companyAdmin?"Co. admin ✓":"Co. admin"}</button>
+          <button onClick={()=>setPw(u)} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Password</button>
+          <button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Log in as</button>
+          {u.id!==currentUser.id&&<button onClick={()=>{if(window.confirm("Delete "+u.email+"?"))setUsers(us=>us.filter(x=>x.id!==u.id));}} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button>}
+        </div>)):<div className="px-3 py-4 text-sm text-stone-400">No logins yet — new logins inherit this customer's rates, credentials, and features automatically.</div>}
+      </div>
+      <div className="border border-stone-200 rounded-lg bg-white p-3 flex flex-wrap items-end gap-2">
+        <Field label="Name"><Input value={lf.name} onChange={e=>setLf({...lf,name:e.target.value})}/></Field>
+        <Field label="Email"><Input value={lf.email} onChange={e=>setLf({...lf,email:e.target.value})}/></Field>
+        <Field label="Temp password"><Input value={lf.password} onChange={e=>setLf({...lf,password:e.target.value})}/></Field>
+        <button onClick={createLogin} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8]">Add login</button>
+      </div>
+    </div>}
+
+    {tab==="rates"&&<div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm text-stone-600">{c.name} prices from</span>
+        <Select value={assign[cid]||"default"} onChange={e=>upRules({assign:{...assign,[cid]:e.target.value}})}>{profiles.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</Select>
+        {prof.id==="default"&&<button onClick={dedicated} className="text-xs bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-800">Create dedicated "{c.name}" profile</button>}
+        <span className="text-[11px] text-stone-400">{prof.id==="default"?"On Default — editing below changes every Default customer. Make a dedicated profile to price this one alone.":"Changes below hit only this profile."}</span>
+      </div>
+      <div className="border border-stone-200 rounded-lg bg-white overflow-x-auto"><table className="w-full text-sm min-w-[640px]"><tbody>
+        {svcQuick.map(sv=>{const r=(prof.services||{})[sv.k]||{};return (
+          <tr key={sv.k} className="border-t border-stone-100 first:border-t-0 hover:bg-stone-50">
+            <td className="py-1.5 pl-3 pr-1 w-6"><input type="checkbox" checked={r.on!==false} onChange={e=>upProfSvc(prof.id,sv.k,{on:e.target.checked})} className="accent-[#0086E0]"/></td>
+            <td className="py-1.5 pr-2 font-medium text-stone-800 whitespace-nowrap">{sv.l}</td>
+            <td className="py-1.5 pr-2"><Select value={r.basis||"pct"} onChange={e=>upProfSvc(prof.id,sv.k,{basis:e.target.value})}><option value="pct">% Markup</option><option value="list">FedEx list − %</option><option value="fixed">Fixed $ over cost</option></Select></td>
+            <td className="py-1.5 pr-2 whitespace-nowrap"><Input type="number" value={r.pct==null?"":r.pct} onChange={e=>upProfSvc(prof.id,sv.k,{pct:e.target.value})} className="w-20 text-right"/> <span className="text-stone-400 text-xs">{r.basis==="fixed"?"$":"%"}</span></td>
+            <td className="py-1.5 pr-3 whitespace-nowrap"><span className="text-stone-400 text-xs">Min $</span> <Input type="number" value={r.min==null?"":r.min} onChange={e=>upProfSvc(prof.id,sv.k,{min:e.target.value})} className="w-24 text-right"/></td>
+          </tr>);})}
+      </tbody></table></div>
+      <p className="text-[11px] text-stone-400">Zone overrides, weight breaks, One Rate pricing, surcharges, and printable rate sheets live in the Rate database section. Every login under {c.name} inherits this automatically.</p>
+    </div>}
+
+    {tab==="labels"&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <Field label="Default label size"><Select value={pf.labelSize||"4x6"} onChange={e=>upPrefs({labelSize:e.target.value})}><option value="4x6">4×6 thermal</option><option value="85x11">8.5×11 laser (top-half)</option></Select></Field>
+      <Field label="Label format"><Select value={pf.labelFormat||"PDF"} onChange={e=>upPrefs({labelFormat:e.target.value})}><option value="PDF">PDF</option><option value="ZPL">ZPL (thermal printer)</option></Select></Field>
+      <Field label="Default service"><Select value={pf.defaultService||""} onChange={e=>upPrefs({defaultService:e.target.value})}><option value="">— none —</option>{svcQuick.map(s=><option key={s.k} value={s.k}>{s.l}</option>)}</Select></Field>
+      <Field label="Default signature"><Select value={pf.signature||"none"} onChange={e=>upPrefs({signature:e.target.value})}><option value="none">None</option><option value="indirect">Indirect</option><option value="direct">Direct</option><option value="adult">Adult</option></Select></Field>
+      <Field label="Packing slip"><Select value={pf.packingSlip||"none"} onChange={e=>upPrefs({packingSlip:e.target.value})}><option value="none">Don't include</option><option value="46">4×6</option><option value="letter">Letter</option></Select></Field>
+      <Field label="Default package"><Select value={pf.packaging||"YOUR_PACKAGING"} onChange={e=>upPrefs({packaging:e.target.value})}>{CERT_PACKAGING.map(([k,l])=><option key={k} value={k}>{l}</option>)}</Select></Field>
+      <div className="col-span-2 sm:col-span-3 flex flex-wrap gap-4 pt-1">
+        <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={!!pf.residentialDefault} onChange={e=>upPrefs({residentialDefault:e.target.checked})} className="accent-[#0086E0]"/>Default to residential</label>
+        <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={!!pf.saturdayOk} onChange={e=>upPrefs({saturdayOk:e.target.checked})} className="accent-[#0086E0]"/>Allow Saturday delivery</label>
+        <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={!!pf.emailLabels} onChange={e=>upPrefs({emailLabels:e.target.checked})} className="accent-[#0086E0]"/>Email label to customer on booking</label>
+      </div>
+    </div>}
+
+    {tab==="supplies"&&<div className="space-y-3">
+      <p className="text-[11px] text-stone-500">Track what this customer orders so reorders and packouts are quick. Check what they use and note quantities.</p>
+      <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
+        {SUPPLY_ITEMS.map(item=>{const s=supplies[item]||{};return (
+          <div key={item} className="flex items-center gap-3 px-3 py-2 text-sm">
+            <label className="flex-1 flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={!!s.on} onChange={e=>upPrefs({supplies:{...supplies,[item]:{...s,on:e.target.checked}}})} className="accent-[#0086E0]"/>{item}</label>
+            <Input value={s.qty||""} onChange={e=>upPrefs({supplies:{...supplies,[item]:{...s,qty:e.target.value}}})} placeholder="qty / cadence" className="w-40"/>
+          </div>);})}
+      </div>
+      <Field label="Other supplies / notes"><Input value={pf.suppliesNotes||""} onChange={e=>upPrefs({suppliesNotes:e.target.value})} placeholder="e.g. custom-printed tape, branded boxes…"/></Field>
+    </div>}
+
+    {tab==="features"&&<div className="space-y-3">
+      {lg.length===0?<div className="text-sm text-stone-400">Add a login first — features apply to a company's logins.</div>
+      :<><p className="text-[11px] text-stone-500">Turn features on/off for <b>every login</b> under {c.name} at once. Amber = mixed; click to make them match.</p>
+        <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">{CATALOG.map(f=>{const state=companyFeatureState(f.id);return (
+          <div key={f.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+            <div className="flex-1 min-w-0"><div className="font-medium text-stone-700">{f.label}{f.custom?<Badge tone="blue">custom</Badge>:null}</div><div className="text-[11px] text-stone-400 truncate">{f.desc}</div></div>
+            {state==="mixed"&&<span className="text-[10px] text-amber-600">mixed</span>}
+            <button onClick={()=>setCompanyFeature(f.id,!(state==="on"))} className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${state==="on"?"bg-[#0086E0] justify-end":state==="mixed"?"bg-amber-400 justify-center":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></button>
+          </div>);})}
+        </div></>}
+    </div>}
+
+    {tab==="creds"&&<div className="space-y-3">
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 flex items-center gap-2">England account — this customer's own rates{(c.england&&c.england.customerId&&c.england.apiKey)?<Badge tone="green">own account</Badge>:<Badge tone="stone">using your main account</Badge>}</div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <Field label="England customer ID"><Input value={(c.england&&c.england.customerId)||""} onChange={e=>upEng({customerId:e.target.value.trim()})} placeholder="e.g. 20605511"/></Field>
+        <Field label="England API key"><Input type="password" value={(c.england&&c.england.apiKey)||""} onChange={e=>upEng({apiKey:e.target.value.trim()})} placeholder="this customer's key"/></Field>
+        <Field label="Integration ID (labels)"><Input value={(c.england&&c.england.integrationId)||""} onChange={e=>upEng({integrationId:e.target.value.trim()})} placeholder="optional"/></Field>
+      </div>
+      <p className="text-[11px] text-stone-400">Fill once — every login under {c.name} quotes and books on this account automatically and never sees a credential. Leave blank to use your main account.</p>
+    </div>}
+
+    {tab==="notes"&&<div className="space-y-2">
+      <Field label="Internal notes (admins only)"><textarea value={c.notes||""} onChange={e=>upClient({notes:e.target.value})} placeholder="Anything worth remembering — contacts, quirks, promises, follow-ups…" className="w-full border border-stone-300 rounded-lg p-2.5 text-sm min-h-[160px]"/></Field>
+      <div className="flex justify-end"><button onClick={()=>{if(!window.confirm('Delete customer "'+c.name+'"? Logins stay but lose the link.'))return;setUsers(us=>us.map(x=>x.clientId===cid?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==cid));onClose&&onClose();}} className="text-[11px] text-rose-500 hover:text-rose-600">Delete customer</button></div>
+    </div>}
+  </div>);
+}
+
+/* ════════ ADMIN → CUSTOMERS (v202) — every customer, every login, everything editable ════════ */
+function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureFlags={},setFeatureFlags,customFeatures=[],onOpenCustomer}){
+  const [rules]=usePersist("rateRules",DEFAULT_RATE_RULES);
+  const [q,setQ]=useState("");
+  const [sort,setSort]=useState("name");
+  const [adding,setAdding]=useState(false);
+  const [nf,setNf]=useState({name:"",contact:"",email:"",phone:"",origin:"",markup:15});
+  const profiles=(rules.profiles&&rules.profiles.length)?rules.profiles:DEFAULT_RATE_RULES.profiles;
+  const assign=rules.assign||{};
+  const profOf=(cid)=>profiles.find(p=>p.id===(assign[cid]||"default"))||profiles[0];
   const loginsOf=(cid)=>users.filter(u=>u.role!=="admin"&&u.clientId===cid);
   const unassigned=users.filter(u=>u.role!=="admin"&&!u.clientId&&!u.demo);
-  const say=(m)=>{setFlash(m);setTimeout(()=>setFlash(""),2200);};
   const list=useMemo(()=>{
     const t=q.trim().toLowerCase();
     let cs=clients.filter(c=>{
@@ -1601,57 +1807,13 @@ function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureF
       status:(a,b)=>String(a.status||"active").localeCompare(String(b.status||"active"))}[sort];
     return [...cs].sort(cmp||(()=>0));
   },[clients,users,q,sort,rules]);
-  const createCustomer=()=>{if(!nf.name)return;const id="c"+Date.now();setClients(p=>[...p,{id,name:nf.name,contact:nf.contact,email:nf.email,phone:nf.phone,origin:nf.origin,markup:+nf.markup||0,status:"active",since:new Date().toISOString().slice(0,7),plan:"Standard"}]);setNf({name:"",contact:"",email:"",phone:"",origin:"",markup:15});setAdding(false);setOpenC(id);setCtab("overview");say("Customer created.");};
-  const createLogin=(c)=>{
-    if(!lf.name||!lf.email||!lf.password)return;
-    setUsers(p=>[...p,{id:"u"+Date.now(),name:lf.name,email:lf.email,role:"customer",clientId:c.id,status:"active",password:lf.password,lastLogin:"—"}]);
-    setLf({name:"",email:"",password:""});say("Login created under "+c.name+".");
-  };
-  const setPw=async(u)=>{const np=window.prompt("New password for "+u.email+" (min 4 characters):");if(!np)return;
-    if(CLOUD.mode==="cloud"){const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});window.alert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}
-    else{setUsers(us=>us.map(x=>x.id===u.id?{...x,password:np}:x));window.alert("Password updated (local mode).");}};
-  const dedicated=(c)=>{
-    const cur=profOf(c.id);
-    const id="p"+Date.now();
-    upRules({profiles:[...profiles,{id,name:c.name,services:JSON.parse(JSON.stringify(cur.services||{})),surcharges:JSON.parse(JSON.stringify(cur.surcharges||{}))}],assign:{...assign,[c.id]:id}});
-    say('Dedicated profile "'+c.name+'" created — its rules now belong to this customer alone.');
-  };
-  /* Feature flags live per-login. A company-wide toggle fans the flag out to every login of the customer. */
-  const companyFeatureState=(cid,fid)=>{
-    const lg=loginsOf(cid); if(!lg.length)return "none";
-    const on=lg.filter(u=>featureOn(fid,u,featureFlags[u.id])).length;
-    return on===0?"off":on===lg.length?"on":"mixed";
-  };
-  const setCompanyFeature=(cid,fid,val)=>{
-    const lg=loginsOf(cid);
-    setFeatureFlags&&setFeatureFlags(ff=>{const next={...ff};lg.forEach(u=>{next[u.id]={...(next[u.id]||{}),[fid]:val};});return next;});
-    say((val?"Enabled":"Disabled")+" for all "+lg.length+" login"+(lg.length===1?"":"s")+".");
-  };
-  const num=(v)=>v==null?"":v;
-  const CTABS=[["overview","Overview"],["logins","Logins"],["rates","Rates"],["features","Features"],["creds","Credentials"]];
-  const svcQuick=RATE_SERVICES.fedex.filter(s=>!s.or);
-  const loginRow=(u)=>(
-    <div key={u.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
-      <div className="flex-1 min-w-[180px] grid grid-cols-2 gap-2">
-        <Input value={u.name||""} onChange={e=>setUsers(us=>us.map(x=>x.id===u.id?{...x,name:e.target.value}:x))}/>
-        <Input value={u.email||""} onChange={e=>setUsers(us=>us.map(x=>x.id===u.id?{...x,email:e.target.value}:x))}/>
-      </div>
-      <span className="text-[11px] text-stone-400 w-20">{u.lastLogin||"—"}</span>
-      <button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,status:x.status==="disabled"?"active":"disabled"}:x))} className={`text-[11px] rounded px-2 py-1 ${u.status==="disabled"?"bg-rose-100 text-rose-600":"bg-emerald-50 text-emerald-700"}`}>{u.status==="disabled"?"disabled":"active"}</button>
-      <button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))} className={`text-[11px] rounded px-2 py-1 ${u.companyAdmin?"bg-violet-600 text-white":"bg-stone-100 text-stone-600"}`}>{u.companyAdmin?"Co. admin ✓":"Co. admin"}</button>
-      <button onClick={()=>setPw(u)} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Password</button>
-      <button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Log in as</button>
-      <Select value={u.clientId||""} onChange={e=>{setUsers(us=>us.map(x=>x.id===u.id?{...x,clientId:e.target.value||null}:x));say("Login moved.");}} title="Move this login to another customer">
-        <option value="">— no customer —</option>{clients.map(cc=><option key={cc.id} value={cc.id}>{cc.name}</option>)}
-      </Select>
-      {u.id!==currentUser.id&&<button onClick={()=>{if(window.confirm("Delete login "+u.email+"? This can't be undone."))setUsers(us=>us.filter(x=>x.id!==u.id));}} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button>}
-    </div>);
+  const createCustomer=()=>{if(!nf.name)return;const id="c"+Date.now();setClients(p=>[...p,{id,name:nf.name,contact:nf.contact,email:nf.email,phone:nf.phone,origin:nf.origin,markup:+nf.markup||0,status:"active",since:new Date().toISOString().slice(0,7),plan:"Standard"}]);setNf({name:"",contact:"",email:"",phone:"",origin:"",markup:15});setAdding(false);onOpenCustomer&&onOpenCustomer(id);};
+  const moveLogin=(uid,cid)=>setUsers(us=>us.map(x=>x.id===uid?{...x,clientId:cid||null}:x));
   return (<div className="space-y-3">
     <div className="flex flex-wrap items-end gap-3">
       <Field label="Search customers & logins"><Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Company, contact, login name or email…" className="w-64"/></Field>
       <Field label="Sort by"><Select value={sort} onChange={e=>setSort(e.target.value)}><option value="name">Name</option><option value="logins">Most logins</option><option value="markup">Highest markup</option><option value="profile">Rate profile</option><option value="status">Status</option></Select></Field>
       <span className="flex-1"/>
-      {flash&&<span className="text-xs text-emerald-600">{flash}</span>}
       <button onClick={()=>setAdding(a=>!a)} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800"><Plus className="w-4 h-4"/>New customer</button>
     </div>
     {adding&&<div className="border border-stone-200 rounded-lg bg-white p-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -1661,100 +1823,36 @@ function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureF
       <Field label="Phone"><Input value={nf.phone} onChange={e=>setNf({...nf,phone:e.target.value})}/></Field>
       <Field label="Origin ZIP"><Input value={nf.origin} onChange={e=>setNf({...nf,origin:e.target.value})}/></Field>
       <Field label="Markup %"><Input type="number" value={nf.markup} onChange={e=>setNf({...nf,markup:e.target.value})}/></Field>
-      <div className="col-span-2 sm:col-span-3"><button onClick={createCustomer} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Create customer</button></div>
+      <div className="col-span-2 sm:col-span-3"><button onClick={createCustomer} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Create &amp; open</button></div>
     </div>}
-    <div className="border border-stone-200 rounded-lg bg-white overflow-hidden divide-y divide-stone-100">
-      {list.length===0&&<div className="px-4 py-8 text-sm text-stone-400 text-center">No customers match "{q}".</div>}
-      {list.map(c=>{
-        const open=openC===c.id;const lg=loginsOf(c.id);const prof=profOf(c.id);
-        return (<div key={c.id}>
-          <div className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-stone-50 cursor-pointer" onClick={()=>{setOpenC(open?null:c.id);setCtab("overview");}}>
-            <ChevronRight className={`w-4 h-4 text-stone-400 transition-transform ${open?"rotate-90":""}`}/>
+    <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="w-4"/><div className="flex-1">Customer</div><div className="w-20 text-center">Logins</div><div className="w-28">Rate profile</div><div className="w-16 text-right">Markup</div><div className="w-20 text-right">Status</div></div>
+      <div className="divide-y divide-stone-100">
+        {list.length===0&&<div className="px-4 py-8 text-sm text-stone-400 text-center">No customers match "{q}".</div>}
+        {list.map(c=>{const lg=loginsOf(c.id);const prof=profOf(c.id);return (
+          <div key={c.id} onClick={()=>onOpenCustomer&&onOpenCustomer(c.id)} className="flex items-center gap-3 px-4 py-3 hover:bg-stone-50 cursor-pointer">
+            <div className="w-7 h-7 rounded-lg bg-[#0086E0]/10 text-[#0086E0] flex items-center justify-center font-bold text-xs shrink-0">{String(c.name||"?").slice(0,1).toUpperCase()}</div>
             <div className="flex-1 min-w-0"><div className="font-medium text-sm truncate">{c.name}</div><div className="text-[11px] text-stone-400 truncate">{c.contact||"—"}{c.email?` · ${c.email}`:""}</div></div>
-            <Badge tone="blue">{lg.length} login{lg.length===1?"":"s"}</Badge>
-            <Badge tone="green">Rates: {prof.name}</Badge>
-            <span className="font-mono text-xs text-stone-500 w-14 text-right">{c.markup}%</span>
-            {(c.england&&c.england.customerId&&c.england.apiKey)?<Badge tone="amber">own England acct</Badge>:null}
-            <Badge tone={c.status==="inactive"?"stone":"green"}>{c.status||"active"}</Badge>
-          </div>
-          {open&&<div className="px-4 sm:px-11 pb-4 bg-stone-50/60">
-            <div className="flex items-center gap-1 border-b border-stone-200 pb-2 mb-3 pt-1">
-              {CTABS.map(([v,l])=><button key={v} onClick={()=>setCtab(v)} className={`text-sm px-3 py-1.5 rounded-lg ${ctab===v?"bg-stone-900 text-white font-medium":"text-stone-500 hover:bg-stone-100"}`}>{l}{v==="logins"?" ("+lg.length+")":""}</button>)}
-            </div>
-            {ctab==="overview"&&<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Field label="Company"><Input value={num(c.name)} onChange={e=>upClient(c.id,{name:e.target.value})}/></Field>
-              <Field label="Contact"><Input value={num(c.contact)} onChange={e=>upClient(c.id,{contact:e.target.value})}/></Field>
-              <Field label="Email"><Input value={num(c.email)} onChange={e=>upClient(c.id,{email:e.target.value})}/></Field>
-              <Field label="Phone"><Input value={num(c.phone)} onChange={e=>upClient(c.id,{phone:e.target.value})}/></Field>
-              <Field label="Origin ZIP"><Input value={num(c.origin)} onChange={e=>upClient(c.id,{origin:e.target.value})}/></Field>
-              <Field label="Legacy flat markup %"><Input type="number" value={num(c.markup)} onChange={e=>upClient(c.id,{markup:+e.target.value||0})}/></Field>
-              <Field label="Status"><Select value={c.status||"active"} onChange={e=>upClient(c.id,{status:e.target.value})}><option value="active">active</option><option value="inactive">inactive</option></Select></Field>
-              <Field label="Plan"><Input value={num(c.plan)} onChange={e=>upClient(c.id,{plan:e.target.value})}/></Field>
-              <div className="col-span-2 sm:col-span-4"><Field label="Notes (only admins see this)"><Input value={num(c.notes)} onChange={e=>upClient(c.id,{notes:e.target.value})} placeholder="Anything worth remembering about this account…"/></Field></div>
-              <div className="col-span-2 sm:col-span-4 flex justify-end"><button onClick={()=>{if(!window.confirm('Delete customer "'+c.name+'"? Their logins stay but lose the customer link.'))return;setUsers(us=>us.map(x=>x.clientId===c.id?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==c.id));setOpenC(null);}} className="text-[11px] text-rose-500 hover:text-rose-600">Delete customer</button></div>
-            </div>}
-            {ctab==="logins"&&<div className="space-y-2">
-              <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">{lg.length?lg.map(u=>loginRow(u)):<div className="px-3 py-4 text-sm text-stone-400">No logins yet — every login created below inherits {c.name}'s rates, features, and credentials automatically.</div>}</div>
-              <div className="border border-stone-200 rounded-lg bg-white p-3 flex flex-wrap items-end gap-2">
-                <Field label="Name"><Input value={lf.name} onChange={e=>setLf({...lf,name:e.target.value})}/></Field>
-                <Field label="Email"><Input value={lf.email} onChange={e=>setLf({...lf,email:e.target.value})}/></Field>
-                <Field label="Temp password"><Input value={lf.password} onChange={e=>setLf({...lf,password:e.target.value})}/></Field>
-                <button onClick={()=>createLogin(c)} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8]">Add login for {c.name}</button>
-              </div>
-              <p className="text-[11px] text-stone-400">Per-login tabs &amp; feature flags still live in Users &amp; logins (the Tabs button) — everything else about a login is editable right here.</p>
-            </div>}
-            {ctab==="rates"&&<div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm text-stone-600">{c.name} prices from</span>
-                <Select value={assign[c.id]||"default"} onChange={e=>upRules({assign:{...assign,[c.id]:e.target.value}})}>{profiles.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</Select>
-                {prof.id==="default"&&<button onClick={()=>dedicated(c)} className="text-xs bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-800">Create dedicated "{c.name}" profile</button>}
-                <span className="text-[11px] text-stone-400">{prof.id==="default"?"Heads up: editing Default below changes every customer on Default — create a dedicated profile to price this customer alone.":"Changes below hit only this profile's customers."}</span>
-              </div>
-              <div className="border border-stone-200 rounded-lg bg-white overflow-x-auto"><table className="w-full text-sm min-w-[640px]"><tbody>
-                {svcQuick.map(sv=>{const r=(prof.services||{})[sv.k]||{};return (
-                  <tr key={sv.k} className="border-t border-stone-100 first:border-t-0 hover:bg-stone-50">
-                    <td className="py-1.5 pl-3 pr-1 w-6"><input type="checkbox" checked={r.on!==false} onChange={e=>upProfSvc(prof.id,sv.k,{on:e.target.checked})} className="accent-[#0086E0]"/></td>
-                    <td className="py-1.5 pr-2 font-medium text-stone-800 whitespace-nowrap">{sv.l}</td>
-                    <td className="py-1.5 pr-2"><Select value={r.basis||"pct"} onChange={e=>upProfSvc(prof.id,sv.k,{basis:e.target.value})}><option value="pct">% Markup</option><option value="list">FedEx list − %</option><option value="fixed">Fixed $ over cost</option></Select></td>
-                    <td className="py-1.5 pr-2 whitespace-nowrap"><Input type="number" value={r.pct==null?"":r.pct} onChange={e=>upProfSvc(prof.id,sv.k,{pct:e.target.value})} className="w-20 text-right"/> <span className="text-stone-400 text-xs">{r.basis==="fixed"?"$":"%"}</span></td>
-                    <td className="py-1.5 pr-3 whitespace-nowrap"><span className="text-stone-400 text-xs">Min $</span> <Input type="number" value={r.min==null?"":r.min} onChange={e=>upProfSvc(prof.id,sv.k,{min:e.target.value})} className="w-24 text-right"/></td>
-                  </tr>);})}
-              </tbody></table></div>
-              <p className="text-[11px] text-stone-400">Zone overrides, weight breaks, One Rate pricing, surcharges, and printable rate sheets for this profile live in the Rates section — this is the fast lane for the per-service numbers. Every login under {c.name} inherits automatically.</p>
-            </div>}
-            {ctab==="features"&&<div className="space-y-3">
-              {lg.length===0?<div className="text-sm text-stone-400">Add a login first — features apply to a company's logins.</div>
-              :<>
-                <p className="text-[11px] text-stone-500">Turn features on or off for <b>every login</b> under {c.name} at once. A dot means some logins have it and some don't — click to make them all match. Per-login overrides still live in All logins.</p>
-                <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
-                  {CATALOG.map(f=>{const state=companyFeatureState(c.id,f.id);return (
-                    <div key={f.id} className="flex items-center gap-3 px-3 py-2 text-sm">
-                      <div className="flex-1 min-w-0"><div className="font-medium text-stone-700">{f.label}{f.custom?<Badge tone="blue">custom</Badge>:null}</div><div className="text-[11px] text-stone-400 truncate">{f.desc}</div></div>
-                      {state==="mixed"&&<span className="text-[10px] text-amber-600">mixed</span>}
-                      <button onClick={()=>setCompanyFeature(c.id,f.id,!(state==="on"))} title={state==="on"?"On for all — click to turn off":state==="off"?"Off for all — click to turn on":"Mixed — click to turn on for all"} className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${state==="on"?"bg-[#0086E0] justify-end":state==="mixed"?"bg-amber-400 justify-center":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></button>
-                    </div>);})}
-                </div>
-              </>}
-            </div>}
-            {ctab==="creds"&&<div className="space-y-3">
-              <div className="text-[10px] uppercase tracking-widest text-stone-400 flex items-center gap-2">England account — this customer's own rates{(c.england&&c.england.customerId&&c.england.apiKey)?<Badge tone="green">own account</Badge>:<Badge tone="stone">using your main account</Badge>}</div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <Field label="England customer ID"><Input value={(c.england&&c.england.customerId)||""} onChange={e=>upEng(c.id,{customerId:e.target.value.trim()})} placeholder="e.g. 20605511"/></Field>
-                <Field label="England API key"><Input type="password" value={(c.england&&c.england.apiKey)||""} onChange={e=>upEng(c.id,{apiKey:e.target.value.trim()})} placeholder="this customer's key"/></Field>
-                <Field label="Integration ID (labels)"><Input value={(c.england&&c.england.integrationId)||""} onChange={e=>upEng(c.id,{integrationId:e.target.value.trim()})} placeholder="optional"/></Field>
-              </div>
-              <p className="text-[11px] text-stone-400">Fill these once and every login under {c.name} quotes and books on this England account automatically — they never see or enter credentials. Leave blank to keep them on your main account. Login passwords are set in the Logins tab.</p>
-            </div>}
-          </div>}
-        </div>);
-      })}
+            <div className="w-20 text-center"><Badge tone="blue">{lg.length}</Badge></div>
+            <div className="w-28 truncate"><Badge tone="green">{prof.name}</Badge></div>
+            <div className="w-16 text-right font-mono text-xs text-stone-500">{c.markup}%</div>
+            <div className="w-20 text-right"><Badge tone={c.status==="inactive"?"stone":"green"}>{c.status||"active"}</Badge></div>
+            <ChevronRight className="w-4 h-4 text-stone-300 shrink-0"/>
+          </div>);})}
+      </div>
     </div>
+    <p className="text-[11px] text-stone-400">Click any customer to open them in a new tab — you can keep several open at once alongside Branding, the rate database, and more.</p>
     {unassigned.length>0&&<div className="border border-amber-200 rounded-lg bg-amber-50/40 overflow-hidden">
       <div className="px-4 py-2.5 text-sm font-semibold text-stone-700 border-b border-amber-100">Logins with no customer ({unassigned.length}) — assign one so they inherit rates &amp; credentials</div>
-      <div className="divide-y divide-amber-100 bg-white">{unassigned.map(u=>loginRow(u))}</div>
+      <div className="divide-y divide-amber-100 bg-white">{unassigned.map(u=>(
+        <div key={u.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
+          <div className="flex-1 min-w-0"><div className="font-medium truncate">{u.name||u.email}</div><div className="text-[11px] text-stone-400 truncate">{u.email}</div></div>
+          <Select value={u.clientId||""} onChange={e=>moveLogin(u.id,e.target.value)}><option value="">— assign to customer —</option>{clients.map(cc=><option key={cc.id} value={cc.id}>{cc.name}</option>)}</Select>
+        </div>))}</div>
     </div>}
   </div>);
 }
+
 
 /* ════════ ADMIN → RATES (v196) — the rate markup database ════════ */
 function RatesAdmin({clients=[],brand}){
@@ -2144,86 +2242,57 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
     {label:"Pricing",items:[["rates","Rate database",DollarSign],["labelcert","FedEx labels",Printer]]},
     {label:"Experience",items:[["customizations","Features & access",Sliders],["branding","Branding",Sparkles],["platforms","Carrier accounts",Truck],["domains","Domains",ExternalLink]]},
   ];
+  const SECTION_META={};NAV_GROUPS.forEach(g=>g.items.forEach(([v,l,Icon])=>{SECTION_META[v]={label:l,Icon};}));
   const allowedKeys=new Set(ALLOWED.map(x=>x[0]));
   const groups=NAV_GROUPS.map(g=>({...g,items:g.items.filter(it=>allowedKeys.has(it[0]))})).filter(g=>g.items.length);
-  const curLabel=(()=>{for(const g of NAV_GROUPS)for(const it of g.items)if(it[0]===sec)return it[1];return "Admin";})();
-  const [navOpen,setNavOpen]=useState(false);
-  const NavList=()=>(<nav className="space-y-5">
-    {groups.map(g=>(<div key={g.label}>
-      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold px-3 mb-1.5">{g.label}</div>
-      <div className="space-y-0.5">{g.items.map(([v,l,Icon])=>(
-        <button key={v} onClick={()=>{setSec(v);setNavOpen(false);}} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${sec===v?"bg-[#0086E0] text-white font-medium shadow-sm":"text-stone-600 hover:bg-stone-100"}`}>
-          <Icon className="w-4 h-4 shrink-0"/>{l}
-        </button>))}</div>
-    </div>))}
-  </nav>);
+  /* Multi-tab workspace: each open tab is {kind:"section",key} or {kind:"customer",id}. */
+  const [tabs,setTabs]=useState(()=>[{kind:"section",key:sec}]);
+  const [active,setActive]=useState(0);
+  const openSection=(key)=>{setTabs(ts=>{const i=ts.findIndex(t=>t.kind==="section"&&t.key===key);if(i>=0){setActive(i);return ts;}const n=[...ts,{kind:"section",key}];setActive(n.length-1);return n;});setSec(key);};
+  const openCustomer=(id)=>{setTabs(ts=>{const i=ts.findIndex(t=>t.kind==="customer"&&t.id===id);if(i>=0){setActive(i);return ts;}const n=[...ts,{kind:"customer",id}];setActive(n.length-1);return n;});};
+  const closeTab=(i)=>{setTabs(ts=>{if(ts.length===1)return ts;const n=ts.filter((_,j)=>j!==i);setActive(a=>{const na=i<a?a-1:(a>=n.length?n.length-1:a);return Math.max(0,na);});return n;});};
+  const cur=tabs[active]||tabs[0];
+  const tabTitle=(t)=>t.kind==="section"?(SECTION_META[t.key]||{label:"Admin"}).label:((clients.find(c=>c.id===t.id)||{}).name||"Customer");
+  const [launch,setLaunch]=useState(false);
+  const SectionBody=({k})=>(<>
+      {k==="customers"&&<CustomersMaster clients={clients} setClients={setClients} users={users} setUsers={setUsers} currentUser={currentUser} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} onOpenCustomer={openCustomer}/>}
+      {k==="rates"&&<RatesAdmin clients={clients} brand={brand}/>}
+      {k==="labelcert"&&<FedexCertLab settings={settings}/>}
+      {k==="branding"&&<Branding settings={settings} setSettings={setSettings} brand={brand} publicBrand={publicBrand} setPublicBrand={setPublicBrand}/>}
+      {k==="domains"&&<Domains settings={settings} setSettings={setSettings} clients={clients}/>}
+      {k==="platforms"&&<PlatformAccountsAdmin settings={settings} setSettings={setSettings}/>}
+      {k==="users"&&<UsersAdmin users={users} setUsers={setUsers} clients={clients} currentUser={currentUser} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
+      {k==="customizations"&&<CustomizationsAdmin users={users} clients={clients} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures}/>}
+      {k==="overview"&&<AdminDashboard platform={platform} loginStats={loginStats} uEmail={uEmail} openCustomer={openCustomer} openSection={openSection}/>}
+  </>);
   return (
-    <div className="flex gap-6 -mt-2">
-      {/* desktop sidebar */}
-      <aside className="hidden lg:block w-56 shrink-0">
-        <div className="sticky top-4 space-y-4">
-          <div className="flex items-center gap-2 px-2"><ShieldCheck className="w-5 h-5 text-[#0086E0]"/><span className="font-semibold text-stone-800">{BRAND.admin?"ShippingCloud HQ":"Admin"}</span></div>
-          <NavList/>
+    <div className="-mt-2">
+      {/* tab bar */}
+      <div className="flex items-center gap-1 border-b border-stone-200 mb-4 overflow-x-auto">
+        <div className="relative">
+          <button onClick={()=>setLaunch(l=>!l)} className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 rounded-t-lg whitespace-nowrap"><Plus className="w-4 h-4"/>Open</button>
+          {launch&&<div className="absolute left-0 top-full z-30 mt-1 w-56 bg-white border border-stone-200 rounded-lg shadow-lg p-2" onMouseLeave={()=>setLaunch(false)}>
+            {groups.map(g=>(<div key={g.label} className="mb-1.5 last:mb-0">
+              <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold px-2 mb-1">{g.label}</div>
+              {g.items.map(([v,l,Icon])=><button key={v} onClick={()=>{openSection(v);setLaunch(false);}} className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-sm text-stone-600 hover:bg-stone-100"><Icon className="w-4 h-4 shrink-0"/>{l}</button>)}
+            </div>))}
+          </div>}
         </div>
-      </aside>
-      {/* mobile drawer */}
-      {navOpen&&<div className="lg:hidden fixed inset-0 z-40 bg-black/40" onClick={()=>setNavOpen(false)}><div className="absolute left-0 top-0 bottom-0 w-64 bg-white p-4 overflow-auto" onClick={e=>e.stopPropagation()}><div className="flex items-center gap-2 mb-4 px-2"><ShieldCheck className="w-5 h-5 text-[#0086E0]"/><span className="font-semibold text-stone-800">Admin</span></div><NavList/></div></div>}
-      <div className="flex-1 min-w-0 space-y-4">
-        <div className="flex items-center gap-3 border-b border-stone-200 pb-3">
-          <button onClick={()=>setNavOpen(true)} className="lg:hidden p-1.5 -ml-1 rounded-lg hover:bg-stone-100"><Layers className="w-5 h-5 text-stone-600"/></button>
-          <h1 className="text-lg font-semibold text-stone-800">{curLabel}</h1>
-        </div>
-
-      {sec==="customers"&&<CustomersMaster clients={clients} setClients={setClients} users={users} setUsers={setUsers} currentUser={currentUser} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures}/>}
-      {sec==="rates"&&<RatesAdmin clients={clients} brand={brand}/>}
-      {sec==="labelcert"&&<FedexCertLab settings={settings}/>}
-      {sec==="branding"&&<Branding settings={settings} setSettings={setSettings} brand={brand} publicBrand={publicBrand} setPublicBrand={setPublicBrand}/>}
-      {sec==="domains"&&<Domains settings={settings} setSettings={setSettings} clients={clients}/>}
-      {sec==="platforms"&&<PlatformAccountsAdmin settings={settings} setSettings={setSettings}/>}
-
-      {sec==="overview"&&<><div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat2 label="Shipments created" v={platform.total}/>
-        <Stat2 label="Shipments · last 30 days" v={platform.t30}/>
-        <Stat2 label="Revenue billed" v={money(platform.rev)}/>
-        <Stat2 label="Margin" v={money(platform.margin)} tone={platform.margin>=0?"text-emerald-600":"text-rose-600"}/>
+        {tabs.map((t,i)=>{const Icon=t.kind==="section"?(SECTION_META[t.key]||{}).Icon:Building2;return (
+          <div key={t.kind+(t.key||t.id)} onClick={()=>{setActive(i);if(t.kind==="section")setSec(t.key);}} className={`group flex items-center gap-1.5 pl-3 pr-2 py-2 text-sm rounded-t-lg cursor-pointer whitespace-nowrap border-b-2 -mb-px ${i===active?"border-[#0086E0] text-stone-900 font-medium bg-white":"border-transparent text-stone-500 hover:bg-stone-50"}`}>
+            {Icon&&<Icon className="w-3.5 h-3.5 shrink-0"/>}{tabTitle(t)}
+            {tabs.length>1&&<button onClick={(e)=>{e.stopPropagation();closeTab(i);}} className="ml-1 p-0.5 rounded hover:bg-stone-200 opacity-40 group-hover:opacity-100"><X className="w-3 h-3"/></button>}
+          </div>);})}
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat2 label="Logins created" v={loginStats.total}/>
-        <Stat2 label="Active logins" v={loginStats.active}/>
-        <Stat2 label="Signed in · last 7 days" v={loginStats.week}/>
-        <Stat2 label="Open orders (all logins)" v={platform.openOrders}/>
-      </div></>}
-      {sec==="overview"&&<div className="grid lg:grid-cols-2 gap-3">
-        <div className="border border-stone-200 rounded-lg bg-white p-4">
-          <div className="text-sm font-semibold text-stone-700 mb-2">Latest shipments — all logins</div>
-          {platform.latest.length===0&&<div className="text-sm text-stone-400 py-4 text-center">No shipments yet.</div>}
-          <div className="divide-y divide-stone-100">{platform.latest.map((x,i2)=>(
-            <div key={i2} className="flex items-center gap-3 py-2 text-sm">
-              <div className="flex-1 min-w-0"><div className="text-stone-800 truncate">{(x.recipient&&x.recipient.name)||"—"} · {(x.recipient&&x.recipient.city)||""} {(x.recipient&&x.recipient.state)||""}</div><div className="text-[11px] text-stone-400 truncate">{x.date} · {x.service||x.carrier||""} · by {uEmail(x._uid)}</div></div>
-              <div className="font-mono text-sm w-20 text-right">{money(x.sell||0)}</div>
-              <Badge tone={x.status==="Delivered"?"green":(x.status==="Voided"?"stone":"blue")}>{x.status||"—"}</Badge>
-            </div>))}
-          </div>
-        </div>
-        <div className="border border-stone-200 rounded-lg bg-white p-4">
-          <div className="text-sm font-semibold text-stone-700 mb-2">Recent logins</div>
-          {loginStats.recent.length===0&&<div className="text-sm text-stone-400 py-4 text-center">No logins yet.</div>}
-          <div className="divide-y divide-stone-100">{loginStats.recent.map(u=>(
-            <div key={u.id} className="flex items-center gap-3 py-2 text-sm">
-              <div className="flex-1 min-w-0"><div className="font-medium text-stone-800 truncate">{u.name||u.email}</div><div className="text-[11px] text-stone-400 truncate">{u.email}</div></div>
-              <div className="text-xs text-stone-400 w-24 text-right">{u.lastLogin||"never"}</div>
-              <Badge tone={u.status==="active"?"green":"stone"}>{u.status||"active"}</Badge>
-            </div>))}
-          </div>
-        </div>
-      </div>}
-
-      {sec==="users"&&<UsersAdmin users={users} setUsers={setUsers} clients={clients} currentUser={currentUser} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
-      {sec==="customizations"&&<CustomizationsAdmin users={users} clients={clients} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures}/>}
+      {/* active tab body */}
+      <div className="min-w-0">
+        {cur.kind==="section"?<SectionBody k={cur.key}/>
+          :<CustomerDetail cid={cur.id} clients={clients} setClients={setClients} users={users} setUsers={setUsers} currentUser={currentUser} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} settings={settings} onClose={()=>closeTab(active)}/>}
       </div>
     </div>
   );
 }
+/* legacy sidebar shell removed — kept SectionBody map above. */
 function PlatformAccountsAdmin({settings,setSettings}){
   const plat=settings.platforms||PLATFORM_DEFAULTS;
   const togglePlat=(id)=>setSettings({...settings,platforms:{...plat,[id]:!plat[id]}});

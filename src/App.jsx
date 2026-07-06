@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v187";
+const BUILD_TAG="addr-v188";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -3093,7 +3093,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 </div>
               ))}
               <button onClick={addLine} className="flex items-center gap-1 text-xs bg-white border border-stone-200 hover:bg-stone-100 rounded-lg px-2.5 py-1.5 font-medium text-stone-700 mt-1"><Plus className="w-3.5 h-3.5"/>Add item</button>
-              <div className="text-base text-stone-600 mt-3">Declared value <span className="font-mono font-bold text-xl text-stone-900">{money(customsTotal)}</span></div>
+              <div className="inline-flex items-center gap-2 border border-stone-200 rounded-lg px-3 py-1.5 mt-3 text-sm text-stone-600 bg-stone-50/60">Declared value <span className="font-mono font-semibold text-stone-900">{money(customsTotal)}</span></div>
+              <div className="border-t border-stone-200 mt-3"/>
               {shipHsMsg&&<div className={`text-[11px] rounded px-2 py-1 border ${shipHsMsg.err?"text-rose-700 bg-rose-50 border-rose-200":"text-emerald-700 bg-emerald-50 border-emerald-200"}`}>{shipHsMsg.err||shipHsMsg.ok}</div>}
               {shipHsOpts&&<div className="flex flex-wrap gap-1.5">{shipHsOpts.opts.map(op=>(
                 <button key={op.code} onClick={()=>{setLine(shipHsOpts.line,{hts:op.code});setShipHsOpts(null);setShipHsMsg({ok:`Applied ${op.code}. Click 💾 Save on the line to remember it for this product.`});}} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-full px-2.5 py-1 font-medium hover:bg-[#CCEAFF]">
@@ -3102,7 +3103,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 <button onClick={()=>setShipHsOpts(null)} className="text-[11px] text-stone-400 hover:text-stone-600 px-1">dismiss</button></div>}
               {customs.lines.reduce((a,l)=>a+(+l.value||0)*(+l.qty||0),0)>2500&&<div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-300 rounded px-2 py-1.5">⚠ Declared value is over <b>$2,500</b> — an <b>EEI filing is likely required</b> (the NOEEI 30.37(a) exemption no longer applies). <a href="https://ace.cbp.gov" target="_blank" rel="noreferrer" className="underline font-semibold">File via AESDirect on the CBP ACE portal →</a> then paste the ITN into the FTR / EEI box.</div>}
             <AssetChips settings={settings||{}} sel={customs} onSel={(v)=>setCustoms(c=>({...c,...v}))}/>
-            <div className="flex flex-wrap items-center gap-2 border-t border-stone-200 pt-4 mt-5">
+            <div className="flex flex-wrap items-center gap-2 mt-1">
               <span className="flex items-center gap-1.5 border border-stone-200 rounded-lg pl-1.5 pr-1 py-1 bg-white">
                 {settings.companyLogo?<img src={settings.companyLogo} alt="logo" className="h-6 max-w-[90px] object-contain"/>:<span className="text-[11px] text-stone-400 px-1">No logo yet</span>}
                 <label className="text-[11px] text-[#006FBF] hover:underline cursor-pointer px-1 whitespace-nowrap">Change logo<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,companyLogo:b})),600);e.target.value="";}}/></label>
@@ -3111,7 +3112,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <button onClick={()=>setShipPad(v=>!v)} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">✍️ Draw a signature</button>
               <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload signature<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"signature",name:f.name.replace(/\.[a-z]+$/i,""),data:b},...(pp.docAssets||[])]})),500);e.target.value="";}}/></label>
               <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Change letterhead<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"letterhead",name:f.name.replace(/\.[a-z]+$/i,""),data:b},...(pp.docAssets||[])]})),1400);e.target.value="";}}/></label>
-              <span className="flex-1"/>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 justify-end">
               <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700"><input type="checkbox" checked={!!customs.proforma} onChange={e=>setCustoms({...customs,proforma:e.target.checked})} className="accent-[#0086E0]"/>PROFORMA</label>
               <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700"><input type="checkbox" checked={!!customs.autoPrint} onChange={e=>setCustoms({...customs,autoPrint:e.target.checked})} className="accent-[#0086E0]"/>Auto-print after label</label>
               <div className="flex gap-2">

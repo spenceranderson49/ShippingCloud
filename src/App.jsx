@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v193";
+const BUILD_TAG="addr-v194";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -810,7 +810,7 @@ const CUSTOM_DEFAULTS={
   hideInvoice:false,hidePO:false,hideAddr23:false,hideOz:false,hideInsure:false,
   phoneRequired:true,emailRequired:true,
   defaultSignature:"none",autoInsurePct:0,
-  defaultView:"cheapest",hiddenServices:[],priceWarn:0,transitStyle:"date",aliases:{},
+  defaultView:"cheapest",hiddenServices:[],priceWarn:0,transitStyle:"date",aliases:{},matchedOnly:false,
   slipThanks:"",slipFooter:"",
   density:"comfortable",stuckDays:0,
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
@@ -2669,6 +2669,17 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const [recErrors,setRecErrors]=useState([]);
   const custom=cz(settings);
   const [selectedOrder,setSelectedOrder]=usePersist("ship.selectedOrder",null);
+  const [scanVal,setScanVal]=useState("");
+  const [scanMsg,setScanMsg]=useState(null);
+  const scanApply=(code)=>{ const c=String(code||"").trim().toLowerCase(); setScanVal(""); if(!c)return;
+    const o=orders.find(x=>[x.name,x.id,x.sku,x.tracking,x.customer,x.zip,x.barcode].filter(Boolean).some(v=>String(v).toLowerCase()===c))
+      ||orders.find(x=>[x.name,x.sku,x.tracking,x.customer].filter(Boolean).some(v=>String(v).toLowerCase().includes(c)));
+    if(!o){ setScanMsg({ok:false,t:`no match for \u201c${code}\u201d`}); setTimeout(()=>setScanMsg(null),4000); return; }
+    setReceiver({...empty,name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email});
+    if(o.weight)setPieces([{weight:o.weight,L:12,W:9,H:4}]);
+    setReference(o.name||""); setSelectedOrder(o.id);
+    setScanMsg({ok:true,t:String(o.name||o.id)}); setTimeout(()=>setScanMsg(null),4000);
+  };
   const [verify,setVerify]=useState(null);
   const [verifyNonce,setVerifyNonce]=useState(0);
   const [saved,setSaved]=useState(false);
@@ -2824,6 +2835,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
   },[rateSrc,orRates,client.markup,fxTransit,residential,addrClassified,sigOption,saturday,insurance]);
   const best=null;
+  const matchedKey=useMemo(()=>{const so=selectedOrder?orders.find(x=>x.id===selectedOrder):null;return matchRequestedService(quotes,so&&so.shippingService);},[quotes,selectedOrder,orders]);
 
   const buildRec=(q,carrier,extra)=>({id:Date.now(),date:new Date().toLocaleDateString(),tracking:(extra&&extra.tracking)||newTracking(carrier),carrier,service:q.label,recipient:{...receiver},sender:{...sender},fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,pieces:pieces.map(p=>({...p})),dims:pieces[0],insurance,cost:q.cost,sell:q.sell,billTo,thirdAcct,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference,invoiceNo,poNo,residential,intl,bookNumber:extra&&extra.bookNumber,customs:intl?{...customs,total:customsTotal,ci:"CI-"+rnd(5)}:null});
   const print=async(q)=>{
@@ -3014,6 +3026,10 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               {!custom.hidePO&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">PO #</span>{(custom.poLocked&&(((settings.fieldLists||{}).po)||[]).length>0)
                 ?<select value={poNo} onChange={e=>setPoNo(e.target.value)} className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] ${custom.poRequired&&!poNo?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}><option value="">— select —</option>{(((settings.fieldLists||{}).po)||[]).map(v=><option key={v} value={v}>{v}</option>)}</select>
                 :<input value={poNo} onChange={e=>setPoNo(e.target.value)} list="sc-po-list" placeholder="PO-…" className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 ${custom.poRequired&&!poNo?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}/>}</div>}
+              <div className="flex items-center gap-1.5"><span className="text-[10px] uppercase tracking-widest text-[#0086E0] font-semibold flex items-center gap-1"><ScanLine className="w-3.5 h-3.5"/>Scan</span>
+                <input value={scanVal} onChange={e=>setScanVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();scanApply(scanVal);}}} placeholder="order # / SKU" className="w-36 border border-dashed border-[#66C2FF] bg-[#E6F4FF]/50 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] focus:bg-white"/>
+                {scanMsg&&<span className={`text-[11px] flex items-center gap-1 ${scanMsg.ok?"text-emerald-600":"text-rose-500"}`}>{scanMsg.ok?<CheckCircle2 className="w-3.5 h-3.5"/>:<AlertTriangle className="w-3.5 h-3.5"/>}{scanMsg.t}</span>}
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-4">
               <span className="text-[11px] text-stone-400 font-mono">total {totalWeight} lb</span>
@@ -3135,7 +3151,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           :rateSrc.live?<><Wifi className="w-3.5 h-3.5"/>Live rates from your England account</>
           :<><Calculator className="w-3.5 h-3.5"/>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""} — connect your England account in Settings → Carrier accounts for live pricing</>}
         </div>}
-        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} onOneRate={applyOneRateBox} custom={custom}/>
+        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matchedKey} collapsible={true} onOneRate={applyOneRateBox} custom={custom}/>
         {labelPreview&&<LabelPreviewModal data={labelPreview} onClose={()=>setLabelPreview(null)}/>}
         {naming&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setNaming(false)}><div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-sm space-y-3" onClick={e=>e.stopPropagation()}><div className="text-sm font-semibold text-stone-800">Name this draft</div><input autoFocus value={draftName} onChange={e=>setDraftName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")commitDraft(draftName.trim());}} placeholder="e.g. Dana Cole – Miami" className="w-full bg-white border border-stone-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><div className="flex justify-end gap-2"><button onClick={()=>setNaming(false)} className="text-sm px-3 py-1.5 rounded text-stone-600 hover:bg-stone-100">Cancel</button><button onClick={()=>commitDraft(draftName.trim())} className="text-sm px-3 py-1.5 rounded bg-stone-900 text-white font-medium hover:bg-stone-800">Save draft</button></div></div></div>}
         {shipStatus&&<div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2.5 ${shipStatus.state==="error"?"bg-rose-50 text-rose-700 border border-rose-200":shipStatus.state==="booked"?"bg-emerald-50 text-emerald-700 border border-emerald-200":shipStatus.state==="pending_timeout"?"bg-amber-50 text-amber-700 border border-amber-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
@@ -3252,7 +3268,17 @@ function CarrierMark({carrier,className}){
   if(carrier==="FedEx") return <img src={FEDEX_LOGO} alt="FedEx" className={className||"h-6 w-auto"}/>;
   return <span className={`font-bold ${CARRIER_TINT[carrier]||"text-stone-700"} ${className||""}`}>{carrier}</span>;
 }
-function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=true,onOneRate,custom=CUSTOM_DEFAULTS}){
+function matchRequestedService(quotes,requested){
+  if(!requested)return null;
+  const c=canonSvc(requested);
+  const KNOWN=["home","ground","2day","express_saver","standard_overnight","priority_overnight","first_overnight","intl_priority"];
+  if(!KNOWN.includes(c))return null;   // "Standard Shipping" etc. \u2014 no honest FedEx match, so no highlight
+  const hit=quotes.find(q=>canonSvc(q.label)===c&&(q.sell??q.cost)!=null);
+  return hit?hit.key:null;
+}
+function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=true,onOneRate,custom=CUSTOM_DEFAULTS,matched=null,collapsible=false}){
+  const [showAll,setShowAll]=useState(false);
+  const collapse=collapsible&&custom.matchedOnly&&matched&&!showAll&&quotes.some(q=>q.key===matched);
   const [view,setView]=useState(custom.defaultView||"cheapest");
   const [open,setOpen]=useState(null);
   const Row=(q)=>{
@@ -3277,9 +3303,10 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
     comps=[...comps,...acc.map(a=>({label:a.label,amount:a.amount}))];
     const hasPrice=sell!=null;
     return (
-      <div key={q.key} className="border rounded-lg border-stone-200 bg-white">
+      <div key={q.key} className={"border rounded-lg bg-white "+(matched===q.key?"border-[#0086E0] ring-1 ring-[#0086E0]":"border-stone-200")}>
         <div onClick={()=>{setOpen(isOpen?null:q.key); if(q._oneRate&&q.packageTypeCode&&onOneRate)onOneRate(q.packageTypeCode);}} className="px-3 py-2 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
           <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isOpen?"rotate-90":""}`}/>
+          {matched===q.key&&<span className="text-[10px] font-semibold uppercase tracking-wide bg-[#E6F4FF] text-[#0086E0] border border-[#99D6FF] rounded px-1.5 py-0.5 shrink-0">Requested</span>}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2"><span className="text-sm truncate">{(custom.aliases&&custom.aliases[canonSvc(q.label)])||q.label}</span></div>
             <div className="text-[11px] text-stone-500 flex items-center gap-1"><Calendar className="w-3 h-3"/>Transit Time: {days?(custom.transitStyle==="days"?<>{days} business day{days>1?"s":""}</>:<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}{fxLive&&days?<span className="text-[#0086E0] font-medium ml-1">FedEx</span>:""}</div>
@@ -3311,8 +3338,8 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
         </div>
       </div>
       {view==="cheapest"
-        ? <div className="space-y-1">{[...quotes].sort((a,b)=>(((a.sell??a.cost)||1e9))-(((b.sell??b.cost)||1e9))).map(Row)}</div>
-        : CARRIER_ORDER.map(c=>{const list=quotes.filter(q=>q.carrier===c);if(!list.length)return null;return (<div key={c} className="mb-4"><div className="mb-2 pb-1.5 border-b border-stone-200"><CarrierMark carrier={c}/></div><div className="space-y-1.5">{list.map(Row)}</div></div>);})}
+        ? <div className="space-y-1">{[...(collapse?quotes.filter(q=>q.key===matched):quotes)].sort((a,b)=>(((a.sell??a.cost)||1e9))-(((b.sell??b.cost)||1e9))).map(Row)}{collapse&&<button onClick={()=>setShowAll(true)} className="w-full text-xs text-stone-500 hover:text-stone-700 border border-dashed border-stone-300 rounded-lg py-1.5 flex items-center justify-center gap-1">Show all services <ChevronRight className="w-3.5 h-3.5 rotate-90"/></button>}</div>
+        : CARRIER_ORDER.map(c=>{const list=(collapse?quotes.filter(q=>q.key===matched):quotes).filter(q=>q.carrier===c);if(!list.length)return null;return (<div key={c} className="mb-4"><div className="mb-2 pb-1.5 border-b border-stone-200"><CarrierMark carrier={c}/></div><div className="space-y-1.5">{list.map(Row)}</div></div>);})}
     </div>
   );
 }
@@ -3699,6 +3726,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
     return withTransit([...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday:sat,insurance}))).sort((a,b)=>(a.sell||0)-(b.sell||0));
   },[baseQuotes,orRates,fxTransit,sigOption,sat,insurance]);
   const best=null;
+  const matchedKey=useMemo(()=>matchRequestedService(quotes,o&&o.shippingService),[quotes,o&&o.shippingService]);
   const applyORBox=(code)=>{const b=FEDEX_ONERATE.find(x=>x.code===code);if(!b)return;if(b.dims){setDims({L:b.dims.L,W:b.dims.W,H:b.dims.H});}setBoxIdx(-1);setOrPkg(code);const val="FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,"");const f=settings?.orBoxField||"invoice";const fill=(set)=>set(prev=>prev&&prev.trim()?prev:val);if(f==="invoice")fill(setInvoiceNo);else if(f==="po")fill(setPoNo);else if(f==="reference")fill(setReference);};
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
   const pickBox=(j)=>{ setBoxIdx(j); if(j>=0){const b=boxes[j];setDims({L:b.L,W:b.W,H:b.H});} };
@@ -3863,7 +3891,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
               </div>
             </div>
             {!shipped&&<div className="bg-white border border-stone-200 rounded-lg p-4">
-              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} onOneRate={applyORBox} custom={cz(settings||{})}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
+              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} matched={matchedKey} collapsible={true} onOneRate={applyORBox} custom={cz(settings||{})}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
               {ready&&rateSrc.loading&&<div className="text-xs text-stone-400 flex items-center gap-1.5 mt-2"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Loading rates…</div>}
               {status&&<div className={`mt-2 text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${status.state==="error"?"text-rose-600 bg-rose-50 border border-rose-200":status.state==="booking"?"text-stone-600 bg-stone-50 border border-stone-200":"text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF]"}`}>{status.state==="error"?<AlertTriangle className="w-3.5 h-3.5"/>:status.state==="booking"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{status.msg}</div>}
             </div>}
@@ -4101,7 +4129,7 @@ function Scan({orders,goShip,goTab}){
   return (
     <div className="max-w-2xl space-y-4">
       <div className="flex items-center gap-2"><ScanLine className="w-5 h-5 text-[#0086E0]"/><h1 className="text-base font-semibold text-stone-800">Scan to ship</h1></div>
-      <p className="text-sm text-stone-500">Scan an order barcode, SKU, or tracking number with your handheld scanner (or type it and press Enter). The matching order loads straight into the Ship tab, ready to print — same flow as ShipManager or SKU Savvy.</p>
+      <p className="text-sm text-stone-500">Scan an order barcode, SKU, or tracking number with your handheld scanner (or type it and press Enter). The matching order loads straight into the Ship tab, ready to print.</p>
       <div className="border-2 border-dashed border-[#99D6FF] rounded-xl bg-[#E6F4FF]/40 p-6 flex flex-col items-center gap-3">
         <ScanLine className="w-10 h-10 text-[#33ABFF]"/>
         <input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();submit(val);}}} placeholder="Scan or type a code, then Enter" className="w-full max-w-md text-center bg-white border border-stone-300 rounded-lg px-4 py-3 text-lg font-mono outline-none focus:border-[#0099FF]"/>
@@ -6522,6 +6550,7 @@ function Customize({settings,setSettings,deployMode}){
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         <Tog k="hideInvoice" label="Hide Invoice # field"/>
         <Tog k="hidePO" label="Hide PO # field"/>
+        <Tog k="matchedOnly" label="Only show the requested service" hint="When a store order names the service the buyer paid for, show just that one \u2014 pre-highlighted, ready to print. Other services sit behind \u2018Show all services\u2019."/>
         <Tog k="hideAddr23" label="Hide Address 2 & 3" hint="On both sender and receiver cards"/>
         <Tog k="hideOz" label="Hide the oz box" hint="Whole pounds are enough for most shops"/>
         <Tog k="hideInsure" label="Hide the Insure $ field"/>

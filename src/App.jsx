@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v192";
+const BUILD_TAG="addr-v193";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -2278,7 +2278,8 @@ function AppInner(){
     const depProds=(function(){const uid=currentUser&&currentUser.id;const fl=(uid&&featureFlags&&featureFlags[uid])||(CLOUD.mode==="cloud"?(myFeatures||{}):{});return (fl&&fl._products)||null;})();
     let products=sc.products;
     if(depProds&&depProds.length){const mine=sc.products||[];const names=new Set(mine.map(x=>String(x.name).toLowerCase()));products=[...mine,...depProds.filter(x=>!names.has(String(x.name).toLowerCase()))];}
-    return {...sc,products,custom:{...deployedCustom,...(sc.custom||{})}};   // company-deployed defaults sit under personal choices
+    const personalCustom=Object.fromEntries(Object.entries(sc.custom||{}).filter(([k,v])=>v!==""&&v!=null));   // "" = "use default" — must not mask company-deployed values
+    return {...sc,products,custom:{...deployedCustom,...personalCustom}};   // company-deployed defaults sit under personal choices
   },[settingsRaw,deployedCustom]);
   const setSettings=(v)=>setSettingsRaw(p=>scrubLegacyDefaults(typeof v==="function"?v(scrubLegacyDefaults(p)):v));
   const custom=cz(settings);
@@ -2494,6 +2495,10 @@ function AppInner(){
           if(hit)rec={name:hit.name,company:hit.company,address1:hit.address1,city:hit.city,state:hit.state,zip:hit.zip,phone:hit.phone,email:hit.email};
         }
         ["name","company","address1","city","state","zip","phone","email"].forEach(k=>{if(i[k]!=null&&i[k]!=="")rec[k]=i[k];});
+        if(i.country){ const cRaw=String(i.country).trim(); const CODE2NAME={US:"United States",CA:"Canada",GB:"United Kingdom",UK:"United Kingdom",MX:"Mexico",AU:"Australia",DE:"Germany",FR:"France",JP:"Japan",CN:"China",IT:"Italy",ES:"Spain",NL:"Netherlands",BR:"Brazil",IN:"India",KR:"South Korea",NZ:"New Zealand",IE:"Ireland",CH:"Switzerland",SE:"Sweden"};
+          const byCode=cRaw.length===2?CODE2NAME[cRaw.toUpperCase()]:null;
+          const byName=COUNTRIES.find(c=>c.toLowerCase()===cRaw.toLowerCase());
+          rec.country=byCode||byName||cRaw; }
         goShip({receiver:rec,weight:i.weight,reference:i.reference,residential:i.residential});
         return "Ship form prefilled"+(rec.name?" for "+rec.name:"")+" — review the details, get a quote, then Buy the label.";
       }
@@ -3904,7 +3909,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
         {list.length===0&&<div className="p-8 text-center text-sm text-stone-400">No shipments match “{q}”.</div>}
         {list.map(s=>(
         <div key={s.id}>
-          <div onClick={()=>setOpen(open===s.id?null:s.id)} className={`flex items-center gap-3 px-4 ${custom.density==="compact"?"py-1.5":"py-3"} hover:bg-stone-50 cursor-pointer ${stuck(r)?"border-l-2 border-amber-400":""}`} title={stuck(r)?"No delivery after "+custom.stuckDays+"+ days in transit — possibly stuck":undefined}>
+          <div onClick={()=>setOpen(open===s.id?null:s.id)} className={`flex items-center gap-3 px-4 ${custom.density==="compact"?"py-1.5":"py-3"} hover:bg-stone-50 cursor-pointer ${stuck(s)?"border-l-2 border-amber-400":""}`} title={stuck(s)?"No delivery after "+custom.stuckDays+"+ days in transit — possibly stuck":undefined}>
             <button className="text-stone-400"><ChevronRight className={`w-4 h-4 transition-transform ${open===s.id?"rotate-90":""}`}/></button>
             <div className="w-24"><div className="text-sm font-mono text-stone-500">{s.date}</div><div className="text-[10px] text-stone-400">{s.time||""}</div></div>
             <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{s.recipient?.name||"—"}</div><div className="text-[11px] text-stone-400 truncate">{s.service}</div></div>
@@ -5212,17 +5217,7 @@ function BoxLogic({settings,setSettings}){
       </div>
       <p className="text-[11px] text-stone-400">Padding is the spare room added around items before choosing a box, so fragile or odd-shaped goods still fit.</p>
     </Panel>
-    <Panel title="Dimensional weight">
-      <Field label="DIM divisor">
-        <Select value={bl.dimDivisor} onChange={e=>set({dimDivisor:+e.target.value})}>
-          <option value={139}>139 — standard domestic (FedEx/UPS)</option>
-          <option value={166}>166 — lighter DIM (some contracts)</option>
-          <option value={250}>250 — DHL / international</option>
-        </Select>
-      </Field>
-      <p className="text-[11px] text-stone-400">Billable weight = the greater of actual weight and (L×W×H ÷ divisor). A lower divisor means higher dim weight. The carrier charges on whichever is larger.</p>
-      <div className="bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-xs text-stone-600 font-mono">Example: a 12×9×4 box ÷ {bl.dimDivisor} = {(12*9*4/bl.dimDivisor).toFixed(1)} lb dim weight</div>
-    </Panel>
+    {/* DIM divisor is automatic: 139 (industry standard) — panel removed per Spencer, v193 */}
     <Panel title="Options">
       <label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={bl.allowOverride} onChange={e=>set({allowOverride:e.target.checked})} className="accent-[#0086E0]"/>Let users override the chosen box on the Ship tab</label>
       <div className="text-xs text-stone-500">Box catalog in use: <b>{boxes.length}</b> boxes (edit them under <b>Package sizes</b>). Product catalog: <b>{products.length}</b> products.</div>

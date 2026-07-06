@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v190";
+const BUILD_TAG="addr-v191";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -645,8 +645,7 @@ function printCommercialInvoice(o,catalog,sender,opts={}){
   <h1 style="text-align:center;margin:0 0 2px;">${opts.proforma?"PROFORMA INVOICE":"COMMERCIAL INVOICE"}</h1>
   ${opts.proforma?`<div style="text-align:center;font-size:10.5px;color:#6b7280;">For customs &amp; quotation only — not a demand for payment</div>`:""}
   <div class="top" style="margin-top:6px;">
-    <div>${lh?`<img class="lh" src="${lh}"/>`:`<div class="co">${esc(sn.company||sn.name||"")}</div>`}
-      <div class="small" style="margin-top:4px;">${esc(sn.address1||"")}${sn.address1?"<br/>":""}${esc([sn.city,sn.state,sn.zip].filter(Boolean).join(", "))}</div></div>
+    <div>${lh?`<img class="lh" src="${lh}"/>`:`<div class="co">${esc(sn.company||sn.name||"")}</div>`}</div>
     <div class="title"><div class="meta">Invoice #: <b>${esc(o.name||"—")}</b><br/>Date: <b>${today}</b></div></div>
   </div>
   <div class="rule"></div>
@@ -667,7 +666,6 @@ function printCommercialInvoice(o,catalog,sender,opts={}){
     <div class="cell"><div class="k">Ship date</div><div class="v">${esc(opts.shipDate||today)}</div></div>
     <div class="cell"><div class="k">Carrier / AWB</div><div class="v">${esc(opts.awb||"____________________")}</div></div>
     <div class="cell"><div class="k">Importer of record</div><div class="v">${esc(opts.ior||"Receiver")}</div></div>
-    <div class="cell"><div class="k">Parties to transaction</div><div class="v" style="font-weight:400;">☐ Related &nbsp; ☐ Not related</div></div>
   </div>
   ${samples?`<div class="samples">SAMPLES — NOT FOR RESALE · VALUE FOR CUSTOMS PURPOSES ONLY</div>`:""}
   <table><thead><tr><th style="width:24px;">#</th><th>Description of goods</th><th>HS code</th><th>Origin</th><th class="r">Weight</th><th class="r">Qty</th><th class="r">Unit value</th><th class="r">Total</th></tr></thead>

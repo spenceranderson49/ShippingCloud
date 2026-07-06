@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v189";
+const BUILD_TAG="addr-v190";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -3075,13 +3075,13 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 <button onClick={()=>setCustoms({...customs,units:"kg"})} className={customs.units==="kg"?"bg-[#0086E0] text-white px-2.5 py-1":"bg-white text-stone-500 px-2.5 py-1 hover:bg-stone-50"}>kg</button>
               </div>
               </div></div>
-              <div className="hidden sm:flex text-[10px] uppercase tracking-wide text-stone-400 px-1 gap-2"><div className="flex-1 max-w-[340px]">Description</div><div className="w-36">HTS code</div><div className="w-28">Origin</div>{(customs.units||"lb")==="lb"?<><div className="w-14">Lb</div><div className="w-14">Oz</div></>:<div className="w-[120px]">Kg</div>}<div className="w-16">Qty</div><div className="w-24">Unit $</div><div className="flex-1"/></div>
+              <div className="hidden sm:flex text-[10px] uppercase tracking-wide text-stone-400 px-1 gap-2"><div className="flex-1 max-w-[340px]">Description</div><div className="w-44">HTS code</div><div className="w-44">Origin</div>{(customs.units||"lb")==="lb"?<><div className="w-14">Lb</div><div className="w-14">Oz</div></>:<div className="w-[120px]">Kg</div>}<div className="w-16">Qty</div><div className="w-24">Unit $</div><div className="flex-1"/></div>
               {customs.lines.map((l,i)=>(
                 <div key={i} className="flex flex-wrap sm:flex-nowrap gap-2 items-center">
                   <input value={l.desc} onChange={e=>{const v=e.target.value;const hit=((settings&&settings.products)||[]).find(pr=>pr.name===v||pr.sku===v);if(hit){const wt=+hit.wt||0;setLine(i,{desc:hit.name,hts:hit.hs||l.hts,origin:hit.origin==="US"?"United States":(hit.origin||l.origin),value:l.value||String(hit.value||""),wlb:l.wlb??(wt?Math.floor(wt):""),woz:l.woz??(wt?Math.round((wt%1)*16):"")});}else setLine(i,{desc:v});}} list="sc-prod-list" placeholder="Item description — type or pick a product" className="flex-1 min-w-0 max-w-[340px] bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
                   
-                  <input value={l.hts} onChange={e=>setLine(i,{hts:e.target.value})} list="htscodes" placeholder="HTS code" className="w-36 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
-                  <input value={l.origin} onChange={e=>setLine(i,{origin:e.target.value})} list="sc-origin-list" placeholder="Origin" className="w-28 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+                  <input value={l.hts} onChange={e=>setLine(i,{hts:e.target.value})} list="htscodes" placeholder="HTS code" className="w-44 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
+                  <select value={l.origin} onChange={e=>setLine(i,{origin:e.target.value})} className="w-44 bg-white border border-stone-200 rounded-lg px-1.5 py-1.5 text-sm outline-none focus:border-[#0099FF]">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
                   {(customs.units||"lb")==="lb"?<><input type="number" value={l.wlb??""} onChange={e=>setLine(i,{wlb:e.target.value})} placeholder="lb" className="w-14 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/>
                   <input type="number" value={l.woz??""} onChange={e=>setLine(i,{woz:e.target.value})} placeholder="oz" className="w-14 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/></>:
                   <input type="number" value={l.wkg??""} onChange={e=>setLine(i,{wkg:e.target.value})} placeholder="kg" className="w-[120px] bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/>}
@@ -3092,9 +3092,6 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                   <button onClick={()=>delLine(i)} className="text-stone-300 hover:text-rose-500 w-5"><X className="w-4 h-4"/></button>
                 </div>
               ))}
-              <button onClick={addLine} className="flex items-center gap-1 text-xs bg-white border border-stone-200 hover:bg-stone-100 rounded-lg px-2.5 py-1.5 font-medium text-stone-700 mt-1"><Plus className="w-3.5 h-3.5"/>Add item</button>
-              <div className="inline-flex items-center gap-2 border border-stone-200 rounded-lg px-3 py-1.5 mt-3 text-sm text-stone-600 bg-stone-50/60">Declared value <span className="font-mono font-semibold text-stone-900">{money(customsTotal)}</span></div>
-              <div className="border-t border-stone-200 mt-3"/>
               {shipHsMsg&&<div className={`text-[11px] rounded px-2 py-1 border ${shipHsMsg.err?"text-rose-700 bg-rose-50 border-rose-200":"text-emerald-700 bg-emerald-50 border-emerald-200"}`}>{shipHsMsg.err||shipHsMsg.ok}</div>}
               {shipHsOpts&&<div className="flex flex-wrap gap-1.5">{shipHsOpts.opts.map(op=>(
                 <button key={op.code} onClick={()=>{setLine(shipHsOpts.line,{hts:op.code});setShipHsOpts(null);setShipHsMsg({ok:`Applied ${op.code}. Click 💾 Save on the line to remember it for this product.`});}} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-full px-2.5 py-1 font-medium hover:bg-[#CCEAFF]">
@@ -3102,13 +3099,16 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 </button>))}
                 <button onClick={()=>setShipHsOpts(null)} className="text-[11px] text-stone-400 hover:text-stone-600 px-1">dismiss</button></div>}
               {customs.lines.reduce((a,l)=>a+(+l.value||0)*(+l.qty||0),0)>2500&&<div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-300 rounded px-2 py-1.5">⚠ Declared value is over <b>$2,500</b> — an <b>EEI filing is likely required</b> (the NOEEI 30.37(a) exemption no longer applies). <a href="https://ace.cbp.gov" target="_blank" rel="noreferrer" className="underline font-semibold">File via AESDirect on the CBP ACE portal →</a> then paste the ITN into the FTR / EEI box.</div>}
-            <AssetChips settings={settings||{}} sel={customs} onSel={(v)=>setCustoms(c=>({...c,...v}))}/>
+              <button onClick={addLine} className="flex items-center gap-1 text-xs bg-white border border-stone-200 hover:bg-stone-100 rounded-lg px-2.5 py-1.5 font-medium text-stone-700 mt-1"><Plus className="w-3.5 h-3.5"/>Add item</button>
+              <div className="inline-flex items-center gap-2 border border-stone-200 rounded-lg px-3 py-1.5 mt-3 text-sm text-stone-600 bg-stone-50/60">Declared value <span className="font-mono font-semibold text-stone-900">{money(customsTotal)}</span></div>
+              <div className="border-t border-stone-200 mt-3"/>
+                          <AssetChips settings={settings||{}} sel={customs} onSel={(v)=>setCustoms(c=>({...c,...v}))}/>
             <div className="flex flex-wrap items-center gap-2 mt-1">
               <span className="flex items-center gap-1.5 border border-stone-200 rounded-lg pl-1.5 pr-1 py-1 bg-white">
                 {settings.companyLogo?<img src={settings.companyLogo} alt="logo" className="h-6 max-w-[90px] object-contain"/>:<span className="text-[11px] text-stone-400 px-1">No logo yet</span>}
                 <label className="text-[11px] text-[#006FBF] hover:underline cursor-pointer px-1 whitespace-nowrap">Change logo<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,companyLogo:b})),600);e.target.value="";}}/></label>
               </span>
-              <span className="flex flex-col"><span className="text-[9px] uppercase tracking-widest text-stone-400 mb-0.5">Printed name</span><input value={customs.printedName??((settings.sender&&settings.sender.name)||"")} onChange={e=>setCustoms({...customs,printedName:e.target.value})} placeholder="Printed name" className="w-48 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-[#0099FF] placeholder-stone-300"/></span>
+              <input value={customs.printedName??((settings.sender&&settings.sender.name)||"")} onChange={e=>setCustoms({...customs,printedName:e.target.value})} placeholder="Printed name (under signature)" className="w-48 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-[#0099FF] placeholder-stone-300"/>
               <button onClick={()=>setShipPad(v=>!v)} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">✍️ Draw a signature</button>
               <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload signature<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"signature",name:f.name.replace(/\.[a-z]+$/i,""),data:b},...(pp.docAssets||[])]})),500);e.target.value="";}}/></label>
               

@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v206";
+const BUILD_TAG="addr-v207";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -4759,7 +4759,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped})
           </div>
         </div>
       </div>
-      {open&&<OrderShipModal o={open} setOrders={setOrders} client={client} settings={settings} onShipped={onShipped} goShip={ship} onClose={()=>setOpen(null)}/>}
+      {open&&<OrderShipModal key={open.id} o={open} orderList={sorted} onNav={setOpen} setOrders={setOrders} client={client} settings={settings} onShipped={onShipped} goShip={ship} onClose={()=>setOpen(null)}/>}
     </div>
   );
 }
@@ -4898,7 +4898,17 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
 }
 
 /* ════════ ORDER · ShipStation-style detail + ship page (modal overlay) ════════ */
-function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
+function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,goShip,onClose}){
+  const navList=Array.isArray(orderList)?orderList:[];
+  const navIdx=navList.findIndex(x=>x&&x.id===o.id);
+  const navPrev=navIdx>0?navList[navIdx-1]:null;
+  const navNext=navIdx>=0&&navIdx<navList.length-1?navList[navIdx+1]:null;
+  const goPrev=()=>{if(navPrev&&onNav)onNav(navPrev);};
+  const goNext=()=>{if(navNext&&onNav)onNav(navNext);};
+  useEffect(()=>{
+    const h=(e)=>{if(e.key==="ArrowLeft"&&navPrev)goPrev();else if(e.key==="ArrowRight"&&navNext)goNext();};
+    window.addEventListener("keydown",h);return()=>window.removeEventListener("keydown",h);
+  },[navIdx,navList.length]);
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 rate database
   const [ciOpts,setCiOpts]=useState({reason:"Sale",incoterm:INCOTERMS[1],samples:false,notes:""});
   const commercial=!!(o.company&&o.company.trim());
@@ -5026,6 +5036,8 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
   const inC="bg-white border border-stone-300 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300";
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-stretch sm:items-center justify-center sm:p-4" onClick={onClose}>
+      {navPrev&&<button onClick={(e)=>{e.stopPropagation();goPrev();}} title={"Previous order ("+navPrev.name+")  ←"} className="hidden sm:flex absolute left-2 lg:left-6 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full bg-white/90 hover:bg-white shadow-lg items-center justify-center text-stone-600 hover:text-stone-900"><ChevronRight className="w-6 h-6 rotate-180"/></button>}
+      {navNext&&<button onClick={(e)=>{e.stopPropagation();goNext();}} title={"Next order ("+navNext.name+")  →"} className="hidden sm:flex absolute right-2 lg:right-6 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full bg-white/90 hover:bg-white shadow-lg items-center justify-center text-stone-600 hover:text-stone-900"><ChevronRight className="w-6 h-6"/></button>}
       <div className="bg-stone-50 w-full max-w-6xl sm:h-[92vh] h-full sm:rounded-xl overflow-hidden shadow-2xl flex flex-col" onClick={e=>e.stopPropagation()}>
         <div className="bg-white border-b border-stone-200 px-4 py-3 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3 min-w-0">
@@ -5036,6 +5048,12 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {navIdx>=0&&navList.length>1&&<div className="hidden sm:flex items-center gap-1 text-[11px] text-stone-400 mr-1">{navIdx+1} of {navList.length}</div>}
+            {navIdx>=0&&navList.length>1&&<div className="flex sm:hidden items-center gap-0.5 mr-1">
+              <button onClick={goPrev} disabled={!navPrev} className="p-1.5 rounded hover:bg-stone-100 disabled:opacity-30"><ChevronRight className="w-4 h-4 rotate-180"/></button>
+              <span className="text-[11px] text-stone-400">{navIdx+1}/{navList.length}</span>
+              <button onClick={goNext} disabled={!navNext} className="p-1.5 rounded hover:bg-stone-100 disabled:opacity-30"><ChevronRight className="w-4 h-4"/></button>
+            </div>}
             {o.country&&o.country!=="United States"&&o.country!=="US"&&<button onClick={()=>printCommercialInvoice(o,(settings&&settings.products)||[],settings&&settings.sender,{...ciOpts,signature:ciOpts.signature||defaultSig(settings),senderTax:ciOpts.senderTax??((settings&&settings.taxId)||""),eei:ciOpts.eei??"NOEEI 30.37(a)",attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(ciOpts.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data}))})} className="text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Commercial invoice</button>}
             <button onClick={()=>{goShip&&goShip(o);onClose&&onClose();}} className="text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/>Open in Ship tab</button>
             <button onClick={onClose} className="text-stone-400 hover:text-stone-700 p-1"><X className="w-5 h-5"/></button>

@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v185";
+const BUILD_TAG="addr-v186";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -612,11 +612,11 @@ function printCommercialInvoice(o,catalog,sender,opts={}){
   const lh=opts.letterhead||CI_OPTS.logo||"";
   const box=(title,inner)=>`<div class="box"><div class="boxlbl">${title}</div>${inner}</div>`;
   const html=`<!doctype html><html><head><title>${opts.proforma?"Proforma":"Commercial"} invoice ${esc(o.name||"")}</title><style>
-    @page{size:letter portrait;margin:0.45in;} *{box-sizing:border-box;} body{font-family:'Helvetica Neue',-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#111827;padding:8px 6px;font-size:11.5px;line-height:1.38;margin:0;}
+    @page{size:letter portrait;margin:0.45in;} *{box-sizing:border-box;} body{font-family:'Helvetica Neue',-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#111827;padding:8px 6px;font-size:12px;line-height:1.4;margin:0;}
     .top{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;}
     .top img.lh{max-height:52px;max-width:280px;object-fit:contain;object-position:left;}
     .co{font-size:20px;font-weight:800;letter-spacing:.01em;}
-    .title{text-align:right;} .title h1{margin:0;font-size:21px;letter-spacing:.14em;font-weight:800;color:#111827;}
+    .title{text-align:right;} h1{font-size:22px;letter-spacing:.16em;font-weight:800;color:#111827;}
     .title .meta{margin-top:6px;font-size:12px;color:#374151;} .title .meta b{color:#111827;}
     .rule{height:3px;background:#111827;margin:10px 0 10px;}
     .box{border:1px solid #d1d5db;border-radius:6px;padding:7px 12px;margin-bottom:7px;}
@@ -625,12 +625,12 @@ function printCommercialInvoice(o,catalog,sender,opts={}){
     .nm{font-weight:700;font-size:13.5px;}
     .band{display:flex;flex-wrap:wrap;border:1px solid #d1d5db;border-radius:6px;overflow:hidden;margin:9px 0;}
     .band .cell{flex:1 1 25%;min-width:130px;padding:5px 10px;border-right:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;}
-    .band .cell .k{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:#6b7280;font-weight:700;} .band .cell .v{font-size:12.5px;margin-top:1px;font-weight:600;}
+    .band .cell .k{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:#6b7280;font-weight:700;} .band .cell .v{font-size:12.5px;margin-top:1px;font-weight:600;} .meta{font-size:12px;}
     .samples{margin:9px 0;border:3px solid #111827;text-align:center;padding:8px 8px;font-weight:900;font-size:15px;letter-spacing:.08em;}
     table{width:100%;border-collapse:collapse;margin-top:4px;}
     thead th{background:#111827;color:#fff;font-size:9px;text-transform:uppercase;letter-spacing:.08em;padding:5px 8px;text-align:left;}
     thead th.r,td.r{text-align:right;}
-    tbody td{padding:4.5px 8px;border-bottom:1px solid #e5e7eb;font-size:11.5px;}
+    tbody td{padding:5px 8px;border-bottom:1px solid #e5e7eb;font-size:12px;}
     tbody tr:nth-child(even) td{background:#f9fafb;}
     .totals{margin-left:auto;width:270px;margin-top:7px;font-size:11.5px;}
     .totals .tr{display:flex;justify-content:space-between;padding:3px 0;color:#374151;}
@@ -642,11 +642,12 @@ function printCommercialInvoice(o,catalog,sender,opts={}){
     .siglab{font-size:9.5px;color:#6b7280;text-transform:uppercase;letter-spacing:.1em;margin-top:3px;}
     @media print{body{padding:22px 30px;}}
   </style></head><body>
-  <div class="top">
+  <h1 style="text-align:center;margin:0 0 2px;">${opts.proforma?"PROFORMA INVOICE":"COMMERCIAL INVOICE"}</h1>
+  ${opts.proforma?`<div style="text-align:center;font-size:10.5px;color:#6b7280;">For customs &amp; quotation only — not a demand for payment</div>`:""}
+  <div class="top" style="margin-top:6px;">
     <div>${lh?`<img class="lh" src="${lh}"/>`:`<div class="co">${esc(sn.company||sn.name||"")}</div>`}
       <div class="small" style="margin-top:4px;">${esc(sn.address1||"")}${sn.address1?"<br/>":""}${esc([sn.city,sn.state,sn.zip].filter(Boolean).join(", "))}</div></div>
-    <div class="title"><h1>${opts.proforma?"PROFORMA INVOICE":"COMMERCIAL INVOICE"}</h1>
-      <div class="meta">Invoice #: <b>${esc(o.name||"—")}</b><br/>Date: <b>${today}</b>${opts.proforma?`<br/><span style="color:#6b7280;">For customs &amp; quotation only — not a demand for payment</span>`:""}</div></div>
+    <div class="title"><div class="meta">Invoice #: <b>${esc(o.name||"—")}</b><br/>Date: <b>${today}</b></div></div>
   </div>
   <div class="rule"></div>
   ${box("Shipper / Exporter",`<div class="two"><div><div class="nm">${esc(sn.company||"")}</div>${esc(sn.name||"")}<br/>${esc(sn.address1||"")}<br/>${esc([sn.city,sn.state,sn.zip].filter(Boolean).join(", "))}<br/>United States</div>
@@ -2683,7 +2684,12 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     setShipHsMsg({ok:`Saved "${l.desc}" with HS ${l.hts} to your product catalog — it'll auto-fill next time.`}); };
   const [shipPad,setShipPad]=useState(false);
   const [bookedLock,setBookedLock]=useState(null);
-  const printShipCI=(preview)=>{const o2={name:reference||invoiceNo||"CI-"+Date.now(),customer:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip,country:receiver.country,phone:receiver.phone,email:receiver.email,weight:totalWeight,lineItems:customs.lines.map(l=>({name:l.desc,quantity:+l.qty||1,price:String(l.value||0)}))};
+  const printShipCI=(preview)=>{
+    if(!preview){const tot=customs.lines.reduce((a,l)=>a+(+l.value||0)*(+l.qty||0),0);
+      saveCIRecord(setSettings,{date:new Date().toLocaleString(),invoiceNo:reference||invoiceNo||"",consignee:receiver.name||receiver.company||"",country:receiver.country||"",total:tot,proforma:!!customs.proforma,tracking:(bookedLock&&bookedLock.tracking)||"",
+        o:{name:reference||invoiceNo||"",customer:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip,country:receiver.country,phone:receiver.phone,email:receiver.email,weight:totalWeight},
+        sn:{...settings.sender},
+        opts:{reason:customs.reason,incoterm:customs.incoterm,samples:customs.samples,marks:customs.marks,notes:customs.notes,senderTax:customs.senderTaxId??settings.taxId,senderTaxCountry:customs.senderTaxCountry,receiverTax:customs.receiverTaxId,receiverEori:customs.receiverEori,receiverContact2:customs.altContact,eei:customs.ftr??"NOEEI 30.37(a)",printedName:customs.printedName,proforma:customs.proforma,units:customs.units||"lb",ior:customs.ior==="Other"?(customs.iorName||"Other"):(customs.ior||"Receiver"),signature:customs.signature||defaultSig(settings),letterhead:customs.letterhead,rows:customs.lines.map(l=>({name:l.desc,qty:+l.qty||1,unit:+l.value||0,hs:l.hts,origin:l.origin,w:(customs.units==="kg")?(l.wkg?`${+l.wkg} kg`:""):((l.wlb||l.woz)?`${+l.wlb||0} lb ${+l.woz||0} oz`:"")}))}});}const o2={name:reference||invoiceNo||"CI-"+Date.now(),customer:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip,country:receiver.country,phone:receiver.phone,email:receiver.email,weight:totalWeight,lineItems:customs.lines.map(l=>({name:l.desc,quantity:+l.qty||1,price:String(l.value||0)}))};
     printCommercialInvoice(o2,(settings&&settings.products)||[],settings.sender,{reason:customs.reason,incoterm:customs.incoterm,samples:customs.samples,marks:customs.marks,notes:customs.notes,senderTax:customs.senderTaxId??settings.taxId,senderTaxCountry:customs.senderTaxCountry,receiverTax:customs.receiverTaxId,receiverEori:customs.receiverEori,receiverContact2:customs.altContact,eei:customs.ftr??"NOEEI 30.37(a)",signature:customs.signature||defaultSig(settings),letterhead:customs.letterhead,preview:!!preview,attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(customs.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data})),printedName:customs.printedName,proforma:customs.proforma,awb:(bookedLock&&bookedLock.tracking)||"",units:customs.units||"lb",ior:customs.ior==="Other"?(customs.iorName||"Other"):(customs.ior||"Receiver"),rows:customs.lines.map(l=>({name:l.desc,qty:+l.qty||1,unit:+l.value||0,hs:l.hts,origin:l.origin,w:(customs.units==="kg")?(l.wkg?`${+l.wkg} kg`:""):((l.wlb||l.woz)?`${+l.wlb||0} lb ${+l.woz||0} oz`:"")}))});};
   const [shipHsMsg,setShipHsMsg]=useState(null);
   const shipSuggestHS=async(i)=>{ const l0=customs.lines[i]; if(!l0||!l0.desc)return;
@@ -3064,9 +3070,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             <Field label="Invoice notes"><textarea value={customs.notes||""} onChange={e=>setCustoms({...customs,notes:e.target.value})} rows={2} placeholder="Custom notes printed on the invoice — license numbers, 'samples for exhibition use only'…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
                         <div className="space-y-1.5">
               <div className="flex items-center justify-between mb-1"><div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">Add products</div>
-              <div className="flex rounded-lg border border-stone-200 overflow-hidden text-[11px] font-medium">
+              <div className="flex flex-col items-end"><div className="flex rounded-lg border border-stone-200 overflow-hidden text-[11px] font-medium">
                 <button onClick={()=>setCustoms({...customs,units:"lb"})} className={(customs.units||"lb")==="lb"?"bg-[#0086E0] text-white px-2.5 py-1":"bg-white text-stone-500 px-2.5 py-1 hover:bg-stone-50"}>lb / oz</button>
                 <button onClick={()=>setCustoms({...customs,units:"kg"})} className={customs.units==="kg"?"bg-[#0086E0] text-white px-2.5 py-1":"bg-white text-stone-500 px-2.5 py-1 hover:bg-stone-50"}>kg</button>
+              </div>
+              <div className="text-xs text-stone-500 mt-1 text-right">Declared value <span className="font-mono font-semibold text-stone-800">{money(customsTotal)}</span></div>
               </div></div>
               <div className="hidden sm:flex text-[10px] uppercase tracking-wide text-stone-400 px-1 gap-2"><div className="flex-1 max-w-[340px]">Description</div><div className="w-36">HTS code</div><div className="w-28">Origin</div>{(customs.units||"lb")==="lb"?<><div className="w-14">Lb</div><div className="w-14">Oz</div></>:<div className="w-[120px]">Kg</div>}<div className="w-16">Qty</div><div className="w-24">Unit $</div><div className="flex-1"/></div>
               {customs.lines.map((l,i)=>(
@@ -3105,20 +3113,16 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Change letterhead<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"letterhead",name:f.name.replace(/\.[a-z]+$/i,""),data:b},...(pp.docAssets||[])]})),1400);e.target.value="";}}/></label>
             </div>
             {shipPad&&<SignaturePad onSave={(b64)=>{setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"signature",name:"Signature "+new Date().toLocaleDateString(),data:b64},...(pp.docAssets||[])]}));setShipPad(false);}} onClose={()=>setShipPad(false)}/>}
-            <div className="flex flex-wrap items-end gap-2 border-t border-stone-100 pt-3 mt-1">
-              <span className="flex-1"/>
-              <div className="flex flex-col items-end gap-2">
-              <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700"><input type="checkbox" checked={!!customs.proforma} onChange={e=>setCustoms({...customs,proforma:e.target.checked})} className="accent-[#0086E0]"/>Print as PROFORMA (quote / pre-shipment)</label>
-              <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700"><input type="checkbox" checked={!!customs.autoPrint} onChange={e=>setCustoms({...customs,autoPrint:e.target.checked})} className="accent-[#0086E0]"/>Auto-print invoice after the label</label>
+            <div className="flex flex-wrap items-center gap-3 border-t border-stone-100 pt-3 mt-1 justify-end">
+              <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700"><input type="checkbox" checked={!!customs.proforma} onChange={e=>setCustoms({...customs,proforma:e.target.checked})} className="accent-[#0086E0]"/>PROFORMA</label>
+              <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700"><input type="checkbox" checked={!!customs.autoPrint} onChange={e=>setCustoms({...customs,autoPrint:e.target.checked})} className="accent-[#0086E0]"/>Auto-print after label</label>
               <div className="flex gap-2">
               <button onClick={()=>printShipCI(true)} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3.5 py-2 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-4 h-4"/>View invoice</button>
-              <button onClick={()=>printShipCI()} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5"><Receipt className="w-4 h-4"/>Print commercial invoice</button></div></div>
+              <button onClick={()=>printShipCI()} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5"><Receipt className="w-4 h-4"/>Print commercial invoice</button></div>
             </div>
                           <datalist id="htscodes">{[...new Set(((settings&&settings.products)||[]).map(pr=>pr.hs).filter(Boolean))].map(c=><option key={"p"+c} value={c}/>)}{HTS_SUGGEST.map(h=><option key={h.code} value={h.code}>{h.desc}</option>)}</datalist>
             </div>
-            <div className="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-[#99D6FF]">
-              <div className="text-sm">Declared value <span className="font-mono font-semibold">{money(customsTotal)}</span></div>
-            </div>
+            
           </div>
         )}
 
@@ -4889,7 +4893,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
 /* ════════ SETTINGS ════════ */
 function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,audit=[]}){
   const [sec,setSec]=useState("general");
-  const secs=[["general","General",Cog],["customize","Customizations",Sliders],["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["catalog","Product catalog",Boxes],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["reference","Reference Fields",Receipt],["cieditor","Commercial invoice",Receipt],["otherdocs","Other documents",FileText],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["ledger","Ledger",Wallet],["integrations","Integrations",Layers],["subscription","Subscription",Star],["company","Company",Building2]];
+  const secs=[["general","General",Cog],["customize","Customizations",Sliders],["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["catalog","Product catalog",Boxes],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["reference","Reference Fields",Receipt],["cieditor","Commercial invoice",Receipt],["cihistory","CI history",FileText],["otherdocs","Other documents",FileText],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["ledger","Ledger",Wallet],["integrations","Integrations",Layers],["subscription","Subscription",Star],["company","Company",Building2]];
   return (
     <div className="flex flex-col md:flex-row gap-6">
       <aside className="md:w-56 shrink-0 space-y-1">{secs.map(([id,l,Icon])=><button key={id} onClick={()=>setSec(id)} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}</button>)}</aside>
@@ -4907,6 +4911,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="notifications"&&<Notifications settings={settings} setSettings={setSettings} emails={emails}/>}
         {sec==="general"&&<GeneralSettings settings={settings} setSettings={setSettings} goSec={setSec}/>}
         {sec==="cieditor"&&<CIEditor settings={settings} setSettings={setSettings} shipments={shipments}/>}
+        {sec==="cihistory"&&<CIHistory settings={settings} setSettings={setSettings}/>}
         {sec==="otherdocs"&&<OtherDocs settings={settings} setSettings={setSettings}/>}
         {sec==="customize"&&<Customize settings={settings} setSettings={setSettings}/>}
         {sec==="clients"&&<Clients clients={clients} setClients={setClients}/>}
@@ -6161,6 +6166,8 @@ function AssetLibrary({settings,setSettings}){
     <div className="text-[11px] text-stone-400 mt-2">Saved here once — then one click stamps them onto any commercial invoice or document. Star ★ a signature to make it your default: it signs every invoice automatically unless you pick a different one. Signatures are personal to your login. Images only (PNG/JPG).</div>
   </Panel>);
 }
+function saveCIRecord(setSettings,rec){ if(!setSettings)return;
+  setSettings(p=>({...p,ciHistory:[{...rec,id:"ci"+Date.now()},...((p.ciHistory||[]).slice(0,199))]})); }
 function defaultSig(settings){const a=((settings&&settings.docAssets)||[]).find(x=>x.id===(settings&&settings.defaultSigId));return (a&&a.data)||"";}
 function AssetChips({settings,sel,onSel}){
   const assets=settings.docAssets||[];
@@ -6176,6 +6183,25 @@ function AssetChips({settings,sel,onSel}){
   </div>);
 }
 
+function CIHistory({settings,setSettings}){
+  const [q,setQ]=useState("");
+  const hist=(settings.ciHistory||[]).filter(r=>{const t=(q||"").toLowerCase();if(!t)return true;return [r.invoiceNo,r.consignee,r.country,r.tracking,String(r.total)].join(" ").toLowerCase().includes(t);});
+  const reprint=(r,preview)=>printCommercialInvoice(r.o||{},[],r.sn||{},{...(r.opts||{}),preview:!!preview});
+  const del=(id)=>setSettings(p=>({...p,ciHistory:(p.ciHistory||[]).filter(x=>x.id!==id)}));
+  return (<div className="max-w-3xl space-y-3">
+    <div className="text-sm text-stone-500">Every commercial invoice you print is saved here automatically (previews aren't). Reprint or review any of them.</div>
+    <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by consignee, country, invoice #, tracking…" className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+    {hist.length===0&&<div className="text-sm text-stone-400 border border-dashed border-stone-200 rounded-lg p-6 text-center">No invoices {q?"match your search":"printed yet — print one from the Ship tab and it'll appear here"}.</div>}
+    <div className="space-y-1.5">{hist.map(r=>(<div key={r.id} className="flex items-center gap-3 text-sm border border-stone-200 rounded-lg px-3 py-2 bg-white">
+      <div className="flex-1 min-w-0"><div className="font-medium text-stone-800 truncate">{r.consignee||"—"} · {r.country||"—"}{r.proforma?" · PROFORMA":""}</div>
+        <div className="text-[11px] text-stone-400">{r.date} · Inv {r.invoiceNo||"—"}{r.tracking?` · Trk ${r.tracking}`:""}</div></div>
+      <div className="font-mono text-stone-700">${(+r.total||0).toFixed(2)}</div>
+      <button onClick={()=>reprint(r,true)} className="text-xs text-[#006FBF] hover:underline">View</button>
+      <button onClick={()=>reprint(r)} className="text-xs text-[#006FBF] hover:underline">Print</button>
+      <button onClick={()=>del(r.id)} className="text-stone-300 hover:text-rose-500">×</button>
+    </div>))}</div>
+  </div>);
+}
 function CIEditor({settings,setSettings,shipments}){
   const intl=(shipments||[]).filter(sh=>sh.recipient&&sh.recipient.country&&!["US","United States"].includes(sh.recipient.country));
   const blank=()=>({exporter:{name:(settings.sender&&settings.sender.name)||"",company:(settings.sender&&settings.sender.company)||settings.company||"",address1:(settings.sender&&settings.sender.address1)||"",city:(settings.sender&&settings.sender.city)||"",state:(settings.sender&&settings.sender.state)||"",zip:(settings.sender&&settings.sender.zip)||"",phone:(settings.sender&&settings.sender.phone)||""},
@@ -6211,6 +6237,9 @@ function CIEditor({settings,setSettings,shipments}){
   const setRow=(i,patch)=>setDoc(d=>({...d,rows:d.rows.map((r,j)=>j===i?{...r,...patch}:r)}));
   const total=doc.rows.reduce((a,r)=>a+(+r.unit||0)*(+r.qty||0),0);
   const print=(preview)=>{
+    if(!preview){saveCIRecord(setSettings,{date:new Date().toLocaleString(),invoiceNo:doc.invoiceNo||"",consignee:doc.consignee.name||doc.consignee.company||"",country:doc.consignee.country||"",total:doc.rows.reduce((a,r)=>a+(+r.unit||0)*(+r.qty||0),0),proforma:!!doc.proforma,tracking:"",
+      o:{name:doc.invoiceNo||"",customer:doc.consignee.name,company:doc.consignee.company,address1:doc.consignee.address1,city:doc.consignee.city,state:doc.consignee.state,zip:doc.consignee.zip,country:doc.consignee.country,phone:doc.consignee.phone,email:doc.consignee.email,weight:doc.weight},
+      sn:{...doc.exporter},opts:{reason:doc.reason,incoterm:doc.incoterm,samples:doc.samples,notes:doc.notes,currency:doc.currency,packages:doc.packages,freight:doc.freight,insurance:doc.insuranceAmt,marks:doc.marks,broker:doc.broker,signature:doc.signature||defaultSig(settings),letterhead:doc.letterhead,proforma:doc.proforma,rows:doc.rows.map(r=>({name:r.name,qty:+r.qty||1,unit:+r.unit||0,hs:r.hs,origin:r.origin}))}});}
     const o={name:doc.invoiceNo||"CI-"+Date.now(),customer:doc.consignee.name,company:doc.consignee.company,address1:doc.consignee.address1,city:doc.consignee.city,state:doc.consignee.state,zip:doc.consignee.zip,country:doc.consignee.country,phone:doc.consignee.phone,email:doc.consignee.email,weight:doc.weight,lineItems:doc.rows.map(r=>({name:r.name,quantity:+r.qty||1,price:String(r.unit||0)}))};
     printCommercialInvoice(o,[],{...doc.exporter},{reason:doc.reason,incoterm:doc.incoterm,samples:doc.samples,notes:doc.notes,currency:doc.currency,packages:doc.packages,freight:doc.freight,insurance:doc.insuranceAmt,marks:doc.marks,broker:doc.broker,signature:doc.signature||defaultSig(settings),letterhead:doc.letterhead,preview:!!preview,attachImgs:resolveAttach(doc),proforma:doc.proforma,rows:doc.rows.map(r=>({name:r.name,qty:+r.qty||1,unit:+r.unit||0,hs:r.hs,origin:r.origin}))});
   };

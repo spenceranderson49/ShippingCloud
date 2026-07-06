@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v215";
+const BUILD_TAG="addr-v217";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -8791,7 +8791,9 @@ function AddressCard({title,data,set,required,residential,setResidential,address
     </div>
     {addresses!==undefined&&(
       <div className="flex flex-col lg:flex-row gap-2 mb-1.5 items-stretch">
-      <div className="relative flex-1 min-w-0">
+      <div className="flex-1 min-w-0">
+      {onSave&&<div className="flex justify-end mb-1.5"><button type="button" onClick={saveToBook} disabled={!data.name&&!data.company} className={`flex items-center gap-1 text-[10px] rounded px-1.5 py-0.5 border ${savedOk?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-white border-stone-200 text-stone-500 hover:text-[#0086E0] hover:border-[#99D6FF] disabled:opacity-40"}`} title="Save this address to your address book">{savedOk?<CheckCircle2 className="w-3 h-3"/>:<Plus className="w-3 h-3"/>}{savedOk?"Saved":"Save to Address Book"}</button></div>}
+      <div className="relative">
         <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400"/>
         <input value={q} onChange={e=>{setQ(e.target.value);setOpen(true);}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder={(addresses&&addresses.length)?`Address book — ${addresses.length} saved (click to choose)…`:"Address book — empty (use Save to Address Book below)"} className="w-full bg-white border border-stone-200 rounded pl-8 pr-8 py-1.5 text-[13px] outline-none focus:border-[#0099FF] placeholder-stone-300"/>
         <button type="button" onMouseDown={(e)=>{e.preventDefault();setOpen(o=>!o);}} className="absolute right-2 top-1.5 text-stone-400 hover:text-[#0086E0]" title="Show all saved addresses"><ChevronDown className={`w-4 h-4 transition-transform ${open?"rotate-180":""}`}/></button>
@@ -8799,12 +8801,12 @@ function AddressCard({title,data,set,required,residential,setResidential,address
         {open&&matches.length>0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-64 overflow-auto">
           <div className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50 border-b border-stone-100 sticky top-0">{q.trim()?`${matches.length} match${matches.length===1?"":"es"}`:`${addresses.length} saved address${addresses.length===1?"":"es"}`}</div>
           <div className="divide-y divide-stone-100">
-__SIDECOL_MARKER__          {matches.map(a=><button key={a.id} onMouseDown={()=>pick(a)} className="w-full text-left px-3 py-2 hover:bg-[#E6F4FF]"><div className="text-sm font-medium text-stone-800">{a.name}{a.company?` · ${a.company}`:""}</div><div className="text-[11px] text-stone-400">{a.address1}{a.address1?", ":""}{a.city} {a.state} {a.zip}{a.acctNum?` · bill ${a.acctCarrier||""} ${a.acctNum}`:""}</div></button>)}
+          {matches.map(a=><button key={a.id} onMouseDown={()=>pick(a)} className="w-full text-left px-3 py-2 hover:bg-[#E6F4FF]"><div className="text-sm font-medium text-stone-800">{a.name}{a.company?` · ${a.company}`:""}</div><div className="text-[11px] text-stone-400">{a.address1}{a.address1?", ":""}{a.city} {a.state} {a.zip}{a.acctNum?` · bill ${a.acctCarrier||""} ${a.acctNum}`:""}</div></button>)}
           </div>
         </div>}
       </div>
-      {(onSave||scanSlot)&&<div className={side?"lg:w-[250px] xl:w-[290px] shrink-0 flex flex-col gap-1.5":"flex flex-col gap-1.5"}>
-        {onSave&&<button type="button" onClick={saveToBook} disabled={!data.name&&!data.company} className={`w-full flex items-center justify-center gap-1 text-[11px] rounded-lg px-2 py-1.5 border ${savedOk?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-white border-stone-200 text-stone-600 hover:text-[#0086E0] hover:border-[#99D6FF]"}`}>{savedOk?<CheckCircle2 className="w-3.5 h-3.5"/>:<Plus className="w-3.5 h-3.5"/>}{savedOk?"Saved to Address Book":"Save to Address Book"}</button>}
+      </div>
+      {scanSlot&&<div className={side?"lg:w-[250px] xl:w-[290px] shrink-0 flex flex-col justify-end gap-1.5":"flex flex-col gap-1.5"}>
         {scanSlot}
       </div>}
       </div>

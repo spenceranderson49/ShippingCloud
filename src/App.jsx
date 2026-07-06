@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v198";
+const BUILD_TAG="addr-v200";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -806,42 +806,91 @@ const RATE_SERVICES={
    marks them up today; the rows are stored so per-surcharge adjustments plug straight in when
    England's per-line surcharge breakdown is wired into the resolver. */
 const FEDEX_SURCHARGES=[
-  {id:"SIG-D",desc:"Direct Signature Required",charge:"fixed",app:1,def:6.55},
-  {id:"SIG-I",desc:"Indirect Signature Required",charge:"fixed",app:1,def:6.55},
-  {id:"SIG-A",desc:"Adult Signature Required",charge:"fixed",app:1,def:8.05},
-  {id:"SAT",desc:"Saturday Delivery",charge:"fixed",app:1,def:16.00},
-  {id:"INS",desc:"Declared Value (per $100 over $100)",charge:"per $100",app:1,def:1.15},
-  {id:"SATP",desc:"Saturday Pickup",charge:"fixed"},
-  {id:"RES",desc:"Residential Delivery",charge:"fixed"},
-  {id:"DAS",desc:"Delivery Area Surcharge — Commercial",charge:"fixed"},
-  {id:"DAS-EC",desc:"DAS — Extended Commercial",charge:"fixed"},
-  {id:"DAS-R",desc:"DAS — Residential",charge:"fixed"},
-  {id:"DAS-ER",desc:"DAS — Extended Residential",charge:"fixed"},
-  {id:"DAS-RM",desc:"DAS — Remote",charge:"fixed"},
-  {id:"DAS-AK",desc:"DAS — Alaska",charge:"fixed"},
-  {id:"DAS-HI",desc:"DAS — Hawaii",charge:"fixed"},
-  {id:"AH-D",desc:"Additional Handling — Dimensions",charge:"fixed"},
-  {id:"AH-W",desc:"Additional Handling — Weight",charge:"fixed"},
-  {id:"AH-P",desc:"Additional Handling — Packaging",charge:"fixed"},
-  {id:"AH-NS",desc:"Additional Handling — Non-Stackable (freight)",charge:"fixed"},
-  {id:"OVR",desc:"Oversize Charge",charge:"fixed"},
-  {id:"PEAK-R",desc:"Demand Surcharge — Residential (peak)",charge:"fixed"},
-  {id:"PEAK-AH",desc:"Demand Surcharge — Additional Handling (peak)",charge:"fixed"},
-  {id:"PEAK-OS",desc:"Demand Surcharge — Oversize (peak)",charge:"fixed"},
-  {id:"ADDR",desc:"Address Correction",charge:"fixed"},
-  {id:"HAL",desc:"Hold at Location",charge:"fixed"},
-  {id:"HD-APPT",desc:"Home Delivery — Appointment",charge:"fixed"},
-  {id:"HD-EVE",desc:"Home Delivery — Evening",charge:"fixed"},
-  {id:"HD-DATE",desc:"Home Delivery — Date Certain",charge:"fixed"},
-  {id:"REATT",desc:"Delivery Reattempt",charge:"fixed"},
-  {id:"RTN",desc:"Print Return Label",charge:"fixed"},
-  {id:"DRY",desc:"Dry Ice",charge:"fixed"},
-  {id:"BSO",desc:"Broker Select Option (intl)",charge:"fixed"},
-  {id:"DTF",desc:"Duty & Tax Forwarding (intl)",charge:"fixed"},
-  {id:"ODA",desc:"Out of Delivery Area (intl)",charge:"fixed"},
-  {id:"OPA",desc:"Out of Pickup Area (intl)",charge:"fixed"},
-  {id:"3PB",desc:"Third Party Billing Surcharge",charge:"percent of base"},
-  {id:"FUEL",desc:"Fuel Surcharge",charge:"percent of base"}
+  /* Delivery & signature */
+  {id:"SIG-D",desc:"Direct Signature Required",seg:"Express & Ground",charge:"fixed",app:1,def:6.55,g:"Delivery & signature"},
+  {id:"SIG-I",desc:"Indirect Signature Required",seg:"Express & Ground",charge:"fixed",app:1,def:6.55,g:"Delivery & signature"},
+  {id:"SIG-A",desc:"Adult Signature Required",seg:"Express & Ground",charge:"fixed",app:1,def:8.05,g:"Delivery & signature"},
+  {id:"SAT",desc:"Saturday Delivery",seg:"Express",charge:"fixed",app:1,def:16.00,g:"Delivery & signature"},
+  {id:"SATP",desc:"Saturday Pickup",seg:"Express",charge:"fixed",g:"Delivery & signature"},
+  {id:"RES",desc:"Residential Delivery",seg:"Express",charge:"fixed",g:"Delivery & signature"},
+  {id:"RES-G",desc:"Residential Delivery",seg:"Ground",charge:"fixed",g:"Delivery & signature"},
+  {id:"RES-HD",desc:"Home Delivery Charge",seg:"Home Delivery",charge:"fixed",g:"Delivery & signature"},
+  {id:"HAL",desc:"Hold at Location",seg:"All",charge:"fixed",g:"Delivery & signature"},
+  {id:"HD-APPT",desc:"Home Delivery — Appointment",seg:"Home Delivery",charge:"fixed",g:"Delivery & signature"},
+  {id:"HD-EVE",desc:"Home Delivery — Evening",seg:"Home Delivery",charge:"fixed",g:"Delivery & signature"},
+  {id:"HD-DATE",desc:"Home Delivery — Date Certain",seg:"Home Delivery",charge:"fixed",g:"Delivery & signature"},
+  {id:"REATT",desc:"Delivery Reattempt",seg:"Express",charge:"fixed",g:"Delivery & signature"},
+  {id:"REROUTE",desc:"Reroute / Redirect (address change in transit)",seg:"Express & Ground",charge:"fixed",g:"Delivery & signature"},
+  /* Coverage, corrections & billing */
+  {id:"INS",desc:"Declared Value (per $100 over $100)",seg:"Express & Ground",charge:"per $100",app:1,def:1.15,g:"Coverage & corrections"},
+  {id:"ADDR",desc:"Address Correction",seg:"Express & Ground",charge:"fixed",g:"Coverage & corrections"},
+  {id:"RW",desc:"Shipping Charge Correction (reweigh / re-dim audit)",seg:"Express & Ground",charge:"fixed",g:"Coverage & corrections"},
+  {id:"3PB",desc:"Third Party Billing Surcharge",seg:"Express & Ground",charge:"percent of base",g:"Coverage & corrections"},
+  {id:"FUEL",desc:"Fuel Surcharge",seg:"Express",charge:"percent of base",g:"Coverage & corrections"},
+  {id:"FUEL-G",desc:"Fuel Surcharge",seg:"Ground",charge:"percent of base",g:"Coverage & corrections"},
+  /* Delivery area */
+  {id:"DAS",desc:"DAS — Commercial",seg:"Express",charge:"fixed",g:"Delivery area"},
+  {id:"DAS-G",desc:"DAS — Commercial",seg:"Ground",charge:"fixed",g:"Delivery area"},
+  {id:"DAS-EC",desc:"DAS — Extended Commercial",seg:"Express",charge:"fixed",g:"Delivery area"},
+  {id:"DAS-EC-G",desc:"DAS — Extended Commercial",seg:"Ground",charge:"fixed",g:"Delivery area"},
+  {id:"DAS-R",desc:"DAS — Residential",seg:"Express",charge:"fixed",g:"Delivery area"},
+  {id:"DAS-R-HD",desc:"DAS — Residential",seg:"Home Delivery",charge:"fixed",g:"Delivery area"},
+  {id:"DAS-ER",desc:"DAS — Extended Residential",seg:"Express",charge:"fixed",g:"Delivery area"},
+  {id:"DAS-ER-HD",desc:"DAS — Extended Residential",seg:"Home Delivery",charge:"fixed",g:"Delivery area"},
+  {id:"DAS-RM",desc:"DAS — Remote",seg:"Express",charge:"fixed",g:"Delivery area"},
+  {id:"DAS-RM-G",desc:"DAS — Remote",seg:"Ground & Home Delivery",charge:"fixed",g:"Delivery area"},
+  {id:"DAS-AK",desc:"DAS — Alaska Commercial",seg:"Express",charge:"fixed",g:"Delivery area"},
+  {id:"DAS-AK-G",desc:"DAS — Alaska Commercial",seg:"Ground",charge:"fixed",g:"Delivery area"},
+  {id:"DAS-AK-R",desc:"DAS — Alaska Residential",seg:"Express",charge:"fixed",g:"Delivery area"},
+  {id:"DAS-AK-R-HD",desc:"DAS — Alaska Residential",seg:"Home Delivery",charge:"fixed",g:"Delivery area"},
+  {id:"DAS-HI",desc:"DAS — Hawaii Commercial",seg:"Express",charge:"fixed",g:"Delivery area"},
+  {id:"DAS-HI-G",desc:"DAS — Hawaii Commercial",seg:"Ground",charge:"fixed",g:"Delivery area"},
+  {id:"DAS-HI-R",desc:"DAS — Hawaii Residential",seg:"Express",charge:"fixed",g:"Delivery area"},
+  {id:"DAS-HI-R-HD",desc:"DAS — Hawaii Residential",seg:"Home Delivery",charge:"fixed",g:"Delivery area"},
+  /* Handling & size */
+  {id:"AH-D",desc:"Additional Handling — Dimensions",seg:"Express",charge:"fixed (zoned)",g:"Handling & size"},
+  {id:"AH-D-G",desc:"Additional Handling — Dimensions",seg:"Ground",charge:"fixed (zoned)",g:"Handling & size"},
+  {id:"AH-W",desc:"Additional Handling — Weight",seg:"Express",charge:"fixed (zoned)",g:"Handling & size"},
+  {id:"AH-W-G",desc:"Additional Handling — Weight",seg:"Ground",charge:"fixed (zoned)",g:"Handling & size"},
+  {id:"AH-P",desc:"Additional Handling — Packaging",seg:"Express",charge:"fixed (zoned)",g:"Handling & size"},
+  {id:"AH-P-G",desc:"Additional Handling — Packaging",seg:"Ground",charge:"fixed (zoned)",g:"Handling & size"},
+  {id:"AH-NS",desc:"Additional Handling — Non-Stackable (freight)",seg:"Express Freight",charge:"fixed",g:"Handling & size"},
+  {id:"OVR",desc:"Oversize Charge",seg:"Express",charge:"fixed (zoned)",g:"Handling & size"},
+  {id:"OVR-G",desc:"Oversize Charge",seg:"Ground",charge:"fixed (zoned)",g:"Handling & size"},
+  {id:"UNAUTH",desc:"Unauthorized Package Charge",seg:"Ground",charge:"fixed",g:"Handling & size"},
+  /* Peak / demand */
+  {id:"PEAK-R",desc:"Demand Surcharge — Residential (peak)",seg:"Express",charge:"fixed",g:"Peak / demand"},
+  {id:"PEAK-R-G",desc:"Demand Surcharge — Residential (peak)",seg:"Ground & Home Delivery",charge:"fixed",g:"Peak / demand"},
+  {id:"PEAK-AH",desc:"Demand Surcharge — Additional Handling (peak)",seg:"Express",charge:"fixed",g:"Peak / demand"},
+  {id:"PEAK-AH-G",desc:"Demand Surcharge — Additional Handling (peak)",seg:"Ground",charge:"fixed",g:"Peak / demand"},
+  {id:"PEAK-OS",desc:"Demand Surcharge — Oversize (peak)",seg:"Express",charge:"fixed",g:"Peak / demand"},
+  {id:"PEAK-OS-G",desc:"Demand Surcharge — Oversize (peak)",seg:"Ground",charge:"fixed",g:"Peak / demand"},
+  {id:"PEAK-UNAUTH",desc:"Demand Surcharge — Unauthorized Package (peak)",seg:"Ground",charge:"fixed",g:"Peak / demand"},
+  {id:"PEAK-GE",desc:"Demand Surcharge — Ground Economy (peak)",seg:"Ground Economy",charge:"fixed",g:"Peak / demand"},
+  {id:"PEAK-INTL",desc:"Demand Surcharge — International (per lane, peak)",seg:"Express",charge:"fixed",g:"Peak / demand"},
+  /* Pickup & returns */
+  {id:"PU-EXP",desc:"On-Call Pickup (per package)",seg:"Express",charge:"fixed",g:"Pickup & returns"},
+  {id:"PU-GRD-OC",desc:"On-Call Pickup (per package)",seg:"Ground",charge:"fixed",g:"Pickup & returns"},
+  {id:"PU-GRD",desc:"Scheduled / Alternate-Day Pickup (weekly)",seg:"Ground",charge:"fixed",g:"Pickup & returns"},
+  {id:"RTN",desc:"Print Return Label",seg:"Express & Ground",charge:"fixed",g:"Pickup & returns"},
+  {id:"RTN-E",desc:"Email Return Label",seg:"Express & Ground",charge:"fixed",g:"Pickup & returns"},
+  {id:"RETAG",desc:"Ground Call Tag / Express Tag (pickup return)",seg:"Express & Ground",charge:"fixed",g:"Pickup & returns"},
+  /* Dangerous goods */
+  {id:"DRY",desc:"Dry Ice",seg:"Express",charge:"fixed",g:"Dangerous goods"},
+  {id:"DG-A",desc:"Dangerous Goods — Accessible",seg:"Express",charge:"fixed",g:"Dangerous goods"},
+  {id:"DG-I",desc:"Dangerous Goods — Inaccessible",seg:"Express",charge:"fixed",g:"Dangerous goods"},
+  {id:"HAZ",desc:"Hazardous Materials",seg:"Ground",charge:"fixed",g:"Dangerous goods"},
+  {id:"LTDQ",desc:"Limited Quantity / ORM-D",seg:"Ground",charge:"fixed",g:"Dangerous goods"},
+  /* International & clearance */
+  {id:"BSO",desc:"Broker Select Option (intl)",seg:"Express & Ground",charge:"fixed",g:"International & clearance"},
+  {id:"DTF",desc:"Duty & Tax Forwarding (intl)",seg:"Express & Ground",charge:"fixed",g:"International & clearance"},
+  {id:"ODA",desc:"Out of Delivery Area (intl)",seg:"Express",charge:"fixed",g:"International & clearance"},
+  {id:"OPA",desc:"Out of Pickup Area (intl)",seg:"Express",charge:"fixed",g:"International & clearance"},
+  {id:"ICE",desc:"International Controlled Export (ICE)",seg:"Express",charge:"fixed",g:"International & clearance"},
+  {id:"CEF",desc:"Clearance Entry Fee (intl / Ground to Canada)",seg:"Ground",charge:"fixed",g:"International & clearance"},
+  {id:"DISB",desc:"Disbursement / Duty & Tax Advancement Fee (intl)",seg:"Express & Ground",charge:"percent or min",g:"International & clearance"},
+  {id:"ANC",desc:"Ancillary Clearance Service Fees (intl)",seg:"Express & Ground",charge:"fixed",g:"International & clearance"},
+  {id:"TPC",desc:"Third Party Consignee (intl)",seg:"Express & Ground",charge:"fixed",g:"International & clearance"}
 ];
 const RATE_ZONES=["2","3","4","5","6","7","8"];
 /* Finer-grained than canonSvc — rate rules need 2Day ≠ 2Day A.M., intl economy ≠ priority, One Rate per packaging. */
@@ -1525,6 +1574,7 @@ function RatesAdmin({clients=[],brand}){
   const [openZ,setOpenZ]=useState({});
   const [openB,setOpenB]=useState({});
   const [surEdit,setSurEdit]=useState(null);
+  const [surQ,setSurQ]=useState("");
   const [sheet,setSheet]=useState(null);
   const [sheetMargin,setSheetMargin]=useState(false);
   const [assignOpen,setAssignOpen]=useState(false);
@@ -1745,16 +1795,30 @@ function RatesAdmin({clients=[],brand}){
       </table></div>}
 
       {tab==="surcharges"&&<div>
-        <p className="text-[11px] text-stone-500 mb-2">Double-click a row to edit. <Badge tone="blue">app-applied</Badge> fees change quotes immediately (they replace the hardcoded signature / Saturday / declared-value amounts). The rest are billed inside England's quote total — your service % marks them up today; per-surcharge adjustments plug in when England's per-line breakdown is wired.</p>
+        <div className="flex flex-wrap items-center gap-3 mb-2">
+          <p className="text-[11px] text-stone-500 flex-1 min-w-[260px]">All {FEDEX_SURCHARGES.length} Service Guide surcharges, split by segment where FedEx prices them differently — Express vs Ground vs Home Delivery each get their own row. Double-click a row to edit. <Badge tone="blue">app-applied</Badge> fees change quotes immediately (they replace the hardcoded signature / Saturday / declared-value amounts). The rest are billed inside England's quote total — your service % marks them up today; per-surcharge adjustments plug in when England's per-line breakdown is wired.</p>
+          <Input value={surQ} onChange={e=>setSurQ(e.target.value)} placeholder="Search surcharges…" className="w-52"/>
+        </div>
         <div className="overflow-x-auto"><table className="w-full text-sm min-w-[760px]">
           <thead><tr className="text-[10px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal py-2 pr-2">Description</th><th className="text-left font-normal pr-2">ID</th><th className="text-left font-normal pr-2">Charge type</th><th className="text-left font-normal pr-2">Markup type</th><th className="text-right font-normal pr-2">Amount</th><th className="text-left font-normal">Applied by</th></tr></thead>
-          <tbody>{FEDEX_SURCHARGES.map(su=>{const r=surRow[su.id]||{};return (
-            <tr key={su.id} onDoubleClick={()=>setSurEdit({...su,type:r.type||(su.app?"fixed":"percent"),amount:r.amount!=null?r.amount:(su.def!=null?su.def:"")})} className="border-t border-stone-100 hover:bg-stone-50 cursor-pointer">
-              <td className="py-2 pr-2">{su.desc}</td><td className="pr-2 font-mono text-xs text-stone-500">{su.id}</td><td className="pr-2 text-stone-500">{su.charge}</td>
-              <td className="pr-2 text-stone-500">{r.type||(su.app?"fixed":"—")}</td>
-              <td className="pr-2 text-right font-mono">{r.amount!=null&&r.amount!==""?(+r.amount).toFixed(2):(su.def!=null?su.def.toFixed(2):"—")}</td>
-              <td>{su.app?<Badge tone="blue">app-applied</Badge>:<Badge tone="stone">England-billed</Badge>}</td>
-            </tr>);})}</tbody>
+          <tbody>{(()=>{
+            const q=surQ.trim().toLowerCase();
+            const list=FEDEX_SURCHARGES.filter(su=>!q||su.desc.toLowerCase().includes(q)||su.id.toLowerCase().includes(q)||(su.g||"").toLowerCase().includes(q)||(su.seg||"").toLowerCase().includes(q));
+            if(!list.length)return <tr><td colSpan={6} className="py-6 text-center text-stone-400">No surcharges match "{surQ}".</td></tr>;
+            const out=[];let lastG=null;
+            list.forEach(su=>{
+              if(su.g!==lastG){lastG=su.g;out.push(<tr key={"g:"+su.g}><td colSpan={6} className="pt-4 pb-1 text-[10px] uppercase tracking-widest text-stone-400 font-semibold">{su.g}</td></tr>);}
+              const r=surRow[su.id]||{};
+              const segTone=/^Express($| &| Freight)/.test(su.seg||"")?"blue":/Home Delivery/.test(su.seg||"")&&!/Ground/.test(su.seg||"")?"amber":/Ground/.test(su.seg||"")?"green":"stone";
+              out.push(<tr key={su.id} onDoubleClick={()=>setSurEdit({...su,type:r.type||(su.app?"fixed":"percent"),amount:r.amount!=null?r.amount:(su.def!=null?su.def:"")})} className="border-t border-stone-100 hover:bg-stone-50 cursor-pointer">
+                <td className="py-2 pr-2"><span className="mr-2">{su.desc}</span><Badge tone={segTone}>{su.seg||"All"}</Badge></td><td className="pr-2 font-mono text-xs text-stone-500">{su.id}</td><td className="pr-2 text-stone-500">{su.charge}</td>
+                <td className="pr-2 text-stone-500">{r.type||(su.app?"fixed":"—")}</td>
+                <td className="pr-2 text-right font-mono">{r.amount!=null&&r.amount!==""?(+r.amount).toFixed(2):(su.def!=null?su.def.toFixed(2):"—")}</td>
+                <td>{su.app?<Badge tone="blue">app-applied</Badge>:<Badge tone="stone">England-billed</Badge>}</td>
+              </tr>);
+            });
+            return out;
+          })()}</tbody>
         </table></div>
       </div>}
 
@@ -1795,7 +1859,7 @@ function RatesAdmin({clients=[],brand}){
         <div className="flex items-center justify-between mb-4"><div className="font-semibold text-stone-800">Edit surcharge</div><button onClick={()=>setSurEdit(null)} className="text-stone-400 hover:text-stone-600"><X className="w-4 h-4"/></button></div>
         <div className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-2.5 text-sm items-center">
           <div className="text-stone-500 text-right">ID</div><div className="font-mono text-xs">{surEdit.id}</div>
-          <div className="text-stone-500 text-right">Description</div><div>{surEdit.desc}</div>
+          <div className="text-stone-500 text-right">Description</div><div>{surEdit.desc}{surEdit.seg?" — "+surEdit.seg:""}</div>
           <div className="text-stone-500 text-right">Charge type</div><div>{surEdit.charge}</div>
           <div className="text-stone-500 text-right">Markup type</div><div><Select value={surEdit.type} onChange={e=>setSurEdit(s=>({...s,type:e.target.value}))}><option value="fixed">Fixed</option><option value="percent">Percent</option></Select></div>
           <div className="text-stone-500 text-right">Amount</div><div><Input type="number" value={surEdit.amount} onChange={e=>setSurEdit(s=>({...s,amount:e.target.value}))} className="w-32"/></div>

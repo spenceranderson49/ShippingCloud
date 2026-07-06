@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v214";
+const BUILD_TAG="addr-v215";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -5059,8 +5059,8 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   const inC="bg-white border border-stone-300 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300";
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-stretch sm:items-center justify-center sm:p-4" onClick={onClose}>
-      {navPrev&&<button onClick={(e)=>{e.stopPropagation();goPrev();}} title={"Previous order ("+navPrev.name+")  ←"} className="hidden sm:flex absolute left-2 lg:left-6 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full bg-white/90 hover:bg-white shadow-lg items-center justify-center text-stone-600 hover:text-stone-900"><ChevronRight className="w-6 h-6 rotate-180"/></button>}
-      {navNext&&<button onClick={(e)=>{e.stopPropagation();goNext();}} title={"Next order ("+navNext.name+")  →"} className="hidden sm:flex absolute right-2 lg:right-6 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full bg-white/90 hover:bg-white shadow-lg items-center justify-center text-stone-600 hover:text-stone-900"><ChevronRight className="w-6 h-6"/></button>}
+      {navPrev&&<button onClick={(e)=>{e.stopPropagation();goPrev();}} title={"Previous order ("+navPrev.name+")  ←"} className="hidden sm:flex absolute left-1 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full bg-white/90 hover:bg-white shadow-lg items-center justify-center text-stone-600 hover:text-stone-900"><ChevronRight className="w-6 h-6 rotate-180"/></button>}
+      {navNext&&<button onClick={(e)=>{e.stopPropagation();goNext();}} title={"Next order ("+navNext.name+")  →"} className="hidden sm:flex absolute right-1 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full bg-white/90 hover:bg-white shadow-lg items-center justify-center text-stone-600 hover:text-stone-900"><ChevronRight className="w-6 h-6"/></button>}
       <div className="bg-stone-50 w-full max-w-6xl sm:h-[92vh] h-full sm:rounded-xl overflow-hidden shadow-2xl flex flex-col" onClick={e=>e.stopPropagation()}>
         <div className="bg-white border-b border-stone-200 px-4 py-3 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3 min-w-0">

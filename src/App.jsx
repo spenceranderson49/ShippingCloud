@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v181";
+const BUILD_TAG="addr-v182";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -612,33 +612,34 @@ function printCommercialInvoice(o,catalog,sender,opts={}){
   const lh=opts.letterhead||CI_OPTS.logo||"";
   const box=(title,inner)=>`<div class="box"><div class="boxlbl">${title}</div>${inner}</div>`;
   const html=`<!doctype html><html><head><title>${opts.proforma?"Proforma":"Commercial"} invoice ${esc(o.name||"")}</title><style>
-    *{box-sizing:border-box;} body{font-family:'Helvetica Neue',-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#111827;padding:34px 44px;font-size:12.5px;line-height:1.45;margin:0;}
+    @page{size:letter portrait;margin:0.45in;} *{box-sizing:border-box;} body{font-family:'Helvetica Neue',-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#111827;padding:8px 6px;font-size:11.5px;line-height:1.38;margin:0;}
     .top{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;}
-    .top img.lh{max-height:64px;max-width:300px;object-fit:contain;object-position:left;}
+    .top img.lh{max-height:52px;max-width:280px;object-fit:contain;object-position:left;}
     .co{font-size:20px;font-weight:800;letter-spacing:.01em;}
     .title{text-align:right;} .title h1{margin:0;font-size:21px;letter-spacing:.14em;font-weight:800;color:#111827;}
     .title .meta{margin-top:6px;font-size:12px;color:#374151;} .title .meta b{color:#111827;}
-    .rule{height:3px;background:#111827;margin:14px 0 16px;}
-    .box{border:1px solid #d1d5db;border-radius:6px;padding:10px 14px;margin-bottom:10px;}
+    .rule{height:3px;background:#111827;margin:10px 0 10px;}
+    .box{border:1px solid #d1d5db;border-radius:6px;padding:7px 12px;margin-bottom:7px;}
     .boxlbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.14em;color:#6b7280;font-weight:700;margin-bottom:5px;}
     .two{display:flex;gap:28px;} .two>div{flex:1;}
     .nm{font-weight:700;font-size:13.5px;}
-    .band{display:flex;flex-wrap:wrap;border:1px solid #d1d5db;border-radius:6px;overflow:hidden;margin:14px 0;}
-    .band .cell{flex:1 1 25%;min-width:150px;padding:8px 12px;border-right:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;}
+    .band{display:flex;flex-wrap:wrap;border:1px solid #d1d5db;border-radius:6px;overflow:hidden;margin:9px 0;}
+    .band .cell{flex:1 1 25%;min-width:130px;padding:5px 10px;border-right:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;}
     .band .cell .k{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:#6b7280;font-weight:700;} .band .cell .v{font-size:12.5px;margin-top:1px;font-weight:600;}
-    .samples{margin:14px 0;border:3px solid #111827;text-align:center;padding:11px 8px;font-weight:900;font-size:16.5px;letter-spacing:.08em;}
+    .samples{margin:9px 0;border:3px solid #111827;text-align:center;padding:8px 8px;font-weight:900;font-size:15px;letter-spacing:.08em;}
     table{width:100%;border-collapse:collapse;margin-top:4px;}
-    thead th{background:#111827;color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.1em;padding:7px 10px;text-align:left;}
+    thead th{background:#111827;color:#fff;font-size:9px;text-transform:uppercase;letter-spacing:.08em;padding:5px 8px;text-align:left;}
     thead th.r,td.r{text-align:right;}
-    tbody td{padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:12.5px;}
+    tbody td{padding:4.5px 8px;border-bottom:1px solid #e5e7eb;font-size:11.5px;}
     tbody tr:nth-child(even) td{background:#f9fafb;}
-    .totals{margin-left:auto;width:280px;margin-top:10px;font-size:12.5px;}
+    .totals{margin-left:auto;width:270px;margin-top:7px;font-size:11.5px;}
     .totals .tr{display:flex;justify-content:space-between;padding:3px 0;color:#374151;}
     .totals .grand{border-top:2px solid #111827;margin-top:5px;padding-top:6px;font-weight:800;font-size:14px;color:#111827;}
     .small{font-size:10.5px;color:#6b7280;}
-    .decl{margin-top:18px;font-size:10.5px;color:#4b5563;border-top:1px solid #e5e7eb;padding-top:10px;}
-    .sigrow{margin-top:34px;display:flex;gap:44px;align-items:flex-end;}
-    .sigline{flex:1;border-top:1px solid #9ca3af;padding-top:4px;font-size:10.5px;color:#6b7280;}
+    .decl{margin-top:11px;font-size:9.5px;color:#4b5563;border-top:1px solid #e5e7eb;padding-top:7px;}
+    .sigrow{margin-top:20px;display:flex;gap:40px;align-items:flex-end;}
+    .sigcell{flex:1;} .sigval{font-size:14.5px;font-weight:600;color:#111827;border-bottom:1.5px solid #374151;padding:0 2px 3px;min-height:22px;}
+    .siglab{font-size:9.5px;color:#6b7280;text-transform:uppercase;letter-spacing:.1em;margin-top:3px;}
     @media print{body{padding:22px 30px;}}
   </style></head><body>
   <div class="top">
@@ -661,6 +662,10 @@ function printCommercialInvoice(o,catalog,sender,opts={}){
     <div class="cell"><div class="k">Gross weight</div><div class="v">${esc(String(o.weight||"—"))} lb</div></div>
     <div class="cell"><div class="k">FTR / EEI</div><div class="v">${esc(opts.eei||(total<=2500?"NOEEI 30.37(a)":"AES ITN required"))}</div></div>
     <div class="cell"><div class="k">Marks &amp; numbers</div><div class="v">${esc(opts.marks||"—")}</div></div>
+    <div class="cell"><div class="k">Invoice / PO reference</div><div class="v">${esc(opts.poRef||o.name||"—")}</div></div>
+    <div class="cell"><div class="k">Ship date</div><div class="v">${esc(opts.shipDate||today)}</div></div>
+    <div class="cell"><div class="k">Carrier / AWB</div><div class="v">${esc(opts.awb||"____________________")}</div></div>
+    <div class="cell"><div class="k">Parties to transaction</div><div class="v" style="font-weight:400;">☐ Related &nbsp; ☐ Not related</div></div>
   </div>
   ${samples?`<div class="samples">SAMPLES — NOT FOR RESALE · VALUE FOR CUSTOMS PURPOSES ONLY</div>`:""}
   <table><thead><tr><th style="width:24px;">#</th><th>Description of goods</th><th>HS code</th><th>Origin</th><th class="r">Weight</th><th class="r">Qty</th><th class="r">Unit value</th><th class="r">Total</th></tr></thead>
@@ -676,11 +681,10 @@ function printCommercialInvoice(o,catalog,sender,opts={}){
   ${opts.notes?`<div class="box" style="margin-top:12px;"><div class="boxlbl">Notes</div><div style="white-space:pre-wrap;">${esc(opts.notes)}</div></div>`:""}
   ${opts.broker?`<div class="box"><div class="boxlbl">Customs broker</div><div style="white-space:pre-wrap;">${esc(opts.broker)}</div></div>`:""}
   <div class="decl">I declare that the above information is true and correct to the best of my knowledge, and that the goods are of the origin stated.</div>
-  ${opts.signature?`<div style="margin-top:22px;"><img src="${opts.signature}" style="height:52px;object-fit:contain;"/></div>`:""}
-  <div class="sigrow" style="margin-top:${opts.signature?"4px":"38px"};">
-    <div class="sigline">Signature of exporter</div>
-    <div class="sigline">Printed name: ${esc(opts.printedName||sn.name||"")||"______________________"}</div>
-    <div class="sigline">Date: ${today}</div>
+  <div class="sigrow">
+    <div class="sigcell"><div class="sigval">${opts.signature?`<img src="${opts.signature}" style="height:40px;object-fit:contain;vertical-align:bottom;"/>`:""}</div><div class="siglab">Signature of exporter</div></div>
+    <div class="sigcell"><div class="sigval">${esc(opts.printedName||sn.name||"")}</div><div class="siglab">Printed name</div></div>
+    <div class="sigcell"><div class="sigval">${today}</div><div class="siglab">Date</div></div>
   </div>
   ${(opts.attachImgs&&opts.attachImgs.length)?opts.attachImgs.map(im=>`<div style="page-break-before:always;padding-top:12px;"><div class="boxlbl">Attachment — ${esc(im.name)}</div><img src="${im.data}" style="max-width:100%;max-height:88vh;object-fit:contain;"/></div>`).join(""):""}
   ${opts.preview?"":`<script>window.onload=()=>window.print();</`+`script>`}</body></html>`;
@@ -2679,7 +2683,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const [shipPad,setShipPad]=useState(false);
   const [bookedLock,setBookedLock]=useState(null);
   const printShipCI=(preview)=>{const o2={name:reference||invoiceNo||"CI-"+Date.now(),customer:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip,country:receiver.country,phone:receiver.phone,email:receiver.email,weight:totalWeight,lineItems:customs.lines.map(l=>({name:l.desc,quantity:+l.qty||1,price:String(l.value||0)}))};
-    printCommercialInvoice(o2,(settings&&settings.products)||[],settings.sender,{reason:customs.reason,incoterm:customs.incoterm,samples:customs.samples,marks:customs.marks,notes:customs.notes,senderTax:customs.senderTaxId??settings.taxId,senderTaxCountry:customs.senderTaxCountry,receiverTax:customs.receiverTaxId,receiverEori:customs.receiverEori,receiverContact2:customs.altContact,eei:customs.ftr??"NOEEI 30.37(a)",signature:customs.signature||defaultSig(settings),letterhead:customs.letterhead,preview:!!preview,attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(customs.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data})),printedName:customs.printedName,rows:customs.lines.map(l=>({name:l.desc,qty:+l.qty||1,unit:+l.value||0,hs:l.hts,origin:l.origin,w:(l.wlb||l.woz)?`${+l.wlb||0} lb ${+l.woz||0} oz`:""}))});};
+    printCommercialInvoice(o2,(settings&&settings.products)||[],settings.sender,{reason:customs.reason,incoterm:customs.incoterm,samples:customs.samples,marks:customs.marks,notes:customs.notes,senderTax:customs.senderTaxId??settings.taxId,senderTaxCountry:customs.senderTaxCountry,receiverTax:customs.receiverTaxId,receiverEori:customs.receiverEori,receiverContact2:customs.altContact,eei:customs.ftr??"NOEEI 30.37(a)",signature:customs.signature||defaultSig(settings),letterhead:customs.letterhead,preview:!!preview,attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(customs.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data})),printedName:customs.printedName,proforma:customs.proforma,awb:(bookedLock&&bookedLock.tracking)||"",rows:customs.lines.map(l=>({name:l.desc,qty:+l.qty||1,unit:+l.value||0,hs:l.hts,origin:l.origin,w:(l.wlb||l.woz)?`${+l.wlb||0} lb ${+l.woz||0} oz`:""}))});};
   const [shipHsMsg,setShipHsMsg]=useState(null);
   const shipSuggestHS=async(i)=>{ const l0=customs.lines[i]; if(!l0||!l0.desc)return;
     setShipHsBusy(i); setShipHsMsg(null);
@@ -3093,6 +3097,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             <div className="flex flex-wrap items-end gap-2 border-t border-stone-100 pt-3 mt-1">
               <span className="flex-1"/>
               <div className="flex flex-col items-end gap-2">
+              <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700"><input type="checkbox" checked={!!customs.proforma} onChange={e=>setCustoms({...customs,proforma:e.target.checked})} className="accent-[#0086E0]"/>Print as PROFORMA (quote / pre-shipment)</label>
               <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700"><input type="checkbox" checked={!!customs.autoPrint} onChange={e=>setCustoms({...customs,autoPrint:e.target.checked})} className="accent-[#0086E0]"/>Auto-print invoice after the label</label>
               <div className="flex gap-2">
               <button onClick={()=>printShipCI(true)} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3.5 py-2 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-4 h-4"/>View invoice</button>

@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v191";
+const BUILD_TAG="addr-v192";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -3280,7 +3280,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
             <div className="text-[11px] text-stone-500 flex items-center gap-1"><Calendar className="w-3 h-3"/>Transit Time: {days?(custom.transitStyle==="days"?<>{days} business day{days>1?"s":""}</>:<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}{fxLive&&days?<span className="text-[#0086E0] font-medium ml-1">FedEx</span>:""}</div>
           </div>
           <div className="text-right font-mono">{!!(custom.priceWarn>0&&ready&&hasPrice&&sell>custom.priceWarn)&&<div className="text-[10px] text-amber-600 flex items-center justify-end gap-0.5" title={"Above your $"+custom.priceWarn+" price alert"}><AlertTriangle className="w-3 h-3"/>over limit</div>}<div className="text-base font-semibold text-stone-900">{ready&&hasPrice?money(sell):<span className="text-stone-300">—</span>}</div></div>
-          {action&&<button onClick={(e)=>{e.stopPropagation();action(q);}} disabled={!ready||!hasPrice} className={`shrink-0 w-32 text-sm rounded px-3 py-2 font-medium flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed ${bought===q.key?"bg-[#0086E0] text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{bought===q.key?<><Check className="w-4 h-4"/>{doneLabel}</>:<><Printer className="w-4 h-4"/>{label}</>}</button>}
+          {action&&<button onClick={(e)=>{e.stopPropagation();action(q);}} disabled={!ready||!hasPrice} title={!hasPrice&&q._oneRate?"England\u2019s rate API doesn\u2019t return One Rate flat pricing \u2014 pick a priced service, or book One Rate in Webship.":undefined} className={`shrink-0 w-32 text-sm rounded px-3 py-2 font-medium flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed ${bought===q.key?"bg-[#0086E0] text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{bought===q.key?<><Check className="w-4 h-4"/>{doneLabel}</>:!hasPrice&&q._oneRate?<>No quote</>:<><Printer className="w-4 h-4"/>{label}</>}</button>}
         </div>
         {isOpen&&ready&&hasPrice&&<div className="px-4 pb-3 pt-1 border-t border-stone-100">
           <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Rate breakdown</div>
@@ -3504,6 +3504,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
   const [status,setStatus]=useState(null); // {state,msg}
   const [labelPreview,setLabelPreview]=useState(null);
   const [rateSrc,setRateSrc]=useState({rates:[],live:false,loading:false});
+  const [rateNonce,setRateNonce]=useState(0);
   const boxes=settings?.boxes||SEED_BOXES;
   const box=boxIdx>=0?boxes[boxIdx]:{L:12,W:9,H:4};
   const eng=englandFor(client,settings);
@@ -3523,12 +3524,13 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
       });
     } else setRateSrc({rates:localOrderQuotes(),live:false,loading:false});
     return ()=>{cancel=true;};
-  },[o.zip,weight,box.L,box.W,box.H,residential,oneRate,orBox&&orBox.code,eng]);
+  },[rateNonce,o.zip,weight,box.L,box.W,box.H,residential,oneRate,orBox&&orBox.code,eng]);
   const localOrderQuotes=()=>quoteRates({fromZip,toZip:o.zip,pieces:[{weight:+weight||0,L:box.L,W:box.W,H:box.H}],residential,intl:false}).filter(qq=>qq.carrier==="FedEx");
   const quotes=useMemo(()=>(rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!/first\s*overnight/i.test(qq.label||"")).filter(qq=>{const k=canonSvc(qq.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;}).map(qq=>({...qq,sell:Math.round((qq.cost||0)*(1+(client?.markup||0)/100)*100)/100})).sort((a,b)=>a.sell-b.sell),[rateSrc,residential,client]);
   const best=(rateSrc.live&&quotes[0])?quotes[0].key:null;
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
   const printHere=async(qq)=>{
+    if(canBook&&(!qq.carrierCode||!qq.serviceCode)){ setRateNonce(n=>n+1); setStatus({state:"error",msg:"That rate was stale \u2014 refreshing live rates now. Pick the service again in a moment."}); return; }
     const carrier=carrierOf(qq.label);
     if(!canBook){ // demo mode: record locally
       const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:newTracking(carrier),carrier,service:qq.label,recipient:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings?.sender||{})},fromZip,toZip:o.zip,weight:+weight,pieces:[{weight:+weight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference:o.name};
@@ -3626,6 +3628,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
   const [status,setStatus]=useState(null);
   const [labelPreview,setLabelPreview]=useState(null);
   const [rateSrc,setRateSrc]=useState({rates:[],live:false,loading:false});
+  const [rateNonce,setRateNonce]=useState(0);
   const [verify,setVerify]=useState(null);
   const [verifyNonce,setVerifyNonce]=useState(0);
   const [fxTransit,setFxTransit]=useState({});
@@ -3675,7 +3678,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
       });
     } else setRateSrc({rates:localOrderQuotes(),live:false,loading:false});
     return ()=>{cancel=true;};
-  },[rcv.zip,totalWeight,box.L,box.W,box.H,residential,eng,sigOption,sat,insurance]);
+  },[rateNonce,rcv.zip,totalWeight,box.L,box.W,box.H,residential,eng,sigOption,sat,insurance]);
   // FedEx transit times via the FedEx API
   useEffect(()=>{
     let cancel=false;
@@ -3696,6 +3699,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
   const pickBox=(j)=>{ setBoxIdx(j); if(j>=0){const b=boxes[j];setDims({L:b.L,W:b.W,H:b.H});} };
   const printHere=async(qq)=>{
     if(!qq)return;
+    if(canBook&&(!qq.carrierCode||!qq.serviceCode)){ setRateNonce(n=>n+1); setStatus({state:"error",msg:"That rate was stale \u2014 refreshing live rates now. Pick the service again in a moment."}); return; }
     const carrier=carrierOf(qq.label);
     const baseRec={service:qq.label,recipient:{name:rcv.name,company:rcv.company,zip:rcv.zip,state:rcv.state,city:rcv.city,address1:rcv.address1,phone:rcv.phone,email:rcv.email},sender:{...(settings?.sender||{})},fromZip,toZip:rcv.zip,weight:totalWeight,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",insurance:insurance||null,signature:sigOption!=="none",signatureOption:sigOption,saturdayDelivery:sat,reference:reference||o.name,poNo,invoiceNo};
     if(!canBook){

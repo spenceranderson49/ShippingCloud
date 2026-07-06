@@ -30,7 +30,7 @@ const FEATURE_CATALOG=[
   {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:true},
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own UPS / other carrier accounts on the Connections page (England always shows; admins always have this)",default:false},
 ];
-const ADMIN_SECTIONS=[["overview","Overview"],["users","Users & logins"],["customers","Customers"],["rates","Rates"],["labelcert","Label certification"],["customizations","Customizations"],["platforms","Platform accounts"],["branding","Branding"],["domains","Domains"]];
+const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All logins"],["rates","Rate database"],["labelcert","FedEx labels"],["customizations","Features & access"],["branding","Branding"],["platforms","Carrier accounts"],["domains","Domains"]];
 const adminSectionsFor=(user)=>(user&&user.role==="admin"&&user.adminPerms&&Array.isArray(user.adminPerms.sections))?ADMIN_SECTIONS.filter(s=>user.adminPerms.sections.includes(s[0])):ADMIN_SECTIONS;
 const featureOn=(id,user,flagsForUser)=>{
   if(!user)return false;
@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v202";
+const BUILD_TAG="addr-v203";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1566,7 +1566,8 @@ function FedexCertLab({settings}){
 }
 
 /* ════════ ADMIN → CUSTOMERS (v202) — every customer, every login, everything editable ════════ */
-function CustomersMaster({clients,setClients,users,setUsers,currentUser}){
+function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureFlags={},setFeatureFlags,customFeatures=[]}){
+  const CATALOG=[...FEATURE_CATALOG,...(customFeatures||[]).map(c=>({...c,custom:true}))];
   const [rules,setRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
   const [q,setQ]=useState("");
   const [sort,setSort]=useState("name");
@@ -1615,8 +1616,19 @@ function CustomersMaster({clients,setClients,users,setUsers,currentUser}){
     upRules({profiles:[...profiles,{id,name:c.name,services:JSON.parse(JSON.stringify(cur.services||{})),surcharges:JSON.parse(JSON.stringify(cur.surcharges||{}))}],assign:{...assign,[c.id]:id}});
     say('Dedicated profile "'+c.name+'" created — its rules now belong to this customer alone.');
   };
+  /* Feature flags live per-login. A company-wide toggle fans the flag out to every login of the customer. */
+  const companyFeatureState=(cid,fid)=>{
+    const lg=loginsOf(cid); if(!lg.length)return "none";
+    const on=lg.filter(u=>featureOn(fid,u,featureFlags[u.id])).length;
+    return on===0?"off":on===lg.length?"on":"mixed";
+  };
+  const setCompanyFeature=(cid,fid,val)=>{
+    const lg=loginsOf(cid);
+    setFeatureFlags&&setFeatureFlags(ff=>{const next={...ff};lg.forEach(u=>{next[u.id]={...(next[u.id]||{}),[fid]:val};});return next;});
+    say((val?"Enabled":"Disabled")+" for all "+lg.length+" login"+(lg.length===1?"":"s")+".");
+  };
   const num=(v)=>v==null?"":v;
-  const CTABS=[["overview","Overview"],["logins","Logins"],["rates","Rates"],["creds","Credentials"]];
+  const CTABS=[["overview","Overview"],["logins","Logins"],["rates","Rates"],["features","Features"],["creds","Credentials"]];
   const svcQuick=RATE_SERVICES.fedex.filter(s=>!s.or);
   const loginRow=(u)=>(
     <div key={u.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
@@ -1709,6 +1721,20 @@ function CustomersMaster({clients,setClients,users,setUsers,currentUser}){
                   </tr>);})}
               </tbody></table></div>
               <p className="text-[11px] text-stone-400">Zone overrides, weight breaks, One Rate pricing, surcharges, and printable rate sheets for this profile live in the Rates section — this is the fast lane for the per-service numbers. Every login under {c.name} inherits automatically.</p>
+            </div>}
+            {ctab==="features"&&<div className="space-y-3">
+              {lg.length===0?<div className="text-sm text-stone-400">Add a login first — features apply to a company's logins.</div>
+              :<>
+                <p className="text-[11px] text-stone-500">Turn features on or off for <b>every login</b> under {c.name} at once. A dot means some logins have it and some don't — click to make them all match. Per-login overrides still live in All logins.</p>
+                <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
+                  {CATALOG.map(f=>{const state=companyFeatureState(c.id,f.id);return (
+                    <div key={f.id} className="flex items-center gap-3 px-3 py-2 text-sm">
+                      <div className="flex-1 min-w-0"><div className="font-medium text-stone-700">{f.label}{f.custom?<Badge tone="blue">custom</Badge>:null}</div><div className="text-[11px] text-stone-400 truncate">{f.desc}</div></div>
+                      {state==="mixed"&&<span className="text-[10px] text-amber-600">mixed</span>}
+                      <button onClick={()=>setCompanyFeature(c.id,f.id,!(state==="on"))} title={state==="on"?"On for all — click to turn off":state==="off"?"Off for all — click to turn on":"Mixed — click to turn on for all"} className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${state==="on"?"bg-[#0086E0] justify-end":state==="mixed"?"bg-amber-400 justify-center":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></button>
+                    </div>);})}
+                </div>
+              </>}
             </div>}
             {ctab==="creds"&&<div className="space-y-3">
               <div className="text-[10px] uppercase tracking-widest text-stone-400 flex items-center gap-2">England account — this customer's own rates{(c.england&&c.england.customerId&&c.england.apiKey)?<Badge tone="green">own account</Badge>:<Badge tone="stone">using your main account</Badge>}</div>
@@ -2079,7 +2105,7 @@ function RatesAdmin({clients=[],brand}){
 
 
 function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,currentUser,settings,setSettings,brand,signupRequests,setSignupRequests,featureFlags,setFeatureFlags,customFeatures,setCustomFeatures,fedexRequests=[],setFedexRequests,publicBrand,setPublicBrand,companyAdminRequests=[],setCompanyAdminRequests}){
-  const [sec,setSec]=useState("overview");
+  const [sec,setSec]=useState(BRAND.admin?"customers":"overview");
   const ALLOWED=adminSectionsFor(currentUser);
   if(ALLOWED.length&&!ALLOWED.some(x=>x[0]===sec))setSec(ALLOWED[0][0]);
   /* v143: platform-wide numbers. Admin's cloud snapshot contains every login's stores
@@ -2112,14 +2138,43 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
     return {total:real.length,active,week,recent};
   },[users]);
   const uEmail=(uid)=>{const u=users.find(x=>x&&x.id===uid);return u?(u.name||u.email):uid;};
+  const NAV_GROUPS=[
+    {label:"Overview",items:[["overview","Dashboard",BarChart3]]},
+    {label:"Accounts",items:[["customers","Customers",Building2],["users","All logins",Users]]},
+    {label:"Pricing",items:[["rates","Rate database",DollarSign],["labelcert","FedEx labels",Printer]]},
+    {label:"Experience",items:[["customizations","Features & access",Sliders],["branding","Branding",Sparkles],["platforms","Carrier accounts",Truck],["domains","Domains",ExternalLink]]},
+  ];
+  const allowedKeys=new Set(ALLOWED.map(x=>x[0]));
+  const groups=NAV_GROUPS.map(g=>({...g,items:g.items.filter(it=>allowedKeys.has(it[0]))})).filter(g=>g.items.length);
+  const curLabel=(()=>{for(const g of NAV_GROUPS)for(const it of g.items)if(it[0]===sec)return it[1];return "Admin";})();
+  const [navOpen,setNavOpen]=useState(false);
+  const NavList=()=>(<nav className="space-y-5">
+    {groups.map(g=>(<div key={g.label}>
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold px-3 mb-1.5">{g.label}</div>
+      <div className="space-y-0.5">{g.items.map(([v,l,Icon])=>(
+        <button key={v} onClick={()=>{setSec(v);setNavOpen(false);}} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${sec===v?"bg-[#0086E0] text-white font-medium shadow-sm":"text-stone-600 hover:bg-stone-100"}`}>
+          <Icon className="w-4 h-4 shrink-0"/>{l}
+        </button>))}</div>
+    </div>))}
+  </nav>);
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-[#0086E0]"/><h1 className="text-lg font-semibold text-stone-800">Admin portal</h1></div>
-      <div className="flex flex-wrap bg-stone-100 rounded-lg p-0.5 text-sm w-fit">
-        {ALLOWED.map(([v,l])=><button key={v} onClick={()=>setSec(v)} className={`px-3 py-1.5 rounded-lg ${sec===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}
-      </div>
+    <div className="flex gap-6 -mt-2">
+      {/* desktop sidebar */}
+      <aside className="hidden lg:block w-56 shrink-0">
+        <div className="sticky top-4 space-y-4">
+          <div className="flex items-center gap-2 px-2"><ShieldCheck className="w-5 h-5 text-[#0086E0]"/><span className="font-semibold text-stone-800">{BRAND.admin?"ShippingCloud HQ":"Admin"}</span></div>
+          <NavList/>
+        </div>
+      </aside>
+      {/* mobile drawer */}
+      {navOpen&&<div className="lg:hidden fixed inset-0 z-40 bg-black/40" onClick={()=>setNavOpen(false)}><div className="absolute left-0 top-0 bottom-0 w-64 bg-white p-4 overflow-auto" onClick={e=>e.stopPropagation()}><div className="flex items-center gap-2 mb-4 px-2"><ShieldCheck className="w-5 h-5 text-[#0086E0]"/><span className="font-semibold text-stone-800">Admin</span></div><NavList/></div></div>}
+      <div className="flex-1 min-w-0 space-y-4">
+        <div className="flex items-center gap-3 border-b border-stone-200 pb-3">
+          <button onClick={()=>setNavOpen(true)} className="lg:hidden p-1.5 -ml-1 rounded-lg hover:bg-stone-100"><Layers className="w-5 h-5 text-stone-600"/></button>
+          <h1 className="text-lg font-semibold text-stone-800">{curLabel}</h1>
+        </div>
 
-      {sec==="customers"&&<CustomersMaster clients={clients} setClients={setClients} users={users} setUsers={setUsers} currentUser={currentUser}/>}
+      {sec==="customers"&&<CustomersMaster clients={clients} setClients={setClients} users={users} setUsers={setUsers} currentUser={currentUser} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures}/>}
       {sec==="rates"&&<RatesAdmin clients={clients} brand={brand}/>}
       {sec==="labelcert"&&<FedexCertLab settings={settings}/>}
       {sec==="branding"&&<Branding settings={settings} setSettings={setSettings} brand={brand} publicBrand={publicBrand} setPublicBrand={setPublicBrand}/>}
@@ -2165,6 +2220,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
 
       {sec==="users"&&<UsersAdmin users={users} setUsers={setUsers} clients={clients} currentUser={currentUser} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
       {sec==="customizations"&&<CustomizationsAdmin users={users} clients={clients} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures}/>}
+      </div>
     </div>
   );
 }

@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v179";
+const BUILD_TAG="addr-v180";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -663,8 +663,8 @@ function printCommercialInvoice(o,catalog,sender,opts={}){
     <div class="cell"><div class="k">Marks &amp; numbers</div><div class="v">${esc(opts.marks||"—")}</div></div>
   </div>
   ${samples?`<div class="samples">SAMPLES — NOT FOR RESALE · VALUE FOR CUSTOMS PURPOSES ONLY</div>`:""}
-  <table><thead><tr><th style="width:24px;">#</th><th>Description of goods</th><th>HS code</th><th>Origin</th><th class="r">Qty</th><th class="r">Unit value</th><th class="r">Total</th></tr></thead>
-  <tbody>${rows.map((r,ix)=>`<tr><td>${ix+1}</td><td>${esc(r.name)}</td><td>${esc(r.hs||"")}</td><td>${esc(r.origin||"")}</td><td class="r">${esc(String(r.qty))}</td><td class="r">$${(+r.unit||0).toFixed(2)}</td><td class="r">$${((+r.unit||0)*(+r.qty||0)).toFixed(2)}</td></tr>`).join("")}</tbody></table>
+  <table><thead><tr><th style="width:24px;">#</th><th>Description of goods</th><th>HS code</th><th>Origin</th><th class="r">Weight</th><th class="r">Qty</th><th class="r">Unit value</th><th class="r">Total</th></tr></thead>
+  <tbody>${rows.map((r,ix)=>`<tr><td>${ix+1}</td><td>${esc(r.name)}</td><td>${esc(r.hs||"")}</td><td>${esc(r.origin||"")}</td><td class="r">${esc(r.w||"—")}</td><td class="r">${esc(String(r.qty))}</td><td class="r">$${(+r.unit||0).toFixed(2)}</td><td class="r">$${((+r.unit||0)*(+r.qty||0)).toFixed(2)}</td></tr>`).join("")}</tbody></table>
   <div class="totals">
     <div class="tr"><span>Declared value of goods</span><span>$${total.toFixed(2)} ${cur}</span></div>
     ${freight?`<div class="tr"><span>Freight charges</span><span>$${freight.toFixed(2)}</span></div>`:""}
@@ -678,7 +678,8 @@ function printCommercialInvoice(o,catalog,sender,opts={}){
   <div class="decl">I declare that the above information is true and correct to the best of my knowledge, and that the goods are of the origin stated.</div>
   ${opts.signature?`<div style="margin-top:22px;"><img src="${opts.signature}" style="height:52px;object-fit:contain;"/></div>`:""}
   <div class="sigrow" style="margin-top:${opts.signature?"4px":"38px"};">
-    <div class="sigline">Signature of exporter — ${esc(sn.name||sn.company||"")}</div>
+    <div class="sigline">Signature of exporter</div>
+    <div class="sigline">Printed name: ${esc(opts.printedName||sn.name||"")||"______________________"}</div>
     <div class="sigline">Date: ${today}</div>
   </div>
   ${(opts.attachImgs&&opts.attachImgs.length)?opts.attachImgs.map(im=>`<div style="page-break-before:always;padding-top:12px;"><div class="boxlbl">Attachment — ${esc(im.name)}</div><img src="${im.data}" style="max-width:100%;max-height:88vh;object-fit:contain;"/></div>`).join(""):""}
@@ -2672,13 +2673,13 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const saveHtsToCatalog=(l)=>{ if(!l.desc||!l.hts)return;
     setSettings(pp=>{const prods=[...(pp.products||[])];const ix=prods.findIndex(pr=>String(pr.name).toLowerCase()===String(l.desc).toLowerCase());
       if(ix>=0)prods[ix]={...prods[ix],hs:l.hts,origin:l.origin==="United States"?"US":(l.origin||prods[ix].origin),value:+l.value||prods[ix].value};
-      else prods.push({id:"pr"+Date.now(),sku:"",name:l.desc,l:0,w:0,h:0,wt:0,value:+l.value||0,origin:l.origin==="United States"?"US":(l.origin||"US"),hs:l.hts});
+      else prods.push({id:"pr"+Date.now(),sku:"",name:l.desc,l:0,w:0,h:0,wt:(+l.wlb||0)+((+l.woz||0)/16),value:+l.value||0,origin:l.origin==="United States"?"US":(l.origin||"US"),hs:l.hts});
       return {...pp,products:prods};});
     setShipHsMsg({ok:`Saved "${l.desc}" with HS ${l.hts} to your product catalog — it'll auto-fill next time.`}); };
   const [shipPad,setShipPad]=useState(false);
   const [bookedLock,setBookedLock]=useState(null);
   const printShipCI=(preview)=>{const o2={name:reference||invoiceNo||"CI-"+Date.now(),customer:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip,country:receiver.country,phone:receiver.phone,email:receiver.email,weight:totalWeight,lineItems:customs.lines.map(l=>({name:l.desc,quantity:+l.qty||1,price:String(l.value||0)}))};
-    printCommercialInvoice(o2,(settings&&settings.products)||[],settings.sender,{reason:customs.reason,incoterm:customs.incoterm,samples:customs.samples,marks:customs.marks,notes:customs.notes,senderTax:customs.senderTaxId??settings.taxId,senderTaxCountry:customs.senderTaxCountry,receiverTax:customs.receiverTaxId,receiverEori:customs.receiverEori,receiverContact2:customs.altContact,eei:customs.ftr??"NOEEI 30.37(a)",signature:customs.signature||defaultSig(settings),letterhead:customs.letterhead,preview:!!preview,attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(customs.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data})),rows:customs.lines.map(l=>({name:l.desc,qty:+l.qty||1,unit:+l.value||0,hs:l.hts,origin:l.origin}))});};
+    printCommercialInvoice(o2,(settings&&settings.products)||[],settings.sender,{reason:customs.reason,incoterm:customs.incoterm,samples:customs.samples,marks:customs.marks,notes:customs.notes,senderTax:customs.senderTaxId??settings.taxId,senderTaxCountry:customs.senderTaxCountry,receiverTax:customs.receiverTaxId,receiverEori:customs.receiverEori,receiverContact2:customs.altContact,eei:customs.ftr??"NOEEI 30.37(a)",signature:customs.signature||defaultSig(settings),letterhead:customs.letterhead,preview:!!preview,attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(customs.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data})),printedName:customs.printedName,rows:customs.lines.map(l=>({name:l.desc,qty:+l.qty||1,unit:+l.value||0,hs:l.hts,origin:l.origin,w:(l.wlb||l.woz)?`${+l.wlb||0} lb ${+l.woz||0} oz`:""}))});};
   const [shipHsMsg,setShipHsMsg]=useState(null);
   const shipSuggestHS=async(i)=>{ const l0=customs.lines[i]; if(!l0||!l0.desc)return;
     setShipHsBusy(i); setShipHsMsg(null);
@@ -3030,18 +3031,23 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <div className="border border-[#99D6FF] bg-[#E6F4FF]/40 rounded-lg p-3 space-y-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-[#006FBF]"><FileText className="w-4 h-4"/>Customs · Commercial invoice</div>
 <datalist id="sc-prod-list">{((settings&&settings.products)||[]).map(pr=><option key={pr.id} value={pr.name}>{(pr.sku?pr.sku+" · ":"")+(pr.hs?("HS "+pr.hs):"no HS yet")}</option>)}</datalist>
+            <datalist id="sc-origin-list">{COUNTRIES.map(c=><option key={c} value={c}/>)}</datalist>
             <div className="grid sm:grid-cols-3 gap-2">
               <Field label="Reason for export"><div className="flex gap-1"><Select value={EXPORT_REASONS.includes(customs.reason)?customs.reason:"__other"} onChange={e=>{const v=e.target.value;setCustoms({...customs,reason:v==="__other"?"":v});}}>{EXPORT_REASONS.map(r=><option key={r}>{r}</option>)}<option value="__other">Other…</option></Select>{!EXPORT_REASONS.includes(customs.reason)&&<input value={customs.reason} onChange={e=>setCustoms({...customs,reason:e.target.value})} placeholder="type reason" className="w-28 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/>}</div></Field>
               <Field label="Incoterms"><Select value={customs.incoterm} onChange={e=>setCustoms({...customs,incoterm:e.target.value})}>{INCOTERMS.map(r=><option key={r}>{r}</option>)}</Select></Field>
               <Field label="Duties & taxes to"><Select value={customs.dutiesBill} onChange={e=>setCustoms({...customs,dutiesBill:e.target.value})}><option value="receiver">Receiver (DAP)</option><option value="sender">Sender (DDP)</option></Select></Field>
             </div>
-            <div className="grid sm:grid-cols-4 gap-2">
+            <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">Your export details</div>
+            <div className="grid sm:grid-cols-3 gap-2">
               <Field label="Sender Tax ID / EIN"><input value={customs.senderTaxId??(settings.taxId||"")} onChange={e=>setCustoms({...customs,senderTaxId:e.target.value})} placeholder="12-3456789" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
               <Field label="EIN issuer country"><Select value={customs.senderTaxCountry||"United States"} onChange={e=>setCustoms({...customs,senderTaxCountry:e.target.value})}>{COUNTRIES.map(c=><option key={c}>{c}</option>)}</Select></Field>
-              <Field label="Receiver VAT / Tax ID"><input value={customs.receiverTaxId||""} onChange={e=>setCustoms({...customs,receiverTaxId:e.target.value})} placeholder="VAT nr" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
-              <Field label="Additional receiver contact"><input value={customs.altContact||""} onChange={e=>setCustoms({...customs,altContact:e.target.value})} placeholder="Broker / consignee alt — name & phone" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
-              <Field label="Receiver EORI"><input value={customs.receiverEori||""} onChange={e=>setCustoms({...customs,receiverEori:e.target.value})} placeholder="EU/UK EORI" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
               <Field label="FTR / EEI"><input value={customs.ftr??"NOEEI 30.37(a)"} onChange={e=>setCustoms({...customs,ftr:e.target.value})} list="sc-ftr-list" placeholder="NOEEI 30.37(a)" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/><datalist id="sc-ftr-list"><option value="NOEEI 30.37(a)">Under $2,500 per HS class</option><option value="NOEEI 30.36">To Canada</option><option value="NOEEI 30.37(h)">Gift / humanitarian</option><option value="AES ITN: X2026________">Filed — paste ITN</option></datalist></Field>
+            </div>
+            <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold mt-1">Receiver details</div>
+            <div className="grid sm:grid-cols-3 gap-2">
+              <Field label="Receiver VAT / Tax ID"><input value={customs.receiverTaxId||""} onChange={e=>setCustoms({...customs,receiverTaxId:e.target.value})} placeholder="VAT nr" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
+              <Field label="Receiver EORI"><input value={customs.receiverEori||""} onChange={e=>setCustoms({...customs,receiverEori:e.target.value})} placeholder="EU/UK EORI" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
+              <Field label="Additional receiver contact"><input value={customs.altContact||""} onChange={e=>setCustoms({...customs,altContact:e.target.value})} placeholder="Broker / consignee alt — name & phone" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <Field label="Package marks"><input value={customs.marks||""} onChange={e=>setCustoms({...customs,marks:e.target.value})} placeholder="Carton 1 of 3" className="w-40 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
@@ -3052,13 +3058,15 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             <Field label="Invoice notes"><textarea value={customs.notes||""} onChange={e=>setCustoms({...customs,notes:e.target.value})} rows={2} placeholder="Custom notes printed on the invoice — license numbers, 'samples for exhibition use only'…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
                         <div className="space-y-1.5">
               <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold mb-1">Add products</div>
-              <div className="hidden sm:flex text-[10px] uppercase tracking-wide text-stone-400 px-1 gap-2"><div className="flex-1 max-w-[340px]">Description</div><div className="w-36">HTS code</div><div className="w-28">Origin</div><div className="w-16">Qty</div><div className="w-24">Unit $</div><div className="flex-1"/></div>
+              <div className="hidden sm:flex text-[10px] uppercase tracking-wide text-stone-400 px-1 gap-2"><div className="flex-1 max-w-[340px]">Description</div><div className="w-36">HTS code</div><div className="w-28">Origin</div><div className="w-14">Lb</div><div className="w-14">Oz</div><div className="w-16">Qty</div><div className="w-24">Unit $</div><div className="flex-1"/></div>
               {customs.lines.map((l,i)=>(
                 <div key={i} className="flex flex-wrap sm:flex-nowrap gap-2 items-center">
-                  <input value={l.desc} onChange={e=>{const v=e.target.value;const hit=((settings&&settings.products)||[]).find(pr=>pr.name===v||pr.sku===v);if(hit){setLine(i,{desc:hit.name,hts:hit.hs||l.hts,origin:hit.origin==="US"?"United States":(hit.origin||l.origin),value:l.value||String(hit.value||"")});}else setLine(i,{desc:v});}} list="sc-prod-list" placeholder="Item description — type or pick a product" className="flex-1 min-w-0 max-w-[340px] bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+                  <input value={l.desc} onChange={e=>{const v=e.target.value;const hit=((settings&&settings.products)||[]).find(pr=>pr.name===v||pr.sku===v);if(hit){const wt=+hit.wt||0;setLine(i,{desc:hit.name,hts:hit.hs||l.hts,origin:hit.origin==="US"?"United States":(hit.origin||l.origin),value:l.value||String(hit.value||""),wlb:l.wlb??(wt?Math.floor(wt):""),woz:l.woz??(wt?Math.round((wt%1)*16):"")});}else setLine(i,{desc:v});}} list="sc-prod-list" placeholder="Item description — type or pick a product" className="flex-1 min-w-0 max-w-[340px] bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
                   
                   <input value={l.hts} onChange={e=>setLine(i,{hts:e.target.value})} list="htscodes" placeholder="HTS code" className="w-36 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
-                  <select value={l.origin} onChange={e=>setLine(i,{origin:e.target.value})} className="w-28 bg-white border border-stone-200 rounded-lg px-1 py-1.5 text-sm outline-none focus:border-[#0099FF]">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
+                  <input value={l.origin} onChange={e=>setLine(i,{origin:e.target.value})} list="sc-origin-list" placeholder="Origin" className="w-28 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+                  <input type="number" value={l.wlb??""} onChange={e=>setLine(i,{wlb:e.target.value})} placeholder="lb" className="w-14 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+                  <input type="number" value={l.woz??""} onChange={e=>setLine(i,{woz:e.target.value})} placeholder="oz" className="w-14 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/>
                   <input type="number" value={l.qty} onChange={e=>setLine(i,{qty:+e.target.value})} className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
                   <input type="number" value={l.value} onChange={e=>setLine(i,{value:e.target.value})} placeholder="0.00" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
                   <button onClick={()=>shipSuggestHS(i)} disabled={!l.desc||shipHsBusy===i} title="Claude reads the item description and suggests an HTS code" className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap self-center">{shipHsBusy===i?"Searching…":"✨ Search HTS codes"}</button>
@@ -3075,6 +3083,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               {customs.lines.reduce((a,l)=>a+(+l.value||0)*(+l.qty||0),0)>2500&&<div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-300 rounded px-2 py-1.5">⚠ Declared value is over <b>$2,500</b> — an <b>EEI filing is likely required</b> (the NOEEI 30.37(a) exemption no longer applies). <a href="https://ace.cbp.gov" target="_blank" rel="noreferrer" className="underline font-semibold">File via AESDirect on the CBP ACE portal →</a> then paste the ITN into the FTR / EEI box.</div>}
             <AssetChips settings={settings||{}} sel={customs} onSel={(v)=>setCustoms(c=>({...c,...v}))}/>
             <div className="flex flex-wrap gap-2">
+              <input value={customs.printedName??((settings.sender&&settings.sender.name)||"")} onChange={e=>setCustoms({...customs,printedName:e.target.value})} placeholder="Printed name (under signature)" className="w-52 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-[#0099FF] placeholder-stone-300"/>
               <button onClick={()=>setShipPad(v=>!v)} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">✍️ Draw a signature</button>
               <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload signature<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"signature",name:f.name.replace(/\.[a-z]+$/i,""),data:b},...(pp.docAssets||[])]})),500);e.target.value="";}}/></label>
               <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Change letterhead<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"letterhead",name:f.name.replace(/\.[a-z]+$/i,""),data:b},...(pp.docAssets||[])]})),1400);e.target.value="";}}/></label>

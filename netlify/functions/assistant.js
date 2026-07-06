@@ -51,6 +51,7 @@ const TOOLS = [
       name: { type: "string" }, company: { type: "string" },
       address1: { type: "string" }, city: { type: "string" }, state: { type: "string" }, zip: { type: "string" },
       phone: { type: "string" }, email: { type: "string" },
+      country: { type: "string", description: "Destination country for international shipments \u2014 full name (\"Canada\") or 2-letter code (\"CA\"). Omit or use \"United States\" for domestic. Setting a non-US country switches the Ship tab to international mode with the commercial invoice section." },
       weight: { type: "number", description: "Package weight in pounds" },
       residential: { type: "boolean" },
       reference: { type: "string", description: "Reference note for the label" }
@@ -62,7 +63,7 @@ const TOOLS = [
     input_schema: { type: "object", required: ["name"], properties: {
       name: { type: "string" }, company: { type: "string" },
       address1: { type: "string" }, city: { type: "string" }, state: { type: "string" }, zip: { type: "string" },
-      phone: { type: "string" }, email: { type: "string" }
+      phone: { type: "string" }, email: { type: "string" }, country: { type: "string", description: "Country name or 2-letter code; omit for US" }
     } }
   },
   {

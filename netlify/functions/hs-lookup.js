@@ -19,15 +19,16 @@ exports.handler = async (event) => {
         model: "claude-haiku-4-5-20251001",
         max_tokens: 300,
         messages: [{ role: "user", content:
-          `Classify this product for a US export commercial invoice with a 6-10 digit HTS/HS code.\nProduct: "${desc}"${dest ? `\nDestination: ${dest}` : ""}\nRespond ONLY with JSON, no markdown: {"code":"XXXX.XX.XXXX","reason":"<10 words why>","confidence":"high|medium|low"}` }],
+          `Classify this product for a US export commercial invoice. Give your TOP 3 candidate HTS/HS codes (6-10 digits), best first.\nProduct: "${desc}"${dest ? `\nDestination: ${dest}` : ""}\nRespond ONLY with JSON, no markdown: {"options":[{"code":"XXXX.XX.XXXX","reason":"<8 words why>","confidence":"high|medium|low"},...]}` }],
       }),
     });
     const d = await r.json();
     const text = ((d.content || []).find((c) => c.type === "text") || {}).text || "";
     const clean = text.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(clean);
-    if (!parsed.code) throw new Error("no code");
-    return J({ ok: true, code: String(parsed.code), reason: String(parsed.reason || ""), confidence: String(parsed.confidence || "") });
+    const opts = Array.isArray(parsed.options) ? parsed.options.filter((x) => x && x.code).slice(0, 3) : (parsed.code ? [parsed] : []);
+    if (!opts.length) throw new Error("no code");
+    return J({ ok: true, code: String(opts[0].code), reason: String(opts[0].reason || ""), options: opts.map((x) => ({ code: String(x.code), reason: String(x.reason || ""), confidence: String(x.confidence || "") })) });
   } catch (e) {
     return J({ ok: false, error: "Claude lookup failed: " + (e.message || "unknown") });
   }

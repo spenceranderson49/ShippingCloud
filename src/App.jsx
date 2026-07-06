@@ -30,7 +30,7 @@ const FEATURE_CATALOG=[
   {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:true},
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own UPS / other carrier accounts on the Connections page (England always shows; admins always have this)",default:false},
 ];
-const ADMIN_SECTIONS=[["overview","Overview"],["users","Users & logins"],["customizations","Customizations"],["platforms","Platform accounts"],["branding","Branding"],["domains","Domains"]];
+const ADMIN_SECTIONS=[["overview","Overview"],["users","Users & logins"],["rates","Rates"],["labelcert","Label certification"],["customizations","Customizations"],["platforms","Platform accounts"],["branding","Branding"],["domains","Domains"]];
 const adminSectionsFor=(user)=>(user&&user.role==="admin"&&user.adminPerms&&Array.isArray(user.adminPerms.sections))?ADMIN_SECTIONS.filter(s=>user.adminPerms.sections.includes(s[0])):ADMIN_SECTIONS;
 const featureOn=(id,user,flagsForUser)=>{
   if(!user)return false;
@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v200";
+const BUILD_TAG="addr-v198";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -719,25 +719,36 @@ function oneRateBoxFor(L,W,H,lbs){
 /* Show the One Rate box the shipment qualifies for, but with NO price. England's rate call doesn't return
    One Rate pricing, so the price stays blank unless England itself returns a One Rate service for this shipment.
    No hardcoded/flat values. */
-function oneRateQuotes(box){
+function oneRateQuotes(box,ctx){
   if(!box) return [];
   const short=box.name.replace(/FedEx\s*One Rate®?\s*/i,"");
-  return [{key:"or_2day_"+box.code, carrier:"FedEx", carrierCode:"FEDEX", serviceCode:"fedex_2_day_one_rate", label:"FedEx 2Day One Rate · "+short, cost:null, sell:null, _oneRate:true, packageTypeCode:box.code, minDays:2, maxDays:2}];
+  const label="FedEx 2Day One Rate · "+short;
+  /* England's quote API never returns One Rate flat pricing. If the admin imported the One Rate flat
+     table (Admin → Rates → Base costs), price it here: table price = cost, customer rule = sell. */
+  let cost=null,sell=null;
+  const rules=ctx&&ctx.rules;
+  const or=(rules&&rules.baseCosts&&rules.baseCosts.onerate)||null;
+  if(or){
+    const v=or[rateSvcKey(label)];
+    if(v!=null&&v!==""){ cost=Math.round(+v*100)/100; sell=rateSellFor(cost,label,ctx); }
+  }
+  return [{key:"or_2day_"+box.code, carrier:"FedEx", carrierCode:"FEDEX", serviceCode:"fedex_2_day_one_rate", label, cost, sell, _oneRate:true, packageTypeCode:box.code, minDays:2, maxDays:2}];
 }
 /* Optional accessorials are fixed published fees — England's rate call does not return them, so we add the
    flat amounts here so they actually change the price. Tune to your exact England fees. */
 const SIG_FEE={direct:6.55,indirect:6.55,adult:8.05};
 const SAT_FEE=16.00;
-function insuranceFee(declared){ const d=+declared||0; if(d<=100)return 0; const units=Math.ceil((d-100)/100); return Math.round(Math.max(3.45,units*1.15)*100)/100; }
+function insuranceFee(declared,unit,minFee){ const d=+declared||0; if(d<=100)return 0; const units=Math.ceil((d-100)/100); const u=unit!=null?+unit:1.15; const m=minFee!=null?+minFee:3.45; return Math.round(Math.max(m,units*u)*100)/100; }
 function applyAccessorials(q, opts){
   if(!opts||q==null) return q;
   if(q.sell==null&&q.cost==null) return q;   // no base price (e.g. blank One Rate placeholder) → nothing to add to
+  const fees=(opts.fees)||{sig:SIG_FEE,sat:SAT_FEE,insUnit:1.15,insMin:3.45};
   const add=[];
   const so=opts.signatureOption;
-  if(so&&so!=="none") add.push({label:(so.charAt(0).toUpperCase()+so.slice(1))+" signature",amount:SIG_FEE[so]||6.55});
+  if(so&&so!=="none") add.push({label:(so.charAt(0).toUpperCase()+so.slice(1))+" signature",amount:(fees.sig&&fees.sig[so])||SIG_FEE[so]||6.55});
   const express=/(overnight|2\s?day|express saver|one rate)/i.test(q.label||"");
-  if(opts.saturday&&express) add.push({label:"Saturday delivery",amount:SAT_FEE});
-  const ins=insuranceFee(opts.insurance);
+  if(opts.saturday&&express) add.push({label:"Saturday delivery",amount:fees.sat!=null?fees.sat:SAT_FEE});
+  const ins=insuranceFee(opts.insurance,fees.insUnit,fees.insMin);
   if(ins>0) add.push({label:"Declared value coverage",amount:ins});
   if(!add.length) return q;
   const addTotal=Math.round(add.reduce((a,e)=>a+e.amount,0)*100)/100;
@@ -747,6 +758,346 @@ function applyAccessorials(q, opts){
 /* NOTE: Signature / Saturday / declared-value costs are NOT estimated in the app. They are requested from
    England on every quote (signatureOptionCode / saturdayDelivery / insuranceAmount) and returned as real
    surcharge line items inside each quote's totalAmount. The breakdown shows England's actual surcharges. */
+
+/* ════════ RATE DATABASE (v196) — Webship-style markup engine ════════
+   One global cloud-synced store ("rateRules") that every login reads:
+   { profiles:[{id,name,services:{key:{basis,pct,min,zones,breaks,on}},surcharges:{id:{type,amount}}}],
+     assign:{clientId:profileId}, baseCosts:{key|"list:"+key:{zones,rows}, onerate:{orKey:price}} }
+   Pricing resolves per quote: weight break % → zone % → service % → the customer's
+   legacy flat markup. Min $ is a floor on the final sell price. Rules attach to the
+   CUSTOMER (clientId), so every login a company creates inherits them automatically. */
+const DEFAULT_RATE_RULES={profiles:[{id:"default",name:"Default",services:{},surcharges:{}}],assign:{},baseCosts:{}};
+const OR_RATE_SVCS=[["first_overnight","First Overnight"],["priority_overnight","Priority Overnight"],["standard_overnight","Standard Overnight"],["2day_am","2Day A.M."],["2day","2Day"],["express_saver","Express Saver"]];
+const OR_RATE_PKGS=[["envelope","Envelope"],["pak","Pak"],["xs_box","Extra Small Box"],["small_box","Small Box"],["medium_box","Medium Box"],["large_box","Large Box"],["xl_box","Extra Large Box"],["tube","Tube"]];
+const RATE_SERVICES={
+  fedex:[
+    {k:"ground",l:"FedEx Ground",g:"Domestic",z:1},
+    {k:"home",l:"FedEx Home Delivery",g:"Domestic",z:1},
+    {k:"ground_economy",l:"FedEx Ground Economy (SmartPost)",g:"Domestic",z:1},
+    {k:"express_saver",l:"FedEx Express Saver",g:"Domestic",z:1},
+    {k:"2day",l:"FedEx 2Day",g:"Domestic",z:1},
+    {k:"2day_am",l:"FedEx 2Day A.M.",g:"Domestic",z:1},
+    {k:"standard_overnight",l:"FedEx Standard Overnight",g:"Domestic",z:1},
+    {k:"priority_overnight",l:"FedEx Priority Overnight",g:"Domestic",z:1},
+    {k:"first_overnight",l:"FedEx First Overnight",g:"Domestic",z:1},
+    {k:"intl_ground_ca",l:"FedEx International Ground (Canada)",g:"International"},
+    {k:"intl_connect_plus",l:"FedEx International Connect Plus",g:"International"},
+    {k:"intl_economy",l:"FedEx International Economy",g:"International"},
+    {k:"intl_priority",l:"FedEx International Priority",g:"International"},
+    {k:"intl_priority_express",l:"FedEx International Priority Express",g:"International"},
+    {k:"intl_first",l:"FedEx International First",g:"International"},
+    {k:"first_overnight_freight",l:"FedEx First Overnight Freight",g:"Express Freight"},
+    {k:"1day_freight",l:"FedEx 1Day Freight",g:"Express Freight"},
+    {k:"2day_freight",l:"FedEx 2Day Freight",g:"Express Freight"},
+    {k:"3day_freight",l:"FedEx 3Day Freight",g:"Express Freight"},
+    {k:"intl_priority_freight",l:"FedEx International Priority Freight",g:"Express Freight"},
+    {k:"intl_economy_freight",l:"FedEx International Economy Freight",g:"Express Freight"}
+  ].concat(OR_RATE_SVCS.reduce((acc,sv)=>acc.concat(OR_RATE_PKGS.map(pk=>({k:"or_"+sv[0]+"_"+pk[0],l:"One Rate "+sv[1]+" "+pk[1],g:"One Rate",or:true}))),[])),
+  dhl:[
+    {k:"dhl_worldwide",l:"DHL Express Worldwide",g:"International"},
+    {k:"dhl_1200",l:"DHL Express 12:00",g:"International"},
+    {k:"dhl_1030",l:"DHL Express 10:30",g:"International"},
+    {k:"dhl_900",l:"DHL Express 9:00",g:"International"},
+    {k:"dhl_economy_select",l:"DHL Economy Select",g:"International"}
+  ]
+};
+/* Every FedEx surcharge from the Service Guide. app:<key> = a fee this app itself adds to quotes
+   (editable and live immediately). The rest are billed inside England's quote total — the service %
+   marks them up today; the rows are stored so per-surcharge adjustments plug straight in when
+   England's per-line surcharge breakdown is wired into the resolver. */
+const FEDEX_SURCHARGES=[
+  {id:"SIG-D",desc:"Direct Signature Required",charge:"fixed",app:1,def:6.55},
+  {id:"SIG-I",desc:"Indirect Signature Required",charge:"fixed",app:1,def:6.55},
+  {id:"SIG-A",desc:"Adult Signature Required",charge:"fixed",app:1,def:8.05},
+  {id:"SAT",desc:"Saturday Delivery",charge:"fixed",app:1,def:16.00},
+  {id:"INS",desc:"Declared Value (per $100 over $100)",charge:"per $100",app:1,def:1.15},
+  {id:"SATP",desc:"Saturday Pickup",charge:"fixed"},
+  {id:"RES",desc:"Residential Delivery",charge:"fixed"},
+  {id:"DAS",desc:"Delivery Area Surcharge — Commercial",charge:"fixed"},
+  {id:"DAS-EC",desc:"DAS — Extended Commercial",charge:"fixed"},
+  {id:"DAS-R",desc:"DAS — Residential",charge:"fixed"},
+  {id:"DAS-ER",desc:"DAS — Extended Residential",charge:"fixed"},
+  {id:"DAS-RM",desc:"DAS — Remote",charge:"fixed"},
+  {id:"DAS-AK",desc:"DAS — Alaska",charge:"fixed"},
+  {id:"DAS-HI",desc:"DAS — Hawaii",charge:"fixed"},
+  {id:"AH-D",desc:"Additional Handling — Dimensions",charge:"fixed"},
+  {id:"AH-W",desc:"Additional Handling — Weight",charge:"fixed"},
+  {id:"AH-P",desc:"Additional Handling — Packaging",charge:"fixed"},
+  {id:"AH-NS",desc:"Additional Handling — Non-Stackable (freight)",charge:"fixed"},
+  {id:"OVR",desc:"Oversize Charge",charge:"fixed"},
+  {id:"PEAK-R",desc:"Demand Surcharge — Residential (peak)",charge:"fixed"},
+  {id:"PEAK-AH",desc:"Demand Surcharge — Additional Handling (peak)",charge:"fixed"},
+  {id:"PEAK-OS",desc:"Demand Surcharge — Oversize (peak)",charge:"fixed"},
+  {id:"ADDR",desc:"Address Correction",charge:"fixed"},
+  {id:"HAL",desc:"Hold at Location",charge:"fixed"},
+  {id:"HD-APPT",desc:"Home Delivery — Appointment",charge:"fixed"},
+  {id:"HD-EVE",desc:"Home Delivery — Evening",charge:"fixed"},
+  {id:"HD-DATE",desc:"Home Delivery — Date Certain",charge:"fixed"},
+  {id:"REATT",desc:"Delivery Reattempt",charge:"fixed"},
+  {id:"RTN",desc:"Print Return Label",charge:"fixed"},
+  {id:"DRY",desc:"Dry Ice",charge:"fixed"},
+  {id:"BSO",desc:"Broker Select Option (intl)",charge:"fixed"},
+  {id:"DTF",desc:"Duty & Tax Forwarding (intl)",charge:"fixed"},
+  {id:"ODA",desc:"Out of Delivery Area (intl)",charge:"fixed"},
+  {id:"OPA",desc:"Out of Pickup Area (intl)",charge:"fixed"},
+  {id:"3PB",desc:"Third Party Billing Surcharge",charge:"percent of base"},
+  {id:"FUEL",desc:"Fuel Surcharge",charge:"percent of base"}
+];
+const RATE_ZONES=["2","3","4","5","6","7","8"];
+/* Finer-grained than canonSvc — rate rules need 2Day ≠ 2Day A.M., intl economy ≠ priority, One Rate per packaging. */
+function rateSvcKey(label){
+  const t=String(label||"").toLowerCase();
+  if(/one\s*rate/.test(t)){
+    let svc="2day";
+    if(/first\s*overnight/.test(t))svc="first_overnight";
+    else if(/priority\s*overnight/.test(t))svc="priority_overnight";
+    else if(/standard\s*overnight/.test(t))svc="standard_overnight";
+    else if(/2\s*day\s*a\.?\s*m/.test(t))svc="2day_am";
+    else if(/express\s*saver/.test(t))svc="express_saver";
+    let pkg="pak";
+    if(/envelope/.test(t))pkg="envelope";
+    else if(/extra\s*small/.test(t))pkg="xs_box";
+    else if(/small/.test(t))pkg="small_box";
+    else if(/medium/.test(t))pkg="medium_box";
+    else if(/extra\s*large/.test(t))pkg="xl_box";
+    else if(/large/.test(t))pkg="large_box";
+    else if(/tube/.test(t))pkg="tube";
+    return "or_"+svc+"_"+pkg;
+  }
+  if(/dhl/.test(t)){
+    if(/12:?00/.test(t))return "dhl_1200";
+    if(/10:?30/.test(t))return "dhl_1030";
+    if(/9:?00/.test(t))return "dhl_900";
+    if(/economy\s*select/.test(t))return "dhl_economy_select";
+    return "dhl_worldwide";
+  }
+  const freight=/freight/.test(t);
+  if(/first\s*overnight/.test(t))return freight?"first_overnight_freight":"first_overnight";
+  if(/priority\s*overnight/.test(t))return "priority_overnight";
+  if(/standard\s*overnight/.test(t))return "standard_overnight";
+  if(/2\s*day\s*a\.?\s*m/.test(t))return "2day_am";
+  if(/(2|two)\s*.?\s*day/.test(t))return freight?"2day_freight":"2day";
+  if(/1\s*day/.test(t)&&freight)return "1day_freight";
+  if(/3\s*day/.test(t)&&freight)return "3day_freight";
+  if(/express\s*saver|3\s*day/.test(t))return "express_saver";
+  if(/home/.test(t))return "home";
+  if(/smart\s*post|ground\s*economy/.test(t))return "ground_economy";
+  if(/ground/.test(t))return /canada|international/.test(t)?"intl_ground_ca":"ground";
+  if(/international\s*first|intl\s*first/.test(t))return "intl_first";
+  if(/connect\s*plus/.test(t))return "intl_connect_plus";
+  if(/(international|intl).*(priority).*(express)/.test(t))return "intl_priority_express";
+  if(/(international|intl).*(priority)/.test(t))return freight?"intl_priority_freight":"intl_priority";
+  if(/(international|intl).*(economy)/.test(t))return freight?"intl_economy_freight":"intl_economy";
+  if(/priority/.test(t))return "intl_priority";
+  if(/economy/.test(t))return "intl_economy";
+  return t.replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
+}
+function rateProfileFor(rules,clientId){
+  const profs=(rules&&rules.profiles&&rules.profiles.length)?rules.profiles:DEFAULT_RATE_RULES.profiles;
+  const pid=(rules&&rules.assign&&clientId&&rules.assign[clientId])||"default";
+  return profs.find(p=>p.id===pid)||profs.find(p=>p.id==="default")||profs[0];
+}
+function rateProfileName(rules,clientId){ const p=rateProfileFor(rules,clientId); return (p&&p.name)||"Default"; }
+function baseCostLookup(rules,key,weight,zone){
+  const t=rules&&rules.baseCosts&&rules.baseCosts[key];
+  if(!t||!Array.isArray(t.rows)||!t.rows.length||!Array.isArray(t.zones))return null;
+  const ci=t.zones.indexOf(String(zone)); if(ci<0)return null;
+  const w=+weight||1;
+  let row=t.rows.find(r=>+r[0]>=w)||t.rows[t.rows.length-1];
+  const v=row&&row[ci+1];
+  return (v==null||v==="")?null:+v;
+}
+/* Sell price for one quote. ctx: {rules, client, prof?, fromZip, toZip, weight}. Falls back to the
+   customer's legacy flat markup whenever no rule answers — nothing changes until a rule is set. */
+function rateSellFor(cost,label,ctx){
+  if(cost==null)return null;
+  const c=ctx||{};
+  const fallback=()=>Math.round(cost*(1+(((c.client&&c.client.markup)||0))/100)*100)/100;
+  const rules=c.rules; if(!rules)return fallback();
+  const prof=c.prof||rateProfileFor(rules,c.client&&c.client.id);
+  const key=rateSvcKey(label);
+  const rule=prof&&prof.services&&prof.services[key];
+  if(!rule||rule.on===false)return fallback();
+  const num=(v)=>(v==null||v==="")?null:+v;
+  let sell=null;
+  if(rule.basis==="list"){
+    const dom=c.fromZip&&c.toZip&&/^\d/.test(String(c.toZip));
+    const zone=dom?String(zoneEst(c.fromZip,c.toZip)):null;
+    const list=zone!=null?baseCostLookup(rules,"list:"+key,c.weight,zone):null;
+    const disc=num(rule.pct);
+    if(list==null||disc==null)return fallback();          // no list table imported yet → honest fallback
+    sell=list*(1-disc/100);
+  } else if(rule.basis==="fixed"){
+    const amt=num(rule.pct); if(amt==null)return fallback();
+    sell=cost+amt;
+  } else {
+    let pct=num(rule.pct);
+    if(rule.breaks&&rule.breaks.length&&c.weight!=null){
+      const b=rule.breaks.find(x=>+c.weight<=+x.upTo)||rule.breaks[rule.breaks.length-1];
+      if(b&&num(b.pct)!=null)pct=num(b.pct);
+    }
+    if(rule.zones&&c.fromZip&&c.toZip&&/^\d/.test(String(c.toZip))){
+      const zp=num(rule.zones[String(zoneEst(c.fromZip,c.toZip))]);
+      if(zp!=null)pct=zp;
+    }
+    if(pct==null)return fallback();
+    sell=cost*(1+pct/100);
+  }
+  const min=num(rule.min);
+  if(min!=null&&sell<min)sell=min;
+  return Math.round(sell*100)/100;
+}
+/* Accessorial fee schedule from the customer's profile — replaces the hardcoded constants when rules exist. */
+function surchargeFees(rules,client){
+  const prof=rateProfileFor(rules,client&&client.id);
+  const sc=(prof&&prof.surcharges)||{};
+  const val=(id,def)=>{const r=sc[id];if(!r||r.amount==null||r.amount==="")return def;const a=+r.amount;return r.type==="percent"?Math.round(def*(1+a/100)*100)/100:Math.round(a*100)/100;};
+  return {sig:{direct:val("SIG-D",SIG_FEE.direct),indirect:val("SIG-I",SIG_FEE.indirect),adult:val("SIG-A",SIG_FEE.adult)},sat:val("SAT",SAT_FEE),insUnit:val("INS",1.15),insMin:3.45};
+}
+/* Paste-import: Excel/CSV/TSV, first column weight, one column per zone header. */
+function parseRateTable(text){
+  const lines=String(text||"").split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  if(lines.length<2)return {error:"Need a header row plus at least one weight row."};
+  const split=(s)=>s.split(/\t|,/).map(x=>x.trim());
+  const head=split(lines[0]);
+  const zones=head.slice(1).map(z=>String(z).replace(/^zone\s*/i,""));
+  while(zones.length&&zones[zones.length-1]==="")zones.pop();
+  if(!zones.length)return {error:"Header needs zone columns after the weight column (e.g. Weight,2,3,4,5,6,7,8)."};
+  const rows=[];
+  for(let i=1;i<lines.length;i++){
+    const p=split(lines[i]); const w=parseFloat(p[0]);
+    if(isNaN(w))continue;
+    rows.push([w].concat(zones.map((_,j)=>{const v=parseFloat(String(p[j+1]||"").replace(/[$,]/g,""));return isNaN(v)?null:v;})));
+  }
+  if(!rows.length)return {error:"No numeric weight rows found."};
+  rows.sort((a,b)=>a[0]-b[0]);
+  return {zones,rows};
+}
+/* v197 — whole-workbook import. Recognizes a service name in a section title, a sheet/file name, or a
+   Service column, so one upload can carry every service at once. Formats:
+   A) single table:            Weight,2,3,…
+   B) stacked sections:        FedEx Ground ⏎ Weight,2,3… ⏎ rows … ⏎ FedEx 2Day ⏎ …   ("== Title" lines too)
+   C) wide long:               Service,Weight,2,3,…  (service repeated per row)
+   D) fully long:              Service,Weight,Zone,Price */
+function svcKeyFromTitle(s){
+  const clean=String(s||"").replace(/^==\s*/,"").replace(/\.(csv|tsv|txt|xlsx)$/i,"").trim();
+  if(!clean)return null;
+  const k=rateSvcKey(clean);
+  return RATE_SERVICES.fedex.concat(RATE_SERVICES.dhl).some(x=>x.k===k)?k:null;
+}
+function parseRateWorkbook(text){
+  const rawLines=String(text||"").split(/\r?\n/).map(s=>s.replace(/\u00a0/g," ").replace(/[,\t]+$/,"").trim()).filter(Boolean);
+  const cellsOf=(s)=>s.split(/\t|,/).map(x=>x.trim());
+  const out={tables:[],unmatched:[],single:null};
+  if(!rawLines.length)return out;
+  const labelFor=(k)=>{const m=RATE_SERVICES.fedex.concat(RATE_SERVICES.dhl).find(x=>x.k===k);return m?m.l:k;};
+  const h0=cellsOf(rawLines[0]).map(x=>x.toLowerCase());
+  if(/service/.test(h0[0]||"")&&/weight|lb/.test(h0[1]||"")){
+    const fullyLong=/zone/.test(h0[2]||"")&&/price|rate|cost|amount/.test(h0[3]||"");
+    const zoneCols=fullyLong?null:cellsOf(rawLines[0]).slice(2).map(z=>String(z).replace(/^zone\s*/i,""));
+    const by={};const un=new Set();
+    for(let i=1;i<rawLines.length;i++){
+      const p=cellsOf(rawLines[i]); const key=svcKeyFromTitle(p[0]);
+      if(!key){ if(p[0]&&isNaN(parseFloat(p[0])))un.add(p[0]); continue; }
+      const w=parseFloat(p[1]); if(isNaN(w))continue;
+      if(fullyLong){
+        const z=String(p[2]||"").replace(/^zone\s*/i,""); const v=parseFloat(String(p[3]||"").replace(/[$,]/g,""));
+        if(!z||isNaN(v))continue;
+        const b=by[key]=by[key]||{long:{}}; (b.long[w]=b.long[w]||{})[z]=v;
+      }else{
+        const b=by[key]=by[key]||{zones:zoneCols,rows:[]};
+        b.rows.push([w].concat(zoneCols.map((_,j)=>{const v=parseFloat(String(p[j+2]||"").replace(/[$,]/g,""));return isNaN(v)?null:v;})));
+      }
+    }
+    Object.keys(by).forEach(k=>{
+      const b=by[k];
+      if(b.long){
+        const zs=[...new Set([].concat.apply([],Object.keys(b.long).map(w=>Object.keys(b.long[w]))))].sort((a,c)=>(+a||99)-(+c||99));
+        const rows=Object.keys(b.long).map(w=>[+w].concat(zs.map(z=>b.long[w][z]!=null?b.long[w][z]:null))).sort((a,c)=>a[0]-c[0]);
+        if(rows.length)out.tables.push({key:k,label:labelFor(k),zones:zs,rows});
+      }else if(b.rows.length){ b.rows.sort((a,c)=>a[0]-c[0]); out.tables.push({key:k,label:labelFor(k),zones:b.zones,rows:b.rows}); }
+    });
+    out.unmatched=[...un];
+    return out;
+  }
+  const secs=[];let cur=null;const plain=[];
+  const flush=(c)=>{ if(!c||!c.lines.length)return; const t=parseRateTable(c.lines.join("\n")); if(t.error){out.unmatched.push(c.title);return;}
+    if(c.key)out.tables.push({key:c.key,label:c.title,zones:t.zones,rows:t.rows}); else secs.push({title:c.title,zones:t.zones,rows:t.rows}); };
+  for(const ln of rawLines){
+    const cells=cellsOf(ln);
+    const titleLike=/^==\s*/.test(ln)||(isNaN(parseFloat(cells[0]))&&(cells.length===1||cells.slice(1).every(x=>x==="")));
+    if(titleLike){ flush(cur); cur={title:cells[0].replace(/^==\s*/,""),key:svcKeyFromTitle(cells[0]),lines:[]}; continue; }
+    if(cur)cur.lines.push(ln); else plain.push(ln);
+  }
+  flush(cur);
+  if(!out.tables.length&&!secs.length&&plain.length){ const t=parseRateTable(plain.join("\n")); if(!t.error)out.single=t; }
+  secs.forEach(s=>out.unmatched.push(s.title));   // parsed fine but the title didn't match a service — shown for manual mapping
+  out.orphan=secs;
+  return out;
+}
+/* v197 — read a real .xlsx without any npm package: zip central directory + DecompressionStream('deflate-raw')
+   + minimal sheet XML parsing. Each tab comes out as "== <SheetName>" + TSV rows, so a workbook with one tab
+   per service imports everything in one shot. Falls back with a clear message on old browsers. */
+async function xlsxToText(file){
+  try{
+    if(typeof DecompressionStream==="undefined")return {error:"This browser can't unzip .xlsx here — save each sheet as CSV and upload those instead."};
+    const buf=new Uint8Array(await file.arrayBuffer());
+    const dv=new DataView(buf.buffer,buf.byteOffset,buf.byteLength);
+    let e=-1;
+    for(let i=buf.length-22;i>=Math.max(0,buf.length-65558);i--){ if(dv.getUint32(i,true)===0x06054b50){e=i;break;} }
+    if(e<0)return {error:"Not a valid .xlsx file."};
+    const cdCount=dv.getUint16(e+10,true), cdOff=dv.getUint32(e+16,true);
+    const entries={};let p=cdOff;
+    for(let i=0;i<cdCount;i++){
+      if(dv.getUint32(p,true)!==0x02014b50)break;
+      const method=dv.getUint16(p+10,true), csize=dv.getUint32(p+20,true), nlen=dv.getUint16(p+28,true), elen=dv.getUint16(p+30,true), clen=dv.getUint16(p+32,true), lho=dv.getUint32(p+42,true);
+      entries[new TextDecoder().decode(buf.slice(p+46,p+46+nlen))]={method,csize,lho};
+      p+=46+nlen+elen+clen;
+    }
+    const inflate=async(ent)=>{
+      const q=ent.lho, nl=dv.getUint16(q+26,true), el=dv.getUint16(q+28,true);
+      const data=buf.slice(q+30+nl+el,q+30+nl+el+ent.csize);
+      if(ent.method===0)return new TextDecoder().decode(data);
+      const ab=await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer();
+      return new TextDecoder().decode(ab);
+    };
+    const unesc=(s)=>String(s).replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&apos;/g,"'");
+    let shared=[];
+    if(entries["xl/sharedStrings.xml"]){
+      const xml=await inflate(entries["xl/sharedStrings.xml"]);
+      shared=(xml.match(/<si>[\s\S]*?<\/si>/g)||[]).map(si=>unesc((si.match(/<t[^>]*>([\s\S]*?)<\/t>/g)||[]).map(t=>t.replace(/<[^>]+>/g,"")).join("")));
+    }
+    let names=[];
+    if(entries["xl/workbook.xml"]){
+      const wb=await inflate(entries["xl/workbook.xml"]);
+      names=(wb.match(/<sheet [^>]*?name="([^"]*)"/g)||[]).map(s=>unesc(s.match(/name="([^"]*)"/)[1]));
+    }
+    const sheetFiles=Object.keys(entries).filter(n=>/^xl\/worksheets\/sheet\d+\.xml$/.test(n)).sort((a,b)=>+a.match(/\d+/)[0]-+b.match(/\d+/)[0]);
+    if(!sheetFiles.length)return {error:"No worksheets found inside the file."};
+    let out=[];
+    for(let i=0;i<sheetFiles.length;i++){
+      const xml=await inflate(entries[sheetFiles[i]]);
+      const rows=[];
+      (xml.match(/<row[^>]*>[\s\S]*?<\/row>/g)||[]).forEach(rx=>{
+        const cells={};let maxc=-1;
+        (rx.match(/<c [^>]*?(?:\/>|>[\s\S]*?<\/c>)/g)||[]).forEach(cx=>{
+          const ref=(cx.match(/r="([A-Z]+)\d+"/)||[])[1];if(!ref)return;
+          let ci=0;for(const ch of ref)ci=ci*26+(ch.charCodeAt(0)-64);ci--;
+          const t=(cx.match(/ t="([^"]*)"/)||[])[1];let v;
+          if(t==="inlineStr")v=unesc(((cx.match(/<t[^>]*>([\s\S]*?)<\/t>/)||[])[1]||"").replace(/<[^>]+>/g,""));
+          else{const raw=(cx.match(/<v>([\s\S]*?)<\/v>/)||[])[1];if(raw==null)return;v=t==="s"?(shared[+raw]||""):unesc(raw);}
+          cells[ci]=String(v);if(ci>maxc)maxc=ci;
+        });
+        const arr=[];for(let c=0;c<=maxc;c++)arr.push(cells[c]!=null?cells[c]:"");
+        if(arr.some(x=>String(x).trim()!==""))rows.push(arr.join("\t"));
+      });
+      if(rows.length){ out.push("== "+(names[i]||("Sheet"+(i+1)))); out=out.concat(rows); }
+    }
+    if(!out.length)return {error:"The workbook has no data rows."};
+    return {text:out.join("\n")};
+  }catch(err){ return {error:"Couldn't read the .xlsx ("+((err&&err.message)||"unknown")+") — save the sheets as CSV and upload those."}; }
+}
+if(typeof window!=="undefined"){ try{ window.__scRateTest={parseRateWorkbook,parseRateTable,rateSvcKey,svcKeyFromTitle,xlsxToText}; }catch(e){} }
 const CART_ITEMS=[
   {name:"Ruffle Leggings",l:8,w:6,h:1,wt:0.4,price:24},
   {name:"Tutu Set",l:10,w:8,h:3,wt:0.9,price:38},
@@ -1036,6 +1387,449 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
   </div>);
 }
 
+/* ════════ ADMIN → LABEL CERTIFICATION (v198) — direct FedEx Ship API, sandbox ════════ */
+const CERT_SERVICES=[["ground","FedEx Ground"],["home","FedEx Home Delivery"],["express_saver","FedEx Express Saver"],["2day","FedEx 2Day"],["2day_am","FedEx 2Day A.M."],["standard_overnight","FedEx Standard Overnight"],["priority_overnight","FedEx Priority Overnight"],["first_overnight","FedEx First Overnight"]];
+const CERT_PACKAGING=[["YOUR_PACKAGING","Your packaging"],["FEDEX_ENVELOPE","FedEx Envelope"],["FEDEX_PAK","FedEx Pak"],["FEDEX_SMALL_BOX","FedEx Small Box"],["FEDEX_MEDIUM_BOX","FedEx Medium Box"],["FEDEX_LARGE_BOX","FedEx Large Box"],["FEDEX_EXTRA_LARGE_BOX","FedEx Extra Large Box"],["FEDEX_TUBE","FedEx Tube"]];
+function FedexCertLab({settings}){
+  const [st,setSt]=useState({loading:true});
+  const [log,setLog]=usePersist("fedexCertLog",[]);
+  const snd=settings&&settings.sender||{};
+  const [from,setFrom]=useState({name:snd.name||"Spencer Anderson",company:snd.company||"Freightwire",address1:snd.address1||"123 Main St",city:snd.city||"American Fork",state:snd.state||"UT",zip:snd.zip||"84003",phone:snd.phone||"8015550100",country:"US"});
+  const [to,setTo]=useState({name:"Test Recipient",company:"",address1:"7900 Legacy Dr",city:"Plano",state:"TX",zip:"75024",phone:"9725550123",country:"US"});
+  const [f,setF]=useState({service:"ground",packaging:"YOUR_PACKAGING",weight:5,L:12,W:9,H:4,residential:false,signature:"none",reference:"CERT TEST",labelFormat:"PDF",labelStock:"PAPER_4X6"});
+  const [busy,setBusy]=useState(false);
+  const [runAll,setRunAll]=useState(null);   // {i,total,current} while the set runs
+  const [lastErr,setLastErr]=useState(null);
+  useEffect(()=>{let c=false;(async()=>{try{const r=await fetch("/.netlify/functions/fedex-ship",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"status"})});const j=await r.json();if(!c)setSt({loading:false,...j});}catch(e){if(!c)setSt({loading:false,ok:false,error:"The fedex-ship function isn't deployed yet."});}})();return()=>{c=true;};},[]);
+  const setF2=(k,v)=>setF(p=>({...p,[k]:v}));
+  const A=(o,set)=>(k)=>({value:o[k]||"",onChange:(e)=>set(p=>({...p,[k]:e.target.value}))});
+  const fa=A(from,setFrom),ta=A(to,setTo);
+  const shipOne=async(over)=>{
+    const s={...f,...(over||{}),from,to};
+    if(s.service==="home")s.residential=true;
+    const r=await fetch("/.netlify/functions/fedex-ship",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"ship",shipment:s})});
+    return await r.json();
+  };
+  const record=(res,svcLabel)=>setLog(l=>[{id:Date.now()+Math.random(),ts:new Date().toLocaleString(),service:res.serviceName||svcLabel,tracking:res.tracking,labelBase64:res.labelBase64,labelType:res.labelType,env:res.env},...l].slice(0,12));
+  const generate=async()=>{
+    setBusy(true);setLastErr(null);
+    try{const res=await shipOne();
+      if(res.ok)record(res,(CERT_SERVICES.find(x=>x[0]===f.service)||[])[1]||f.service);
+      else setLastErr(res);
+    }catch(e){setLastErr({error:e.message||"Request failed."});}
+    setBusy(false);
+  };
+  const runCertSet=async()=>{
+    if(!window.confirm("Generate one label for each of the "+CERT_SERVICES.length+" express/ground services? Stops on the first FedEx error so you can fix and resume."))return;
+    setBusy(true);setLastErr(null);
+    for(let i=0;i<CERT_SERVICES.length;i++){
+      const [k,label]=CERT_SERVICES[i];
+      setRunAll({i:i+1,total:CERT_SERVICES.length,current:label});
+      try{const res=await shipOne({service:k,residential:k==="home"});
+        if(res.ok)record(res,label);
+        else{setLastErr({...res,during:label});break;}
+      }catch(e){setLastErr({error:e.message,during:label});break;}
+    }
+    setRunAll(null);setBusy(false);
+  };
+  const dl=(e2)=>{
+    if(!e2.labelBase64)return;
+    const isZpl=/ZPL/i.test(e2.labelType||"");
+    const a=document.createElement("a");
+    a.href="data:"+(isZpl?"text/plain":"application/pdf")+";base64,"+e2.labelBase64;
+    a.download=("FedEx "+(e2.service||"label")+" "+(e2.tracking||"")).trim().replace(/[^\w -]+/g,"")+(isZpl?".zpl":".pdf");
+    document.body.appendChild(a);a.click();a.remove();
+  };
+  const envPill=st.env==="production"?<Badge tone="rose">PRODUCTION</Badge>:<Badge tone="amber">sandbox</Badge>;
+  return (<div className="space-y-4">
+    <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="font-semibold text-stone-800">Direct FedEx Ship API</div>{!st.loading&&envPill}
+        {st.loading?<Badge tone="stone">checking…</Badge>
+          :st.configured===false?<Badge tone="amber">not configured</Badge>
+          :st.auth?<Badge tone="green">connected · acct {st.account}</Badge>
+          :<Badge tone="rose">auth failed</Badge>}
+      </div>
+      {st.configured===false&&<div className="text-sm text-stone-600 border border-amber-200 bg-amber-50/60 rounded-lg p-3">
+        <div className="font-medium mb-1">Add these Netlify env vars on BOTH sites, then redeploy (missing: {(st.missing||[]).join(", ")}):</div>
+        <div className="font-mono text-xs space-y-0.5"><div>FEDEX_API_KEY = your test API key</div><div>FEDEX_SECRET_KEY = your test secret key</div><div>FEDEX_ACCOUNT_NUMBER = the 9-digit TEST shipping account from the Developer Portal project page</div></div>
+        <div className="text-[11px] text-stone-500 mt-2">Set them as <b>normal</b> vars, not secret — secret-flagged vars silently drop from functions here. If a var already exists, delete it and re-add (updating in place 422s). Env changes only take effect on the next deploy. Keys stay out of the repo — it's public.</div>
+      </div>}
+      {st.configured&&st.auth===false&&<div className="text-sm text-rose-600">FedEx rejected the credentials: {st.error||"unknown"}. Double-check key/secret and that FEDEX_ENV matches the key type (sandbox keys only work on sandbox).</div>}
+      <p className="text-[11px] text-stone-500">This is FedEx's own API — separate from England. Labels here are certification samples on the sandbox account: generate one per service below, download the PDFs, and submit them through the Developer Portal certification form. When FedEx approves, swap in the production key/secret/account and set FEDEX_ENV=production — same screen, real labels.</p>
+    </div>
+
+    <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Ship from</div>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Name"><Input {...fa("name")}/></Field><Field label="Company"><Input {...fa("company")}/></Field>
+            <div className="col-span-2"><Field label="Street"><Input {...fa("address1")}/></Field></div>
+            <Field label="City"><Input {...fa("city")}/></Field>
+            <div className="grid grid-cols-2 gap-2"><Field label="State"><Input {...fa("state")}/></Field><Field label="ZIP"><Input {...fa("zip")}/></Field></div>
+          </div></div>
+        <div><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Ship to</div>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Name"><Input {...ta("name")}/></Field><Field label="Company"><Input {...ta("company")}/></Field>
+            <div className="col-span-2"><Field label="Street"><Input {...ta("address1")}/></Field></div>
+            <Field label="City"><Input {...ta("city")}/></Field>
+            <div className="grid grid-cols-2 gap-2"><Field label="State"><Input {...ta("state")}/></Field><Field label="ZIP"><Input {...ta("zip")}/></Field></div>
+          </div></div>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 items-end">
+        <div className="col-span-2"><Field label="Service"><Select value={f.service} onChange={e=>setF2("service",e.target.value)}>{CERT_SERVICES.map(([k,l])=><option key={k} value={k}>{l}</option>)}</Select></Field></div>
+        <div className="col-span-2"><Field label="Packaging"><Select value={f.packaging} onChange={e=>setF2("packaging",e.target.value)}>{CERT_PACKAGING.map(([k,l])=><option key={k} value={k}>{l}</option>)}</Select></Field></div>
+        <Field label="Weight lb"><Input type="number" value={f.weight} onChange={e=>setF2("weight",e.target.value)}/></Field>
+        <Field label="L"><Input type="number" value={f.L} onChange={e=>setF2("L",e.target.value)}/></Field>
+        <Field label="W"><Input type="number" value={f.W} onChange={e=>setF2("W",e.target.value)}/></Field>
+        <Field label="H"><Input type="number" value={f.H} onChange={e=>setF2("H",e.target.value)}/></Field>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 items-end">
+        <Field label="Signature"><Select value={f.signature} onChange={e=>setF2("signature",e.target.value)}><option value="none">None</option><option value="service_default">Service default</option><option value="indirect">Indirect</option><option value="direct">Direct</option><option value="adult">Adult</option></Select></Field>
+        <Field label="Label"><Select value={f.labelFormat+"|"+f.labelStock} onChange={e=>{const [lf,ls]=e.target.value.split("|");setF(p=>({...p,labelFormat:lf,labelStock:ls}));}}><option value="PDF|PAPER_4X6">PDF · 4×6</option><option value="PDF|PAPER_85X11_TOP_HALF_LABEL">PDF · 8.5×11 top-half</option><option value="ZPL|STOCK_4X6">ZPL · 4×6 thermal</option></Select></Field>
+        <Field label="Reference"><Input value={f.reference} onChange={e=>setF2("reference",e.target.value)}/></Field>
+        <label className="flex items-center gap-2 text-sm pb-2 cursor-pointer"><input type="checkbox" checked={f.residential||f.service==="home"} disabled={f.service==="home"} onChange={e=>setF2("residential",e.target.checked)} className="accent-[#0086E0]"/>Residential</label>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button onClick={generate} disabled={busy||!st.auth} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-50 flex items-center gap-1.5">{busy&&!runAll?<Loader2 className="w-4 h-4 animate-spin"/>:<Printer className="w-4 h-4"/>}Generate label</button>
+        <button onClick={runCertSet} disabled={busy||!st.auth} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-50">Run the certification set — one label per service</button>
+        {runAll&&<span className="text-sm text-stone-500 flex items-center gap-1.5"><Loader2 className="w-4 h-4 animate-spin"/>{runAll.i}/{runAll.total} · {runAll.current}</span>}
+      </div>
+      {lastErr&&<div className="border border-rose-200 bg-rose-50/60 rounded-lg p-3 text-sm text-rose-700">
+        <div className="font-medium">FedEx rejected {lastErr.during?("the "+lastErr.during+" label"):"the request"}: {lastErr.error}{lastErr.code?" ("+lastErr.code+")":""}</div>
+        {lastErr.detail&&<pre className="text-[10px] text-rose-500 mt-1 overflow-auto max-h-32 whitespace-pre-wrap">{JSON.stringify(lastErr.detail,null,1).slice(0,1200)}</pre>}
+      </div>}
+    </div>
+
+    <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+      <div className="px-4 py-2.5 text-sm font-semibold text-stone-700 border-b border-stone-100 flex items-center justify-between"><span>Generated labels (last 12 kept)</span>{log.length>0&&<button onClick={()=>{if(window.confirm("Clear the label log?"))setLog([]);}} className="text-[11px] text-stone-400 hover:text-rose-500">Clear</button>}</div>
+      {log.length===0?<div className="px-4 py-8 text-sm text-stone-400 text-center">No labels yet — generate the certification set above, download each PDF, and submit them to FedEx.</div>
+      :<div className="divide-y divide-stone-100">{log.map(e2=>(
+        <div key={e2.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm">
+          <div className="flex-1 min-w-0"><div className="font-medium truncate">{e2.service}</div><div className="text-[11px] text-stone-400">{e2.ts} · {e2.env}</div></div>
+          <div className="font-mono text-xs text-stone-600">{e2.tracking||"—"}</div>
+          <Badge tone={e2.env==="production"?"rose":"amber"}>{e2.labelType||"PDF"}</Badge>
+          <button onClick={()=>dl(e2)} disabled={!e2.labelBase64} className="text-xs bg-stone-100 rounded-lg px-3 py-1.5 hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1"><Download className="w-3.5 h-3.5"/>Download</button>
+        </div>))}</div>}
+    </div>
+  </div>);
+}
+
+/* ════════ ADMIN → RATES (v196) — the rate markup database ════════ */
+function RatesAdmin({clients=[],brand}){
+  const [rules,setRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
+  const [carrier,setCarrier]=useState("fedex");
+  const [tab,setTab]=useState("services");
+  const [profId,setProfId]=useState("default");
+  const [custView,setCustView]=useState("");
+  const [openZ,setOpenZ]=useState({});
+  const [openB,setOpenB]=useState({});
+  const [surEdit,setSurEdit]=useState(null);
+  const [sheet,setSheet]=useState(null);
+  const [sheetMargin,setSheetMargin]=useState(false);
+  const [assignOpen,setAssignOpen]=useState(false);
+  const [impKind,setImpKind]=useState("cost");
+  const [impKey,setImpKey]=useState("ground");
+  const [impText,setImpText]=useState("");
+  const [impMsg,setImpMsg]=useState(null);
+  const [impPreview,setImpPreview]=useState(null);
+  const [impBusy,setImpBusy]=useState(false);
+  const profiles=(rules.profiles&&rules.profiles.length)?rules.profiles:DEFAULT_RATE_RULES.profiles;
+  const prof=profiles.find(p=>p.id===profId)||profiles[0];
+  const assign=rules.assign||{};
+  const baseCosts=rules.baseCosts||{};
+  useEffect(()=>{ if(custView){ const pid=assign[custView]||"default"; if(profiles.some(p=>p.id===pid)) setProfId(pid); } },[custView]);
+  const upRules=(patch)=>setRules(r=>({...DEFAULT_RATE_RULES,...r,...patch}));
+  const upProf=(patch)=>upRules({profiles:profiles.map(p=>p.id===prof.id?{...p,...patch}:p)});
+  const upSvc=(k,patch)=>upProf({services:{...(prof.services||{}),[k]:{...((prof.services||{})[k]||{}),...patch}}});
+  const upSur=(id,patch)=>upProf({surcharges:{...(prof.surcharges||{}),[id]:{...((prof.surcharges||{})[id]||{}),...patch}}});
+  const newProfile=()=>{const n=window.prompt("Name for the new rate profile:");if(!n)return;const id="p"+Date.now();upRules({profiles:[...profiles,{id,name:n,services:JSON.parse(JSON.stringify(prof.services||{})),surcharges:JSON.parse(JSON.stringify(prof.surcharges||{}))}]});setProfId(id);};
+  const renameProfile=()=>{const n=window.prompt("Rename profile:",prof.name);if(!n)return;upProf({name:n});};
+  const deleteProfile=()=>{if(prof.id==="default")return window.alert("The Default profile can't be deleted.");if(!window.confirm('Delete profile "'+prof.name+'"? Customers on it fall back to Default.'))return;const na={...assign};Object.keys(na).forEach(k=>{if(na[k]===prof.id)delete na[k];});upRules({profiles:profiles.filter(p=>p.id!==prof.id),assign:na});setProfId("default");};
+  const quickSet=(v)=>{
+    if(!v)return;
+    const svcs={...(prof.services||{})};
+    const apply=(fn)=>{RATE_SERVICES[carrier].forEach(s=>{svcs[s.k]={...(svcs[s.k]||{}),...fn(svcs[s.k]||{})};});upProf({services:svcs});};
+    if(/^pct:/.test(v)){const p=+v.slice(4);if(window.confirm("Set every "+carrier.toUpperCase()+" service on \""+prof.name+"\" to "+p+"% markup over cost?"))apply(()=>({basis:"pct",pct:p}));}
+    else if(v==="listpct"){
+      const withList=RATE_SERVICES[carrier].filter(s=>baseCosts["list:"+s.k]);
+      if(!withList.length)return window.alert("Import FedEx list rate tables first (Base costs tab) — the list basis prices live quotes as list − %, so it needs the list.");
+      const p=window.prompt("FedEx list minus what percent? Applies to the "+withList.length+" service"+(withList.length>1?"s":"")+" that have list tables.","35");
+      if(p==null||p==="")return;
+      const svcs={...(prof.services||{})};withList.forEach(s=>{svcs[s.k]={...(svcs[s.k]||{}),basis:"list",pct:+p};});upProf({services:svcs});
+    }
+    else if(v==="clearmin"&&window.confirm("Clear every Min $ on this carrier?"))apply(()=>({min:""}));
+    else if(v==="clearzones"&&window.confirm("Remove every zone override on this carrier?"))apply(()=>({zones:null}));
+  };
+  const num2=(v)=>v==null||v===""||isNaN(+v)?"—":"$"+(+v).toFixed(2);
+  /* sheet pricing with an explicit zone (the live resolver derives zone from zips) */
+  const sheetSell=(rule,cost,weight,zone,key)=>{
+    if(cost==null)return null;
+    if(!rule||rule.on===false)return null;
+    const num=(x)=>(x==null||x==="")?null:+x;
+    let sell=null;
+    if(rule.basis==="list"){const list=baseCostLookup(rules,"list:"+key,weight,zone);const d=num(rule.pct);if(list==null||d==null)return null;sell=list*(1-d/100);}
+    else if(rule.basis==="fixed"){const a=num(rule.pct);if(a==null)return null;sell=cost+a;}
+    else{let pct=num(rule.pct);if(rule.breaks&&rule.breaks.length){const b=rule.breaks.find(x=>+weight<=+x.upTo)||rule.breaks[rule.breaks.length-1];if(b&&num(b.pct)!=null)pct=num(b.pct);}const zp=rule.zones?num(rule.zones[String(zone)]):null;if(zp!=null)pct=zp;if(pct==null)return null;sell=cost*(1+pct/100);}
+    const mn=num(rule.min);let starred=false;
+    if(mn!=null&&sell<mn){sell=mn;starred=true;}
+    return {sell:Math.round(sell*100)/100,starred};
+  };
+  const sheetData=useMemo(()=>{
+    if(!sheet)return null;
+    const key=sheet.k;const rule=(prof.services||{})[key]||{};
+    const src=rule.basis==="list"?(baseCosts["list:"+key]||baseCosts[key]):baseCosts[key];
+    const costT=baseCosts[key];
+    if(!src||!src.rows||!src.rows.length)return {empty:true};
+    return {zones:src.zones,rows:src.rows.map(r=>{
+      const w=r[0];
+      return {w,cells:src.zones.map((z,i)=>{
+        const f=costT&&costT.zones?(()=>{const ci=costT.zones.indexOf(String(z));const rr=costT.rows.find(x=>+x[0]>=+w)||costT.rows[costT.rows.length-1];return ci>=0&&rr?rr[ci+1]:null;})():null;
+        const base=rule.basis==="list"?r[i+1]:f;
+        const s=sheetSell(rule,base==null?null:+base,w,z,key);
+        return {f:f==null?null:+f,c:s?s.sell:null,star:s?s.starred:false};
+      })};
+    })};
+  },[sheet,rules,profId]);
+  const brandWordmark=()=>((brand&&brand.name1)||"SHIPPING")+((brand&&brand.name2)||"CLOUD");
+  const exportCSV=()=>{
+    if(!sheetData||sheetData.empty||!sheet)return;
+    let csv="Rate sheet,"+sheet.l+"\nProfile,"+prof.name+"\nDate,"+new Date().toLocaleDateString()+"\n\nWeight,"+sheetData.zones.join(",")+"\n";
+    sheetData.rows.forEach(r=>{csv+=r.w+","+r.cells.map(c=>c.c==null?"":c.c.toFixed(2)+(c.star?"*":"")).join(",")+"\n";});
+    csv+="\n* = Min $ floor applied\n";
+    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download=(sheet.l+" rate sheet "+prof.name).replace(/[^\w -]+/g,"")+".csv";document.body.appendChild(a);a.click();a.remove();
+  };
+  const printSheet=()=>{
+    if(!sheetData||sheetData.empty||!sheet)return;
+    const logo=BRAND.fw?('<img src="'+FW_LOGO+'" style="height:42px"/>'):('<div style="font:800 22px system-ui;letter-spacing:.02em">'+brandWordmark()+'</div>');
+    const head="<tr><th style='text-align:left'>Weight (lb)</th>"+sheetData.zones.map(z=>"<th>Zone "+z+"</th>").join("")+"</tr>";
+    const body=sheetData.rows.map(r=>"<tr><td style='text-align:left;font-weight:600'>"+r.w+"</td>"+r.cells.map(c=>{
+      if(c.c==null)return "<td>—</td>";
+      if(sheetMargin&&c.f!=null){const m=Math.round((c.c-c.f)*100)/100;const p=c.c?Math.round(m/c.c*100):0;return "<td><b>$"+c.c.toFixed(2)+(c.star?"*":"")+"</b><br/><span style='color:#888'>F:$"+c.f.toFixed(2)+"</span><br/><span style='color:#0a7'>M:$"+m.toFixed(2)+" · "+p+"%</span></td>";}
+      return "<td>$"+c.c.toFixed(2)+(c.star?"*":"")+"</td>";
+    }).join("")+"</tr>").join("");
+    const w=window.open("","_blank");if(!w)return window.alert("Allow pop-ups to print the rate sheet.");
+    w.document.write("<html><head><title>"+sheet.l+" — rate sheet</title><style>body{font-family:system-ui,Segoe UI,Arial;padding:28px;color:#1c1917}table{border-collapse:collapse;width:100%;font-size:12px;margin-top:16px}th,td{border:1px solid #e5e5e5;padding:6px 8px;text-align:right}th{background:#f5f5f4}h1{font-size:17px;margin:14px 0 2px}.sub{color:#78716c;font-size:12px}</style></head><body>"+logo+"<h1>"+sheet.l+" — customer rate sheet</h1><div class='sub'>Profile: "+prof.name+" · Generated "+new Date().toLocaleDateString()+" · * = Min $ floor applied"+(sheetMargin?" · C=customer price, F=cost, M=margin":"")+"</div><table>"+head+body+"</table><div class='sub' style='margin-top:14px'>Rates include base transportation and automatic fuel/residential surcharges. Optional accessorials (signature, Saturday, declared value) are additional. Rates subject to change.</div><script>window.print()</scr"+"ipt></body></html>");
+    w.document.close();
+  };
+  const doImport=()=>{
+    setImpMsg(null);
+    if(impKind==="onerate"){
+      const lines=String(impText||"").split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+      const or={...(baseCosts.onerate||{})};let n=0;
+      lines.forEach(ln=>{const p=ln.split(/\t|,/).map(x=>x.trim());if(p.length<2)return;
+        const price=parseFloat(String(p[p.length-1]).replace(/[$,]/g,""));if(isNaN(price))return;
+        const key=/^or_/.test(p[0])?p[0]:rateSvcKey("One Rate "+p.slice(0,-1).join(" "));
+        if(/^or_/.test(key)){or[key]=price;n++;}});
+      if(!n)return setImpMsg({err:"No rows matched. Use: Service,Packaging,Price (e.g. 2Day,Small Box,12.85) or or_2day_small_box,12.85"});
+      upRules({baseCosts:{...baseCosts,onerate:or}});setImpText("");return setImpMsg({ok:n+" One Rate prices imported."});
+    }
+    const wb=parseRateWorkbook(impText);
+    if(!wb.tables.length&&!wb.single&&!(wb.orphan&&wb.orphan.length)){
+      return setImpMsg({err:"Couldn't find any rate tables. "+(wb.unmatched.length?"Unrecognized sections: "+wb.unmatched.slice(0,4).join(", ")+". ":"")+"Expected Weight,2,3… tables — optionally titled with a service name, a Service column, or one Excel tab per service."});
+    }
+    const tables=wb.tables.slice();
+    if(wb.single)tables.push({key:impKey,label:"(single table — assigned to the service picked below)",zones:wb.single.zones,rows:wb.single.rows});
+    (wb.orphan||[]).forEach(s=>tables.push({key:"",label:s.title+" — pick the service",zones:s.zones,rows:s.rows}));
+    setImpPreview({tables});
+  };
+  const readFiles=async(fileList)=>{
+    const files=[...(fileList||[])]; if(!files.length)return;
+    setImpBusy(true);setImpMsg(null);
+    try{
+      const chunks=[];
+      for(const f of files){
+        if(/\.xlsx$/i.test(f.name)){
+          const r=await xlsxToText(f);
+          if(r.error){setImpMsg({err:f.name+": "+r.error});setImpBusy(false);return;}
+          chunks.push(r.text);
+        }else{
+          const t=await f.text();
+          chunks.push("== "+f.name.replace(/\.[^.]+$/,"")+"\n"+t);   // filename doubles as the service title
+        }
+      }
+      setImpText(v=>(v?v+"\n":"")+chunks.join("\n"));
+      setImpMsg({ok:files.length+" file"+(files.length>1?"s":"")+" loaded — hit Preview import."});
+    }catch(err){ setImpMsg({err:"Couldn't read the file"+((err&&err.message)?" ("+err.message+")":"")+"."}); }
+    setImpBusy(false);
+  };
+  const importAll=()=>{
+    if(!impPreview)return;
+    const good=impPreview.tables.filter(t=>t.key);
+    if(!good.length)return setImpMsg({err:"Map each table to a service first."});
+    const bc={...baseCosts};
+    good.forEach(t=>{bc[(impKind==="list"?"list:":"")+t.key]={zones:t.zones,rows:t.rows};});
+    upRules({baseCosts:bc});
+    setImpPreview(null);setImpText("");
+    setImpMsg({ok:good.length+" "+(impKind==="list"?"FedEx list":"England cost")+" table"+(good.length>1?"s":"")+" imported — live quotes use them on the next rate fetch."});
+  };
+  const dropTable=(key)=>{if(!window.confirm("Remove this table?"))return;const bc={...baseCosts};delete bc[key];upRules({baseCosts:bc});};
+  const svcList=RATE_SERVICES[carrier]||[];
+  const groups=[];svcList.forEach(s=>{let g=groups.find(x=>x.g===s.g);if(!g){g={g:s.g,items:[]};groups.push(g);}g.items.push(s);});
+  const custName=(id)=>{const c=clients.find(x=>x.id===id);return c?c.name:id;};
+  const assignedTo=(pid)=>clients.filter(c=>(assign[c.id]||"default")===pid);
+  const surRow=(prof.surcharges||{});
+  return (<div className="space-y-4">
+    {/* top controls */}
+    <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
+      <div className="flex flex-wrap items-end gap-3">
+        <Field label="Markup profile"><div className="flex items-center gap-1.5">
+          <Select value={prof.id} onChange={e=>{setProfId(e.target.value);setCustView("");}}>{profiles.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</Select>
+          <button onClick={newProfile} title="New profile" className="text-xs bg-stone-100 rounded-lg px-2 py-1.5 hover:bg-stone-200">＋ New</button>
+          <button onClick={renameProfile} className="text-xs bg-stone-100 rounded-lg px-2 py-1.5 hover:bg-stone-200">Rename</button>
+          {prof.id!=="default"&&<button onClick={deleteProfile} className="text-xs text-rose-500 bg-stone-100 rounded-lg px-2 py-1.5 hover:bg-rose-50">Delete</button>}
+        </div></Field>
+        <Field label="Pricing for customer"><Select value={custView} onChange={e=>setCustView(e.target.value)}><option value="">All customers on this profile</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
+        <Field label="Quick set"><Select value="" onChange={e=>{quickSet(e.target.value);e.target.value="";}}><option value="">Rate action…</option><option value="listpct">Everything → FedEx list − %…</option><option value="pct:70">Every service → 70%</option><option value="pct:65">Every service → 65%</option><option value="pct:55">Every service → 55%</option><option value="pct:50">Every service → 50%</option><option value="clearmin">Clear all minimums</option><option value="clearzones">Clear all zone overrides</option></Select></Field>
+        <button onClick={()=>setAssignOpen(a=>!a)} className={`text-sm rounded-lg px-3 py-2 font-medium ${assignOpen?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>Assign customers ({assignedTo(prof.id).length})</button>
+      </div>
+      {custView&&<div className="border border-sky-200 bg-sky-50/60 rounded-lg px-3 py-2 text-sm flex flex-wrap items-center gap-2">
+        <span className="font-medium text-stone-800">{custName(custView)}</span><span className="text-stone-500">ships on profile</span>
+        <Select value={assign[custView]||"default"} onChange={e=>upRules({assign:{...assign,[custView]:e.target.value}})}>{profiles.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</Select>
+        <span className="text-[11px] text-stone-400">Every login this company creates prices from this profile automatically.</span>
+      </div>}
+      {assignOpen&&<div className="border-t border-stone-100 pt-3">
+        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Which profile each customer prices from</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1.5">
+          {clients.map(c=>(<div key={c.id} className="flex items-center gap-2 text-sm"><span className="flex-1 truncate">{c.name}</span>
+            <Select value={assign[c.id]||"default"} onChange={e=>upRules({assign:{...assign,[c.id]:e.target.value}})}>{profiles.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</Select></div>))}
+          {!clients.length&&<div className="text-sm text-stone-400">No customers yet.</div>}
+        </div>
+      </div>}
+      <p className="text-[11px] text-stone-500">Rules price on top of your England cost the moment a live quote returns — zone % → service % → the customer's legacy flat markup, with Min $ as a floor on the sell price. Cost sheets under Base costs unlock printable rate sheets and margin analysis; a FedEx list table unlocks the "FedEx list − %" basis.</p>
+    </div>
+
+    {/* carrier + inner tabs */}
+    <div className="border border-stone-200 rounded-lg bg-white p-4">
+      <div className="flex flex-wrap items-center gap-1 border-b border-stone-200 pb-2 mb-3">
+        {[["fedex","FedEx"],["dhl","DHL"]].map(([v,l])=><button key={v} onClick={()=>setCarrier(v)} className={`text-sm px-3 py-1.5 rounded-lg ${carrier===v?"bg-stone-900 text-white font-medium":"text-[#0086E0] hover:bg-stone-100"}`}>{l}</button>)}
+        <span className="flex-1"/>
+        {[["services","Services"],["surcharges","Surcharges"],["base","Base costs"]].map(([v,l])=><button key={v} onClick={()=>setTab(v)} className={`text-sm px-3 py-1.5 rounded-lg ${tab===v?"bg-stone-100 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-50"}`}>{l}</button>)}
+      </div>
+
+      {tab==="services"&&<div className="overflow-x-auto"><table className="w-full text-sm min-w-[860px]">
+        <tbody>
+        {groups.map(g=>(<React.Fragment key={g.g}>
+          <tr><td colSpan={7} className="pt-4 pb-1 text-[10px] uppercase tracking-widest text-stone-400 font-semibold">{g.g}{g.g==="One Rate"&&<span className="normal-case tracking-normal font-normal"> — England's quote API doesn't return One Rate pricing; these price from the imported One Rate table under Base costs</span>}</td></tr>
+          {g.items.map(s=>{
+            const r=(prof.services||{})[s.k]||{};
+            const zOn=!!(openZ[s.k]||(r.zones&&Object.keys(r.zones).length));
+            const bOn=!!openB[s.k];
+            const hasCost=!!baseCosts[s.k];const hasList=!!baseCosts["list:"+s.k];
+            return (<React.Fragment key={s.k}>
+            <tr className="border-t border-stone-100 hover:bg-stone-50">
+              <td className="py-2 pr-1 w-6"><input type="checkbox" checked={r.on!==false} onChange={e=>upSvc(s.k,{on:e.target.checked})} className="accent-[#0086E0]"/></td>
+              <td className="py-2 pr-2 font-medium text-stone-800 whitespace-nowrap">{s.l}{s.or&&!(baseCosts.onerate&&baseCosts.onerate[s.k]!=null)&&<Badge tone="stone">needs One Rate table</Badge>}</td>
+              <td className="py-2 pr-2"><Select value={r.basis||"pct"} onChange={e=>upSvc(s.k,{basis:e.target.value})}><option value="pct">% Markup (over cost)</option><option value="list">FedEx list − %</option><option value="fixed">Fixed $ over cost</option></Select></td>
+              <td className="py-2 pr-2 whitespace-nowrap"><Input type="number" value={r.pct==null?"":r.pct} onChange={e=>upSvc(s.k,{pct:e.target.value})} className="w-20 text-right"/> <span className="text-stone-400 text-xs">{r.basis==="fixed"?"$":"%"}</span></td>
+              <td className="py-2 pr-2 whitespace-nowrap"><span className="text-stone-400 text-xs">Min $</span> <Input type="number" value={r.min==null?"":r.min} onChange={e=>upSvc(s.k,{min:e.target.value})} className="w-24 text-right"/></td>
+              <td className="py-2 pr-2 whitespace-nowrap">
+                <button onClick={()=>{setSheet(s);setSheetMargin(false);}} className="text-xs bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8]">View</button>{" "}
+                <button onClick={()=>setOpenB(o=>({...o,[s.k]:!o[s.k]}))} className={`text-xs rounded-lg px-2.5 py-1.5 ${r.breaks&&r.breaks.length?"bg-sky-100 text-sky-700":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>{r.breaks&&r.breaks.length?r.breaks.length+" weight breaks":"Weight breaks"}</button>
+              </td>
+              <td className="py-2 whitespace-nowrap">{s.z?<label className="flex items-center gap-1.5 text-xs text-stone-500 cursor-pointer"><input type="checkbox" checked={zOn} onChange={e=>{setOpenZ(o=>({...o,[s.k]:e.target.checked}));if(!e.target.checked)upSvc(s.k,{zones:null});}} className="accent-[#0086E0]"/>By zone</label>:<span className="text-[11px] text-stone-300">{hasList&&r.basis==="list"?<Badge tone="green">list table ✓</Badge>:null}</span>}</td>
+            </tr>
+            {zOn&&s.z&&<tr><td colSpan={7}><div className="ml-7 mb-2 border border-stone-200 bg-stone-50 rounded-lg p-2.5">
+              <div className="flex gap-2 flex-wrap">{RATE_ZONES.map(z=>(<div key={z} className="text-center"><div className="text-[10px] font-semibold text-stone-500 mb-0.5">{z}</div><Input type="number" value={(r.zones&&r.zones[z])==null?"":r.zones[z]} onChange={e=>upSvc(s.k,{zones:{...(r.zones||{}),[z]:e.target.value}})} className="w-14 text-center"/></div>))}</div>
+              <div className="text-[11px] text-stone-400 mt-1.5">Zone % overrides the service % when the lane's zone is known. Blank = fall back to the service %. AK/HI/territory zone columns light up once real FedEx zone charts are imported (today zones are estimated 2–8).</div>
+            </div></td></tr>}
+            {bOn&&<tr><td colSpan={7}><div className="ml-7 mb-2 border border-stone-200 bg-stone-50 rounded-lg p-2.5 space-y-1.5">
+              {(r.breaks||[]).map((b,i)=>(<div key={i} className="flex items-center gap-2 text-sm"><span className="text-stone-500 text-xs">Up to</span><Input type="number" value={b.upTo} onChange={e=>{const br=[...r.breaks];br[i]={...br[i],upTo:e.target.value};upSvc(s.k,{breaks:br});}} className="w-20 text-right"/><span className="text-stone-500 text-xs">lb →</span><Input type="number" value={b.pct==null?"":b.pct} onChange={e=>{const br=[...r.breaks];br[i]={...br[i],pct:e.target.value};upSvc(s.k,{breaks:br});}} className="w-20 text-right"/><span className="text-stone-500 text-xs">%</span><button onClick={()=>upSvc(s.k,{breaks:r.breaks.filter((_,j)=>j!==i)})} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button></div>))}
+              <button onClick={()=>upSvc(s.k,{breaks:[...(r.breaks||[]),{upTo:"",pct:""}]})} className="text-xs bg-stone-100 rounded-lg px-2.5 py-1.5 hover:bg-stone-200">＋ Add weight break</button>
+              <div className="text-[11px] text-stone-400">Weight-band % overrides the service % (heaviest band applies above the last break). Zone % still wins over both.</div>
+            </div></td></tr>}
+            </React.Fragment>);
+          })}
+        </React.Fragment>))}
+        </tbody>
+      </table></div>}
+
+      {tab==="surcharges"&&<div>
+        <p className="text-[11px] text-stone-500 mb-2">Double-click a row to edit. <Badge tone="blue">app-applied</Badge> fees change quotes immediately (they replace the hardcoded signature / Saturday / declared-value amounts). The rest are billed inside England's quote total — your service % marks them up today; per-surcharge adjustments plug in when England's per-line breakdown is wired.</p>
+        <div className="overflow-x-auto"><table className="w-full text-sm min-w-[760px]">
+          <thead><tr className="text-[10px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal py-2 pr-2">Description</th><th className="text-left font-normal pr-2">ID</th><th className="text-left font-normal pr-2">Charge type</th><th className="text-left font-normal pr-2">Markup type</th><th className="text-right font-normal pr-2">Amount</th><th className="text-left font-normal">Applied by</th></tr></thead>
+          <tbody>{FEDEX_SURCHARGES.map(su=>{const r=surRow[su.id]||{};return (
+            <tr key={su.id} onDoubleClick={()=>setSurEdit({...su,type:r.type||(su.app?"fixed":"percent"),amount:r.amount!=null?r.amount:(su.def!=null?su.def:"")})} className="border-t border-stone-100 hover:bg-stone-50 cursor-pointer">
+              <td className="py-2 pr-2">{su.desc}</td><td className="pr-2 font-mono text-xs text-stone-500">{su.id}</td><td className="pr-2 text-stone-500">{su.charge}</td>
+              <td className="pr-2 text-stone-500">{r.type||(su.app?"fixed":"—")}</td>
+              <td className="pr-2 text-right font-mono">{r.amount!=null&&r.amount!==""?(+r.amount).toFixed(2):(su.def!=null?su.def.toFixed(2):"—")}</td>
+              <td>{su.app?<Badge tone="blue">app-applied</Badge>:<Badge tone="stone">England-billed</Badge>}</td>
+            </tr>);})}</tbody>
+        </table></div>
+      </div>}
+
+      {tab==="base"&&<div className="space-y-3">
+        <p className="text-[11px] text-stone-500">Upload everything at once — an .xlsx workbook (one tab per service), a stack of CSVs, or one big paste. <b>FedEx list rates</b> drive the "FedEx list − %" basis: every live quote from the England API looks up the shipment's weight and zone in the list and sells at list minus your discount (the API's cost stays your cost — margin is list-minus-% over England's price). <b>England cost sheets</b> power printable rate sheets, margin analysis, and offline pricing. The <b>One Rate flat table</b> prices the One Rate services England never quotes.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {Object.keys(baseCosts).filter(k=>k!=="onerate").map(k=>{const t=baseCosts[k];return (<div key={k} className="border border-stone-200 rounded-lg px-3 py-2 flex items-center justify-between text-sm"><span className="truncate">{/^list:/.test(k)?"FedEx list — "+k.slice(5):"England cost — "+k}</span><span className="flex items-center gap-1.5"><Badge tone="green">{t.rows.length}w × {t.zones.length}z</Badge><button onClick={()=>dropTable(k)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button></span></div>);})}
+          {baseCosts.onerate&&<div className="border border-stone-200 rounded-lg px-3 py-2 flex items-center justify-between text-sm"><span>One Rate flat table</span><span className="flex items-center gap-1.5"><Badge tone="green">{Object.keys(baseCosts.onerate).length} prices</Badge><button onClick={()=>dropTable("onerate")} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button></span></div>}
+          {!Object.keys(baseCosts).length&&<div className="text-sm text-stone-400">No tables imported yet — the live markup engine doesn't need them; rate sheets and the list basis do.</div>}
+        </div>
+        <div className="border-t border-stone-100 pt-3 space-y-2">
+          <div className="flex flex-wrap items-end gap-3">
+            <Field label="Table kind"><Select value={impKind} onChange={e=>{setImpKind(e.target.value);setImpPreview(null);}}><option value="cost">England cost sheets</option><option value="list">FedEx list rates</option><option value="onerate">One Rate flat table</option></Select></Field>
+            {impKind!=="onerate"&&<label className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 cursor-pointer flex items-center gap-1.5"><Upload className="w-4 h-4"/>{impBusy?"Reading…":"Upload files"}<input type="file" multiple accept=".csv,.tsv,.txt,.xlsx" onChange={e=>{readFiles(e.target.files);e.target.value="";}} className="hidden"/></label>}
+            {impKind!=="onerate"&&<Field label="Service for a single un-titled table"><Select value={impKey} onChange={e=>setImpKey(e.target.value)}>{svcList.filter(s=>!s.or).map(s=><option key={s.k} value={s.k}>{s.l}</option>)}</Select></Field>}
+            <button onClick={doImport} disabled={impBusy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-50">{impKind==="onerate"?"Import":"Preview import"}</button>
+          </div>
+          <textarea value={impText} onChange={e=>{setImpText(e.target.value);setImpPreview(null);}} placeholder={impKind==="onerate"?"Service,Packaging,Price — one per line\n2Day,Small Box,12.85\nStandard Overnight,Envelope,27.50":"Upload files above or paste here. One shot can carry EVERY service:\n• an .xlsx workbook with one tab per service (tab name = service)\n• stacked sections:  FedEx Ground ⏎ Weight,2,3,4,5,6,7,8 ⏎ 1,8.12,… then the next service\n• a Service column:  Service,Weight,2,3,…  or  Service,Weight,Zone,Price\n• one CSV per service — the filename names the service (ground.csv, 2day.csv…)"} className="w-full border border-stone-300 rounded-lg p-2.5 text-xs font-mono min-h-[110px]"/>
+          {impPreview&&<div className="border border-sky-200 bg-sky-50/50 rounded-lg p-3 space-y-2">
+            <div className="text-sm font-medium text-stone-800">Found {impPreview.tables.length} table{impPreview.tables.length>1?"s":""} — check the mapping, then import</div>
+            <div className="space-y-1.5">{impPreview.tables.map((t,i)=>(<div key={i} className="flex flex-wrap items-center gap-2 text-sm">
+              <Select value={t.key} onChange={e=>setImpPreview(p=>({tables:p.tables.map((x,j)=>j===i?{...x,key:e.target.value}:x)}))}><option value="">— skip this table —</option>{svcList.filter(s=>!s.or).map(s=><option key={s.k} value={s.k}>{s.l}</option>)}</Select>
+              <Badge tone={t.key?"green":"amber"}>{t.rows.length}w × {t.zones.length}z</Badge>
+              <span className="text-[11px] text-stone-500 truncate max-w-[280px]">{t.label}</span>
+              {t.key&&baseCosts[(impKind==="list"?"list:":"")+t.key]&&<Badge tone="stone">replaces existing</Badge>}
+            </div>))}</div>
+            <div className="flex items-center gap-2"><button onClick={importAll} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8]">Import {impPreview.tables.filter(t=>t.key).length} table{impPreview.tables.filter(t=>t.key).length===1?"":"s"}</button><button onClick={()=>setImpPreview(null)} className="text-sm bg-stone-100 rounded-lg px-3 py-2 hover:bg-stone-200">Cancel</button></div>
+          </div>}
+          {impMsg&&(impMsg.err?<div className="text-xs text-rose-600">{impMsg.err}</div>:<div className="text-xs text-emerald-600">{impMsg.ok}</div>)}
+          <p className="text-[11px] text-stone-400">Zone columns beyond 2–8 (AK/HI/territories) are stored and shown on rate sheets; live quotes use them once real FedEx zone charts replace the 2–8 estimate. Rate sheets show "—" for any weight/zone with no cost loaded — nothing gets invented.</p>
+        </div>
+      </div>}
+    </div>
+
+    {/* surcharge edit modal */}
+    {surEdit&&<div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-16 bg-stone-900/40" onClick={()=>setSurEdit(null)}>
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4"><div className="font-semibold text-stone-800">Edit surcharge</div><button onClick={()=>setSurEdit(null)} className="text-stone-400 hover:text-stone-600"><X className="w-4 h-4"/></button></div>
+        <div className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-2.5 text-sm items-center">
+          <div className="text-stone-500 text-right">ID</div><div className="font-mono text-xs">{surEdit.id}</div>
+          <div className="text-stone-500 text-right">Description</div><div>{surEdit.desc}</div>
+          <div className="text-stone-500 text-right">Charge type</div><div>{surEdit.charge}</div>
+          <div className="text-stone-500 text-right">Markup type</div><div><Select value={surEdit.type} onChange={e=>setSurEdit(s=>({...s,type:e.target.value}))}><option value="fixed">Fixed</option><option value="percent">Percent</option></Select></div>
+          <div className="text-stone-500 text-right">Amount</div><div><Input type="number" value={surEdit.amount} onChange={e=>setSurEdit(s=>({...s,amount:e.target.value}))} className="w-32"/></div>
+        </div>
+        {surEdit.app?<p className="text-[11px] text-stone-400 mt-3">Fixed = charge this amount. Percent = adjust the published fee (e.g. 10 charges 110% of the default, −65 charges 35%). Changes hit quotes for every customer on the "{prof.name}" profile immediately.</p>
+          :<p className="text-[11px] text-stone-400 mt-3">Stored on "{prof.name}". This surcharge is billed inside England's quote total today, so this value doesn't change prices yet — it's staged for the per-line surcharge wiring.</p>}
+        <div className="flex justify-end gap-2 mt-4"><button onClick={()=>setSurEdit(null)} className="text-sm bg-stone-100 rounded-lg px-3 py-2 hover:bg-stone-200">Close</button><button onClick={()=>{upSur(surEdit.id,{type:surEdit.type,amount:surEdit.amount});setSurEdit(null);}} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8]">Confirm</button></div>
+      </div>
+    </div>}
+
+    {/* rate sheet modal */}
+    {sheet&&<div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-10 bg-stone-900/40" onClick={()=>setSheet(null)}>
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl p-5" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3"><div className="font-semibold text-stone-800">Rate sheet — {sheet.l} · {prof.name}</div><button onClick={()=>setSheet(null)} className="text-stone-400 hover:text-stone-600"><X className="w-4 h-4"/></button></div>
+        {(!sheetData||sheetData.empty)?<div className="text-sm text-stone-500 py-8 text-center">No {((prof.services||{})[sheet.k]||{}).basis==="list"?"FedEx list":"England cost"} table for this service yet.<br/><span className="text-xs text-stone-400">Paste it under Base costs — live quotes are priced without it; the printable sheet needs it.</span></div>
+        :<div>
+          <div className="flex flex-wrap items-center gap-3 mb-2">
+            <label className="flex items-center gap-1.5 text-sm cursor-pointer"><input type="checkbox" checked={sheetMargin} onChange={e=>setSheetMargin(e.target.checked)} className="accent-[#0086E0]"/>Show margin analysis</label>
+            <span className="text-[11px] text-stone-400">* = Min $ floor · C: customer price · F: your England cost · M: margin</span>
+            <span className="flex-1"/>
+            <button onClick={exportCSV} className="text-xs bg-stone-100 rounded-lg px-3 py-1.5 hover:bg-stone-200 flex items-center gap-1"><Download className="w-3.5 h-3.5"/>CSV</button>
+            <button onClick={printSheet} className="text-xs bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1"><Printer className="w-3.5 h-3.5"/>Print / PDF{BRAND.fw?" (Freightwire letterhead)":""}</button>
+          </div>
+          <div className="overflow-auto max-h-[420px] border border-stone-200 rounded-lg"><table className="text-xs min-w-[700px] w-full">
+            <thead className="sticky top-0 bg-stone-100"><tr><th className="text-left px-2.5 py-1.5">Weight</th>{sheetData.zones.map(z=><th key={z} className="text-right px-2.5 py-1.5">Z{z}</th>)}</tr></thead>
+            <tbody>{sheetData.rows.map((r,i)=>(<tr key={i} className="border-t border-stone-100"><td className="px-2.5 py-1.5 font-semibold">{r.w}</td>{r.cells.map((c,j)=>(<td key={j} className="text-right px-2.5 py-1.5 font-mono whitespace-nowrap">{c.c==null?"—":(sheetMargin&&c.f!=null?(<span><b>${c.c.toFixed(2)}{c.star?"*":""}</b><span className="block text-stone-400">F:${c.f.toFixed(2)}</span><span className="block text-emerald-600">M:${(Math.round((c.c-c.f)*100)/100).toFixed(2)} · {c.c?Math.round((c.c-c.f)/c.c*100):0}%</span></span>):(<span>${c.c.toFixed(2)}{c.star?"*":""}</span>))}</td>))}</tr>))}</tbody>
+          </table></div>
+        </div>}
+      </div>
+    </div>}
+  </div>);
+}
+
+
 function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,currentUser,settings,setSettings,brand,signupRequests,setSignupRequests,featureFlags,setFeatureFlags,customFeatures,setCustomFeatures,fedexRequests=[],setFedexRequests,publicBrand,setPublicBrand,companyAdminRequests=[],setCompanyAdminRequests}){
   const [sec,setSec]=useState("overview");
   const ALLOWED=adminSectionsFor(currentUser);
@@ -1077,6 +1871,8 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
         {ALLOWED.map(([v,l])=><button key={v} onClick={()=>setSec(v)} className={`px-3 py-1.5 rounded-lg ${sec===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}
       </div>
 
+      {sec==="rates"&&<RatesAdmin clients={clients} brand={brand}/>}
+      {sec==="labelcert"&&<FedexCertLab settings={settings}/>}
       {sec==="branding"&&<Branding settings={settings} setSettings={setSettings} brand={brand} publicBrand={publicBrand} setPublicBrand={setPublicBrand}/>}
       {sec==="domains"&&<Domains settings={settings} setSettings={setSettings} clients={clients}/>}
       {sec==="platforms"&&<PlatformAccountsAdmin settings={settings} setSettings={setSettings}/>}
@@ -1259,6 +2055,8 @@ function CustomizationsAdmin({users,clients,featureFlags={},setFeatureFlags,cust
   </div>);
 }
 function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSignupRequests,featureFlags={},setFeatureFlags,customFeatures=[],fedexRequests=[],setFedexRequests,companyAdminRequests=[],setCompanyAdminRequests}){
+  const [rateRules,setRateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 — show each customer's rate profile here
+  const [rpOpen,setRpOpen]=useState(null);
   const CATALOG=[...FEATURE_CATALOG,...customFeatures.map(c=>({...c,custom:true}))];
   const fullAdmin=!(currentUser&&currentUser.adminPerms&&Array.isArray(currentUser.adminPerms.sections));
   const [featOpen,setFeatOpen]=useState(null);
@@ -1343,12 +2141,22 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
           <div className="flex flex-wrap items-center justify-end gap-1.5">
             {u.role==="admin"&&u.id!=="u1"&&u.id!==currentUser.id&&fullAdmin&&<button onClick={()=>setAccessOpen(accessOpen===u.id?null:u.id)} title="Which Admin sections this login can open" className={`text-[11px] rounded px-2 py-1 ${accessOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>Portal access</button>}
             {u.role!=="admin"&&<button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }} title="Open the app exactly as this person sees it" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Log in as</button>}
+            {u.role!=="admin"&&u.clientId&&<button onClick={()=>setRpOpen(rpOpen===u.id?null:u.id)} title="Which rate profile this company prices from — applies to every login of the company" className={`text-[11px] rounded px-2 py-1 ${rpOpen===u.id?"bg-[#0086E0] text-white":"bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}>Rates: {rateProfileName(rateRules,u.clientId)}</button>}
             {u.role!=="admin"&&<button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))} title={u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins"} className={`text-[11px] rounded px-2 py-1 ${u.companyAdmin?"bg-violet-600 text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>{u.companyAdmin?"Company admin ✓":"Company admin"}</button>}
             {u.role!=="admin"&&<button onClick={()=>setFeatOpen(featOpen===u.id?null:u.id)} title="Features for this login" className={`text-[11px] rounded px-2 py-1 ${featOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>Tabs &amp; logo</button>}
             {CLOUD.mode==="cloud"&&(u.role!=="admin"||fullAdmin)&&<button onClick={async()=>{const np=window.prompt("New password for "+u.email+" (min 4 characters):");if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});window.alert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}} title="Reset password" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Password</button>}
             <button onClick={()=>toggle(u.id)} title={u.status==="active"?"Deactivate":"Activate"} className={`text-[11px] rounded px-2 py-1 ${u.status==="active"?"bg-emerald-50 text-emerald-700":"bg-stone-100 text-stone-500"}`}>{u.status==="active"?"Active":"Deactivated"}</button>
             {u.id!==currentUser.id&&(u.role!=="admin"||(fullAdmin&&u.id!=="u1"))&&<button onClick={()=>del(u.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
           </div>
+          {rpOpen===u.id&&u.role!=="admin"&&u.clientId&&<div className="w-full mt-2 border-t border-stone-100 pt-3">
+            <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Rate profile for {(clients.find(c=>c.id===u.clientId)||{}).name||"this company"} — every login of the company prices from it</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Select value={(rateRules.assign||{})[u.clientId]||"default"} onChange={e=>setRateRules(r=>({...DEFAULT_RATE_RULES,...r,assign:{...(r.assign||{}),[u.clientId]:e.target.value}}))}>
+                {((rateRules.profiles&&rateRules.profiles.length)?rateRules.profiles:DEFAULT_RATE_RULES.profiles).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+              </Select>
+              <span className="text-[11px] text-stone-400">Edit the profile's services, zones, and surcharges under Admin → Rates. If no rule answers, their legacy flat markup ({(clients.find(c=>c.id===u.clientId)||{}).markup!=null?(clients.find(c=>c.id===u.clientId)||{}).markup+"%":"—"}) still applies.</span>
+            </div>
+          </div>}
           {featOpen===u.id&&u.role!=="admin"&&<div className="w-full mt-2 border-t border-stone-100 pt-3">
             <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Tabs &amp; features for {u.name||u.email} — anything you flip here applies to this login only</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1.5">
@@ -1410,7 +2218,7 @@ const lsDel=(k)=>{ if(!LS_OK)return; try{window.localStorage.removeItem("sc_"+k)
 // Which login is active. Every non-global key is stored under this account so each login keeps its OWN settings/data.
 const activeUid=()=>{ try{const s=lsGet("session",null); const id=s&&(s.id||s.email); return id?String(id):"guest"; }catch(e){return "guest";} };
 // Shared across all logins (never namespaced): the accounts list + who is signed in.
-const GLOBAL_KEYS={session:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1,customFeatures:1,fedexRequests:1,publicBrand:1,myAccess:1,companyUsers:1,companyFlags:1,companyAdminRequests:1};
+const GLOBAL_KEYS={session:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1,customFeatures:1,fedexRequests:1,publicBrand:1,myAccess:1,companyUsers:1,companyFlags:1,companyAdminRequests:1,rateRules:1};
 // Scratch = the in-progress shipment. Per-login, but starts blank on each login (never migrated/inherited).
 const isScratch=(key)=>String(key).indexOf("ship.")===0;
 // Scratch keys wiped on login so the receiver + package dims are always blank for a fresh session.
@@ -1471,7 +2279,7 @@ function makeDemoData(){
   }
 
   // 18 orders — Shopify-heavy, 8 waiting to fulfill
-  const orders=Array.from({length:18},(_,i)=>{const {who,c,company,email,phone}=person(i);return {id:7000+i,name:"#1"+(140+i),customer:who,company,address1:(88+i*9)+" "+["Cedar Ave","Birch Ct","Market St","Lakeview Dr"][i%4],city:c[0],state:c[1],zip:c[2],phone,email,items:PRODUCTS[i%PRODUCTS.length]+(i%3===0?", "+PRODUCTS[(i+5)%PRODUCTS.length]:""),status:i<8?"unfulfilled":"fulfilled",source:i%5===0?"Manual":"Shopify",shippingService:i%5===0?"":["FedEx Home Delivery","FedEx 2Day","FedEx Express Saver","FedEx Priority Overnight","Standard Shipping","FedEx Standard Overnight","FedEx 2Day","Free Shipping"][i%8],weight:[3,1,2,5,1,4,2,3,1,2,6,2,4,1,3,2,5,1][i],total:+((19+i*8.75).toFixed(2)),date:demoDaysAgo(i%6)};});
+  const orders=Array.from({length:18},(_,i)=>{const {who,c,company,email,phone}=person(i);return {id:7000+i,name:"#1"+(140+i),customer:who,company,address1:(88+i*9)+" "+["Cedar Ave","Birch Ct","Market St","Lakeview Dr"][i%4],city:c[0],state:c[1],zip:c[2],phone,email,items:PRODUCTS[i%PRODUCTS.length]+(i%3===0?", "+PRODUCTS[(i+5)%PRODUCTS.length]:""),status:i<8?"unfulfilled":"fulfilled",source:i%5===0?"Manual":"Shopify",weight:[3,1,2,5,1,4,2,3,1,2,6,2,4,1,3,2,5,1][i],total:+((19+i*8.75).toFixed(2)),date:demoDaysAgo(i%6)};});
 
   // returns — FedEx only
   const returns=[
@@ -2638,6 +3446,7 @@ function AppInner(){
 
 /* ════════ SHIP ════════ */
 function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,drafts,setDrafts,prefill,clearPrefill,onShipped,onPending,logEmail,onQuickQuote,onRefresh,syncing}){
+  const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 rate database — global, follows the customer's profile
   const empty={country:"United States",name:"",company:"",zip:"",state:"",city:"",address1:"",address2:"",address3:"",phone:"",email:""};
   const [sender,setSender]=useState({country:"United States",...settings.sender,address2:"",address3:""});
   // Persist any sender edits made here back into saved settings, so the ship-from sticks across reloads/logins (no more reverting to the seed).
@@ -2806,7 +3615,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     return ()=>{cancel=true;};
   },[receiver.zip,sender.zip,residential,JSON.stringify(pieces)]);
   // FedEx One Rate box the shipment qualifies for — shown as a placeholder with a blank price (see oneRateQuotes).
-  const orRates=useMemo(()=>orBox?oneRateQuotes(orBox,client.markup):[],[orBox&&orBox.code,client.markup]);
+  const orRates=useMemo(()=>orBox?oneRateQuotes(orBox,{rules:rateRules,client}):[],[orBox&&orBox.code,client.markup,rateRules]);
   useEffect(()=>{
     let cancel=false;
     if(!ready){setRateSrc({rates:[],live:false,loading:false,error:null});return;}
@@ -2831,11 +3640,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(addrClassified){
       list=list.filter(q=>{const k=canonSvc(q.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;});
     }
-    return list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:(cost!=null?Math.round(cost*(1+client.markup/100)*100)/100:null),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:sigOption,saturday,insurance});})
+    return list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,client)});})
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
-  },[rateSrc,orRates,client.markup,fxTransit,residential,addrClassified,sigOption,saturday,insurance]);
+  },[rateSrc,orRates,client.markup,rateRules,fxTransit,residential,addrClassified,sigOption,saturday,insurance]);
   const best=null;
-  const matched=useMemo(()=>{const so=selectedOrder?orders.find(x=>x.id===selectedOrder):null;return matchServiceForOrder(quotes,so);},[quotes,selectedOrder,orders]);
+  const matchedKey=useMemo(()=>{const so=selectedOrder?orders.find(x=>x.id===selectedOrder):null;return matchRequestedService(quotes,so&&so.shippingService);},[quotes,selectedOrder,orders]);
 
   const buildRec=(q,carrier,extra)=>({id:Date.now(),date:new Date().toLocaleDateString(),tracking:(extra&&extra.tracking)||newTracking(carrier),carrier,service:q.label,recipient:{...receiver},sender:{...sender},fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,pieces:pieces.map(p=>({...p})),dims:pieces[0],insurance,cost:q.cost,sell:q.sell,billTo,thirdAcct,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference,invoiceNo,poNo,residential,intl,bookNumber:extra&&extra.bookNumber,customs:intl?{...customs,total:customsTotal,ci:"CI-"+rnd(5)}:null});
   const print=async(q)=>{
@@ -3001,11 +3810,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         <div className="relative grid lg:grid-cols-3 gap-4">
           <div className="min-w-0"><AddressCard title="Sender" data={sender} set={setSender} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} hideAddr23={custom.hideAddr23}/></div>
           <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-1/3 top-11 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-4 h-4"/></button>
-          <div className="min-w-0 lg:col-span-2"><AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} headerExtra={<div className="flex items-center gap-1.5 flex-1 min-w-0">
-              <ScanLine className="w-4 h-4 text-[#0086E0] shrink-0"/>
-              <input value={scanVal} onChange={e=>setScanVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();scanApply(scanVal);}}} placeholder="Scan order # / SKU" title={scanMsg&&!scanMsg.ok?scanMsg.t:undefined} className={`flex-1 min-w-0 border border-dashed rounded-lg px-2 py-1 text-sm outline-none placeholder:text-stone-400 ${scanMsg?(scanMsg.ok?"border-emerald-300 bg-emerald-50":"border-rose-300 bg-rose-50"):"border-[#66C2FF] bg-[#E6F4FF]/50 focus:border-[#0086E0] focus:bg-white"}`}/>
-              {scanMsg&&(scanMsg.ok?<CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500"/>:<AlertTriangle className="w-4 h-4 shrink-0 text-rose-400"/>)}
-            </div>} contactFallback={{phone:sender.phone,email:sender.email}} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }} hideAddr23={custom.hideAddr23} reqOverrides={{phone:custom.phoneRequired!==false,email:custom.emailRequired!==false}} side={addressCheck}/></div>
+          <div className="min-w-0 lg:col-span-2"><AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} contactFallback={{phone:sender.phone,email:sender.email}} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }} hideAddr23={custom.hideAddr23} reqOverrides={{phone:custom.phoneRequired!==false,email:custom.emailRequired!==false}} side={addressCheck}/></div>
         </div>
         {!(sender.name||sender.company||sender.address1||sender.zip)&&<div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No sender on file — fill in the Sender card above, or set your default sender in Settings → Company.</div>}
         {billTo==="third"&&thirdAcct&&<div className="flex flex-wrap items-center gap-2 text-xs -mt-1">
@@ -3030,6 +3835,10 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               {!custom.hidePO&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">PO #</span>{(custom.poLocked&&(((settings.fieldLists||{}).po)||[]).length>0)
                 ?<select value={poNo} onChange={e=>setPoNo(e.target.value)} className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] ${custom.poRequired&&!poNo?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}><option value="">— select —</option>{(((settings.fieldLists||{}).po)||[]).map(v=><option key={v} value={v}>{v}</option>)}</select>
                 :<input value={poNo} onChange={e=>setPoNo(e.target.value)} list="sc-po-list" placeholder="PO-…" className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 ${custom.poRequired&&!poNo?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}/>}</div>}
+              <div className="flex items-center gap-1.5"><span className="text-[10px] uppercase tracking-widest text-[#0086E0] font-semibold flex items-center gap-1"><ScanLine className="w-3.5 h-3.5"/>Scan</span>
+                <input value={scanVal} onChange={e=>setScanVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();scanApply(scanVal);}}} placeholder="order # / SKU" className="w-36 border border-dashed border-[#66C2FF] bg-[#E6F4FF]/50 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] focus:bg-white"/>
+                {scanMsg&&<span className={`text-[11px] flex items-center gap-1 ${scanMsg.ok?"text-emerald-600":"text-rose-500"}`}>{scanMsg.ok?<CheckCircle2 className="w-3.5 h-3.5"/>:<AlertTriangle className="w-3.5 h-3.5"/>}{scanMsg.t}</span>}
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-4">
               <span className="text-[11px] text-stone-400 font-mono">total {totalWeight} lb</span>
@@ -3151,7 +3960,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           :rateSrc.live?<><Wifi className="w-3.5 h-3.5"/>Live rates from your England account</>
           :<><Calculator className="w-3.5 h-3.5"/>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""} — connect your England account in Settings → Carrier accounts for live pricing</>}
         </div>}
-        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom}/>
+        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matchedKey} collapsible={true} onOneRate={applyOneRateBox} custom={custom}/>
         {labelPreview&&<LabelPreviewModal data={labelPreview} onClose={()=>setLabelPreview(null)}/>}
         {naming&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setNaming(false)}><div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-sm space-y-3" onClick={e=>e.stopPropagation()}><div className="text-sm font-semibold text-stone-800">Name this draft</div><input autoFocus value={draftName} onChange={e=>setDraftName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")commitDraft(draftName.trim());}} placeholder="e.g. Dana Cole – Miami" className="w-full bg-white border border-stone-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><div className="flex justify-end gap-2"><button onClick={()=>setNaming(false)} className="text-sm px-3 py-1.5 rounded text-stone-600 hover:bg-stone-100">Cancel</button><button onClick={()=>commitDraft(draftName.trim())} className="text-sm px-3 py-1.5 rounded bg-stone-900 text-white font-medium hover:bg-stone-800">Save draft</button></div></div></div>}
         {shipStatus&&<div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2.5 ${shipStatus.state==="error"?"bg-rose-50 text-rose-700 border border-rose-200":shipStatus.state==="booked"?"bg-emerald-50 text-emerald-700 border border-emerald-200":shipStatus.state==="pending_timeout"?"bg-amber-50 text-amber-700 border border-amber-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
@@ -3268,12 +4077,6 @@ function CarrierMark({carrier,className}){
   if(carrier==="FedEx") return <img src={FEDEX_LOGO} alt="FedEx" className={className||"h-6 w-auto"}/>;
   return <span className={`font-bold ${CARRIER_TINT[carrier]||"text-stone-700"} ${className||""}`}>{carrier}</span>;
 }
-function matchServiceForOrder(quotes,o){
-  if(!o)return null;
-  if(o.ruleService){ const hit=quotes.find(q=>canonSvc(q.label)===canonSvc(o.ruleService)&&(q.sell??q.cost)!=null); if(hit)return {key:hit.key,src:"autopilot"}; }
-  const req=matchRequestedService(quotes,o.shippingService);
-  return req?{key:req,src:"requested"}:null;
-}
 function matchRequestedService(quotes,requested){
   if(!requested)return null;
   const c=canonSvc(requested);
@@ -3282,7 +4085,7 @@ function matchRequestedService(quotes,requested){
   const hit=quotes.find(q=>canonSvc(q.label)===c&&(q.sell??q.cost)!=null);
   return hit?hit.key:null;
 }
-function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=true,onOneRate,custom=CUSTOM_DEFAULTS,matched=null,matchedSrc=null,collapsible=false}){
+function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=true,onOneRate,custom=CUSTOM_DEFAULTS,matched=null,collapsible=false}){
   const [showAll,setShowAll]=useState(false);
   const collapse=collapsible&&custom.matchedOnly&&matched&&!showAll&&quotes.some(q=>q.key===matched);
   const [view,setView]=useState(custom.defaultView||"cheapest");
@@ -3312,7 +4115,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
       <div key={q.key} className={"border rounded-lg bg-white "+(matched===q.key?"border-[#0086E0] ring-1 ring-[#0086E0]":"border-stone-200")}>
         <div onClick={()=>{setOpen(isOpen?null:q.key); if(q._oneRate&&q.packageTypeCode&&onOneRate)onOneRate(q.packageTypeCode);}} className="px-3 py-2 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
           <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isOpen?"rotate-90":""}`}/>
-          {matched===q.key&&<span className="text-[10px] font-semibold uppercase tracking-wide bg-[#E6F4FF] text-[#0086E0] border border-[#99D6FF] rounded px-1.5 py-0.5 shrink-0 flex items-center gap-1">{matchedSrc==="autopilot"&&<Zap className="w-3 h-3"/>}{matchedSrc==="autopilot"?"Autopilot":"Requested"}</span>}
+          {matched===q.key&&<span className="text-[10px] font-semibold uppercase tracking-wide bg-[#E6F4FF] text-[#0086E0] border border-[#99D6FF] rounded px-1.5 py-0.5 shrink-0">Requested</span>}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2"><span className="text-sm truncate">{(custom.aliases&&custom.aliases[canonSvc(q.label)])||q.label}</span></div>
             <div className="text-[11px] text-stone-500 flex items-center gap-1"><Calendar className="w-3 h-3"/>Transit Time: {days?(custom.transitStyle==="days"?<>{days} business day{days>1?"s":""}</>:<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}{fxLive&&days?<span className="text-[#0086E0] font-medium ml-1">FedEx</span>:""}</div>
@@ -3638,6 +4441,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
 
 /* ════════ ORDER · ShipStation-style detail + ship page (modal overlay) ════════ */
 function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
+  const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 rate database
   const [ciOpts,setCiOpts]=useState({reason:"Sale",incoterm:INCOTERMS[1],samples:false,notes:""});
   const commercial=!!(o.company&&o.company.trim());
   const [rcv,setRcv]=useState({name:o.customer||"",company:o.company||"",address1:o.address1||"",address2:o.address2||"",city:o.city||"",state:o.state||"",zip:o.zip||"",country:o.country||"US",phone:o.phone||"",email:o.email||""});
@@ -3725,14 +4529,14 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
     return ()=>{cancel=true;};
   },[rcv.zip,fromZip,residential,totalWeight,box.L,box.W,box.H]);
   // FedEx One Rate 2Day — flat, zone-independent.
-  const orRates=useMemo(()=>selectedOrBox?oneRateQuotes(selectedOrBox,client?.markup||0):[],[selectedOrBox&&selectedOrBox.code,client]);
-  const baseQuotes=useMemo(()=>(rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!/first\s*overnight/i.test(qq.label||"")).filter(qq=>{if(!addrClassified)return true;const k=canonSvc(qq.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;}).map(qq=>({...qq,sell:Math.round((qq.cost||0)*(1+(client?.markup||0)/100)*100)/100})),[rateSrc,residential,client,addrClassified]);
+  const orRates=useMemo(()=>selectedOrBox?oneRateQuotes(selectedOrBox,{rules:rateRules,client}):[],[selectedOrBox&&selectedOrBox.code,client,rateRules]);
+  const baseQuotes=useMemo(()=>(rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!/first\s*overnight/i.test(qq.label||"")).filter(qq=>{if(!addrClassified)return true;const k=canonSvc(qq.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;}).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,fromZip,toZip:rcv.zip,weight:totalWeight})})),[rateSrc,residential,client,addrClassified,rateRules]);
   const quotes=useMemo(()=>{
     const withTransit=(list)=>list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};});
-    return withTransit([...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday:sat,insurance}))).sort((a,b)=>(a.sell||0)-(b.sell||0));
-  },[baseQuotes,orRates,fxTransit,sigOption,sat,insurance]);
+    return withTransit([...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday:sat,insurance,fees:surchargeFees(rateRules,client)}))).sort((a,b)=>(a.sell||0)-(b.sell||0));
+  },[baseQuotes,orRates,fxTransit,sigOption,sat,insurance,rateRules]);
   const best=null;
-  const matched=useMemo(()=>matchServiceForOrder(quotes,o),[quotes,o&&o.shippingService,o&&o.ruleService]);
+  const matchedKey=useMemo(()=>matchRequestedService(quotes,o&&o.shippingService),[quotes,o&&o.shippingService]);
   const applyORBox=(code)=>{const b=FEDEX_ONERATE.find(x=>x.code===code);if(!b)return;if(b.dims){setDims({L:b.dims.L,W:b.dims.W,H:b.dims.H});}setBoxIdx(-1);setOrPkg(code);const val="FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,"");const f=settings?.orBoxField||"invoice";const fill=(set)=>set(prev=>prev&&prev.trim()?prev:val);if(f==="invoice")fill(setInvoiceNo);else if(f==="po")fill(setPoNo);else if(f==="reference")fill(setReference);};
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
   const pickBox=(j)=>{ setBoxIdx(j); if(j>=0){const b=boxes[j];setDims({L:b.L,W:b.W,H:b.H});} };
@@ -3897,7 +4701,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
               </div>
             </div>
             {!shipped&&<div className="bg-white border border-stone-200 rounded-lg p-4">
-              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyORBox} custom={cz(settings||{})}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
+              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} matched={matchedKey} collapsible={true} onOneRate={applyORBox} custom={cz(settings||{})}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
               {ready&&rateSrc.loading&&<div className="text-xs text-stone-400 flex items-center gap-1.5 mt-2"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Loading rates…</div>}
               {status&&<div className={`mt-2 text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${status.state==="error"?"text-rose-600 bg-rose-50 border border-rose-200":status.state==="booking"?"text-stone-600 bg-stone-50 border border-stone-200":"text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF]"}`}>{status.state==="error"?<AlertTriangle className="w-3.5 h-3.5"/>:status.state==="booking"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{status.msg}</div>}
             </div>}
@@ -4033,6 +4837,7 @@ function Pickups({pickups,setPickups,settings}){
 
 /* ════════ QUICK QUOTE ════════ */
 function QuickQuote({onClose,client,england,senderZip}){
+  const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 rate database
   const [fromZip,setFromZip]=useState(senderZip||client?.origin||"");
   const [toZip,setToZip]=useState("90210");
   const [residential,setResidential]=useState(true);
@@ -4069,8 +4874,8 @@ function QuickQuote({onClose,client,england,senderZip}){
     return ()=>{cancel=true;};
   },[fromZip,toZip,residential,JSON.stringify(pieces),sigOption,saturday,insurance,england]);
   const qqOrBox=oneRateBoxFor(pieces[0]&&pieces[0].L,pieces[0]&&pieces[0].W,pieces[0]&&pieces[0].H,totalWeight);
-  const qqOrRates=useMemo(()=>qqOrBox?oneRateQuotes(qqOrBox):[],[qqOrBox&&qqOrBox.code]);
-  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:Math.round(q.cost*(1+(client?.markup||0)/100)*100)/100})),...qqOrRates].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday,insurance})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,client,fxTransit,qqOrRates,sigOption,saturday,insurance]);
+  const qqOrRates=useMemo(()=>qqOrBox?oneRateQuotes(qqOrBox,{rules:rateRules,client}):[],[qqOrBox&&qqOrBox.code,rateRules,client]);
+  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,fromZip,toZip,weight:pieces.reduce((a,p)=>a+(+p.weight||0),0)})})),...qqOrRates].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,client)})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,client,rateRules,fxTransit,qqOrRates,sigOption,saturday,insurance,fromZip,toZip,JSON.stringify(pieces)]);
   const hasExpress=quotes.some(q=>{const l=String(q.label||"").toLowerCase();return /(overnight|2\s?day|express saver)/.test(l);});
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-8 bg-stone-900/40 backdrop-blur-sm overflow-auto" onClick={onClose}>
@@ -7384,7 +8189,7 @@ function parseAddressBlob(raw){
   if(out.address1&&out.city) out.address1=stripTrailingCity(out.address1,out.city);
   return out;
 }
-function AddressCard({title,data,set,required,residential,setResidential,addresses,onPick,onSave,errorFields=[],contactFallback,side,hideAddr23,reqOverrides={},headerExtra=null}){
+function AddressCard({title,data,set,required,residential,setResidential,addresses,onPick,onSave,errorFields=[],contactFallback,side,hideAddr23,reqOverrides={}}){
   const f=(k,v)=>set({...data,[k]:v});
   // Smart paste: if the pasted text parses into 2+ fields, distribute it across the whole form instead of one field
   const onSmartPaste=(e)=>{
@@ -7481,13 +8286,12 @@ function AddressCard({title,data,set,required,residential,setResidential,address
     <div className="flex items-center justify-between mb-1.5">
       <span className="text-[#0086E0] font-semibold text-sm">{title}</span>
       <div className="flex items-center gap-2">
-        {false&&onSave&&<button type="button" onClick={saveToBook} disabled={!data.name&&!data.company} className={`flex items-center gap-1 text-[10px] rounded px-1.5 py-0.5 border ${savedOk?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-white border-stone-200 text-stone-500 hover:text-[#0086E0] hover:border-[#99D6FF] disabled:opacity-40"}`} title="Save this address to your address book">{savedOk?<><Check className="w-3 h-3"/>Saved</>:<><Plus className="w-3 h-3"/>Save to Address Book</>}</button>}
+        {onSave&&<button type="button" onClick={saveToBook} disabled={!data.name&&!data.company} className={`flex items-center gap-1 text-[10px] rounded px-1.5 py-0.5 border ${savedOk?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-white border-stone-200 text-stone-500 hover:text-[#0086E0] hover:border-[#99D6FF] disabled:opacity-40"}`} title="Save this address to your address book">{savedOk?<><Check className="w-3 h-3"/>Saved</>:<><Plus className="w-3 h-3"/>Save to Address Book</>}</button>}
         {setResidential&&<label className="flex items-center gap-1.5 text-[11px] cursor-pointer"><input type="checkbox" checked={residential} onChange={e=>setResidential(e.target.checked)} className="accent-[#0086E0]"/>{residential?<span className="flex items-center gap-1 text-[#006FBF]"><Home className="w-3.5 h-3.5"/>Residential</span>:<span className="flex items-center gap-1 text-stone-600"><Building2 className="w-3.5 h-3.5"/>Commercial</span>}</label>}
       </div>
     </div>
     {addresses!==undefined&&(
-      <div className="flex items-center gap-2 mb-1.5">
-      <div className="relative flex-1 min-w-0">
+      <div className="relative mb-1.5">
         <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400"/>
         <input value={q} onChange={e=>{setQ(e.target.value);setOpen(true);}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder={(addresses&&addresses.length)?`Address book — ${addresses.length} saved (click to choose)…`:"Address book — empty (use Save to Address Book below)"} className="w-full bg-white border border-stone-200 rounded pl-8 pr-8 py-1.5 text-[13px] outline-none focus:border-[#0099FF] placeholder-stone-300"/>
         <button type="button" onMouseDown={(e)=>{e.preventDefault();setOpen(o=>!o);}} className="absolute right-2 top-1.5 text-stone-400 hover:text-[#0086E0]" title="Show all saved addresses"><ChevronDown className={`w-4 h-4 transition-transform ${open?"rotate-180":""}`}/></button>
@@ -7498,9 +8302,6 @@ function AddressCard({title,data,set,required,residential,setResidential,address
           {matches.map(a=><button key={a.id} onMouseDown={()=>pick(a)} className="w-full text-left px-3 py-2 hover:bg-[#E6F4FF]"><div className="text-sm font-medium text-stone-800">{a.name}{a.company?` · ${a.company}`:""}</div><div className="text-[11px] text-stone-400">{a.address1}{a.address1?", ":""}{a.city} {a.state} {a.zip}{a.acctNum?` · bill ${a.acctCarrier||""} ${a.acctNum}`:""}</div></button>)}
           </div>
         </div>}
-      </div>
-      {onSave&&<button type="button" onClick={saveToBook} disabled={!data.name&&!data.company} className={`shrink-0 flex items-center gap-1 text-[10px] rounded px-1.5 py-1 border ${savedOk?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-white border-stone-200 text-stone-500 hover:text-[#0086E0] hover:border-[#99D6FF]"}`}>{savedOk?<CheckCircle2 className="w-3 h-3"/>:<Plus className="w-3 h-3"/>}{savedOk?"Saved":"Save to Address Book"}</button>}
-      {headerExtra&&<div className={side?"shrink-0 lg:w-[250px] xl:w-[290px] flex":"shrink-0 flex"}>{headerExtra}</div>}
       </div>
     )}
     <div className={side?"flex flex-col lg:flex-row border border-stone-200 rounded-lg overflow-hidden":""}>

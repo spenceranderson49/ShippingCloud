@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v217";
+const BUILD_TAG="addr-v218";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -8785,15 +8785,13 @@ function AddressCard({title,data,set,required,residential,setResidential,address
     <div className="flex items-center justify-between mb-1.5">
       <span className="text-[#0086E0] font-semibold text-sm shrink-0">{title}</span>
       <div className="flex items-center gap-2">
-        {false&&onSave&&<button type="button" onClick={saveToBook} disabled={!data.name&&!data.company} className={`flex items-center gap-1 text-[10px] rounded px-1.5 py-0.5 border ${savedOk?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-white border-stone-200 text-stone-500 hover:text-[#0086E0] hover:border-[#99D6FF] disabled:opacity-40"}`} title="Save this address to your address book">{savedOk?<><Check className="w-3 h-3"/>Saved</>:<><Plus className="w-3 h-3"/>Save to Address Book</>}</button>}
+        {onSave&&<button type="button" onClick={saveToBook} disabled={!data.name&&!data.company} className={`flex items-center gap-1 text-[10px] rounded px-1.5 py-0.5 border ${savedOk?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-white border-stone-200 text-stone-500 hover:text-[#0086E0] hover:border-[#99D6FF] disabled:opacity-40"}`} title="Save this address to your address book">{savedOk?<CheckCircle2 className="w-3 h-3"/>:<Plus className="w-3 h-3"/>}{savedOk?"Saved":"Save to Address Book"}</button>}
         {setResidential&&<label className="flex items-center gap-1.5 text-[11px] cursor-pointer"><input type="checkbox" checked={residential} onChange={e=>setResidential(e.target.checked)} className="accent-[#0086E0]"/>{residential?<span className="flex items-center gap-1 text-[#006FBF]"><Home className="w-3.5 h-3.5"/>Residential</span>:<span className="flex items-center gap-1 text-stone-600"><Building2 className="w-3.5 h-3.5"/>Commercial</span>}</label>}
       </div>
     </div>
     {addresses!==undefined&&(
-      <div className="flex flex-col lg:flex-row gap-2 mb-1.5 items-stretch">
-      <div className="flex-1 min-w-0">
-      {onSave&&<div className="flex justify-end mb-1.5"><button type="button" onClick={saveToBook} disabled={!data.name&&!data.company} className={`flex items-center gap-1 text-[10px] rounded px-1.5 py-0.5 border ${savedOk?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-white border-stone-200 text-stone-500 hover:text-[#0086E0] hover:border-[#99D6FF] disabled:opacity-40"}`} title="Save this address to your address book">{savedOk?<CheckCircle2 className="w-3 h-3"/>:<Plus className="w-3 h-3"/>}{savedOk?"Saved":"Save to Address Book"}</button></div>}
-      <div className="relative">
+      <div className="flex flex-col lg:flex-row gap-2 mb-1.5 items-start">
+      <div className="relative flex-1 min-w-0">
         <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400"/>
         <input value={q} onChange={e=>{setQ(e.target.value);setOpen(true);}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder={(addresses&&addresses.length)?`Address book — ${addresses.length} saved (click to choose)…`:"Address book — empty (use Save to Address Book below)"} className="w-full bg-white border border-stone-200 rounded pl-8 pr-8 py-1.5 text-[13px] outline-none focus:border-[#0099FF] placeholder-stone-300"/>
         <button type="button" onMouseDown={(e)=>{e.preventDefault();setOpen(o=>!o);}} className="absolute right-2 top-1.5 text-stone-400 hover:text-[#0086E0]" title="Show all saved addresses"><ChevronDown className={`w-4 h-4 transition-transform ${open?"rotate-180":""}`}/></button>
@@ -8805,8 +8803,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
           </div>
         </div>}
       </div>
-      </div>
-      {scanSlot&&<div className={side?"lg:w-[250px] xl:w-[290px] shrink-0 flex flex-col justify-end gap-1.5":"flex flex-col gap-1.5"}>
+      {scanSlot&&<div className={side?"lg:w-[250px] xl:w-[290px] shrink-0 flex flex-col gap-1.5":"flex flex-col gap-1.5"}>
         {scanSlot}
       </div>}
       </div>

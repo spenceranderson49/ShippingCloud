@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v173";
+const BUILD_TAG="addr-v174";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -597,33 +597,92 @@ function printPickList(orderList){
 
 /* ── commercial invoice for international shipments (3 copies convention: print thrice) ── */
 function printCommercialInvoice(o,catalog,sender,opts={}){
-  /* opts.rows: explicit [{name,qty,unit,hs,origin}] overrides catalog-derived lines (CI editor) */
+  /* Professional layout modeled on FedEx/DHL standard commercial invoices.
+     opts.rows overrides catalog-derived lines; opts.preview opens without the print dialog. */
   const esc=(x)=>String(x||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
   const bySku={},byName={};(catalog||[]).forEach(p=>{if(p.sku)bySku[String(p.sku).toLowerCase()]=p;if(p.name)byName[String(p.name).toLowerCase()]=p;});
   const rows=(opts.rows&&opts.rows.length)?opts.rows:parseItemsList(o).map(it=>{const pr=byName[String(it.name).toLowerCase()]||bySku[String(it.name).toLowerCase()];return {name:it.name,qty:it.qty,hs:pr&&pr.hs||"",origin:pr&&pr.origin||"US",unit:pr&&+pr.value||0};});
-  const total=rows.reduce((a,r)=>a+r.unit*r.qty,0);
+  const total=rows.reduce((a,r)=>a+(+r.unit||0)*(+r.qty||0),0);
   const sn=(sender||{});
-  const html=`<!doctype html><html><head><title>Commercial invoice</title><style>body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;padding:32px 40px;font-size:13px;}h1{font-size:17px;letter-spacing:.02em;border-bottom:2px solid #1c1917;padding-bottom:8px;}.grid{display:flex;gap:32px;margin-top:14px;}.col{flex:1;}.lbl{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:#a8a29e;}table{width:100%;border-collapse:collapse;margin-top:16px;}th{text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#a8a29e;border-bottom:1px solid #e7e5e4;padding:5px 0;}td{padding:6px 0;border-bottom:1px solid #f5f5f4;}.r{text-align:right;}.tot{margin-top:10px;text-align:right;font-weight:700;}.sig{margin-top:34px;display:flex;gap:40px;font-size:11px;color:#78716c;}.line{border-top:1px solid #a8a29e;padding-top:4px;flex:1;}</style></head><body>
-  ${opts.letterhead?`<img src="${opts.letterhead}" style="width:100%;max-height:120px;object-fit:contain;object-position:left;margin-bottom:8px;"/>`:""}
-  <h1>${opts.proforma?"PROFORMA INVOICE":"COMMERCIAL INVOICE"}</h1>
-  ${opts.proforma?`<div style="font-size:11px;color:#78716c;margin-top:2px;">For customs and quotation purposes only — not a demand for payment. Goods not yet shipped.</div>`:""}
-  ${opts.samples?`<div style="margin-top:10px;border:2.5px solid #1c1917;text-align:center;padding:9px 6px;font-weight:800;font-size:15px;letter-spacing:.06em;">SAMPLES — NOT FOR RESALE · VALUE FOR CUSTOMS PURPOSES ONLY</div>`:""}
-  <div class="grid"><div class="col"><div class="lbl">Exporter / shipper</div><div>${esc(sn.company||sn.name||"")}</div><div>${esc(sn.address1||"")}</div><div>${esc([sn.city,sn.state,sn.zip].filter(Boolean).join(", "))}, US</div></div>
-  <div class="col"><div class="lbl">Consignee</div><div>${esc(o.customer||"")}</div>${o.company?`<div>${esc(o.company)}</div>`:""}<div>${esc(o.address1||"")}</div><div>${esc([o.city,o.state,o.zip].filter(Boolean).join(", "))}, ${esc(o.country||"")}</div></div>
-  <div class="col"><div class="lbl">Details</div><div>Invoice # ${esc(o.name||"")}</div><div>Date ${new Date().toLocaleDateString()}</div><div>Reason for export: ${esc(opts.reason||"Sale of goods")}</div><div>Incoterms: ${esc(opts.incoterm||"DDP — Delivered Duty Paid")}</div><div>Currency: ${esc(opts.currency||"USD")}</div><div>Country of destination: ${esc(o.country||"")}</div></div></div>
-  <div class="grid" style="margin-top:6px"><div class="col"><div class="lbl">Shipper contact / Tax ID</div><div>${esc(sn.phone||"")}</div><div>Tax ID / EIN: ${esc(opts.senderTax||CI_OPTS.taxId)||"______________"}${opts.senderTaxCountry?` (${esc(opts.senderTaxCountry)})`:""}</div></div><div class="col"><div class="lbl">Consignee contact</div><div>${esc(o.phone||"")}</div><div>${esc(o.email||"")}</div>${opts.receiverTax?`<div>VAT / Tax ID: ${esc(opts.receiverTax)}</div>`:""}${opts.receiverEori?`<div>EORI: ${esc(opts.receiverEori)}</div>`:""}</div><div class="col"><div class="lbl">Shipment</div><div>Packages: ${esc(String(opts.packages||"1"))}</div><div>Gross weight: ${esc(String(o.weight||""))} lb</div>${opts.marks?`<div>Marks & nos: ${esc(opts.marks)}</div>`:""}</div></div>
-  <table><thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Unit value</th><th class="r">Total</th><th>HS code</th><th>Origin</th></tr></thead>
-  <tbody>${rows.map(r=>`<tr><td>${esc(r.name)}</td><td class="r">${r.qty}</td><td class="r">$${r.unit.toFixed(2)}</td><td class="r">$${(r.unit*r.qty).toFixed(2)}</td><td>${esc(r.hs)||"—"}</td><td>${esc(r.origin)}</td></tr>`).join("")}</tbody></table>
-  <div class="tot">Declared value: $${total.toFixed(2)} ${esc(opts.currency||"USD")}</div>
-  ${(+opts.freight||+opts.insurance)?`<div style="text-align:right;font-size:12px;margin-top:2px;">${+opts.freight?`Freight charges: $${(+opts.freight).toFixed(2)}<br/>`:""}${+opts.insurance?`Insurance: $${(+opts.insurance).toFixed(2)}<br/>`:""}<b>Total (CIF): $${(total+(+opts.freight||0)+(+opts.insurance||0)).toFixed(2)} ${esc(opts.currency||"USD")}</b></div>`:""}
-  <div style="margin-top:8px;font-size:11px;color:#57534e;">${opts.eei?esc(opts.eei):(total<=2500?"NO EEI REQUIRED — FTR 30.37(a): each Schedule B/HS class valued $2,500 or less.":"EEI/AES: ITN ______________ (required — one or more classes may exceed $2,500)")}</div>
-  ${opts.broker?`<div style="margin-top:8px;"><div class="lbl">Customs broker</div><div style="font-size:12px;white-space:pre-wrap;">${esc(opts.broker)}</div></div>`:""}
-  ${rows.some(r=>!r.hs)?`<div style="margin-top:10px;font-size:11px;color:#b45309;">⚠ Some items are missing HS codes — add them in Settings → Product catalog to avoid customs delays.</div>`:""}
-  ${opts.notes?`<div style="margin-top:12px;"><div class="lbl">Notes</div><div style="white-space:pre-wrap;font-size:12px;">${esc(opts.notes)}</div></div>`:""}
-  <div style="margin-top:14px;font-size:10.5px;color:#78716c;">I declare that the above information is true and correct to the best of my knowledge.</div>\n  ${opts.signature?`<div style="margin-top:26px;"><img src="${opts.signature}" style="height:52px;object-fit:contain;"/></div>`:""}
-  <div class="sig" style="margin-top:${opts.signature?"4px":"56px"};"><div class="line">Signature of exporter — ${esc(sn.name||sn.company||"")}</div><div class="line">Date</div></div>
-  ${(opts.attachImgs&&opts.attachImgs.length)?opts.attachImgs.map(im=>`<div style="page-break-before:always;padding-top:12px;"><div class="lbl">Attachment — ${esc(im.name)}</div><img src="${im.data}" style="max-width:100%;max-height:88vh;object-fit:contain;"/></div>`).join(""):""}
-  <script>window.onload=()=>window.print();</`+`script></body></html>`;
+  const cur=esc(opts.currency||"USD");
+  const freight=+opts.freight||0, insur=+opts.insurance||0;
+  const cif=total+freight+insur;
+  const samples=opts.samples===false?false:(!!opts.samples||/sample/i.test(String(opts.reason||"")));
+  const today=new Date().toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"});
+  const lh=opts.letterhead||CI_OPTS.logo||"";
+  const box=(title,inner)=>`<div class="box"><div class="boxlbl">${title}</div>${inner}</div>`;
+  const html=`<!doctype html><html><head><title>${opts.proforma?"Proforma":"Commercial"} invoice ${esc(o.name||"")}</title><style>
+    *{box-sizing:border-box;} body{font-family:'Helvetica Neue',-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#111827;padding:34px 44px;font-size:12.5px;line-height:1.45;margin:0;}
+    .top{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;}
+    .top img.lh{max-height:64px;max-width:300px;object-fit:contain;object-position:left;}
+    .co{font-size:20px;font-weight:800;letter-spacing:.01em;}
+    .title{text-align:right;} .title h1{margin:0;font-size:21px;letter-spacing:.14em;font-weight:800;color:#111827;}
+    .title .meta{margin-top:6px;font-size:12px;color:#374151;} .title .meta b{color:#111827;}
+    .rule{height:3px;background:#111827;margin:14px 0 16px;}
+    .box{border:1px solid #d1d5db;border-radius:6px;padding:10px 14px;margin-bottom:10px;}
+    .boxlbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.14em;color:#6b7280;font-weight:700;margin-bottom:5px;}
+    .two{display:flex;gap:28px;} .two>div{flex:1;}
+    .nm{font-weight:700;font-size:13.5px;}
+    .band{display:flex;flex-wrap:wrap;border:1px solid #d1d5db;border-radius:6px;overflow:hidden;margin:14px 0;}
+    .band .cell{flex:1 1 25%;min-width:150px;padding:8px 12px;border-right:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;}
+    .band .cell .k{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:#6b7280;font-weight:700;} .band .cell .v{font-size:12.5px;margin-top:1px;font-weight:600;}
+    .samples{margin:14px 0;border:3px solid #111827;text-align:center;padding:11px 8px;font-weight:900;font-size:16.5px;letter-spacing:.08em;}
+    table{width:100%;border-collapse:collapse;margin-top:4px;}
+    thead th{background:#111827;color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.1em;padding:7px 10px;text-align:left;}
+    thead th.r,td.r{text-align:right;}
+    tbody td{padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:12.5px;}
+    tbody tr:nth-child(even) td{background:#f9fafb;}
+    .totals{margin-left:auto;width:280px;margin-top:10px;font-size:12.5px;}
+    .totals .tr{display:flex;justify-content:space-between;padding:3px 0;color:#374151;}
+    .totals .grand{border-top:2px solid #111827;margin-top:5px;padding-top:6px;font-weight:800;font-size:14px;color:#111827;}
+    .small{font-size:10.5px;color:#6b7280;}
+    .decl{margin-top:18px;font-size:10.5px;color:#4b5563;border-top:1px solid #e5e7eb;padding-top:10px;}
+    .sigrow{margin-top:34px;display:flex;gap:44px;align-items:flex-end;}
+    .sigline{flex:1;border-top:1px solid #9ca3af;padding-top:4px;font-size:10.5px;color:#6b7280;}
+    @media print{body{padding:22px 30px;}}
+  </style></head><body>
+  <div class="top">
+    <div>${lh?`<img class="lh" src="${lh}"/>`:`<div class="co">${esc(sn.company||sn.name||"")}</div>`}
+      <div class="small" style="margin-top:4px;">${esc(sn.address1||"")}${sn.address1?"<br/>":""}${esc([sn.city,sn.state,sn.zip].filter(Boolean).join(", "))}</div></div>
+    <div class="title"><h1>${opts.proforma?"PROFORMA INVOICE":"COMMERCIAL INVOICE"}</h1>
+      <div class="meta">Invoice #: <b>${esc(o.name||"—")}</b><br/>Date: <b>${today}</b>${opts.proforma?`<br/><span style="color:#6b7280;">For customs &amp; quotation only — not a demand for payment</span>`:""}</div></div>
+  </div>
+  <div class="rule"></div>
+  ${box("Shipper / Exporter",`<div class="two"><div><div class="nm">${esc(sn.company||"")}</div>${esc(sn.name||"")}<br/>${esc(sn.address1||"")}<br/>${esc([sn.city,sn.state,sn.zip].filter(Boolean).join(", "))}<br/>United States</div>
+    <div>${sn.phone?`Phone: ${esc(sn.phone)}<br/>`:""}Tax ID / EIN: <b>${esc(opts.senderTax||CI_OPTS.taxId)||"______________"}</b>${opts.senderTaxCountry&&opts.senderTaxCountry!=="United States"?` (${esc(opts.senderTaxCountry)})`:""}</div></div>`)}
+  ${box("Consignee / Ship To",`<div class="two"><div><div class="nm">${esc(o.company||o.customer||"")}</div>${o.company?esc(o.customer||"")+"<br/>":""}${esc(o.address1||"")}<br/>${esc([o.city,o.state,o.zip].filter(Boolean).join(", "))}<br/><b>${esc(o.country||"")}</b></div>
+    <div>${o.phone?`Phone: ${esc(o.phone)}<br/>`:""}${o.email?`${esc(o.email)}<br/>`:""}${opts.receiverTax?`VAT / Tax ID: <b>${esc(opts.receiverTax)}</b><br/>`:""}${opts.receiverEori?`EORI: <b>${esc(opts.receiverEori)}</b>`:""}</div></div>`)}
+  <div class="band">
+    <div class="cell"><div class="k">Reason for export</div><div class="v">${esc(opts.reason||"Sale of goods")}</div></div>
+    <div class="cell"><div class="k">Incoterms</div><div class="v">${esc(opts.incoterm||"DDP — Delivered Duty Paid")}</div></div>
+    <div class="cell"><div class="k">Currency</div><div class="v">${cur}</div></div>
+    <div class="cell"><div class="k">Country of destination</div><div class="v">${esc(o.country||"—")}</div></div>
+    <div class="cell"><div class="k">Packages</div><div class="v">${esc(String(opts.packages||"1"))}</div></div>
+    <div class="cell"><div class="k">Gross weight</div><div class="v">${esc(String(o.weight||"—"))} lb</div></div>
+    <div class="cell"><div class="k">FTR / EEI</div><div class="v">${esc(opts.eei||(total<=2500?"NOEEI 30.37(a)":"AES ITN required"))}</div></div>
+    <div class="cell"><div class="k">Marks &amp; numbers</div><div class="v">${esc(opts.marks||"—")}</div></div>
+  </div>
+  ${samples?`<div class="samples">SAMPLES — NOT FOR RESALE · VALUE FOR CUSTOMS PURPOSES ONLY</div>`:""}
+  <table><thead><tr><th style="width:24px;">#</th><th>Description of goods</th><th>HS code</th><th>Origin</th><th class="r">Qty</th><th class="r">Unit value</th><th class="r">Total</th></tr></thead>
+  <tbody>${rows.map((r,ix)=>`<tr><td>${ix+1}</td><td>${esc(r.name)}</td><td>${esc(r.hs||"")}</td><td>${esc(r.origin||"")}</td><td class="r">${esc(String(r.qty))}</td><td class="r">$${(+r.unit||0).toFixed(2)}</td><td class="r">$${((+r.unit||0)*(+r.qty||0)).toFixed(2)}</td></tr>`).join("")}</tbody></table>
+  <div class="totals">
+    <div class="tr"><span>Declared value of goods</span><span>$${total.toFixed(2)} ${cur}</span></div>
+    ${freight?`<div class="tr"><span>Freight charges</span><span>$${freight.toFixed(2)}</span></div>`:""}
+    ${insur?`<div class="tr"><span>Insurance</span><span>$${insur.toFixed(2)}</span></div>`:""}
+    <div class="tr grand"><span>TOTAL ${freight||insur?"(CIF)":""}</span><span>$${cif.toFixed(2)} ${cur}</span></div>
+  </div>
+  ${rows.some(r=>!r.hs)?`<div class="small" style="color:#b45309;margin-top:8px;">⚠ Some items are missing HS codes — add them in Settings → Products to avoid customs delays.</div>`:""}
+  ${samples?`<div class="small" style="margin-top:8px;"><b>These goods are samples, not for resale.</b> Values shown are for customs purposes only.</div>`:""}
+  ${opts.notes?`<div class="box" style="margin-top:12px;"><div class="boxlbl">Notes</div><div style="white-space:pre-wrap;">${esc(opts.notes)}</div></div>`:""}
+  ${opts.broker?`<div class="box"><div class="boxlbl">Customs broker</div><div style="white-space:pre-wrap;">${esc(opts.broker)}</div></div>`:""}
+  <div class="decl">I declare that the above information is true and correct to the best of my knowledge, and that the goods are of the origin stated.</div>
+  ${opts.signature?`<div style="margin-top:22px;"><img src="${opts.signature}" style="height:52px;object-fit:contain;"/></div>`:""}
+  <div class="sigrow" style="margin-top:${opts.signature?"4px":"38px"};">
+    <div class="sigline">Signature of exporter — ${esc(sn.name||sn.company||"")}</div>
+    <div class="sigline">Date: ${today}</div>
+  </div>
+  ${(opts.attachImgs&&opts.attachImgs.length)?opts.attachImgs.map(im=>`<div style="page-break-before:always;padding-top:12px;"><div class="boxlbl">Attachment — ${esc(im.name)}</div><img src="${im.data}" style="max-width:100%;max-height:88vh;object-fit:contain;"/></div>`).join(""):""}
+  ${opts.preview?"":`<script>window.onload=()=>window.print();</`+`script>`}</body></html>`;
   const w=window.open("","_blank");if(!w)return;w.document.write(html);w.document.close();
 }
 const SEED_PRODUCTS=[
@@ -757,7 +816,7 @@ const CUSTOM_DEFAULTS={
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
 const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
 const SLIP_OPTS={thanks:"",footer:""};   // synced from settings by AppInner; read by packingSlipHTML
-const CI_OPTS={taxId:""};                 // Tax ID / EIN printed on commercial invoices, from Settings → General
+const CI_OPTS={taxId:"",logo:""};                 // Tax ID / EIN printed on commercial invoices, from Settings → General
 const fireConfetti=()=>{try{window.dispatchEvent(new CustomEvent("sc-confetti"));}catch(e){}};
 const seasonalEmoji=()=>{const d=new Date(),m=d.getMonth(),dd=d.getDate();if(m===11&&dd<=27)return "🎅";if(m===9&&dd>=24)return "🎃";if(m===1&&dd>=10&&dd<=15)return "❤️";if(m===6&&dd<=5)return "🎆";if(m===2&&dd>=15&&dd<=18)return "🍀";if(m===10&&dd>=23&&dd<=29)return "🦃";return "";};
 function ConfettiHost({mode}){
@@ -2380,6 +2439,7 @@ function AppInner(){
   const isAdmin=currentUser&&currentUser.role==="admin";
   const isDemo=!!(currentUser&&currentUser.id==="demo");
   const myFlags=isDemo?{pickups:true,batch:true,invoices:true,rules:true,scan:true,settings:true}:(isAdmin?{}:((featureFlags&&featureFlags[currentUser&&currentUser.id])||(CLOUD.mode==="cloud"?myFeatures:{})));
+  useEffect(()=>{ CI_OPTS.logo=(myFlags&&myFlags._logoB64)||settings.companyLogo||""; },[myFlags,settings.companyLogo]);
   const [batchCmd,setBatchCmd]=useState(null);
   const assistantContext=()=>{
     try{
@@ -2606,8 +2666,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   useEffect(()=>{ if(receiver.email&&!String(emailTo||"").trim()) setEmailTo(receiver.email); },[receiver.email]);
   const [shipHsBusy,setShipHsBusy]=useState(-1);
   const [shipPad,setShipPad]=useState(false);
-  const printShipCI=()=>{const o2={name:reference||invoiceNo||"CI-"+Date.now(),customer:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip,country:receiver.country,phone:receiver.phone,email:receiver.email,weight:totalWeight,lineItems:customs.lines.map(l=>({name:l.desc,quantity:+l.qty||1,price:String(l.value||0)}))};
-    printCommercialInvoice(o2,(settings&&settings.products)||[],settings.sender,{reason:customs.reason,incoterm:customs.incoterm,samples:customs.samples,marks:customs.marks,notes:customs.notes,senderTax:customs.senderTaxId??settings.taxId,senderTaxCountry:customs.senderTaxCountry,receiverTax:customs.receiverTaxId,receiverEori:customs.receiverEori,eei:customs.ftr??"NOEEI 30.37(a)",signature:customs.signature,letterhead:customs.letterhead,attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(customs.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data})),rows:customs.lines.map(l=>({name:l.desc,qty:+l.qty||1,unit:+l.value||0,hs:l.hts,origin:l.origin}))});};
+  const printShipCI=(preview)=>{const o2={name:reference||invoiceNo||"CI-"+Date.now(),customer:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip,country:receiver.country,phone:receiver.phone,email:receiver.email,weight:totalWeight,lineItems:customs.lines.map(l=>({name:l.desc,quantity:+l.qty||1,price:String(l.value||0)}))};
+    printCommercialInvoice(o2,(settings&&settings.products)||[],settings.sender,{reason:customs.reason,incoterm:customs.incoterm,samples:customs.samples,marks:customs.marks,notes:customs.notes,senderTax:customs.senderTaxId??settings.taxId,senderTaxCountry:customs.senderTaxCountry,receiverTax:customs.receiverTaxId,receiverEori:customs.receiverEori,eei:customs.ftr??"NOEEI 30.37(a)",signature:customs.signature,letterhead:customs.letterhead,preview:!!preview,attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(customs.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data})),rows:customs.lines.map(l=>({name:l.desc,qty:+l.qty||1,unit:+l.value||0,hs:l.hts,origin:l.origin}))});};
   const [shipHsMsg,setShipHsMsg]=useState(null);
   const shipSuggestHS=async(i)=>{ const l0=customs.lines[i]; if(!l0||!l0.desc)return;
     setShipHsBusy(i); setShipHsMsg(null);
@@ -2964,8 +3024,9 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <Field label="Package marks"><input value={customs.marks||""} onChange={e=>setCustoms({...customs,marks:e.target.value})} placeholder="Carton 1 of 3" className="w-40 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
-              <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700 mt-4"><input type="checkbox" checked={!!customs.samples} onChange={e=>setCustoms({...customs,samples:e.target.checked})} className="accent-[#0086E0]"/>Print big "SAMPLES — NOT FOR RESALE" banner</label>
-              <button onClick={()=>printShipCI()} className="mt-4 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Print commercial invoice</button>
+              {customs.reason==="Sample"&&<label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700 mt-4"><input type="checkbox" checked={customs.samples!==false} onChange={e=>setCustoms({...customs,samples:e.target.checked})} className="accent-[#0086E0]"/>Print big "SAMPLES — NOT FOR RESALE" banner</label>}
+              <button onClick={()=>printShipCI(true)} className="mt-4 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>View invoice</button>
+              <button onClick={()=>printShipCI()} className="mt-4 text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-3 py-1.5 font-medium flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Print commercial invoice</button>
               <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700 mt-4"><input type="checkbox" checked={!!customs.autoPrint} onChange={e=>setCustoms({...customs,autoPrint:e.target.checked})} className="accent-[#0086E0]"/>Auto-print invoice after the label</label>
             </div>
             <Field label="Invoice notes"><textarea value={customs.notes||""} onChange={e=>setCustoms({...customs,notes:e.target.value})} rows={2} placeholder="Custom notes printed on the invoice — license numbers, 'samples for exhibition use only'…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
@@ -2973,7 +3034,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             <div className="flex flex-wrap gap-2">
               <button onClick={()=>setShipPad(v=>!v)} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">✍️ Draw a signature</button>
               <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload signature<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"signature",name:f.name.replace(/\.[a-z]+$/i,""),data:b},...(pp.docAssets||[])]})),500);e.target.value="";}}/></label>
-              <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload letterhead<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"letterhead",name:f.name.replace(/\.[a-z]+$/i,""),data:b},...(pp.docAssets||[])]})),1400);e.target.value="";}}/></label>
+              <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Change letterhead<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"letterhead",name:f.name.replace(/\.[a-z]+$/i,""),data:b},...(pp.docAssets||[])]})),1400);e.target.value="";}}/></label>
             </div>
             {shipPad&&<SignaturePad onSave={(b64)=>{setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"signature",name:"Signature "+new Date().toLocaleDateString(),data:b64},...(pp.docAssets||[])]}));setShipPad(false);}} onClose={()=>setShipPad(false)}/>}
             {(customs.reason==="Sample"||customs.samples)&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">Tip: declare at least $10 value per sample item — $0/$1 values are a top cause of customs holds.</div>}
@@ -3459,7 +3520,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <input value={ciOpts.reason} onChange={e=>setCiOpts(v=>({...v,reason:e.target.value}))} list="sc-export-reasons-m" placeholder="Reason for export" className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] w-36"/><datalist id="sc-export-reasons-m">{EXPORT_REASONS.map(r=><option key={r} value={r}/>)}</datalist>
             <select value={ciOpts.incoterm} onChange={e=>setCiOpts(v=>({...v,incoterm:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] max-w-[240px]">{INCOTERMS.map(r=><option key={r}>{r}</option>)}</select>
-            <label className="flex items-center gap-1.5 cursor-pointer text-stone-700"><input type="checkbox" checked={!!ciOpts.samples} onChange={e=>setCiOpts(v=>({...v,samples:e.target.checked}))} className="accent-[#0086E0]"/>Print big "SAMPLES — NOT FOR RESALE" banner</label>
+            {ciOpts.reason==="Sample"&&<label className="flex items-center gap-1.5 cursor-pointer text-stone-700"><input type="checkbox" checked={ciOpts.samples!==false} onChange={e=>setCiOpts(v=>({...v,samples:e.target.checked}))} className="accent-[#0086E0]"/>Print big "SAMPLES — NOT FOR RESALE" banner</label>}
           </div>
           {(ciOpts.reason==="Sample"||ciOpts.samples)&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">Tip: declare at least $10 value per sample item — $0/$1 values are a top cause of customs holds and inspections.</div>}
           <textarea value={ciOpts.notes} onChange={e=>setCiOpts(v=>({...v,notes:e.target.value}))} rows={2} placeholder="Custom notes printed on the invoice — e.g. 'No commercial value, samples for exhibition use only', license numbers, broker contact…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
@@ -3619,7 +3680,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <input value={ciOpts.reason} onChange={e=>setCiOpts(v=>({...v,reason:e.target.value}))} list="sc-export-reasons-m" placeholder="Reason for export" className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] w-36"/><datalist id="sc-export-reasons-m">{EXPORT_REASONS.map(r=><option key={r} value={r}/>)}</datalist>
             <select value={ciOpts.incoterm} onChange={e=>setCiOpts(v=>({...v,incoterm:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] max-w-[240px]">{INCOTERMS.map(r=><option key={r}>{r}</option>)}</select>
-            <label className="flex items-center gap-1.5 cursor-pointer text-stone-700"><input type="checkbox" checked={!!ciOpts.samples} onChange={e=>setCiOpts(v=>({...v,samples:e.target.checked}))} className="accent-[#0086E0]"/>Print big "SAMPLES — NOT FOR RESALE" banner</label>
+            {ciOpts.reason==="Sample"&&<label className="flex items-center gap-1.5 cursor-pointer text-stone-700"><input type="checkbox" checked={ciOpts.samples!==false} onChange={e=>setCiOpts(v=>({...v,samples:e.target.checked}))} className="accent-[#0086E0]"/>Print big "SAMPLES — NOT FOR RESALE" banner</label>}
           </div>
           {(ciOpts.reason==="Sample"||ciOpts.samples)&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">Tip: declare at least $10 value per sample item — $0/$1 values are a top cause of customs holds and inspections.</div>}
           <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -6088,9 +6149,9 @@ function CIEditor({settings,setSettings,shipments}){
   const setCo=(k,v)=>setDoc(d=>({...d,consignee:{...d.consignee,[k]:v}}));
   const setRow=(i,patch)=>setDoc(d=>({...d,rows:d.rows.map((r,j)=>j===i?{...r,...patch}:r)}));
   const total=doc.rows.reduce((a,r)=>a+(+r.unit||0)*(+r.qty||0),0);
-  const print=()=>{
+  const print=(preview)=>{
     const o={name:doc.invoiceNo||"CI-"+Date.now(),customer:doc.consignee.name,company:doc.consignee.company,address1:doc.consignee.address1,city:doc.consignee.city,state:doc.consignee.state,zip:doc.consignee.zip,country:doc.consignee.country,phone:doc.consignee.phone,email:doc.consignee.email,weight:doc.weight,lineItems:doc.rows.map(r=>({name:r.name,quantity:+r.qty||1,price:String(r.unit||0)}))};
-    printCommercialInvoice(o,[],{...doc.exporter},{reason:doc.reason,incoterm:doc.incoterm,samples:doc.samples,notes:doc.notes,currency:doc.currency,packages:doc.packages,freight:doc.freight,insurance:doc.insuranceAmt,marks:doc.marks,broker:doc.broker,signature:doc.signature,letterhead:doc.letterhead,attachImgs:resolveAttach(doc),proforma:doc.proforma,rows:doc.rows.map(r=>({name:r.name,qty:+r.qty||1,unit:+r.unit||0,hs:r.hs,origin:r.origin}))});
+    printCommercialInvoice(o,[],{...doc.exporter},{reason:doc.reason,incoterm:doc.incoterm,samples:doc.samples,notes:doc.notes,currency:doc.currency,packages:doc.packages,freight:doc.freight,insurance:doc.insuranceAmt,marks:doc.marks,broker:doc.broker,signature:doc.signature,letterhead:doc.letterhead,preview:!!preview,attachImgs:resolveAttach(doc),proforma:doc.proforma,rows:doc.rows.map(r=>({name:r.name,qty:+r.qty||1,unit:+r.unit||0,hs:r.hs,origin:r.origin}))});
   };
   const In=({v,on,ph,cls})=>(<input value={v} onChange={e=>on(e.target.value)} placeholder={ph} className={`bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 ${cls||"w-full"}`}/>);
   return (<div className="max-w-3xl space-y-4">
@@ -6140,7 +6201,7 @@ function CIEditor({settings,setSettings,shipments}){
       </div>
       <In v={doc.broker||""} on={v=>setDoc(d=>({...d,broker:v}))} ph="Customs broker contact (optional)" cls="w-full mt-2"/>
       <div className="mt-2"><AssetChips settings={settings} sel={doc} onSel={(v)=>setDoc(d=>({...d,...v}))}/></div>
-      <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700 mt-2"><input type="checkbox" checked={doc.samples} onChange={e=>setDoc(d=>({...d,samples:e.target.checked}))} className="accent-[#0086E0]"/>Print big "SAMPLES — NOT FOR RESALE" banner</label>
+      {doc.reason==="Sample"&&<label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700 mt-2"><input type="checkbox" checked={doc.samples!==false} onChange={e=>setDoc(d=>({...d,samples:e.target.checked}))} className="accent-[#0086E0]"/>Print big "SAMPLES — NOT FOR RESALE" banner</label>}
       <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700 mt-1"><input type="checkbox" checked={!!doc.proforma} onChange={e=>setDoc(d=>({...d,proforma:e.target.checked}))} className="accent-[#0086E0]"/>Print as PROFORMA invoice (quote / pre-shipment)</label>
       {(doc.reason==="Sample"||doc.samples)&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mt-1">Tip: declare at least $10 value per sample item.</div>}
       <textarea value={doc.notes} onChange={e=>setDoc(d=>({...d,notes:e.target.value}))} rows={2} placeholder="Custom notes printed on the invoice…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 mt-2"/>
@@ -6164,7 +6225,10 @@ function CIEditor({settings,setSettings,shipments}){
         <div className="text-sm font-mono text-stone-700">Declared: ${total.toFixed(2)}</div>
       </div>
     </Panel>
-    <button onClick={print} disabled={!doc.consignee.name&&!doc.consignee.company} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-4 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40"><Receipt className="w-4 h-4"/>Print commercial invoice</button>
+    <div className="flex gap-2">
+      <button onClick={()=>print(true)} disabled={!doc.consignee.name&&!doc.consignee.company} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40 hover:bg-stone-200"><FileText className="w-4 h-4"/>View invoice</button>
+      <button onClick={()=>print()} disabled={!doc.consignee.name&&!doc.consignee.company} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-4 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40"><Receipt className="w-4 h-4"/>Print commercial invoice</button>
+    </div>
   </div>);
 }
 const DOC_TEMPLATES=[

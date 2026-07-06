@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v172";
+const BUILD_TAG="addr-v173";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -2983,7 +2983,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               {customs.lines.map((l,i)=>(
                 <div key={i} className="flex flex-wrap sm:flex-nowrap gap-2 items-center">
                   <input value={l.desc} onChange={e=>{const v=e.target.value;const hit=((settings&&settings.products)||[]).find(pr=>pr.name===v||pr.sku===v);if(hit){setLine(i,{desc:hit.name,hts:hit.hs||l.hts,origin:hit.origin==="US"?"United States":(hit.origin||l.origin),value:l.value||String(hit.value||"")});}else setLine(i,{desc:v});}} list="sc-prod-list" placeholder="Item description — type or pick a product" className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/>
-                  <button onClick={()=>shipSuggestHS(i)} disabled={!l.desc||shipHsBusy===i} title="Ask Claude to classify this item" className="text-xs text-[#006FBF] hover:underline disabled:opacity-40 whitespace-nowrap self-center">{shipHsBusy===i?"…":"✨"}</button>
+                  <button onClick={()=>shipSuggestHS(i)} disabled={!l.desc||shipHsBusy===i} title="Claude reads the item description and suggests an HTS code" className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap self-center">{shipHsBusy===i?"Searching…":"✨ Search HTS codes"}</button>
                   <input value={l.hts} onChange={e=>setLine(i,{hts:e.target.value})} list="htscodes" placeholder="HTS" className="w-28 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
                   <select value={l.origin} onChange={e=>setLine(i,{origin:e.target.value})} className="w-28 bg-white border border-stone-200 rounded-lg px-1 py-1.5 text-sm outline-none focus:border-[#0099FF]">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
                   <input type="number" value={l.qty} onChange={e=>setLine(i,{qty:+e.target.value})} className="w-12 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
@@ -6154,7 +6154,7 @@ function CIEditor({settings,setSettings,shipments}){
         <In v={r.qty} on={v=>setRow(i,{qty:v})} ph="1" cls="w-14"/>
         <In v={r.unit} on={v=>setRow(i,{unit:v})} ph="0.00" cls="w-20"/>
         <input value={r.hs} onChange={e=>setRow(i,{hs:e.target.value})} list="sc-hts-list-ci" placeholder="HS" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-        <button onClick={()=>suggestHS(i)} disabled={!r.name||hsBusy===i} title="Ask Claude to classify this item" className="text-xs text-[#006FBF] hover:underline disabled:opacity-40 whitespace-nowrap">{hsBusy===i?"…":"✨ HS"}</button>
+        <button onClick={()=>suggestHS(i)} disabled={!r.name||hsBusy===i} title="Claude reads the item description and suggests an HTS code" className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap">{hsBusy===i?"Searching…":"✨ Search HTS"}</button>
         <select value={r.origin} onChange={e=>setRow(i,{origin:e.target.value})} className="w-32 bg-white border border-stone-200 rounded-lg px-1 py-1.5 text-sm outline-none focus:border-[#0099FF]">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
         <button onClick={()=>setDoc(d=>({...d,rows:d.rows.filter((_,j)=>j!==i)}))} className="text-stone-300 hover:text-rose-500">×</button>
       </div>))}

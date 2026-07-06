@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v167";
+const BUILD_TAG="addr-v170";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -604,18 +604,25 @@ function printCommercialInvoice(o,catalog,sender,opts={}){
   const total=rows.reduce((a,r)=>a+r.unit*r.qty,0);
   const sn=(sender||{});
   const html=`<!doctype html><html><head><title>Commercial invoice</title><style>body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;padding:32px 40px;font-size:13px;}h1{font-size:17px;letter-spacing:.02em;border-bottom:2px solid #1c1917;padding-bottom:8px;}.grid{display:flex;gap:32px;margin-top:14px;}.col{flex:1;}.lbl{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:#a8a29e;}table{width:100%;border-collapse:collapse;margin-top:16px;}th{text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#a8a29e;border-bottom:1px solid #e7e5e4;padding:5px 0;}td{padding:6px 0;border-bottom:1px solid #f5f5f4;}.r{text-align:right;}.tot{margin-top:10px;text-align:right;font-weight:700;}.sig{margin-top:34px;display:flex;gap:40px;font-size:11px;color:#78716c;}.line{border-top:1px solid #a8a29e;padding-top:4px;flex:1;}</style></head><body>
-  <h1>COMMERCIAL INVOICE</h1>
+  ${opts.letterhead?`<img src="${opts.letterhead}" style="width:100%;max-height:120px;object-fit:contain;object-position:left;margin-bottom:8px;"/>`:""}
+  <h1>${opts.proforma?"PROFORMA INVOICE":"COMMERCIAL INVOICE"}</h1>
+  ${opts.proforma?`<div style="font-size:11px;color:#78716c;margin-top:2px;">For customs and quotation purposes only — not a demand for payment. Goods not yet shipped.</div>`:""}
   ${opts.samples?`<div style="margin-top:10px;border:2.5px solid #1c1917;text-align:center;padding:9px 6px;font-weight:800;font-size:15px;letter-spacing:.06em;">SAMPLES — NOT FOR RESALE · VALUE FOR CUSTOMS PURPOSES ONLY</div>`:""}
   <div class="grid"><div class="col"><div class="lbl">Exporter / shipper</div><div>${esc(sn.company||sn.name||"")}</div><div>${esc(sn.address1||"")}</div><div>${esc([sn.city,sn.state,sn.zip].filter(Boolean).join(", "))}, US</div></div>
   <div class="col"><div class="lbl">Consignee</div><div>${esc(o.customer||"")}</div>${o.company?`<div>${esc(o.company)}</div>`:""}<div>${esc(o.address1||"")}</div><div>${esc([o.city,o.state,o.zip].filter(Boolean).join(", "))}, ${esc(o.country||"")}</div></div>
-  <div class="col"><div class="lbl">Details</div><div>Invoice # ${esc(o.name||"")}</div><div>Date ${new Date().toLocaleDateString()}</div><div>Reason for export: ${esc(opts.reason||"Sale of goods")}</div><div>Incoterms: ${esc(opts.incoterm||"DDP — Delivered Duty Paid")}</div><div>Currency: USD</div><div>Country of destination: ${esc(o.country||"")}</div></div></div>
-  <div class="grid" style="margin-top:6px"><div class="col"><div class="lbl">Shipper contact / Tax ID</div><div>${esc(sn.phone||"")}</div><div>Tax ID / EIN: ${esc(CI_OPTS.taxId)||"______________"}</div></div><div class="col"><div class="lbl">Consignee contact</div><div>${esc(o.phone||"")}</div><div>${esc(o.email||"")}</div></div><div class="col"><div class="lbl">Shipment</div><div>Packages: 1+</div><div>Gross weight: ${esc(String(o.weight||""))} lb</div></div></div>
+  <div class="col"><div class="lbl">Details</div><div>Invoice # ${esc(o.name||"")}</div><div>Date ${new Date().toLocaleDateString()}</div><div>Reason for export: ${esc(opts.reason||"Sale of goods")}</div><div>Incoterms: ${esc(opts.incoterm||"DDP — Delivered Duty Paid")}</div><div>Currency: ${esc(opts.currency||"USD")}</div><div>Country of destination: ${esc(o.country||"")}</div></div></div>
+  <div class="grid" style="margin-top:6px"><div class="col"><div class="lbl">Shipper contact / Tax ID</div><div>${esc(sn.phone||"")}</div><div>Tax ID / EIN: ${esc(CI_OPTS.taxId)||"______________"}</div></div><div class="col"><div class="lbl">Consignee contact</div><div>${esc(o.phone||"")}</div><div>${esc(o.email||"")}</div></div><div class="col"><div class="lbl">Shipment</div><div>Packages: ${esc(String(opts.packages||"1"))}</div><div>Gross weight: ${esc(String(o.weight||""))} lb</div>${opts.marks?`<div>Marks & nos: ${esc(opts.marks)}</div>`:""}</div></div>
   <table><thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Unit value</th><th class="r">Total</th><th>HS code</th><th>Origin</th></tr></thead>
   <tbody>${rows.map(r=>`<tr><td>${esc(r.name)}</td><td class="r">${r.qty}</td><td class="r">$${r.unit.toFixed(2)}</td><td class="r">$${(r.unit*r.qty).toFixed(2)}</td><td>${esc(r.hs)||"—"}</td><td>${esc(r.origin)}</td></tr>`).join("")}</tbody></table>
-  <div class="tot">Declared value: $${total.toFixed(2)} USD</div>
+  <div class="tot">Declared value: $${total.toFixed(2)} ${esc(opts.currency||"USD")}</div>
+  ${(+opts.freight||+opts.insurance)?`<div style="text-align:right;font-size:12px;margin-top:2px;">${+opts.freight?`Freight charges: $${(+opts.freight).toFixed(2)}<br/>`:""}${+opts.insurance?`Insurance: $${(+opts.insurance).toFixed(2)}<br/>`:""}<b>Total (CIF): $${(total+(+opts.freight||0)+(+opts.insurance||0)).toFixed(2)} ${esc(opts.currency||"USD")}</b></div>`:""}
+  <div style="margin-top:8px;font-size:11px;color:#57534e;">${opts.eei?esc(opts.eei):(total<=2500?"NO EEI REQUIRED — FTR 30.37(a): each Schedule B/HS class valued $2,500 or less.":"EEI/AES: ITN ______________ (required — one or more classes may exceed $2,500)")}</div>
+  ${opts.broker?`<div style="margin-top:8px;"><div class="lbl">Customs broker</div><div style="font-size:12px;white-space:pre-wrap;">${esc(opts.broker)}</div></div>`:""}
   ${rows.some(r=>!r.hs)?`<div style="margin-top:10px;font-size:11px;color:#b45309;">⚠ Some items are missing HS codes — add them in Settings → Product catalog to avoid customs delays.</div>`:""}
   ${opts.notes?`<div style="margin-top:12px;"><div class="lbl">Notes</div><div style="white-space:pre-wrap;font-size:12px;">${esc(opts.notes)}</div></div>`:""}
-  <div style="margin-top:14px;font-size:10.5px;color:#78716c;">I declare that the above information is true and correct to the best of my knowledge.</div>\n  <div class="sig"><div class="line">Signature of exporter — ${esc(sn.name||sn.company||"")}</div><div class="line">Date</div></div>
+  <div style="margin-top:14px;font-size:10.5px;color:#78716c;">I declare that the above information is true and correct to the best of my knowledge.</div>\n  ${opts.signature?`<div style="margin-top:26px;"><img src="${opts.signature}" style="height:52px;object-fit:contain;"/></div>`:""}
+  <div class="sig" style="margin-top:${opts.signature?"4px":"56px"};"><div class="line">Signature of exporter — ${esc(sn.name||sn.company||"")}</div><div class="line">Date</div></div>
+  ${(opts.attachImgs&&opts.attachImgs.length)?opts.attachImgs.map(im=>`<div style="page-break-before:always;padding-top:12px;"><div class="lbl">Attachment — ${esc(im.name)}</div><img src="${im.data}" style="max-width:100%;max-height:88vh;object-fit:contain;"/></div>`).join(""):""}
   <script>window.onload=()=>window.print();</`+`script></body></html>`;
   const w=window.open("","_blank");if(!w)return;w.document.write(html);w.document.close();
 }
@@ -2928,6 +2935,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {intl&&(
           <div className="border border-[#99D6FF] bg-[#E6F4FF]/40 rounded-lg p-3 space-y-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-[#006FBF]"><FileText className="w-4 h-4"/>Customs · Commercial invoice</div>
+            <datalist id="sc-prod-list">{((settings&&settings.products)||[]).map(pr=><option key={pr.id} value={pr.name}>{(pr.sku?pr.sku+" · ":"")+(pr.hs?("HS "+pr.hs):"no HS yet")}</option>)}</datalist>
             <div className="grid sm:grid-cols-3 gap-2">
               <Field label="Reason for export"><input value={customs.reason} onChange={e=>setCustoms({...customs,reason:e.target.value})} list="sc-export-reasons" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/><datalist id="sc-export-reasons">{EXPORT_REASONS.map(r=><option key={r} value={r}/>)}</datalist></Field>
               <Field label="Incoterms"><Select value={customs.incoterm} onChange={e=>setCustoms({...customs,incoterm:e.target.value})}>{INCOTERMS.map(r=><option key={r}>{r}</option>)}</Select></Field>
@@ -2938,7 +2946,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <div className="hidden sm:flex text-[10px] uppercase tracking-wide text-stone-400 px-1 gap-2"><div className="flex-1">Description</div><div className="w-28">HTS code</div><div className="w-28">Origin</div><div className="w-12">Qty</div><div className="w-16">Unit $</div><div className="w-5"/></div>
               {customs.lines.map((l,i)=>(
                 <div key={i} className="flex flex-wrap sm:flex-nowrap gap-2 items-center">
-                  <input value={l.desc} onChange={e=>setLine(i,{desc:e.target.value})} placeholder="Item description" className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/>
+                  <input value={l.desc} onChange={e=>{const v=e.target.value;const hit=((settings&&settings.products)||[]).find(pr=>pr.name===v||pr.sku===v);if(hit){setLine(i,{desc:hit.name,hts:hit.hs||l.hts,origin:hit.origin==="US"?"United States":(hit.origin||l.origin),value:l.value||String(hit.value||"")});}else setLine(i,{desc:v});}} list="sc-prod-list" placeholder="Item description — type or pick a product" className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/>
                   <input value={l.hts} onChange={e=>setLine(i,{hts:e.target.value})} list="htscodes" placeholder="HTS" className="w-28 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
                   <select value={l.origin} onChange={e=>setLine(i,{origin:e.target.value})} className="w-28 bg-white border border-stone-200 rounded-lg px-1 py-1.5 text-sm outline-none focus:border-[#0099FF]">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
                   <input type="number" value={l.qty} onChange={e=>setLine(i,{qty:+e.target.value})} className="w-12 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
@@ -2946,7 +2954,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                   <button onClick={()=>delLine(i)} className="text-stone-300 hover:text-rose-500 w-5"><X className="w-4 h-4"/></button>
                 </div>
               ))}
-              <datalist id="htscodes">{HTS_SUGGEST.map(h=><option key={h.code} value={h.code}>{h.desc}</option>)}</datalist>
+              <datalist id="htscodes">{[...new Set(((settings&&settings.products)||[]).map(pr=>pr.hs).filter(Boolean))].map(c=><option key={"p"+c} value={c}/>)}{HTS_SUGGEST.map(h=><option key={h.code} value={h.code}>{h.desc}</option>)}</datalist>
               <button onClick={addLine} className="flex items-center gap-1 text-xs bg-white border border-stone-200 hover:bg-stone-100 rounded-lg px-2.5 py-1.5 font-medium text-stone-700"><Plus className="w-3.5 h-3.5"/>Add item</button>
             </div>
             <div className="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-[#99D6FF]">
@@ -3407,7 +3415,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
           {rateSrc.live?<span className="text-[11px] text-emerald-600 flex items-center gap-1"><Wifi className="w-3.5 h-3.5"/>Live England rates</span>:canBook?<span className="text-[11px] text-stone-400">{rateSrc.loading?"Loading rates…":""}</span>:<span className="text-[11px] text-amber-600">Demo rates — connect England</span>}
           <button onClick={()=>goShip(o)} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/>Open in Ship tab</button>
           <button onClick={()=>printPackingSlips([slipFromOrder(o,settings&&settings.sender)])} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing slip</button>
-          {o.country&&o.country!=="US"&&<button onClick={()=>printCommercialInvoice(o,(settings&&settings.products)||[],settings&&settings.sender,ciOpts)} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Commercial invoice</button>}
+          {o.country&&o.country!=="US"&&<button onClick={()=>printCommercialInvoice(o,(settings&&settings.products)||[],settings&&settings.sender,{...ciOpts,attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(ciOpts.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data}))})} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Commercial invoice</button>}
         </div>
         {o.country&&o.country!=="US"&&<div className="border border-stone-200 rounded-lg p-3 space-y-2 bg-stone-50/60">
           <div className="text-[10px] uppercase tracking-widest text-stone-400">Commercial invoice options</div>
@@ -3564,7 +3572,7 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {o.country&&o.country!=="United States"&&o.country!=="US"&&<button onClick={()=>printCommercialInvoice(o,(settings&&settings.products)||[],settings&&settings.sender,ciOpts)} className="text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Commercial invoice</button>}
+            {o.country&&o.country!=="United States"&&o.country!=="US"&&<button onClick={()=>printCommercialInvoice(o,(settings&&settings.products)||[],settings&&settings.sender,{...ciOpts,attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(ciOpts.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data}))})} className="text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Commercial invoice</button>}
             <button onClick={()=>{goShip&&goShip(o);onClose&&onClose();}} className="text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/>Open in Ship tab</button>
             <button onClick={onClose} className="text-stone-400 hover:text-stone-700 p-1"><X className="w-5 h-5"/></button>
           </div>
@@ -3577,7 +3585,17 @@ function OrderShipModal({o,setOrders,client,settings,onShipped,goShip,onClose}){
             <label className="flex items-center gap-1.5 cursor-pointer text-stone-700"><input type="checkbox" checked={!!ciOpts.samples} onChange={e=>setCiOpts(v=>({...v,samples:e.target.checked}))} className="accent-[#0086E0]"/>Print big "SAMPLES — NOT FOR RESALE" banner</label>
           </div>
           {(ciOpts.reason==="Sample"||ciOpts.samples)&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">Tip: declare at least $10 value per sample item — $0/$1 values are a top cause of customs holds and inspections.</div>}
-          <textarea value={ciOpts.notes} onChange={e=>setCiOpts(v=>({...v,notes:e.target.value}))} rows={2} placeholder="Custom notes printed on the invoice — e.g. 'Samples for exhibition use only', license numbers, broker contact…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <select value={ciOpts.currency||"USD"} onChange={e=>setCiOpts(v=>({...v,currency:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF]">{["USD","CAD","EUR","GBP","MXN","AUD"].map(x=><option key={x}>{x}</option>)}</select>
+            <input value={ciOpts.packages||""} onChange={e=>setCiOpts(v=>({...v,packages:e.target.value}))} placeholder="Pkgs" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+            <input value={ciOpts.freight||""} onChange={e=>setCiOpts(v=>({...v,freight:e.target.value}))} placeholder="Freight $" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+            <input value={ciOpts.insurance||""} onChange={e=>setCiOpts(v=>({...v,insurance:e.target.value}))} placeholder="Insurance $" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+            <input value={ciOpts.marks||""} onChange={e=>setCiOpts(v=>({...v,marks:e.target.value}))} placeholder="Marks & nos — e.g. Carton 1 of 3" className="flex-1 min-w-[160px] bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+          </div>
+          <input value={ciOpts.broker||""} onChange={e=>setCiOpts(v=>({...v,broker:e.target.value}))} placeholder="Customs broker contact (optional — prints as its own block)" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+          <textarea value={ciOpts.notes} onChange={e=>setCiOpts(v=>({...v,notes:e.target.value}))} rows={2} placeholder="Custom notes printed on the invoice — e.g. 'Samples for exhibition use only', license numbers…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+          <AssetChips settings={settings||{}} sel={ciOpts} onSel={(v)=>setCiOpts(c=>({...c,...v}))}/>
+          <div className="text-[11px] text-stone-400">EEI/AES line prints automatically: "NO EEI — FTR 30.37(a)" up to $2,500, or an ITN blank above it.</div>
         </div>}
         <div className="flex-1 overflow-y-auto">
           <div className="p-4 space-y-4">
@@ -5933,6 +5951,66 @@ function Billing({settings,setSettings}){
     </Panel>
   </div>);
 }
+function readImgFile(f,cb,maxW){const rd=new FileReader();rd.onload=()=>{const img=new Image();img.onload=()=>{try{const sc=Math.min(1,(maxW||900)/img.width);const cv=document.createElement("canvas");cv.width=Math.round(img.width*sc);cv.height=Math.round(img.height*sc);cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);cb(cv.toDataURL("image/png"));}catch(_){cb(String(rd.result));}};img.src=String(rd.result);};rd.readAsDataURL(f);}
+function SignaturePad({onSave,onClose}){
+  const ref=React.useRef(null);const drawing=React.useRef(false);const dirty=React.useRef(false);
+  const pos=(e)=>{const r=ref.current.getBoundingClientRect();const t=e.touches?e.touches[0]:e;return{x:t.clientX-r.left,y:t.clientY-r.top};};
+  const down=(e)=>{drawing.current=true;const c=ref.current.getContext("2d");const p=pos(e);c.beginPath();c.moveTo(p.x,p.y);e.preventDefault();};
+  const move=(e)=>{if(!drawing.current)return;const c=ref.current.getContext("2d");c.lineWidth=2.2;c.lineCap="round";c.strokeStyle="#1c1917";const p=pos(e);c.lineTo(p.x,p.y);c.stroke();dirty.current=true;e.preventDefault();};
+  const up=()=>{drawing.current=false;};
+  const clear=()=>{const c=ref.current.getContext("2d");c.clearRect(0,0,ref.current.width,ref.current.height);dirty.current=false;};
+  const save=()=>{if(!dirty.current)return;onSave(ref.current.toDataURL("image/png"));};
+  return (<div className="border border-stone-200 rounded-lg p-3 bg-white space-y-2">
+    <div className="text-[10px] uppercase tracking-widest text-stone-400">Draw your signature</div>
+    <canvas ref={ref} width={420} height={130} className="border border-dashed border-stone-300 rounded bg-white touch-none w-full max-w-[420px]"
+      onMouseDown={down} onMouseMove={move} onMouseUp={up} onMouseLeave={up} onTouchStart={down} onTouchMove={move} onTouchEnd={up}/>
+    <div className="flex gap-2">
+      <button onClick={save} className="text-xs bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-3 py-1.5 font-medium">Save signature</button>
+      <button onClick={clear} className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200">Clear</button>
+      <button onClick={onClose} className="text-xs text-stone-400 hover:text-stone-600 px-1">Close</button>
+    </div>
+  </div>);
+}
+function AssetLibrary({settings,setSettings}){
+  const assets=settings.docAssets||[];
+  const [pad,setPad]=useState(false);
+  const add=(type,name,data)=>setSettings(p=>({...p,docAssets:[{id:"as"+Date.now(),type,name,data},...(p.docAssets||[])]}));
+  const del=(id)=>setSettings(p=>({...p,docAssets:(p.docAssets||[]).filter(a=>a.id!==id)}));
+  const Up=({type,label,maxW})=>(<label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">{label}
+    <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b64)=>add(type,f.name.replace(/\.[a-z]+$/i,""),b64),maxW);e.target.value="";}}/>
+  </label>);
+  return (<Panel title="Signatures, letterhead & attachments">
+    <div className="flex flex-wrap gap-2">
+      <button onClick={()=>setPad(v=>!v)} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">✍️ Draw a signature</button>
+      <Up type="signature" label="Upload signature image" maxW={500}/>
+      <Up type="letterhead" label="Upload letterhead" maxW={1400}/>
+      <Up type="image" label="Upload attachment image" maxW={1200}/>
+    </div>
+    {pad&&<div className="mt-2"><SignaturePad onSave={(b64)=>{add("signature","Signature "+new Date().toLocaleDateString(),b64);setPad(false);}} onClose={()=>setPad(false)}/></div>}
+    {assets.length>0&&<div className="grid sm:grid-cols-2 gap-2 mt-3">
+      {assets.map(a=>(<div key={a.id} className="border border-stone-200 rounded-lg p-2 flex items-center gap-2">
+        <img src={a.data} alt={a.name} className="h-9 max-w-[130px] object-contain bg-white border border-stone-100 rounded"/>
+        <div className="flex-1 min-w-0"><div className="text-xs font-medium text-stone-700 truncate">{a.name}</div><div className="text-[10px] uppercase tracking-widest text-stone-400">{a.type}</div></div>
+        <button onClick={()=>del(a.id)} className="text-stone-300 hover:text-rose-500">×</button>
+      </div>))}
+    </div>}
+    <div className="text-[11px] text-stone-400 mt-2">Saved here once — then one click stamps them onto any commercial invoice or document below. Images only (PNG/JPG); merging whole PDF files isn't possible in the browser.</div>
+  </Panel>);
+}
+function AssetChips({settings,sel,onSel}){
+  const assets=settings.docAssets||[];
+  if(!assets.length)return <div className="text-[11px] text-stone-400">No saved signatures or letterhead yet — add them under Settings → Other documents.</div>;
+  const tog=(a)=>{ if(a.type==="signature")onSel({...sel,signature:sel.signature===a.data?"":a.data});
+    else if(a.type==="letterhead")onSel({...sel,letterhead:sel.letterhead===a.data?"":a.data});
+    else {const set=new Set(sel.attach||[]);set.has(a.id)?set.delete(a.id):set.add(a.id);onSel({...sel,attach:[...set]});} };
+  const on=(a)=>a.type==="signature"?sel.signature===a.data:a.type==="letterhead"?sel.letterhead===a.data:(sel.attach||[]).includes(a.id);
+  return (<div className="flex flex-wrap gap-1.5">
+    {assets.map(a=>(<button key={a.id} onClick={()=>tog(a)} className={`inline-flex items-center gap-1.5 text-xs rounded-full pl-1.5 pr-2.5 py-1 border font-medium ${on(a)?"bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]":"bg-stone-50 text-stone-500 border-stone-200 hover:border-stone-300"}`}>
+      <img src={a.data} alt="" className="h-4 max-w-[40px] object-contain"/>{a.type==="signature"?"Sign: ":a.type==="letterhead"?"Letterhead: ":"Attach: "}{a.name}{on(a)?" ✓":""}
+    </button>))}
+  </div>);
+}
+
 function CIEditor({settings,setSettings,shipments}){
   const intl=(shipments||[]).filter(sh=>sh.recipient&&sh.recipient.country&&!["US","United States"].includes(sh.recipient.country));
   const blank=()=>({exporter:{name:(settings.sender&&settings.sender.name)||"",company:(settings.sender&&settings.sender.company)||settings.company||"",address1:(settings.sender&&settings.sender.address1)||"",city:(settings.sender&&settings.sender.city)||"",state:(settings.sender&&settings.sender.state)||"",zip:(settings.sender&&settings.sender.zip)||"",phone:(settings.sender&&settings.sender.phone)||""},
@@ -5940,6 +6018,18 @@ function CIEditor({settings,setSettings,shipments}){
     invoiceNo:"",date:new Date().toLocaleDateString(),reason:"Sale",incoterm:INCOTERMS[1],samples:false,notes:"",weight:"",
     rows:[{name:"",qty:1,unit:0,hs:"",origin:"United States"}]});
   const [doc,setDoc]=useState(blank());
+  const [hsBusy,setHsBusy]=useState(-1);
+  const [hsMsg,setHsMsg]=useState(null);
+  const suggestHS=async(i)=>{ const r0=doc.rows[i]; if(!r0||!r0.name)return;
+    setHsBusy(i); setHsMsg(null);
+    try{ const rs=await fetch("/.netlify/functions/hs-lookup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({description:r0.name,destination:doc.consignee.country||""})});
+      const d=await rs.json();
+      if(d&&d.ok&&d.code){ setRow(i,{hs:d.code}); setHsMsg({ok:`${d.code} — ${d.reason||"suggested"} (verify before filing; classification is the shipper's responsibility)`}); }
+      else setHsMsg({err:(d&&d.error)||"Lookup failed — is ANTHROPIC_API_KEY set on Netlify?"});
+    }catch(e){ setHsMsg({err:"Lookup failed — is ANTHROPIC_API_KEY set on Netlify?"}); }
+    setHsBusy(-1);
+  };
+  const resolveAttach=(sel)=>((settings.docAssets||[]).filter(a=>(sel.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data})));
   const [loadedFrom,setLoadedFrom]=useState("");
   const loadShipment=(id)=>{
     const sh=intl.find(x=>String(x.id)===String(id)); if(!sh)return;
@@ -5957,7 +6047,7 @@ function CIEditor({settings,setSettings,shipments}){
   const total=doc.rows.reduce((a,r)=>a+(+r.unit||0)*(+r.qty||0),0);
   const print=()=>{
     const o={name:doc.invoiceNo||"CI-"+Date.now(),customer:doc.consignee.name,company:doc.consignee.company,address1:doc.consignee.address1,city:doc.consignee.city,state:doc.consignee.state,zip:doc.consignee.zip,country:doc.consignee.country,phone:doc.consignee.phone,email:doc.consignee.email,weight:doc.weight,lineItems:doc.rows.map(r=>({name:r.name,quantity:+r.qty||1,price:String(r.unit||0)}))};
-    printCommercialInvoice(o,[],{...doc.exporter},{reason:doc.reason,incoterm:doc.incoterm,samples:doc.samples,notes:doc.notes,rows:doc.rows.map(r=>({name:r.name,qty:+r.qty||1,unit:+r.unit||0,hs:r.hs,origin:r.origin}))});
+    printCommercialInvoice(o,[],{...doc.exporter},{reason:doc.reason,incoterm:doc.incoterm,samples:doc.samples,notes:doc.notes,currency:doc.currency,packages:doc.packages,freight:doc.freight,insurance:doc.insuranceAmt,marks:doc.marks,broker:doc.broker,signature:doc.signature,letterhead:doc.letterhead,attachImgs:resolveAttach(doc),proforma:doc.proforma,rows:doc.rows.map(r=>({name:r.name,qty:+r.qty||1,unit:+r.unit||0,hs:r.hs,origin:r.origin}))});
   };
   const In=({v,on,ph,cls})=>(<input value={v} onChange={e=>on(e.target.value)} placeholder={ph} className={`bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 ${cls||"w-full"}`}/>);
   return (<div className="max-w-3xl space-y-4">
@@ -5970,6 +6060,9 @@ function CIEditor({settings,setSettings,shipments}){
         </select>
         <button onClick={()=>{setDoc(blank());setLoadedFrom("");}} className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200">Start blank</button>
         {loadedFrom&&<span className="text-xs text-emerald-700">Loaded from {loadedFrom} — edit anything below.</span>}
+        <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Open a past invoice PDF for reference
+          <input type="file" accept="application/pdf,image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;try{window.open(URL.createObjectURL(f),"_blank");}catch(_){/**/}e.target.value="";}}/>
+        </label>
       </div>
     </Panel>
     <Panel title="Exporter / shipper">
@@ -5995,20 +6088,34 @@ function CIEditor({settings,setSettings,shipments}){
         <select value={doc.incoterm} onChange={e=>setDoc(d=>({...d,incoterm:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">{INCOTERMS.map(r=><option key={r}>{r}</option>)}</select>
         <In v={doc.weight} on={v=>setDoc(d=>({...d,weight:v}))} ph="Gross weight (lb)"/>
       </div>
+      <div className="grid sm:grid-cols-5 gap-2 mt-2">
+        <select value={doc.currency||"USD"} onChange={e=>setDoc(d=>({...d,currency:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">{["USD","CAD","EUR","GBP","MXN","AUD"].map(x=><option key={x}>{x}</option>)}</select>
+        <In v={doc.packages||""} on={v=>setDoc(d=>({...d,packages:v}))} ph="Packages"/>
+        <In v={doc.freight||""} on={v=>setDoc(d=>({...d,freight:v}))} ph="Freight $"/>
+        <In v={doc.insuranceAmt||""} on={v=>setDoc(d=>({...d,insuranceAmt:v}))} ph="Insurance $"/>
+        <In v={doc.marks||""} on={v=>setDoc(d=>({...d,marks:v}))} ph="Marks & nos"/>
+      </div>
+      <In v={doc.broker||""} on={v=>setDoc(d=>({...d,broker:v}))} ph="Customs broker contact (optional)" cls="w-full mt-2"/>
+      <div className="mt-2"><AssetChips settings={settings} sel={doc} onSel={(v)=>setDoc(d=>({...d,...v}))}/></div>
       <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700 mt-2"><input type="checkbox" checked={doc.samples} onChange={e=>setDoc(d=>({...d,samples:e.target.checked}))} className="accent-[#0086E0]"/>Print big "SAMPLES — NOT FOR RESALE" banner</label>
+      <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700 mt-1"><input type="checkbox" checked={!!doc.proforma} onChange={e=>setDoc(d=>({...d,proforma:e.target.checked}))} className="accent-[#0086E0]"/>Print as PROFORMA invoice (quote / pre-shipment)</label>
       {(doc.reason==="Sample"||doc.samples)&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mt-1">Tip: declare at least $10 value per sample item.</div>}
       <textarea value={doc.notes} onChange={e=>setDoc(d=>({...d,notes:e.target.value}))} rows={2} placeholder="Custom notes printed on the invoice…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 mt-2"/>
     </Panel>
     <Panel title="Line items">
+      <datalist id="sc-prod-list-ci">{(settings.products||[]).map(pr=><option key={pr.id} value={pr.name}>{(pr.sku?pr.sku+" · ":"")+(pr.hs?("HS "+pr.hs):"no HS yet")}</option>)}</datalist>
+      <datalist id="sc-hts-list-ci">{[...new Set([...(settings.products||[]).map(pr=>pr.hs).filter(Boolean),...HTS_SUGGEST.map(h=>h.code)])].map(c=><option key={c} value={c}/>)}</datalist>
       <div className="hidden sm:flex text-[10px] uppercase tracking-wide text-stone-400 px-1 gap-2"><div className="flex-1">Description</div><div className="w-14">Qty</div><div className="w-20">Unit $</div><div className="w-24">HS code</div><div className="w-32">Origin</div><div className="w-5"/></div>
       {doc.rows.map((r,i)=>(<div key={i} className="flex flex-wrap sm:flex-nowrap gap-2 items-center mt-1.5">
-        <In v={r.name} on={v=>setRow(i,{name:v})} ph="Item description" cls="flex-1 min-w-0"/>
+        <input value={r.name} onChange={e=>{const v=e.target.value;const hit=(settings.products||[]).find(pr=>pr.name===v||pr.sku===v);if(hit)setRow(i,{name:hit.name,hs:hit.hs||r.hs,origin:hit.origin==="US"?"United States":(hit.origin||r.origin),unit:+r.unit||+hit.value||0});else setRow(i,{name:v});}} list="sc-prod-list-ci" placeholder="Item description — type or pick a product" className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
         <In v={r.qty} on={v=>setRow(i,{qty:v})} ph="1" cls="w-14"/>
         <In v={r.unit} on={v=>setRow(i,{unit:v})} ph="0.00" cls="w-20"/>
-        <In v={r.hs} on={v=>setRow(i,{hs:v})} ph="HS" cls="w-24"/>
+        <input value={r.hs} onChange={e=>setRow(i,{hs:e.target.value})} list="sc-hts-list-ci" placeholder="HS" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+        <button onClick={()=>suggestHS(i)} disabled={!r.name||hsBusy===i} title="Ask Claude to classify this item" className="text-xs text-[#006FBF] hover:underline disabled:opacity-40 whitespace-nowrap">{hsBusy===i?"…":"✨ HS"}</button>
         <select value={r.origin} onChange={e=>setRow(i,{origin:e.target.value})} className="w-32 bg-white border border-stone-200 rounded-lg px-1 py-1.5 text-sm outline-none focus:border-[#0099FF]">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
         <button onClick={()=>setDoc(d=>({...d,rows:d.rows.filter((_,j)=>j!==i)}))} className="text-stone-300 hover:text-rose-500">×</button>
       </div>))}
+      {hsMsg&&<div className={`text-[11px] mt-1.5 rounded px-2 py-1 border ${hsMsg.err?"text-rose-700 bg-rose-50 border-rose-200":"text-emerald-700 bg-emerald-50 border-emerald-200"}`}>{hsMsg.err||hsMsg.ok}</div>}
       <div className="flex items-center justify-between mt-2">
         <button onClick={()=>setDoc(d=>({...d,rows:[...d.rows,{name:"",qty:1,unit:0,hs:"",origin:"United States"}]}))} className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200">+ Add line</button>
         <div className="text-sm font-mono text-stone-700">Declared: ${total.toFixed(2)}</div>
@@ -6040,16 +6147,19 @@ function OtherDocs({settings,setSettings}){
       .co{font-size:18px;font-weight:800;} .meta{font-size:11px;color:#78716c;text-align:right;}
       h1{font-size:15px;letter-spacing:.08em;margin:26px 0 14px;} .body{white-space:pre-wrap;}
       .sig{margin-top:56px;display:flex;gap:48px;font-size:11px;color:#78716c;} .line{border-top:1px solid #a8a29e;padding-top:4px;flex:1;}</style></head><body>
-      <div class="lh"><div>${settings.companyLogo?`<img src="${settings.companyLogo}" style="height:34px;"/>`:`<div class="co">${esc(settings.company||sn.company||"")}</div>`}</div>
-      <div class="meta">${esc(sn.address1||"")}<br/>${esc([sn.city,sn.state,sn.zip].filter(Boolean).join(", "))}<br/>${esc(sn.phone||"")}${settings.supportEmail?` · ${esc(settings.supportEmail)}`:""}</div></div>
+      ${d.letterhead?`<img src="${d.letterhead}" style="width:100%;max-height:130px;object-fit:contain;object-position:left;margin-bottom:6px;"/>`:`<div class="lh"><div>${settings.companyLogo?`<img src="${settings.companyLogo}" style="height:34px;"/>`:`<div class="co">${esc(settings.company||sn.company||"")}</div>`}</div>
+      <div class="meta">${esc(sn.address1||"")}<br/>${esc([sn.city,sn.state,sn.zip].filter(Boolean).join(", "))}<br/>${esc(sn.phone||"")}${settings.supportEmail?` · ${esc(settings.supportEmail)}`:""}</div></div>`}
       ${d.title?`<h1>${esc(d.title)}</h1>`:""}
       <div class="body">${esc(d.body)}</div>
       <div style="margin-top:24px;font-size:12px;">Date: ${new Date().toLocaleDateString()}</div>
-      ${d.sigLines?`<div class="sig"><div class="line">Signature — ${esc(sn.name||settings.company||"")}</div><div class="line">Printed name & title</div></div>`:""}
+      ${d.signature?`<div style="margin-top:30px;"><img src="${d.signature}" style="height:52px;object-fit:contain;"/></div>`:""}
+      ${d.sigLines?`<div class="sig" style="margin-top:${d.signature?"4px":"56px"};"><div class="line">Signature — ${esc(sn.name||settings.company||"")}</div><div class="line">Printed name & title</div></div>`:""}
+      ${(d.attach&&d.attach.length)?((settings.docAssets||[]).filter(a=>d.attach.includes(a.id)).map(a=>`<div style="page-break-before:always;padding-top:12px;"><div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#78716c;">Attachment — ${esc(a.name)}</div><img src="${a.data}" style="max-width:100%;max-height:88vh;object-fit:contain;"/></div>`).join("")):""}
       <script>window.onload=()=>window.print();</`+`script></body></html>`;
     const w=window.open("","_blank"); if(!w)return; w.document.write(html); w.document.close();
   };
   return (<div className="max-w-3xl space-y-4">
+    <AssetLibrary settings={settings} setSettings={setSettings}/>
     <div className="text-sm text-stone-500">Build, save, and print letterheaded documents — shipper waivers, declarations, letters of instruction. Printing uses your browser's print dialog: choose "Save as PDF" there for a file.</div>
     <Panel title="Start from a template">
       <div className="grid sm:grid-cols-3 gap-2">
@@ -6071,6 +6181,7 @@ function OtherDocs({settings,setSettings}){
         <input value={cur.title} onChange={e=>setCur(c=>({...c,title:e.target.value}))} placeholder="Printed title (e.g. SIGNATURE RELEASE AUTHORIZATION)" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
         <textarea value={cur.body} onChange={e=>setCur(c=>({...c,body:e.target.value}))} rows={12} placeholder="Body text — [bracketed] placeholders are just prompts, replace them with your details." className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 font-mono"/>
         <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700"><input type="checkbox" checked={!!cur.sigLines} onChange={e=>setCur(c=>({...c,sigLines:e.target.checked}))} className="accent-[#0086E0]"/>Include signature lines</label>
+        <AssetChips settings={settings} sel={cur} onSel={(v)=>setCur(c=>({...c,...v}))}/>
         <div className="flex gap-2">
           <button onClick={save} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200">Save</button>
           <button onClick={()=>print(cur)} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-3.5 py-1.5 font-medium flex items-center gap-1.5"><FileText className="w-4 h-4"/>Print / Save as PDF</button>

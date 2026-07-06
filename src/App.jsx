@@ -40,7 +40,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v174";
+const BUILD_TAG="addr-v175";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -2672,10 +2672,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const shipSuggestHS=async(i)=>{ const l0=customs.lines[i]; if(!l0||!l0.desc)return;
     setShipHsBusy(i); setShipHsMsg(null);
     try{ const rs=await fetch("/.netlify/functions/hs-lookup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({description:l0.desc,destination:receiver.country||""})});
+      if(rs.status===404){setShipHsMsg({err:"The AI lookup isn't deployed yet: commit netlify/functions/hs-lookup.js to the repo, then add ANTHROPIC_API_KEY on Netlify and redeploy."});setShipHsBusy(-1);return;}
       const d=await rs.json();
       if(d&&d.ok&&d.code){ setLine(i,{hts:d.code}); setShipHsMsg({ok:`${d.code} — ${d.reason||"suggested"} (verify before filing; classification is the shipper's responsibility)`}); }
-      else setShipHsMsg({err:(d&&d.error)||"Lookup failed — is ANTHROPIC_API_KEY set on Netlify?"});
-    }catch(e){ setShipHsMsg({err:"Lookup failed — is ANTHROPIC_API_KEY set on Netlify?"}); }
+      else setShipHsMsg({err:(d&&d.error)||"Lookup failed — is ANTHROPIC_API_KEY set on Netlify (non-secret) with a redeploy after?"});
+    }catch(e){ setShipHsMsg({err:"Lookup failed — likely hs-lookup.js isn't committed or ANTHROPIC_API_KEY isn't set on Netlify."}); }
     setShipHsBusy(-1);
   };
   const [customs,setCustoms]=useState({reason:"Sale",incoterm:INCOTERMS[1],dutiesBill:"sender",lines:[{desc:"",hts:"",origin:"United States",qty:1,value:"",weight:""}]});
@@ -3025,9 +3026,6 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             <div className="flex flex-wrap items-center gap-3">
               <Field label="Package marks"><input value={customs.marks||""} onChange={e=>setCustoms({...customs,marks:e.target.value})} placeholder="Carton 1 of 3" className="w-40 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
               {customs.reason==="Sample"&&<label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700 mt-4"><input type="checkbox" checked={customs.samples!==false} onChange={e=>setCustoms({...customs,samples:e.target.checked})} className="accent-[#0086E0]"/>Print big "SAMPLES — NOT FOR RESALE" banner</label>}
-              <button onClick={()=>printShipCI(true)} className="mt-4 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>View invoice</button>
-              <button onClick={()=>printShipCI()} className="mt-4 text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-3 py-1.5 font-medium flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Print commercial invoice</button>
-              <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700 mt-4"><input type="checkbox" checked={!!customs.autoPrint} onChange={e=>setCustoms({...customs,autoPrint:e.target.checked})} className="accent-[#0086E0]"/>Auto-print invoice after the label</label>
             </div>
             <Field label="Invoice notes"><textarea value={customs.notes||""} onChange={e=>setCustoms({...customs,notes:e.target.value})} rows={2} placeholder="Custom notes printed on the invoice — license numbers, 'samples for exhibition use only'…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
             <AssetChips settings={settings||{}} sel={customs} onSel={(v)=>setCustoms(c=>({...c,...v}))}/>
@@ -3037,21 +3035,28 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Change letterhead<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"letterhead",name:f.name.replace(/\.[a-z]+$/i,""),data:b},...(pp.docAssets||[])]})),1400);e.target.value="";}}/></label>
             </div>
             {shipPad&&<SignaturePad onSave={(b64)=>{setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"signature",name:"Signature "+new Date().toLocaleDateString(),data:b64},...(pp.docAssets||[])]}));setShipPad(false);}} onClose={()=>setShipPad(false)}/>}
+            <div className="flex flex-wrap items-center gap-2 border-t border-stone-100 pt-3">
+              <button onClick={()=>printShipCI(true)} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3.5 py-2 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-4 h-4"/>View invoice</button>
+              <button onClick={()=>printShipCI()} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5"><Receipt className="w-4 h-4"/>Print commercial invoice</button>
+              <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700 ml-1"><input type="checkbox" checked={!!customs.autoPrint} onChange={e=>setCustoms({...customs,autoPrint:e.target.checked})} className="accent-[#0086E0]"/>Auto-print after the label</label>
+              <span className="text-[11px] text-stone-400 w-full">Highlighted fields are required on the customs invoice.</span>
+            </div>
             {(customs.reason==="Sample"||customs.samples)&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">Tip: declare at least $10 value per sample item — $0/$1 values are a top cause of customs holds.</div>}
-            {shipHsMsg&&<div className={`text-[11px] rounded px-2 py-1 border ${shipHsMsg.err?"text-rose-700 bg-rose-50 border-rose-200":"text-emerald-700 bg-emerald-50 border-emerald-200"}`}>{shipHsMsg.err||shipHsMsg.ok}</div>}
+
             <div className="space-y-1.5">
               <div className="hidden sm:flex text-[10px] uppercase tracking-wide text-stone-400 px-1 gap-2"><div className="flex-1">Description</div><div className="w-28">HTS code</div><div className="w-28">Origin</div><div className="w-12">Qty</div><div className="w-16">Unit $</div><div className="w-5"/></div>
               {customs.lines.map((l,i)=>(
                 <div key={i} className="flex flex-wrap sm:flex-nowrap gap-2 items-center">
-                  <input value={l.desc} onChange={e=>{const v=e.target.value;const hit=((settings&&settings.products)||[]).find(pr=>pr.name===v||pr.sku===v);if(hit){setLine(i,{desc:hit.name,hts:hit.hs||l.hts,origin:hit.origin==="US"?"United States":(hit.origin||l.origin),value:l.value||String(hit.value||"")});}else setLine(i,{desc:v});}} list="sc-prod-list" placeholder="Item description — type or pick a product" className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/>
+                  <input value={l.desc} onChange={e=>{const v=e.target.value;const hit=((settings&&settings.products)||[]).find(pr=>pr.name===v||pr.sku===v);if(hit){setLine(i,{desc:hit.name,hts:hit.hs||l.hts,origin:hit.origin==="US"?"United States":(hit.origin||l.origin),value:l.value||String(hit.value||"")});}else setLine(i,{desc:v});}} list="sc-prod-list" placeholder="Item description — type or pick a product" className={`flex-1 min-w-0 border rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 ${!l.desc?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-200"}`}/>
                   <button onClick={()=>shipSuggestHS(i)} disabled={!l.desc||shipHsBusy===i} title="Claude reads the item description and suggests an HTS code" className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap self-center">{shipHsBusy===i?"Searching…":"✨ Search HTS codes"}</button>
                   <input value={l.hts} onChange={e=>setLine(i,{hts:e.target.value})} list="htscodes" placeholder="HTS" className="w-28 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
                   <select value={l.origin} onChange={e=>setLine(i,{origin:e.target.value})} className="w-28 bg-white border border-stone-200 rounded-lg px-1 py-1.5 text-sm outline-none focus:border-[#0099FF]">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
-                  <input type="number" value={l.qty} onChange={e=>setLine(i,{qty:+e.target.value})} className="w-12 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
-                  <input type="number" value={l.value} onChange={e=>setLine(i,{value:e.target.value})} placeholder="0.00" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+                  <input type="number" value={l.qty} onChange={e=>setLine(i,{qty:+e.target.value})} className={`w-12 border rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] ${!(+l.qty)?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-200"}`}/>
+                  <input type="number" value={l.value} onChange={e=>setLine(i,{value:e.target.value})} placeholder="0.00" className={`w-16 border rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] ${!(+l.value)?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-200"}`}/>
                   <button onClick={()=>delLine(i)} className="text-stone-300 hover:text-rose-500 w-5"><X className="w-4 h-4"/></button>
                 </div>
               ))}
+              {shipHsMsg&&<div className={`text-[11px] rounded px-2 py-1 border ${shipHsMsg.err?"text-rose-700 bg-rose-50 border-rose-200":"text-emerald-700 bg-emerald-50 border-emerald-200"}`}>{shipHsMsg.err||shipHsMsg.ok}</div>}
               <datalist id="htscodes">{[...new Set(((settings&&settings.products)||[]).map(pr=>pr.hs).filter(Boolean))].map(c=><option key={"p"+c} value={c}/>)}{HTS_SUGGEST.map(h=><option key={h.code} value={h.code}>{h.desc}</option>)}</datalist>
               <button onClick={addLine} className="flex items-center gap-1 text-xs bg-white border border-stone-200 hover:bg-stone-100 rounded-lg px-2.5 py-1.5 font-medium text-stone-700"><Plus className="w-3.5 h-3.5"/>Add item</button>
             </div>

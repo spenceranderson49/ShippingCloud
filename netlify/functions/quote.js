@@ -1,295 +1,206 @@
 /* ════════════════════════════════════════════════════════════════════════
-   POST /.netlify/functions/quote   —   live England (FedEx/UPS) rates
-   ------------------------------------------------------------------------
-   Rock Solid / eCommerce Webship API. Sends the FULL documented quote body
-   (so no required field is missing), auth via "Authorization: RSIS <key>",
-   requests FedEx + UPS, merges, and surfaces England's real error if any.
-   Auto-retries the signatureOptionCode value so an enum mismatch can't fail.
-   Always returns HTTP 200 with JSON.
+   quote.js — addr-v228 — DIRECT FEDEX RATES (replaces the England/Rock Solid quote)
+   Same endpoint, same request/response contract the app has always used:
+     in:  {carriers, fromZip, toZip, fromCountry, toCountry, residential,
+           packageTypeCode, pieces:[{weight,length,width,height}], account:{...}}
+     out: {live:true, rates:[{key,carrier,carrierCode,serviceCode,label,cost,list,
+           packageTypeCode,minDays,maxDays,surcharges:[{label,amount}]}]}
+   cost = ACCOUNT rate on your FedEx account number (your raw England-billed rate).
+   list = FedEx published LIST rate from the same call (powers "FedEx list − %").
+   Env vars (Netlify, set as NORMAL non-secret, redeploy after changing):
+     FEDEX_CLIENT_ID, FEDEX_CLIENT_SECRET, FEDEX_ACCOUNT, FEDEX_ENV ("production" default, "sandbox" for testing)
    ════════════════════════════════════════════════════════════════════════ */
 
-const J = (obj) => ({ statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) });
-const CARRIER_NAME = { FEDEX: "FedEx", UPS: "UPS", USPS: "USPS", DHL: "DHL" };
-const carrierName = (c) => { const k = String(c || "").toUpperCase(); return CARRIER_NAME[k] || (k ? k[0] + k.slice(1).toLowerCase() : "FedEx"); };
-const num = (...v) => { for (const x of v) { const n = Number(x); if (!isNaN(n) && n > 0) return n; } return undefined; };
-const S = (n) => String(n);
+const ENV = (process.env.FEDEX_ENV || "production").toLowerCase();
+const BASE = ENV === "sandbox" ? "https://apis-sandbox.fedex.com" : "https://apis.fedex.com";
+const CLIENT_ID = process.env.FEDEX_CLIENT_ID || process.env.FEDEX_API_KEY || process.env.FEDEX_KEY || "";
+const CLIENT_SECRET = process.env.FEDEX_CLIENT_SECRET || process.env.FEDEX_SECRET_KEY || process.env.FEDEX_SECRET || "";
+const ACCOUNT = process.env.FEDEX_ACCOUNT || process.env.FEDEX_ACCOUNT_NUMBER || process.env.FEDEX_ACCT || "";
 
-/* ════════════════════════════════════════════════════════════════════════
-   READ-THROUGH RATE CACHE  (Netlify Blobs, dependency-free & best-effort)
-   ------------------------------------------------------------------------
-   Every entry is a REAL England quote response keyed by the exact inputs
-   that change the price. Repeat lanes serve in ms; a miss falls through to
-   live England (identical to before) and stores the result. If Blobs is
-   unavailable for any reason, everything degrades silently to live quoting —
-   the cache can never break a quote.
-   • Signature / Saturday / insurance are NOT in the key: England ignores them
-     at quote time (they're applied client-side), so leaving them out is both
-     correct and raises the hit rate.
-   • To wipe the whole cache at once (e.g. after a FedEx GRI or a fuel change),
-     bump CACHE_VERSION below ("v1" → "v2") and re-upload this one file.
-   ════════════════════════════════════════════════════════════════════════ */
-const CACHE_STORE = "rate-cache";
-const CACHE_VERSION = "v1";                    // ← bump to invalidate ALL cached rates
-// TTL backstop default 6h (the warmer re-quotes frequent lanes far more often than this).
-// Tunable WITHOUT code changes: set Netlify env var RATE_CACHE_TTL_MINUTES (e.g. 120). 0 disables caching.
-const CACHE_TTL_MS = (() => { const m = parseInt(process.env.RATE_CACHE_TTL_MINUTES, 10); return (isNaN(m) || m < 0 ? 360 : m) * 60 * 1000; })();
-
-function blobsCtx() {
-  try {
-    const raw = process.env.NETLIFY_BLOBS_CONTEXT;
-    if (!raw) return null;
-    const ctx = JSON.parse(Buffer.from(raw, "base64").toString("utf8"));
-    if (!ctx || !ctx.token || !ctx.siteID || !(ctx.edgeURL || ctx.apiURL)) return null;
-    return ctx;
-  } catch { return null; }
-}
-function blobUrl(ctx, key) {
-  const path = "/" + ctx.siteID + "/" + CACHE_STORE + "/" + encodeURIComponent(key);
-  if (ctx.edgeURL) return new URL(path, ctx.edgeURL).toString();
-  return new URL("/api/v1/blobs" + path, ctx.apiURL || "https://api.netlify.com").toString();
-}
-async function blobFetch(ctx, key, opts) {
-  const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 2500);
-  try { return await fetch(blobUrl(ctx, key), { ...opts, headers: { authorization: "Bearer " + ctx.token, ...(opts && opts.headers) }, signal: ctrl.signal }); }
-  finally { clearTimeout(t); }
-}
-// "Refresh rates" marker: any cache entry written BEFORE the marker is treated as gone.
-const flushKeyFor = (customerId) => "flush_" + CACHE_VERSION + "_" + String(customerId || "");
-async function cacheGet(key, flushKey) {
-  const ctx = blobsCtx(); if (!ctx) return null;
-  if (CACHE_TTL_MS === 0) return null;
-  try {
-    const [entryRes, markerRes] = await Promise.all([
-      blobFetch(ctx, key),
-      blobFetch(ctx, flushKey).catch(() => null),
-    ]);
-    if (!entryRes || !entryRes.ok) return null;              // 404 = miss
-    const j = await entryRes.json();
-    if (!j || !Array.isArray(j.rates) || !j.ts) return null;
-    if (Date.now() - j.ts > CACHE_TTL_MS) return null;       // stale by age
-    if (markerRes && markerRes.ok) {
-      const m = await markerRes.json().catch(() => null);
-      if (m && m.ts && j.ts <= m.ts) return null;            // written before last "Refresh rates" → gone
-    }
-    return j;
-  } catch { return null; }
-}
-async function cachePut(key, rates) {
-  const ctx = blobsCtx(); if (!ctx || CACHE_TTL_MS === 0) return;
-  try { await blobFetch(ctx, key, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ts: Date.now(), rates }) }); }
-  catch { /* best-effort: a failed write just means the next identical quote is a miss */ }
-}
-async function cacheFlush(customerId) {
-  const ctx = blobsCtx();
-  if (!ctx) return { ok: false, error: "Netlify Blobs isn't available on this site, so there's no cache to clear — all quotes are already pulling live from England." };
-  try {
-    const ts = Date.now();
-    const r = await blobFetch(ctx, flushKeyFor(customerId), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ts }) });
-    if (r && r.ok) return { ok: true, flushedAt: ts };
-    return { ok: false, error: "Could not write the refresh marker (HTTP " + (r && r.status) + ")." };
-  } catch (e) { return { ok: false, error: "Refresh failed: " + ((e && e.message) || String(e)) }; }
+let _tok = null; // {token, exp}
+async function getToken() {
+  if (_tok && Date.now() < _tok.exp - 60000) return _tok.token;
+  const r = await fetch(BASE + "/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "client_credentials", client_id: CLIENT_ID, client_secret: CLIENT_SECRET })
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.access_token) throw new Error("FedEx auth failed (" + r.status + "): " + (j.errors && j.errors[0] && j.errors[0].message || JSON.stringify(j).slice(0, 200)));
+  _tok = { token: j.access_token, exp: Date.now() + ((+j.expires_in || 3000) * 1000) };
+  return _tok.token;
 }
 
-/* ── Lane tracking for the auto-warmer ──────────────────────────────────────
-   Every real (non-warmer) quote records its lane: the exact re-quotable inputs,
-   how often it's used, and when it was last used. warm-rates.mjs reads these to
-   keep frequent lanes permanently fresh. NO SECRETS are stored — only the
-   customer ID; the warmer authenticates with the Netlify env vars. */
-function sanitizedLaneBody(body) {
-  const pieces = (Array.isArray(body.pieces) && body.pieces.length ? body.pieces : [{ weight: body.weight || 1, L: body.L || 12, W: body.W || 9, H: body.H || 4 }])
-    .map((p) => ({ weight: +p.weight || 1, length: +p.length || +p.L || 1, width: +p.width || +p.W || 1, height: +p.height || +p.H || 1 }));
-  return {
-    carriers: String(body.carriers || "fedex"),
-    fromZip: String(body.fromZip || "").trim(), fromCountry: body.fromCountry || "US",
-    toZip: String(body.toZip || "").trim(), toCountry: body.toCountry || "US",
-    ...(body.toCity ? { toCity: body.toCity } : {}), ...(body.toState ? { toState: body.toState } : {}),
-    residential: !!body.residential,
-    packageTypeCode: String(body.packageTypeCode || ""),
-    pieces,
-    account: { customerId: (body.account && body.account.customerId) || process.env.ENGLAND_CUSTOMER_ID || "" },
-  };
-}
-async function laneTouch(cacheKey, body) {
-  const ctx = blobsCtx(); if (!ctx || CACHE_TTL_MS === 0) return;
-  try {
-    const laneKey = "lane_" + cacheKey;
-    let count = 0;
-    try { const r = await blobFetch(ctx, laneKey); if (r && r.ok) { const j = await r.json(); count = (j && j.count) || 0; } } catch {}
-    await blobFetch(ctx, laneKey, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body: sanitizedLaneBody(body), count: count + 1, lastUsed: Date.now() }) });
-  } catch { /* best-effort */ }
-}
-function cacheKeyFor(body) {
-  const crypto = require("crypto");
-  const pcs = (Array.isArray(body.pieces) && body.pieces.length ? body.pieces : [{ weight: body.weight || 1, L: body.L || 12, W: body.W || 9, H: body.H || 4 }])
-    .map((p) => [S(+p.weight || 1), S(+p.length || +p.L || 1), S(+p.width || +p.W || 1), S(+p.height || +p.H || 1)].join("x"))
-    .join(",");
-  const carriers = String(body.carriers || "fedex").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean).sort().join("+");
-  const parts = [
-    CACHE_VERSION,
-    (body.account && body.account.customerId) || process.env.ENGLAND_CUSTOMER_ID || "",
-    carriers,
-    (body.fromCountry || "US") + ":" + String(body.fromZip || "").trim(),
-    (body.toCountry || "US") + ":" + String(body.toZip || "").trim(),
-    body.residential ? "R" : "C",
-    String(body.packageTypeCode || "").toLowerCase(),
-    pcs,
-  ].join("|");
-  return "q_" + CACHE_VERSION + "_" + crypto.createHash("sha1").update(parts).digest("hex");
-}
+/* serviceType → the labels/keys the app's canonSvc()/rateSvcKey() already parse */
+const SVC = {
+  FEDEX_GROUND:                       { key: "ground",              label: "FedEx Ground" },
+  GROUND_HOME_DELIVERY:               { key: "home",                label: "FedEx Home Delivery" },
+  SMART_POST:                         { key: "ground_economy",      label: "FedEx Ground Economy" },
+  FEDEX_GROUND_ECONOMY:               { key: "ground_economy",      label: "FedEx Ground Economy" },
+  FEDEX_EXPRESS_SAVER:                { key: "express_saver",       label: "FedEx Express Saver" },
+  FEDEX_2_DAY:                        { key: "2day",                label: "FedEx 2Day" },
+  FEDEX_2_DAY_AM:                     { key: "2day_am",             label: "FedEx 2Day A.M." },
+  STANDARD_OVERNIGHT:                 { key: "standard_overnight",  label: "FedEx Standard Overnight" },
+  PRIORITY_OVERNIGHT:                 { key: "priority_overnight",  label: "FedEx Priority Overnight" },
+  FIRST_OVERNIGHT:                    { key: "first_overnight",     label: "FedEx First Overnight" },
+  INTERNATIONAL_GROUND:               { key: "intl_ground_ca",      label: "FedEx International Ground" },
+  FEDEX_INTERNATIONAL_CONNECT_PLUS:   { key: "intl_connect_plus",   label: "FedEx International Connect Plus" },
+  INTERNATIONAL_ECONOMY:              { key: "intl_economy",        label: "FedEx International Economy" },
+  INTERNATIONAL_PRIORITY:             { key: "intl_priority",       label: "FedEx International Priority" },
+  FEDEX_INTERNATIONAL_PRIORITY:       { key: "intl_priority",       label: "FedEx International Priority" },
+  FEDEX_INTERNATIONAL_PRIORITY_EXPRESS:{ key: "intl_priority_express", label: "FedEx International Priority Express" },
+  INTERNATIONAL_FIRST:                { key: "intl_first",          label: "FedEx International First" },
+  FEDEX_FIRST_FREIGHT:                { key: "first_overnight_freight", label: "FedEx First Overnight Freight" },
+  FEDEX_1_DAY_FREIGHT:                { key: "1day_freight",        label: "FedEx 1Day Freight" },
+  FEDEX_2_DAY_FREIGHT:                { key: "2day_freight",        label: "FedEx 2Day Freight" },
+  FEDEX_3_DAY_FREIGHT:                { key: "3day_freight",        label: "FedEx 3Day Freight" },
+  INTERNATIONAL_PRIORITY_FREIGHT:     { key: "intl_priority_freight", label: "FedEx International Priority Freight" },
+  INTERNATIONAL_ECONOMY_FREIGHT:      { key: "intl_economy_freight", label: "FedEx International Economy Freight" }
+};
 
-// Map the app's internal One Rate box codes to FedEx's canonical packaging type codes.
-// FedEx One Rate pricing is only returned when a FedEx-branded packaging type is requested.
-const PKG_MAP = { fedex_envelope:"FEDEX_ENVELOPE", fedex_pak:"FEDEX_PAK", fedex_extra_small_box:"FEDEX_SMALL_BOX", fedex_small_box:"FEDEX_SMALL_BOX", fedex_medium_box:"FEDEX_MEDIUM_BOX", fedex_large_box:"FEDEX_LARGE_BOX", fedex_extra_large_box:"FEDEX_EXTRA_LARGE_BOX", fedex_tube:"FEDEX_TUBE" };
-const normPkg = (c) => { const k = String(c || "").toLowerCase(); return PKG_MAP[k] || (c || ""); };
+const TRANSIT_DAYS = {
+  ONE_DAY: 1, TWO_DAYS: 2, THREE_DAYS: 3, FOUR_DAYS: 4, FIVE_DAYS: 5, SIX_DAYS: 6, SEVEN_DAYS: 7,
+  EIGHT_DAYS: 8, NINE_DAYS: 9, TEN_DAYS: 10, ELEVEN_DAYS: 11, TWELVE_DAYS: 12, THIRTEEN_DAYS: 13,
+  FOURTEEN_DAYS: 14, FIFTEEN_DAYS: 15, SIXTEEN_DAYS: 16, SEVENTEEN_DAYS: 17, EIGHTEEN_DAYS: 18,
+  NINETEEN_DAYS: 19, TWENTY_DAYS: 20
+};
 
-function svcCodeFromName(name) {
-  const n = String(name || "").toLowerCase().replace(/[®™]/g, "").replace(/\(.*?\)/g, "").replace(/[^a-z0-9]+/g, " ").trim();
-  const map = [
-    ["home delivery", "fedex_home_delivery"], ["ground economy", "fedex_ground_economy"], ["ground", "fedex_ground"],
-    ["express saver", "fedex_express_saver"], ["2day am", "fedex_2_day_am"], ["2 day am", "fedex_2_day_am"],
-    ["2day", "fedex_2_day"], ["2 day", "fedex_2_day"], ["standard overnight", "fedex_standard_overnight"],
-    ["priority overnight", "fedex_priority_overnight"], ["first overnight", "fedex_first_overnight"],
-    ["international economy", "fedex_international_economy"], ["international priority", "fedex_international_priority"],
-    ["international first", "fedex_international_first"],
-  ];
-  for (const [k, v] of map) if (n.includes(k)) return v;
-  return "";
+function pickDetail(details, wantList) {
+  if (!Array.isArray(details)) return null;
+  const isList = (t) => /LIST/.test(String(t || ""));
+  const isAcct = (t) => /ACCOUNT|INCENTIVE|PREFERRED_ACCOUNT/.test(String(t || ""));
+  let d = details.find(x => wantList ? isList(x.rateType) : isAcct(x.rateType));
+  if (!d && !wantList) d = details.find(x => !isList(x.rateType)); // whatever isn't LIST
+  if (!d && !wantList) d = details[0];
+  return d || null;
 }
-function mapQuotes(data, cc) {
-  const quotes = (data && (data.quotes || data.rates)) || [];
-  if (!Array.isArray(quotes)) return [];
-  return quotes.map((q, i) => {
-    const amount = num(q.totalAmount, q.total, q.amount, q.baseAmount) || 0;
-    const desc = q.serviceDescription || q.serviceName || q.serviceCode || "Service";
-    const code = (q.serviceCode || desc).toString().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
-    const days = num(q.transitDays, q.deliveryDays, q.businessDaysInTransit);
-    const surcharges = Array.isArray(q.surcharges) ? q.surcharges.map((s) => ({ label: s.description || s.name || "Surcharge", amount: num(s.amount) || 0 })) : [];
-    const qwType = S(q.quotedWeightType || q.weightType || "").toLowerCase();
-    const carrierCode = q.carrierCode || q.carrier || cc || "";
-    const serviceCode = q.serviceCode || q.service || q.serviceType || q.svcCode || q.code || svcCodeFromName(desc);
-    const pkgCode = q.packageTypeCode || q.packageType || (carrierCode ? String(carrierCode).toLowerCase() + "_custom_package" : "");
-    return { key: code || ("svc_" + i), carrier: carrierName(carrierCode), carrierCode, serviceCode, packageTypeCode: pkgCode, label: desc, cost: Math.round(amount * 100) / 100, base: num(q.baseAmount) || null, surcharges, minDays: days, maxDays: days, zone: q.zone, quotedWeight: num(q.quotedWeight) || null, dimWeight: qwType.indexOf("dim") >= 0 };
-  }).filter((x) => x.cost > 0);
-}
+const netOf = (d) => {
+  if (!d) return null;
+  const v = d.totalNetChargeWithDutiesAndTaxes != null && +d.totalNetChargeWithDutiesAndTaxes > 0
+    ? null // prefer plain net charge below for domestic parity
+    : null;
+  const n = d.totalNetCharge != null ? +d.totalNetCharge : (d.totalNetFedExCharge != null ? +d.totalNetFedExCharge : null);
+  return (n == null || isNaN(n)) ? null : Math.round(n * 100) / 100;
+};
 
+/* ── per-site backend switch ─────────────────────────────────────────────
+   Set CARRIER_BACKEND=england in a Netlify site's env vars and this function
+   delegates every request to ./quote-england.js (the pre-cutover England/Rock Solid
+   implementation, restored from git history). Unset / "fedex" = direct FedEx. */
 exports.handler = async (event) => {
+  const respond = (code, obj) => ({ statusCode: code, headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) });
+  if ((process.env.CARRIER_BACKEND || "fedex").toLowerCase() === "england") {
+    try { return await require("./quote-england.js").handler(event); }
+    catch (e) {
+      const msg = "CARRIER_BACKEND=england is set but quote-england.js isn't deployed or failed: " + ((e && e.message) || e);
+      return respond(200, {live:false,error:msg,rates:[]});
+    }
+  }
+  if (event.httpMethod === "OPTIONS") return respond(200, { ok: true });
+  let body = {};
+  try { body = JSON.parse(event.body || "{}"); } catch (e) { return respond(200, { live: false, error: "Bad request body", rates: [] }); }
+
+  if (body.action === "flushCache") return respond(200, { ok: true, flushed: true });
+
+  if (!CLIENT_ID || !CLIENT_SECRET || !ACCOUNT) {
+    return respond(200, { live: false, error: "FedEx isn't configured: set FEDEX_CLIENT_ID, FEDEX_CLIENT_SECRET and FEDEX_ACCOUNT in Netlify (normal vars, then redeploy).", rates: [] });
+  }
+
+  const fromZip = String(body.fromZip || "").trim();
+  const toZip = String(body.toZip || "").trim();
+  if (!fromZip || !toZip) return respond(200, { live: false, error: "Origin and destination ZIP required", rates: [] });
+  const fromCountry = (body.fromCountry || "US").toUpperCase();
+  const toCountry = (body.toCountry || "US").toUpperCase();
+  const acct = String(body.fedexAccount || (body.account && body.account.fedexAccount) || ACCOUNT).replace(/\D/g, "") || ACCOUNT;
+  const pieces = (Array.isArray(body.pieces) && body.pieces.length ? body.pieces : [{ weight: 1, length: 12, width: 9, height: 4 }])
+    .map(p => ({
+      weight: { units: "LB", value: Math.max(0.1, +p.weight || 1) },
+      dimensions: { length: Math.max(1, Math.round(+p.length || 12)), width: Math.max(1, Math.round(+p.width || 9)), height: Math.max(1, Math.round(+p.height || 4)), units: "IN" }
+    }));
+
+  const req = {
+    accountNumber: { value: acct },
+    rateRequestControlParameters: { returnTransitTimes: true, rateSortOrder: "COMMITASCENDING" },
+    requestedShipment: {
+      shipper: { address: { postalCode: fromZip, countryCode: fromCountry } },
+      recipient: { address: { postalCode: toZip, countryCode: toCountry, residential: !!body.residential } },
+      pickupType: "USE_SCHEDULED_PICKUP",
+      rateRequestType: ["ACCOUNT", "LIST"],
+      requestedPackageLineItems: pieces
+    }
+  };
+
   try {
-    if (event.httpMethod === "OPTIONS") return { statusCode: 204, body: "" };
-    if (event.httpMethod !== "POST") return J({ live: false, error: "Use POST", rates: [] });
-
-    let body = {};
-    try { body = JSON.parse(event.body || "{}"); } catch { return J({ live: false, error: "Bad JSON body", rates: [] }); }
-
-    // ── "Refresh rates" button: invalidate every cached quote for this England account ──
-    if (body.action === "flushCache") {
-      const custId = (body.account && body.account.customerId) || process.env.ENGLAND_CUSTOMER_ID || "";
-      if (!custId) return J({ ok: false, error: "No England customer ID configured." });
-      const res = await cacheFlush(custId);
-      return J(res);
-    }
-
-    // ── read-through cache: serve a prior real England answer for identical inputs ──
-    const custIdForCache = (body.account && body.account.customerId) || process.env.ENGLAND_CUSTOMER_ID || "";
-    const cacheKey = cacheKeyFor(body);
-    const isWarm = !!body._warm; // warmer traffic must not count as real usage
-    if (!body.noCache) {
-      const [hit] = await Promise.all([cacheGet(cacheKey, flushKeyFor(custIdForCache)), isWarm ? null : laneTouch(cacheKey, body)]);
-      if (hit) return J({ live: true, cached: true, ts: hit.ts, rates: hit.rates });
-    } else if (!isWarm) {
-      await laneTouch(cacheKey, body);
-    }
-
-    const acct = body.account || {};
-    const base = (acct.base || process.env.ENGLAND_API_BASE || "https://englandship.rocksolidinternet.com").replace(/\/+$/, "");
-    const apiKey = (acct.apiKey || process.env.ENGLAND_API_KEY || "").trim();
-    const customerId = (acct.customerId || process.env.ENGLAND_CUSTOMER_ID || "").trim();
-    if (!apiKey || !customerId) return J({ live: false, error: "Missing England API key or customer ID.", rates: [] });
-
-    const pieces = (Array.isArray(body.pieces) && body.pieces.length ? body.pieces : [{ weight: body.weight || 1, L: body.L || 12, W: body.W || 9, H: body.H || 4 }])
-      .map((p) => ({
-        weight: S(+p.weight || 1),
-        length: S(+p.length || +p.L || 1),
-        width: S(+p.width || +p.W || 1),
-        height: S(+p.height || +p.H || 1),
-        insuranceAmount: S(+p.insuranceAmount || 0),
-        declaredValue: null,
-      }));
-
-    const receiver = { country: body.toCountry || "US", zip: String(body.toZip || "").trim() };
-    if (body.toCity) receiver.city = body.toCity;
-    if (body.toState) receiver.state = body.toState;
-
-    // Full documented quote body. signatureOptionCode filled per-attempt.
-    const mkBody = (cc, sig) => ({
-      carrierCode: cc,
-      serviceCode: "",
-      packageTypeCode: normPkg(body.packageTypeCode),
-      sender: { country: body.fromCountry || "US", zip: String(body.fromZip || "").trim() },
-      receiver,
-      residential: !!body.residential,
-      signatureOptionCode: sig,
-      saturdayDelivery: !!body.saturdayDelivery,
-      contentDescription: "Merchandise",
-      weightUnit: "lb",
-      dimUnit: "in",
-      currency: "USD",
-      customsCurrency: "USD",
-      pieces: (body.insuranceAmount ? pieces.map((p) => ({ ...p, insuranceAmount: String(body.insuranceAmount) })) : pieces),
-      billing: { party: "sender" },
-      providerAccountId: null,
+    const token = await getToken();
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 22000);
+    const r = await fetch(BASE + "/rate/v1/rates/quotes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token, "x-locale": "en_US" },
+      body: JSON.stringify(req),
+      signal: ctrl.signal
     });
-
-    const url = base + "/restapi/v1/customers/" + encodeURIComponent(customerId) + "/quote";
-    const headers = { "Content-Type": "application/json", "Authorization": "RSIS " + apiKey };
-
-    async function call(reqBody) {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 9000);
-      try {
-        const r = await fetch(url, { method: "POST", headers, body: JSON.stringify(reqBody), signal: ctrl.signal });
-        const text = await r.text();
-        let data = null; try { data = JSON.parse(text); } catch {}
-        return { ok: r.ok, status: r.status, data, text };
-      } catch (e) {
-        return { ok: false, status: 0, text: e.name === "AbortError" ? "timeout" : (e.message || "network error") };
-      } finally { clearTimeout(timer); }
+    clearTimeout(t);
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const msg = (j.errors && j.errors[0] && (j.errors[0].message || j.errors[0].code)) || ("FedEx rate error " + r.status);
+      return respond(200, { live: false, error: msg, rates: [], _status: r.status });
     }
-
-    // signature: use the app's chosen option; otherwise try "no signature" values
-    const sigPick = body.signatureOption && body.signatureOption !== "none" ? String(body.signatureOption) : null;
-    const sigCandidates = sigPick ? [sigPick, sigPick.toUpperCase(), "direct"] : ["none", "NONE", "no_signature_required", ""];
-    async function quoteCarrier(cc) {
-      let last = null;
-      for (const sig of sigCandidates) {
-        const res = await call(mkBody(cc, sig));
-        if (res.ok) return { ok: true, data: res.data };
-        const detail = (res.data && (res.data.error || res.data.message || res.data.errorMessage)) || (res.text || "").slice(0, 300);
-        last = { status: res.status, detail };
-        // only keep trying other signature values if THIS error is about signatureOptionCode
-        if (!/signatureOption/i.test(detail || "")) break;
+    const replies = (j.output && j.output.rateReplyDetails) || [];
+    const rates = [];
+    for (const rd of replies) {
+      const svc = SVC[rd.serviceType] || { key: String(rd.serviceType || "").toLowerCase(), label: String(rd.serviceName || rd.serviceType || "FedEx").replace(/[®™]/g, "").trim() };
+      const acctD = pickDetail(rd.ratedShipmentDetails, false);
+      const listD = pickDetail(rd.ratedShipmentDetails, true);
+      const cost = netOf(acctD);
+      const list = netOf(listD);
+      if (cost == null && list == null) continue;
+      let minDays = null, maxDays = null;
+      const tt = rd.operationalDetail && rd.operationalDetail.transitTime;
+      if (tt && TRANSIT_DAYS[tt]) { minDays = TRANSIT_DAYS[tt]; maxDays = TRANSIT_DAYS[tt]; }
+      /* Fee breakdown, England-style: FedEx puts surcharges either on the shipment
+         rate detail or per-package — harvest both, merge duplicates, clean labels. */
+      const rawSur = [];
+      if (acctD && acctD.shipmentRateDetail && Array.isArray(acctD.shipmentRateDetail.surCharges)) rawSur.push(...acctD.shipmentRateDetail.surCharges);
+      if (!rawSur.length && acctD && Array.isArray(acctD.ratedPackages)) {
+        acctD.ratedPackages.forEach(p => {
+          const prd = p.packageRateDetail || {};
+          (prd.surcharges || prd.surCharges || []).forEach(x => rawSur.push(x));
+        });
       }
-      return { ok: false, err: last };
+      const merged = {};
+      rawSur.forEach(x => {
+        const label = String(x.description || x.type || "Surcharge").replace(/_/g, " ").toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase()).replace(/\bFedex\b/g, "FedEx");
+        const amt = +((x.amount && x.amount.amount != null) ? x.amount.amount : x.amount) || 0;
+        if (amt) merged[label] = Math.round(((merged[label] || 0) + amt) * 100) / 100;
+      });
+      let surch = Object.keys(merged).map(label => ({ label, amount: merged[label] }));
+      if (!surch.length && acctD && acctD.shipmentRateDetail && +acctD.shipmentRateDetail.totalSurcharges > 0) {
+        surch = [{ label: "Carrier surcharges", amount: Math.round(+acctD.shipmentRateDetail.totalSurcharges * 100) / 100 }];
+      }
+      rates.push({
+        key: svc.key,
+        carrier: "FedEx",
+        carrierCode: "fedex",
+        serviceCode: rd.serviceType,
+        label: svc.label,
+        cost: cost != null ? cost : list,
+        list: list,
+        packageTypeCode: "",
+        minDays, maxDays,
+        base: cost != null ? Math.round((cost - surch.reduce((a, x) => a + x.amount, 0)) * 100) / 100 : null,
+        surcharges: surch,
+        _rateType: acctD && acctD.rateType || null
+      });
     }
-
-    const carriers = (body.carriers || acct.carriers || process.env.ENGLAND_CARRIERS || "fedex,dhl").split(",").map((s) => s.trim()).filter(Boolean);
-    let all = [];
-    const tried = [];
-    let firstErr = null;
-    const raw = {};
-    const results = await Promise.all(carriers.map(async (cc) => ({ cc, res: await quoteCarrier(cc) })));
-    for (const { cc, res } of results) {
-      if (res.ok) { raw[cc] = res.data; const r = mapQuotes(res.data, cc); all = all.concat(r); tried.push(cc + " → OK (" + r.length + ")"); }
-      else { tried.push(cc + " → HTTP " + (res.err && res.err.status) + (res.err && res.err.detail ? (": " + res.err.detail) : "")); if (!firstErr) firstErr = res.err; }
+    rates.sort((a, b) => (a.cost || 0) - (b.cost || 0));
+    if (!rates.length) {
+      const alert = j.output && j.output.alerts && j.output.alerts[0] && j.output.alerts[0].message;
+      return respond(200, { live: false, error: alert || "FedEx returned no rates for this shipment.", rates: [] });
     }
-
-    const seen = {};
-    for (const r of all) { const k = r.carrier + "|" + r.key; if (!seen[k] || r.cost < seen[k].cost) seen[k] = r; }
-    const rates = Object.values(seen).sort((a, b) => a.cost - b.cost);
-
-    if (rates.length) { await cachePut(cacheKey, rates); return J({ live: true, rates, raw, tried }); }
-    if (firstErr) return J({ live: false, error: "England HTTP " + firstErr.status + (firstErr.detail ? (": " + firstErr.detail) : ""), england_status: firstErr.status, england_response: firstErr.detail, tried, rates: [] });
-    return J({ live: false, error: "England returned no rates for this shipment.", tried, rates: [] });
+    return respond(200, { live: true, provider: "fedex-direct", account: acct.replace(/^(\d{3})\d+(\d{2})$/, "$1****$2"), rates });
   } catch (e) {
-    return J({ live: false, error: "Function error: " + (e && e.message ? e.message : String(e)), rates: [] });
+    const msg = e && e.name === "AbortError" ? "FedEx took too long to respond" : ((e && e.message) || "FedEx request failed");
+    return respond(200, { live: false, error: msg, rates: [] });
   }
 };

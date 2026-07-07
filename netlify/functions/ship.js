@@ -1,199 +1,224 @@
 /* ════════════════════════════════════════════════════════════════════════
-   POST /.netlify/functions/ship   —   book a label on England (Rock Solid)
-   ------------------------------------------------------------------------
-   The eCommerce API has no single "buy label" call. The real flow is:
-     1) Put Order      PUT  /restapi/v1/customers/:cid/integrations/:iid/orders/:oid
-     2) (Webship books it — automatically if an auto-ship rule is set)
-     3) Search Shipments POST /restapi/v1/customers/:cid/searchShipments {keyword:oid}
-     4) Retrieve Label  GET  /restapi/v1/customers/:cid/shipments/:book/label/PDF
-   Auth: Authorization: RSIS <apiKey>. Always returns HTTP 200 + JSON.
-
-   Body:
-     { action:"ship", account:{base,apiKey,customerId,integrationId}, order:{...} }
-       → pushes the order, does a quick look for a booked shipment, returns
-         { ok, orderId, booked, bookNumber?, tracking?, labelPdfBase64? }
-     { action:"status", account:{...}, orderId|bookNumber }
-       → looks again (app polls this); returns booked/tracking/label when ready
+   ship.js — addr-v228 — DIRECT FEDEX SHIP API (replaces the England/Rock Solid booking)
+   Same endpoint + contract the app already speaks:
+     {action:"ship", order:{...}}  → {ok:true, booked:true, tracking, orderId, labelPdfBase64}
+     {action:"status", orderId}    → {ok:true, booked:false}   (FedEx books synchronously — nothing is ever pending)
+     {action:"diag"}               → provider-accounts shape the Settings diagnostic expects
+   FedEx is synchronous: the label comes back in the booking response, so the app's
+   pollLabel() path short-circuits on res.booked and everything downstream is untouched.
+   Env vars (Netlify, NORMAL non-secret, redeploy after changing):
+     FEDEX_CLIENT_ID, FEDEX_CLIENT_SECRET, FEDEX_ACCOUNT, FEDEX_ENV ("production" default, "sandbox" for testing)
    ════════════════════════════════════════════════════════════════════════ */
 
-const J = (o) => ({ statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify(o) });
-const S = (v) => (v == null ? "" : String(v));
-const PKG_MAP = { fedex_envelope:"FEDEX_ENVELOPE", fedex_pak:"FEDEX_PAK", fedex_extra_small_box:"FEDEX_SMALL_BOX", fedex_small_box:"FEDEX_SMALL_BOX", fedex_medium_box:"FEDEX_MEDIUM_BOX", fedex_large_box:"FEDEX_LARGE_BOX", fedex_extra_large_box:"FEDEX_EXTRA_LARGE_BOX", fedex_tube:"FEDEX_TUBE" };
-const normPkg = (c) => { const k = String(c || "").toLowerCase(); return PKG_MAP[k] || (c || ""); };
-const two = (v) => S(v).trim().slice(0, 2).toUpperCase();
-const today = () => new Date().toISOString().slice(0, 10);
-const plusDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
-const digits = (v) => S(v).replace(/\D/g, "");
-const phoneOrNull = (v) => { const d = digits(v); return d.length >= 10 ? d : null; };
-const strOrNull = (v) => { const s = S(v).trim(); return s.length ? s : null; };
-const nameOr = (v, fb) => { const s = S(v).trim(); return s.length ? s : (S(fb).trim() || "Recipient"); };
+const ENV = (process.env.FEDEX_ENV || "production").toLowerCase();
+const BASE = ENV === "sandbox" ? "https://apis-sandbox.fedex.com" : "https://apis.fedex.com";
+const CLIENT_ID = process.env.FEDEX_CLIENT_ID || process.env.FEDEX_API_KEY || process.env.FEDEX_KEY || "";
+const CLIENT_SECRET = process.env.FEDEX_CLIENT_SECRET || process.env.FEDEX_SECRET_KEY || process.env.FEDEX_SECRET || "";
+const ACCOUNT = process.env.FEDEX_ACCOUNT || process.env.FEDEX_ACCOUNT_NUMBER || process.env.FEDEX_ACCT || "";
 
-function creds(acct) {
+let _tok = null;
+async function getToken() {
+  if (_tok && Date.now() < _tok.exp - 60000) return _tok.token;
+  const r = await fetch(BASE + "/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "client_credentials", client_id: CLIENT_ID, client_secret: CLIENT_SECRET })
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.access_token) throw new Error("FedEx auth failed (" + r.status + "): " + (j.errors && j.errors[0] && j.errors[0].message || JSON.stringify(j).slice(0, 200)));
+  _tok = { token: j.access_token, exp: Date.now() + ((+j.expires_in || 3000) * 1000) };
+  return _tok.token;
+}
+
+/* Accepts either a FedEx serviceType straight off a live quote, a legacy England-ish
+   code, or falls back to parsing the human service label. */
+function serviceTypeFor(order) {
+  const raw = String(order.serviceCode || "").trim();
+  if (/^[A-Z0-9_]+$/.test(raw) && raw.length > 3) {
+    const oneRate = /_ONE_RATE$/.test(raw);
+    return { serviceType: raw.replace(/_ONE_RATE$/, ""), oneRate };
+  }
+  const t = (raw + " " + String(order.shippingService || "")).toLowerCase();
+  const oneRate = /one\s*rate/.test(t);
+  let st = null;
+  if (/home/.test(t)) st = "GROUND_HOME_DELIVERY";
+  else if (/ground\s*economy|smart\s*post/.test(t)) st = "SMART_POST";
+  else if (/international/.test(t)) {
+    if (/connect/.test(t)) st = "FEDEX_INTERNATIONAL_CONNECT_PLUS";
+    else if (/priority\s*express/.test(t)) st = "FEDEX_INTERNATIONAL_PRIORITY_EXPRESS";
+    else if (/economy/.test(t)) st = "INTERNATIONAL_ECONOMY";
+    else if (/first/.test(t)) st = "INTERNATIONAL_FIRST";
+    else if (/ground/.test(t)) st = "INTERNATIONAL_GROUND";
+    else st = "FEDEX_INTERNATIONAL_PRIORITY";
+  }
+  else if (/first\s*overnight/.test(t)) st = "FIRST_OVERNIGHT";
+  else if (/priority\s*overnight/.test(t)) st = "PRIORITY_OVERNIGHT";
+  else if (/standard\s*overnight/.test(t)) st = "STANDARD_OVERNIGHT";
+  else if (/2\s*day\s*a\.?m/.test(t)) st = "FEDEX_2_DAY_AM";
+  else if (/2\s*day/.test(t)) st = "FEDEX_2_DAY";
+  else if (/express\s*saver/.test(t)) st = "FEDEX_EXPRESS_SAVER";
+  else if (/ground/.test(t)) st = "FEDEX_GROUND";
+  return { serviceType: st || "FEDEX_GROUND", oneRate };
+}
+
+const PKG = {
+  envelope: "FEDEX_ENVELOPE", pak: "FEDEX_PAK", xs_box: "FEDEX_EXTRA_SMALL_BOX", small_box: "FEDEX_SMALL_BOX",
+  medium_box: "FEDEX_MEDIUM_BOX", large_box: "FEDEX_LARGE_BOX", xl_box: "FEDEX_EXTRA_LARGE_BOX", tube: "FEDEX_TUBE",
+  FEDEX_ENVELOPE: "FEDEX_ENVELOPE", FEDEX_PAK: "FEDEX_PAK", FEDEX_SMALL_BOX: "FEDEX_SMALL_BOX",
+  FEDEX_MEDIUM_BOX: "FEDEX_MEDIUM_BOX", FEDEX_LARGE_BOX: "FEDEX_LARGE_BOX", FEDEX_EXTRA_LARGE_BOX: "FEDEX_EXTRA_LARGE_BOX",
+  FEDEX_EXTRA_SMALL_BOX: "FEDEX_EXTRA_SMALL_BOX", FEDEX_TUBE: "FEDEX_TUBE"
+};
+const SIG = { direct: "DIRECT", indirect: "INDIRECT", adult: "ADULT" };
+
+function party(p) {
+  const streets = [p.address1, p.address2].filter(Boolean).map(s => String(s).slice(0, 35));
   return {
-    base: (acct.base || process.env.ENGLAND_API_BASE || "https://englandship.rocksolidinternet.com").replace(/\/+$/, ""),
-    apiKey: S(acct.apiKey || process.env.ENGLAND_API_KEY).trim(),
-    customerId: S(acct.customerId || process.env.ENGLAND_CUSTOMER_ID).trim(),
-    integrationId: S(acct.integrationId || process.env.ENGLAND_INTEGRATION_ID).trim(),
+    contact: {
+      personName: String(p.name || p.company || "Shipping Dept").slice(0, 70),
+      companyName: String(p.company || "").slice(0, 70) || undefined,
+      phoneNumber: String(p.phone || "").replace(/\D/g, "").slice(0, 15) || "8015550100",
+      emailAddress: p.email || undefined
+    },
+    address: {
+      streetLines: streets.length ? streets : ["-"],
+      city: String(p.city || "").slice(0, 35),
+      stateOrProvinceCode: String(p.state || "").toUpperCase().slice(0, 2),
+      postalCode: String(p.zip || "").trim(),
+      countryCode: (p.country || "US").toUpperCase()
+    }
   };
-}
-const authHeaders = (apiKey) => ({ "Content-Type": "application/json", "Authorization": "RSIS " + apiKey });
-
-async function req(url, opts, timeoutMs) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs || 9000);
-  try {
-    const r = await fetch(url, Object.assign({ signal: ctrl.signal }, opts));
-    return r;
-  } finally { clearTimeout(t); }
-}
-
-// find a booked shipment for an order id; returns {bookNumber,tracking,carrierCode,serviceCode} or null
-async function findShipment(c, orderId) {
-  const url = c.base + "/restapi/v1/customers/" + encodeURIComponent(c.customerId) + "/searchShipments";
-  const r = await req(url, { method: "POST", headers: authHeaders(c.apiKey), body: JSON.stringify({ keyword: S(orderId) }) });
-  const text = await r.text();
-  if (!r.ok) return { error: "HTTP " + r.status + (text ? ": " + text.slice(0, 200) : "") };
-  let data = null; try { data = JSON.parse(text); } catch {}
-  const ships = (data && data.shipments) || [];
-  const match = ships.find((s) => !s.voided && s.bookNumber && (
-    (Array.isArray(s.orderIds) && s.orderIds.map(S).includes(S(orderId))) ||
-    S(s.shipperReference) === S(orderId) || S(s.fulfillment && s.fulfillment.orderId) === S(orderId)
-  )) || ships.find((s) => !s.voided && s.bookNumber);
-  if (!match) return null;
-  return { bookNumber: S(match.bookNumber), tracking: S(match.trackingNumber), trackingNumbers: match.trackingNumbers || [], carrierCode: match.carrierCode, serviceCode: match.serviceCode, cost: match.totalShippingCost };
-}
-
-// fetch the label PDF as base64
-async function fetchLabel(c, bookNumber) {
-  const url = c.base + "/restapi/v1/customers/" + encodeURIComponent(c.customerId) + "/shipments/" + encodeURIComponent(bookNumber) + "/label/PDF";
-  const r = await req(url, { method: "GET", headers: { "Authorization": "RSIS " + c.apiKey } });
-  if (!r.ok) { const t = await r.text(); return { error: "Label HTTP " + r.status + (t ? ": " + t.slice(0, 200) : "") }; }
-  const buf = Buffer.from(await r.arrayBuffer());
-  return { pdf: buf.toString("base64") };
 }
 
 exports.handler = async (event) => {
-  try {
-    if (event.httpMethod === "OPTIONS") return { statusCode: 204, body: "" };
-    if (event.httpMethod !== "POST") return J({ ok: false, error: "Use POST" });
-    let body = {}; try { body = JSON.parse(event.body || "{}"); } catch { return J({ ok: false, error: "Bad JSON body" }); }
+  const respond = (code, obj) => ({ statusCode: code, headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) });
+  if (event.httpMethod === "OPTIONS") return respond(200, { ok: true });
+  let body = {};
+  try { body = JSON.parse(event.body || "{}"); } catch (e) { return respond(200, { ok: false, error: "Bad request body" }); }
+  const action = body.action || "ship";
 
-    const c = creds(body.account || {});
-    if (!c.apiKey || !c.customerId) return J({ ok: false, error: "Missing England API key or customer ID." });
+  if (!CLIENT_ID || !CLIENT_SECRET || !ACCOUNT) {
+    const err = "FedEx isn't configured: set FEDEX_CLIENT_ID, FEDEX_CLIENT_SECRET and FEDEX_ACCOUNT in Netlify (normal vars, then redeploy).";
+    if (action === "diag") return respond(200, { ok: true, diag: { providerAccounts: { ok: false, status: 0, raw: err, providers: [], accounts: [] } } });
+    return respond(200, { ok: false, error: err });
+  }
 
-    /* ---- action: diag — what can this key actually access? ---- */
-    if (body.action === "diag") {
-      const out = { customerId: c.customerId };
-      async function probe(path) {
-        try {
-          const r = await req(c.base + path, { headers: authHeaders(c.apiKey) });
-          const t = await r.text(); let d = null; try { d = JSON.parse(t); } catch {}
-          return { status: r.status, ok: r.ok, data: d, raw: r.ok ? undefined : (t ? t.slice(0, 200) : "") };
-        } catch (e) { return { status: 0, ok: false, raw: (e && e.message) || "error" }; }
-      }
-      const pa = await probe("/restapi/v1/customers/" + encodeURIComponent(c.customerId) + "/provider-accounts");
-      const accts = (pa.data && pa.data.providerAccounts) || [];
-      out.providerAccounts = { status: pa.status, ok: pa.ok, count: accts.length, providers: accts.map((a) => a.providerCode), accounts: accts.map((a) => ({ id: a.id, providerCode: a.providerCode, accountNumber: (a.accountFields && a.accountFields.accountNumber) || a.accountNumber || null })), raw: pa.raw };
-      const sv = await probe("/restapi/v1/customers/" + encodeURIComponent(c.customerId) + "/services");
-      out.services = { status: sv.status, ok: sv.ok, raw: sv.raw };
-      return J({ ok: true, diag: out });
+  if (action === "status") return respond(200, { ok: true, booked: false, note: "Direct FedEx books synchronously — nothing is ever pending." });
+  if (action === "flushCache") return respond(200, { ok: true });
+
+  if (action === "diag" || action === "test") {
+    try {
+      await getToken();
+      return respond(200, {
+        ok: true,
+        diag: { providerAccounts: { ok: true, providers: ["fedex"], accounts: [{ providerCode: "fedex", id: "fedex-direct", accountNumber: ACCOUNT }] }, env: ENV, base: BASE }
+      });
+    } catch (e) {
+      return respond(200, { ok: true, diag: { providerAccounts: { ok: false, status: 401, raw: (e && e.message) || "Auth failed", providers: [], accounts: [] } } });
     }
+  }
 
-    /* ---- action: status (app polls this after shipping) ---- */
-    if (body.action === "status") {
-      const orderId = S(body.orderId);
-      const bookNumber = S(body.bookNumber);
-      let found = bookNumber ? { bookNumber, tracking: S(body.tracking) } : await findShipment(c, orderId);
-      if (!found) return J({ ok: true, booked: false });
-      if (found.error) return J({ ok: false, error: found.error });
-      const label = await fetchLabel(c, found.bookNumber);
-      return J({ ok: true, booked: true, bookNumber: found.bookNumber, tracking: found.tracking, carrierCode: found.carrierCode, serviceCode: found.serviceCode, labelPdfBase64: label.pdf || null, labelError: label.error || null });
-    }
+  if (action !== "ship") return respond(200, { ok: false, error: "Unknown action: " + action });
 
-    /* ---- action: ship — book a label directly (synchronous, v1 Book Shipment) ---- */
-    const o = body.order || {};
-    if (!o.receiver || !o.receiver.zip) return J({ ok: false, error: "Receiver address is incomplete." });
-    if (!o.sender || !o.sender.zip) return J({ ok: false, error: "Sender (ship-from) address is incomplete." });
-    if (!o.carrierCode || !o.serviceCode) return J({ ok: false, error: "Missing carrier/service code for this rate — re-quote the shipment and try again." });
+  const o = body.order || {};
+  const sender = o.sender || {};
+  const receiver = o.receiver || {};
+  const acct = String(o.fedexAccount || (body.account && body.account.fedexAccount) || ACCOUNT).replace(/\D/g, "") || ACCOUNT;
+  const { serviceType, oneRate } = serviceTypeFor(o);
+  const intl = (receiver.country || "US").toUpperCase() !== (sender.country || "US").toUpperCase();
+  const pieces = (Array.isArray(o.pieces) && o.pieces.length ? o.pieces : [{ weight: 1, length: 12, width: 9, height: 4 }]);
+  const totalWeight = pieces.reduce((a, p) => a + (+p.weight || 0), 0) || 1;
+  const declaredTotal = pieces.reduce((a, p) => a + (+p.declaredValue || 0), 0) || (+o.insuranceAmount || 0);
 
-    const CC = (v) => { const s = S(v).trim(); if (!s) return "US"; const m = { "united states": "US", "usa": "US", "u.s.": "US", "u.s.a.": "US", "canada": "CA", "mexico": "MX", "united kingdom": "GB", "great britain": "GB", "uk": "GB" }; const k = s.toLowerCase(); return m[k] || s.slice(0, 2).toUpperCase(); };
-    const intl = CC(o.receiver.country || "US") !== "US";
-    const pieces = (Array.isArray(o.pieces) && o.pieces.length ? o.pieces : [{ weight: o.weight || 1, length: 12, width: 9, height: 4 }]);
+  const refs = [];
+  if (o.reference) refs.push({ customerReferenceType: "CUSTOMER_REFERENCE", value: String(o.reference).slice(0, 40) });
+  if (o.invoiceNo) refs.push({ customerReferenceType: "INVOICE_NUMBER", value: String(o.invoiceNo).slice(0, 40) });
+  if (o.poNo) refs.push({ customerReferenceType: "P_O_NUMBER", value: String(o.poNo).slice(0, 40) });
 
-    // England requires providerAccountId (a string) identifying which carrier account to ship on.
-    // Use an explicit override if given, otherwise look it up from /provider-accounts by carrier.
-    let providerAccountId = strOrNull(o.providerAccountId);
-    if (!providerAccountId) {
-      try {
-        const pr = await req(c.base + "/restapi/v1/customers/" + encodeURIComponent(c.customerId) + "/provider-accounts", { headers: authHeaders(c.apiKey) });
-        const pt = await pr.text(); let pd = null; try { pd = JSON.parse(pt); } catch {}
-        const accts = (pd && (pd.providerAccounts || pd.data)) || [];
-        const want = S(o.carrierCode).toLowerCase();
-        const match = accts.find((a) => S(a.providerCode).toLowerCase() === want) || (accts.length === 1 ? accts[0] : null);
-        if (match && match.id != null) providerAccountId = String(match.id);
-        if (!providerAccountId) {
-          return J({ ok: false, error: accts.length
-            ? ("No England carrier account matches '" + S(o.carrierCode) + "'. England has: " + accts.map((a) => a.providerCode).join(", ") + ". Enter the provider account ID in Settings → England.")
-            : ("England returned no carrier accounts to ship on (HTTP " + pr.status + "). Ask England to enable booking/provider-accounts on your key, or enter your provider account ID in Settings → England.") });
-        }
-      } catch (e) {
-        return J({ ok: false, error: "Couldn't look up your England carrier account: " + (e.name === "AbortError" ? "timeout" : e.message) + ". Enter your provider account ID in Settings → England." });
-      }
-    }
-
-    // RockSolid/XPS exposes only ONE reference field (shipmentReference) — no separate PO/invoice fields —
-    // so pack order ref + PO + invoice into it, trimmed to FedEx's ~40-char reference limit.
-    const refBits = [S(o.reference || o.orderNumber), o.poNo ? ("PO " + S(o.poNo)) : "", o.invoiceNo ? ("INV " + S(o.invoiceNo)) : ""].filter(Boolean);
-    const shipmentReference = (refBits.join("  ") || ("SC" + Date.now())).slice(0, 40);
-
-    const shipBody = {
-      carrierCode: S(o.carrierCode),
-      serviceCode: S(o.serviceCode),
-      packageTypeCode: normPkg(o.packageTypeCode) || (S(o.carrierCode).toLowerCase() + "_custom_package"),
-      shipmentDate: o.shipmentDate || today(),
-      shipmentReference: shipmentReference,
-      orderNumber: S(o.orderNumber || o.reference || ""),
-      contentDescription: S(o.contentDescription || "Merchandise"),
-      sender: {
-        name: nameOr(o.sender.name, o.sender.company), company: S(o.sender.company) || nameOr(o.sender.name, "Shipper"),
-        address1: S(o.sender.address1), address2: S(o.sender.address2), city: S(o.sender.city),
-        state: two(o.sender.state), zip: S(o.sender.zip), country: CC(o.sender.country || "US"),
-        phone: phoneOrNull(o.sender.phone) || "0000000000", email: strOrNull(o.sender.email),
-      },
-      receiver: {
-        name: nameOr(o.receiver.name, o.receiver.company), company: S(o.receiver.company),
-        address1: S(o.receiver.address1), address2: S(o.receiver.address2), city: S(o.receiver.city),
-        state: two(o.receiver.state), zip: S(o.receiver.zip), country: CC(o.receiver.country || "US"),
-        phone: phoneOrNull(o.receiver.phone) || "0000000000", email: strOrNull(o.receiver.email),
-      },
-      residential: !!o.residential,
-      signatureOptionCode: (o.signatureOption && o.signatureOption !== "none") ? String(o.signatureOption) : null,
-      saturdayDelivery: !!o.saturdayDelivery,
-      weightUnit: "lb", dimUnit: "in", currency: "USD", customsCurrency: "USD",
-      labelImageFormat: "PDF",
-      pieces: pieces.map((p) => ({
-        weight: S(+p.weight || 1), length: S(+p.length || +p.L || 12), width: S(+p.width || +p.W || 9), height: S(+p.height || +p.H || 4),
-        insuranceAmount: o.insuranceAmount ? String(o.insuranceAmount) : null,
-        declaredValue: (intl && (p.declaredValue || p.value)) ? String(p.declaredValue || p.value) : null,
-      })),
-      billing: { party: S(o.billingParty || "sender"), account: strOrNull(o.billingAccount), country: o.billingZip ? CC(o.billingCountry || "US") : null, zip: strOrNull(o.billingZip) },
-      providerAccountId: providerAccountId,
-      approvePrepayRecharge: o.approvePrepayRecharge !== false,
+  const lineItems = pieces.map((p, i) => {
+    const it = {
+      weight: { units: "LB", value: Math.max(0.1, +p.weight || 1) },
+      dimensions: { length: Math.max(1, Math.round(+p.length || 12)), width: Math.max(1, Math.round(+p.width || 9)), height: Math.max(1, Math.round(+p.height || 4)), units: "IN" }
     };
-    if (!intl) shipBody.pieces.forEach((p) => { p.declaredValue = null; });
+    if (i === 0 && refs.length) it.customerReferences = refs;
+    const sig = SIG[String(o.signatureOption || "none").toLowerCase()];
+    if (sig) it.packageSpecialServices = { signatureOptionType: sig };
+    if (i === 0 && +o.insuranceAmount > 0) it.declaredValue = { amount: Math.round(+o.insuranceAmount * 100) / 100, currency: "USD" };
+    return it;
+  });
 
-    const url = c.base + "/restapi/v1/customers/" + encodeURIComponent(c.customerId) + "/shipments";
-    let r, t;
-    try { r = await req(url, { method: "POST", headers: authHeaders(c.apiKey), body: JSON.stringify(shipBody) }); t = await r.text(); }
-    catch (e) { return J({ ok: false, error: "Book Shipment failed: " + (e.name === "AbortError" ? "timeout" : e.message) }); }
-    let d = null; try { d = JSON.parse(t); } catch {}
-    if (!r.ok) return J({ ok: false, error: "England HTTP " + r.status + ((d && (d.error || d.message)) ? ": " + (d.error || d.message) : (t ? ": " + t.slice(0, 300) : "")) });
-    const bookNumber = S(d && d.bookNumber);
-    const tracking = S(d && d.trackingNumber);
-    if (!bookNumber) return J({ ok: false, error: "Booked but no bookNumber returned: " + (t ? t.slice(0, 200) : "") });
-    const label = await fetchLabel(c, bookNumber);
-    return J({ ok: true, booked: true, bookNumber, tracking, zone: d && d.zone, prepayBalance: d && d.prepayBalance, labelPdfBase64: label.pdf || null, labelError: label.error || null });
+  let payment = { paymentType: "SENDER", payor: { responsibleParty: { accountNumber: { value: acct } } } };
+  if (o.billingParty === "third_party" && o.billingAccount) payment = { paymentType: "THIRD_PARTY", payor: { responsibleParty: { accountNumber: { value: String(o.billingAccount).replace(/\D/g, "") } } } };
+  else if (o.billingParty === "receiver" && o.billingAccount) payment = { paymentType: "RECIPIENT", payor: { responsibleParty: { accountNumber: { value: String(o.billingAccount).replace(/\D/g, "") } } } };
+
+  const shipmentSpecial = [];
+  if (o.saturdayDelivery) shipmentSpecial.push("SATURDAY_DELIVERY");
+  if (oneRate) shipmentSpecial.push("FEDEX_ONE_RATE");
+
+  const requestedShipment = {
+    shipper: party({ ...sender, country: sender.country || "US" }),
+    recipients: [Object.assign(party({ ...receiver, country: receiver.country || "US" }), {})],
+    shipDatestamp: (o.shipmentDate && /^\d{4}-\d{2}-\d{2}$/.test(o.shipmentDate)) ? o.shipmentDate : new Date().toISOString().slice(0, 10),
+    serviceType,
+    packagingType: PKG[String(o.packageTypeCode || "").trim()] || PKG[String(o.packageTypeCode || "").toLowerCase()] || "YOUR_PACKAGING",
+    pickupType: "USE_SCHEDULED_PICKUP",
+    blockInsightVisibility: false,
+    shippingChargesPayment: payment,
+    labelSpecification: { imageType: "PDF", labelStockType: "PAPER_4X6" },
+    requestedPackageLineItems: lineItems
+  };
+  requestedShipment.recipients[0].address.residential = !!o.residential;
+  if (shipmentSpecial.length) requestedShipment.shipmentSpecialServices = { specialServiceTypes: shipmentSpecial };
+  if (intl) {
+    const customsVal = Math.max(1, Math.round((declaredTotal || 1) * 100) / 100);
+    requestedShipment.customsClearanceDetail = {
+      dutiesPayment: { paymentType: "SENDER", payor: { responsibleParty: { accountNumber: { value: acct } } } },
+      isDocumentOnly: false,
+      commodities: [{
+        description: String(o.contentDescription || "Merchandise").slice(0, 450),
+        countryOfManufacture: (sender.country || "US").toUpperCase(),
+        quantity: 1, quantityUnits: "PCS",
+        unitPrice: { amount: customsVal, currency: "USD" },
+        customsValue: { amount: customsVal, currency: "USD" },
+        weight: { units: "LB", value: totalWeight }
+      }]
+    };
+  }
+
+  try {
+    const token = await getToken();
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 25000);
+    const r = await fetch(BASE + "/ship/v1/shipments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token, "x-locale": "en_US" },
+      body: JSON.stringify({ labelResponseOptions: "LABEL", accountNumber: { value: acct }, requestedShipment }),
+      signal: ctrl.signal
+    });
+    clearTimeout(t);
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const msg = (j.errors && j.errors[0] && (j.errors[0].message || j.errors[0].code)) || ("FedEx ship error " + r.status);
+      return respond(200, { ok: false, error: msg, _status: r.status });
+    }
+    const ts = j.output && j.output.transactionShipments && j.output.transactionShipments[0];
+    if (!ts) return respond(200, { ok: false, error: "FedEx returned no shipment in the response." });
+    const tracking = ts.masterTrackingNumber || (ts.pieceResponses && ts.pieceResponses[0] && ts.pieceResponses[0].trackingNumber) || "";
+    const labels = [];
+    (ts.pieceResponses || []).forEach(pr => (pr.packageDocuments || []).forEach(doc => { if (doc.encodedLabel) labels.push(doc.encodedLabel); }));
+    if (!labels.length && ts.shipmentDocuments) ts.shipmentDocuments.forEach(doc => { if (doc.encodedLabel) labels.push(doc.encodedLabel); });
+    return respond(200, {
+      ok: true, booked: true,
+      orderId: tracking || String(Date.now()),
+      bookNumber: tracking,
+      tracking,
+      labelPdfBase64: labels[0] || null,
+      labels: labels.length > 1 ? labels : undefined,
+      labelError: labels.length ? null : "Booked, but FedEx returned no label document — reprint from FedEx Ship Manager.",
+      serviceName: ts.serviceName || serviceType,
+      env: ENV
+    });
   } catch (e) {
-    return J({ ok: false, error: "Function error: " + (e && e.message ? e.message : String(e)) });
+    const msg = e && e.name === "AbortError" ? "FedEx took too long to respond" : ((e && e.message) || "FedEx request failed");
+    return respond(200, { ok: false, error: msg });
   }
 };

@@ -72,7 +72,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v260";
+const BUILD_TAG="addr-v261";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1530,7 +1530,7 @@ const CUSTOM_DEFAULTS={
   slipThanks:"",slipFooter:"",
   density:"comfortable",stuckDays:0,
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
-  logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,skipBookedSummary:false,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],theme:"light",accent:"",
+  logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,skipBookedSummary:false,autoRulesOnShip:false,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],theme:"light",accent:"",
   refRequired:false,invRequired:false,poRequired:false,refLocked:false,invLocked:false,poLocked:false,
   confetti:"page",seasonal:true,loginBg:"",appBg:"",headerBg:"",pageBg:"",navBg:"",
 };
@@ -4468,6 +4468,21 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
 
   const swap=()=>{const s=sender;setSender(receiver);setReceiver(s);};
   const originZip=(String(sender.zip||"").match(/\d{5}/)||[])[0]||(String(client.origin||"").match(/\d{5}/)||[])[0]||(String((settings&&settings.sender&&settings.sender.zip)||"").match(/\d{5}/)||[])[0]||"";
+  /* Autopilot, live: when the toggle is on and an order is loaded, run the SAME rule engine
+     Autopilot uses — client-side, instantly, no batch step — and if a rule fires a "Set Service"
+     action, that service gets the same AUTOPILOT-badged highlight a completed Autopilot run gives it. */
+  const liveRuleMatch=useMemo(()=>{
+    if(!custom.autoRulesOnShip||!selectedOrder)return null;
+    const so=orders.find(x=>x.id===selectedOrder); if(!so)return null;
+    const enabled=(rules||[]).filter(r=>r&&r.enabled);
+    if(!enabled.length)return null;
+    try{
+      const run=runRuleEngine(enabled,[so],originZip);
+      const r0=run.results&&run.results[0];
+      return (r0&&r0.fires&&r0.fires.length&&r0.view&&r0.view.selectedService)?r0.view.selectedService:null;
+    }catch(e){ return null; }
+  },[custom.autoRulesOnShip,selectedOrder,orders,rules,originZip]);
+
   const ready=/^\d{5}/.test(receiver.zip||"")&&totalWeight>0;
   const shipment={fromZip:originZip,toZip:receiver.zip,pieces:pieces.map(p=>({...p,weight:pw(p)})),residential,signature,signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null,intl,packageTypeCode:orBox?orBox.code:""};
   // Front screen shows FedEx only (until a USPS/UPS/DAP deal is added). Blank-price skeleton before rates load.
@@ -4520,7 +4535,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
   },[rateSrc,orRates,client,JSON.stringify(custom.hiddenServices||[]),JSON.stringify(client&&client.blockedServices||[]),rateRules,fxTransit,residential,addrClassified,sigOption,saturday,insurance]);
   const best=null;
-  const matched=useMemo(()=>{const so=selectedOrder?orders.find(x=>x.id===selectedOrder):null;return matchServiceForOrder(quotes,so);},[quotes,selectedOrder,orders]);
+  const matched=useMemo(()=>{
+    if(liveRuleMatch){ const rc=canonSvc(liveRuleMatch); const hit=quotes.find(q=>canonSvc(q.label)===rc&&(q.sell??q.cost)!=null); if(hit)return {key:hit.key,src:"autopilot"}; }
+    const so=selectedOrder?orders.find(x=>x.id===selectedOrder):null;
+    return matchServiceForOrder(quotes,so);
+  },[quotes,selectedOrder,orders,liveRuleMatch]);
 
   const buildRec=(q,carrier,extra)=>({id:Date.now(),date:new Date().toLocaleDateString(),tracking:(extra&&extra.tracking)||newTracking(carrier),carrier,service:q.label,recipient:{...receiver},sender:{...sender},fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,pieces:pieces.map(p=>({...p})),dims:pieces[0],insurance,cost:q.cost,sell:q.sell,billTo,thirdAcct,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference,invoiceNo,poNo,residential,intl,bookNumber:extra&&extra.bookNumber,customs:intl?{...customs,total:customsTotal,ci:"CI-"+rnd(5)}:null});
   const print=async(q)=>{
@@ -8506,6 +8525,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
         <Tog k="hideInvoice" label="Hide Invoice # field"/>
         <Tog k="hidePO" label="Hide PO # field"/>
         <Tog k="matchedOnly" label="Only show the requested service" hint="When a store order names the service the buyer paid for, show just that one — pre-highlighted, ready to print. Other services sit behind ‘Show all services’."/>
+        <Tog k="autoRulesOnShip" label="Run my Autopilot rules here too" hint="When an order you pull into the Ship tab matches one of your Autopilot rules, pre-highlight the service that rule picks — live, without running a separate Autopilot batch first."/>
         <Tog k="hideAddr23" label="Hide Address 2 & 3" hint="On both sender and receiver cards"/>
         <Tog k="hideOz" label="Hide the oz box" hint="Whole pounds are enough for most shops"/>
         <Tog k="hideInsure" label="Hide the Insure $ field"/>

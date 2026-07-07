@@ -89,8 +89,19 @@ function party(p) {
   };
 }
 
+/* ── per-site backend switch ─────────────────────────────────────────────
+   Set CARRIER_BACKEND=england in a Netlify site's env vars and this function
+   delegates every request to ./ship-england.js (the pre-cutover England/Rock Solid
+   implementation, restored from git history). Unset / "fedex" = direct FedEx. */
 exports.handler = async (event) => {
   const respond = (code, obj) => ({ statusCode: code, headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) });
+  if ((process.env.CARRIER_BACKEND || "fedex").toLowerCase() === "england") {
+    try { return await require("./ship-england.js").handler(event); }
+    catch (e) {
+      const msg = "CARRIER_BACKEND=england is set but ship-england.js isn't deployed or failed: " + ((e && e.message) || e);
+      return respond(200, {ok:false,error:msg});
+    }
+  }
   if (event.httpMethod === "OPTIONS") return respond(200, { ok: true });
   let body = {};
   try { body = JSON.parse(event.body || "{}"); } catch (e) { return respond(200, { ok: false, error: "Bad request body" }); }
@@ -203,9 +214,23 @@ exports.handler = async (event) => {
     const ts = j.output && j.output.transactionShipments && j.output.transactionShipments[0];
     if (!ts) return respond(200, { ok: false, error: "FedEx returned no shipment in the response." });
     const tracking = ts.masterTrackingNumber || (ts.pieceResponses && ts.pieceResponses[0] && ts.pieceResponses[0].trackingNumber) || "";
+    /* Label harvest: FedEx puts the base64 under different keys depending on the
+       response shape — encodedLabel is standard for labelResponseOptions:LABEL, but
+       sweep every document array and every plausible field so a variant cannot
+       leave the app label-less. */
     const labels = [];
-    (ts.pieceResponses || []).forEach(pr => (pr.packageDocuments || []).forEach(doc => { if (doc.encodedLabel) labels.push(doc.encodedLabel); }));
-    if (!labels.length && ts.shipmentDocuments) ts.shipmentDocuments.forEach(doc => { if (doc.encodedLabel) labels.push(doc.encodedLabel); });
+    const grab = (doc) => { if (!doc) return; const b64 = doc.encodedLabel || doc.content || (doc.parts && doc.parts[0] && doc.parts[0].image) || null; if (b64 && typeof b64 === "string" && b64.length > 20 && /^[A-Za-z0-9+\/=\r\n]+$/.test(b64.slice(0, 400))) labels.push(b64); };
+    (ts.pieceResponses || []).forEach(pr => { (pr.packageDocuments || pr.documents || []).forEach(grab); });
+    (ts.shipmentDocuments || ts.documents || []).forEach(grab);
+    let docShape = null;
+    if (!labels.length) {
+      try {
+        const pr0 = ts.pieceResponses && ts.pieceResponses[0];
+        docShape = "transactionShipments keys: " + Object.keys(ts).join(",")
+          + (pr0 ? " | pieceResponses[0] keys: " + Object.keys(pr0).join(",") : "")
+          + (pr0 && pr0.packageDocuments && pr0.packageDocuments[0] ? " | packageDocuments[0] keys: " + Object.keys(pr0.packageDocuments[0]).join(",") : "");
+      } catch (e) {}
+    }
     return respond(200, {
       ok: true, booked: true,
       orderId: tracking || String(Date.now()),
@@ -213,7 +238,7 @@ exports.handler = async (event) => {
       tracking,
       labelPdfBase64: labels[0] || null,
       labels: labels.length > 1 ? labels : undefined,
-      labelError: labels.length ? null : "Booked, but FedEx returned no label document — reprint from FedEx Ship Manager.",
+      labelError: labels.length ? null : ("Booked, but no label was found in the FedEx response." + (docShape ? " [" + docShape + "]" : "")),
       serviceName: ts.serviceName || serviceType,
       env: ENV
     });

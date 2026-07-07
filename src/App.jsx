@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v226";
+const BUILD_TAG="addr-v227";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1105,7 +1105,13 @@ function baseCostLookup(rules,key,weight,zone){
 function rateSellFor(cost,label,ctx){
   if(cost==null)return null;
   const c=ctx||{};
-  const fallback=()=>Math.round(cost*(1+(((c.client&&c.client.markup)||0))/100)*100)/100;
+  const g=(c.rules&&c.rules.global)||{};
+  const gPct=(g.pct==null||g.pct===""||isNaN(+g.pct))?null:+g.pct;
+  const gMin=(g.min==null||g.min===""||isNaN(+g.min))?null:+g.min;
+  const fallback=()=>{
+    if(gPct!=null){let s=cost*(1+gPct/100);if(gMin!=null&&s<gMin)s=gMin;return Math.round(s*100)/100;}
+    return Math.round(cost*(1+(((c.client&&c.client.markup)||0))/100)*100)/100;
+  };
   const rules=c.rules; if(!rules)return fallback();
   const prof=c.prof||rateProfileFor(rules,c.client&&c.client.id);
   const key=rateSvcKey(label);
@@ -1144,8 +1150,11 @@ function rateSellFor(cost,label,ctx){
 function surchargeFees(rules,client){
   const prof=rateProfileFor(rules,client&&client.id);
   const sc=(prof&&prof.surcharges)||{};
-  const val=(id,def)=>{const r=sc[id];if(!r||r.amount==null||r.amount==="")return def;const a=+r.amount;return r.type==="percent"?Math.round(def*(1+a/100)*100)/100:Math.round(a*100)/100;};
-  return {sig:{direct:val("SIG-D",SIG_FEE.direct),indirect:val("SIG-I",SIG_FEE.indirect),adult:val("SIG-A",SIG_FEE.adult)},sat:val("SAT",SAT_FEE),insUnit:val("INS",1.15),insMin:3.45};
+  const g=(rules&&rules.global)||{};
+  const gPct=(g.pct==null||g.pct===""||isNaN(+g.pct))?null:+g.pct;
+  const gUp=(d)=>gPct!=null?Math.round(d*(1+gPct/100)*100)/100:d;
+  const val=(id,def)=>{const r=sc[id];if(!r||r.amount==null||r.amount==="")return gUp(def);const a=+r.amount;return r.type==="percent"?Math.round(def*(1+a/100)*100)/100:Math.round(a*100)/100;};
+  return {sig:{direct:val("SIG-D",SIG_FEE.direct),indirect:val("SIG-I",SIG_FEE.indirect),adult:val("SIG-A",SIG_FEE.adult)},sat:val("SAT",SAT_FEE),insUnit:val("INS",1.15),insMin:gUp(3.45)};
 }
 /* Paste-import: Excel/CSV/TSV, first column weight, one column per zone header. */
 function parseRateTable(text){
@@ -2120,12 +2129,16 @@ function RatesAdmin({clients=[],brand}){
   /* sheet pricing with an explicit zone (the live resolver derives zone from zips) */
   const sheetSell=(rule,cost,weight,zone,key)=>{
     if(cost==null)return null;
-    if(!rule||rule.on===false)return null;
+    const gg=rules.global||{};
+    const ggPct=(gg.pct==null||gg.pct===""||isNaN(+gg.pct))?null:+gg.pct;
+    const ggMin=(gg.min==null||gg.min===""||isNaN(+gg.min))?null:+gg.min;
+    const gFall=()=>{if(ggPct==null)return null;let s=cost*(1+ggPct/100);let st=false;if(ggMin!=null&&s<ggMin){s=ggMin;st=true;}return {sell:Math.round(s*100)/100,starred:st};};
+    if(!rule||rule.on===false)return gFall();
     const num=(x)=>(x==null||x==="")?null:+x;
     let sell=null;
-    if(rule.basis==="list"){const list=baseCostLookup(rules,"list:"+key,weight,zone);const d=num(rule.pct);if(list==null||d==null)return null;sell=list*(1-d/100);}
-    else if(rule.basis==="fixed"){const a=num(rule.pct);if(a==null)return null;sell=cost+a;}
-    else{let pct=num(rule.pct);if(rule.breaks&&rule.breaks.length){const b=rule.breaks.find(x=>+weight<=+x.upTo)||rule.breaks[rule.breaks.length-1];if(b&&num(b.pct)!=null)pct=num(b.pct);}const zp=rule.zones?num(rule.zones[String(zone)]):null;if(zp!=null)pct=zp;if(pct==null)return null;sell=cost*(1+pct/100);}
+    if(rule.basis==="list"){const list=baseCostLookup(rules,"list:"+key,weight,zone);const d=num(rule.pct);if(list==null||d==null)return gFall();sell=list*(1-d/100);}
+    else if(rule.basis==="fixed"){const a=num(rule.pct);if(a==null)return gFall();sell=cost+a;}
+    else{let pct=num(rule.pct);if(rule.breaks&&rule.breaks.length){const b=rule.breaks.find(x=>+weight<=+x.upTo)||rule.breaks[rule.breaks.length-1];if(b&&num(b.pct)!=null)pct=num(b.pct);}const zp=rule.zones?num(rule.zones[String(zone)]):null;if(zp!=null)pct=zp;if(pct==null)return gFall();sell=cost*(1+pct/100);}
     const mn=num(rule.min);let starred=false;
     if(mn!=null&&sell<mn){sell=mn;starred=true;}
     return {sell:Math.round(sell*100)/100,starred};
@@ -2225,6 +2238,20 @@ function RatesAdmin({clients=[],brand}){
   const assignedTo=(pid)=>clients.filter(c=>(assign[c.id]||"default")===pid);
   const surRow=(prof.surcharges||{});
   return (<div className="space-y-4">
+    {/* global cost-plus markup — one knob over everything */}
+    <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-2">
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <div className="text-sm font-semibold text-stone-800">Global cost-plus markup</div>
+          <div className="text-[11px] text-stone-500 mt-0.5 max-w-xl">Marks up every rate and app-added accessorial on every carrier. Applies to whatever cost the live quote returns — no rate tables needed. Per-service rules in a profile still override it; per-surcharge rules override the accessorial markup.</div>
+        </div>
+        <span className="flex-1"/>
+        <Field label="Markup %"><Input type="number" className="w-24" placeholder="e.g. 20" value={(rules.global&&rules.global.pct)??""} onChange={e=>upRules({global:{...(rules.global||{}),pct:e.target.value}})}/></Field>
+        <Field label="Min $ / label (optional)"><Input type="number" className="w-28" placeholder="—" value={(rules.global&&rules.global.min)??""} onChange={e=>upRules({global:{...(rules.global||{}),min:e.target.value}})}/></Field>
+        {rules.global&&rules.global.pct!==""&&rules.global.pct!=null&&<button onClick={()=>{if(window.confirm("Clear the global markup? Pricing falls back to per-service rules and each customer's flat markup."))upRules({global:{}});}} className="text-xs text-rose-500 bg-stone-100 rounded-lg px-2.5 py-2 hover:bg-rose-50">Clear</button>}
+      </div>
+      {rules.global&&rules.global.pct!==""&&rules.global.pct!=null&&!isNaN(+rules.global.pct)&&<div className="text-[11px] rounded px-3 py-2 bg-emerald-50 border border-emerald-200 text-emerald-800">Global cost-plus is <b>ON</b>: every quote sells at cost + {+rules.global.pct}%{rules.global.min?` (min $${(+rules.global.min).toFixed(2)})`:""}. It replaces each customer's legacy flat markup while set — customers on profiles with per-service rules keep those rules.</div>}
+    </div>
     {/* top controls */}
     <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
       <div className="flex flex-wrap items-end gap-3">
@@ -2251,7 +2278,7 @@ function RatesAdmin({clients=[],brand}){
           {!clients.length&&<div className="text-sm text-stone-400">No customers yet.</div>}
         </div>
       </div>}
-      <p className="text-[11px] text-stone-500">Rules price on top of your England cost the moment a live quote returns — zone % → service % → the customer's legacy flat markup, with Min $ as a floor on the sell price. Cost sheets under Base costs unlock printable rate sheets and margin analysis; a FedEx list table unlocks the "FedEx list − %" basis.</p>
+      <p className="text-[11px] text-stone-500">Rules price on top of your carrier cost the moment a live quote returns — zone % → service % → the global cost-plus markup → the customer's legacy flat markup, with Min $ as a floor on the sell price. Cost sheets under Base costs unlock printable rate sheets and margin analysis; a FedEx list table unlocks the "FedEx list − %" basis.</p>
     </div>
 
     {/* carrier + inner tabs */}

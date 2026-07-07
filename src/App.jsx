@@ -45,7 +45,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v200fw";
+const BUILD_TAG="addr-v201fw";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1806,10 +1806,8 @@ function Landing({onAuth}){
   </div>);
   if(BRAND.fw) return (<div className="min-h-screen relative overflow-hidden flex flex-col items-center justify-center px-5 py-10" style={{background:"#faf8f4"}}>
     <style>{`@keyframes fwRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}@keyframes fwDrift{0%,100%{transform:translate(-50%,0)}50%{transform:translate(calc(-50% + 18px),-12px)}}`}</style>
-    <div className="relative flex items-center gap-4 mb-8" style={{animation:"fwRise .6s ease both"}}>
-      <img src={FW_LOGO} alt="Freightwire" style={{height:46}} className="w-auto" draggable={false}/>
-      <span className="w-px h-9 bg-stone-300"/>
-      <img src={FWSHIP_LOGO} alt="FreightwireShip" style={{height:40}} className="w-auto" draggable={false}/>
+    <div className="relative flex items-center justify-center mb-8" style={{animation:"fwRise .6s ease both"}}>
+      <img src={FW_LOGO} alt="Freightwire" style={{height:52}} className="w-auto" draggable={false}/>
     </div>
     <div className="relative w-full flex justify-center py-4" style={{animation:"fwRise .6s .14s ease both",transform:"scale(1.2)",transformOrigin:"top center"}}>
       <CloudAuth onDone={()=>window.location.reload()} initialMode="login"/>
@@ -1821,7 +1819,7 @@ function Landing({onAuth}){
     {/* nav */}
     <div className="max-w-6xl mx-auto px-5 py-5 flex flex-wrap items-center justify-between gap-y-3">
       <button onClick={()=>setPage("home")} className="text-left">
-        <div className="flex items-center gap-3 text-white font-bold text-4xl"><Cloud className="w-11 h-11 text-[#38b6ff]"/><span>Shipping<span className="text-[#38b6ff]">Cloud</span></span></div>
+        <div className="flex items-center gap-3"><img src={SC_LOGO} alt="ShippingCloud" style={{height:46,background:"#fff",borderRadius:12,padding:"8px 14px"}} className="w-auto" draggable={false}/></div>
         <div className="text-[15px] text-stone-400 tracking-wide mt-1 ml-[56px]">Sky’s the limit.</div>
         {pub&&pub.showLogo&&<div className="flex items-center gap-1 text-[11px] text-stone-500 mt-1 ml-[56px]" style={LOGO_FONT}>by <span className="font-bold text-stone-700">Freightwire<span style={{color:"#1E9BF0"}}>Ship</span></span></div>}
       </button>
@@ -2555,7 +2553,7 @@ function AppInner(){
           {BRAND.fw?(<>
             <button onClick={()=>setTab("ship")} title="Back to Ship" className="flex items-center gap-2.5 cursor-pointer select-none shrink-0">
               <span className="hidden" aria-hidden="true"/>
-              <img src={FW_LOGO} alt="Freightwire" style={{height:26}} className="w-auto shrink-0" draggable={false}/><span className="w-px h-6 bg-stone-200 shrink-0"/><img src={FWSHIP_LOGO} alt="FreightwireShip" style={{height:22}} className="w-auto shrink-0" draggable={false}/>
+              <img src={FW_LOGO} alt="Freightwire" style={{height:Math.round(28*((custom.logoScale||100)/100))+"px"}} className="w-auto shrink-0" draggable={false}/>
             </button>
           </>):(
           <button onClick={()=>setTab("ship")} title="Back to Ship" className="cursor-pointer flex items-center shrink-0">{(!brand.name1||brand.name1==="Shipping")&&(!brand.name2||brand.name2==="Cloud")?<img src={SC_LOGO} alt="ShippingCloud" style={{height:Math.round(30*((custom.logoScale||100)/100))+"px"}} className="w-auto" draggable={false}/>:<span className="font-bold text-[20px] sm:text-[26px]" style={{...LOGO_FONT,color:(custom.theme==="dark"||custom.theme==="grey")?"#F5F5F4":brand.dark}}>{brand.name1}<span style={{color:custom.accent||brand.primary}}>{brand.name2}</span></span>}</button>)}

@@ -72,7 +72,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v261";
+const BUILD_TAG="addr-v262";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1540,6 +1540,28 @@ const SLIP_OPTS={thanks:"",footer:""};   // synced from settings by AppInner; re
 const CI_OPTS={taxId:"",logo:""};                 // Tax ID / EIN printed on commercial invoices, from Settings → General
 const fireConfetti=()=>{try{window.dispatchEvent(new CustomEvent("sc-confetti"));}catch(e){}};
 const seasonalEmoji=()=>{const d=new Date(),m=d.getMonth(),dd=d.getDate();if(m===11&&dd<=27)return "🎅";if(m===9&&dd>=24)return "🎃";if(m===1&&dd>=10&&dd<=15)return "❤️";if(m===6&&dd<=5)return "🎆";if(m===2&&dd>=15&&dd<=18)return "🍀";if(m===10&&dd>=23&&dd<=29)return "🦃";return "";};
+/* Real save confirmation, everywhere — not a fake instant toast. Fires only when cloudFlush's
+   network call actually succeeds or actually fails, so "Saved" means it truly reached the
+   server, and a failure genuinely tells you it didn't (instead of failing silently forever). */
+function SaveToast(){
+  const [msgs,setMsgs]=useState([]);
+  useEffect(()=>{
+    const onSaved=()=>{ const id=Date.now()+Math.random(); setMsgs(m=>[...m,{id,ok:true}]); setTimeout(()=>setMsgs(m=>m.filter(x=>x.id!==id)),2200); };
+    const onFailed=(e)=>{ const id=Date.now()+Math.random(); const err=(e&&e.detail&&e.detail.error)||"offline"; setMsgs(m=>[...m,{id,ok:false,err}]); setTimeout(()=>setMsgs(m=>m.filter(x=>x.id!==id)),6000); };
+    window.addEventListener("sc-saved",onSaved);
+    window.addEventListener("sc-save-failed",onFailed);
+    return ()=>{ window.removeEventListener("sc-saved",onSaved); window.removeEventListener("sc-save-failed",onFailed); };
+  },[]);
+  if(!msgs.length)return null;
+  const last=msgs[msgs.length-1];
+  return (<div className="fixed bottom-4 right-4 z-[200] flex flex-col items-end gap-2 pointer-events-none">
+    <div key={last.id} className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium shadow-lg ${last.ok?"bg-emerald-600 text-white":"bg-rose-600 text-white"}`} style={{animation:"scToastIn .25s ease both"}}>
+      {last.ok?<CheckCircle2 className="w-4 h-4"/>:<AlertTriangle className="w-4 h-4"/>}
+      {last.ok?"Saved":`Couldn't save (${last.err}) \u2014 will retry`}
+    </div>
+    <style>{`@keyframes scToastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}`}</style>
+  </div>);
+}
 function ConfettiHost({mode}){
   const [bursts,setBursts]=useState([]);
   useEffect(()=>{ if(mode==="off")return;
@@ -3233,12 +3255,18 @@ async function cloudFlush(){
   CLOUD.timer=null;
   const stores=CLOUD.queue; if(!Object.keys(stores).length)return;
   CLOUD.queue={};
+  const keys=Object.keys(stores);
   const res=await cloudCall({action:"putMany",token:CLOUD.token,stores});
-  if(res&&res.ok){ CLOUD.offline=false; return; }
+  if(res&&res.ok){
+    CLOUD.offline=false;
+    try{ window.dispatchEvent(new CustomEvent("sc-saved",{detail:{keys}})); }catch(e){}
+    return;
+  }
   if(res&&res.authFailed){ lsDel("cloud.token"); window.location.reload(); return; }
   CLOUD.offline=true;
   CLOUD.queue={...stores,...CLOUD.queue};
   for(const k in stores) delete CLOUD.baseline[k];
+  try{ window.dispatchEvent(new CustomEvent("sc-save-failed",{detail:{keys,error:(res&&res.error)||"offline"}})); }catch(e){}
   if(!CLOUD.timer)CLOUD.timer=setTimeout(cloudFlush,10000);
 }
 /* Cross-site freshness: shared stores (clients, rateRules, users…) are pulled from the
@@ -4234,6 +4262,7 @@ function AppInner(){
       {!isDemo&&!isAdmin&&!adminReturn&&CLOUD.mode==="cloud"&&!fedexPrompt.seen&&<FirstRunFedEx user={currentUser} onClose={()=>setFedexPrompt({seen:true})}/>}
       <AssistantChat who={isDemo?"demo":isAdmin?"admin":"customer"} getContext={assistantContext} onAction={onAssistantAction}/>
       <ConfettiHost mode={custom.confetti||"page"}/>
+      <SaveToast/>
       <header style={custom.headerBg?{background:custom.headerBg}:undefined} className={"border-b border-stone-200 sticky z-30 backdrop-blur "+(custom.headerBg?"":"bg-white/90 ")+((adminReturn||isDemo)?"top-9":"top-0")}>
         <div className="px-3 sm:px-4 h-14 flex items-center gap-2 sm:gap-3 relative">
           <button onClick={()=>setNavOpen(true)} className="md:hidden p-2 -ml-1 rounded-lg hover:bg-stone-100 text-stone-600" aria-label="Menu"><Layers className="w-5 h-5"/></button>
@@ -4292,7 +4321,7 @@ function AppInner(){
         </aside>
         <main className="flex-1 min-w-0 overflow-x-clip px-3 sm:px-6 py-4 sm:py-6" style={(custom.appBg||custom.pageBg)?{...(custom.pageBg?{backgroundColor:custom.pageBg}:{}),...(custom.appBg?{backgroundImage:`url(${custom.appBg})`,backgroundSize:"cover",backgroundPosition:"center",backgroundAttachment:"fixed"}:{})}:undefined}>
           {tab==="dashboard"&&<Dashboard shipments={shipments} orders={orders} returns={returns} goTab={setTab}/>}
-          {tab==="ship"&&<Ship client={client} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={rules} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders}/>}
+          {tab==="ship"&&<Ship client={client} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={rules} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders} currentUser={currentUser} setUsers={setUsers} setCurrentUser={setCurrentUser} clients={clients}/>}
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
           {tab==="orders"&&<Orders orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} setSettings={setSettings} onShipped={onShipped} openOrderId={pendingOpenOrderId} onOpenedOrder={()=>setPendingOpenOrderId(null)}/>}
           {tab==="batch"&&<Batch orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
@@ -4319,7 +4348,7 @@ function AppInner(){
 }
 
 /* ════════ SHIP ════════ */
-function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,drafts,setDrafts,prefill,clearPrefill,onShipped,onPending,logEmail,onQuickQuote,onRefresh,syncing}){
+function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,drafts,setDrafts,prefill,clearPrefill,onShipped,onPending,logEmail,onQuickQuote,onRefresh,syncing,currentUser,setUsers,setCurrentUser,clients=[]}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 rate database — global, follows the customer's profile
   const empty={country:"United States",name:"",company:"",zip:"",state:"",city:"",address1:"",address2:"",address3:"",phone:"",email:""};
   const [sender,setSender]=useState({country:"United States",...settings.sender,address2:"",address3:""});
@@ -4471,17 +4500,20 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   /* Autopilot, live: when the toggle is on and an order is loaded, run the SAME rule engine
      Autopilot uses — client-side, instantly, no batch step — and if a rule fires a "Set Service"
      action, that service gets the same AUTOPILOT-badged highlight a completed Autopilot run gives it. */
-  const liveRuleMatch=useMemo(()=>{
-    if(!custom.autoRulesOnShip||!selectedOrder)return null;
-    const so=orders.find(x=>x.id===selectedOrder); if(!so)return null;
+  const liveRuleStatus=useMemo(()=>{
+    if(!custom.autoRulesOnShip)return null;                              // toggle off — say nothing
+    if(!selectedOrder)return {state:"no-order"};                        // on, but nothing loaded to check
+    const so=orders.find(x=>x.id===selectedOrder); if(!so)return {state:"no-order"};
     const enabled=(rules||[]).filter(r=>r&&r.enabled);
-    if(!enabled.length)return null;
+    if(!enabled.length)return {state:"no-rules"};
     try{
       const run=runRuleEngine(enabled,[so],originZip);
       const r0=run.results&&run.results[0];
-      return (r0&&r0.fires&&r0.fires.length&&r0.view&&r0.view.selectedService)?r0.view.selectedService:null;
-    }catch(e){ return null; }
+      if(r0&&r0.fires&&r0.fires.length&&r0.view&&r0.view.selectedService)return {state:"fired",rule:r0.fires[0].ruleName,service:r0.view.selectedService};
+      return {state:"no-match"};
+    }catch(e){ return {state:"error",msg:(e&&e.message)||"rule engine error"}; }
   },[custom.autoRulesOnShip,selectedOrder,orders,rules,originZip]);
+  const liveRuleMatch=liveRuleStatus&&liveRuleStatus.state==="fired"?liveRuleStatus.service:null;
 
   const ready=/^\d{5}/.test(receiver.zip||"")&&totalWeight>0;
   const shipment={fromZip:originZip,toZip:receiver.zip,pieces:pieces.map(p=>({...p,weight:pw(p)})),residential,signature,signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null,intl,packageTypeCode:orBox?orBox.code:""};
@@ -4841,7 +4873,14 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           </div>
         )}
 
-        {(client._unassigned||client._unresolved)&&<div className="flex items-center gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>{client._unresolved?`This login is set to an unknown customer (id "${client.id}") — no such customer exists, so no account markup can apply. Fix the login’s assigned customer in Admin → Customers.`:"This login has no customer assigned — quotes price at exactly the raw carrier cost, no markup at all. Assign a customer in Admin → Customers → Logins to give it real pricing."}</div>}
+        {(client._unassigned||client._unresolved)&&<div className="flex flex-wrap items-center gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0"/>
+                  <span className="flex-1 min-w-[220px]">{client._unresolved?`This login is set to an unknown customer (id "${client.id}") — no such customer exists, so no account markup can apply.`:"This login has no customer assigned — quotes price at exactly the raw carrier cost, no markup at all."}</span>
+                  {currentUser&&setUsers&&setCurrentUser&&<select onChange={e=>{const cid=e.target.value;if(!cid)return;setCurrentUser(cu=>cu&&({...cu,clientId:cid}));setUsers(us=>us.map(u=>u.id===currentUser.id?{...u,clientId:cid}:u));e.target.value="";}} defaultValue="" className="bg-white border border-amber-300 rounded px-2 py-1 text-xs">
+                    <option value="" disabled>Assign to customer — fixes it instantly…</option>
+                    {clients.map(cc=><option key={cc.id} value={cc.id}>{cc.name}</option>)}
+                  </select>}
+                </div>}
                 {selectedOrder&&(()=>{const so=orders.find(o=>o.id===selectedOrder);return so&&(so.shippingService||so.source)?<div className="flex items-center gap-2 text-xs text-stone-600 bg-stone-100 border border-stone-200 rounded-lg px-3 py-2"><Truck className="w-3.5 h-3.5 text-stone-400"/>From order <b>{so.name}</b>{so.source?` (${so.source})`:""} — buyer requested <b>{so.shippingService||"Standard"}</b>.</div>:null;})()}
         {ready&&<div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
           {rateSrc.loading?<><Loader2 className="w-3.5 h-3.5 animate-spin"/>Fetching live rates…</>
@@ -4850,6 +4889,14 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         </div>}
         {ready&&!rateSrc.live&&!rateSrc.loading&&rateSrc.diag&&<div className="text-[11px] text-stone-400 -mt-1 px-1">
           Tried England on your <b>{rateSrc.diag.src==="customer"?"customer's":"main"}</b> account · from ZIP {rateSrc.diag.fromZip} · customer ID {rateSrc.diag.cust} · key {rateSrc.diag.key} · {rateSrc.diag.enabled?"live toggle ON":"live toggle OFF"}{!rateSrc.diag.hasKey?" · no API key found":""}{!rateSrc.diag.hasCust?" · no customer ID found":""}{rateSrc.diag.fromZip==="(none)"?" — no origin ZIP: set your sender ZIP or the customer's origin.":""}{rateSrc.error&&/401|invalid/i.test(rateSrc.error)?" — England rejected this key/ID pair. Re-enter it in Settings → Carrier accounts and Test again.":""}
+        </div>}
+        {liveRuleStatus&&<div className={`text-[11px] rounded px-3 py-2 mb-2 flex items-center gap-1.5 ${liveRuleStatus.state==="fired"?"bg-emerald-50 border border-emerald-200 text-emerald-800":liveRuleStatus.state==="error"?"bg-rose-50 border border-rose-200 text-rose-700":"bg-stone-50 border border-stone-200 text-stone-500"}`}>
+          <Zap className="w-3.5 h-3.5 shrink-0"/>
+          {liveRuleStatus.state==="fired"&&<span>Autopilot rule <b>"{liveRuleStatus.rule}"</b> matched this order — highlighted <b>{liveRuleStatus.service}</b> below.</span>}
+          {liveRuleStatus.state==="no-order"&&<span>Autopilot is on, but no order is loaded on this screen — it only checks orders pulled in from the sidebar, not manually-typed shipments.</span>}
+          {liveRuleStatus.state==="no-rules"&&<span>Autopilot is on, but you have no enabled rules — check Autopilot \u2192 your rules aren’t toggled off.</span>}
+          {liveRuleStatus.state==="no-match"&&<span>Autopilot is on — none of your rules matched this order, so nothing was auto-selected.</span>}
+          {liveRuleStatus.state==="error"&&<span>Autopilot hit an error checking this order: {liveRuleStatus.msg}</span>}
         </div>}
         <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
         {labelPreview&&<LabelPreviewModal data={labelPreview} settings={settings} onClose={()=>{setLabelPreview(null);if(cz(settings).skipBookedSummary)newShipment();}}/>}

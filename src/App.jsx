@@ -45,7 +45,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v204fw";
+const BUILD_TAG="addr-v206fw";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1798,7 +1798,7 @@ function Landing({onAuth}){
   useEffect(()=>{const onHash=()=>setPageState(pageFromHash());window.addEventListener("hashchange",onHash);return ()=>window.removeEventListener("hashchange",onHash);},[]);
   const [pub,setPub]=useState(null);
   useEffect(()=>{let on=true;(async()=>{try{const r=await cloudCall({action:"publicConfig"});if(on&&r&&r.ok)setPub(r);}catch{}})();return ()=>{on=false;};},[]);
-  const NavTab=({label,onClick})=>(<button onClick={onClick} className="text-sm text-stone-300 hover:text-white px-2.5 py-2">{label}</button>);
+  const NavTab=({label,onClick})=>(<button onClick={onClick} className="text-sm font-medium text-stone-600 hover:text-stone-900 hover:bg-stone-100 px-3 py-1.5 rounded-lg transition-colors">{label}</button>);
   const F=({icon:I,title,children})=>(<div className="bg-white border border-stone-200/80 rounded-2xl p-6 shadow-[0_2px_12px_-4px_rgba(30,50,80,.06)] hover:shadow-[0_8px_28px_-8px_rgba(30,50,80,.14)] hover:-translate-y-0.5 transition-all duration-200">
     <div className="w-11 h-11 rounded-xl bg-[#0086E0]/10 border border-[#0086E0]/20 flex items-center justify-center mb-4"><I className="w-5 h-5 text-[#0086E0]"/></div>
     <div className="font-semibold text-stone-900 mb-1.5">{title}</div>
@@ -1815,7 +1815,7 @@ function Landing({onAuth}){
 
     <div className="relative mt-2 text-[11px] text-stone-400 flex items-center gap-2" style={{animation:"fwRise .6s .3s ease both"}}>© {new Date().getFullYear()} Freightwire · <LegalLinks/></div>
   </div>);
-  return (<div className="min-h-screen bg-[#f7f6f3] text-stone-700">
+  return (<div className="min-h-screen bg-[#f4f2ee] text-stone-600">
     {/* nav */}
     <div className="max-w-6xl mx-auto px-5 py-5 flex flex-wrap items-center justify-between gap-y-3">
       <button onClick={()=>setPage("home")} className="text-left">
@@ -1863,7 +1863,7 @@ function Landing({onAuth}){
       <div className="text-center mb-10"><h2 className="text-2xl sm:text-3xl font-bold text-stone-900">Your customized long term solution</h2></div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <F icon={DollarSign} title="Industry-leading FedEx rates">The pricing big shippers get, from day one. No volume commitments, no negotiating.</F>
-        <F icon={Receipt} title="Automated invoice auditing">We check every carrier bill against what you were quoted and flag anything off, so you can dispute anything that isn’t right.</F>
+        <F icon={BarChart3} title="Transit dashboard & detailed reporting">Track every shipment end to end and see spend, transit times, and delivery performance at a glance — with detailed reports you can act on.</F>
         <F icon={Zap} title="Autopilot Mode">Set your rules once, then let the platform do all the work. Orders arrive rated, boxed, and ready to print — you just hit go.</F>
         <F icon={Cog} title="Customization">We adapt to your flow, not the other way around. Need something the platform doesn’t do? Tell us. We’ll build it.</F>
         <F icon={Users} title="Built by shipping people, supported by tech people">We’ve stood at the shipping desk — the reweighs, the surprise surcharges, the reps who never call back. We know the problems firsthand, and we have the tech team to fix them.</F>
@@ -1872,7 +1872,7 @@ function Landing({onAuth}){
     </div>
     {/* beat your UPS rates */}
     <div id="rates" className="max-w-6xl mx-auto px-5 pb-16 scroll-mt-6">
-      <div className="border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-transparent rounded-2xl p-8 sm:p-10 text-center">
+      <div className="border border-stone-200/80 bg-white shadow-[0_2px_14px_-6px_rgba(30,50,80,.08)] rounded-2xl p-8 sm:p-10 text-center">
         <h2 className="text-2xl sm:text-3xl font-bold text-stone-900 leading-snug">Save 10–15% switching to our FedEx rates.</h2>
         <p className="mt-3 text-stone-400 max-w-2xl mx-auto">No fees. No BS. Send us a recent UPS invoice and get a line-by-line comparison back — the same day.</p>
         <button onClick={()=>onAuth("fedex")} className="mt-6 border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#0086E0] font-semibold rounded-lg px-6 py-3 inline-flex items-center gap-2"><Upload className="w-4 h-4"/>Send us your UPS invoice</button>
@@ -1880,7 +1880,7 @@ function Landing({onAuth}){
     </div>
     {/* integrations banner */}
     <div className="max-w-6xl mx-auto px-5 pb-16">
-      <div className="border border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-transparent rounded-2xl p-8 sm:p-10 text-center">
+      <div className="border border-stone-200/80 bg-white shadow-[0_2px_14px_-6px_rgba(30,50,80,.08)] rounded-2xl p-8 sm:p-10 text-center">
         <h2 className="text-2xl sm:text-3xl font-bold text-stone-900 leading-snug">We want to integrate with your systems.</h2>
         <p className="mt-3 text-stone-400 max-w-2xl mx-auto">Your WMS, your ERP, your inventory management, your shopping cart — we plug into what you already run, so this works as a long-term solution. We already have lots of integrations, and if we don’t have yours, we’ll build it.</p>
         <button onClick={()=>onAuth("request")} className="mt-6 border border-violet-400/50 bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 font-semibold rounded-lg px-6 py-3 inline-flex items-center gap-2"><Plug className="w-4 h-4"/>Tell us what you run</button>
@@ -1888,7 +1888,7 @@ function Landing({onAuth}){
     </div>
     {/* customization banner */}
     <div className="max-w-6xl mx-auto px-5 pb-16">
-      <div className="border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-transparent rounded-2xl p-8 sm:p-10 text-center">
+      <div className="border border-stone-200/80 bg-white shadow-[0_2px_14px_-6px_rgba(30,50,80,.08)] rounded-2xl p-8 sm:p-10 text-center">
         <h2 className="text-2xl sm:text-3xl font-bold text-stone-900 leading-snug">Customized for your company and processes.</h2>
         <p className="mt-3 text-stone-400 max-w-2xl mx-auto">Their limitations become your limitations. Not here — we grow with you and build the features you actually need, on your account, when you need them.</p>
         <button onClick={()=>onAuth("request")} className="mt-6 border border-amber-400/50 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-semibold rounded-lg px-6 py-3 inline-flex items-center gap-2"><Cog className="w-4 h-4"/>Get started</button>
@@ -1897,26 +1897,26 @@ function Landing({onAuth}){
     {/* built-in Claude */}
     <div className="max-w-6xl mx-auto px-5 pb-4">
       <div className="rounded-2xl p-8 sm:p-12 border border-[#D97757]/30 bg-gradient-to-br from-[#D97757]/12 via-[#faf3ef]/[0.04] to-transparent">
-        <div className="flex items-center gap-2 text-[#E8927C] font-semibold text-sm"><Sparkles className="w-4 h-4"/>Built-in AI · powered by Claude</div>
+        <div className="flex items-center gap-2 text-[#0086E0] font-semibold text-sm"><Sparkles className="w-4 h-4"/>Built-in AI · powered by Claude</div>
         <h2 className="mt-3 text-3xl sm:text-4xl font-bold text-stone-900 leading-tight max-w-3xl">Let Claude do the shipping busywork for you.</h2>
         <p className="mt-4 text-stone-600 max-w-2xl text-[15px] leading-relaxed">ShippingCloud has Anthropic’s Claude built right in — not a canned help bot, but an assistant that actually works your account. Ask in plain English and it sets things up for you to approve.</p>
         <div className="mt-8 grid sm:grid-cols-3 gap-4 max-w-4xl">
           <div className="bg-white border border-stone-200 rounded-xl p-5">
-            <div className="flex items-center gap-2 text-stone-900 font-semibold"><Layers className="w-4 h-4 text-[#E8927C]"/>Batch by voice</div>
+            <div className="flex items-center gap-2 text-stone-900 font-semibold"><Layers className="w-4 h-4 text-[#0086E0]"/>Batch by voice</div>
             <p className="mt-2 text-[13px] text-stone-400 leading-relaxed">“Batch every Shopify order under 5 lb to Texas as cheapest ground.” Claude filters, selects, and stages the whole run.</p>
           </div>
           <div className="bg-white border border-stone-200 rounded-xl p-5">
-            <div className="flex items-center gap-2 text-stone-900 font-semibold"><Zap className="w-4 h-4 text-[#E8927C]"/>Rules in plain English</div>
+            <div className="flex items-center gap-2 text-stone-900 font-semibold"><Zap className="w-4 h-4 text-[#0086E0]"/>Rules in plain English</div>
             <p className="mt-2 text-[13px] text-stone-400 leading-relaxed">“Orders over $500 ship Priority Overnight.” It writes the automation rule into Autopilot and can run it on the spot.</p>
           </div>
           <div className="bg-white border border-stone-200 rounded-xl p-5">
-            <div className="flex items-center gap-2 text-stone-900 font-semibold"><MessageCircle className="w-4 h-4 text-[#E8927C]"/>Answers, instantly</div>
+            <div className="flex items-center gap-2 text-stone-900 font-semibold"><MessageCircle className="w-4 h-4 text-[#0086E0]"/>Answers, instantly</div>
             <p className="mt-2 text-[13px] text-stone-400 leading-relaxed">“Start a label to Acme in Austin,” “which orders are going stale?” — it fills forms and knows your shipping cold.</p>
           </div>
         </div>
         <div className="mt-7 flex flex-wrap items-center gap-4">
           <button onClick={enterDemo} className="inline-flex items-center gap-2 bg-white text-neutral-950 font-semibold rounded-lg px-6 py-3 hover:bg-stone-200"><Eye className="w-4 h-4"/>Try it in the demo</button>
-          <span className="inline-flex items-center gap-1.5 text-[13px] text-stone-400"><ShieldCheck className="w-4 h-4 text-[#E8927C]"/>It stages, you approve — Claude never prints a label without you.</span>
+          <span className="inline-flex items-center gap-1.5 text-[13px] text-stone-400"><ShieldCheck className="w-4 h-4 text-[#0086E0]"/>It stages, you approve — Claude never prints a label without you.</span>
         </div>
       </div>
     </div>

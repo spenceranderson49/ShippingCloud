@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v238";
+const BUILD_TAG="addr-v240";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1904,7 +1904,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       <Field label="Phone"><Input value={c.phone||""} onChange={e=>upClient({phone:e.target.value})}/></Field>
       <Field label="Origin ZIP (ships from)"><Input value={c.origin||""} onChange={e=>upClient({origin:e.target.value})}/></Field>
       <Field label="Legacy flat markup %"><Input type="number" value={c.markup==null?"":c.markup} onChange={e=>upClient({markup:+e.target.value||0})}/></Field>
-      {(()=>{const g=(rules&&rules.global)||{};const on=g.pct!=null&&g.pct!==""&&!isNaN(+g.pct);return <div className={`text-[11px] rounded px-3 py-2 border ${on?"bg-emerald-50 border-emerald-200 text-emerald-800":"bg-stone-50 border-stone-200 text-stone-500"}`}>Global cost-plus markup: {on?<b>cost + {+g.pct}%{g.min?` (min $${(+g.min).toFixed(2)})`:""}</b>:"off"} — the platform-wide knob lives at the top of <b>Admin → Rate database</b>. Per-service rules here override it; this customer's flat markup applies only when global is off.</div>;})()}
+      {(()=>{const g=(rules&&rules.global)||{};const on=g.pct!=null&&g.pct!==""&&!isNaN(+g.pct);return <div className={`text-[11px] rounded px-3 py-2 border ${on?"bg-emerald-50 border-emerald-200 text-emerald-800":"bg-stone-50 border-stone-200 text-stone-500"}`}>Global cost-plus markup: {on?<b>cost + {+g.pct}%{g.min?` (min $${(+g.min).toFixed(2)})`:""}</b>:"off"} — edit it at the top of this customer\u2019s <b>Rates</b> tab (it\u2019s platform-wide). Per-service rules here override it; this customer's flat markup applies only when global is off.</div>;})()}
       <Field label="Status"><Select value={c.status||"active"} onChange={e=>upClient({status:e.target.value})}><option value="active">active</option><option value="inactive">inactive</option></Select></Field>
       <Field label="Plan"><Input value={c.plan||""} onChange={e=>upClient({plan:e.target.value})}/></Field>
       <Field label="Account number (yours)"><Input value={c.acctNo||""} onChange={e=>upClient({acctNo:e.target.value})} placeholder="internal ref"/></Field>
@@ -1956,6 +1956,22 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
     </div>}
 
     {tab==="rates"&&<div className="space-y-3">
+      {/* Global cost-plus markup — same store the Rate database section edits; shown here so all pricing lives on one screen */}
+      <div className="border border-stone-200 rounded-lg bg-white p-3 flex flex-wrap items-end gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-stone-800 flex items-center gap-2">Global cost-plus markup {(rules.global&&rules.global.pct!=null&&rules.global.pct!==""&&!isNaN(+rules.global.pct))?<Badge tone="green">on — every customer</Badge>:<Badge>off</Badge>}</div>
+          <div className="text-[11px] text-stone-500 mt-0.5 max-w-md">One number over cost, platform-wide: every customer, every service, every accessorial. The per-service rules below override it for this profile; while it's set it replaces customers' legacy flat markups.</div>
+        </div>
+        <span className="flex-1"/>
+        <Field label="Markup %"><Input type="number" className="w-24" placeholder="e.g. 20" value={(rules.global&&rules.global.pct)??""} onChange={e=>upRules({global:{...(rules.global||{}),pct:e.target.value}})}/></Field>
+        <Field label="Min $ / label"><Input type="number" className="w-24" placeholder="—" value={(rules.global&&rules.global.min)??""} onChange={e=>upRules({global:{...(rules.global||{}),min:e.target.value}})}/></Field>
+        {rules.global&&rules.global.pct!==""&&rules.global.pct!=null&&<button onClick={()=>{if(window.confirm("Clear the global markup? Pricing falls back to per-service rules and each customer\u2019s flat markup."))upRules({global:{}});}} className="text-xs text-rose-500 bg-stone-100 rounded-lg px-2.5 py-1.5 hover:bg-rose-50">Clear</button>}
+      </div>
+      <div className="text-[11px] text-stone-600 bg-[#F0F9FF] border border-[#BAE6FD] rounded px-3 py-2">
+        <b>Live check</b> — a $10.00 cost sells right now for:&nbsp;
+        {["FedEx Ground","FedEx Home Delivery","FedEx 2Day","FedEx Priority Overnight"].map((l,i)=><span key={l}>{i>0&&" · "}{l.replace("FedEx ","")} <b className="font-mono">{money(rateSellFor(10,l,{rules,client:c}))}</b></span>)}
+        &nbsp;— same engine that prices every quote; type a markup above or below and watch these move instantly.
+      </div>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-stone-600">{c.name} prices from</span>
         <Select value={assign[cid]||"default"} onChange={e=>upRules({assign:{...assign,[cid]:e.target.value}})}>{profiles.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</Select>
@@ -3063,6 +3079,10 @@ function scrubLegacyDefaults(s){
   if(wh.length!==(next.warehouses||[]).length){ next={...next,warehouses:wh}; changed=true; }
   return changed?next:s;
 }
+/* Every hook on the same key stays in lockstep: edits broadcast to all mounted
+   components instantly (PERSIST_BUS) and to other same-site tabs via storage
+   events. Other domains pick changes up from the cloud on their next load. */
+const PERSIST_BUS={};
 function usePersist(key,initial){
   const nsKey=GLOBAL_KEYS[key]?key:("u/"+activeUid()+"/"+key);
   const [val,setVal]=useState(()=>{
@@ -3076,8 +3096,16 @@ function usePersist(key,initial){
     }
     return initial;
   });
+  useEffect(()=>{
+    const bus=(PERSIST_BUS[nsKey]=PERSIST_BUS[nsKey]||new Set());
+    bus.add(setVal);
+    const onStorage=(e)=>{ if(e&&e.key===nsKey&&e.newValue!=null){ try{ setVal(JSON.parse(e.newValue)); }catch(_){ } } };
+    window.addEventListener("storage",onStorage);
+    return ()=>{ bus.delete(setVal); window.removeEventListener("storage",onStorage); };
+  },[nsKey]);
   useEffect(()=>{lsSet(nsKey,val);cloudQueue(nsKey,val);},[nsKey,val]);
-  return [val,setVal];
+  const setShared=React.useCallback((v)=>{ const bus=PERSIST_BUS[nsKey]; if(bus&&bus.size){ bus.forEach(fn=>{ try{ fn(v); }catch(_){ } }); } else setVal(v); },[nsKey]);
+  return [val,setShared];
 }
 
 /* ════════ CLOUD SYNC (Supabase via /.netlify/functions/db) ════════
@@ -4128,7 +4156,7 @@ function AppInner(){
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
           {tab==="orders"&&<Orders orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} setSettings={setSettings} onShipped={onShipped}/>}
           {tab==="batch"&&<Batch orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
-          {tab==="shipments"&&<Shipments labels={labelStore} shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels} settings={settings}/>}
+          {tab==="shipments"&&<Shipments isAdmin={isAdmin} labels={labelStore} shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels} settings={settings}/>}
           {hkHelp&&<div onClick={()=>setHkHelp(false)} className="fixed bottom-4 right-4 z-50 bg-stone-900 text-white rounded-xl shadow-lg p-4 text-xs space-y-1.5 cursor-pointer">
             <div className="font-semibold text-sm mb-1">Keyboard shortcuts</div>
             <div><span className="font-mono bg-stone-700 rounded px-1">g</span> then <span className="font-mono bg-stone-700 rounded px-1">s</span> Ship · <span className="font-mono bg-stone-700 rounded px-1">o</span> Orders · <span className="font-mono bg-stone-700 rounded px-1">h</span> Shipments</div>
@@ -5499,7 +5527,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   );
 }
 
-function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,settings,labels={}}){
+function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,settings,labels={},isAdmin=false}){
   const [reprintLp,setReprintLp]=useState(null);
   const doReprint=(sh)=>{ const e=labels&&labels[sh.id]; if(e&&e.pdf){ setReprintLp({pdf:e.pdf,tracking:sh.tracking,service:sh.service,carrier:sh.carrier,rec:sh}); } else { window.alert("No stored label for this shipment on this account (labels are kept for the 60 most recent bookings). Use Edit & reship to book a fresh one."); } };
   const custom=cz(settings||{});
@@ -5560,6 +5588,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                 {s.intl&&<Info k="Customs" v={s.customs?`${s.customs.ci} · declared ${money(s.customs.total)}`:"International"}/>}
                 <Info k="Bill to" v={s.billTo==="third"?`Third-party ${s.thirdAcct||""}`:s.billTo}/>
                 <Info k="Rate" v={money(s.sell)}/>
+                {isAdmin&&s.cost!=null&&<Info k="Cost → margin" v={money(s.cost)+" → +"+money(Math.max(0,(s.sell||0)-(s.cost||0)))}/>}
               </div>
               <div className="flex flex-wrap gap-2">
                 <button onClick={()=>reship(s)} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-800 flex items-center gap-1.5"><RotateCcw className="w-3.5 h-3.5"/>Edit &amp; reship</button>

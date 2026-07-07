@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v252";
+const BUILD_TAG="addr-v253";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -2873,6 +2873,28 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
       <p>Create and manage every login on the platform. <b>Customer</b> logins see only their own data and the tabs you give them; <b>admin</b> logins run this portal.</p>
       <p className="text-xs text-stone-400">Per-login buttons: <b>Log in as</b> opens the app exactly as that person sees it (sign out to come back) · <b>Company admin</b> lets them manage their own company's logins · <b>Tabs &amp; logo</b> sets which tabs they see and their header logo · <b>Password</b> resets it · <b>Active/Deactivated</b> controls whether they can sign in.</p>
     </div>
+    {(()=>{
+      const clientIds=new Set(clients.map(c=>c.id));
+      const orphans=users.filter(u=>u.role==="customer"&&u.clientId&&!clientIds.has(u.clientId));
+      if(!orphans.length)return null;
+      return (<div className="border border-amber-300 rounded-lg bg-amber-50/60 p-4 space-y-2">
+        <div className="font-semibold text-amber-800 flex items-center gap-2"><AlertTriangle className="w-4 h-4"/>{orphans.length} login{orphans.length>1?"s are":" is"} assigned to a customer that doesn't exist</div>
+        <div className="text-[12px] text-amber-700">These logins point at a customer ID with no matching record — usually left behind by a deleted or never-finished customer. Nobody is billed wrong because of this, but no account markup can apply until it's fixed, and the login sees an "unknown customer" warning when quoting.</div>
+        <div className="border border-amber-200 rounded-lg bg-white divide-y divide-amber-100 overflow-hidden">
+          {orphans.map(u=>(<div key={u.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
+            <span className="font-medium text-stone-800">{u.name}</span>
+            <span className="text-stone-400 text-xs">{u.email}</span>
+            <span className="text-[11px] font-mono text-amber-600 bg-amber-100 rounded px-1.5 py-0.5">dead id: {u.clientId}</span>
+            <span className="flex-1"/>
+            <Select value="" onChange={e=>{const v=e.target.value;if(!v)return;setUsers(us=>us.map(x=>x.id===u.id?{...x,clientId:v}:x));}} className="w-44 !py-1 text-xs">
+              <option value="">Reassign to…</option>
+              {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+            </Select>
+            <button onClick={()=>{if(window.confirm(`Remove ${u.name}'s customer assignment? They'll price at the platform default until reassigned.`))setUsers(us=>us.map(x=>x.id===u.id?{...x,clientId:null}:x));}} className="text-xs text-rose-500 hover:bg-rose-50 rounded px-2 py-1">Clear</button>
+          </div>))}
+        </div>
+      </div>);
+    })()}
     {companyAdminRequests.length>0&&<div className="border border-violet-200 rounded-lg bg-violet-50/50 p-4 space-y-2">
       <div className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Building2 className="w-4 h-4 text-violet-600"/>Company admin requests<Badge tone="stone">{companyAdminRequests.length}</Badge></div>
       {companyAdminRequests.map(r=>{const co=clients.find(c=>c.id===r.clientId);return (
@@ -3861,7 +3883,8 @@ function AppInner(){
   const [companyFlags,setCompanyFlags]=usePersist("companyFlags",{});
   const [companyAdminRequests,setCompanyAdminRequests]=usePersist("companyAdminRequests",[]);
   const [tab,setTab]=useState(BRAND.admin?"admin":"ship");
-  useEffect(()=>{const h=(e)=>{const t=e&&e.detail&&e.detail.tab;if(t)setTab(t);};window.addEventListener("sc-nav",h);return()=>window.removeEventListener("sc-nav",h);},[]);
+  const [pendingOpenOrderId,setPendingOpenOrderId]=useState(null);
+  useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};if(d.tab)setTab(d.tab);if(d.openOrderId)setPendingOpenOrderId(d.openOrderId);};window.addEventListener("sc-nav",h);return()=>window.removeEventListener("sc-nav",h);},[]);
   useEffect(()=>{ try{
     if(localStorage.getItem("scPurge")!=="2"){
       ["orders","shipments","returns","ledger","invoices","emails","drafts","pendingShips","rules","accounts"].forEach(k=>localStorage.removeItem(k));
@@ -4259,7 +4282,7 @@ function AppInner(){
           {tab==="dashboard"&&<Dashboard shipments={shipments} orders={orders} returns={returns} goTab={setTab}/>}
           {tab==="ship"&&<Ship client={client} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={rules} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders}/>}
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
-          {tab==="orders"&&<Orders orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} setSettings={setSettings} onShipped={onShipped}/>}
+          {tab==="orders"&&<Orders orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} setSettings={setSettings} onShipped={onShipped} openOrderId={pendingOpenOrderId} onOpenedOrder={()=>setPendingOpenOrderId(null)}/>}
           {tab==="batch"&&<Batch orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
           {tab==="shipments"&&<Shipments isAdmin={isAdmin} labels={labelStore} shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels} settings={settings}/>}
           {hkHelp&&<div onClick={()=>setHkHelp(false)} className="fixed bottom-4 right-4 z-50 bg-stone-900 text-white rounded-xl shadow-lg p-4 text-xs space-y-1.5 cursor-pointer">
@@ -5060,7 +5083,8 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
 }
 
 /* ════════ ORDERS ════════ */
-function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped}){
+function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,openOrderId=null,onOpenedOrder}){
+  useEffect(()=>{ if(!openOrderId)return; const found=orders.find(o=>o.id===openOrderId); if(found)setOpen(found); if(onOpenedOrder)onOpenedOrder(); },[openOrderId,orders]);
   const custom=cz(settings||{});
   const ordPad=custom.density==="compact"?"px-3 py-1":"px-3 py-2.5";
   const hideCol=new Set(custom.orderCols||[]);
@@ -6222,7 +6246,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
       let picked=null;
       try{
         const dup=dupShipment(o.name,shipments);
-        if(dup){ out.push({o,name:o.name,ok:false,error:"Skipped — already shipped "+dup.date+" ("+dup.tracking+"). Void that label first if this is intentional."}); setResults([...out]); setProgress(pr0=>({...pr0,n:pr0.n+1})); continue; }
+        if(dup){ out.push({o,name:o.name,orderId:o.id,ok:false,error:"Skipped — already shipped "+dup.date+" ("+dup.tracking+"). Void that label first if this is intentional."}); setResults([...out]); setProgress(pr0=>({...pr0,n:pr0.n+1})); continue; }
         if(orderHasHazmat(o,settings.products||[])&&!/ground|home/i.test(String((svcOv[o.id]||"")))){ /* ground-only enforcement happens at pick below */ }
         const pk0=packs[o.id];
         const res=await ratesForOrder(o,{residential:true,weightLb:(pk0&&pk0.totalWt)||o.weight,box:pk0&&pk0.pieces[0]?{L:pk0.pieces[0].L,W:pk0.pieces[0].W,H:pk0.pieces[0].H}:undefined,fromZip:originZip,sender:settings.sender},eng);
@@ -6235,16 +6259,16 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
           else picked=qs.slice().sort((a,b)=>a.cost-b.cost)[0];
         }
       }catch(e){}
-      if(!picked){ out.push({o,name:o.name,ok:false,error:"No rate returned"}); setResults([...out]); continue; }
+      if(!picked){ out.push({o,name:o.name,orderId:o.id,ok:false,error:"No rate returned"}); setResults([...out]); continue; }
       const need=[]; if(!o.customer&&!o.company)need.push("name"); if(String(o.phone||"").replace(/\D/g,"").length<10)need.push("phone"); if(!o.email)need.push("email");
-      if(need.length){ out.push({o,name:o.name,ok:false,error:"Missing "+need.join(", ")}); setResults([...out]); continue; }
+      if(need.length){ out.push({o,name:o.name,orderId:o.id,ok:false,error:"Missing "+need.join(", ")}); setResults([...out]); continue; }
       const pkB=packs[o.id];
       const res=await bookOrderLabel(o,{quote:picked,weightLb:(pkB&&pkB.totalWt)||o.weight,box:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:undefined,residential:true,sender:settings.sender},eng,settings.sender);
       if(res&&res.ok){
         const carrier=carrierOf(picked.label);
         onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:originZip,toZip:o.zip,weight:(pkB&&pkB.totalWt)||o.weight,pieces:pkB?pkB.pieces:undefined,dims:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,items:o.items||"",note:o.note||"",bookNumber:res.bookNumber},o.id);
         out.push({o,name:o.name,ok:true,tracking:res.tracking,service:picked.label,carrier,pdf:res.labelPdfBase64||null});
-      } else out.push({o,name:o.name,ok:false,error:(res&&res.error)||"Booking failed"});
+      } else out.push({o,name:o.name,orderId:o.id,ok:false,error:(res&&res.error)||"Booking failed"});
       setResults([...out]);
     }
     logBatch(out.filter(r=>r.ok).length,out.filter(r=>!r.ok).length);
@@ -6421,11 +6445,14 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         {results.some(r=>r.ok)&&<button onClick={()=>printPackingSlips(results.filter(r=>r.ok&&r.o).map(r=>slipFromOrder(r.o,settings.sender)))} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-4 h-4"/>Print packing slips</button>}
           <button onClick={()=>setResults([])} className="text-stone-300 hover:text-stone-600"><X className="w-4 h-4"/></button>
         </div>
-        {results.map((r,i)=>(<div key={i} className="flex items-center gap-2 text-[13px]">
+        {results.map((r,i)=>{
+          const jump=()=>{ const oid=r.orderId||(r.o&&r.o.id); if(!oid)return; try{ window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"orders",openOrderId:oid}})); }catch(e){} };
+          const oid=r.orderId||(r.o&&r.o.id);
+          return (<div key={i} onClick={!r.ok&&oid?jump:undefined} className={`flex items-center gap-2 text-[13px] ${!r.ok&&oid?"cursor-pointer hover:bg-rose-50 rounded px-1 -mx-1":""}`}>
           {r.ok?<CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0"/>:<AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0"/>}
           <span className="font-medium text-stone-700 w-16">{r.name}</span>
-          {r.ok?<span className="text-stone-500 truncate">{r.service}{r.tracking?` · ${r.tracking}`:""}</span>:<span className="text-rose-600 truncate">{r.error}</span>}
-        </div>))}
+          {r.ok?<span className="text-stone-500 truncate">{r.service}{r.tracking?` · ${r.tracking}`:""}</span>:<span className="text-rose-600 truncate underline decoration-dotted">{r.error}{oid?" — click to fix":""}</span>}
+        </div>);})}
       </div>}
 
       {/* order list */}
@@ -7574,7 +7601,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
       if(!canBook){
         const qs=quoteRates({fromZip:senderZip,toZip:o.zip,L:12,W:9,H:4,weight:wt,residential:true});
         const q=pickRate(qs,pref);
-        if(!q){rows.push({name:o.name,ok:false,error:"No rate"});continue;}
+        if(!q){rows.push({name:o.name,orderId:o.id,ok:false,error:"No rate"});continue;}
         const carrier=/dhl/i.test(q.label)?"DHL":"FedEx";
         onShipped&&onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:newTracking(carrier),carrier,service:q.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...((settings&&settings.sender)||{})},fromZip:senderZip,toZip:o.zip,weight:wt,dims:{L:12,W:9,H:4},cost:q.cost,sell:q.sell,billTo:"sender",status:"Label created",reference:o.name},o.id);
         rows.push({name:o.name,ok:true,service:q.label,demo:true});
@@ -7587,15 +7614,15 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
         const qs=((res&&res.rates)||[]).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:senderZip,toZip:o.zip,weight:wt})}));
         picked=pickRate(qs,pref);
       }catch(e){}
-      if(!picked){rows.push({name:o.name,ok:false,error:"No rate returned"});setApResults({rows:[...rows],heldN});continue;}
+      if(!picked){rows.push({name:o.name,orderId:o.id,ok:false,error:"No rate returned"});setApResults({rows:[...rows],heldN});continue;}
       const need=[];if(!o.customer&&!o.company)need.push("name");if(String(o.phone||"").replace(/\D/g,"").length<10)need.push("phone");if(!o.email)need.push("email");
-      if(need.length){rows.push({name:o.name,ok:false,error:"Missing "+need.join(", ")});setApResults({rows:[...rows],heldN});continue;}
+      if(need.length){rows.push({name:o.name,orderId:o.id,ok:false,error:"Missing "+need.join(", ")});setApResults({rows:[...rows],heldN});continue;}
       const res=await bookOrderLabel(o,{quote:picked,weightLb:wt,residential:true,sender:settings.sender},eng,settings.sender);
       if(res&&res.ok){
         const carrier=/dhl/i.test(picked.label)?"DHL":"FedEx";
         onShipped&&onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:senderZip,toZip:o.zip,weight:wt,dims:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,items:o.items||"",note:o.note||"",bookNumber:res.bookNumber},o.id);
         rows.push({name:o.name,ok:true,service:picked.label,tracking:res.tracking,pdf:res.labelPdfBase64||null});
-      } else rows.push({name:o.name,ok:false,error:(res&&res.error)||"Booking failed"});
+      } else rows.push({name:o.name,orderId:o.id,ok:false,error:(res&&res.error)||"Booking failed"});
       setApResults({rows:[...rows],heldN});
     }
     setApRunning(false);setApProg(null);
@@ -7655,11 +7682,13 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
         <button onClick={()=>setApResults(null)} className="text-stone-300 hover:text-stone-600"><X className="w-4 h-4"/></button>
       </div>
       {apResults.none&&<div className="text-sm text-stone-500">No unfulfilled orders to run right now{apResults.heldN?` — ${apResults.heldN} are held for your review`:""}.</div>}
-      {apResults.rows.map((r,i)=>(<div key={i} className="flex items-center gap-2 text-[13px]">
+      {apResults.rows.map((r,i)=>{
+        const jump=()=>{ if(!r.orderId)return; try{ window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"orders",openOrderId:r.orderId}})); }catch(e){} };
+        return (<div key={i} onClick={!r.ok&&r.orderId?jump:undefined} className={`flex items-center gap-2 text-[13px] ${!r.ok&&r.orderId?"cursor-pointer hover:bg-rose-50 rounded px-1 -mx-1":""}`}>
         {r.ok?<CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0"/>:<AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0"/>}
         <span className="font-medium text-stone-700 w-16">{r.name}</span>
-        {r.ok?<span className="text-stone-500 truncate">{r.service}{r.tracking?` · ${r.tracking}`:""}{r.demo?" · recorded (connect your carrier account for live labels)":""}</span>:<span className="text-rose-600 truncate">{r.error}</span>}
-      </div>))}
+        {r.ok?<span className="text-stone-500 truncate">{r.service}{r.tracking?` · ${r.tracking}`:""}{r.demo?" · recorded (connect your carrier account for live labels)":""}</span>:<span className="text-rose-600 truncate underline decoration-dotted">{r.error}{r.orderId?" — click to fix":""}</span>}
+      </div>);})}
       {apResults.rows.some(r=>r.ok&&!r.demo)&&<div className="text-[11px] text-stone-400">Labeled orders are marked fulfilled and now live in Shipments.</div>}
     </div>}
 

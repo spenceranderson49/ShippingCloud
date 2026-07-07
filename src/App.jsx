@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v233";
+const BUILD_TAG="addr-v234";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1897,6 +1897,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       <Field label="Phone"><Input value={c.phone||""} onChange={e=>upClient({phone:e.target.value})}/></Field>
       <Field label="Origin ZIP (ships from)"><Input value={c.origin||""} onChange={e=>upClient({origin:e.target.value})}/></Field>
       <Field label="Legacy flat markup %"><Input type="number" value={c.markup==null?"":c.markup} onChange={e=>upClient({markup:+e.target.value||0})}/></Field>
+      {(()=>{const g=(rules&&rules.global)||{};const on=g.pct!=null&&g.pct!==""&&!isNaN(+g.pct);return <div className={`text-[11px] rounded px-3 py-2 border ${on?"bg-emerald-50 border-emerald-200 text-emerald-800":"bg-stone-50 border-stone-200 text-stone-500"}`}>Global cost-plus markup: {on?<b>cost + {+g.pct}%{g.min?` (min $${(+g.min).toFixed(2)})`:""}</b>:"off"} — the platform-wide knob lives at the top of <b>Admin → Rate database</b>. Per-service rules here override it; this customer's flat markup applies only when global is off.</div>;})()}
       <Field label="Status"><Select value={c.status||"active"} onChange={e=>upClient({status:e.target.value})}><option value="active">active</option><option value="inactive">inactive</option></Select></Field>
       <Field label="Plan"><Input value={c.plan||""} onChange={e=>upClient({plan:e.target.value})}/></Field>
       <Field label="Account number (yours)"><Input value={c.acctNo||""} onChange={e=>upClient({acctNo:e.target.value})} placeholder="internal ref"/></Field>
@@ -4335,11 +4336,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     let rates=(rateSrc.rates||[]).filter(q=>q.carrier==="FedEx");
     let list=rates.length?rates:FEDEX_SKELETON.slice();   // skeleton (blank prices) until live rates arrive
     list=list.concat((orRates||[]).filter(q=>q.carrier==="FedEx"));   // One Rate services auto-appear when the box qualifies
-    list=list.filter(q=>!/first\s*overnight/i.test(q.label||""));   // never offer First Overnight
-    if(custom.hiddenServices&&custom.hiddenServices.length){const hs=new Set(custom.hiddenServices);list=list.filter(q=>!hs.has(canonSvc(q.label)));}   // user-hidden services
-    if(addrClassified){
-      list=list.filter(q=>{const k=canonSvc(q.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;});
-    }
+    // Every service FedEx returns is offered — hide services per-login in Settings → Customize → Services.
+    if(custom.hiddenServices&&custom.hiddenServices.length){const hs=new Set(custom.hiddenServices);list=list.filter(q=>!hs.has(canonSvc(q.label)));}
     return list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,client)});})
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
   },[rateSrc,orRates,client.markup,rateRules,fxTransit,residential,addrClassified,sigOption,saturday,insurance]);
@@ -5102,7 +5100,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
     return ()=>{cancel=true;};
   },[rateNonce,o.zip,weight,box.L,box.W,box.H,residential,oneRate,orBox&&orBox.code,eng]);
   const localOrderQuotes=()=>quoteRates({fromZip,toZip:o.zip,pieces:[{weight:+weight||0,L:box.L,W:box.W,H:box.H}],residential,intl:false}).filter(qq=>qq.carrier==="FedEx");
-  const quotes=useMemo(()=>(rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!/first\s*overnight/i.test(qq.label||"")).filter(qq=>{const k=canonSvc(qq.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;}).map(qq=>({...qq,sell:Math.round((qq.cost||0)*(1+(client?.markup||0)/100)*100)/100})).sort((a,b)=>a.sell-b.sell),[rateSrc,residential,client]);
+  const quotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:Math.round((qq.cost||0)*(1+(client?.markup||0)/100)*100)/100})).sort((a,b)=>a.sell-b.sell);},[rateSrc,residential,client,settings]);
   const best=(rateSrc.live&&quotes[0])?quotes[0].key:null;
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
   const printHere=async(qq)=>{
@@ -5275,7 +5273,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   },[rcv.zip,fromZip,residential,totalWeight,box.L,box.W,box.H]);
   // FedEx One Rate 2Day — flat, zone-independent.
   const orRates=useMemo(()=>selectedOrBox?oneRateQuotes(selectedOrBox,{rules:rateRules,client}):[],[selectedOrBox&&selectedOrBox.code,client,rateRules]);
-  const baseQuotes=useMemo(()=>(rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!/first\s*overnight/i.test(qq.label||"")).filter(qq=>{if(!addrClassified)return true;const k=canonSvc(qq.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;}).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,fromZip,toZip:rcv.zip,weight:totalWeight})})),[rateSrc,residential,client,addrClassified,rateRules]);
+  const baseQuotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,fromZip,toZip:rcv.zip,weight:totalWeight})}));},[rateSrc,residential,client,addrClassified,rateRules,settings]);
   const quotes=useMemo(()=>{
     const withTransit=(list)=>list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};});
     return withTransit([...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday:sat,insurance,fees:surchargeFees(rateRules,client)}))).sort((a,b)=>(a.sell||0)-(b.sell||0));
@@ -6048,7 +6046,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         if(orderHasHazmat(o,settings.products||[])&&!/ground|home/i.test(String((svcOv[o.id]||"")))){ /* ground-only enforcement happens at pick below */ }
         const pk0=packs[o.id];
         const res=await ratesForOrder(o,{residential:true,weightLb:(pk0&&pk0.totalWt)||o.weight,box:pk0&&pk0.pieces[0]?{L:pk0.pieces[0].L,W:pk0.pieces[0].W,H:pk0.pieces[0].H}:undefined,fromZip:originZip,sender:settings.sender},eng);
-        let qs=((res&&res.rates)||[]).filter(q=>!/first\s*overnight/i.test(q.label||"")).map(q=>({...q,sell:Math.round((q.cost||0)*(1+(client.markup||0)/100)*100)/100}));
+        const _hs=new Set(cz(settings).hiddenServices||[]);let qs=((res&&res.rates)||[]).filter(q=>!_hs.has(canonSvc(q.label))).map(q=>({...q,sell:Math.round((q.cost||0)*(1+(client.markup||0)/100)*100)/100}));
         picked=pickByPref(qs,svcOv[o.id]);
         if(!picked){
           if(rule==="ground")picked=qs.filter(q=>/ground|home/i.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
@@ -8187,7 +8185,7 @@ function Customize({settings,setSettings,deployMode}){
     <select value={c[k]} onChange={e=>set(k,e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]">{opts.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>);
   const Num=({k,label,hint,step,suffix})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span>
     <span className="flex items-center gap-1"><input type="number" min="0" step={step||1} value={c[k]||""} placeholder="0" onChange={e=>set(k,+e.target.value||0)} className="w-20 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF] text-right"/>{suffix&&<span className="text-xs text-stone-400">{suffix}</span>}</span></label>);
-  const SVC=[["ground","FedEx Ground®"],["home","FedEx Home Delivery®"],["express_saver","FedEx Express Saver®"],["2day","FedEx 2Day®"],["standard_overnight","FedEx Standard Overnight®"],["priority_overnight","FedEx Priority Overnight®"],["intl_priority","FedEx International Priority®"]];
+  const SVC=[["ground","FedEx Ground®"],["home","FedEx Home Delivery®"],["ground_economy","FedEx Ground Economy®"],["express_saver","FedEx Express Saver®"],["2day","FedEx 2Day®"],["2day_am","FedEx 2Day® A.M."],["standard_overnight","FedEx Standard Overnight®"],["priority_overnight","FedEx Priority Overnight®"],["first_overnight","FedEx First Overnight®"],["intl_priority","FedEx International Priority®"],["intl_economy","FedEx International Economy®"],["intl_connect_plus","FedEx International Connect Plus®"]];
   const svcHidden=new Set(c.hiddenServices||[]);
   const togSvc=(k)=>{const nx=new Set(svcHidden); nx.has(k)?nx.delete(k):nx.add(k); set("hiddenServices",[...nx]);};
   const setAlias=(k,v)=>set("aliases",{...(c.aliases||{}),[k]:v});
@@ -8444,7 +8442,11 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
   const runTest=async()=>{
     setTest({loading:true});
     const res=await getLiveRates({fromZip:settings.sender?.zip||"84101",toZip:"90210",residential:true,pieces:[{weight:3,L:12,W:9,H:4}]},{...eng,enabled:true});
-    if(res&&res.live&&res.rates&&res.rates.length) setTest({ok:true,msg:`Connected — ${res.rates.length} live services returned (cheapest ${money(res.rates[0].cost)}).`});
+    if(res&&res.live&&res.rates&&res.rates.length){
+      const listOnly=res.rates.every(r=>r._rateType&&!/ACCOUNT|INCENTIVE|PREFERRED/.test(String(r._rateType)));
+      const lines=res.rates.map(r=>`${r.label} — ${money(r.cost)}${r.list!=null?` (list ${money(r.list)})`:""}${r.minDays?` · ${r.minDays}d`:""}${r.surcharges&&r.surcharges.length?` · ${r.surcharges.length} surcharge${r.surcharges.length>1?"s":""}`:""}`).join("\n");
+      setTest({ok:true,msg:`Connected — ${res.rates.length} live services returned (cheapest ${money(res.rates[0].cost)}).${listOnly?" ⚠ These look like LIST rates, not your account rates — the account may not carry discounts.":""}`,detail:"Everything the carrier returned for a 3 lb test (your ZIP → 90210, residential):\n"+lines});
+    }
     else setTest({ok:false,msg:(res&&res.error)||"No live rates returned.",detail:res&&(res.england_response||res.detail)});
   };
   const [flush,setFlush]=useState(null); // {loading} | {ok,msg}
@@ -8506,7 +8508,7 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
         </div>
         {flush&&!flush.loading&&<div className={`text-xs rounded px-3 py-2 flex items-start gap-1.5 ${flush.ok?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-amber-50 text-amber-800 border border-amber-200"}`}>{flush.ok?<CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5"/>:<AlertTriangle className="w-4 h-4 shrink-0 mt-0.5"/>}<span>{flush.msg}</span></div>}
         {diag&&!diag.loading&&<div className={`text-xs rounded px-3 py-2 flex items-start gap-1.5 ${diag.ok?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-amber-50 text-amber-800 border border-amber-200"}`}>{diag.ok?<CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5"/>:<AlertTriangle className="w-4 h-4 shrink-0 mt-0.5"/>}<span>{diag.msg}</span></div>}
-        {test&&!test.loading&&!test.ok&&test.detail&&<div className="text-[11px] text-stone-500 font-mono bg-stone-100 border border-stone-200 rounded p-2 break-words whitespace-pre-wrap">England said: {typeof test.detail==="string"?test.detail:JSON.stringify(test.detail)}</div>}
+        {test&&!test.loading&&test.detail&&<div className="text-[11px] text-stone-500 font-mono bg-stone-100 border border-stone-200 rounded p-2 break-words whitespace-pre-wrap">England said: {typeof test.detail==="string"?test.detail:JSON.stringify(test.detail)}</div>}
         {SHOW_ENGLAND&&<p className="text-[11px] text-stone-400">For production, store the API key as a Netlify env var (<span className="font-mono">ENGLAND_API_KEY</span>, <span className="font-mono">ENGLAND_CUSTOMER_ID</span>) instead of here, so it never ships to the browser. England authenticates with the API key + customer ID; if you only have the FedEx account number, try it as the customer ID or confirm the key with your England rep.</p>}
       </div>
     </div>

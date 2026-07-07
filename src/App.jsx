@@ -55,7 +55,15 @@ const FEATURE_CATALOG=[
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own UPS / other carrier accounts on the Connections page (England always shows; admins always have this)",default:false},
 ];
 const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All logins"],["rates","Rate database"],["labelcert","FedEx labels"],["customizations","Features & access"],["branding","Branding"],["platforms","Carrier accounts"],["domains","Domains"]];
-const adminSectionsFor=(user)=>(user&&user.role==="admin"&&user.adminPerms&&Array.isArray(user.adminPerms.sections))?ADMIN_SECTIONS.filter(s=>user.adminPerms.sections.includes(s[0])):ADMIN_SECTIONS;
+/* A restricted admin ALWAYS keeps access to "users" — without it there is no self-service way
+   to ever fix a permission set that’s missing something, for yourself or anyone else. A wrong
+   restriction otherwise becomes a permanent lockout with no way back in. */
+const adminSectionsFor=(user)=>{
+  if(!(user&&user.role==="admin"&&user.adminPerms&&Array.isArray(user.adminPerms.sections)))return ADMIN_SECTIONS;
+  const allowed=new Set(user.adminPerms.sections);
+  allowed.add("users");
+  return ADMIN_SECTIONS.filter(s=>allowed.has(s[0]));
+};
 const featureOn=(id,user,flagsForUser)=>{
   if(!user)return false;
   if(user.role==="admin")return true;                                   // admins always have everything
@@ -64,7 +72,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v259";
+const BUILD_TAG="addr-v260";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */

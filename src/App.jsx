@@ -72,7 +72,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v264";
+const BUILD_TAG="addr-v265";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -5275,6 +5275,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
                     {!hideCol.has("items")&&<th className="text-left font-medium px-3 py-2">Items</th>}
                     {!hideCol.has("recipient")&&<th className="text-left font-medium px-3 py-2">Recipient</th>}
                     {!hideCol.has("requested")&&<th className="text-left font-medium px-3 py-2 whitespace-nowrap">Requested</th>}
+                    {!hideCol.has("estRate")&&<th className="text-right font-medium px-3 py-2 whitespace-nowrap">Est. Rate</th>}
                     {!hideCol.has("qty")&&<th className="text-right font-medium px-3 py-2">Qty</th>}
                     {!hideCol.has("total")&&<th className="text-right font-medium px-3 py-2 whitespace-nowrap">Order total</th>}
                     {!hideCol.has("status")&&<th className="text-left font-medium px-3 py-2">Status</th>}
@@ -5291,6 +5292,15 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
                       {!hideCol.has("items")&&<td className={ordPad}><div className="text-stone-700 truncate max-w-[220px]">{o.items||"—"}</div>{o.lineItems&&o.lineItems[0]&&o.lineItems[0].sku?<div className="text-[11px] text-stone-400 truncate max-w-[220px]">SKU {o.lineItems[0].sku}</div>:null}</td>}
                       {!hideCol.has("recipient")&&<td className={ordPad}><div className="text-stone-800 truncate max-w-[160px]">{o.customer||"—"}</div><div className="text-[11px] text-stone-400 truncate max-w-[160px]">{o.city}{o.state?`, ${o.state}`:""}</div></td>}
                       {!hideCol.has("requested")&&<td className="px-3 py-2.5 text-stone-500 whitespace-nowrap">{o.shippingService||"—"}</td>}
+                      {!hideCol.has("estRate")&&<td className="px-3 py-2.5 text-right whitespace-nowrap">{(()=>{
+                        if(!o.zip)return <span className="text-stone-300">—</span>;
+                        try{
+                          const fromZip=(client&&client.origin)||(settings&&settings.sender&&settings.sender.zip)||"";
+                          if(!fromZip)return <span className="text-stone-300">—</span>;
+                          const est=quoteRates({fromZip,toZip:o.zip,pieces:[{weight:+o.weight||1,L:12,W:9,H:4}],residential:true}).filter(q=>q.carrier==="FedEx").sort((a,b)=>a.cost-b.cost)[0];
+                          return est?<span className="text-stone-600 font-mono">{money(est.cost)}<span className="text-stone-300 font-sans"> est.</span></span>:<span className="text-stone-300">—</span>;
+                        }catch(e){ return <span className="text-stone-300">—</span>; }
+                      })()}</td>}
                       {!hideCol.has("qty")&&<td className="px-3 py-2.5 text-right text-stone-600">{o.itemCount||"—"}</td>}
                       {!hideCol.has("total")&&<td className="px-3 py-2.5 text-right font-mono text-stone-800 whitespace-nowrap">${o.total}</td>}
                       {!hideCol.has("status")&&<td className={ordPad}><div className="flex items-center gap-1 flex-wrap"><Badge tone={o.status==="fulfilled"?"green":"amber"}>{o.status==="fulfilled"?"Shipped":"Awaiting"}</Badge>{o.hold&&<span title={o.hold}><Badge tone="rose">Held</Badge></span>}{o.gift&&<span title={o.giftMessage||"Gift"}><Badge tone="blue">Gift</Badge></span>}{o.assignee&&<span title={"Assigned to "+o.assignee}><Badge tone="stone">{o.assignee}</Badge></span>}</div></td>}

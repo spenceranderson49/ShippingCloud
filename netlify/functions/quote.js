@@ -143,7 +143,10 @@ exports.handler = async (event) => {
     clearTimeout(t);
     const j = await r.json().catch(() => ({}));
     if (!r.ok) {
-      const msg = (j.errors && j.errors[0] && (j.errors[0].message || j.errors[0].code)) || ("FedEx rate error " + r.status);
+      let msg = (j.errors && j.errors[0] && (j.errors[0].message || j.errors[0].code)) || ("FedEx rate error " + r.status);
+      if (/mismatch|should match the shipper|not\s*authorized|account.*(invalid|not\s*found)/i.test(msg)) {
+        msg = "FedEx doesn't recognize account #" + acct + " on your API credentials — add it in the FedEx Developer Portal (Manage Organization \u2192 Shipping accounts, with that account's billing address + EULA), attach it to your project, then retry. FedEx said: " + msg;
+      }
       return respond(200, { live: false, error: msg, rates: [], _status: r.status });
     }
     const replies = (j.output && j.output.rateReplyDetails) || [];

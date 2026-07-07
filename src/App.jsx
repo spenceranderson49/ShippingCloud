@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v243";
+const BUILD_TAG="addr-v244";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -4431,7 +4431,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(eng&&eng.enabled){
       setRateSrc(s=>({...s,loading:true,error:null,diag}));
       getLiveRates(shipment,eng).then(res=>{ if(cancel)return;
-        if(res&&res.live&&res.rates&&res.rates.length) setRateSrc({rates:res.rates,live:true,loading:false,error:null,diag});
+        if(res&&res.live&&res.rates&&res.rates.length) setRateSrc({rates:res.rates,live:true,loading:false,error:null,diag,oneRateError:res.oneRateRequested&&!res.oneRateOk?res.oneRateError:null});
         else setRateSrc({rates:localQuotes(),live:false,loading:false,error:(res&&res.error)||null,diag});
       });
     } else setRateSrc({rates:localQuotes(),live:false,loading:false,error:null,diag});
@@ -5005,6 +5005,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
+        {orBox&&rateSrc.oneRateError&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-2">FedEx didn\u2019t return a live One Rate price for the {orBox.name}: {rateSrc.oneRateError}</div>}
         <h2 className="text-sm font-semibold text-stone-700">Select service</h2>
         <div className="flex items-center gap-2">
           {!ready&&<span className="text-[11px] text-stone-400">enter ZIP &amp; weight to see rates</span>}
@@ -5392,7 +5393,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
     if(!ready){setRateSrc({rates:[],live:false,loading:false});return;}
     if(canBook){
       setRateSrc(s=>({...s,loading:true}));
-      ratesForOrder(dest,{residential,box,weightLb:totalWeight,fromZip,sender:settings.sender,packageTypeCode:"",signatureOption:sigOption,saturdayDelivery:sat,insuranceAmount:insurance||null},eng).then(res=>{ if(cancel)return;
+      ratesForOrder(dest,{residential,box,weightLb:totalWeight,fromZip,sender:settings.sender,packageTypeCode:selectedOrBox?selectedOrBox.code:"",signatureOption:sigOption,saturdayDelivery:sat,insuranceAmount:insurance||null},eng).then(res=>{ if(cancel)return;
         if(res&&res.live&&res.rates&&res.rates.length)setRateSrc({rates:res.rates,live:true,loading:false});
         else setRateSrc({rates:localOrderQuotes(),live:false,loading:false});
       });

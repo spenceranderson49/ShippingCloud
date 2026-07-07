@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v229";
+const BUILD_TAG="addr-v230";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -414,7 +414,14 @@ const SEED_CLIENTS=[
 ];
 const SEED_USERS=[
   {id:"u1",name:"Spencer Anderson",email:"spencer@shippingcloud.net",role:"admin",clientId:null,status:"active",password:"admin",lastLogin:"Today"},
+  {id:"u1fw",name:"Spencer Anderson",email:"spencer@freightwire.com",role:"admin",clientId:null,status:"active",password:"admin",lastLogin:"Today"},
   ];
+/* Built-in administrators: these emails are ALWAYS full admins on every brand —
+   the role is forced at session time, so a stray edit to the stored user record
+   (or a cloud login created as "customer") can never lock the owner out of the
+   Admin tab. Built-in admins can't be demoted or deleted from the logins list. */
+const BUILT_IN_ADMINS=["spencer@freightwire.com","spencer@shippingcloud.net"];
+const isBuiltInAdmin=(email)=>BUILT_IN_ADMINS.includes(String(email||"").trim().toLowerCase());
 const SEED_ACCOUNTS=[];
 const SEED_ORDERS=[];
 const SCAN_CITIES=["Memphis, TN hub","Indianapolis, IN hub","Ontario, CA","Newark, NJ","Atlanta, GA hub","Local facility","Out for delivery"];
@@ -2759,14 +2766,14 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
           <div className="w-32 hidden sm:block text-xs text-stone-500 truncate">{u.role==="admin"?"— all —":(clients.find(c=>c.id===u.clientId)||{}).name||"—"}</div>
           <div className="w-24 hidden sm:block text-xs text-stone-400">{u.lastLogin||"—"}</div>
           <div className="flex flex-wrap items-center justify-end gap-1.5">
-            {u.role==="admin"&&u.id!=="u1"&&u.id!==currentUser.id&&fullAdmin&&<button onClick={()=>setAccessOpen(accessOpen===u.id?null:u.id)} title="Which Admin sections this login can open" className={`text-[11px] rounded px-2 py-1 ${accessOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>Portal access</button>}
+            {u.role==="admin"&&u.id!=="u1"&&!isBuiltInAdmin(u.email)&&u.id!==currentUser.id&&fullAdmin&&<button onClick={()=>setAccessOpen(accessOpen===u.id?null:u.id)} title="Which Admin sections this login can open" className={`text-[11px] rounded px-2 py-1 ${accessOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>Portal access</button>}
             {u.role!=="admin"&&<button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }} title="Open the app exactly as this person sees it" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Log in as</button>}
             {u.role!=="admin"&&u.clientId&&<button onClick={()=>setRpOpen(rpOpen===u.id?null:u.id)} title="Which rate profile this company prices from — applies to every login of the company" className={`text-[11px] rounded px-2 py-1 ${rpOpen===u.id?"bg-[#0086E0] text-white":"bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}>Rates: {rateProfileName(rateRules,u.clientId)}</button>}
             {u.role!=="admin"&&<button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))} title={u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins"} className={`text-[11px] rounded px-2 py-1 ${u.companyAdmin?"bg-violet-600 text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>{u.companyAdmin?"Company admin ✓":"Company admin"}</button>}
             {u.role!=="admin"&&<button onClick={()=>setFeatOpen(featOpen===u.id?null:u.id)} title="Features for this login" className={`text-[11px] rounded px-2 py-1 ${featOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>Tabs &amp; logo</button>}
             {CLOUD.mode==="cloud"&&(u.role!=="admin"||fullAdmin)&&<button onClick={async()=>{const np=window.prompt("New password for "+u.email+" (min 4 characters):");if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});window.alert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}} title="Reset password" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Password</button>}
             <button onClick={()=>toggle(u.id)} title={u.status==="active"?"Deactivate":"Activate"} className={`text-[11px] rounded px-2 py-1 ${u.status==="active"?"bg-emerald-50 text-emerald-700":"bg-stone-100 text-stone-500"}`}>{u.status==="active"?"Active":"Deactivated"}</button>
-            {u.id!==currentUser.id&&(u.role!=="admin"||(fullAdmin&&u.id!=="u1"))&&<button onClick={()=>del(u.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
+            {u.id!==currentUser.id&&!isBuiltInAdmin(u.email)&&(u.role!=="admin"||(fullAdmin&&u.id!=="u1"))&&<button onClick={()=>del(u.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
           </div>
           {rpOpen===u.id&&u.role!=="admin"&&u.clientId&&<div className="w-full mt-2 border-t border-stone-100 pt-3">
             <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Rate profile for {(clients.find(c=>c.id===u.clientId)||{}).name||"this company"} — every login of the company prices from it</div>
@@ -3661,7 +3668,8 @@ function AppInner(){
     }
   }catch(e){} },[]);
   const [users,setUsers]=usePersist("users",SEED_USERS);
-  const [currentUser,setCurrentUser]=usePersist("session",null);
+  const [currentUserRaw,setCurrentUser]=usePersist("session",null);
+  const currentUser=useMemo(()=>(currentUserRaw&&isBuiltInAdmin(currentUserRaw.email)&&(currentUserRaw.role!=="admin"||currentUserRaw.adminPerms))?{...currentUserRaw,role:"admin",adminPerms:null}:currentUserRaw,[currentUserRaw]);
   const [clients,setClients]=usePersist("clients",SEED_CLIENTS);
   const [clientId,setClientId]=useState("c1");
   const [accounts,setAccounts]=usePersist("accounts",SEED_ACCOUNTS);

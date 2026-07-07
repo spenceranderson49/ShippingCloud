@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v255";
+const BUILD_TAG="addr-v256";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -76,7 +76,7 @@ const BUILD_TAG="addr-v255";
 const IS_STAGING=(()=>{ try{ return String((import.meta.env&&import.meta.env.VITE_STAGING)||"").toLowerCase()==="true"; }catch(e){ return false; } })();
 const SHOW_ENGLAND=(()=>{ try{ return String((import.meta.env&&import.meta.env.VITE_CARRIER_BACKEND)||"").toLowerCase()==="england"; }catch(e){ return false; } })();
 const BRAND=(()=>{ let k="shippingcloud"; try{ k=(import.meta.env&&import.meta.env.VITE_BRAND)||"shippingcloud"; }catch(e){}
-  if(k==="admin")return {key:"admin",fw:false,admin:true,name:"ShippingCloud HQ",short:"HQ",accent:"#0086E0",accent2:"#0072BE"};
+  if(k==="admin")return {key:"admin",fw:true,admin:true,name:"ShipHub Admin",short:"Admin HQ",accent:"#1e3a5f",accent2:"#2d5a8e"};
   return k==="freightwire"
     ?{key:"freightwire",fw:true,name:"ShipHub",short:"ShipHub",accent:"#1e3a5f",accent2:"#2d5a8e"}
     :{key:"shippingcloud",fw:false,name:"ShippingCloud",short:"ShippingCloud",accent:"#0086E0",accent2:"#0072BE"}; })();
@@ -4522,7 +4522,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(client&&client.blockedServices&&client.blockedServices.length){const bs=new Set(client.blockedServices);list=list.filter(q=>!bs.has(canonSvc(q.label)));}   // admin-locked — can't be bypassed by the customer's own toggle
     return list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,list:q.list,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,client)});})
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
-  },[rateSrc,orRates,client.markup,rateRules,fxTransit,residential,addrClassified,sigOption,saturday,insurance]);
+  },[rateSrc,orRates,client,JSON.stringify(custom.hiddenServices||[]),JSON.stringify(client&&client.blockedServices||[]),rateRules,fxTransit,residential,addrClassified,sigOption,saturday,insurance]);
   const best=null;
   const matched=useMemo(()=>{const so=selectedOrder?orders.find(x=>x.id===selectedOrder):null;return matchServiceForOrder(quotes,so);},[quotes,selectedOrder,orders]);
 

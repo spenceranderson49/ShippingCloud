@@ -72,7 +72,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v263";
+const BUILD_TAG="addr-v264";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -430,9 +430,7 @@ async function connectorCall(endpoint,payload){ return shopifyCall(endpoint,payl
 const OAUTH_RETURNS=[
   {flag:"qbo_connected",id:"quickbooks",map:{realmId:"realmId",accessToken:"access",refreshToken:"refresh"}},
   {flag:"sf_connected",id:"salesforce",map:{instanceUrl:"instance",accessToken:"access",refreshToken:"refresh"}},
-  {flag:"xero_connected",id:"xero",map:{accessToken:"access",refreshToken:"refresh",tenantId:"tenant"}},
   {flag:"ebay_connected",id:"ebay",map:{accessToken:"access",refreshToken:"refresh"}},
-  {flag:"etsy_connected",id:"etsy",map:{accessToken:"access",refreshToken:"refresh",userId:"userId"}},
 ];
 // Connector catalog: drives the Integrations tiles, the setup modal, sync + tracking push.
 const CONNECTORS=[
@@ -466,29 +464,13 @@ const CONNECTORS=[
   {id:"netsuite",name:"NetSuite",tint:"bg-[#2D5C34]/12 text-[#2D5C34]",auth:"token",orders:false,endpoint:"netsuite",
     fields:[["accountId","Account ID","1234567 or 1234567_SB1"],["consumerKey","Consumer key","…"],["consumerSecret","Consumer secret","…"],["tokenId","Token ID","…"],["tokenSecret","Token secret","…"]],
     instr:["Enable SuiteTalk REST Web Services + Token-Based Auth (Setup → Company → Enable Features).","Create an Integration record → copy Consumer Key + Secret.","Create an Access Token (Setup → Users/Roles → Access Tokens) → copy Token ID + Secret.","Paste all five (plus your Account ID) above and click Save."]},
-  {id:"hubspot",name:"HubSpot",tint:"bg-[#FF7A59]/15 text-[#FF7A59]",auth:"token",orders:false,endpoint:"hubspot",
-    fields:[["token","Private app token","pat-na1-…"]],
-    instr:["In HubSpot go to Settings → Integrations → Private Apps → Create a private app.","Add scopes: crm.objects.contacts (r/w) and crm.objects.deals (r/w).","Create the app and copy the Access Token.","Paste it above and click Save."]},
-  {id:"pipedrive",name:"Pipedrive",tint:"bg-[#111]/10 text-[#111]",auth:"token",orders:false,endpoint:"pipedrive",
-    fields:[["token","API token","…"],["domain","Company domain (before .pipedrive.com)","yourco"]],
-    instr:["In Pipedrive go to Settings → Personal preferences → API.","Copy your personal API token.","Note your company domain (the part before .pipedrive.com in your URL).","Paste both above and click Save."]},
-  {id:"shipbob",name:"ShipBob",tint:"bg-[#1F6FEB]/12 text-[#1F6FEB]",auth:"token",orders:true,endpoint:"shipbob",
-    fields:[["token","Personal access token","…"],["channelId","Channel ID (optional)",""]],
-    instr:["In ShipBob go to Integrations → API Tokens (or the Developer portal).","Generate a Personal Access Token.","Optionally copy your Channel ID.","Paste above and click Save."]},
-  {id:"ordoro",name:"Ordoro",tint:"bg-[#2BB673]/15 text-[#1E7D50]",auth:"token",orders:true,endpoint:"ordoro",
-    fields:[["username","API username","…"],["password","API password","…"]],
-    instr:["In Ordoro go to Settings → API.","Create/copy your API username and password.","Paste both above and click Save."]},
   // OAuth connectors — Connect button starts the handshake; tokens come back automatically
   {id:"quickbooks",name:"QuickBooks Online",tint:"bg-[#2CA01C]/15 text-[#2CA01C]",auth:"oauth",orders:false,endpoint:"quickbooks",env:["QBO_CLIENT_ID","QBO_CLIENT_SECRET"],
     instr:["Go to developer.intuit.com → My Apps → create an app with the Accounting scope.","Set the Redirect URI to:  https://shippingcloud.net/.netlify/functions/quickbooks","Copy the Client ID + Client Secret. (Send them to your admin to set as QBO_CLIENT_ID / QBO_CLIENT_SECRET in Netlify, or set them yourself.)","Then click “Connect with QuickBooks” below and approve."]},
-  {id:"xero",name:"Xero",tint:"bg-[#13B5EA]/15 text-[#0E8FBA]",auth:"oauth",orders:false,endpoint:"xero",env:["XERO_CLIENT_ID","XERO_CLIENT_SECRET"],
-    instr:["Go to developer.xero.com → New app.","Set the Redirect URI to:  https://shippingcloud.net/.netlify/functions/xero","Copy the Client ID + Client Secret and set them as XERO_CLIENT_ID / XERO_CLIENT_SECRET in Netlify.","Then click “Connect with Xero” below and approve."]},
   {id:"salesforce",name:"Salesforce",tint:"bg-[#00A1E0]/15 text-[#0079A1]",auth:"oauth",orders:false,endpoint:"salesforce",env:["SF_CLIENT_ID","SF_CLIENT_SECRET"],
     instr:["In Salesforce: Setup → App Manager → New Connected App, enable OAuth.","Set the Callback URL to:  https://shippingcloud.net/.netlify/functions/salesforce","Scopes: api, refresh_token. Copy the Consumer Key + Secret and set them as SF_CLIENT_ID / SF_CLIENT_SECRET in Netlify.","Then click “Connect with Salesforce” below and approve."]},
   {id:"ebay",name:"eBay",tint:"bg-[#E53238]/12 text-[#E53238]",auth:"oauth",orders:true,endpoint:"ebay",env:["EBAY_CLIENT_ID","EBAY_CLIENT_SECRET","EBAY_RUNAME"],
     instr:["Go to developer.ebay.com → your keyset → User Tokens → create a Redirect URL name (RuName).","Set the RuName’s accepted URL to:  https://shippingcloud.net/.netlify/functions/ebay","Set EBAY_CLIENT_ID, EBAY_CLIENT_SECRET and EBAY_RUNAME in Netlify.","Then click “Connect with eBay” below and approve."]},
-  {id:"etsy",name:"Etsy",tint:"bg-[#F1641E]/15 text-[#F1641E]",auth:"oauth",orders:true,endpoint:"etsy",env:["ETSY_CLIENT_ID","ETSY_CLIENT_SECRET"],postShopId:true,
-    instr:["Go to etsy.com/developers → Create a New App.","Set the Callback URL to:  https://shippingcloud.net/.netlify/functions/etsy","Copy the Keystring (client id) + Shared secret and set them as ETSY_CLIENT_ID / ETSY_CLIENT_SECRET in Netlify.","Click “Connect with Etsy” below, approve, then enter your numeric Shop ID when prompted."]},
   // QuickBooks Desktop — Web Connector
   {id:"quickbooks-desktop",name:"QuickBooks Desktop",tint:"bg-[#2CA01C]/15 text-[#2CA01C]",auth:"qwc",orders:false,endpoint:"quickbooks-desktop",env:["QBWC_USER","QBWC_PASS"],
     instr:["Have an admin set QBWC_USER and QBWC_PASS in Netlify (the Web Connector login).","On the PC running QuickBooks, install the QuickBooks Web Connector (free from Intuit).","Click “Download .qwc” below, then in the Web Connector choose File → Add an Application and pick that file; enter the QBWC password.","Open QuickBooks as Admin and approve the app. It will sync every few minutes; queued invoices post automatically."]},
@@ -3960,7 +3942,6 @@ function AppInner(){
   const [shipments,setShipments]=usePersist("shipments",SEED_SHIPMENTS);
   const [audit,setAudit]=usePersist("audit",[]);
   const isSandbox=IS_STAGING||!!(currentUser&&/^sandbox@/i.test(currentUser.email||""));
-  useEffect(()=>{ if(!isSandbox)return; try{ if((orders||[]).length===0&&(shipments||[]).length===0){ const d=makeDemoData(); setOrders(d.orders); setShipments(d.shipments); setSettings(st=>({...st,...d.settings,sender:st.sender||d.settings.sender})); } }catch(e){} },[isSandbox]);
   useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};setAudit(a=>[{ts:new Date().toLocaleString(),user:(currentUser&&currentUser.email)||"",action:d.action||"",detail:d.detail||""},...a].slice(0,200));};window.addEventListener("sc-audit",h);return()=>window.removeEventListener("sc-audit",h);},[currentUser]);
   const [pendingShips,setPendingShips]=usePersist("pendingShips",[]);
   /* Booked label PDFs, keyed by shipment id, capped at the 60 newest — powers Shipments → Reprint.
@@ -4510,7 +4491,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
 
   const [packNote,setPackNote]=useState(null);
   const applyOrder=(o)=>{setSelectedOrder(o.id);setReference(o.name);setReceiver({...empty,name:o.customer||"",company:o.company||"",zip:o.zip||"",state:o.state||"",city:o.city||"",address1:o.address1||"",phone:o.phone||"",email:o.email||""});
-    const pk=packOrder(o,settings.products||SEED_PRODUCTS,settings.boxes||SEED_BOXES,settings.boxLogic);
+    const pk=packOrder(o,settings.products||[],settings.boxes||SEED_BOXES,settings.boxLogic);
     if(pk&&pk.pieces.length){ setPieces(pk.pieces.map(x=>({weight:x.weight,L:x.L,W:x.W,H:x.H}))); setPackNote(pk); }
     else { setPieces([{weight:o.weight||1,L:12,W:9,H:4}]); setPackNote(null); }
     if(custom.autoInsurePct>0&&o.total){const v=Math.round((+o.total||0)*custom.autoInsurePct)/100;if(v>0)setInsurance(String(v));}   // auto-insure % of order value
@@ -6204,7 +6185,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
   const canBook=eng&&eng.enabled;
   const originZip=(settings.sender&&settings.sender.zip)||client.origin;
   // box logic: cartonize every open order once (products + boxes from Settings)
-  const packs=useMemo(()=>{const m={};const prods=settings.products||SEED_PRODUCTS;const bxs=settings.boxes||SEED_BOXES;pool.forEach(o=>{m[o.id]=packOrder(o,prods,bxs,settings.boxLogic);});return m;},[orders,settings]);
+  const packs=useMemo(()=>{const m={};const prods=settings.products||[];const bxs=settings.boxes||SEED_BOXES;pool.forEach(o=>{m[o.id]=packOrder(o,prods,bxs,settings.boxLogic);});return m;},[orders,settings]);
   const importCSV=(e)=>{
     const file=e.target.files&&e.target.files[0]; if(!file)return;
     const reader=new FileReader();
@@ -6903,7 +6884,7 @@ function Warehouses({settings,setSettings}){
   </div>);
 }
 function ProductCatalog({settings,setSettings}){
-  const products=settings.products||SEED_PRODUCTS;
+  const products=settings.products||[];
   const [q,setQ]=useState("");
   const [editId,setEditId]=useState(null);
   const [ef,setEf]=useState(null);
@@ -7085,7 +7066,7 @@ function BoxLogic({settings,setSettings}){
   const bl=settings.boxLogic||{mode:"smallest",dimDivisor:139,padding:0.5,fallbackL:12,fallbackW:9,fallbackH:4,allowOverride:true};
   const set=(patch)=>setSettings({...settings,boxLogic:{...bl,...patch}});
   const boxes=settings.boxes||SEED_BOXES;
-  const products=settings.products||SEED_PRODUCTS;
+  const products=settings.products||[];
   const [test,setTest]=useState(()=>({}));  // {productId: qty}
   const addQty=(id,d)=>setTest(t=>{const n={...t,[id]:Math.max(0,(t[id]||0)+d)};if(!n[id])delete n[id];return n;});
   const testItems=Object.entries(test).flatMap(([id,qty])=>{const pr=products.find(p=>p.id===id);return pr?[{l:+pr.l||0,w:+pr.w||0,h:+pr.h||0,wt:+pr.wt||0,qty,name:pr.name}]:[];});
@@ -7387,13 +7368,7 @@ const RULE_ACTION_TYPES=["Set Service","Set Package","Set One Rate Box","Request
 const RULE_SERVICES=["ANY - Cheapest","ANY - Cheapest Ground","ANY - Cheapest 2 Day","ANY - Fastest","FedEx - Ground","FedEx - Home Delivery","FedEx - Express Saver","FedEx - 2Day","FedEx - 2Day OneRate","FedEx - Priority Overnight OneRate","FedEx - Standard Overnight OneRate","FedEx - Standard Overnight","FedEx - Priority Overnight","DHL - Express Worldwide"];
 const RULE_PACKAGES=["Custom","FedEx Envelope","FedEx Small Box","FedEx Medium Box","FedEx Large Box","FedEx Extra Large Box"];
 const RULE_SIG=["direct","indirect","adult"];
-const SEED_RULESET=[
-  {id:"rs1",name:"High-value → signature + insurance",enabled:true,stop:false,match:"all",conditions:[{id:"c1",property:"Order Value",operator:">",value:"500"}],actions:[{id:"a1",type:"Request Signature",sig:"adult"},{id:"a2",type:"Set Insurance",amount:"500"},{id:"a3",type:"Add Order Tag",tag:"insured"}]},
-  {id:"rs2",name:"International → DHL",enabled:true,stop:false,match:"all",conditions:[{id:"c2",property:"To Country",operator:"NOT IN",value:"US"}],actions:[{id:"a4",type:"Set Service",service:"DHL - Express Worldwide"},{id:"a5",type:"Add Order Tag",tag:"international"}]},
-  {id:"rs4",name:"Nearby (zone ≤ 3) → cheapest ground",enabled:true,stop:false,match:"all",conditions:[{id:"c4",property:"Zone",operator:"<=",value:"3"}],actions:[{id:"a7",type:"Set Service",service:"ANY - Cheapest Ground"}]},
-  {id:"rs5",name:"Small parcel → One Rate box (auto by cubic)",enabled:false,stop:false,match:"all",conditions:[{id:"c5",property:"Cubic Volume",operator:"<",value:"650"}],actions:[{id:"a8",type:"Set One Rate Box",box:"auto"}]},
-  {id:"rs3",name:"Overweight → hold for review",enabled:true,stop:true,match:"all",conditions:[{id:"c3",property:"Package Weight",operator:">",value:"70"}],actions:[{id:"a6",type:"Assign Hold",hold:"Manual review — overweight"}]},
-];
+const SEED_RULESET=[];   // real accounts start with zero Autopilot rules — nothing pre-configured to silently reroute or hold real shipments
 /* Estimated FedEx/UPS zone from origin→destination ZIP. Uses a 2-digit ZIP-prefix centroid table
    (state/metro resolution) + FedEx-style distance bands. Official zones are origin-specific ZIP3 charts;
    this is a close distance-based estimate and is labeled as estimated in the UI. */

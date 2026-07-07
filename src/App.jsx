@@ -72,7 +72,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v262";
+const BUILD_TAG="addr-v263";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1989,6 +1989,11 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
     </div>
 
     {tab==="profile"&&<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="col-span-2 sm:col-span-4 text-[11px] text-stone-500 bg-stone-50 border border-stone-200 rounded px-3 py-2 flex items-center gap-2">
+        <span>Customer ID</span><span className="font-mono text-stone-700">{c.id}</span>
+        <button onClick={()=>{try{navigator.clipboard.writeText(c.id);}catch(e){}}} className="text-[#0086E0] hover:underline">Copy</button>
+        <span className="text-stone-400">— this is the exact value a login's assignment must match. Compare it against a login's stuck ID on the Users screen to see if they’re the same account.</span>
+      </div>
       <Field label="Company"><Input value={c.name||""} onChange={e=>upClient({name:e.target.value})}/></Field>
       <Field label="Primary contact"><Input value={c.contact||""} onChange={e=>upClient({contact:e.target.value})}/></Field>
       <Field label="Email"><Input value={c.email||""} onChange={e=>upClient({email:e.target.value})}/></Field>
@@ -3968,6 +3973,26 @@ function AppInner(){
   const [manifests,setManifests]=usePersist("manifests",[]);
   const [rules,setRules]=usePersist("rules",SEED_RULES);
   const [ruleset,setRuleset]=usePersist("ruleset",SEED_RULESET);
+  /* One-time self-heal: rules saved before the OneRate label rename ("2Day One Rate", two words)
+     no longer match live quotes ("2Day OneRate", one word) and silently fall back to cheapest —
+     which is how a OneRate rule can end up printing Home Delivery. Fix any stored rule automatically
+     instead of asking every admin to notice and manually re-pick it from the dropdown. */
+  useEffect(()=>{
+    try{
+      let changed=false;
+      const fixed=(ruleset||[]).map(r=>{
+        const acts=(r.actions||[]).map(a=>{
+          if(a&&a.type==="Set Service"&&typeof a.service==="string"&&/one\s+rate/i.test(a.service)&&!/onerate/i.test(a.service)){
+            changed=true;
+            return {...a,service:a.service.replace(/one\s+rate/i,"OneRate")};
+          }
+          return a;
+        });
+        return acts===r.actions?r:{...r,actions:acts};
+      });
+      if(changed)setRuleset(fixed);
+    }catch(e){}
+  },[]);
   const [drafts,setDrafts]=usePersist("drafts",[]);
   const [emails,setEmails]=usePersist("emails",SEED_EMAILS);
   const [ledger,setLedger]=usePersist("ledger",SEED_LEDGER);
@@ -4321,7 +4346,7 @@ function AppInner(){
         </aside>
         <main className="flex-1 min-w-0 overflow-x-clip px-3 sm:px-6 py-4 sm:py-6" style={(custom.appBg||custom.pageBg)?{...(custom.pageBg?{backgroundColor:custom.pageBg}:{}),...(custom.appBg?{backgroundImage:`url(${custom.appBg})`,backgroundSize:"cover",backgroundPosition:"center",backgroundAttachment:"fixed"}:{})}:undefined}>
           {tab==="dashboard"&&<Dashboard shipments={shipments} orders={orders} returns={returns} goTab={setTab}/>}
-          {tab==="ship"&&<Ship client={client} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={rules} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders} currentUser={currentUser} setUsers={setUsers} setCurrentUser={setCurrentUser} clients={clients}/>}
+          {tab==="ship"&&<Ship client={client} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={ruleset} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders} currentUser={currentUser} setUsers={setUsers} setCurrentUser={setCurrentUser} clients={clients}/>}
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
           {tab==="orders"&&<Orders orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} setSettings={setSettings} onShipped={onShipped} openOrderId={pendingOpenOrderId} onOpenedOrder={()=>setPendingOpenOrderId(null)}/>}
           {tab==="batch"&&<Batch orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
@@ -6320,7 +6345,10 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         if(dup){ out.push({o,name:o.name,orderId:o.id,ok:false,error:"Skipped — already shipped "+dup.date+" ("+dup.tracking+"). Void that label first if this is intentional."}); setResults([...out]); setProgress(pr0=>({...pr0,n:pr0.n+1})); continue; }
         if(orderHasHazmat(o,settings.products||[])&&!/ground|home/i.test(String((svcOv[o.id]||"")))){ /* ground-only enforcement happens at pick below */ }
         const pk0=packs[o.id];
-        const res=await ratesForOrder(o,{residential:true,weightLb:(pk0&&pk0.totalWt)||o.weight,box:pk0&&pk0.pieces[0]?{L:pk0.pieces[0].L,W:pk0.pieces[0].W,H:pk0.pieces[0].H}:undefined,fromZip:originZip,sender:settings.sender},eng);
+        const _wt0=(pk0&&pk0.totalWt)||o.weight||0;
+        const _box0=pk0&&pk0.pieces[0]?{L:pk0.pieces[0].L,W:pk0.pieces[0].W,H:pk0.pieces[0].H}:{L:12,W:9,H:4};
+        const _orBox0=oneRateBoxFor(_box0.L,_box0.W,_box0.H,_wt0);   // same live-One-Rate detection the Ship tab uses — Batch never asked for this before
+        const res=await ratesForOrder(o,{residential:true,weightLb:_wt0,box:pk0&&pk0.pieces[0]?_box0:undefined,fromZip:originZip,sender:settings.sender,packageTypeCode:_orBox0?_orBox0.code:""},eng);
         const _hs=new Set(cz(settings).hiddenServices||[]);const _bs=new Set((client&&client.blockedServices)||[]);let qs=((res&&res.rates)||[]).filter(q=>!_hs.has(canonSvc(q.label))&&!_bs.has(canonSvc(q.label))).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:originZip,toZip:o.zip,weight:(pk0&&pk0.totalWt)||o.weight||1})}));
         picked=pickByPref(qs,svcOv[o.id]);
         if(!picked){
@@ -7684,7 +7712,9 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
       }
       let picked=null;
       try{
-        const res=await ratesForOrder(o,{residential:true,weightLb:wt,fromZip:senderZip,sender:settings.sender},eng);
+        const _dims0=o.dims||{}; const _box0=(+o.length||+_dims0.L)?{L:+o.length||+_dims0.L,W:+o.width||+_dims0.W,H:+o.height||+_dims0.H}:{L:12,W:9,H:4};
+        const _orBox0=oneRateBoxFor(_box0.L,_box0.W,_box0.H,wt);   // same live-One-Rate detection the Ship tab uses — Autopilot never asked for this before
+        const res=await ratesForOrder(o,{residential:true,weightLb:wt,fromZip:senderZip,sender:settings.sender,box:_box0,packageTypeCode:_orBox0?_orBox0.code:""},eng);
         const _apHs=new Set(cz(settings).hiddenServices||[]);const _apBs=new Set((client&&client.blockedServices)||[]);
         const qs=((res&&res.rates)||[]).filter(q=>!_apHs.has(canonSvc(q.label))&&!_apBs.has(canonSvc(q.label))).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:senderZip,toZip:o.zip,weight:wt})}));
         picked=pickRate(qs,pref);

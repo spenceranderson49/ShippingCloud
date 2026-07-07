@@ -45,7 +45,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v201fw";
+const BUILD_TAG="addr-v202fw";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -826,7 +826,7 @@ const CUSTOM_DEFAULTS={
   slipThanks:"",slipFooter:"",
   density:"comfortable",stuckDays:0,
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
-  logoScale:100,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],theme:"light",accent:"",
+  logoScale:100,companyLogoScale:100,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],theme:"light",accent:"",
   refRequired:false,invRequired:false,poRequired:false,refLocked:false,invLocked:false,poLocked:false,
   confetti:"page",seasonal:true,loginBg:"",appBg:"",headerBg:"",pageBg:"",navBg:"",
 };
@@ -2558,7 +2558,7 @@ function AppInner(){
           </>):(
           <button onClick={()=>setTab("ship")} title="Back to Ship" className="cursor-pointer flex items-center shrink-0">{(!brand.name1||brand.name1==="Shipping")&&(!brand.name2||brand.name2==="Cloud")?<img src={SC_LOGO} alt="ShippingCloud" style={{height:Math.round(30*((custom.logoScale||100)/100))+"px"}} className="w-auto" draggable={false}/>:<span className="font-bold text-[20px] sm:text-[26px]" style={{...LOGO_FONT,color:(custom.theme==="dark"||custom.theme==="grey")?"#F5F5F4":brand.dark}}>{brand.name1}<span style={{color:custom.accent||brand.primary}}>{brand.name2}</span></span>}</button>)}
           {custom.seasonal!==false&&seasonalEmoji()&&<span className="text-base select-none shrink-0 -ml-0.5" title="Seasonal touch — turn off in Customizations">{seasonalEmoji()}</span>}
-          {(()=>{const cl=(myFlags&&myFlags._logoB64)||settings.companyLogo||"";return cl?<span className="flex items-center gap-2.5 sm:gap-3 min-w-0 self-center"><span className="w-px h-6 bg-stone-200 shrink-0 hidden sm:block"/><img src={cl} alt={settings.company||"Company logo"} style={{height:Math.round(28*((custom.logoScale||100)/100))+"px"}} className={`w-auto max-w-[110px] sm:max-w-[200px] object-contain block ${(custom.theme==="dark"||custom.theme==="grey")?"bg-white rounded-md px-1.5 py-0.5 box-content":""}`} draggable={false}/></span>:null;})()}
+          {(()=>{const cl=(myFlags&&myFlags._logoB64)||settings.companyLogo||"";return cl?<span className="flex items-center gap-2.5 sm:gap-3 min-w-0 self-center"><span className="w-px h-6 bg-stone-200 shrink-0 hidden sm:block"/><img src={cl} alt={settings.company||"Company logo"} style={{height:Math.round(28*((custom.companyLogoScale||100)/100))+"px"}} className={`w-auto max-w-[110px] sm:max-w-[200px] object-contain block ${(custom.theme==="dark"||custom.theme==="grey")?"bg-white rounded-md px-1.5 py-0.5 box-content":""}`} draggable={false}/></span>:null;})()}
           {brand.showLogo&&brand.logo&&<span className="hidden sm:flex items-center gap-1.5 text-stone-400 text-xs"><span className="w-px h-5 bg-stone-200"/>{brand.partnerLabel}<img src={brand.logo} alt="partner" className="h-3 w-auto object-contain"/></span>}
           <div className="flex-1"/>
           <div className="flex items-center gap-2 sm:gap-3">
@@ -6583,7 +6583,7 @@ function Customize({settings,setSettings,deployMode}){
     {!deployMode&&<Panel title="Company logo">
       <div className="flex items-center gap-4">
         {settings.companyLogo
-          ?<img src={settings.companyLogo} alt="Company logo" style={{height:Math.round(28*((c.logoScale||100)/100))+"px"}} className="w-auto max-w-[200px] object-contain border border-stone-200 rounded-lg bg-white px-2 py-1"/>
+          ?<img src={settings.companyLogo} alt="Company logo" style={{height:Math.round(28*((c.companyLogoScale||100)/100))+"px"}} className="w-auto max-w-[200px] object-contain border border-stone-200 rounded-lg bg-white px-2 py-1"/>
           :<span className="text-[11px] text-stone-300 border border-dashed border-stone-300 rounded-lg px-3 py-2">No logo yet</span>}
         <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload logo
           <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={e=>{
@@ -6601,10 +6601,13 @@ function Customize({settings,setSettings,deployMode}){
         </label>
         {settings.companyLogo&&<button onClick={()=>setSettings(p=>({...p,companyLogo:""}))} className="text-[11px] text-stone-400 hover:text-rose-600">Remove</button>}
       </div>
-      <label className="block text-sm text-stone-700 mt-1">Logo size <span className="text-[11px] text-stone-400">· {c.logoScale||100}%</span>
+      <label className="block text-sm text-stone-700 mt-1">Brand logo size <span className="text-[11px] text-stone-400">· {c.logoScale||100}%</span>
         <input type="range" min="50" max="250" step="5" value={c.logoScale||100} onChange={e=>set("logoScale",+e.target.value)} className="mt-1 w-full accent-[#0086E0]"/>
       </label>
-      <div className="text-[11px] text-stone-400">Scales the header logo (ShippingCloud / Freightwire) and your company logo together — the live preview above shows the size.</div>
+      <label className="block text-sm text-stone-700 mt-3">Company logo size <span className="text-[11px] text-stone-400">· {c.companyLogoScale||100}%</span>
+        <input type="range" min="50" max="250" step="5" value={c.companyLogoScale||100} onChange={e=>set("companyLogoScale",+e.target.value)} className="mt-1 w-full accent-[#0086E0]"/>
+      </label>
+      <div className="text-[11px] text-stone-400">Two independent sizes: the <b>Brand logo</b> (ShippingCloud / Freightwire) and your uploaded <b>Company logo</b>. Both show live in the header.</div>
     </Panel>}
 
     <Panel title="Appearance & navigation">

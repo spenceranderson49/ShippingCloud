@@ -69,6 +69,17 @@ const PKG = {
   FEDEX_EXTRA_SMALL_BOX: "FEDEX_EXTRA_SMALL_BOX", FEDEX_TUBE: "FEDEX_TUBE"
 };
 const SIG = { direct: "DIRECT", indirect: "INDIRECT", adult: "ADULT" };
+/* Country dropdowns in the app store full names ("United States"); FedEx wants ISO-2.
+   2-letter inputs pass through; unknown names pass through raw so FedEx names the problem
+   instead of us silently misrouting a shipment. */
+const ISO2 = { "united states":"US","usa":"US","u.s.":"US","u.s.a.":"US","united states of america":"US","canada":"CA","mexico":"MX","united kingdom":"GB","great britain":"GB","uk":"GB","england":"GB","australia":"AU","germany":"DE","france":"FR","italy":"IT","spain":"ES","netherlands":"NL","belgium":"BE","switzerland":"CH","austria":"AT","sweden":"SE","norway":"NO","denmark":"DK","finland":"FI","ireland":"IE","portugal":"PT","poland":"PL","czech republic":"CZ","czechia":"CZ","greece":"GR","hungary":"HU","romania":"RO","bulgaria":"BG","croatia":"HR","slovakia":"SK","slovenia":"SI","estonia":"EE","latvia":"LV","lithuania":"LT","luxembourg":"LU","iceland":"IS","japan":"JP","china":"CN","hong kong":"HK","taiwan":"TW","south korea":"KR","korea, south":"KR","republic of korea":"KR","singapore":"SG","malaysia":"MY","thailand":"TH","vietnam":"VN","philippines":"PH","indonesia":"ID","india":"IN","pakistan":"PK","bangladesh":"BD","sri lanka":"LK","israel":"IL","saudi arabia":"SA","united arab emirates":"AE","uae":"AE","qatar":"QA","kuwait":"KW","bahrain":"BH","oman":"OM","jordan":"JO","turkey":"TR","egypt":"EG","south africa":"ZA","nigeria":"NG","kenya":"KE","morocco":"MA","ghana":"GH","brazil":"BR","argentina":"AR","chile":"CL","colombia":"CO","peru":"PE","ecuador":"EC","uruguay":"UY","paraguay":"PY","bolivia":"BO","venezuela":"VE","costa rica":"CR","panama":"PA","guatemala":"GT","honduras":"HN","el salvador":"SV","nicaragua":"NI","dominican republic":"DO","jamaica":"JM","bahamas":"BS","barbados":"BB","trinidad and tobago":"TT","puerto rico":"PR","new zealand":"NZ","russia":"RU","ukraine":"UA","belarus":"BY","kazakhstan":"KZ","georgia":"GE","armenia":"AM","azerbaijan":"AZ" };
+function toISO(v) {
+  const s = String(v == null ? "" : v).trim();
+  if (!s) return "US";
+  if (/^[A-Za-z]{2}$/.test(s)) return s.toUpperCase();
+  return ISO2[s.toLowerCase()] || s;
+}
+
 
 function party(p) {
   const streets = [p.address1, p.address2].filter(Boolean).map(s => String(s).slice(0, 35));
@@ -84,7 +95,7 @@ function party(p) {
       city: String(p.city || "").slice(0, 35),
       stateOrProvinceCode: String(p.state || "").toUpperCase().slice(0, 2),
       postalCode: String(p.zip || "").trim(),
-      countryCode: (p.country || "US").toUpperCase()
+      countryCode: toISO(p.country || "US")
     }
   };
 }
@@ -135,7 +146,7 @@ exports.handler = async (event) => {
   const receiver = o.receiver || {};
   const acct = String(o.fedexAccount || (body.account && body.account.fedexAccount) || ACCOUNT).replace(/\D/g, "") || ACCOUNT;
   const { serviceType, oneRate } = serviceTypeFor(o);
-  const intl = (receiver.country || "US").toUpperCase() !== (sender.country || "US").toUpperCase();
+  const intl = toISO(receiver.country || "US") !== toISO(sender.country || "US");
   const pieces = (Array.isArray(o.pieces) && o.pieces.length ? o.pieces : [{ weight: 1, length: 12, width: 9, height: 4 }]);
   const totalWeight = pieces.reduce((a, p) => a + (+p.weight || 0), 0) || 1;
   const declaredTotal = pieces.reduce((a, p) => a + (+p.declaredValue || 0), 0) || (+o.insuranceAmount || 0);
@@ -188,7 +199,7 @@ exports.handler = async (event) => {
       isDocumentOnly: false,
       commodities: [{
         description: String(o.contentDescription || "Merchandise").slice(0, 450),
-        countryOfManufacture: (sender.country || "US").toUpperCase(),
+        countryOfManufacture: toISO(sender.country || "US"),
         quantity: 1, quantityUnits: "PCS",
         unitPrice: { amount: customsVal, currency: "USD" },
         customsValue: { amount: customsVal, currency: "USD" },

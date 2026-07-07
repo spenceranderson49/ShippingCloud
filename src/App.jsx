@@ -27,8 +27,8 @@ function FreightwireShipHub({logoH=44,sub=true}){
     <img src={FW_LOGO} alt="Freightwire" style={{height:logoH}} className="w-auto shrink-0" draggable={false}/>
     <span style={{width:1,height:Math.round(logoH*0.82),background:"#d6d3ce"}} className="shrink-0"/>
     <span className="inline-flex flex-col" style={{gap:1}}>
-      <span style={{fontFamily:"Inter,system-ui,sans-serif",fontWeight:800,fontSize:nameSize,letterSpacing:"0.1em",lineHeight:1,color:"#1F1B18",textTransform:"uppercase"}}>Ship<span style={{color:"#0072CE"}}>Hub</span></span>
-      {sub&&<span style={{fontSize:Math.max(8,Math.round(logoH*0.19)),letterSpacing:"0.2em",color:"#a8a29e",fontWeight:600,textTransform:"uppercase",lineHeight:1}}>Client Portal</span>}
+      <span style={{fontFamily:"Inter,system-ui,sans-serif",fontWeight:800,fontSize:nameSize,letterSpacing:"0.1em",lineHeight:1,color:"#1F1B18",textTransform:"uppercase"}}>Ship<span style={{color:"#0198FF"}}>Hub</span></span>
+      {sub&&<span style={{fontFamily:"Inter,system-ui,sans-serif",fontSize:Math.max(9,Math.round(logoH*0.2)),letterSpacing:"0.12em",color:"#78716c",fontWeight:500,textTransform:"uppercase",lineHeight:1}}>Client Portal</span>}
     </span>
   </span>);
 }
@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v222";
+const BUILD_TAG="addr-v223";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -3086,21 +3086,14 @@ function Landing({onAuth}){
     <style>{`@keyframes fwRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}@keyframes fwDrift{0%,100%{transform:translate(-50%,0)}50%{transform:translate(calc(-50% + 18px),-12px)}}`}</style>
     <div className="absolute inset-0 pointer-events-none" style={{background:"repeating-linear-gradient(-35deg,transparent 0 70px,rgba(30,155,240,.05) 70px 72px)"}}/>
     <div className="absolute pointer-events-none" style={{width:640,height:640,borderRadius:"50%",top:-180,left:"50%",background:"radial-gradient(circle,rgba(30,155,240,.14),transparent 65%)",animation:"fwDrift 12s ease-in-out infinite"}}/>
-    <div className="relative flex flex-col items-center gap-1.5 mb-2" style={{animation:"fwRise .6s ease both"}}>
-      <FreightwireShipHub logoH={48}/>
+    <div className="relative flex flex-col items-center mb-3" style={{animation:"fwRise .6s ease both"}}>
+      <FreightwireShipHub logoH={52}/>
     </div>
     <div className="relative text-[15px] font-medium text-stone-600 mb-6" style={{animation:"fwRise .6s .08s ease both"}}>Your shipping platform <span className="text-stone-900">&</span> partner</div>
     <div className="relative w-full flex justify-center py-4" style={{animation:"fwRise .6s .14s ease both",transform:"scale(1.2)",transformOrigin:"top center"}}>
       <CloudAuth onDone={()=>window.location.reload()} initialMode="signin"/>
     </div>
     <button onClick={enterDemo} className="relative mt-4 text-[13px] text-stone-500 hover:text-stone-700 underline underline-offset-4 decoration-stone-300" style={{animation:"fwRise .6s .18s ease both"}}>Just looking? Take a peek →</button>
-    <div className="relative mt-16 w-full max-w-3xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" style={{animation:"fwRise .6s .22s ease both",transform:"scale(0.85)",transformOrigin:"top center"}}>
-      {[[Zap,"Autopilot & batch","Rules + one-click batch printing"],[Boxes,"Smart box logic","Packs every order automatically"],[ShoppingBag,"Cart sync","Shopify & other shopping carts"],[Receipt,"Invoice auditing","Catches overcharges & mistakes"],[Sparkles,"Powered by Claude","An AI assistant does the busywork"],[Cog,"Made yours","Customizable to how you ship"],[FileText,"All the paperwork","Slips, pick lists, commercial invoices"],[DollarSign,"Best rates","Industry-best shipping rates"]].map(([Ic,h,sub],i)=>
-        <div key={i} className="rounded-xl border p-3.5 flex flex-col gap-2.5 transition-all hover:-translate-y-0.5" style={{background:"rgba(255,255,255,.75)",borderColor:"#ece8e1"}}>
-          <div className="w-[34px] h-[34px] rounded-[9px] flex items-center justify-center" style={{background:"linear-gradient(135deg,#37aef7,#1E9BF0)",boxShadow:"0 5px 12px -5px rgba(30,155,240,.6)"}}><Ic className="w-[18px] h-[18px] text-white"/></div>
-          <div><div className="text-[13px] font-bold text-stone-800">{h}</div><div className="text-[11.5px] text-stone-500 leading-snug mt-0.5">{sub}</div></div>
-        </div>)}
-    </div>
     <div className="relative mt-2 text-[11px] text-stone-400 flex items-center gap-2" style={{animation:"fwRise .6s .3s ease both"}}>© {new Date().getFullYear()} Freightwire · <LegalLinks/></div>
   </div>);
   return (<div className="min-h-screen bg-[#f4f2ee] text-stone-600">
@@ -3118,7 +3111,7 @@ function Landing({onAuth}){
         <NavTab label="Contact" onClick={()=>setPage("contact")}/>
         <a href={"tel:"+CONTACT_PHONE_TEL} className="hidden md:flex items-center gap-2 text-sm text-stone-600 hover:text-stone-900 px-2.5 py-2"><Phone className="w-4 h-4 text-[#0086E0]"/>{CONTACT_PHONE}</a>
         <button onClick={()=>onAuth("signin")} className="text-sm text-stone-600 hover:text-stone-900 px-2.5 py-2">Sign in</button>
-        <button onClick={()=>onAuth("request")} className="text-sm bg-[#0086E0] hover:bg-[#0a76c2] text-stone-900 font-medium rounded-lg px-4 py-2">Create account</button>
+        <button onClick={()=>onAuth("request")} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white font-medium rounded-lg px-4 py-2">Create account</button>
       </div>
     </div>
     {page==="home"&&<>
@@ -3128,7 +3121,7 @@ function Landing({onAuth}){
         <h1 className="text-5xl sm:text-6xl font-bold text-stone-900 leading-tight">Your shipping platform.<br/><span className="text-[#0086E0]">Your shipping partner.</span></h1>
         <p className="mt-6 text-xl text-stone-500 leading-relaxed">Enterprise FedEx and DHL rates. Industry leading customer service. Customized for you.</p>
         <div className="mt-7 flex flex-wrap gap-3">
-          <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0a76c2] text-stone-900 font-semibold rounded-lg px-7 py-3.5 text-[15px]">Create ShippingCloud account</button>
+          <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0072BE] text-white font-semibold rounded-lg px-7 py-3.5 text-[15px]">Create ShippingCloud account</button>
           <button onClick={()=>onAuth("fedex")} className="border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#0086E0] font-semibold rounded-lg px-7 py-3.5 text-[15px] flex items-center gap-2"><Truck className="w-4 h-4"/>Get your own FedEx account</button>
           <button onClick={enterDemo} className="text-[14px] text-stone-500 hover:text-stone-900 flex items-center gap-1.5 px-2 py-3.5 underline underline-offset-4 decoration-stone-600"><Eye className="w-4 h-4"/>Take a peek first</button>
         </div>
@@ -3138,7 +3131,7 @@ function Landing({onAuth}){
         <div className="absolute -inset-8 bg-[#0086E0]/20 blur-3xl rounded-full"/>
         <div className="relative text-center text-sm uppercase tracking-widest text-[#0086E0] font-semibold mb-4">Get FedEx and DHL Enterprise rates</div>
         <div className="relative bg-white border border-stone-200/80 rounded-2xl p-7 shadow-2xl">
-          {[["FedEx Ground®","2 days","$9.41"],["FedEx One Rate® · 2Day","flat-rate box · 2 days","$14.95"],["FedEx Priority Overnight®","next day","$42.10"],["DHL Express","2 days","$21.66"]].map((r,i)=>(
+          {[["FedEx Ground®","2 days","$10.15"],["FedEx One Rate® · 2Day","flat-rate box · 2 days","$14.95"],["FedEx Priority Overnight®","next day","$42.10"],["DHL Express","2 days","$21.66"]].map((r,i)=>(
             <div key={i} className={`flex items-center justify-between rounded-xl px-4 py-3.5 mb-2 ${i===0?"bg-[#0086E0]/15 border border-[#0086E0]/40":"bg-white border border-white/5"}`}>
               <div className="flex items-center gap-3.5"><Truck className={`w-5 h-5 ${i===0?"text-[#0086E0]":"text-stone-500"}`}/><div><div className="text-[15px] text-stone-900 font-medium">{r[0]}</div><div className="text-xs text-stone-500">{r[1]}</div></div></div>
               <div className={`font-mono text-lg ${i===0?"text-[#0086E0] font-bold":"text-stone-600"}`}>{r[2]}</div>
@@ -3146,45 +3139,60 @@ function Landing({onAuth}){
         </div>
       </div>
     </div>
+    {/* trust strip */}
+    <div className="max-w-6xl mx-auto px-5 pb-16 -mt-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 rounded-2xl overflow-hidden border border-stone-200/70 divide-x divide-stone-200/70 bg-white">
+        {[["10–15%","Avg. savings vs. UPS"],["FedEx + DHL","Enterprise-tier rates"],["Same-day","Rate comparisons"],["Real people","Answer the phone"]].map((x,i)=>(
+          <div key={i} className={`px-5 py-7 text-center ${i>=2?"border-t md:border-t-0 border-stone-200/70":""}`}>
+            <div className="text-2xl sm:text-[26px] font-bold text-[#0086E0] leading-none">{x[0]}</div>
+            <div className="mt-2 text-[12.5px] text-stone-500 leading-snug">{x[1]}</div>
+          </div>
+        ))}
+      </div>
+    </div>
     {/* features */}
     <div id="features" className="max-w-6xl mx-auto px-5 pb-16 scroll-mt-6">
       <div className="text-center mb-10"><h2 className="text-2xl sm:text-3xl font-bold text-stone-900">Your customized long term solution</h2></div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <F icon={DollarSign} title="Industry-leading FedEx rates">The pricing big shippers get, from day one. No volume commitments, no negotiating.</F>
-        <F icon={Receipt} title="Automated invoice auditing">We check every carrier bill against what you were quoted and flag anything off, so you can dispute anything that isn’t right.</F>
+        <F icon={BarChart3} title="Transit dashboard & detailed reporting">Track every shipment end to end and see spend, transit times, and delivery performance at a glance — with reports you can act on.</F>
         <F icon={Zap} title="Autopilot Mode">Set your rules once, then let the platform do all the work. Orders arrive rated, boxed, and ready to print — you just hit go.</F>
         <F icon={Cog} title="Customization">We adapt to your flow, not the other way around. Need something the platform doesn’t do? Tell us. We’ll build it.</F>
         <F icon={Users} title="Built by shipping people, supported by tech people">We’ve stood at the shipping desk — the reweighs, the surprise surcharges, the reps who never call back. We know the problems firsthand, and we have the tech team to fix them.</F>
         <F icon={Boxes} title="Box logic and live cart rates">We know your products and your boxes, so your store shows the real cost to ship — and you never pay to ship empty space.</F>
       </div>
     </div>
-    {/* beat your UPS rates */}
-    <div id="rates" className="max-w-6xl mx-auto px-5 pb-16 scroll-mt-6">
-      <div className="border border-stone-200/80 bg-white shadow-[0_2px_14px_-6px_rgba(30,50,80,.08)] rounded-2xl p-8 sm:p-10 text-center">
-        <h2 className="text-2xl sm:text-3xl font-bold text-stone-900 leading-snug">Save 10–15% switching to our FedEx rates.</h2>
-        <p className="mt-3 text-stone-500 max-w-2xl mx-auto">No fees. No BS. Send us a recent UPS invoice and get a line-by-line comparison back — the same day.</p>
-        <button onClick={()=>onAuth("fedex")} className="mt-6 border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#0086E0] font-semibold rounded-lg px-6 py-3 inline-flex items-center gap-2"><Upload className="w-4 h-4"/>Send us your UPS invoice</button>
+    {/* rates CTA banner */}
+    <div id="rates" className="max-w-6xl mx-auto px-5 pb-14 scroll-mt-6">
+      <div className="relative overflow-hidden rounded-3xl p-8 sm:p-12 text-center bg-gradient-to-br from-[#0086E0] to-[#0064B0]">
+        <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/10 blur-2xl"/>
+        <div className="absolute -bottom-20 -left-10 w-64 h-64 rounded-full bg-white/10 blur-2xl"/>
+        <div className="relative">
+          <div className="text-[13px] uppercase tracking-widest text-white/80 font-semibold mb-3">No fees · No commitments</div>
+          <h2 className="text-3xl sm:text-4xl font-bold text-white leading-tight">Save 10–15% switching to our FedEx rates.</h2>
+          <p className="mt-4 text-white/85 max-w-2xl mx-auto text-[15px] leading-relaxed">Send us a recent UPS or FedEx invoice and get a line-by-line comparison back — the same day. No BS, no pressure.</p>
+          <div className="mt-7 flex flex-wrap gap-3 justify-center">
+            <button onClick={()=>onAuth("fedex")} className="bg-white text-[#0064B0] font-semibold rounded-lg px-7 py-3.5 text-[15px] hover:bg-stone-100 transition-colors">Get your own FedEx account</button>
+            <button onClick={()=>onAuth("request")} className="border border-white/60 text-white font-semibold rounded-lg px-7 py-3.5 text-[15px] hover:bg-white/10 transition-colors">Compare my rates</button>
+          </div>
+        </div>
       </div>
     </div>
-    {/* integrations banner */}
+    {/* why us — 3 up */}
     <div className="max-w-6xl mx-auto px-5 pb-16">
-      <div className="border border-stone-200/80 bg-white shadow-[0_2px_14px_-6px_rgba(30,50,80,.08)] rounded-2xl p-8 sm:p-10 text-center">
-        <h2 className="text-2xl sm:text-3xl font-bold text-stone-900 leading-snug">We want to integrate with your systems.</h2>
-        <p className="mt-3 text-stone-500 max-w-2xl mx-auto">Your WMS, your ERP, your inventory management, your shopping cart — we plug into what you already run, so this works as a long-term solution. We already have lots of integrations, and if we don’t have yours, we’ll build it.</p>
-        <button onClick={()=>onAuth("request")} className="mt-6 border border-[#0086E0]/40 bg-[#0086E0]/8 hover:bg-[#0086E0]/15 text-[#0086E0] font-semibold rounded-lg px-6 py-3 inline-flex items-center gap-2"><Plug className="w-4 h-4"/>Tell us what you run</button>
-      </div>
-    </div>
-    {/* customization banner */}
-    <div className="max-w-6xl mx-auto px-5 pb-16">
-      <div className="border border-stone-200/80 bg-white shadow-[0_2px_14px_-6px_rgba(30,50,80,.08)] rounded-2xl p-8 sm:p-10 text-center">
-        <h2 className="text-2xl sm:text-3xl font-bold text-stone-900 leading-snug">Customized for your company and processes.</h2>
-        <p className="mt-3 text-stone-500 max-w-2xl mx-auto">Their limitations become your limitations. Not here — we grow with you and build the features you actually need, on your account, when you need them.</p>
-        <button onClick={()=>onAuth("request")} className="mt-6 border border-[#0086E0]/40 bg-[#0086E0]/8 hover:bg-[#0086E0]/15 text-[#0086E0] font-semibold rounded-lg px-6 py-3 inline-flex items-center gap-2"><Cog className="w-4 h-4"/>Get started</button>
+      <div className="grid sm:grid-cols-3 gap-4">
+        {[[Plug,"Integrates with your systems","Your WMS, ERP, inventory, and shopping cart — we plug into what you already run, no rip-and-replace."],[Cog,"Built around your process","Their limitations become your limitations. Not here — we grow with you and build what you need."],[Users,"Real people, real support","Shipping people who've worked the desk. When you need a human, you get one — no ticket black holes."]].map(([Ic,h,sub],i)=>(
+          <div key={i} className="bg-white border border-stone-200/80 rounded-2xl p-6 shadow-[0_2px_14px_-6px_rgba(30,50,80,.08)] hover:shadow-[0_10px_30px_-10px_rgba(30,50,80,.16)] hover:-translate-y-0.5 transition-all duration-200">
+            <div className="w-11 h-11 rounded-xl bg-[#0086E0]/10 border border-[#0086E0]/20 flex items-center justify-center mb-4"><Ic className="w-5 h-5 text-[#0086E0]"/></div>
+            <div className="font-semibold text-stone-900 text-[15px] mb-1.5">{h}</div>
+            <div className="text-[13.5px] text-stone-500 leading-relaxed">{sub}</div>
+          </div>
+        ))}
       </div>
     </div>
     {/* built-in Claude */}
     <div className="max-w-6xl mx-auto px-5 pb-4">
-      <div className="rounded-2xl p-8 sm:p-12 border border-[#D97757]/30 bg-gradient-to-br from-[#D97757]/12 via-[#faf3ef]/[0.04] to-transparent">
+      <div className="rounded-2xl p-8 sm:p-12 border border-[#0086E0]/25 bg-gradient-to-br from-[#0086E0]/10 via-white/40 to-transparent">
         <div className="flex items-center gap-2 text-[#0086E0] font-semibold text-sm"><Sparkles className="w-4 h-4"/>Built-in AI · powered by Claude</div>
         <h2 className="mt-3 text-3xl sm:text-4xl font-bold text-stone-900 leading-tight max-w-3xl">Let Claude do the shipping busywork for you.</h2>
         <p className="mt-4 text-stone-600 max-w-2xl text-[15px] leading-relaxed">ShippingCloud has Anthropic’s Claude built right in — not a canned help bot, but an assistant that actually works your account. Ask in plain English and it sets things up for you to approve.</p>
@@ -3203,7 +3211,7 @@ function Landing({onAuth}){
           </div>
         </div>
         <div className="mt-7 flex flex-wrap items-center gap-4">
-          <button onClick={enterDemo} className="inline-flex items-center gap-2 bg-white text-neutral-950 font-semibold rounded-lg px-6 py-3 hover:bg-stone-200"><Eye className="w-4 h-4"/>Try it in the demo</button>
+          <button onClick={enterDemo} className="inline-flex items-center gap-2 bg-white text-stone-900 font-semibold rounded-lg px-6 py-3 hover:bg-stone-200"><Eye className="w-4 h-4"/>Try it in the demo</button>
           <span className="inline-flex items-center gap-1.5 text-[13px] text-stone-500"><ShieldCheck className="w-4 h-4 text-[#0086E0]"/>It stages, you approve — Claude never prints a label without you.</span>
         </div>
       </div>
@@ -3213,7 +3221,7 @@ function Landing({onAuth}){
       <div className="bg-gradient-to-br from-[#0086E0]/15 to-transparent border border-[#0086E0]/25 rounded-2xl p-8 sm:p-10 text-center">
         <h2 className="text-2xl sm:text-3xl font-bold text-stone-900 leading-snug">Real people answer the phone.</h2>
         <p className="mt-3 text-stone-500 max-w-xl mx-auto">Claude handles the busywork inside the app — but when you need a human, you get one. No week-old tickets, no runaround. One call covers your shipping and your tech, from someone who knows your account.</p>
-        <a href={"tel:"+CONTACT_PHONE_TEL} className="mt-6 inline-flex items-center gap-2 bg-white text-neutral-950 font-semibold rounded-lg px-6 py-3 hover:bg-stone-200"><Phone className="w-4 h-4"/>{CONTACT_PHONE}</a>
+        <a href={"tel:"+CONTACT_PHONE_TEL} className="mt-6 inline-flex items-center gap-2 bg-white text-stone-900 font-semibold rounded-lg px-6 py-3 hover:bg-stone-200"><Phone className="w-4 h-4"/>{CONTACT_PHONE}</a>
       </div>
     </div>
     </>}
@@ -3223,8 +3231,8 @@ function Landing({onAuth}){
       <p className="mt-4 text-stone-500 leading-relaxed text-lg">So we built both sides of it: enterprise FedEx and DHL pricing from day one, and a platform with real humans behind it who answer the phone and build what you need. When a customer says “I wish it did this,” our answer is usually “give us a week.”</p>
       <p className="mt-4 text-stone-500 leading-relaxed text-lg">We’re not trying to be the biggest shipping platform. We’re trying to be <span className="text-stone-900 font-medium">your</span> shipping platform — the last one you’ll need to switch to.</p>
       <div className="mt-8 flex flex-wrap gap-3">
-        <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0a76c2] text-stone-900 font-semibold rounded-lg px-6 py-3">Create ShippingCloud account</button>
-        <button onClick={()=>setPage("contact")} className="border border-white/15 hover:bg-white/5 text-stone-900 font-medium rounded-lg px-6 py-3">Talk to us</button>
+        <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0072BE] text-white font-semibold rounded-lg px-6 py-3">Create ShippingCloud account</button>
+        <button onClick={()=>setPage("contact")} className="border border-stone-300 hover:bg-stone-100 text-stone-700 font-medium rounded-lg px-6 py-3">Talk to us</button>
       </div>
     </div>}
     {page==="contact"&&<div className="max-w-3xl mx-auto px-5 py-14">
@@ -3245,7 +3253,7 @@ function Landing({onAuth}){
         </a>
       </div>
       <p className="mt-6 text-[13px] text-stone-500">Already a customer? Sign in and your account context comes with you — the person you reach will know your shipping.</p>
-      <div className="mt-6"><button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0a76c2] text-stone-900 font-semibold rounded-lg px-6 py-3">Create ShippingCloud account</button></div>
+      <div className="mt-6"><button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0072BE] text-white font-semibold rounded-lg px-6 py-3">Create ShippingCloud account</button></div>
     </div>}
     {/* footer */}
     <div className="max-w-6xl mx-auto px-5 py-10 text-center">
@@ -3858,10 +3866,10 @@ function AppInner(){
           </>):(
           <button onClick={()=>setTab("ship")} title="Back to Ship" className="cursor-pointer flex items-center shrink-0">{(!brand.name1||brand.name1==="Shipping")&&(!brand.name2||brand.name2==="Cloud")?<ShipCloudLogo size={Math.round(22*((custom.logoScale||100)/100))}/>:<span className="font-extrabold tracking-tight text-[20px] sm:text-[26px]" style={{color:(custom.theme==="dark"||custom.theme==="grey")?"#F5F5F4":brand.dark}}>{brand.name1}<span style={{color:custom.accent||brand.primary}}>{brand.name2}</span></span>}</button>)}
           {custom.seasonal!==false&&seasonalEmoji()&&<span className="text-base select-none shrink-0 -ml-0.5" title="Seasonal touch — turn off in Customizations">{seasonalEmoji()}</span>}
-          {(()=>{const cl=(myFlags&&myFlags._logoB64)||settings.companyLogo||"";return cl?<span className="flex items-center gap-2.5 sm:gap-3 min-w-0 self-center"><span className="w-px h-6 bg-stone-200 shrink-0 hidden sm:block"/><img src={cl} alt={settings.company||"Company logo"} style={{height:Math.round(28*((custom.logoScale||100)/100))+"px"}} className={`w-auto max-w-[110px] sm:max-w-[200px] object-contain block ${(custom.theme==="dark"||custom.theme==="grey")?"bg-white rounded-md px-1.5 py-0.5 box-content":""}`} draggable={false}/></span>:null;})()}
           {brand.showLogo&&brand.logo&&<span className="hidden sm:flex items-center gap-1.5 text-stone-400 text-xs"><span className="w-px h-5 bg-stone-200"/>{brand.partnerLabel}<img src={brand.logo} alt="partner" className="h-3 w-auto object-contain"/></span>}
           <div className="flex-1"/>
           <div className="flex items-center gap-2 sm:gap-3">
+            {(()=>{const cl=(myFlags&&myFlags._logoB64)||settings.companyLogo||"";return cl?<span className="flex items-center min-w-0 shrink"><img src={cl} alt={settings.company||"Company logo"} style={{height:Math.round(28*((custom.companyLogoScale||100)/100))+"px"}} className={`w-auto max-w-[100px] sm:max-w-[160px] object-contain block ${(custom.theme==="dark"||custom.theme==="grey")?"bg-white rounded-md px-1.5 py-0.5 box-content":""}`} draggable={false}/><span className="w-px h-6 bg-stone-200 shrink-0 mx-2.5 sm:mx-3 hidden sm:block"/></span>:null;})()}
             <div className="text-right leading-tight hidden sm:block"><div className="text-sm font-medium text-stone-800">{currentUser.name}</div><div className="text-[11px] text-stone-400">{currentUser.role==="admin"?"Administrator":(clients.find(c=>c.id===currentUser.clientId)||{}).name||"Customer"}</div></div>
             <span className="w-8 h-8 rounded-full bg-[#CCEAFF] text-[#006FBF] flex items-center justify-center text-sm font-semibold shrink-0">{(currentUser.name||"?").slice(0,1).toUpperCase()}</span>
             <button onClick={()=>{ const ar=lsGet("adminReturn",null); if(ar){ lsSet("session",ar); lsDel("adminReturn"); } else { lsSet("session",null); lsDel("cloud.token"); } window.location.reload(); }} className="text-xs sm:text-sm text-stone-500 hover:text-stone-800 border border-stone-200 rounded px-2 sm:px-2.5 py-1.5">Sign out</button>

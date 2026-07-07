@@ -17,6 +17,17 @@ const CLIENT_ID = process.env.FEDEX_CLIENT_ID || process.env.FEDEX_API_KEY || pr
 const CLIENT_SECRET = process.env.FEDEX_CLIENT_SECRET || process.env.FEDEX_SECRET_KEY || process.env.FEDEX_SECRET || "";
 const ACCOUNT = process.env.FEDEX_ACCOUNT || process.env.FEDEX_ACCOUNT_NUMBER || process.env.FEDEX_ACCT || "";
 
+/* Country dropdowns in the app store full names ("United States"); FedEx wants ISO-2.
+   2-letter inputs pass through; unknown names pass through raw so FedEx names the problem
+   instead of us silently misrouting a shipment. */
+const ISO2 = { "united states":"US","usa":"US","u.s.":"US","u.s.a.":"US","united states of america":"US","canada":"CA","mexico":"MX","united kingdom":"GB","great britain":"GB","uk":"GB","england":"GB","australia":"AU","germany":"DE","france":"FR","italy":"IT","spain":"ES","netherlands":"NL","belgium":"BE","switzerland":"CH","austria":"AT","sweden":"SE","norway":"NO","denmark":"DK","finland":"FI","ireland":"IE","portugal":"PT","poland":"PL","czech republic":"CZ","czechia":"CZ","greece":"GR","hungary":"HU","romania":"RO","bulgaria":"BG","croatia":"HR","slovakia":"SK","slovenia":"SI","estonia":"EE","latvia":"LV","lithuania":"LT","luxembourg":"LU","iceland":"IS","japan":"JP","china":"CN","hong kong":"HK","taiwan":"TW","south korea":"KR","korea, south":"KR","republic of korea":"KR","singapore":"SG","malaysia":"MY","thailand":"TH","vietnam":"VN","philippines":"PH","indonesia":"ID","india":"IN","pakistan":"PK","bangladesh":"BD","sri lanka":"LK","israel":"IL","saudi arabia":"SA","united arab emirates":"AE","uae":"AE","qatar":"QA","kuwait":"KW","bahrain":"BH","oman":"OM","jordan":"JO","turkey":"TR","egypt":"EG","south africa":"ZA","nigeria":"NG","kenya":"KE","morocco":"MA","ghana":"GH","brazil":"BR","argentina":"AR","chile":"CL","colombia":"CO","peru":"PE","ecuador":"EC","uruguay":"UY","paraguay":"PY","bolivia":"BO","venezuela":"VE","costa rica":"CR","panama":"PA","guatemala":"GT","honduras":"HN","el salvador":"SV","nicaragua":"NI","dominican republic":"DO","jamaica":"JM","bahamas":"BS","barbados":"BB","trinidad and tobago":"TT","puerto rico":"PR","new zealand":"NZ","russia":"RU","ukraine":"UA","belarus":"BY","kazakhstan":"KZ","georgia":"GE","armenia":"AM","azerbaijan":"AZ" };
+function toISO(v) {
+  const s = String(v == null ? "" : v).trim();
+  if (!s) return "US";
+  if (/^[A-Za-z]{2}$/.test(s)) return s.toUpperCase();
+  return ISO2[s.toLowerCase()] || s;
+}
+
 let _tok = null; // {token, exp}
 async function getToken() {
   if (_tok && Date.now() < _tok.exp - 60000) return _tok.token;
@@ -109,8 +120,8 @@ exports.handler = async (event) => {
   const fromZip = String(body.fromZip || "").trim();
   const toZip = String(body.toZip || "").trim();
   if (!fromZip || !toZip) return respond(200, { live: false, error: "Origin and destination ZIP required", rates: [] });
-  const fromCountry = (body.fromCountry || "US").toUpperCase();
-  const toCountry = (body.toCountry || "US").toUpperCase();
+  const fromCountry = toISO(body.fromCountry || "US");
+  const toCountry = toISO(body.toCountry || "US");
   const acct = String(body.fedexAccount || (body.account && body.account.fedexAccount) || ACCOUNT).replace(/\D/g, "") || ACCOUNT;
   const pieces = (Array.isArray(body.pieces) && body.pieces.length ? body.pieces : [{ weight: 1, length: 12, width: 9, height: 4 }])
     .map(p => ({

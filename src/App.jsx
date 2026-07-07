@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, MessageCircle, Sparkles, ClipboardList, Ban, Tag ,Sliders, Save} from "lucide-react";
+import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, MessageCircle, Sparkles, ClipboardList, Ban, Tag, Copy, Sliders, Save} from "lucide-react";
 const FW_BLUE="#0099FF";
 const FW_DARK="#111418";
 function BrandCloud({className,color,style}){return (
@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v234";
+const BUILD_TAG="addr-v236";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -280,20 +280,27 @@ async function pdfToImages(base64,scale){
   return {imgs,wIn:wPt/72,hIn:hPt/72};
 }
 function printImagePages(imgs,wIn,hIn){
-  const f=document.createElement("iframe");
-  f.style.cssText="position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
-  document.body.appendChild(f);
-  const d=f.contentWindow.document;
-  d.open();
-  d.write("<html><head><title>Shipping label</title><style>@page{size:"+wIn.toFixed(2)+"in "+hIn.toFixed(2)+"in;margin:0}html,body{margin:0;padding:0}img{display:block;width:"+wIn.toFixed(2)+"in;height:"+hIn.toFixed(2)+"in;page-break-after:always}img:last-child{page-break-after:auto}</style></head><body>"
-    +imgs.map(u=>'<img src="'+u+'"/>').join("")+"</body></html>");
-  d.close();
-  let printed=false;
-  const go=()=>{ if(printed)return;printed=true; try{f.contentWindow.focus();f.contentWindow.print();}catch(e){} };
-  const first=d.querySelector("img");
-  if(first&&!first.complete)first.onload=()=>setTimeout(go,120);
-  setTimeout(go,900);                                     // data-URL images decode fast; belt & braces
-  setTimeout(()=>{try{document.body.removeChild(f);}catch(e){}},180000);
+  /* The one print path a browser can't silently swallow: window.print() on the page
+     itself (identical to Ctrl+P), with a print-only stylesheet that hides the whole
+     app and shows only the label pages, sized exactly to the label stock. */
+  try{
+    document.querySelectorAll(".sc-print-label,.sc-print-style").forEach(n=>n.remove());
+    const st=document.createElement("style");
+    st.className="sc-print-style";
+    st.textContent="@media print{ body>*:not(.sc-print-label){display:none !important;} .sc-print-label{display:block !important;} .sc-print-label img{display:block;width:"+wIn.toFixed(2)+"in;height:"+hIn.toFixed(2)+"in;page-break-after:always;} .sc-print-label img:last-child{page-break-after:auto;} @page{size:"+wIn.toFixed(2)+"in "+hIn.toFixed(2)+"in;margin:0;} } @media screen{ .sc-print-label{display:none;} }";
+    const box=document.createElement("div");
+    box.className="sc-print-label";
+    imgs.forEach(u=>{const im=document.createElement("img");im.src=u;box.appendChild(im);});
+    document.head.appendChild(st);
+    document.body.appendChild(box);
+    const cleanup=()=>{ try{box.remove();st.remove();}catch(e){} window.removeEventListener("afterprint",cleanup); };
+    window.addEventListener("afterprint",cleanup);
+    setTimeout(cleanup,120000);
+    const go=()=>{ try{window.focus();window.print();}catch(e){cleanup();} };
+    const pending=imgs.length&&!box.firstChild.complete;
+    if(pending){ box.firstChild.onload=()=>setTimeout(go,80); setTimeout(go,700); }
+    else setTimeout(go,60);
+  }catch(e){}
 }
 async function printLabelPdf(base64){
   try{ const r=await pdfToImages(base64,4); if(!r.imgs.length)throw new Error("no pages"); printImagePages(r.imgs,r.wIn,r.hIn); return true; }
@@ -3737,6 +3744,7 @@ function AppInner(){
   const [companyFlags,setCompanyFlags]=usePersist("companyFlags",{});
   const [companyAdminRequests,setCompanyAdminRequests]=usePersist("companyAdminRequests",[]);
   const [tab,setTab]=useState(BRAND.admin?"admin":"ship");
+  useEffect(()=>{const h=(e)=>{const t=e&&e.detail&&e.detail.tab;if(t)setTab(t);};window.addEventListener("sc-nav",h);return()=>window.removeEventListener("sc-nav",h);},[]);
   useEffect(()=>{ try{
     if(localStorage.getItem("scPurge")!=="2"){
       ["orders","shipments","returns","ledger","invoices","emails","drafts","pendingShips","rules","accounts"].forEach(k=>localStorage.removeItem(k));
@@ -4338,7 +4346,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     list=list.concat((orRates||[]).filter(q=>q.carrier==="FedEx"));   // One Rate services auto-appear when the box qualifies
     // Every service FedEx returns is offered — hide services per-login in Settings → Customize → Services.
     if(custom.hiddenServices&&custom.hiddenServices.length){const hs=new Set(custom.hiddenServices);list=list.filter(q=>!hs.has(canonSvc(q.label)));}
-    return list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,client)});})
+    return list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,list:q.list,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,client)});})
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
   },[rateSrc,orRates,client.markup,rateRules,fxTransit,residential,addrClassified,sigOption,saturday,insurance]);
   const best=null;
@@ -4655,7 +4663,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {selectedOrder&&(()=>{const so=orders.find(o=>o.id===selectedOrder);return so&&(so.shippingService||so.source)?<div className="flex items-center gap-2 text-xs text-stone-600 bg-stone-100 border border-stone-200 rounded-lg px-3 py-2"><Truck className="w-3.5 h-3.5 text-stone-400"/>From order <b>{so.name}</b>{so.source?` (${so.source})`:""} — buyer requested <b>{so.shippingService||"Standard"}</b>.</div>:null;})()}
         {ready&&<div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
           {rateSrc.loading?<><Loader2 className="w-3.5 h-3.5 animate-spin"/>Fetching live rates…</>
-          :rateSrc.live?<><Wifi className="w-3.5 h-3.5"/>Live rates from your England account</>
+          :rateSrc.live?<><Wifi className="w-3.5 h-3.5"/>Live rates from your FedEx account</>
           :<><Calculator className="w-3.5 h-3.5"/>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""} — turn on live rates in Settings → Carrier accounts to price with your real account</>}
         </div>}
         {ready&&!rateSrc.live&&!rateSrc.loading&&rateSrc.diag&&<div className="text-[11px] text-stone-400 -mt-1 px-1">
@@ -4769,6 +4777,21 @@ function LabelPreviewModal({data,onClose,settings}){
   },[data.pdf]);
   useEffect(()=>()=>{ if(url)try{URL.revokeObjectURL(url);}catch(e){} },[url]);
   const doPrint=()=>{ if(pages&&pages.imgs.length){printImagePages(pages.imgs,pages.wIn,pages.hIn);} else { printLabelPdf(data.pdf); } };
+  const [copied,setCopied]=useState(false);
+  const copyTracking=async()=>{ const t=String(data.tracking||""); if(!t)return;
+    try{ await navigator.clipboard.writeText(t); }
+    catch(e){ try{ const ta=document.createElement("textarea");ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove(); }catch(e2){} }
+    setCopied(true); setTimeout(()=>setCopied(false),1600);
+  };
+  const emailLabel=()=>{
+    const to=(data.rec&&data.rec.recipient&&data.rec.recipient.email)||"";
+    const tn=String(data.tracking||"");
+    const carrier=data.carrier||"FedEx";
+    const turl=tn?((TRACK_URL[carrier]||TRACK_URL.FedEx)(tn)):"";
+    const subject="Your shipment is on the way"+(tn?" — "+tn:"");
+    const body="Your order has shipped via "+(data.service||carrier)+".\n\n"+(tn?("Tracking number: "+tn+"\n"):"")+(turl?("Track it here: "+turl+"\n"):"")+"\n(The shipping label PDF can be attached from the Download button.)";
+    window.location.href="mailto:"+encodeURIComponent(to)+"?subject="+encodeURIComponent(subject)+"&body="+encodeURIComponent(body);
+  };
   const download=()=>{ if(!url)return; const a=document.createElement("a");a.href=url;a.download=`label-${data.tracking||"shipment"}.pdf`;a.click(); };
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
@@ -4789,7 +4812,12 @@ function LabelPreviewModal({data,onClose,settings}){
             <div className="flex items-center justify-center h-full text-stone-400 gap-2 text-sm" style={{minHeight:"45vh"}}><Loader2 className="w-4 h-4 animate-spin"/>Rendering label…</div>
           )}
         </div>
-        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-stone-200">
+        <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-t border-stone-200">
+          {data.tracking&&<button onClick={copyTracking} className={`text-sm px-3 py-2 rounded border flex items-center gap-1.5 ${copied?"border-emerald-300 bg-emerald-50 text-emerald-700":"border-stone-200 text-stone-600 hover:bg-stone-50"}`}>{copied?<CheckCircle2 className="w-4 h-4"/>:<Copy className="w-4 h-4"/>}{copied?"Copied":"Copy tracking"}</button>}
+          {data.tracking&&<a href={(TRACK_URL[data.carrier||"FedEx"]||TRACK_URL.FedEx)(data.tracking)} target="_blank" rel="noreferrer" className="text-sm px-3 py-2 rounded border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"><ExternalLink className="w-4 h-4"/>Track</a>}
+          <button onClick={emailLabel} className="text-sm px-3 py-2 rounded border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"><Mail className="w-4 h-4"/>Email</button>
+          <button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"pickups"}}));}catch(e){} onClose();}} className="text-sm px-3 py-2 rounded border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"><Calendar className="w-4 h-4"/>Schedule pickup</button>
+          <span className="flex-1"/>
           <button onClick={download} className="text-sm px-3 py-2 rounded border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"><Download className="w-4 h-4"/>Download</button>
           {dtCfg&&dtCfg.enabled&&<button onClick={()=>printDocTab(dtCfg,docCtx,data.tracking)} className="text-sm px-3 py-2 rounded border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"><Tag className="w-4 h-4"/>Doc tab</button>}
           {rcCfg&&rcCfg.enabled&&<button onClick={()=>printReceipt(rcCfg,docCtx,rcpLogo)} className="text-sm px-3 py-2 rounded border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"><Receipt className="w-4 h-4"/>Receipt</button>}
@@ -5068,6 +5096,7 @@ function NewOrderForm({onClose,onCreate}){
   );
 }
 function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
+  const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
   const [ciOpts,setCiOpts]=useState({reason:"Sale",incoterm:INCOTERMS[1],samples:false,notes:""});
   const commercial=!!(o.company&&o.company.trim());
   const [weight,setWeight]=useState(o.weight||1);
@@ -5100,7 +5129,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
     return ()=>{cancel=true;};
   },[rateNonce,o.zip,weight,box.L,box.W,box.H,residential,oneRate,orBox&&orBox.code,eng]);
   const localOrderQuotes=()=>quoteRates({fromZip,toZip:o.zip,pieces:[{weight:+weight||0,L:box.L,W:box.W,H:box.H}],residential,intl:false}).filter(qq=>qq.carrier==="FedEx");
-  const quotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:Math.round((qq.cost||0)*(1+(client?.markup||0)/100)*100)/100})).sort((a,b)=>a.sell-b.sell);},[rateSrc,residential,client,settings]);
+  const quotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,fromZip:(settings&&settings.sender&&settings.sender.zip)||"",toZip:o.zip,weight:+weight||o.weight||1})})).sort((a,b)=>(a.sell||1e9)-(b.sell||1e9));},[rateSrc,residential,client,settings,rateRules,weight]);
   const best=(rateSrc.live&&quotes[0])?quotes[0].key:null;
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
   const printHere=async(qq)=>{
@@ -5872,6 +5901,7 @@ const US_STATES=["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL
 const SERVICE_OPTIONS={FedEx:["FedEx Ground","FedEx Home Delivery","FedEx 2Day","FedEx Express Saver","FedEx Standard Overnight","FedEx Priority Overnight"]};
 const speedRank=(label)=>{const t=String(label||"").toLowerCase();if(/first overnight/.test(t))return 1;if(/priority overnight/.test(t))return 2;if(/standard overnight|next day/.test(t))return 3;if(/2.?day|2nd day air/.test(t))return 4;if(/express saver|3 day/.test(t))return 5;if(/home|ground/.test(t))return 7;return 6;};
 function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings,onShipped,batchCmd,onBatchCmdDone}){
+  const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
   const pool=orders.filter(o=>o.status==="unfulfilled");
   const [sel,setSel]=useState(()=>new Set());
   const [rule,setRule]=useState("cheapest");
@@ -6046,7 +6076,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         if(orderHasHazmat(o,settings.products||[])&&!/ground|home/i.test(String((svcOv[o.id]||"")))){ /* ground-only enforcement happens at pick below */ }
         const pk0=packs[o.id];
         const res=await ratesForOrder(o,{residential:true,weightLb:(pk0&&pk0.totalWt)||o.weight,box:pk0&&pk0.pieces[0]?{L:pk0.pieces[0].L,W:pk0.pieces[0].W,H:pk0.pieces[0].H}:undefined,fromZip:originZip,sender:settings.sender},eng);
-        const _hs=new Set(cz(settings).hiddenServices||[]);let qs=((res&&res.rates)||[]).filter(q=>!_hs.has(canonSvc(q.label))).map(q=>({...q,sell:Math.round((q.cost||0)*(1+(client.markup||0)/100)*100)/100}));
+        const _hs=new Set(cz(settings).hiddenServices||[]);let qs=((res&&res.rates)||[]).filter(q=>!_hs.has(canonSvc(q.label))).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:originZip,toZip:o.zip,weight:(pk0&&pk0.totalWt)||o.weight||1})}));
         picked=pickByPref(qs,svcOv[o.id]);
         if(!picked){
           if(rule==="ground")picked=qs.filter(q=>/ground|home/i.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
@@ -7346,6 +7376,7 @@ function RuleEditorModal({rule,onSave,onClose,onDelete,warehouses}){
 }
 
 function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,onShipped}){
+  const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
   const [editing,setEditing]=useState(null);
   const [view,setView]=useState("all");
   const [applied,setApplied]=useState(null);
@@ -7406,7 +7437,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
       let picked=null;
       try{
         const res=await ratesForOrder(o,{residential:true,weightLb:wt,fromZip:senderZip,sender:settings.sender},eng);
-        const qs=((res&&res.rates)||[]).map(q=>({...q,sell:Math.round((q.cost||0)*(1+((client&&client.markup)||0)/100)*100)/100}));
+        const qs=((res&&res.rates)||[]).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:senderZip,toZip:o.zip,weight:wt})}));
         picked=pickRate(qs,pref);
       }catch(e){}
       if(!picked){rows.push({name:o.name,ok:false,error:"No rate returned"});setApResults({rows:[...rows],heldN});continue;}

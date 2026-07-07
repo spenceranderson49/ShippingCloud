@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, MessageCircle, Sparkles, ClipboardList, Ban ,Sliders, Save} from "lucide-react";
+import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, MessageCircle, Sparkles, ClipboardList, Ban, Tag ,Sliders, Save} from "lucide-react";
 const FW_BLUE="#0099FF";
 const FW_DARK="#111418";
 function BrandCloud({className,color,style}){return (
@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v223";
+const BUILD_TAG="addr-v225";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -573,6 +573,111 @@ function printPackingSlips(slips){
   const w=window.open("","_blank");
   if(!w)return;
   w.document.write(packingSlipHTML(list));
+  w.document.close();
+}
+
+/* Resolve a doc-tab / receipt field binding to a printable string from shipment data.
+   ctx carries the shipment fields; z is the zone/line config ({field,custom,label}). */
+function resolveDocField(field,ctx,custom){
+  const c=ctx||{};
+  switch(field){
+    case "custom": return custom||"";
+    case "reference": return c.reference||c.shipmentReference||"";
+    case "invoiceNo": return c.invoiceNo||"";
+    case "orderNo": return c.orderNo||c.orderName||"";
+    case "shipDate": return c.shipDate||new Date().toLocaleDateString();
+    case "service": return c.service||"";
+    case "weight": return c.weight!=null?(c.weight+(c.weightUnit||" lb")):"";
+    case "pieces": return c.pieces!=null?String(c.pieces):"1";
+    case "declaredValue": return c.declaredValue?("$"+c.declaredValue):"";
+    case "recipientName": return (c.recipient&&c.recipient.name)||c.recipientName||"";
+    case "recipientCompany": return (c.recipient&&c.recipient.company)||c.recipientCompany||"";
+    case "recipientZip": return (c.recipient&&c.recipient.zip)||c.recipientZip||"";
+    case "senderName": return (c.sender&&c.sender.name)||c.senderName||"";
+    case "senderCompany": return (c.sender&&c.sender.company)||c.senderCompany||"";
+    case "cost": return c.cost!=null?("$"+c.cost):"";
+    default: return "";
+  }
+}
+/* Build the doc-tab text block (used when composing thermal label output).
+   Returns an array of {label,value,size} lines, skipping empties. */
+function buildDocTabLines(docTab,ctx){
+  if(!docTab||!docTab.enabled)return [];
+  return (docTab.zones||[]).map(z=>({label:docTab.showLabels!==false?z.label:"",value:resolveDocField(z.field,ctx,z.custom),size:z.size||9})).filter(l=>l.value!=="");
+}
+function receiptHTML(rc,ctx,logoUrl){
+  const esc=(x)=>String(x||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  const fs=rc.fontSize||11;
+  const widths={"4x6":"4in","letter":"8.5in","receipt3":"3in"};
+  const w=widths[rc.size||"4x6"]||"4in";
+  const lines=(rc.lines||[]).map(l=>({label:l.label,value:resolveDocField(l.field,ctx,l.custom)})).filter(l=>l.value!=="");
+  const body=lines.map(l=>`<div class="ln"><span class="lb">${esc(l.label)}${l.label?": ":""}</span>${esc(l.value)}</div>`).join("");
+  return `<!doctype html><html><head><title>Receipt</title><style>
+    @page{size:${w} auto;margin:0;}
+    body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;margin:0;}
+    .r{width:${w};box-sizing:border-box;padding:16px 18px;}
+    .logo{max-height:34px;max-width:60%;margin-bottom:8px;display:block;}
+    .title{font-weight:800;font-size:${fs+3}pt;margin-bottom:10px;border-bottom:2px solid #1c1917;padding-bottom:6px;}
+    .ln{font-size:${fs}pt;line-height:1.55;} .lb{color:#78716c;}
+    @media print{.r{padding:12px 14px;}}
+  </style></head><body><div class="r">
+    ${rc.showLogo!==false&&logoUrl?`<img class="logo" src="${logoUrl}"/>`:""}
+    <div class="title">${esc(rc.title||"Shipment Receipt")}</div>
+    ${body}
+  </div><script>window.onload=()=>window.print();</`+`script></body></html>`;
+}
+function printReceipt(rc,ctx,logoUrl){
+  if(!rc)return;
+  const w=window.open("","_blank");
+  if(!w)return;
+  w.document.write(receiptHTML(rc,ctx,logoUrl));
+  w.document.close();
+}
+/* Map a shipment record (from buildRec / order booking) → flat doc-tab context. */
+function recToDocCtx(rec){
+  const r=rec||{};
+  const rcp=r.recipient||r.receiver||{};
+  const snd=r.sender||{};
+  const pc=Array.isArray(r.pieces)?r.pieces.length:(r.pieces||1);
+  return {
+    reference:r.reference||r.shipmentReference||"",
+    invoiceNo:r.invoiceNo||"",
+    orderNo:r.orderNo||r.orderName||r.orderNumber||r.invoiceNo||"",
+    shipDate:r.date||r.shipDate||new Date().toLocaleDateString(),
+    service:r.service||"",
+    weight:(r.weight!=null&&r.weight!=="")?r.weight:null,
+    weightUnit:" lb",
+    pieces:pc,
+    declaredValue:r.insurance||r.declaredValue||"",
+    recipient:rcp, sender:snd,
+    recipientName:rcp.name||"", recipientCompany:rcp.company||"", recipientZip:rcp.zip||r.toZip||"",
+    senderName:snd.name||"", senderCompany:snd.company||"",
+    cost:(r.sell??r.cost),
+    carrier:r.carrier||"", tracking:r.tracking||""
+  };
+}
+/* Compact doc-tab strip — the tear-off reference block that rides with a thermal label. */
+function docTabHTML(docTab,ctx,tracking){
+  const esc=(x)=>String(x==null?"":x).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  const lines=buildDocTabLines(docTab,ctx);
+  const body=lines.map(l=>`<div class="ln" style="font-size:${l.size}pt">${l.label?`<span class="lb">${esc(l.label)}: </span>`:""}${esc(l.value)}</div>`).join("");
+  return `<!doctype html><html><head><title>Doc tab</title><style>
+    @page{size:4in auto;margin:0;}
+    body{font-family:'Courier New',ui-monospace,monospace;color:#000;margin:0;}
+    .t{width:4in;box-sizing:border-box;padding:8px 12px;border:1px dashed #999;}
+    .hd{font-family:-apple-system,Segoe UI,Arial,sans-serif;font-size:7pt;letter-spacing:.14em;color:#666;text-transform:uppercase;margin-bottom:5px;}
+    .ln{line-height:1.5;white-space:nowrap;} .lb{color:#555;}
+    .tk{margin-top:6px;padding-top:5px;border-top:1px solid #ccc;font-size:8pt;color:#333;}
+  </style></head><body><div class="t">
+    <div class="hd">Doc Tab</div>${body}
+    ${tracking?`<div class="tk">${esc(tracking)}</div>`:""}
+  </div><script>window.onload=()=>window.print();</`+`script></body></html>`;
+}
+function printDocTab(docTab,ctx,tracking){
+  if(!docTab)return;
+  const w=window.open("","_blank");
+  if(!w)return;
+  w.document.write(docTabHTML(docTab,ctx,tracking));
   w.document.close();
 }
 
@@ -3086,10 +3191,9 @@ function Landing({onAuth}){
     <style>{`@keyframes fwRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}@keyframes fwDrift{0%,100%{transform:translate(-50%,0)}50%{transform:translate(calc(-50% + 18px),-12px)}}`}</style>
     <div className="absolute inset-0 pointer-events-none" style={{background:"repeating-linear-gradient(-35deg,transparent 0 70px,rgba(30,155,240,.05) 70px 72px)"}}/>
     <div className="absolute pointer-events-none" style={{width:640,height:640,borderRadius:"50%",top:-180,left:"50%",background:"radial-gradient(circle,rgba(30,155,240,.14),transparent 65%)",animation:"fwDrift 12s ease-in-out infinite"}}/>
-    <div className="relative flex flex-col items-center mb-3" style={{animation:"fwRise .6s ease both"}}>
+    <div className="relative flex flex-col items-center mb-7" style={{animation:"fwRise .6s ease both"}}>
       <FreightwireShipHub logoH={52}/>
     </div>
-    <div className="relative text-[15px] font-medium text-stone-600 mb-6" style={{animation:"fwRise .6s .08s ease both"}}>Your shipping platform <span className="text-stone-900">&</span> partner</div>
     <div className="relative w-full flex justify-center py-4" style={{animation:"fwRise .6s .14s ease both",transform:"scale(1.2)",transformOrigin:"top center"}}>
       <CloudAuth onDone={()=>window.location.reload()} initialMode="signin"/>
     </div>
@@ -3116,43 +3220,19 @@ function Landing({onAuth}){
     </div>
     {page==="home"&&<>
     {/* hero */}
-    <div className="max-w-6xl mx-auto px-5 pt-16 pb-20 lg:min-h-[74vh] grid lg:grid-cols-2 gap-14 items-center">
-      <div>
-        <h1 className="text-5xl sm:text-6xl font-bold text-stone-900 leading-tight">Your shipping platform.<br/><span className="text-[#0086E0]">Your shipping partner.</span></h1>
-        <p className="mt-6 text-xl text-stone-500 leading-relaxed">Enterprise FedEx and DHL rates. Industry leading customer service. Customized for you.</p>
-        <div className="mt-7 flex flex-wrap gap-3">
-          <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0072BE] text-white font-semibold rounded-lg px-7 py-3.5 text-[15px]">Create ShippingCloud account</button>
-          <button onClick={()=>onAuth("fedex")} className="border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#0086E0] font-semibold rounded-lg px-7 py-3.5 text-[15px] flex items-center gap-2"><Truck className="w-4 h-4"/>Get your own FedEx account</button>
-          <button onClick={enterDemo} className="text-[14px] text-stone-500 hover:text-stone-900 flex items-center gap-1.5 px-2 py-3.5 underline underline-offset-4 decoration-stone-600"><Eye className="w-4 h-4"/>Take a peek first</button>
-        </div>
-      </div>
-      {/* hero graphic: mock rate card */}
-      <div className="relative hidden lg:block">
-        <div className="absolute -inset-8 bg-[#0086E0]/20 blur-3xl rounded-full"/>
-        <div className="relative text-center text-sm uppercase tracking-widest text-[#0086E0] font-semibold mb-4">Get FedEx and DHL Enterprise rates</div>
-        <div className="relative bg-white border border-stone-200/80 rounded-2xl p-7 shadow-2xl">
-          {[["FedEx Ground®","2 days","$10.15"],["FedEx One Rate® · 2Day","flat-rate box · 2 days","$14.95"],["FedEx Priority Overnight®","next day","$42.10"],["DHL Express","2 days","$21.66"]].map((r,i)=>(
-            <div key={i} className={`flex items-center justify-between rounded-xl px-4 py-3.5 mb-2 ${i===0?"bg-[#0086E0]/15 border border-[#0086E0]/40":"bg-white border border-white/5"}`}>
-              <div className="flex items-center gap-3.5"><Truck className={`w-5 h-5 ${i===0?"text-[#0086E0]":"text-stone-500"}`}/><div><div className="text-[15px] text-stone-900 font-medium">{r[0]}</div><div className="text-xs text-stone-500">{r[1]}</div></div></div>
-              <div className={`font-mono text-lg ${i===0?"text-[#0086E0] font-bold":"text-stone-600"}`}>{r[2]}</div>
-            </div>))}
-        </div>
-      </div>
-    </div>
-    {/* trust strip */}
-    <div className="max-w-6xl mx-auto px-5 pb-16 -mt-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 rounded-2xl overflow-hidden border border-stone-200/70 divide-x divide-stone-200/70 bg-white">
-        {[["10–15%","Avg. savings vs. UPS"],["FedEx + DHL","Enterprise-tier rates"],["Same-day","Rate comparisons"],["Real people","Answer the phone"]].map((x,i)=>(
-          <div key={i} className={`px-5 py-7 text-center ${i>=2?"border-t md:border-t-0 border-stone-200/70":""}`}>
-            <div className="text-2xl sm:text-[26px] font-bold text-[#0086E0] leading-none">{x[0]}</div>
-            <div className="mt-2 text-[12.5px] text-stone-500 leading-snug">{x[1]}</div>
-          </div>
-        ))}
+    <div className="max-w-5xl mx-auto px-5 pt-20 pb-16 text-center">
+      <div className="inline-flex items-center gap-2 rounded-full border border-[#0086E0]/25 bg-[#0086E0]/8 px-4 py-1.5 text-[13px] font-medium text-[#0086E0] mb-7"><Sparkles className="w-3.5 h-3.5"/>Enterprise FedEx &amp; DHL rates · built-in AI · real support</div>
+      <h1 style={{fontFamily:"'Space Grotesk',Inter,sans-serif",letterSpacing:"-0.03em"}} className="text-5xl sm:text-[68px] font-bold text-stone-900 leading-[1.02]">Your shipping platform.<br/><span className="text-[#0086E0]">Your shipping partner.</span></h1>
+      <p className="mt-6 text-xl text-stone-500 leading-relaxed max-w-2xl mx-auto">The enterprise carrier rates big shippers get, a platform that actually fits how you work, and real people who answer the phone.</p>
+      <div className="mt-9 flex flex-wrap gap-3 justify-center">
+        <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0072BE] text-white font-semibold rounded-xl px-8 py-4 text-[15px] shadow-lg shadow-[#0086E0]/20 transition-colors">Create your account</button>
+        <button onClick={()=>onAuth("fedex")} className="border border-stone-300 bg-white hover:border-[#0086E0]/50 hover:text-[#0086E0] text-stone-700 font-semibold rounded-xl px-8 py-4 text-[15px] flex items-center gap-2 transition-colors"><Truck className="w-4 h-4"/>Get your own FedEx account</button>
+        <button onClick={enterDemo} className="text-[15px] text-stone-500 hover:text-stone-900 flex items-center gap-1.5 px-3 py-4 transition-colors"><Eye className="w-4 h-4"/>Take a peek first</button>
       </div>
     </div>
     {/* features */}
     <div id="features" className="max-w-6xl mx-auto px-5 pb-16 scroll-mt-6">
-      <div className="text-center mb-10"><h2 className="text-2xl sm:text-3xl font-bold text-stone-900">Your customized long term solution</h2></div>
+      <div className="text-center mb-10"><h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-2xl sm:text-3xl font-bold text-stone-900">Your customized long term solution</h2></div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <F icon={DollarSign} title="Industry-leading FedEx rates">The pricing big shippers get, from day one. No volume commitments, no negotiating.</F>
         <F icon={BarChart3} title="Transit dashboard & detailed reporting">Track every shipment end to end and see spend, transit times, and delivery performance at a glance — with reports you can act on.</F>
@@ -3169,7 +3249,7 @@ function Landing({onAuth}){
         <div className="absolute -bottom-20 -left-10 w-64 h-64 rounded-full bg-white/10 blur-2xl"/>
         <div className="relative">
           <div className="text-[13px] uppercase tracking-widest text-white/80 font-semibold mb-3">No fees · No commitments</div>
-          <h2 className="text-3xl sm:text-4xl font-bold text-white leading-tight">Save 10–15% switching to our FedEx rates.</h2>
+          <h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-3xl sm:text-4xl font-bold text-white leading-tight">Save 10–15% switching to our FedEx rates.</h2>
           <p className="mt-4 text-white/85 max-w-2xl mx-auto text-[15px] leading-relaxed">Send us a recent UPS or FedEx invoice and get a line-by-line comparison back — the same day. No BS, no pressure.</p>
           <div className="mt-7 flex flex-wrap gap-3 justify-center">
             <button onClick={()=>onAuth("fedex")} className="bg-white text-[#0064B0] font-semibold rounded-lg px-7 py-3.5 text-[15px] hover:bg-stone-100 transition-colors">Get your own FedEx account</button>
@@ -3194,7 +3274,7 @@ function Landing({onAuth}){
     <div className="max-w-6xl mx-auto px-5 pb-4">
       <div className="rounded-2xl p-8 sm:p-12 border border-[#0086E0]/25 bg-gradient-to-br from-[#0086E0]/10 via-white/40 to-transparent">
         <div className="flex items-center gap-2 text-[#0086E0] font-semibold text-sm"><Sparkles className="w-4 h-4"/>Built-in AI · powered by Claude</div>
-        <h2 className="mt-3 text-3xl sm:text-4xl font-bold text-stone-900 leading-tight max-w-3xl">Let Claude do the shipping busywork for you.</h2>
+        <h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="mt-3 text-3xl sm:text-4xl font-bold text-stone-900 leading-tight max-w-3xl">Let Claude do the shipping busywork for you.</h2>
         <p className="mt-4 text-stone-600 max-w-2xl text-[15px] leading-relaxed">ShippingCloud has Anthropic’s Claude built right in — not a canned help bot, but an assistant that actually works your account. Ask in plain English and it sets things up for you to approve.</p>
         <div className="mt-8 grid sm:grid-cols-3 gap-4 max-w-4xl">
           <div className="bg-white border border-stone-200/80 rounded-xl p-5">
@@ -3219,14 +3299,14 @@ function Landing({onAuth}){
     {/* partner, not just a platform */}
     <div className="max-w-6xl mx-auto px-5 pb-16 pt-8">
       <div className="bg-gradient-to-br from-[#0086E0]/15 to-transparent border border-[#0086E0]/25 rounded-2xl p-8 sm:p-10 text-center">
-        <h2 className="text-2xl sm:text-3xl font-bold text-stone-900 leading-snug">Real people answer the phone.</h2>
+        <h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-2xl sm:text-3xl font-bold text-stone-900 leading-snug">Real people answer the phone.</h2>
         <p className="mt-3 text-stone-500 max-w-xl mx-auto">Claude handles the busywork inside the app — but when you need a human, you get one. No week-old tickets, no runaround. One call covers your shipping and your tech, from someone who knows your account.</p>
         <a href={"tel:"+CONTACT_PHONE_TEL} className="mt-6 inline-flex items-center gap-2 bg-white text-stone-900 font-semibold rounded-lg px-6 py-3 hover:bg-stone-200"><Phone className="w-4 h-4"/>{CONTACT_PHONE}</a>
       </div>
     </div>
     </>}
     {page==="about"&&<div className="max-w-3xl mx-auto px-5 py-14">
-      <h1 className="text-3xl sm:text-4xl font-bold text-stone-900">About ShippingCloud</h1>
+      <h1 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-3xl sm:text-4xl font-bold text-stone-900">About ShippingCloud</h1>
       <p className="mt-6 text-stone-500 leading-relaxed text-lg">We’re shipping people. We’ve run the shipping desks, eaten the surprise surcharges, argued the reweighs, and waited on hold with carriers who never called back. ShippingCloud exists because we got tired of choosing between good rates and good software — and tired of platforms that make you work their way.</p>
       <p className="mt-4 text-stone-500 leading-relaxed text-lg">So we built both sides of it: enterprise FedEx and DHL pricing from day one, and a platform with real humans behind it who answer the phone and build what you need. When a customer says “I wish it did this,” our answer is usually “give us a week.”</p>
       <p className="mt-4 text-stone-500 leading-relaxed text-lg">We’re not trying to be the biggest shipping platform. We’re trying to be <span className="text-stone-900 font-medium">your</span> shipping platform — the last one you’ll need to switch to.</p>
@@ -3236,7 +3316,7 @@ function Landing({onAuth}){
       </div>
     </div>}
     {page==="contact"&&<div className="max-w-3xl mx-auto px-5 py-14">
-      <h1 className="text-3xl sm:text-4xl font-bold text-stone-900">Talk to a real person</h1>
+      <h1 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-3xl sm:text-4xl font-bold text-stone-900">Talk to a real person</h1>
       <p className="mt-4 text-stone-500 leading-relaxed text-lg">No chatbots, no ticket black holes. Call or write — a human who can actually fix it answers.</p>
       <div className="mt-8 grid sm:grid-cols-2 gap-4">
         <a href={"tel:"+CONTACT_PHONE_TEL} className="bg-white border border-stone-200/80 hover:bg-stone-50 rounded-2xl p-6 block">
@@ -3290,7 +3370,7 @@ function FirstRunFedEx({user,onClose}){
         <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto"/>
         <div className="text-lg font-semibold text-stone-800">You’re on the list</div>
         <p className="text-sm text-stone-500">A real person will set up your FedEx account and reach out — usually the same day. If you attached a UPS invoice, your rate comparison comes with it.</p>
-        <button onClick={onClose} className="bg-stone-900 text-stone-900 rounded-lg px-5 py-2 text-sm font-medium">Start shipping</button>
+        <button onClick={onClose} className="bg-stone-900 text-white rounded-lg px-5 py-2 text-sm font-medium">Start shipping</button>
       </div>):(<>
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -3311,7 +3391,7 @@ function FirstRunFedEx({user,onClose}){
       <p className="text-[11px] text-stone-500 -mt-1">Attach one and we’ll send back a line-by-line rate comparison — same day. (Find it in the <a href="https://www.ups.com/us/en/business-solutions/ups-billing" target="_blank" rel="noopener noreferrer" className="text-[#0086E0] underline">UPS Billing Center</a>: Manage Your Bills → Billing Center → Log in → Download PDF or CSV.)</p>
       {err&&<div className="text-xs text-red-600">{err}</div>}
       <div className="flex items-center gap-2">
-        <button onClick={go} disabled={state==="busy"} className="flex-1 bg-[#0086E0] text-stone-900 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-[#0a76c2] disabled:opacity-50">{state==="busy"?"Sending…":"Get my FedEx account"}</button>
+        <button onClick={go} disabled={state==="busy"} className="flex-1 bg-[#0086E0] text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-[#0072BE] disabled:opacity-50">{state==="busy"?"Sending…":"Get my FedEx account"}</button>
         <button onClick={onClose} className="text-sm text-stone-500 px-3 py-2">Maybe later</button>
       </div>
       </>)}
@@ -3387,7 +3467,7 @@ function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,set
         <Field label="Email"><Input value={f.email} onChange={e=>setF({...f,email:e.target.value})}/></Field>
         <Field label="Temp password"><Input value={f.password} onChange={e=>setF({...f,password:e.target.value})}/></Field>
       </div>
-      <button onClick={create} disabled={busy||!f.name||!f.email||!f.password} className="text-sm bg-[#0086E0] text-stone-900 rounded-lg px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<Plus className="w-4 h-4"/>}Create login</button>
+      <button onClick={create} disabled={busy||!f.name||!f.email||!f.password} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<Plus className="w-4 h-4"/>}Create login</button>
     </Panel>
     <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
       <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500">{users.length} login{users.length===1?"":"s"} in your company</div>
@@ -3741,7 +3821,7 @@ function AppInner(){
         setShipments(p=>[rec,...p]);
         setPendingShips(list=>list.filter(x=>x.orderId!==pend.orderId));
         if(pend.orderRef) setOrders(o=>o.map(x=>x.id===pend.orderRef?{...x,status:"fulfilled",tracking:rec.tracking}:x));
-        if(res.labelPdfBase64&&!firstLabel) firstLabel={pdf:res.labelPdfBase64,tracking:rec.tracking,service:pend.service,carrier:pend.carrier};
+        if(res.labelPdfBase64&&!firstLabel) firstLabel={pdf:res.labelPdfBase64,tracking:rec.tracking,service:pend.service,carrier:pend.carrier,rec};
       }
     }
     if(firstLabel) setAppLabel(firstLabel);
@@ -3877,7 +3957,7 @@ function AppInner(){
         </div>
       </header>
       {qq&&<QuickQuote onClose={()=>setQQ(false)} client={client} england={englandFor(client,settings)} senderZip={settings?.sender?.zip||""}/>}
-      {appLabel&&<LabelPreviewModal data={appLabel} onClose={()=>setAppLabel(null)}/>}
+      {appLabel&&<LabelPreviewModal data={appLabel} settings={settings} onClose={()=>setAppLabel(null)}/>}
       {navOpen&&<div className="md:hidden fixed inset-0 z-40 flex" role="dialog">
         <div className="absolute inset-0 bg-stone-900/40" onClick={()=>setNavOpen(false)}/>
         <aside style={custom.navBg?{background:custom.navBg}:undefined} className={`relative w-64 ${custom.navBg?"":"bg-white"} h-full shadow-xl overflow-y-auto`}>
@@ -4187,7 +4267,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       pieces:pieces.map(p=>({weight:pw(p),length:p.L,width:p.W,height:p.H,declaredValue:intl?(p.value||null):null}))};
     const res=await shipCall({action:"ship",account:acctOf(eng),order});
     if(!res||!res.ok){setShipStatus({state:"error",key:q.key,msg:(res&&res.error)||"Booking failed"});setBought(null);return;}
-    const done=(st)=>{ onShipped(buildRec(q,carrier,st),selectedOrder); if(st.labelPdfBase64){setLabelPreview({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier});} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setBookedLock({tracking:st.tracking}); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
+    const done=(st)=>{ const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){setLabelPreview({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec});} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setBookedLock({tracking:st.tracking}); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
     if(res.booked){done(res);return;}
     setShipStatus({state:"pending",key:q.key,orderId:res.orderId});
     pollLabel(eng,res.orderId,done).then(r=>{ if(r&&r.timedOut){ onPending&&onPending({orderId:res.orderId,rec:buildRec(q,carrier,{}),service:q.label,carrier,orderRef:selectedOrder}); setShipStatus({state:"pending_timeout",key:q.key});setBought(null);} });
@@ -4462,7 +4542,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           Tried England on your <b>{rateSrc.diag.src==="customer"?"customer's":"main"}</b> account · from ZIP {rateSrc.diag.fromZip} · customer ID {rateSrc.diag.cust} · key {rateSrc.diag.key} · {rateSrc.diag.enabled?"live toggle ON":"live toggle OFF"}{!rateSrc.diag.hasKey?" · no API key found":""}{!rateSrc.diag.hasCust?" · no customer ID found":""}{rateSrc.diag.fromZip==="(none)"?" — no origin ZIP: set your sender ZIP or the customer's origin.":""}{rateSrc.error&&/401|invalid/i.test(rateSrc.error)?" — England rejected this key/ID pair. Re-enter it in Settings → Carrier accounts and Test again.":""}
         </div>}
         <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom}/>
-        {labelPreview&&<LabelPreviewModal data={labelPreview} onClose={()=>setLabelPreview(null)}/>}
+        {labelPreview&&<LabelPreviewModal data={labelPreview} settings={settings} onClose={()=>setLabelPreview(null)}/>}
         {naming&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setNaming(false)}><div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-sm space-y-3" onClick={e=>e.stopPropagation()}><div className="text-sm font-semibold text-stone-800">Name this draft</div><input autoFocus value={draftName} onChange={e=>setDraftName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")commitDraft(draftName.trim());}} placeholder="e.g. Dana Cole – Miami" className="w-full bg-white border border-stone-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><div className="flex justify-end gap-2"><button onClick={()=>setNaming(false)} className="text-sm px-3 py-1.5 rounded text-stone-600 hover:bg-stone-100">Cancel</button><button onClick={()=>commitDraft(draftName.trim())} className="text-sm px-3 py-1.5 rounded bg-stone-900 text-white font-medium hover:bg-stone-800">Save draft</button></div></div></div>}
         {shipStatus&&<div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2.5 ${shipStatus.state==="error"?"bg-rose-50 text-rose-700 border border-rose-200":shipStatus.state==="booked"?"bg-emerald-50 text-emerald-700 border border-emerald-200":shipStatus.state==="pending_timeout"?"bg-amber-50 text-amber-700 border border-amber-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
           {shipStatus.state==="booking"&&<><Loader2 className="w-4 h-4 animate-spin"/>Booking label on your England account…</>}
@@ -4540,10 +4620,14 @@ function CommercialInvoice({sender,receiver,customs,total,reference,pieces,total
 
 const addBizDays=(n)=>{const d=new Date();let added=0;let guard=0;while(added<n&&guard<60){d.setDate(d.getDate()+1);const day=d.getDay();if(day!==0&&day!==6)added++;guard++;}return d;};
 const fmtDeliv=(d)=>d.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"});
-function LabelPreviewModal({data,onClose}){
+function LabelPreviewModal({data,onClose,settings}){
   const [url,setUrl]=useState(null);
   const frameRef=React.useRef(null);
   const printed=React.useRef(false);
+  const st=settings||{};
+  const docCtx=recToDocCtx(data.rec||{...data,recipient:data.recipient,service:data.service,tracking:data.tracking,carrier:data.carrier});
+  const rcpLogo=(st.companyLogo)||"";
+  const rcCfg=st.receipt, dtCfg=st.docTab;
   useEffect(()=>{
     try{
       const bin=atob(data.pdf);const bytes=new Uint8Array(bin.length);
@@ -4567,6 +4651,8 @@ function LabelPreviewModal({data,onClose}){
         </div>
         <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-stone-200">
           <button onClick={download} className="text-sm px-3 py-2 rounded border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"><Download className="w-4 h-4"/>Download</button>
+          {dtCfg&&dtCfg.enabled&&<button onClick={()=>printDocTab(dtCfg,docCtx,data.tracking)} className="text-sm px-3 py-2 rounded border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"><Tag className="w-4 h-4"/>Doc tab</button>}
+          {rcCfg&&rcCfg.enabled&&<button onClick={()=>printReceipt(rcCfg,docCtx,rcpLogo)} className="text-sm px-3 py-2 rounded border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"><Receipt className="w-4 h-4"/>Receipt</button>}
           <button onClick={doPrint} className="text-sm px-4 py-2 rounded bg-stone-900 text-white hover:bg-stone-800 flex items-center gap-1.5"><Printer className="w-4 h-4"/>Print label</button>
         </div>
       </div>
@@ -4891,7 +4977,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
     if(!res||!res.ok){ setStatus({state:"error",msg:(res&&res.error)||"Booking failed"}); setBought(null); return; }
     const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:qq.label,recipient:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings?.sender||{})},fromZip,toZip:o.zip,weight:+weight,pieces:[{weight:+weight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference:o.name,bookNumber:res.bookNumber};
     onShipped(rec,o.id);
-    if(res.labelPdfBase64) setLabelPreview({pdf:res.labelPdfBase64,tracking:res.tracking,service:qq.label,carrier});
+    if(res.labelPdfBase64) setLabelPreview({pdf:res.labelPdfBase64,tracking:res.tracking,service:qq.label,carrier,rec});
     setStatus({state:"booked",msg:"Label created — saved to Shipments."});fireConfetti();
   };
   const Info=({k,v})=>(<div className="min-w-0"><div className="text-[10px] uppercase tracking-widest text-stone-400">{k}</div><div className="text-sm text-stone-800 truncate">{v||"—"}</div></div>);
@@ -4941,7 +5027,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
         <ServiceList quotes={quotes} best={best} bought={bought} action={ready?printHere:null} label="Buy & print" doneLabel="Printed" ready={ready} custom={cz(settings||{})}/>
         {status&&<div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2 ${status.state==="error"?"text-rose-600 bg-rose-50 border border-rose-200":status.state==="booking"?"text-stone-600 bg-stone-50 border border-stone-200":"text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF]"}`}>{status.state==="booking"?<Loader2 className="w-4 h-4 animate-spin"/>:status.state==="error"?<AlertTriangle className="w-4 h-4"/>:<CheckCircle2 className="w-4 h-4"/>}{status.msg}</div>}
       </>)}
-      {labelPreview&&<LabelPreviewModal data={labelPreview} onClose={()=>setLabelPreview(null)}/>}
+      {labelPreview&&<LabelPreviewModal data={labelPreview} settings={settings} onClose={()=>setLabelPreview(null)}/>}
     </div>
   );
 }
@@ -5073,7 +5159,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
     if(!res||!res.ok){ setStatus({state:"error",msg:(res&&res.error)||"Booking failed"}); setBought(null); return; }
     const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,...baseRec,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,bookNumber:res.bookNumber};
     onShipped(rec,o.id);
-    if(res.labelPdfBase64) setLabelPreview({pdf:res.labelPdfBase64,tracking:res.tracking,service:qq.label,carrier});
+    if(res.labelPdfBase64) setLabelPreview({pdf:res.labelPdfBase64,tracking:res.tracking,service:qq.label,carrier,rec});
     setStatus({state:"booked",msg:"Label created — saved to Shipments."});fireConfetti();
   };
   const items=(o.lineItems&&o.lineItems.length)?o.lineItems:String(o.items||"").split(",").map(s=>s.trim()).filter(Boolean).map((s,i)=>{const m=s.match(/^(\d+)\s*[×x]\s*(.+)$/);return {id:"i"+i,title:m?m[2]:s,quantity:m?+m[1]:1,price:"",sku:""};});
@@ -5233,7 +5319,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
           </div>
         </div>
       </div>
-      {labelPreview&&<LabelPreviewModal data={labelPreview} onClose={()=>setLabelPreview(null)}/>}
+      {labelPreview&&<LabelPreviewModal data={labelPreview} settings={settings} onClose={()=>setLabelPreview(null)}/>}
     </div>
   );
 }
@@ -6611,9 +6697,27 @@ function BoxLogic({settings,setSettings}){
     </Panel>
   </div>);
 }
+// Fields that can be bound onto a doc tab zone or receipt line, resolved from shipment data at print time
+const DOCTAB_FIELDS=[["reference","Reference / PO"],["invoiceNo","Invoice #"],["orderNo","Order #"],["shipDate","Ship date"],["service","Service"],["weight","Weight"],["pieces","Piece count"],["declaredValue","Declared value"],["recipientName","Recipient name"],["recipientCompany","Recipient company"],["recipientZip","Recipient ZIP"],["senderName","Sender name"],["senderCompany","Sender company"],["cost","Your cost"],["custom","Custom text…"]];
+const DOCTAB_LABEL={};DOCTAB_FIELDS.forEach(([k,l])=>{DOCTAB_LABEL[k]=l;});
+const DEFAULT_DOCTABS=[{id:"dt1",zone:"01",field:"reference",label:"REF",custom:"",size:9},{id:"dt2",zone:"02",field:"shipDate",label:"SHIP DATE",custom:"",size:9},{id:"dt3",zone:"03",field:"weight",label:"WEIGHT",custom:"",size:9}];
+const DEFAULT_RECEIPT_LINES=[{id:"rl1",field:"recipientName",label:"To",custom:""},{id:"rl2",field:"reference",label:"Ref",custom:""},{id:"rl3",field:"service",label:"Service",custom:""},{id:"rl4",field:"weight",label:"Weight",custom:""},{id:"rl5",field:"cost",label:"Cost",custom:""}];
 function PrinterSettings({settings,setSettings}){
   const pr=settings.printer||{labelSize:"4x6",format:"PDF",printer:"",packingSlip:true,autoPrint:false,slipSize:"letter",rotate:false};
   const set=(patch)=>setSettings({...settings,printer:{...pr,...patch}});
+  // Doc tabs + receipt config (per-login settings)
+  const dt=settings.docTab||{enabled:false,stock:"trailing",zones:DEFAULT_DOCTABS,showLabels:true};
+  const setDt=(patch)=>setSettings({...settings,docTab:{...dt,...patch}});
+  const dtZones=dt.zones||DEFAULT_DOCTABS;
+  const addZone=()=>setDt({zones:[...dtZones,{id:"dt"+Date.now(),zone:String(dtZones.length+1).padStart(2,"0"),field:"reference",label:"",custom:"",size:9}]});
+  const setZone=(id,patch)=>setDt({zones:dtZones.map(z=>z.id===id?{...z,...patch}:z)});
+  const delZone=(id)=>setDt({zones:dtZones.filter(z=>z.id!==id)});
+  const rc=settings.receipt||{enabled:false,size:"4x6",title:"Shipment Receipt",showLogo:true,fontSize:11,lines:DEFAULT_RECEIPT_LINES};
+  const setRc=(patch)=>setSettings({...settings,receipt:{...rc,...patch}});
+  const rcLines=rc.lines||DEFAULT_RECEIPT_LINES;
+  const addLine=()=>setRc({lines:[...rcLines,{id:"rl"+Date.now(),field:"reference",label:"",custom:""}]});
+  const setLine=(id,patch)=>setRc({lines:rcLines.map(l=>l.id===id?{...l,...patch}:l)});
+  const delLine=(id)=>setRc({lines:rcLines.filter(l=>l.id!==id)});
   const printers=settings.printers||[];
   const routes=settings.printRoutes||[];
   const [pn,setPn]=useState("");
@@ -6679,6 +6783,80 @@ function PrinterSettings({settings,setSettings}){
           <option value="4x6">4×6</option>
         </Select>
       </Field>
+    </Panel>
+    <Panel title="Doc tabs">
+      <p className="text-xs text-stone-500 leading-relaxed">The doc tab is the removable tab on thermal FedEx label stock. Turn it on and choose what prints there — pulled from each shipment, or your own fixed text. <span className="text-stone-400">Requires doc-tab label stock in your thermal printer.</span></p>
+      <div className="flex flex-wrap items-center gap-4">
+        <label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={!!dt.enabled} onChange={e=>setDt({enabled:e.target.checked})}/>Print a doc tab</label>
+        {dt.enabled&&<label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={dt.showLabels!==false} onChange={e=>setDt({showLabels:e.target.checked})}/>Show field labels</label>}
+      </div>
+      {dt.enabled&&<>
+        <Field label="Doc-tab position on label stock">
+          <Select value={dt.stock||"trailing"} onChange={e=>setDt({stock:e.target.value})}>
+            <option value="trailing">Trailing (bottom of label)</option>
+            <option value="leading">Leading (top of label)</option>
+          </Select>
+        </Field>
+        <div className="space-y-1.5">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400">Zones · print in order</div>
+          {dtZones.map(z=>(<div key={z.id} className="flex flex-wrap items-center gap-1.5 text-[13px] bg-stone-50 rounded-lg px-2 py-1.5">
+            <span className="text-[11px] text-stone-400 w-9">Zone {z.zone}</span>
+            <Input value={z.label} onChange={e=>setZone(z.id,{label:e.target.value})} placeholder="Label (e.g. REF)" className="!w-24"/>
+            <Select value={z.field} onChange={e=>setZone(z.id,{field:e.target.value})} className="!w-auto">{DOCTAB_FIELDS.map(([v,l])=><option key={v} value={v}>{l}</option>)}</Select>
+            {z.field==="custom"&&<Input value={z.custom} onChange={e=>setZone(z.id,{custom:e.target.value})} placeholder="Text to print" className="!w-32"/>}
+            <span className="text-[11px] text-stone-400">font</span>
+            <Select value={z.size||9} onChange={e=>setZone(z.id,{size:+e.target.value})} className="!w-auto">{[7,8,9,10,11,12,14].map(n=><option key={n} value={n}>{n}pt</option>)}</Select>
+            <button onClick={()=>delZone(z.id)} className="text-stone-300 hover:text-rose-500 ml-auto"><Trash2 className="w-3.5 h-3.5"/></button>
+          </div>))}
+          <button onClick={addZone} className="text-xs text-[#0086E0] font-medium flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add zone</button>
+        </div>
+        <div className="rounded-lg border border-stone-200 bg-white p-3">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Preview</div>
+          <div className="inline-block border border-dashed border-stone-300 rounded bg-stone-50 px-3 py-2 min-w-[180px]">
+            {dtZones.length===0?<div className="text-[11px] text-stone-400">No zones yet</div>:dtZones.map(z=>(
+              <div key={z.id} style={{fontSize:(z.size||9)+"pt",lineHeight:1.35}} className="font-mono text-stone-700 whitespace-nowrap">{dt.showLabels!==false&&z.label?<span className="text-stone-400">{z.label}: </span>:null}{z.field==="custom"?(z.custom||"—"):("{"+DOCTAB_LABEL[z.field]+"}")}</div>
+            ))}
+          </div>
+        </div>
+      </>}
+    </Panel>
+    <Panel title="Receipt">
+      <p className="text-xs text-stone-500 leading-relaxed">Print a shipment receipt alongside the label — a quick record for the counter, the driver, or the customer. Choose the size, the fields, and the text size.</p>
+      <label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={!!rc.enabled} onChange={e=>setRc({enabled:e.target.checked})}/>Print a receipt with each label</label>
+      {rc.enabled&&<>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Receipt size">
+            <Select value={rc.size||"4x6"} onChange={e=>setRc({size:e.target.value})}>
+              <option value="4x6">4×6 — thermal</option>
+              <option value="letter">8.5×11 — laser/inkjet</option>
+              <option value="receipt3">3″ — receipt roll</option>
+            </Select>
+          </Field>
+          <Field label="Body font size">
+            <Select value={rc.fontSize||11} onChange={e=>setRc({fontSize:+e.target.value})}>{[9,10,11,12,13,14,16].map(n=><option key={n} value={n}>{n}pt</option>)}</Select>
+          </Field>
+        </div>
+        <Field label="Receipt title"><Input value={rc.title||""} onChange={e=>setRc({title:e.target.value})} placeholder="Shipment Receipt"/></Field>
+        <label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={rc.showLogo!==false} onChange={e=>setRc({showLogo:e.target.checked})}/>Include company logo</label>
+        <div className="space-y-1.5">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400">Receipt lines · print in order</div>
+          {rcLines.map(l=>(<div key={l.id} className="flex flex-wrap items-center gap-1.5 text-[13px] bg-stone-50 rounded-lg px-2 py-1.5">
+            <Input value={l.label} onChange={e=>setLine(l.id,{label:e.target.value})} placeholder="Label" className="!w-24"/>
+            <Select value={l.field} onChange={e=>setLine(l.id,{field:e.target.value})} className="!w-auto">{DOCTAB_FIELDS.map(([v,lb])=><option key={v} value={v}>{lb}</option>)}</Select>
+            {l.field==="custom"&&<Input value={l.custom} onChange={e=>setLine(l.id,{custom:e.target.value})} placeholder="Text" className="!w-32"/>}
+            <button onClick={()=>delLine(l.id)} className="text-stone-300 hover:text-rose-500 ml-auto"><Trash2 className="w-3.5 h-3.5"/></button>
+          </div>))}
+          <button onClick={addLine} className="text-xs text-[#0086E0] font-medium flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add line</button>
+        </div>
+        <div className="rounded-lg border border-stone-200 bg-white p-3">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Preview</div>
+          <div className="inline-block border border-stone-300 rounded bg-white px-4 py-3 min-w-[200px] shadow-sm">
+            {rc.showLogo!==false&&<div className="text-[11px] font-semibold text-stone-400 mb-1">[ Company logo ]</div>}
+            <div className="font-bold text-stone-800 mb-2" style={{fontSize:((rc.fontSize||11)+3)+"pt"}}>{rc.title||"Shipment Receipt"}</div>
+            {rcLines.map(l=>(<div key={l.id} style={{fontSize:(rc.fontSize||11)+"pt",lineHeight:1.5}} className="text-stone-700"><span className="text-stone-400">{l.label}: </span>{l.field==="custom"?(l.custom||"—"):("{"+DOCTAB_LABEL[l.field]+"}")}</div>))}
+          </div>
+        </div>
+      </>}
     </Panel>
     <div className="flex items-center gap-2 text-xs text-stone-400"><Printer className="w-4 h-4"/>Thermal sizes (4×6 / ZPL) print fastest on label printers; choose Letter/PDF if you print on a standard office printer.</div>
   </div>);

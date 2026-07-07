@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v258";
+const BUILD_TAG="addr-v259";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1343,7 +1343,7 @@ function svcKeyFromTitle(s){
   return RATE_SERVICES.fedex.concat(RATE_SERVICES.dhl).some(x=>x.k===k)?k:null;
 }
 function parseRateWorkbook(text){
-  const rawLines=String(text||"").split(/\r?\n/).map(s=>s.replace(/\u00a0/g," ").replace(/[,\t]+$/,"").trim()).filter(Boolean);
+  const rawLines=String(text||"").split(/\r?\n/).map(s=>s.replace(/ /g," ").replace(/[,\t]+$/,"").trim()).filter(Boolean);
   const cellsOf=(s)=>s.split(/\t|,/).map(x=>x.trim());
   const out={tables:[],unmatched:[],single:null};
   if(!rawLines.length)return out;
@@ -3836,7 +3836,7 @@ function LandingGate({onDone}){
   const [auth,setAuth]=useState(()=>{const p=lsGet("postDemo",null);if(p){lsSet("postDemo",null);return "request";}return null;}); // null | "signin" | "request" | "fedex"
   const [intake,setIntake]=useState(null);
   if(BRAND.admin)return (<div className="min-h-screen bg-stone-100 flex flex-col items-center justify-center p-4 gap-4">
-    <div className="text-center"><div className="text-2xl font-extrabold tracking-tight text-stone-900">ShippingCloud <span className="text-[#0086E0]">HQ</span></div><div className="text-xs text-stone-500 mt-1">Administrator portal — same accounts, same data, no customer noise.</div></div>
+    <div className="text-center flex flex-col items-center gap-2"><FreightwireShipHub logoH={40}/><div className="text-xs text-stone-500 mt-1">Administrator portal — same accounts, same data, no customer noise.</div></div>
     <CloudAuth initialMode="signin" onDone={onDone}/>
   </div>);
   return (<div className="relative">
@@ -4371,15 +4371,15 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       else prods.push({id:"pr"+Date.now(),sku:"",name:l.desc,l:0,w:0,h:0,wt:(+l.wlb||0)+((+l.woz||0)/16),value:+l.value||0,origin:l.origin==="United States"?"US":(l.origin||"US"),hs:l.hts});
       return {...pp,products:prods};});
     setShipHsMsg({ok:`Saved "${l.desc}" with HS ${l.hts} to your product catalog — it'll auto-fill next time.`}); };
+  const [lastTracking,setLastTracking]=useState("");   // feeds the post-booking CI reprint, no visual lock UI attached
   const [shipPad,setShipPad]=useState(false);
-  const [bookedLock,setBookedLock]=useState(null);
   const printShipCI=(preview)=>{
     if(!preview){const tot=customs.lines.reduce((a,l)=>a+(+l.value||0)*(+l.qty||0),0);
-      saveCIRecord(setSettings,{date:new Date().toLocaleString(),invoiceNo:reference||invoiceNo||"",consignee:receiver.name||receiver.company||"",country:receiver.country||"",total:tot,proforma:!!customs.proforma,tracking:(bookedLock&&bookedLock.tracking)||"",
+      saveCIRecord(setSettings,{date:new Date().toLocaleString(),invoiceNo:reference||invoiceNo||"",consignee:receiver.name||receiver.company||"",country:receiver.country||"",total:tot,proforma:!!customs.proforma,tracking:lastTracking||"",
         o:{name:reference||invoiceNo||"",customer:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip,country:receiver.country,phone:receiver.phone,email:receiver.email,weight:totalWeight},
         sn:{...settings.sender},
         opts:{reason:customs.reason,incoterm:customs.incoterm,samples:customs.samples,marks:customs.marks,notes:customs.notes,senderTax:customs.senderTaxId??settings.taxId,senderTaxCountry:customs.senderTaxCountry,receiverTax:customs.receiverTaxId,receiverEori:customs.receiverEori,receiverContact2:customs.altContact,eei:customs.ftr??"NOEEI 30.37(a)",printedName:customs.printedName,proforma:customs.proforma,units:customs.units||"lb",ior:customs.ior==="Other"?(customs.iorName||"Other"):(customs.ior||"Receiver"),signature:customs.signature||defaultSig(settings),letterhead:customs.letterhead,rows:customs.lines.map(l=>({name:l.desc,qty:+l.qty||1,unit:+l.value||0,hs:l.hts,origin:l.origin,w:(customs.units==="kg")?(l.wkg?`${+l.wkg} kg`:""):((l.wlb||l.woz)?`${+l.wlb||0} lb ${+l.woz||0} oz`:"")}))}});}const o2={name:reference||invoiceNo||"CI-"+Date.now(),customer:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip,country:receiver.country,phone:receiver.phone,email:receiver.email,weight:totalWeight,lineItems:customs.lines.map(l=>({name:l.desc,quantity:+l.qty||1,price:String(l.value||0)}))};
-    printCommercialInvoice(o2,(settings&&settings.products)||[],settings.sender,{reason:customs.reason,incoterm:customs.incoterm,samples:customs.samples,marks:customs.marks,notes:customs.notes,senderTax:customs.senderTaxId??settings.taxId,senderTaxCountry:customs.senderTaxCountry,receiverTax:customs.receiverTaxId,receiverEori:customs.receiverEori,receiverContact2:customs.altContact,eei:customs.ftr??"NOEEI 30.37(a)",signature:customs.signature||defaultSig(settings),letterhead:customs.letterhead,preview:!!preview,attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(customs.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data})),printedName:customs.printedName,proforma:customs.proforma,awb:(bookedLock&&bookedLock.tracking)||"",units:customs.units||"lb",ior:customs.ior==="Other"?(customs.iorName||"Other"):(customs.ior||"Receiver"),rows:customs.lines.map(l=>({name:l.desc,qty:+l.qty||1,unit:+l.value||0,hs:l.hts,origin:l.origin,w:(customs.units==="kg")?(l.wkg?`${+l.wkg} kg`:""):((l.wlb||l.woz)?`${+l.wlb||0} lb ${+l.woz||0} oz`:"")}))});};
+    printCommercialInvoice(o2,(settings&&settings.products)||[],settings.sender,{reason:customs.reason,incoterm:customs.incoterm,samples:customs.samples,marks:customs.marks,notes:customs.notes,senderTax:customs.senderTaxId??settings.taxId,senderTaxCountry:customs.senderTaxCountry,receiverTax:customs.receiverTaxId,receiverEori:customs.receiverEori,receiverContact2:customs.altContact,eei:customs.ftr??"NOEEI 30.37(a)",signature:customs.signature||defaultSig(settings),letterhead:customs.letterhead,preview:!!preview,attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(customs.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data})),printedName:customs.printedName,proforma:customs.proforma,awb:lastTracking||"",units:customs.units||"lb",ior:customs.ior==="Other"?(customs.iorName||"Other"):(customs.ior||"Receiver"),rows:customs.lines.map(l=>({name:l.desc,qty:+l.qty||1,unit:+l.value||0,hs:l.hts,origin:l.origin,w:(customs.units==="kg")?(l.wkg?`${+l.wkg} kg`:""):((l.wlb||l.woz)?`${+l.wlb||0} lb ${+l.woz||0} oz`:"")}))});};
   const [shipHsMsg,setShipHsMsg]=useState(null);
   const shipSuggestHS=async(i)=>{ const l0=customs.lines[i]; if(!l0||!l0.desc)return;
     setShipHsBusy(i); setShipHsMsg(null);
@@ -4508,7 +4508,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     // Every service FedEx returns is offered — hide services per-login in Settings → Customize → Services.
     if(custom.hiddenServices&&custom.hiddenServices.length){const hs=new Set(custom.hiddenServices);list=list.filter(q=>!hs.has(canonSvc(q.label)));}
     if(client&&client.blockedServices&&client.blockedServices.length){const bs=new Set(client.blockedServices);list=list.filter(q=>!bs.has(canonSvc(q.label)));}   // admin-locked — can't be bypassed by the customer's own toggle
-    return list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,list:q.list,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,client)});})
+    return list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,list:q.list,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,client)});})
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
   },[rateSrc,orRates,client,JSON.stringify(custom.hiddenServices||[]),JSON.stringify(client&&client.blockedServices||[]),rateRules,fxTransit,residential,addrClassified,sigOption,saturday,insurance]);
   const best=null;
@@ -4542,7 +4542,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(custom.spendCap>0&&(q.sell??q.cost)>custom.spendCap){setShipStatus({state:"error",key:q.key,msg:`This rate is over your $${custom.spendCap} spending cap (Settings → Customizations).`});setTimeout(()=>setShipStatus(null),5000);return;}
     if(!canBook){
       onShipped(buildRec(q,carrier),selectedOrder);
-      setBought(q.key);setBookedLock({tracking:""});fireConfetti();setTimeout(()=>setBought(null),1800);
+      setBought(q.key);fireConfetti();setTimeout(()=>setBought(null),1800);
       return;
     }
     setBought(q.key);setShipStatus({state:"booking",key:q.key});
@@ -4557,7 +4557,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       pieces:pieces.map(p=>({weight:pw(p),length:p.L,width:p.W,height:p.H,declaredValue:intl?(p.value||null):null}))};
     const res=await shipCall({action:"ship",account:acctOf(eng),order});
     if(!res||!res.ok){setShipStatus({state:"error",key:q.key,msg:(res&&res.error)||"Booking failed"});setBought(null);return;}
-    const done=(st)=>{ const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} setLabelPreview({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec});} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setBookedLock({tracking:st.tracking}); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
+    const done=(st)=>{ const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} setLabelPreview({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec});} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
     if(res.booked){done(res);return;}
     setShipStatus({state:"pending",key:q.key,orderId:res.orderId});
     pollLabel(eng,res.orderId,done).then(r=>{ if(r&&r.timedOut){ onPending&&onPending({orderId:res.orderId,rec:buildRec(q,carrier,{}),service:q.label,carrier,orderRef:selectedOrder}); setShipStatus({state:"pending_timeout",key:q.key});setBought(null);} });
@@ -4592,7 +4592,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const saveDraft=()=>{setDraftName(reference||receiver.name||receiver.city||"");setNaming(true);};
   /* box-logic explanation banner shown while a packed order is loaded */
   const PackNote=()=>packNote?(<div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800 flex items-center gap-2"><Boxes className="w-3.5 h-3.5 shrink-0"/><span className="flex-1">Box logic packed this order: <b>{packNote.boxNames}</b> · {packNote.totalWt} lb billable{packNote.unresolved.length?` · ${packNote.unresolved.length} item${packNote.unresolved.length===1?"":"s"} not in your catalog (weight may be low)`:""} — dims are editable below.</span><button onClick={()=>setPackNote(null)} className="text-emerald-500 hover:text-emerald-700"><X className="w-3.5 h-3.5"/></button></div>):null;
-  const newShipment=()=>{setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setRes(true);setResTouched(false);setBookedLock(null);setSig(custom.defaultSignature&&custom.defaultSignature!=="none");setSigOption(custom.defaultSignature||"none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");};
+  const newShipment=()=>{setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setRes(true);setResTouched(false);setSig(custom.defaultSignature&&custom.defaultSignature!=="none");setSigOption(custom.defaultSignature||"none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");};
   const addressCheck=(
     <div className="text-xs space-y-2">
       <div className="text-[10px] uppercase tracking-widest text-stone-500 font-semibold flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5"/>Address check</div>
@@ -4623,14 +4623,6 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   );
   return (
     <div className="relative flex flex-row gap-4 items-start">
-      {bookedLock&&<div className="absolute inset-0 z-40 bg-white/50 backdrop-blur-[1px] flex items-start justify-center pt-14">
-        <div className="bg-white border border-emerald-300 shadow-xl rounded-xl px-5 py-4 text-center space-y-2 pointer-events-auto">
-          <div className="text-emerald-700 font-semibold text-lg flex items-center gap-2 justify-center"><CheckCircle2 className="w-5 h-5"/>Booked!</div>
-          {bookedLock.tracking&&<div className="text-sm text-stone-600">Tracking <span className="font-mono font-semibold">{bookedLock.tracking}</span></div>}
-          <div className="text-xs text-stone-400">This shipment is locked — no more edits.</div>
-          <button onClick={()=>newShipment()} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-4 py-2 font-medium">Start new shipment</button>
-        </div>
-      </div>}
       {ordersOpen?(
       <aside className="w-60 shrink-0 space-y-2">
         <div className="flex items-center justify-between gap-2">
@@ -4822,7 +4814,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           </div>
         )}
 
-        {(client._unassigned||client._unresolved)&&<div className="flex items-center gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>{client._unresolved?`This login is set to an unknown customer (id "${client.id}") — no such customer exists, so no account markup can apply. Fix the login’s assigned customer in Admin \u2192 Customers.`:"This login has no customer assigned — pricing uses the platform default only, never another customer’s markup. Assign one in Admin \u2192 Customers \u2192 Logins if that’s wrong."}</div>}
+        {(client._unassigned||client._unresolved)&&<div className="flex items-center gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>{client._unresolved?`This login is set to an unknown customer (id "${client.id}") — no such customer exists, so no account markup can apply. Fix the login’s assigned customer in Admin → Customers.`:"This login has no customer assigned — quotes price at exactly the raw carrier cost, no markup at all. Assign a customer in Admin → Customers → Logins to give it real pricing."}</div>}
                 {selectedOrder&&(()=>{const so=orders.find(o=>o.id===selectedOrder);return so&&(so.shippingService||so.source)?<div className="flex items-center gap-2 text-xs text-stone-600 bg-stone-100 border border-stone-200 rounded-lg px-3 py-2"><Truck className="w-3.5 h-3.5 text-stone-400"/>From order <b>{so.name}</b>{so.source?` (${so.source})`:""} — buyer requested <b>{so.shippingService||"Standard"}</b>.</div>:null;})()}
         {ready&&<div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
           {rateSrc.loading?<><Loader2 className="w-3.5 h-3.5 animate-spin"/>Fetching live rates…</>
@@ -5482,7 +5474,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   const orRates=useMemo(()=>selectedOrBox?oneRateQuotes(selectedOrBox,{rules:rateRules,client}):[],[selectedOrBox&&selectedOrBox.code,client,rateRules]);
   const baseQuotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,fromZip,toZip:rcv.zip,weight:totalWeight})}));},[rateSrc,residential,client,addrClassified,rateRules,settings]);
   const quotes=useMemo(()=>{
-    const withTransit=(list)=>list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};});
+    const withTransit=(list)=>list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};});
     return withTransit([...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday:sat,insurance,fees:surchargeFees(rateRules,client)}))).sort((a,b)=>(a.sell||0)-(b.sell||0));
   },[baseQuotes,orRates,fxTransit,sigOption,sat,insurance,rateRules]);
   const best=null;
@@ -6711,7 +6703,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
 /* ════════ SETTINGS ════════ */
 function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,audit=[]}){
   const [sec,setSec]=useState("general");
-  const secs=[["general","General",Cog],["customize","Customizations",Sliders],["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["catalog","Product catalog",Boxes],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["reference","Reference Fields",Receipt],["cieditor","Commercial invoice",Receipt],["cihistory","CI history",FileText],["otherdocs","Other documents",FileText],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["ledger","Ledger",Wallet],["integrations","Integrations",Layers],["subscription","Subscription",Star]];
+  const secs=[["general","General",Cog],["customize","Customizations",Sliders],["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["catalog","Product catalog",Boxes],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["reference","Reference Fields",Receipt],["cieditor","Commercial invoice",Receipt],["cihistory","CI history",FileText],["otherdocs","Other documents",FileText],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["billing","Billing",CreditCard],["integrations","Integrations",Layers],["subscription","Subscription",Star]];
   return (
     <div className="flex flex-col md:flex-row gap-6">
       <aside className="md:w-56 shrink-0 space-y-1">{secs.map(([id,l,Icon])=><button key={id} onClick={()=>setSec(id)} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}</button>)}</aside>
@@ -6732,9 +6724,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="cihistory"&&<CIHistory settings={settings} setSettings={setSettings}/>}
         {sec==="otherdocs"&&<OtherDocs settings={settings} setSettings={setSettings}/>}
         {sec==="customize"&&<Customize settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])}/>}
-        {sec==="clients"&&<Clients clients={clients} setClients={setClients}/>}
         {sec==="billing"&&<Billing settings={settings} setSettings={setSettings}/>}
-        {sec==="ledger"&&<Ledger ledger={ledger} addLedger={addLedger}/>}
         {sec==="integrations"&&<Integrations settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders}/>}
         {sec==="subscription"&&<Subscription settings={settings} setSettings={setSettings}/>}
       </div>
@@ -7290,9 +7280,9 @@ const RULE_PROPERTIES={
   "Created":{key:"date",type:"date"},
 };
 const RULE_PROP_NAMES=Object.keys(RULE_PROPERTIES);
-const RULE_OPERATORS={text:["IN","NOT IN","=","!="],list:["IN","NOT IN","=","!="],number:["=","!=",">","<",">=","<="],date:["=","!=",">","<"]};
+const RULE_OPERATORS={text:["CONTAINS","NOT CONTAINS","IN","NOT IN","=","!="],list:["IN","NOT IN","=","!="],number:["=","!=",">","<",">=","<="],date:["=","!=",">","<"]};
 const RULE_ACTION_TYPES=["Set Service","Set Package","Set One Rate Box","Request Signature","Set Insurance","Saturday Delivery","Add Order Tag","Add Note","Assign To","Set Weight","Set Custom Field","Mark as Gift","Split Packages","Assign Hold","Set From Address","Route to Printer"];
-const RULE_SERVICES=["ANY - Cheapest","ANY - Cheapest Ground","ANY - Cheapest 2 Day","ANY - Fastest","FedEx - Ground","FedEx - Home Delivery","FedEx - Express Saver","FedEx - 2Day","FedEx - 2Day One Rate","FedEx - Standard Overnight","FedEx - Priority Overnight","DHL - Express Worldwide"];
+const RULE_SERVICES=["ANY - Cheapest","ANY - Cheapest Ground","ANY - Cheapest 2 Day","ANY - Fastest","FedEx - Ground","FedEx - Home Delivery","FedEx - Express Saver","FedEx - 2Day","FedEx - 2Day OneRate","FedEx - Priority Overnight OneRate","FedEx - Standard Overnight OneRate","FedEx - Standard Overnight","FedEx - Priority Overnight","DHL - Express Worldwide"];
 const RULE_PACKAGES=["Custom","FedEx Envelope","FedEx Small Box","FedEx Medium Box","FedEx Large Box","FedEx Extra Large Box"];
 const RULE_SIG=["direct","indirect","adult"];
 const SEED_RULESET=[
@@ -7371,6 +7361,11 @@ function ruleEval(cond,ov){
     switch(op){case "=":return a===b;case "!=":return a!==b;case ">":return a>b;case "<":return a<b;} return false;
   }
   const A=String(actual==null?"":actual).toLowerCase(); const set=vals.map(v=>v.toLowerCase());
+  /* CONTAINS/NOT CONTAINS: substring match — the operator real-world text needs, since e-commerce
+     platforms rarely send back an exact, predictable string ("Free Shipping" vs "Free Standard
+     Shipping (5-8 days)"). IN/NOT IN and =/!= stay exact-match, for fields where that’s correct. */
+  if(op==="CONTAINS")return set.some(v=>v&&A.includes(v));
+  if(op==="NOT CONTAINS")return !set.some(v=>v&&A.includes(v));
   if(op==="IN")return set.includes(A); if(op==="NOT IN")return !set.includes(A);
   if(op==="=")return A===(set[0]||""); if(op==="!=")return A!==(set[0]||""); return false;
 }
@@ -8502,7 +8497,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         <Tog k="hideInvoice" label="Hide Invoice # field"/>
         <Tog k="hidePO" label="Hide PO # field"/>
-        <Tog k="matchedOnly" label="Only show the requested service" hint="When a store order names the service the buyer paid for, show just that one — pre-highlighted, ready to print. Other services sit behind \u2018Show all services’."/>
+        <Tog k="matchedOnly" label="Only show the requested service" hint="When a store order names the service the buyer paid for, show just that one — pre-highlighted, ready to print. Other services sit behind ‘Show all services’."/>
         <Tog k="hideAddr23" label="Hide Address 2 & 3" hint="On both sender and receiver cards"/>
         <Tog k="hideOz" label="Hide the oz box" hint="Whole pounds are enough for most shops"/>
         <Tog k="hideInsure" label="Hide the Insure $ field"/>

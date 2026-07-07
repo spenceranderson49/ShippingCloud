@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v227";
+const BUILD_TAG="addr-v229";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -172,7 +172,7 @@ const newTracking=carrier=>carrier==="UPS"?"1Z"+Math.random().toString(36).slice
 const RATES_ENDPOINT="/.netlify/functions/quote";
 async function getLiveRates(s,england){
   if(!england||!england.enabled) return null;
-  const body={carriers:s.carriers||"fedex",fromZip:s.fromZip,toZip:s.toZip,fromCountry:s.fromCountry||"US",toCountry:s.toCountry||"US",residential:!!s.residential,signature:!!s.signature,signatureOption:s.signatureOption||(s.signature?"direct":"none"),saturdayDelivery:!!s.saturdayDelivery,insuranceAmount:s.insuranceAmount||null,packageTypeCode:s.packageTypeCode||"",pieces:(s.pieces||[]).map(p=>({weight:+p.weight||1,length:+p.L||12,width:+p.W||9,height:+p.H||4})),account:{base:england.base,apiKey:england.apiKey,customerId:england.customerId}};
+  const body={carriers:s.carriers||"fedex",fromZip:s.fromZip,toZip:s.toZip,fromCountry:s.fromCountry||"US",toCountry:s.toCountry||"US",residential:!!s.residential,signature:!!s.signature,signatureOption:s.signatureOption||(s.signature?"direct":"none"),saturdayDelivery:!!s.saturdayDelivery,insuranceAmount:s.insuranceAmount||null,packageTypeCode:s.packageTypeCode||"",fedexAccount:(england.fedexAccount||null),pieces:(s.pieces||[]).map(p=>({weight:+p.weight||1,length:+p.L||12,width:+p.W||9,height:+p.H||4})),account:{base:england.base,apiKey:england.apiKey,customerId:england.customerId}};
   const attempt=async(ms)=>{
     const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),ms);
     try{
@@ -182,7 +182,7 @@ async function getLiveRates(s,england){
       if(data&&typeof data==="object") return data;
       if(!r.ok) return {live:false,error:`Server ${r.status}`,rates:[]};
       return {live:false,error:"Empty response from server",rates:[]};
-    }catch(e){ clearTimeout(t); return {live:false,_transient:true,error:(e&&e.name==="AbortError")?"England took too long to respond":((e&&e.message)||"Network error"),rates:[]}; }
+    }catch(e){ clearTimeout(t); return {live:false,_transient:true,error:(e&&e.name==="AbortError")?"The rate server took too long to respond":((e&&e.message)||"Network error"),rates:[]}; }
   };
   try{
     let res=await attempt(25000);
@@ -192,17 +192,20 @@ async function getLiveRates(s,england){
   }catch(e){ return {live:false,error:(e&&e.message)||"Network error",rates:[]}; }
 }
 const SHIP_ENDPOINT="/.netlify/functions/ship";
-function acctOf(england){return {base:england.base,apiKey:england.apiKey,customerId:england.customerId,integrationId:england.integrationId};}
+function acctOf(england){return {base:england.base,apiKey:england.apiKey,customerId:england.customerId,integrationId:england.integrationId,fedexAccount:england.fedexAccount||null};}
 /* Per-client England accounts: if the client has their own England customer ID + API key
    (England bakes their markup into that account's rates), quotes and bookings run on THEIR
    account. Otherwise they fall back to the main account in Settings. The global "Use live
    England rates" toggle stays the master switch; base URL is inherited unless overridden. */
 function englandFor(client,settings){
-  // Single-account model: everything ships on the one England account entered in
+  // Single-account model: everything ships on the one account entered in
   // Settings → Carrier accounts. Per-customer England fields are ignored so a stray
   // customer entry can never shadow the working account.
+  // fedexAccount is the ONE per-customer override: the FedEx account number the
+  // direct FedEx quote/ship functions rate and book on (customer's England-provisioned
+  // account). Falls back to the Settings override, then the FEDEX_ACCOUNT env default.
   const g=(settings&&settings.england)||{};
-  return {...g,_src:"main"};
+  return {...g,_src:"main",fedexAccount:(client&&client.fedex&&String(client.fedex.accountNumber||"").trim())||g.fedexAccount||""};
 }
 /* ── shared per-order shipping helpers (used by Orders individual ship + Batch) ── */
 async function ratesForOrder(o,opts,eng){
@@ -1122,9 +1125,10 @@ function rateSellFor(cost,label,ctx){
   if(rule.basis==="list"){
     const dom=c.fromZip&&c.toZip&&/^\d/.test(String(c.toZip));
     const zone=dom?String(zoneEst(c.fromZip,c.toZip)):null;
-    const list=zone!=null?baseCostLookup(rules,"list:"+key,c.weight,zone):null;
+    const live=(c.list!=null&&c.list!==""&&!isNaN(+c.list))?+c.list:null;   // live FedEx LIST from the quote
+    const list=live!=null?live:(zone!=null?baseCostLookup(rules,"list:"+key,c.weight,zone):null);
     const disc=num(rule.pct);
-    if(list==null||disc==null)return fallback();          // no list table imported yet → honest fallback
+    if(list==null||disc==null)return fallback();          // no live list and no table → honest fallback
     sell=list*(1-disc/100);
   } else if(rule.basis==="fixed"){
     const amt=num(rule.pct); if(amt==null)return fallback();
@@ -1920,6 +1924,10 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         say("Applied FedEx list − discount to "+c.name+"'s rate profile.");
       };
       return (<div className="space-y-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
+          <Field label="FedEx account # (rates & labels)"><Input value={fx.accountNumber||""} onChange={e=>upFx({accountNumber:e.target.value.replace(/[^0-9]/g,"")})} placeholder="9-digit account"/></Field>
+          <div className="col-span-1 sm:col-span-3 text-[11px] text-stone-500 pb-1.5">Live quotes and label bookings for {c.name} run on this FedEx account number (their England-provisioned account — its ACCOUNT rate is your raw cost). Blank = the platform's main FedEx account. The account must be added to your FedEx developer project or FedEx will reject it.</div>
+        </div>
         <p className="text-[11px] text-stone-500">Record this customer's FedEx-earned pricing tier so you always know their real cost basis. The overall list discount can drive their sell pricing in one click; per-service discounts below override it. This is reference + a pricing shortcut — it doesn't change what England bills.</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Field label="FedEx account #"><Input value={fx.acctNo||""} onChange={e=>upFx({acctNo:e.target.value.trim()})} placeholder="9 digits"/></Field>
@@ -4223,7 +4231,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     const eng=englandFor(client,settings);
     const mask=(v)=>{v=String(v||"");return v.length>4?"…"+v.slice(-4):(v||"(empty)");};
     const diag={src:(eng&&eng._src)||"main",cust:mask(eng&&eng.customerId),key:mask(eng&&eng.apiKey),base:(eng&&eng.base)||"(no base URL)",enabled:!!(eng&&eng.enabled),hasKey:!!(eng&&eng.apiKey),hasCust:!!(eng&&eng.customerId),fromZip:originZip||"(none)"};
-    if(eng&&eng.enabled&&eng.apiKey&&eng.customerId){
+    if(eng&&eng.enabled){
       setRateSrc(s=>({...s,loading:true,error:null,diag}));
       getLiveRates(shipment,eng).then(res=>{ if(cancel)return;
         if(res&&res.live&&res.rates&&res.rates.length) setRateSrc({rates:res.rates,live:true,loading:false,error:null,diag});
@@ -4253,7 +4261,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const print=async(q)=>{
     const carrier=carrierOf(q.label);
     const eng=englandFor(client,settings);
-    const canBook=eng&&eng.enabled&&eng.apiKey&&eng.customerId;
+    const canBook=eng&&eng.enabled;
     const need=[];
     if(!receiver.name&&!receiver.company)need.push("name");
     if(!receiver.address1)need.push("address1");
@@ -4967,7 +4975,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
   const boxes=settings?.boxes||SEED_BOXES;
   const box=boxIdx>=0?boxes[boxIdx]:{L:12,W:9,H:4};
   const eng=englandFor(client,settings);
-  const canBook=eng&&eng.enabled&&eng.apiKey&&eng.customerId;
+  const canBook=eng&&eng.enabled;
   const fromZip=settings?.sender?.zip||client?.origin||"";
   const ready=/^\d{5}/.test(o.zip||"")&&(+weight>0);
   const orBox=oneRate?oneRateBoxFor(box.L,box.W,box.H,+weight||0):null;
@@ -4993,11 +5001,11 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
     const carrier=carrierOf(qq.label);
     if(!canBook){ // demo mode: record locally
       const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:newTracking(carrier),carrier,service:qq.label,recipient:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings?.sender||{})},fromZip,toZip:o.zip,weight:+weight,pieces:[{weight:+weight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference:o.name};
-      onShipped(rec,o.id); setBought(qq.key); setStatus({state:"demo",msg:"Recorded (demo — connect England to book real labels)."}); return;
+      onShipped(rec,o.id); setBought(qq.key); setStatus({state:"demo",msg:"Recorded (demo — turn on live rates in Settings to book real labels)."}); return;
     }
     const need=[]; if(!o.customer&&!o.company)need.push("name"); if(String(o.phone||"").replace(/\D/g,"").length<10)need.push("10-digit phone"); if(!o.email)need.push("email");
-    if(need.length){ setStatus({state:"error",msg:"England needs the receiver's "+need.join(", ")+". Edit the order or open in Ship tab."}); return; }
-    setBought(qq.key); setStatus({state:"booking",msg:"Booking with England…"});
+    if(need.length){ setStatus({state:"error",msg:"FedEx needs the receiver's "+need.join(", ")+". Edit the order or open in Ship tab."}); return; }
+    setBought(qq.key); setStatus({state:"booking",msg:"Booking with FedEx…"});
     const res=await bookOrderLabel(o,{quote:qq,box,weightLb:+weight,residential,packageTypeCode:orBox?orBox.code:(qq.packageTypeCode||""),sender:settings.sender},eng,settings.sender);
     if(!res||!res.ok){ setStatus({state:"error",msg:(res&&res.error)||"Booking failed"}); setBought(null); return; }
     const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:qq.label,recipient:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings?.sender||{})},fromZip,toZip:o.zip,weight:+weight,pieces:[{weight:+weight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference:o.name,bookNumber:res.bookNumber};
@@ -5032,7 +5040,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
           <label className="flex items-center gap-1.5 text-[13px] text-stone-600"><input type="checkbox" checked={oneRate} onChange={e=>setOneRate(e.target.checked)} className="accent-[#0086E0]"/>One Rate</label>
           <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border ${residential?"text-[#006FBF] bg-[#E6F4FF] border-[#99D6FF]":"text-stone-700 bg-stone-100 border-stone-200"}`}>{residential?<Home className="w-3.5 h-3.5"/>:<Building2 className="w-3.5 h-3.5"/>}{residential?"Residential":"Commercial"}</span>
           <div className="flex-1"/>
-          {rateSrc.live?<span className="text-[11px] text-emerald-600 flex items-center gap-1"><Wifi className="w-3.5 h-3.5"/>Live England rates</span>:canBook?<span className="text-[11px] text-stone-400">{rateSrc.loading?"Loading rates…":""}</span>:<span className="text-[11px] text-amber-600">Demo rates — connect England</span>}
+          {rateSrc.live?<span className="text-[11px] text-emerald-600 flex items-center gap-1"><Wifi className="w-3.5 h-3.5"/>Live FedEx rates</span>:canBook?<span className="text-[11px] text-stone-400">{rateSrc.loading?"Loading rates…":""}</span>:<span className="text-[11px] text-amber-600">Demo rates — connect England</span>}
           <button onClick={()=>goShip(o)} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/>Open in Ship tab</button>
           <button onClick={()=>printPackingSlips([slipFromOrder(o,settings&&settings.sender)])} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing slip</button>
           {o.country&&o.country!=="US"&&<button onClick={()=>printCommercialInvoice(o,(settings&&settings.products)||[],settings&&settings.sender,{...ciOpts,signature:ciOpts.signature||defaultSig(settings),senderTax:ciOpts.senderTax??((settings&&settings.taxId)||""),eei:ciOpts.eei??"NOEEI 30.37(a)",attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(ciOpts.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data}))})} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Commercial invoice</button>}
@@ -5105,7 +5113,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   const [orPkg,setOrPkg]=useState("");
   const boxes=settings?.boxes||SEED_BOXES;
   const eng=englandFor(client,settings);
-  const canBook=eng&&eng.enabled&&eng.apiKey&&eng.customerId;
+  const canBook=eng&&eng.enabled;
   const fromZip=settings?.sender?.zip||client?.origin||"";
   const box={L:+dims.L||12,W:+dims.W||9,H:+dims.H||4};
   const totalWeight=Math.round(((+weight||0)+(+oz||0)/16)*100)/100;
@@ -5158,7 +5166,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   },[rcv.zip,fromZip,residential,totalWeight,box.L,box.W,box.H]);
   // FedEx One Rate 2Day — flat, zone-independent.
   const orRates=useMemo(()=>selectedOrBox?oneRateQuotes(selectedOrBox,{rules:rateRules,client}):[],[selectedOrBox&&selectedOrBox.code,client,rateRules]);
-  const baseQuotes=useMemo(()=>(rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!/first\s*overnight/i.test(qq.label||"")).filter(qq=>{if(!addrClassified)return true;const k=canonSvc(qq.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;}).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,fromZip,toZip:rcv.zip,weight:totalWeight})})),[rateSrc,residential,client,addrClassified,rateRules]);
+  const baseQuotes=useMemo(()=>(rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!/first\s*overnight/i.test(qq.label||"")).filter(qq=>{if(!addrClassified)return true;const k=canonSvc(qq.label);if(residential&&k==="ground")return false;if(!residential&&k==="home")return false;return true;}).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,fromZip,toZip:rcv.zip,weight:totalWeight})})),[rateSrc,residential,client,addrClassified,rateRules]);
   const quotes=useMemo(()=>{
     const withTransit=(list)=>list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};});
     return withTransit([...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday:sat,insurance,fees:surchargeFees(rateRules,client)}))).sort((a,b)=>(a.sell||0)-(b.sell||0));
@@ -5175,11 +5183,11 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
     const baseRec={service:qq.label,recipient:{name:rcv.name,company:rcv.company,zip:rcv.zip,state:rcv.state,city:rcv.city,address1:rcv.address1,phone:rcv.phone,email:rcv.email},sender:{...(settings?.sender||{})},fromZip,toZip:rcv.zip,weight:totalWeight,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",insurance:insurance||null,signature:sigOption!=="none",signatureOption:sigOption,saturdayDelivery:sat,reference:reference||o.name,poNo,invoiceNo};
     if(!canBook){
       const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:newTracking(carrier),carrier,...baseRec,status:"Label created",lastScan:"Label created",eta:"—",onTime:true};
-      onShipped(rec,o.id); setBought(qq.key); setStatus({state:"demo",msg:"Recorded (demo — connect England to book real labels)."}); return;
+      onShipped(rec,o.id); setBought(qq.key); setStatus({state:"demo",msg:"Recorded (demo — turn on live rates in Settings to book real labels)."}); return;
     }
     const need=[]; if(!rcv.name&&!rcv.company)need.push("name"); if(String(rcv.phone||"").replace(/\D/g,"").length<10)need.push("10-digit phone"); if(!rcv.email)need.push("email");
-    if(need.length){ setStatus({state:"error",msg:"England needs the receiver's "+need.join(", ")+"."}); return; }
-    setBought(qq.key); setStatus({state:"booking",msg:"Booking with England…"});
+    if(need.length){ setStatus({state:"error",msg:"FedEx needs the receiver's "+need.join(", ")+"."}); return; }
+    setBought(qq.key); setStatus({state:"booking",msg:"Booking with FedEx…"});
     const res=await bookOrderLabel(dest,{quote:qq,box,weightLb:totalWeight,residential,packageTypeCode:qq.packageTypeCode||"",sender:settings.sender,reference:reference||o.name,invoiceNo,poNo},eng,settings.sender);
     if(!res||!res.ok){ setStatus({state:"error",msg:(res&&res.error)||"Booking failed"}); setBought(null); return; }
     const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,...baseRec,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,bookNumber:res.bookNumber};
@@ -5500,7 +5508,7 @@ function QuickQuote({onClose,client,england,senderZip}){
     let cancel=false;
     if(!ready){setRateSrc({rates:[],live:false,loading:false,error:null});return;}
     const ship={fromZip,toZip,pieces:shipPieces,residential,signature:sigOption!=="none",signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null};
-    if(england&&england.enabled&&england.apiKey&&england.customerId){
+    if(england&&england.enabled){
       setRateSrc(p=>({...p,loading:true}));
       getLiveRates(ship,england).then(res=>{ if(cancel)return;
         if(res&&res.live&&res.rates&&res.rates.length) setRateSrc({rates:res.rates,live:true,loading:false,error:null});
@@ -5511,7 +5519,7 @@ function QuickQuote({onClose,client,england,senderZip}){
   },[fromZip,toZip,residential,JSON.stringify(pieces),sigOption,saturday,insurance,england]);
   const qqOrBox=oneRateBoxFor(pieces[0]&&pieces[0].L,pieces[0]&&pieces[0].W,pieces[0]&&pieces[0].H,totalWeight);
   const qqOrRates=useMemo(()=>qqOrBox?oneRateQuotes(qqOrBox,{rules:rateRules,client}):[],[qqOrBox&&qqOrBox.code,rateRules,client]);
-  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,fromZip,toZip,weight:pieces.reduce((a,p)=>a+(+p.weight||0),0)})})),...qqOrRates].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,client)})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,client,rateRules,fxTransit,qqOrRates,sigOption,saturday,insurance,fromZip,toZip,JSON.stringify(pieces)]);
+  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip,toZip,weight:pieces.reduce((a,p)=>a+(+p.weight||0),0)})})),...qqOrRates].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,client)})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,client,rateRules,fxTransit,qqOrRates,sigOption,saturday,insurance,fromZip,toZip,JSON.stringify(pieces)]);
   const hasExpress=quotes.some(q=>{const l=String(q.label||"").toLowerCase();return /(overnight|2\s?day|express saver)/.test(l);});
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-8 bg-stone-900/40 backdrop-blur-sm overflow-auto" onClick={onClose}>
@@ -5783,7 +5791,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
   const [results,setResults]=useState([]); // [{name, ok, tracking, error, pdf}]
   const [batches,setBatches]=usePersist("batches",[]);
   const eng=englandFor(client,settings);
-  const canBook=eng&&eng.enabled&&eng.apiKey&&eng.customerId;
+  const canBook=eng&&eng.enabled;
   const originZip=(settings.sender&&settings.sender.zip)||client.origin;
   // box logic: cartonize every open order once (products + boxes from Settings)
   const packs=useMemo(()=>{const m={};const prods=settings.products||SEED_PRODUCTS;const bxs=settings.boxes||SEED_BOXES;pool.forEach(o=>{m[o.id]=packOrder(o,prods,bxs,settings.boxLogic);});return m;},[orders,settings]);
@@ -7250,7 +7258,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
     setTimeout(()=>setApplied(null),6000);
   };
   const eng=englandFor(client,settings);
-  const canBook=!!(eng&&eng.enabled&&eng.apiKey&&eng.customerId);
+  const canBook=!!(eng&&eng.enabled);
   // honor the rule-chosen service when picking a rate; fall back to cheapest
   const pickRate=(qs,pref)=>{
     if(!qs||!qs.length)return null;
@@ -8366,7 +8374,7 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
       <p className="text-sm text-stone-500 mb-3">Enter your England API credentials to pull your real negotiated rates on the Ship tab and Quick quote. Until this is on, the app shows estimates.</p>
       <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
         <label className="flex items-center justify-between gap-3">
-          <span className="text-sm font-medium flex items-center gap-2">Use live England rates {eng.enabled&&<Badge tone="green">on</Badge>}</span>
+          <span className="text-sm font-medium flex items-center gap-2">Use live FedEx rates {eng.enabled&&<Badge tone="green">on</Badge>}</span>
           <button onClick={()=>setEng({enabled:!eng.enabled})}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${eng.enabled?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full"/></span></button>
         </label>
         <div className="grid sm:grid-cols-2 gap-3">
@@ -8375,11 +8383,12 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
           <Field label="Integration ID (for printing labels)"><Input value={eng.integrationId||""} onChange={e=>setEng({integrationId:e.target.value})} placeholder="e.g. 3214"/></Field>
           <Field label="Provider account ID (for booking)"><Input value={eng.providerAccountId||""} onChange={e=>setEng({providerAccountId:e.target.value})} placeholder="auto-filled by Check booking access"/></Field>
           <Field label="API base URL"><Input value={eng.base} onChange={e=>setEng({base:e.target.value})}/></Field>
+          <Field label="FedEx account # (optional override)"><Input value={eng.fedexAccount||""} onChange={e=>setEng({fedexAccount:e.target.value.replace(/[^0-9]/g,"")})} placeholder="blank = platform default"/></Field>
         </div>
         <p className="text-[11px] text-stone-400 -mt-1">The Integration ID enables real label printing. In Webship: gear/settings → eCommerce Integrations → Add → Rest API → Save New Integration → copy the ID. Turn on auto-ship for that integration so labels book automatically. The Provider account ID tells England which carrier account to ship on — click <b>Check booking access</b> to auto-fill it, or paste it manually if England hasn't opened that endpoint on your key.</p>
         <div className="flex flex-wrap items-center gap-3">
-          <button onClick={runTest} disabled={!eng.apiKey||!eng.customerId} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{test&&test.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Testing…</>:<><ShieldCheck className="w-4 h-4"/>Test connection</>}</button>
-          <button onClick={runDiag} disabled={!eng.apiKey||!eng.customerId} className="text-sm border border-stone-300 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5">{diag&&diag.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Checking…</>:<><Truck className="w-4 h-4"/>Check booking access</>}</button>
+          <button onClick={runTest} disabled={false} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{test&&test.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Testing…</>:<><ShieldCheck className="w-4 h-4"/>Test connection</>}</button>
+          <button onClick={runDiag} disabled={false} className="text-sm border border-stone-300 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5">{diag&&diag.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Checking…</>:<><Truck className="w-4 h-4"/>Check booking access</>}</button>
           <button onClick={runFlush} disabled={flush&&flush.loading} className="text-sm border border-stone-300 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5" title="Clear saved quotes so every rate pulls fresh from England — use after changing pricing in England's backend">{flush&&flush.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Refreshing…</>:<><RefreshCw className="w-4 h-4"/>Refresh rates</>}</button>
           {test&&!test.loading&&<span className={`text-xs flex items-center gap-1.5 ${test.ok?"text-emerald-700":"text-[#0086E0]"}`}>{test.ok?<CheckCircle2 className="w-4 h-4"/>:<AlertTriangle className="w-4 h-4"/>}{test.msg}</span>}
         </div>

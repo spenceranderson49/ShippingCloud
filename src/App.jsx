@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v231";
+const BUILD_TAG="addr-v232";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -239,6 +239,63 @@ async function shipCall(payload){
     return data||{ok:false,error:"Empty response"};
   }catch(e){clearTimeout(t);return {ok:false,error:(e&&e.message)||"Network error"};}
 }
+/* ── label printing that ALWAYS pops the print preview ──────────────────────
+   Chrome's built-in PDF viewer routinely ignores print() from hidden/embedded
+   frames, so we stop asking it: the label PDF is rasterized to images with
+   pdf.js (loaded on demand from cdnjs, cached after first use) and printed as
+   a plain HTML page sized to the label — the same rock-solid path doc tabs and
+   receipts use. If pdf.js can't load (offline/CDN blocked) we fall back to the
+   old PDF-frame print, then to a tab. */
+let _pdfjsLoad=null;
+function loadPdfJs(){
+  if(window.pdfjsLib)return Promise.resolve(window.pdfjsLib);
+  if(_pdfjsLoad)return _pdfjsLoad;
+  _pdfjsLoad=new Promise((res,rej)=>{
+    const sc=document.createElement("script");
+    sc.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+    sc.onload=()=>{ try{ window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"; res(window.pdfjsLib); }catch(e){rej(e);} };
+    sc.onerror=()=>rej(new Error("pdf.js failed to load"));
+    document.head.appendChild(sc);
+  });
+  return _pdfjsLoad;
+}
+async function pdfToImages(base64,scale){
+  const lib=await loadPdfJs();
+  const bin=atob(base64);const bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+  const doc=await lib.getDocument({data:bytes}).promise;
+  const imgs=[];let wPt=288,hPt=432;
+  for(let n=1;n<=doc.numPages;n++){
+    const page=await doc.getPage(n);
+    const v1=page.getViewport({scale:1}); if(n===1){wPt=v1.width;hPt=v1.height;}
+    const vp=page.getViewport({scale:scale||4});
+    const c=document.createElement("canvas");c.width=Math.round(vp.width);c.height=Math.round(vp.height);
+    await page.render({canvasContext:c.getContext("2d"),viewport:vp}).promise;
+    imgs.push(c.toDataURL("image/png"));
+  }
+  try{doc.destroy();}catch(e){}
+  return {imgs,wIn:wPt/72,hIn:hPt/72};
+}
+function printImagePages(imgs,wIn,hIn){
+  const f=document.createElement("iframe");
+  f.style.cssText="position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
+  document.body.appendChild(f);
+  const d=f.contentWindow.document;
+  d.open();
+  d.write("<html><head><title>Shipping label</title><style>@page{size:"+wIn.toFixed(2)+"in "+hIn.toFixed(2)+"in;margin:0}html,body{margin:0;padding:0}img{display:block;width:"+wIn.toFixed(2)+"in;height:"+hIn.toFixed(2)+"in;page-break-after:always}img:last-child{page-break-after:auto}</style></head><body>"
+    +imgs.map(u=>'<img src="'+u+'"/>').join("")+"</body></html>");
+  d.close();
+  let printed=false;
+  const go=()=>{ if(printed)return;printed=true; try{f.contentWindow.focus();f.contentWindow.print();}catch(e){} };
+  const first=d.querySelector("img");
+  if(first&&!first.complete)first.onload=()=>setTimeout(go,120);
+  setTimeout(go,900);                                     // data-URL images decode fast; belt & braces
+  setTimeout(()=>{try{document.body.removeChild(f);}catch(e){}},180000);
+}
+async function printLabelPdf(base64){
+  try{ const r=await pdfToImages(base64,4); if(!r.imgs.length)throw new Error("no pages"); printImagePages(r.imgs,r.wIn,r.hIn); return true; }
+  catch(e){ try{ const u=pdfBlobUrl(base64); printPdfUrl(u); setTimeout(()=>URL.revokeObjectURL(u),180000); return true; }catch(e2){ return false; } }
+}
 /* ── reliable PDF printing: hidden body-level iframe + print(), because calling
    print() on a modal's preview iframe is exactly what Chrome's PDF viewer
    sometimes silently ignores. onload doesn't always fire for PDFs, so a timed
@@ -266,12 +323,7 @@ function pdfBlobUrl(base64){
   return URL.createObjectURL(new Blob([bytes],{type:"application/pdf"}));
 }
 function openLabelPdf(base64){
-  try{
-    const url=pdfBlobUrl(base64);
-    printPdfUrl(url);
-    setTimeout(()=>URL.revokeObjectURL(url),180000);
-    return true;
-  }catch(e){return false;}
+  try{ printLabelPdf(base64); return true; }catch(e){return false;}
 }
 // poll ship status until booked or timeout (~30s); calls onUpdate with each state
 async function pollLabel(england,orderId,onUpdate){
@@ -4697,11 +4749,11 @@ function LabelPreviewModal({data,onClose,settings}){
       for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
       const blob=new Blob([bytes],{type:"application/pdf"});
       const u=URL.createObjectURL(blob);setUrl(u);
-      const t=setTimeout(()=>{ if(!printed.current){ printed.current=true; printPdfUrl(u); } },600);   // print preview pops the moment the label lands
+      const t=setTimeout(()=>{ if(!printed.current){ printed.current=true; printLabelPdf(data.pdf); } },400);   // print preview pops the moment the label lands
       return ()=>{clearTimeout(t);URL.revokeObjectURL(u);};
     }catch(e){}
   },[data.pdf]);
-  const doPrint=()=>{ const f=frameRef.current; try{ if(f&&f.contentWindow){f.contentWindow.focus();f.contentWindow.print();return;} }catch(e){} printPdfUrl(url); };
+  const doPrint=()=>{ printLabelPdf(data.pdf); };
   const download=()=>{ if(!url)return; const a=document.createElement("a");a.href=url;a.download=`label-${data.tracking||"shipment"}.pdf`;a.click(); };
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
@@ -4711,7 +4763,7 @@ function LabelPreviewModal({data,onClose,settings}){
           <button onClick={onClose} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button>
         </div>
         <div className="flex-1 min-h-0 bg-stone-100">
-          {url?<iframe ref={frameRef} src={url} title="Shipping label" className="w-full h-full" style={{minHeight:"55vh"}} onLoad={()=>{ if(!printed.current){printed.current=true;setTimeout(doPrint,500);} }}/>:<div className="flex items-center justify-center h-full text-stone-400" style={{minHeight:"55vh"}}><Loader2 className="w-5 h-5 animate-spin"/></div>}
+          {url?<iframe ref={frameRef} src={url} title="Shipping label" className="w-full h-full" style={{minHeight:"55vh"}} />:<div className="flex items-center justify-center h-full text-stone-400" style={{minHeight:"55vh"}}><Loader2 className="w-5 h-5 animate-spin"/></div>}
         </div>
         <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-stone-200">
           <button onClick={download} className="text-sm px-3 py-2 rounded border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"><Download className="w-4 h-4"/>Download</button>

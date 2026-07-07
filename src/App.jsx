@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v242";
+const BUILD_TAG="addr-v243";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -2980,7 +2980,7 @@ const lsDel=(k)=>{ if(!LS_OK)return; try{window.localStorage.removeItem("sc_"+k)
 // Which login is active. Every non-global key is stored under this account so each login keeps its OWN settings/data.
 const activeUid=()=>{ try{const s=lsGet("session",null); const id=s&&(s.id||s.email); return id?String(id):"guest"; }catch(e){return "guest";} };
 // Shared across all logins (never namespaced): the accounts list + who is signed in.
-const GLOBAL_KEYS={session:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1,customFeatures:1,fedexRequests:1,publicBrand:1,myAccess:1,companyUsers:1,companyFlags:1,companyAdminRequests:1,rateRules:1};
+const GLOBAL_KEYS={session:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1,customFeatures:1,fedexRequests:1,publicBrand:1,myAccess:1,companyUsers:1,companyFlags:1,companyAdminRequests:1,rateRules:1,clients:1};
 // Scratch = the in-progress shipment. Per-login, but starts blank on each login (never migrated/inherited).
 const isScratch=(key)=>String(key).indexOf("ship.")===0;
 // Scratch keys wiped on login so the receiver + package dims are always blank for a fresh session.
@@ -3178,6 +3178,31 @@ async function cloudFlush(){
   CLOUD.queue={...stores,...CLOUD.queue};
   for(const k in stores) delete CLOUD.baseline[k];
   if(!CLOUD.timer)CLOUD.timer=setTimeout(cloudFlush,10000);
+}
+/* Cross-site freshness: shared stores (clients, rateRules, users…) are pulled from the
+   cloud every 20s and pushed through PERSIST_BUS, so an edit made on admin.shippingcloud.net
+   reaches an open shippingcloud.net tab within seconds — no reload. Baseline is updated
+   first so the receiving hooks don't echo the same value back to the server. */
+let CLOUD_POLL=null;
+function startCloudPoll(){
+  if(CLOUD_POLL||typeof window==="undefined")return;
+  CLOUD_POLL=setInterval(async()=>{
+    try{
+      if(!CLOUD.token||CLOUD.offline||document.hidden)return;
+      const res=await cloudCall({action:"getAll",token:CLOUD.token});
+      if(!(res&&res.ok&&res.stores))return;
+      for(const k in res.stores){
+        if(!GLOBAL_KEYS[k]||k==="session")continue;          // sessions stay device-local decisions
+        if(k in CLOUD.queue)continue;                         // never clobber an edit awaiting flush
+        const j=JSON.stringify(res.stores[k]);
+        if(CLOUD.baseline[k]===j)continue;
+        CLOUD.baseline[k]=j;
+        lsSet(k,res.stores[k]);
+        const bus=PERSIST_BUS[k];
+        if(bus&&bus.size)bus.forEach(fn=>{try{fn(res.stores[k]);}catch(_){ }});
+      }
+    }catch(_){ }
+  },20000);
 }
 async function cloudLoadAll(){
   const res=await cloudCall({action:"getAll",token:CLOUD.token});
@@ -3819,6 +3844,18 @@ function AppInner(){
   const [currentUserRaw,setCurrentUser]=usePersist("session",null);
   const currentUser=useMemo(()=>(currentUserRaw&&isBuiltInAdmin(currentUserRaw.email)&&(currentUserRaw.role!=="admin"||currentUserRaw.adminPerms))?{...currentUserRaw,role:"admin",adminPerms:null}:currentUserRaw,[currentUserRaw]);
   const [clients,setClients]=usePersist("clients",SEED_CLIENTS);
+  /* clients moved from per-login storage to the shared store (so account markups,
+     FedEx accounts, and accessorial tables reach every login). If the shared store
+     is still factory-seed but this admin's old per-login book has real records,
+     adopt the old book once. */
+  useEffect(()=>{ try{
+    if(!(currentUser&&currentUser.role==="admin"))return;
+    const seedish=!clients||!clients.length||(clients.length===1&&clients[0]&&clients[0].id==="c2");
+    if(!seedish)return;
+    const old=lsGet("u/"+activeUid()+"/clients",null);
+    if(old&&Array.isArray(old)&&old.length>1) setClients(old);
+  }catch(e){} },[currentUser&&currentUser.id]);
+  useEffect(()=>{ startCloudPoll(); },[]);
   const [clientId,setClientId]=useState("c1");
   const [accounts,setAccounts]=usePersist("accounts",SEED_ACCOUNTS);
   const [orders,setOrders]=usePersist("orders",SEED_ORDERS);

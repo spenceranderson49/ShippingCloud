@@ -83,8 +83,19 @@ const netOf = (d) => {
   return (n == null || isNaN(n)) ? null : Math.round(n * 100) / 100;
 };
 
+/* ── per-site backend switch ─────────────────────────────────────────────
+   Set CARRIER_BACKEND=england in a Netlify site's env vars and this function
+   delegates every request to ./quote-england.js (the pre-cutover England/Rock Solid
+   implementation, restored from git history). Unset / "fedex" = direct FedEx. */
 exports.handler = async (event) => {
   const respond = (code, obj) => ({ statusCode: code, headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) });
+  if ((process.env.CARRIER_BACKEND || "fedex").toLowerCase() === "england") {
+    try { return await require("./quote-england.js").handler(event); }
+    catch (e) {
+      const msg = "CARRIER_BACKEND=england is set but quote-england.js isn't deployed or failed: " + ((e && e.message) || e);
+      return respond(200, {live:false,error:msg,rates:[]});
+    }
+  }
   if (event.httpMethod === "OPTIONS") return respond(200, { ok: true });
   let body = {};
   try { body = JSON.parse(event.body || "{}"); } catch (e) { return respond(200, { live: false, error: "Bad request body", rates: [] }); }
@@ -147,9 +158,23 @@ exports.handler = async (event) => {
       let minDays = null, maxDays = null;
       const tt = rd.operationalDetail && rd.operationalDetail.transitTime;
       if (tt && TRANSIT_DAYS[tt]) { minDays = TRANSIT_DAYS[tt]; maxDays = TRANSIT_DAYS[tt]; }
-      const surch = ((acctD && acctD.shipmentRateDetail && acctD.shipmentRateDetail.surCharges) || [])
-        .map(s => ({ label: s.description || s.type || "Surcharge", amount: Math.round((+s.amount || 0) * 100) / 100 }))
-        .filter(s => s.amount);
+      /* Fee breakdown, England-style: FedEx puts surcharges either on the shipment
+         rate detail or per-package — harvest both, merge duplicates, clean labels. */
+      const rawSur = [];
+      if (acctD && acctD.shipmentRateDetail && Array.isArray(acctD.shipmentRateDetail.surCharges)) rawSur.push(...acctD.shipmentRateDetail.surCharges);
+      if (!rawSur.length && acctD && Array.isArray(acctD.ratedPackages)) {
+        acctD.ratedPackages.forEach(p => {
+          const prd = p.packageRateDetail || {};
+          (prd.surcharges || prd.surCharges || []).forEach(x => rawSur.push(x));
+        });
+      }
+      const merged = {};
+      rawSur.forEach(x => {
+        const label = String(x.description || x.type || "Surcharge").replace(/_/g, " ").toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase()).replace(/\bFedex\b/g, "FedEx");
+        const amt = +((x.amount && x.amount.amount != null) ? x.amount.amount : x.amount) || 0;
+        if (amt) merged[label] = Math.round(((merged[label] || 0) + amt) * 100) / 100;
+      });
+      const surch = Object.keys(merged).map(label => ({ label, amount: merged[label] }));
       rates.push({
         key: svc.key,
         carrier: "FedEx",
@@ -160,6 +185,7 @@ exports.handler = async (event) => {
         list: list,
         packageTypeCode: "",
         minDays, maxDays,
+        base: cost != null ? Math.round((cost - surch.reduce((a, x) => a + x.amount, 0)) * 100) / 100 : null,
         surcharges: surch,
         _rateType: acctD && acctD.rateType || null
       });

@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v249";
+const BUILD_TAG="addr-v250";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -522,7 +522,7 @@ async function fedexSchedulePickup(p){
 
 /* ════════ SEED ════════ */
 const SEED_CLIENTS=[
-    {id:"c2",name:"House accounts",markup:12,origin:"84057",contact:"—",email:"",phone:"",status:"active",since:"2025-06",plan:"Standard"},
+    {id:"c2",name:"House accounts",markup:"",origin:"84057",contact:"—",email:"",phone:"",status:"active",since:"2025-06",plan:"Standard"},
 ];
 const SEED_USERS=[
   {id:"u1",name:"Spencer Anderson",email:"spencer@shippingcloud.net",role:"admin",clientId:null,status:"active",password:"admin",lastLogin:"Today"},
@@ -3861,7 +3861,7 @@ function AppInner(){
     if(old&&Array.isArray(old)&&old.length>1) setClients(old);
   }catch(e){} },[currentUser&&currentUser.id]);
   useEffect(()=>{ startCloudPoll(); },[]);
-  const [clientId,setClientId]=useState("c1");
+  const [clientId,setClientId]=useState("");   // "" = unassigned; never a guessed id — c1 has never existed (SEED_CLIENTS starts at c2)
   const [accounts,setAccounts]=usePersist("accounts",SEED_ACCOUNTS);
   const [orders,setOrders]=usePersist("orders",SEED_ORDERS);
   const [shipments,setShipments]=usePersist("shipments",SEED_SHIPMENTS);
@@ -3971,7 +3971,11 @@ function AppInner(){
   const brand=BRAND.fw
     ?{...DEFAULT_BRAND,name1:"FREIGHT",name2:"WIRE SHIP",dark:"#1c1917",primary:"#1E9BF0",...(settings.brand||{})}
     :{...DEFAULT_BRAND,...(settings.brand||{})};
-  const client=clients.find(c=>c.id===clientId)||clients[0];
+  /* An unresolved clientId must NEVER silently fall back to clients[0] — that borrows a real
+     customer's markup/account settings for a login that isn't actually assigned to them.
+     Unassigned logins get a clean empty placeholder so pricing falls through to the platform
+     default only (or raw cost if nothing is set) — never someone else's number by accident. */
+  const client=clients.find(c=>c.id===clientId)||(clientId?{id:clientId,name:"(unknown customer — "+clientId+")",_unresolved:true}:{id:"",name:"",_unassigned:true});
   const SandboxBanner=()=>isSandbox?(<div className="bg-amber-500/95 text-white text-xs font-medium text-center py-1.5">SANDBOX — play freely. This account’s data is yours to trash; real accounts are untouched.</div>):null;
   const _origOnShippedAudit=(rec)=>{try{window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Booked label",detail:(rec.reference||"")+" · "+(rec.service||"")+" · "+(rec.tracking||"")}}));}catch(x){}};
   const logEmail=(e)=>{
@@ -4765,7 +4769,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           </div>
         )}
 
-        {selectedOrder&&(()=>{const so=orders.find(o=>o.id===selectedOrder);return so&&(so.shippingService||so.source)?<div className="flex items-center gap-2 text-xs text-stone-600 bg-stone-100 border border-stone-200 rounded-lg px-3 py-2"><Truck className="w-3.5 h-3.5 text-stone-400"/>From order <b>{so.name}</b>{so.source?` (${so.source})`:""} — buyer requested <b>{so.shippingService||"Standard"}</b>.</div>:null;})()}
+        {(client._unassigned||client._unresolved)&&<div className="flex items-center gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>{client._unresolved?`This login is set to an unknown customer (id "${client.id}") \u2014 no such customer exists, so no account markup can apply. Fix the login\u2019s assigned customer in Admin \u2192 Customers.`:"This login has no customer assigned \u2014 pricing uses the platform default only, never another customer\u2019s markup. Assign one in Admin \u2192 Customers \u2192 Logins if that\u2019s wrong."}</div>}
+                {selectedOrder&&(()=>{const so=orders.find(o=>o.id===selectedOrder);return so&&(so.shippingService||so.source)?<div className="flex items-center gap-2 text-xs text-stone-600 bg-stone-100 border border-stone-200 rounded-lg px-3 py-2"><Truck className="w-3.5 h-3.5 text-stone-400"/>From order <b>{so.name}</b>{so.source?` (${so.source})`:""} — buyer requested <b>{so.shippingService||"Standard"}</b>.</div>:null;})()}
         {ready&&<div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
           {rateSrc.loading?<><Loader2 className="w-3.5 h-3.5 animate-spin"/>Fetching live rates…</>
           :rateSrc.live?<><Wifi className="w-3.5 h-3.5"/>Live rates from your FedEx account</>

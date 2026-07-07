@@ -64,12 +64,16 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v250";
+const BUILD_TAG="addr-v252";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
 /* England-connected mirror sites (england.freightwireship.com) set VITE_CARRIER_BACKEND=england
    in Netlify — that surfaces the England credential panel + cache tools that FedEx sites hide. */
+/* Staging site: set VITE_STAGING=true in that Netlify site's env vars only. Marks the whole
+   site — every login, not just one account — and is the flag worth trusting, since a per-login
+   "sandbox@" email is easy to forget and doesn't actually isolate data or FedEx bookings by itself. */
+const IS_STAGING=(()=>{ try{ return String((import.meta.env&&import.meta.env.VITE_STAGING)||"").toLowerCase()==="true"; }catch(e){ return false; } })();
 const SHOW_ENGLAND=(()=>{ try{ return String((import.meta.env&&import.meta.env.VITE_CARRIER_BACKEND)||"").toLowerCase()==="england"; }catch(e){ return false; } })();
 const BRAND=(()=>{ let k="shippingcloud"; try{ k=(import.meta.env&&import.meta.env.VITE_BRAND)||"shippingcloud"; }catch(e){}
   if(k==="admin")return {key:"admin",fw:false,admin:true,name:"ShippingCloud HQ",short:"HQ",accent:"#0086E0",accent2:"#0072BE"};
@@ -278,6 +282,27 @@ async function pdfToImages(base64,scale){
   }
   try{doc.destroy();}catch(e){}
   return {imgs,wIn:wPt/72,hIn:hPt/72};
+}
+/* Batch print: renders every label's pages once, concatenates them, and fires exactly ONE
+   print job — the system dialog opens a single time with all labels back to back, instead of
+   one dialog per label (which is what tripped up the app UI suppression when many overlapping
+   print calls raced each other, and is not what anyone means by "print all"). */
+async function printImagePagesBatch(base64List,settingsForLogo,onProgress){
+  let allImgs=[]; let wIn=4, hIn=6; let failed=0;
+  for(let i=0;i<base64List.length;i++){
+    try{
+      const r=await pdfToImages(base64List[i],3);
+      if(!r.imgs.length)throw new Error("no pages");
+      let imgs=r.imgs;
+      if(settingsForLogo){ try{ const cc=cz(settingsForLogo); const lg=cc.labelLogo||settingsForLogo.companyLogo||""; imgs=await stampLogo(imgs,cc,lg); }catch(e){} }
+      allImgs=allImgs.concat(imgs);
+      if(i===0){ wIn=r.wIn; hIn=r.hIn; }
+    }catch(e){ failed++; }
+    if(onProgress)onProgress(i+1,base64List.length);
+  }
+  if(!allImgs.length) return {ok:false,failed};
+  printImagePages(allImgs,wIn,hIn);
+  return {ok:true,printed:allImgs.length,failed};
 }
 function printImagePages(imgs,wIn,hIn,onDone){
   /* The one print path a browser can't silently swallow: window.print() on the page
@@ -3866,7 +3891,7 @@ function AppInner(){
   const [orders,setOrders]=usePersist("orders",SEED_ORDERS);
   const [shipments,setShipments]=usePersist("shipments",SEED_SHIPMENTS);
   const [audit,setAudit]=usePersist("audit",[]);
-  const isSandbox=!!(currentUser&&/^sandbox@/i.test(currentUser.email||""));
+  const isSandbox=IS_STAGING||!!(currentUser&&/^sandbox@/i.test(currentUser.email||""));
   useEffect(()=>{ if(!isSandbox)return; try{ if((orders||[]).length===0&&(shipments||[]).length===0){ const d=makeDemoData(); setOrders(d.orders); setShipments(d.shipments); setSettings(st=>({...st,...d.settings,sender:st.sender||d.settings.sender})); } }catch(e){} },[isSandbox]);
   useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};setAudit(a=>[{ts:new Date().toLocaleString(),user:(currentUser&&currentUser.email)||"",action:d.action||"",detail:d.detail||""},...a].slice(0,200));};window.addEventListener("sc-audit",h);return()=>window.removeEventListener("sc-audit",h);},[currentUser]);
   const [pendingShips,setPendingShips]=usePersist("pendingShips",[]);
@@ -3976,7 +4001,7 @@ function AppInner(){
      Unassigned logins get a clean empty placeholder so pricing falls through to the platform
      default only (or raw cost if nothing is set) — never someone else's number by accident. */
   const client=clients.find(c=>c.id===clientId)||(clientId?{id:clientId,name:"(unknown customer — "+clientId+")",_unresolved:true}:{id:"",name:"",_unassigned:true});
-  const SandboxBanner=()=>isSandbox?(<div className="bg-amber-500/95 text-white text-xs font-medium text-center py-1.5">SANDBOX — play freely. This account’s data is yours to trash; real accounts are untouched.</div>):null;
+  const SandboxBanner=()=>isSandbox?(<div className="bg-amber-500/95 text-white text-xs font-medium text-center py-1.5">{IS_STAGING?"STAGING — separate database, FedEx test mode. Nothing here touches production or books a real label.":"SANDBOX login — play freely, but this is still the live site: real database, real FedEx account unless FEDEX_ENV is set to sandbox here too."}</div>):null;
   const _origOnShippedAudit=(rec)=>{try{window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Booked label",detail:(rec.reference||"")+" · "+(rec.service||"")+" · "+(rec.tracking||"")}}));}catch(x){}};
   const logEmail=(e)=>{
     const id="e"+Date.now()+Math.random();
@@ -6226,7 +6251,13 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
     setRunning(false);
     setSel(new Set());
   };
-  const printAll=(only)=>{ results.filter(r=>r.ok&&r.pdf&&(!only||only.includes(r))).forEach((r,i)=>setTimeout(()=>openLabelPdf(r.pdf),i*400)); };
+  const [printBusy,setPrintBusy]=useState(false);
+  const printAll=async(only)=>{
+    const pdfs=results.filter(r=>r.ok&&r.pdf&&(!only||only.includes(r))).map(r=>r.pdf);
+    if(!pdfs.length)return;
+    setPrintBusy(true);
+    try{ await printImagePagesBatch(pdfs,settings); }finally{ setPrintBusy(false); }
+  };
   const printGroups=(()=>{
     const done=results.filter(r=>r.ok&&r.pdf);
     if(!((settings.printers||[]).length))return null;
@@ -6385,7 +6416,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
           <Badge tone="green">{results.filter(r=>r.ok).length} labeled</Badge>
           {results.filter(r=>!r.ok).length>0&&<Badge tone="rose">{results.filter(r=>!r.ok).length} failed</Badge>}
           <div className="flex-1"/>
-          {results.some(r=>r.ok&&r.pdf)&&!printGroups&&<button onClick={()=>printAll()} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE] flex items-center gap-1.5"><Printer className="w-4 h-4"/>Print all labels</button>}
+          {results.some(r=>r.ok&&r.pdf)&&!printGroups&&<button disabled={printBusy} onClick={()=>printAll()} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE] disabled:opacity-60 flex items-center gap-1.5">{printBusy?<Loader2 className="w-4 h-4 animate-spin"/>:<Printer className="w-4 h-4"/>}{printBusy?"Preparing…":"Print all labels"}</button>}
         {printGroups&&printGroups.map(gp=><button key={gp.name} onClick={()=>printAll(gp.rows)} title="Opens these labels as their own print run — pick this printer in the dialog once" className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE] flex items-center gap-1.5"><Printer className="w-4 h-4"/>{gp.rows.length} → {gp.name}</button>)}
         {results.some(r=>r.ok)&&<button onClick={()=>printPackingSlips(results.filter(r=>r.ok&&r.o).map(r=>slipFromOrder(r.o,settings.sender)))} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-4 h-4"/>Print packing slips</button>}
           <button onClick={()=>setResults([])} className="text-stone-300 hover:text-stone-600"><X className="w-4 h-4"/></button>
@@ -7569,7 +7600,13 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
     }
     setApRunning(false);setApProg(null);
   };
-  const apPrintAll=()=>{ ((apResults&&apResults.rows)||[]).filter(r=>r.ok&&r.pdf).forEach((r,i)=>setTimeout(()=>openLabelPdf(r.pdf),i*400)); };
+  const [apPrintBusy,setApPrintBusy]=useState(false);
+  const apPrintAll=async()=>{
+    const pdfs=((apResults&&apResults.rows)||[]).filter(r=>r.ok&&r.pdf).map(r=>r.pdf);
+    if(!pdfs.length)return;
+    setApPrintBusy(true);
+    try{ await printImagePagesBatch(pdfs,settings); }finally{ setApPrintBusy(false); }
+  };
   const addStarters=()=>setRules(rs=>[...rs,...SEED_RULESET.map((r,i)=>({...JSON.parse(JSON.stringify(r)),id:"r"+Date.now()+i}))]);
   const newRule=()=>setEditing({_isNew:true,id:"r"+Date.now(),name:"",enabled:true,stop:false,match:"all",conditions:[],actions:[{id:"a"+Date.now(),type:"Set Service",service:"ANY - Cheapest"}]});
   const saveRule=(r)=>{ const clean={id:r.id,name:r.name,enabled:r.enabled,stop:r.stop,match:r.match||"all",conditions:r.conditions,actions:r.actions};
@@ -7614,7 +7651,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
         {apResults.rows.filter(r=>!r.ok).length>0&&<Badge tone="rose">{apResults.rows.filter(r=>!r.ok).length} failed</Badge>}
         {apResults.heldN>0&&<Badge tone="amber">{apResults.heldN} held for review</Badge>}
         <div className="flex-1"/>
-        {apResults.rows.some(r=>r.ok&&r.pdf)&&<button onClick={apPrintAll} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE] flex items-center gap-1.5"><Printer className="w-4 h-4"/>Print all labels</button>}
+        {apResults.rows.some(r=>r.ok&&r.pdf)&&<button disabled={apPrintBusy} onClick={apPrintAll} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE] disabled:opacity-60 flex items-center gap-1.5">{apPrintBusy?<Loader2 className="w-4 h-4 animate-spin"/>:<Printer className="w-4 h-4"/>}{apPrintBusy?"Preparing…":"Print all labels"}</button>}
         <button onClick={()=>setApResults(null)} className="text-stone-300 hover:text-stone-600"><X className="w-4 h-4"/></button>
       </div>
       {apResults.none&&<div className="text-sm text-stone-500">No unfulfilled orders to run right now{apResults.heldN?` — ${apResults.heldN} are held for your review`:""}.</div>}

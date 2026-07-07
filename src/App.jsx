@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v225";
+const BUILD_TAG="addr-v226";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -3181,11 +3181,11 @@ function Landing({onAuth}){
   useEffect(()=>{const onHash=()=>setPageState(pageFromHash());window.addEventListener("hashchange",onHash);return ()=>window.removeEventListener("hashchange",onHash);},[]);
   const [pub,setPub]=useState(null);
   useEffect(()=>{let on=true;(async()=>{try{const r=await cloudCall({action:"publicConfig"});if(on&&r&&r.ok)setPub(r);}catch{}})();return ()=>{on=false;};},[]);
-  const NavTab=({label,onClick})=>(<button onClick={onClick} className="text-sm text-stone-300 hover:text-white px-2.5 py-2">{label}</button>);
-  const F=({icon:I,title,children})=>(<div className="bg-white/[0.04] border border-white/10 rounded-2xl p-6 hover:bg-white/[0.07] transition-colors">
-    <div className="w-10 h-10 rounded-xl bg-[#0086E0]/15 border border-[#0086E0]/30 flex items-center justify-center mb-4"><I className="w-5 h-5 text-[#38b6ff]"/></div>
-    <div className="font-semibold text-white mb-1.5">{title}</div>
-    <div className="text-sm text-stone-400 leading-relaxed">{children}</div>
+  const NavTab=({label,onClick})=>(<button onClick={onClick} className="text-sm font-medium text-stone-900 hover:text-[#0086E0] px-2.5 py-2 transition-colors">{label}</button>);
+  const F=({icon:I,title,children})=>(<div className="bg-white border border-stone-200/80 rounded-2xl p-6 shadow-[0_2px_14px_-6px_rgba(30,50,80,.08)] hover:shadow-[0_10px_30px_-10px_rgba(30,50,80,.16)] hover:-translate-y-0.5 transition-all duration-200">
+    <div className="w-11 h-11 rounded-xl bg-[#0086E0]/10 border border-[#0086E0]/20 flex items-center justify-center mb-4"><I className="w-5 h-5 text-[#0086E0]"/></div>
+    <div className="font-semibold text-stone-900 text-[15px] mb-1.5">{title}</div>
+    <div className="text-[13.5px] text-stone-500 leading-relaxed">{children}</div>
   </div>);
   if(BRAND.fw) return (<div className="min-h-screen relative overflow-hidden flex flex-col items-center justify-center px-5 py-10" style={{background:"#faf8f4",...(lsGet("loginBg","")?{backgroundImage:`url(${lsGet("loginBg","")})`,backgroundSize:"cover",backgroundPosition:"center"}:{})}}>
     <style>{`@keyframes fwRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}@keyframes fwDrift{0%,100%{transform:translate(-50%,0)}50%{transform:translate(calc(-50% + 18px),-12px)}}`}</style>
@@ -3221,7 +3221,6 @@ function Landing({onAuth}){
     {page==="home"&&<>
     {/* hero */}
     <div className="max-w-5xl mx-auto px-5 pt-20 pb-16 text-center">
-      <div className="inline-flex items-center gap-2 rounded-full border border-[#0086E0]/25 bg-[#0086E0]/8 px-4 py-1.5 text-[13px] font-medium text-[#0086E0] mb-7"><Sparkles className="w-3.5 h-3.5"/>Enterprise FedEx &amp; DHL rates · built-in AI · real support</div>
       <h1 style={{fontFamily:"'Space Grotesk',Inter,sans-serif",letterSpacing:"-0.03em"}} className="text-5xl sm:text-[68px] font-bold text-stone-900 leading-[1.02]">Your shipping platform.<br/><span className="text-[#0086E0]">Your shipping partner.</span></h1>
       <p className="mt-6 text-xl text-stone-500 leading-relaxed max-w-2xl mx-auto">The enterprise carrier rates big shippers get, a platform that actually fits how you work, and real people who answer the phone.</p>
       <div className="mt-9 flex flex-wrap gap-3 justify-center">
@@ -3248,7 +3247,6 @@ function Landing({onAuth}){
         <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/10 blur-2xl"/>
         <div className="absolute -bottom-20 -left-10 w-64 h-64 rounded-full bg-white/10 blur-2xl"/>
         <div className="relative">
-          <div className="text-[13px] uppercase tracking-widest text-white/80 font-semibold mb-3">No fees · No commitments</div>
           <h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-3xl sm:text-4xl font-bold text-white leading-tight">Save 10–15% switching to our FedEx rates.</h2>
           <p className="mt-4 text-white/85 max-w-2xl mx-auto text-[15px] leading-relaxed">Send us a recent UPS or FedEx invoice and get a line-by-line comparison back — the same day. No BS, no pressure.</p>
           <div className="mt-7 flex flex-wrap gap-3 justify-center">

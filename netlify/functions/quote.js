@@ -120,6 +120,10 @@ exports.handler = async (event) => {
   const fromZip = String(body.fromZip || "").trim();
   const toZip = String(body.toZip || "").trim();
   if (!fromZip || !toZip) return respond(200, { live: false, error: "Origin and destination ZIP required", rates: [] });
+  const PKG_MAP = { fedex_envelope: "FEDEX_ENVELOPE", fedex_pak: "FEDEX_PAK", fedex_extra_small_box: "FEDEX_SMALL_BOX", fedex_small_box: "FEDEX_SMALL_BOX", fedex_medium_box: "FEDEX_MEDIUM_BOX", fedex_large_box: "FEDEX_LARGE_BOX", fedex_tube: "FEDEX_TUBE" };
+  const boxCode = String(body.packageTypeCode || "").trim().toLowerCase();
+  const fedexPackaging = PKG_MAP[boxCode] || (/^FEDEX_/i.test(boxCode) ? boxCode.toUpperCase() : null);
+  const SMARTPOST_HUB = String(body.smartPostHub || process.env.FEDEX_SMARTPOST_HUB || "").trim();
   const fromCountry = toISO(body.fromCountry || "US");
   const toCountry = toISO(body.toCountry || "US");
   const acct = String(body.fedexAccount || (body.account && body.account.fedexAccount) || ACCOUNT).replace(/\D/g, "") || ACCOUNT;
@@ -140,19 +144,39 @@ exports.handler = async (event) => {
       requestedPackageLineItems: pieces
     }
   };
+  /* Ground Economy (SmartPost) is only returned when the request carries your hub —
+     set FEDEX_SMARTPOST_HUB in Netlify env (the hub FedEx assigned to the account). */
+  if (SMARTPOST_HUB && toCountry === "US" && fromCountry === "US") {
+    req.requestedShipment.smartPostInfoDetail = { indicia: "PARCEL_SELECT", hubId: SMARTPOST_HUB };
+  }
+  /* One Rate is only returned when asked for with FedEx packaging — when the shipper picked a
+     FedEx box, run a second rate call in parallel and merge its flat prices in. */
+  let oneRateReq = null;
+  if (fedexPackaging && toCountry === "US" && fromCountry === "US") {
+    oneRateReq = JSON.parse(JSON.stringify(req));
+    delete oneRateReq.requestedShipment.smartPostInfoDetail;
+    oneRateReq.requestedShipment.packagingType = fedexPackaging;
+    oneRateReq.requestedShipment.shipmentSpecialServices = { specialServiceTypes: ["FEDEX_ONE_RATE"] };
+    oneRateReq.requestedShipment.requestedPackageLineItems = pieces.map(pp => ({ weight: pp.weight }));
+  }
 
   try {
     const token = await getToken();
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 22000);
-    const r = await fetch(BASE + "/rate/v1/rates/quotes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token, "x-locale": "en_US" },
-      body: JSON.stringify(req),
-      signal: ctrl.signal
-    });
-    clearTimeout(t);
-    const j = await r.json().catch(() => ({}));
+    const rateCall = async (payload) => {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 22000);
+      const rr = await fetch(BASE + "/rate/v1/rates/quotes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token, "x-locale": "en_US" },
+        body: JSON.stringify(payload),
+        signal: ctrl.signal
+      });
+      clearTimeout(t);
+      const jj = await rr.json().catch(() => ({}));
+      return { r: rr, j: jj };
+    };
+    const [main, orRes] = await Promise.all([rateCall(req), oneRateReq ? rateCall(oneRateReq).catch(() => null) : Promise.resolve(null)]);
+    const r = main.r, j = main.j;
     if (!r.ok) {
       let msg = (j.errors && j.errors[0] && (j.errors[0].message || j.errors[0].code)) || ("FedEx rate error " + r.status);
       if (/mismatch|should match the shipper|not\s*authorized|account.*(invalid|not\s*found)/i.test(msg)) {
@@ -160,9 +184,11 @@ exports.handler = async (event) => {
       }
       return respond(200, { live: false, error: msg, rates: [], _status: r.status });
     }
-    const replies = (j.output && j.output.rateReplyDetails) || [];
     const rates = [];
-    for (const rd of replies) {
+    const oneRateOk = !!(orRes && orRes.r && orRes.r.ok);
+    const batches = [{ replies: (j.output && j.output.rateReplyDetails) || [], oneRate: false }];
+    if (oneRateOk) batches.push({ replies: (orRes.j.output && orRes.j.output.rateReplyDetails) || [], oneRate: true });
+    for (const batch of batches) for (const rd of batch.replies) {
       const svc = SVC[rd.serviceType] || { key: String(rd.serviceType || "").toLowerCase(), label: String(rd.serviceName || rd.serviceType || "FedEx").replace(/[®™]/g, "").trim() };
       const acctD = pickDetail(rd.ratedShipmentDetails, false);
       const listD = pickDetail(rd.ratedShipmentDetails, true);
@@ -193,14 +219,15 @@ exports.handler = async (event) => {
         surch = [{ label: "Carrier surcharges", amount: Math.round(+acctD.shipmentRateDetail.totalSurcharges * 100) / 100 }];
       }
       rates.push({
-        key: svc.key,
+        key: batch.oneRate ? "or_" + svc.key : svc.key,
         carrier: "FedEx",
         carrierCode: "fedex",
-        serviceCode: rd.serviceType,
-        label: svc.label,
+        serviceCode: batch.oneRate ? rd.serviceType + "_ONE_RATE" : rd.serviceType,
+        label: batch.oneRate ? svc.label + " One Rate" : svc.label,
         cost: cost != null ? cost : list,
         list: list,
-        packageTypeCode: "",
+        packageTypeCode: batch.oneRate ? boxCode : "",
+        _oneRate: batch.oneRate || undefined,
         minDays, maxDays,
         base: cost != null ? Math.round((cost - surch.reduce((a, x) => a + x.amount, 0)) * 100) / 100 : null,
         surcharges: surch,

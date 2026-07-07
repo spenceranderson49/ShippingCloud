@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, MessageCircle, Sparkles, ClipboardList, Ban, Tag, Copy, Sliders, Save} from "lucide-react";
+import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, EyeOff, MessageCircle, Sparkles, ClipboardList, Ban, Tag, Copy, Sliders, Save} from "lucide-react";
 const FW_BLUE="#0099FF";
 const FW_DARK="#111418";
 function BrandCloud({className,color,style}){return (
@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v256";
+const BUILD_TAG="addr-v258";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -512,7 +512,7 @@ function canonSvc(s){
   const t=String(s||"").toLowerCase();
   /* One Rate variants get their own "or_" keys — otherwise "FedEx 2Day OneRate - Medium Box"
      collapses onto plain "2day" and can never be toggled, renamed, or admin-locked independently
-     of the base service it\u2019s built from. */
+     of the base service it’s built from. */
   const oneRate=/one\s*rate/.test(t);
   const pre=oneRate?"or_":"";
   if(/home/.test(t)) return pre+"home";
@@ -1258,16 +1258,13 @@ function baseCostLookup(rules,key,weight,zone){
 function rateSellFor(cost,label,ctx){
   if(cost==null)return null;
   const c=ctx||{};
-  const g=(c.rules&&c.rules.global)||{};
-  const gPct=(g.pct==null||g.pct===""||isNaN(+g.pct))?null:+g.pct;
-  const gMin=(g.min==null||g.min===""||isNaN(+g.min))?null:+g.min;
-  /* Account-wide markup (this customer's blanket number) beats the platform-wide
-     global default; per-service rules in the profile beat both. */
+  /* No platform-wide default markup — each account sells at its own account-wide
+     markup, or per-service rules, or raw cost if nothing is set. Nothing applies
+     to an account that hasn’t been explicitly priced. */
   const aPct=(c.client&&c.client.markup!=null&&c.client.markup!==""&&!isNaN(+c.client.markup)&&+c.client.markup!==0)?+c.client.markup:null;
   const aMin=(c.client&&c.client.markupMin!=null&&c.client.markupMin!==""&&!isNaN(+c.client.markupMin)&&+c.client.markupMin>0)?+c.client.markupMin:null;
   const fallback=()=>{
     if(aPct!=null||aMin!=null){let s=cost*(1+((aPct||0))/100);if(aMin!=null&&s<cost+aMin)s=cost+aMin;return Math.round(s*100)/100;}
-    if(gPct!=null){let s=cost*(1+gPct/100);if(gMin!=null&&s<gMin)s=gMin;return Math.round(s*100)/100;}
     return Math.round(cost*100)/100;
   };
   const rules=c.rules; if(!rules)return fallback();
@@ -1309,11 +1306,8 @@ function rateSellFor(cost,label,ctx){
 function surchargeFees(rules,client){
   const prof=rateProfileFor(rules,client&&client.id);
   const sc=(prof&&prof.surcharges)||{};
-  const g=(rules&&rules.global)||{};
-  const gPct=(g.pct==null||g.pct===""||isNaN(+g.pct))?null:+g.pct;
   const aPct=(client&&client.markup!=null&&client.markup!==""&&!isNaN(+client.markup)&&+client.markup!==0)?+client.markup:null;
-  const upPct=aPct!=null?aPct:gPct;
-  const gUp=(d)=>upPct!=null?Math.round(d*(1+upPct/100)*100)/100:d;
+  const gUp=(d)=>aPct!=null?Math.round(d*(1+aPct/100)*100)/100:d;
   const val=(id,def)=>{const r=sc[id];if(!r||r.amount==null||r.amount==="")return gUp(def);const a=+r.amount;return r.type==="percent"?Math.round(def*(1+a/100)*100)/100:Math.round(a*100)/100;};
   return {sig:{direct:val("SIG-D",SIG_FEE.direct),indirect:val("SIG-I",SIG_FEE.indirect),adult:val("SIG-A",SIG_FEE.adult)},sat:val("SAT",SAT_FEE),insUnit:val("INS",1.15),insMin:gUp(3.45)};
 }
@@ -1588,6 +1582,7 @@ function Login({users,onLogin,brand}){
   const [mode,setMode]=useState("signin");
   const [email,setEmail]=useState("");
   const [pw,setPw]=useState("");
+  const [showPw,setShowPw]=useState(false);
   const [name,setName]=useState("");
   const [company,setCompany]=useState("");
   const [err,setErr]=useState("");
@@ -1618,7 +1613,7 @@ function Login({users,onLogin,brand}){
           </div>
           {mode==="signup"&&<><Field label="Your name"><Input value={name} onChange={e=>setName(e.target.value)}/></Field><Field label="Company"><Input value={company} onChange={e=>setCompany(e.target.value)}/></Field></>}
           <Field label="Email"><Input value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&mode==="signin")signin();}} placeholder="you@company.com"/></Field>
-          <Field label="Password"><Input type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")mode==="signin"?signin():signup();}} placeholder="••••••••"/></Field>
+          <Field label="Password"><div className="relative"><Input type={showPw?"text":"password"} value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")mode==="signin"?signin():signup();}} placeholder="••••••••" className="pr-9"/><button type="button" onClick={()=>setShowPw(v=>!v)} tabIndex={-1} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">{showPw?<EyeOff className="w-4 h-4"/>:<Eye className="w-4 h-4"/>}</button></div></Field>
           {err&&<div className="text-sm text-rose-600 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4"/>{err}</div>}
           {note&&<div className="text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2">{note}</div>}
           <button onClick={mode==="signin"?signin:signup} className="w-full bg-stone-900 text-white rounded-lg px-4 py-2.5 font-medium hover:bg-stone-800">{mode==="signin"?"Sign in":"Request account"}</button>
@@ -1969,8 +1964,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       <Field label="Email"><Input value={c.email||""} onChange={e=>upClient({email:e.target.value})}/></Field>
       <Field label="Phone"><Input value={c.phone||""} onChange={e=>upClient({phone:e.target.value})}/></Field>
       <Field label="Origin ZIP (ships from)"><Input value={c.origin||""} onChange={e=>upClient({origin:e.target.value})}/></Field>
-      <div className="text-[11px] text-stone-500 bg-stone-50 border border-stone-200 rounded px-3 py-2 sm:col-span-2">Markup is set on the <b>Rates</b> tab \u2014 that\u2019s the only place pricing is edited, so it can\u2019t drift out of sync.</div>
-      {(()=>{const g=(rules&&rules.global)||{};const on=g.pct!=null&&g.pct!==""&&!isNaN(+g.pct);return <div className={`text-[11px] rounded px-3 py-2 border ${on?"bg-emerald-50 border-emerald-200 text-emerald-800":"bg-stone-50 border-stone-200 text-stone-500"}`}>Global cost-plus markup: {on?<b>cost + {+g.pct}%{g.min?` (min $${(+g.min).toFixed(2)})`:""}</b>:"off"} — it\u2019s the same account-wide markup editable at the top of this customer\u2019s <b>Rates</b> tab. Per-service rules here override it; this customer's flat markup applies only when global is off.</div>;})()}
+      <div className="text-[11px] text-stone-500 bg-stone-50 border border-stone-200 rounded px-3 py-2 sm:col-span-2">Markup is set on the <b>Rates</b> tab — that’s the only place pricing is edited, so it can’t drift out of sync.</div>
       <Field label="Status"><Select value={c.status||"active"} onChange={e=>upClient({status:e.target.value})}><option value="active">active</option><option value="inactive">inactive</option></Select></Field>
       <Field label="Plan"><Input value={c.plan||""} onChange={e=>upClient({plan:e.target.value})}/></Field>
       <Field label="Account number (yours)"><Input value={c.acctNo||""} onChange={e=>upClient({acctNo:e.target.value})} placeholder="internal ref"/></Field>
@@ -2022,23 +2016,12 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
     </div>}
 
     {tab==="rates"&&<div className="space-y-3">
-      {lg.length===0&&<div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">This account has <b>0 logins</b> — nobody can generate a real quote as {c.name} yet, so changes here won\u2019t show up in any quote until a user is added under the <b>Logins</b> tab (or you view them via admin impersonation). The Live check strip below still reflects the math correctly.</div>}
-      {/* Platform default — applies to every account with nothing set below (accounts with no login, no assigned customer, etc). Editable from any customer\u2019s Rates tab; it\u2019s one shared number. */}
-      <div className="border border-stone-200 rounded-lg bg-white p-3 flex flex-wrap items-end gap-3">
-        <div className="min-w-0">
-          <div className="text-sm font-semibold text-stone-800 flex items-center gap-2">Platform default markup — every account {(rules.global&&rules.global.pct!=null&&rules.global.pct!==""&&!isNaN(+rules.global.pct))?<Badge tone="green">on</Badge>:<Badge>off</Badge>}</div>
-          <div className="text-[11px] text-stone-500 mt-0.5 max-w-md">Applies platform-wide over the raw FedEx/England cost the carrier returns. Fills in for any account with no markup of its own set below \u2014 including logins with no customer assigned. A brand-new account with nothing set anywhere sells at <b>exactly the raw carrier cost</b>, no markup.</div>
-        </div>
-        <span className="flex-1"/>
-        <Field label="Markup %"><Input type="number" className="w-24" placeholder="e.g. 20" value={(rules.global&&rules.global.pct)??""} onChange={e=>upRules({global:{...(rules.global||{}),pct:e.target.value}})}/></Field>
-        <Field label="Min $ / label"><Input type="number" className="w-24" placeholder="—" value={(rules.global&&rules.global.min)??""} onChange={e=>upRules({global:{...(rules.global||{}),min:e.target.value}})}/></Field>
-        {rules.global&&rules.global.pct!==""&&rules.global.pct!=null&&<button onClick={()=>{if(window.confirm("Clear the platform default markup? Any account with nothing set of its own will sell at raw cost."))upRules({global:{}});}} className="text-xs text-rose-500 bg-stone-100 rounded-lg px-2.5 py-1.5 hover:bg-rose-50">Clear</button>}
-      </div>
+      {lg.length===0&&<div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">This account has <b>0 logins</b> — nobody can generate a real quote as {c.name} yet, so changes here won’t show up in any quote until a user is added under the <b>Logins</b> tab (or you view them via admin impersonation). The Live check strip below still reflects the math correctly.</div>}
       {/* Account-wide markup — THIS customer's blanket number, over the England/FedEx cost, beats the platform default */}
       <div className="border border-stone-200 rounded-lg bg-white p-3 flex flex-wrap items-end gap-3">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-stone-800 flex items-center gap-2">Account-wide markup — {c.name} only {(c.markup!=null&&c.markup!==""&&+c.markup!==0)||(c.markupMin!=null&&c.markupMin!==""&&+c.markupMin>0)?<Badge tone="green">on</Badge>:<Badge>off</Badge>}</div>
-          <div className="text-[11px] text-stone-500 mt-0.5 max-w-md">Marks up the England/FedEx cost for every rate, service, and accessorial returned for this account only. Beats the platform default above; per-service rules below beat this. Leave blank for raw cost.</div>
+          <div className="text-[11px] text-stone-500 mt-0.5 max-w-md">Marks up the England/FedEx cost for every rate, service, and accessorial returned for this account only. Per-service rules below beat this. Leave blank and this account sells at exactly the raw carrier cost — no markup, anywhere.</div>
         </div>
         <span className="flex-1"/>
         <Field label="Markup %"><Input type="number" className="w-24" placeholder="e.g. 20" value={c.markup==null?"":c.markup} onChange={e=>upClient({markup:e.target.value===""?"":+e.target.value})}/></Field>
@@ -2069,7 +2052,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       <p className="text-[11px] text-stone-400">Zone overrides, weight breaks, One Rate pricing, and printable rate sheets live in the Rate database section. Every login under {c.name} inherits this automatically.</p>
       <div className="pt-1">
         <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Services {c.name}'s logins are allowed to turn on themselves</div>
-        <p className="text-[11px] text-stone-500 mb-2">Uncheck a service to lock it off platform-wide for this customer — it disappears as a real quote option and greys out (can\u2019t be re-enabled) on their own Settings → Customize → Services screen, no matter what they try to toggle. Checked = the customer\u2019s own toggle controls it. One Rate variants are listed separately from their base service — locking Priority Overnight doesn\u2019t touch Priority Overnight OneRate, and vice versa.</p>
+        <p className="text-[11px] text-stone-500 mb-2">Uncheck a service to lock it off platform-wide for this customer — it disappears as a real quote option and greys out (can’t be re-enabled) on their own Settings → Customize → Services screen, no matter what they try to toggle. Checked = the customer’s own toggle controls it. One Rate variants are listed separately from their base service — locking Priority Overnight doesn’t touch Priority Overnight OneRate, and vice versa.</p>
         <div className="border border-stone-200 rounded-lg bg-white p-3 grid sm:grid-cols-2 lg:grid-cols-3 gap-1.5 max-h-64 overflow-y-auto">
           {svcQuick.concat(ONE_RATE_LOCK_SVCS).map(sv=>{const blocked=(c.blockedServices||[]).includes(sv.k);return (<label key={sv.k} className="flex items-center gap-1.5 text-sm text-stone-700 cursor-pointer">
             <input type="checkbox" checked={!blocked} onChange={e=>{const cur=new Set(c.blockedServices||[]);e.target.checked?cur.delete(sv.k):cur.add(sv.k);upClient({blockedServices:[...cur]});}} className="accent-[#0086E0]"/>
@@ -2333,10 +2316,7 @@ function RatesAdmin({clients=[],brand}){
   /* sheet pricing with an explicit zone (the live resolver derives zone from zips) */
   const sheetSell=(rule,cost,weight,zone,key)=>{
     if(cost==null)return null;
-    const gg=rules.global||{};
-    const ggPct=(gg.pct==null||gg.pct===""||isNaN(+gg.pct))?null:+gg.pct;
-    const ggMin=(gg.min==null||gg.min===""||isNaN(+gg.min))?null:+gg.min;
-    const gFall=()=>{if(ggPct==null)return null;let s=cost*(1+ggPct/100);let st=false;if(ggMin!=null&&s<ggMin){s=ggMin;st=true;}return {sell:Math.round(s*100)/100,starred:st};};
+    const gFall=()=>null;   // no platform-wide default — a rate sheet cell with no rule shows "—", never an invented price
     if(!rule||rule.on===false)return gFall();
     const num=(x)=>(x==null||x==="")?null:+x;
     let sell=null;
@@ -2442,11 +2422,9 @@ function RatesAdmin({clients=[],brand}){
   const assignedTo=(pid)=>clients.filter(c=>(assign[c.id]||"default")===pid);
   const surRow=(prof.surcharges||{});
   return (<div className="space-y-4">
-    {/* Markup itself is edited from each customer's Rates tab (platform default + account markup) —
-       this screen is for the shared plumbing: profiles, per-service rules, base-cost tables, zones. */}
+    {/* Markup itself is edited from each customer's Rates tab — this screen is for the shared plumbing: profiles, per-service rules, base-cost tables, zones. */}
     <div className="text-[11px] text-stone-500 bg-stone-50 border border-stone-200 rounded px-3 py-2">
-      Markup is edited on each customer\u2019s <b>Rates</b> tab \u2014 the platform default and every account\u2019s number live there, in one place. This screen holds the shared pieces: rate profiles, per-service rules below, base-cost tables, and zone data.
-      {rules.global&&rules.global.pct!==""&&rules.global.pct!=null&&!isNaN(+rules.global.pct)&&<span> Right now the platform default is <b>cost + {+rules.global.pct}%</b>{rules.global.min?` (min $${(+rules.global.min).toFixed(2)})`:""}.</span>}
+      Markup is edited on each customer’s <b>Rates</b> tab — every account’s number lives there. There's no platform-wide default: an account with nothing set of its own sells at raw carrier cost. This screen holds the shared pieces: rate profiles, per-service rules below, base-cost tables, and zone data.
     </div>
     {/* top controls */}
     <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
@@ -2683,7 +2661,15 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
   const SECTION_META={};NAV_GROUPS.forEach(g=>g.items.forEach(([v,l,Icon])=>{SECTION_META[v]={label:l,Icon};}));
   const allowedKeys=new Set(ALLOWED.map(x=>x[0]));
   const groups=NAV_GROUPS.map(g=>({...g,items:g.items.filter(it=>allowedKeys.has(it[0]))})).filter(g=>g.items.length);
-  const [tabs,setTabs]=useState(()=>[{kind:"section",key:sec}]);
+  /* Every admin capability lives in this one workspace — Customers, Rate database, everything — regardless
+     of which login opens it. Pre-opening the core tabs means nobody has to discover the "+ Open" launcher
+     to find rates/services; they're just already sitting there the moment Admin opens. */
+  const [tabs,setTabs]=useState(()=>{
+    const core=["overview","customers","rates"].filter(k=>allowedKeys.has(k));
+    const seeded=core.length?core.map(key=>({kind:"section",key})):[{kind:"section",key:sec}];
+    if(!seeded.some(t=>t.key===sec))seeded.unshift({kind:"section",key:sec});
+    return seeded;
+  });
   const [active,setActive]=useState(0);
   const openSection=(key)=>{setTabs(ts=>{const i=ts.findIndex(t=>t.kind==="section"&&t.key===key);if(i>=0){setActive(i);return ts;}const n=[...ts,{kind:"section",key}];setActive(n.length-1);return n;});setSec(key);};
   const openCustomer=(id)=>{setTabs(ts=>{const i=ts.findIndex(t=>t.kind==="customer"&&t.id===id);if(i>=0){setActive(i);return ts;}const n=[...ts,{kind:"customer",id}];setActive(n.length-1);return n;});};
@@ -2906,7 +2892,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
               <option value="">Reassign to…</option>
               {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
             </Select>
-            <button onClick={()=>{if(window.confirm(`Remove ${u.name}'s customer assignment? They'll price at the platform default until reassigned.`))setUsers(us=>us.map(x=>x.id===u.id?{...x,clientId:null}:x));}} className="text-xs text-rose-500 hover:bg-rose-50 rounded px-2 py-1">Clear</button>
+            <button onClick={()=>{if(window.confirm(`Remove ${u.name}'s customer assignment? They'll price at raw cost until reassigned.`))setUsers(us=>us.map(x=>x.id===u.id?{...x,clientId:null}:x));}} className="text-xs text-rose-500 hover:bg-rose-50 rounded px-2 py-1">Clear</button>
           </div>))}
         </div>
       </div>);
@@ -3324,12 +3310,14 @@ function CloudAuth({onDone,initialMode,intake}){
   const [fp,setFp]=useState(null); // null | "ask" | "sent" | {reset:token} | "done"
   const [fpEmail,setFpEmail]=useState("");
   const [fpPw,setFpPw]=useState("");
+  const [showFpPw,setShowFpPw]=useState(false);
   const [fpErr,setFpErr]=useState("");
   useEffect(()=>{try{const t=new URLSearchParams(window.location.search).get("reset");if(t)setFp({reset:t});}catch(e){}},[]);
   const fpAsk=async()=>{setFpErr("");try{await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"requestReset",email:fpEmail})});setFp("sent");}catch(e){setFpErr("Network error — try again.");}};
   const fpSave=async()=>{setFpErr("");try{const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"resetPassword",rtoken:fp.reset,password:fpPw})});const d=await r.json();if(d&&d.ok){setFp("done");try{window.history.replaceState({},"",window.location.pathname);}catch(e){}}else setFpErr((d&&d.error)||"Could not reset.");}catch(e){setFpErr("Network error — try again.");}};
   const [mode,setMode]=useState(initialMode||"signin"); // signin | request | requested
   const [f,setF]=useState({name:"",company:"",email:"",pw:"",volume:"",carrier:""});
+  const [showPw,setShowPw]=useState(false);
   const [inv,setInv]=useState(null); // {name,type,data(base64)}
   const [err,setErr]=useState("");const [busy,setBusy]=useState(false);
   const pickFile=(e)=>{
@@ -3371,7 +3359,7 @@ function CloudAuth({onDone,initialMode,intake}){
       <div onClick={e=>e.stopPropagation()} className="bg-white rounded-2xl p-6 max-w-sm w-full space-y-3 text-left">
         {fp==="ask"&&<><div className="font-semibold text-stone-800">Reset your password</div><p className="text-[13px] text-stone-500">Enter your login email and we’ll send a one-hour reset link.</p><input value={fpEmail} onChange={e=>setFpEmail(e.target.value)} placeholder="you@company.com" className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><button onClick={fpAsk} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium hover:bg-[#0072BE]">Send reset link</button></>}
         {fp==="sent"&&<><div className="font-semibold text-stone-800">Check your email</div><p className="text-[13px] text-stone-500">If that address has an account, a reset link is on its way. It works for one hour.</p><button onClick={()=>setFp(null)} className="w-full text-sm bg-stone-100 border border-stone-200 rounded-lg py-2 font-medium">Back to sign in</button></>}
-        {fp&&fp.reset&&<><div className="font-semibold text-stone-800">Choose a new password</div><input type="password" value={fpPw} onChange={e=>setFpPw(e.target.value)} placeholder="New password (6+ characters)" className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><button onClick={fpSave} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium hover:bg-[#0072BE]">Save new password</button></>}
+        {fp&&fp.reset&&<><div className="font-semibold text-stone-800">Choose a new password</div><div className="relative"><input type={showFpPw?"text":"password"} value={fpPw} onChange={e=>setFpPw(e.target.value)} placeholder="New password (6+ characters)" className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 pr-9 text-sm outline-none focus:border-[#0099FF]"/><button type="button" onClick={()=>setShowFpPw(v=>!v)} tabIndex={-1} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">{showFpPw?<EyeOff className="w-4 h-4"/>:<Eye className="w-4 h-4"/>}</button></div><button onClick={fpSave} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium hover:bg-[#0072BE]">Save new password</button></>}
         {fp==="done"&&<><div className="font-semibold text-emerald-700 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>Password updated</div><p className="text-[13px] text-stone-500">Sign in with your new password.</p><button onClick={()=>setFp(null)} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium">Sign in</button></>}
         {fpErr&&<div className="text-xs text-rose-600">{fpErr}</div>}
       </div>
@@ -3391,7 +3379,7 @@ function CloudAuth({onDone,initialMode,intake}){
           <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp+" bg-white"}><option value="">Ship mostly with…</option><option>UPS</option><option>FedEx</option><option>USPS</option><option>A mix</option></select>
         </div>}</>}
         <input value={f.email} onChange={e=>setF({...f,email:e.target.value})} placeholder="Email" className={inp} autoFocus/>
-        <input value={f.pw} onChange={e=>setF({...f,pw:e.target.value})} onKeyDown={e=>e.key==="Enter"&&(mode==="signin"?signin():request())} placeholder={mode==="request"?"Choose a password":"Password"} type="password" className={inp}/>
+        <div className="relative"><input value={f.pw} onChange={e=>setF({...f,pw:e.target.value})} onKeyDown={e=>e.key==="Enter"&&(mode==="signin"?signin():request())} placeholder={mode==="request"?"Choose a password":"Password"} type={showPw?"text":"password"} className={inp+" pr-9"}/><button type="button" onClick={()=>setShowPw(v=>!v)} tabIndex={-1} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">{showPw?<EyeOff className="w-4 h-4"/>:<Eye className="w-4 h-4"/>}</button></div>
       </div>
       {err&&<div className="text-xs text-red-600">{err}</div>}
       <button onClick={mode==="signin"?signin:request} disabled={busy} className="w-full bg-stone-900 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"One moment…":(mode==="signin"?"Sign in":"Create account")}</button>
@@ -4361,7 +4349,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const scanApply=(code)=>{ const c=String(code||"").trim().toLowerCase(); setScanVal(""); if(!c)return;
     const o=orders.find(x=>[x.name,x.id,x.sku,x.tracking,x.customer,x.zip,x.barcode].filter(Boolean).some(v=>String(v).toLowerCase()===c))
       ||orders.find(x=>[x.name,x.sku,x.tracking,x.customer].filter(Boolean).some(v=>String(v).toLowerCase().includes(c)));
-    if(!o){ setScanMsg({ok:false,t:`no match for \u201c${code}\u201d`}); setTimeout(()=>setScanMsg(null),4000); return; }
+    if(!o){ setScanMsg({ok:false,t:`no match for “${code}”`}); setTimeout(()=>setScanMsg(null),4000); return; }
     setReceiver({...empty,name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email});
     if(o.weight)setPieces([{weight:o.weight,L:12,W:9,H:4}]);
     setReference(o.name||""); setSelectedOrder(o.id);
@@ -4834,7 +4822,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           </div>
         )}
 
-        {(client._unassigned||client._unresolved)&&<div className="flex items-center gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>{client._unresolved?`This login is set to an unknown customer (id "${client.id}") \u2014 no such customer exists, so no account markup can apply. Fix the login\u2019s assigned customer in Admin \u2192 Customers.`:"This login has no customer assigned \u2014 pricing uses the platform default only, never another customer\u2019s markup. Assign one in Admin \u2192 Customers \u2192 Logins if that\u2019s wrong."}</div>}
+        {(client._unassigned||client._unresolved)&&<div className="flex items-center gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>{client._unresolved?`This login is set to an unknown customer (id "${client.id}") — no such customer exists, so no account markup can apply. Fix the login’s assigned customer in Admin \u2192 Customers.`:"This login has no customer assigned — pricing uses the platform default only, never another customer’s markup. Assign one in Admin \u2192 Customers \u2192 Logins if that’s wrong."}</div>}
                 {selectedOrder&&(()=>{const so=orders.find(o=>o.id===selectedOrder);return so&&(so.shippingService||so.source)?<div className="flex items-center gap-2 text-xs text-stone-600 bg-stone-100 border border-stone-200 rounded-lg px-3 py-2"><Truck className="w-3.5 h-3.5 text-stone-400"/>From order <b>{so.name}</b>{so.source?` (${so.source})`:""} — buyer requested <b>{so.shippingService||"Standard"}</b>.</div>:null;})()}
         {ready&&<div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
           {rateSrc.loading?<><Loader2 className="w-3.5 h-3.5 animate-spin"/>Fetching live rates…</>
@@ -4844,7 +4832,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {ready&&!rateSrc.live&&!rateSrc.loading&&rateSrc.diag&&<div className="text-[11px] text-stone-400 -mt-1 px-1">
           Tried England on your <b>{rateSrc.diag.src==="customer"?"customer's":"main"}</b> account · from ZIP {rateSrc.diag.fromZip} · customer ID {rateSrc.diag.cust} · key {rateSrc.diag.key} · {rateSrc.diag.enabled?"live toggle ON":"live toggle OFF"}{!rateSrc.diag.hasKey?" · no API key found":""}{!rateSrc.diag.hasCust?" · no customer ID found":""}{rateSrc.diag.fromZip==="(none)"?" — no origin ZIP: set your sender ZIP or the customer's origin.":""}{rateSrc.error&&/401|invalid/i.test(rateSrc.error)?" — England rejected this key/ID pair. Re-enter it in Settings → Carrier accounts and Test again.":""}
         </div>}
-        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn\u2019t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
+        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
         {labelPreview&&<LabelPreviewModal data={labelPreview} settings={settings} onClose={()=>{setLabelPreview(null);if(cz(settings).skipBookedSummary)newShipment();}}/>}
         {naming&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setNaming(false)}><div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-sm space-y-3" onClick={e=>e.stopPropagation()}><div className="text-sm font-semibold text-stone-800">Name this draft</div><input autoFocus value={draftName} onChange={e=>setDraftName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")commitDraft(draftName.trim());}} placeholder="e.g. Dana Cole – Miami" className="w-full bg-white border border-stone-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><div className="flex justify-end gap-2"><button onClick={()=>setNaming(false)} className="text-sm px-3 py-1.5 rounded text-stone-600 hover:bg-stone-100">Cancel</button><button onClick={()=>commitDraft(draftName.trim())} className="text-sm px-3 py-1.5 rounded bg-stone-900 text-white font-medium hover:bg-stone-800">Save draft</button></div></div></div>}
         {shipStatus&&<div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2.5 ${shipStatus.state==="error"?"bg-rose-50 text-rose-700 border border-rose-200":shipStatus.state==="booked"?"bg-emerald-50 text-emerald-700 border border-emerald-200":shipStatus.state==="pending_timeout"?"bg-amber-50 text-amber-700 border border-amber-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
@@ -5026,7 +5014,7 @@ function matchRequestedService(quotes,requested){
   if(!requested)return null;
   const c=canonSvc(requested);
   const KNOWN=["home","ground","2day","express_saver","standard_overnight","priority_overnight","first_overnight","intl_priority"];
-  if(!KNOWN.includes(c))return null;   // "Standard Shipping" etc. \u2014 no honest FedEx match, so no highlight
+  if(!KNOWN.includes(c))return null;   // "Standard Shipping" etc. — no honest FedEx match, so no highlight
   const hit=quotes.find(q=>canonSvc(q.label)===c&&(q.sell??q.cost)!=null);
   return hit?hit.key:null;
 }
@@ -5066,7 +5054,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
             <div className="text-[11px] text-stone-500 flex items-center gap-1"><Calendar className="w-3 h-3"/>Transit Time: {days?(custom.transitStyle==="days"?<>{days} business day{days>1?"s":""}</>:<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}{fxLive&&days?<span className="text-[#0086E0] font-medium ml-1">FedEx</span>:""}</div>
           </div>
           <div className="text-right font-mono">{!!(custom.priceWarn>0&&ready&&hasPrice&&sell>custom.priceWarn)&&<div className="text-[10px] text-amber-600 flex items-center justify-end gap-0.5" title={"Above your $"+custom.priceWarn+" price alert"}><AlertTriangle className="w-3 h-3"/>over limit</div>}<div className="text-base font-semibold text-stone-900">{ready&&hasPrice?money(sell):<span className="text-stone-300">—</span>}</div></div>
-          {action&&<button onClick={(e)=>{e.stopPropagation();action(q);}} disabled={!ready||!hasPrice} title={!hasPrice&&q._oneRate?"England\u2019s rate API doesn\u2019t return One Rate flat pricing \u2014 pick a priced service, or book One Rate in Webship.":undefined} className={`shrink-0 w-32 text-sm rounded px-3 py-2 font-medium flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed ${bought===q.key?"bg-[#0086E0] text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{bought===q.key?<><Check className="w-4 h-4"/>{doneLabel}</>:!hasPrice&&q._oneRate?<>No quote</>:<><Printer className="w-4 h-4"/>{label}</>}</button>}
+          {action&&<button onClick={(e)=>{e.stopPropagation();action(q);}} disabled={!ready||!hasPrice} title={!hasPrice&&q._oneRate?"England’s rate API doesn’t return One Rate flat pricing — pick a priced service, or book One Rate in Webship.":undefined} className={`shrink-0 w-32 text-sm rounded px-3 py-2 font-medium flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed ${bought===q.key?"bg-[#0086E0] text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{bought===q.key?<><Check className="w-4 h-4"/>{doneLabel}</>:!hasPrice&&q._oneRate?<>No quote</>:<><Printer className="w-4 h-4"/>{label}</>}</button>}
         </div>
         {isOpen&&ready&&hasPrice&&<div className="px-4 pb-3 pt-1 border-t border-stone-100">
           <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Rate breakdown</div>
@@ -5320,7 +5308,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
   const best=(rateSrc.live&&quotes[0])?quotes[0].key:null;
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
   const printHere=async(qq)=>{
-    if(canBook&&(!qq.carrierCode||!qq.serviceCode)){ setRateNonce(n=>n+1); setStatus({state:"error",msg:"That rate was stale \u2014 refreshing live rates now. Pick the service again in a moment."}); return; }
+    if(canBook&&(!qq.carrierCode||!qq.serviceCode)){ setRateNonce(n=>n+1); setStatus({state:"error",msg:"That rate was stale — refreshing live rates now. Pick the service again in a moment."}); return; }
     const carrier=carrierOf(qq.label);
     if(!canBook){ // demo mode: record locally
       const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:newTracking(carrier),carrier,service:qq.label,recipient:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings?.sender||{})},fromZip,toZip:o.zip,weight:+weight,pieces:[{weight:+weight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference:o.name};
@@ -5504,7 +5492,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   const pickBox=(j)=>{ setBoxIdx(j); if(j>=0){const b=boxes[j];setDims({L:b.L,W:b.W,H:b.H});} };
   const printHere=async(qq)=>{
     if(!qq)return;
-    if(canBook&&(!qq.carrierCode||!qq.serviceCode)){ setRateNonce(n=>n+1); setStatus({state:"error",msg:"That rate was stale \u2014 refreshing live rates now. Pick the service again in a moment."}); return; }
+    if(canBook&&(!qq.carrierCode||!qq.serviceCode)){ setRateNonce(n=>n+1); setStatus({state:"error",msg:"That rate was stale — refreshing live rates now. Pick the service again in a moment."}); return; }
     const carrier=carrierOf(qq.label);
     const baseRec={service:qq.label,recipient:{name:rcv.name,company:rcv.company,zip:rcv.zip,state:rcv.state,city:rcv.city,address1:rcv.address1,phone:rcv.phone,email:rcv.email},sender:{...(settings?.sender||{})},fromZip,toZip:rcv.zip,weight:totalWeight,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",insurance:insurance||null,signature:sigOption!=="none",signatureOption:sigOption,saturdayDelivery:sat,reference:reference||o.name,poNo,invoiceNo};
     if(!canBook){
@@ -8514,7 +8502,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         <Tog k="hideInvoice" label="Hide Invoice # field"/>
         <Tog k="hidePO" label="Hide PO # field"/>
-        <Tog k="matchedOnly" label="Only show the requested service" hint="When a store order names the service the buyer paid for, show just that one \u2014 pre-highlighted, ready to print. Other services sit behind \u2018Show all services\u2019."/>
+        <Tog k="matchedOnly" label="Only show the requested service" hint="When a store order names the service the buyer paid for, show just that one — pre-highlighted, ready to print. Other services sit behind \u2018Show all services’."/>
         <Tog k="hideAddr23" label="Hide Address 2 & 3" hint="On both sender and receiver cards"/>
         <Tog k="hideOz" label="Hide the oz box" hint="Whole pounds are enough for most shops"/>
         <Tog k="hideInsure" label="Hide the Insure $ field"/>

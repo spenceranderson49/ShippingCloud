@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v236";
+const BUILD_TAG="addr-v238";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1462,7 +1462,7 @@ const CUSTOM_DEFAULTS={
   slipThanks:"",slipFooter:"",
   density:"comfortable",stuckDays:0,
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
-  logoScale:100,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],theme:"light",accent:"",
+  logoScale:100,companyLogoScale:100,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],theme:"light",accent:"",
   refRequired:false,invRequired:false,poRequired:false,refLocked:false,invLocked:false,poLocked:false,
   confetti:"page",seasonal:true,loginBg:"",appBg:"",headerBg:"",pageBg:"",navBg:"",
 };
@@ -3962,7 +3962,7 @@ function AppInner(){
   const isAdmin=currentUser&&currentUser.role==="admin";
   const isDemo=!!(currentUser&&currentUser.id==="demo");
   const myFlags=isDemo?{pickups:true,batch:true,invoices:true,rules:true,scan:true,settings:true}:(isAdmin?{}:((featureFlags&&featureFlags[currentUser&&currentUser.id])||(CLOUD.mode==="cloud"?myFeatures:{})));
-  useEffect(()=>{ CI_OPTS.logo=(myFlags&&myFlags._logoB64)||settings.companyLogo||""; },[myFlags,settings.companyLogo]);
+  useEffect(()=>{ CI_OPTS.logo=settings.companyLogo||(myFlags&&myFlags._logoB64)||""; },[myFlags,settings.companyLogo]);
   const [batchCmd,setBatchCmd]=useState(null);
   const assistantContext=()=>{
     try{
@@ -4080,7 +4080,7 @@ function AppInner(){
           {brand.showLogo&&brand.logo&&<span className="hidden sm:flex items-center gap-1.5 text-stone-400 text-xs"><span className="w-px h-5 bg-stone-200"/>{brand.partnerLabel}<img src={brand.logo} alt="partner" className="h-3 w-auto object-contain"/></span>}
           <div className="flex-1"/>
           <div className="flex items-center gap-2 sm:gap-3">
-            {(()=>{const cl=(myFlags&&myFlags._logoB64)||settings.companyLogo||"";return cl?<span className="flex items-center min-w-0 shrink"><img src={cl} alt={settings.company||"Company logo"} style={{height:Math.round(28*((custom.companyLogoScale||100)/100))+"px"}} className={`w-auto max-w-[100px] sm:max-w-[160px] object-contain block ${(custom.theme==="dark"||custom.theme==="grey")?"bg-white rounded-md px-1.5 py-0.5 box-content":""}`} draggable={false}/><span className="w-px h-6 bg-stone-200 shrink-0 mx-2.5 sm:mx-3 hidden sm:block"/></span>:null;})()}
+            {(()=>{const cl=settings.companyLogo||(myFlags&&myFlags._logoB64)||"";return cl?<span className="flex items-center min-w-0 shrink"><img src={cl} alt={settings.company||"Company logo"} style={{height:Math.round(28*((custom.companyLogoScale||100)/100))+"px"}} className={`w-auto max-w-[100px] sm:max-w-[160px] object-contain block ${(custom.theme==="dark"||custom.theme==="grey")?"bg-white rounded-md px-1.5 py-0.5 box-content":""}`} draggable={false}/><span className="w-px h-6 bg-stone-200 shrink-0 mx-2.5 sm:mx-3 hidden sm:block"/></span>:null;})()}
             <div className="text-right leading-tight hidden sm:block"><div className="text-sm font-medium text-stone-800">{currentUser.name}</div><div className="text-[11px] text-stone-400">{currentUser.role==="admin"?"Administrator":(clients.find(c=>c.id===currentUser.clientId)||{}).name||"Customer"}</div></div>
             <span className="w-8 h-8 rounded-full bg-[#CCEAFF] text-[#006FBF] flex items-center justify-center text-sm font-semibold shrink-0">{(currentUser.name||"?").slice(0,1).toUpperCase()}</span>
             <button onClick={()=>{ const ar=lsGet("adminReturn",null); if(ar){ lsSet("session",ar); lsDel("adminReturn"); } else { lsSet("session",null); lsDel("cloud.token"); } window.location.reload(); }} className="text-xs sm:text-sm text-stone-500 hover:text-stone-800 border border-stone-200 rounded px-2 sm:px-2.5 py-1.5">Sign out</button>
@@ -4343,7 +4343,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const quotes=useMemo(()=>{
     let rates=(rateSrc.rates||[]).filter(q=>q.carrier==="FedEx");
     let list=rates.length?rates:FEDEX_SKELETON.slice();   // skeleton (blank prices) until live rates arrive
-    list=list.concat((orRates||[]).filter(q=>q.carrier==="FedEx"));   // One Rate services auto-appear when the box qualifies
+    const liveOR=rates.some(q=>q._oneRate);   // FedEx now quotes One Rate live when a FedEx box is picked
+    if(!liveOR) list=list.concat((orRates||[]).filter(q=>q.carrier==="FedEx"));   // table/blank placeholders only when no live One Rate came back
     // Every service FedEx returns is offered — hide services per-login in Settings → Customize → Services.
     if(custom.hiddenServices&&custom.hiddenServices.length){const hs=new Set(custom.hiddenServices);list=list.filter(q=>!hs.has(canonSvc(q.label)));}
     return list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,list:q.list,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,client)});})
@@ -4778,6 +4779,7 @@ function LabelPreviewModal({data,onClose,settings}){
   useEffect(()=>()=>{ if(url)try{URL.revokeObjectURL(url);}catch(e){} },[url]);
   const doPrint=()=>{ if(pages&&pages.imgs.length){printImagePages(pages.imgs,pages.wIn,pages.hIn);} else { printLabelPdf(data.pdf); } };
   const [copied,setCopied]=useState(false);
+  const [showLabel,setShowLabel]=useState(false);
   const copyTracking=async()=>{ const t=String(data.tracking||""); if(!t)return;
     try{ await navigator.clipboard.writeText(t); }
     catch(e){ try{ const ta=document.createElement("textarea");ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove(); }catch(e2){} }
@@ -4800,17 +4802,21 @@ function LabelPreviewModal({data,onClose,settings}){
           <div><div className="font-semibold text-stone-800 flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-600"/>Label booked</div><div className="text-[11px] text-stone-400">{data.service}{data.tracking?` · ${data.tracking}`:""}</div></div>
           <button onClick={onClose} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button>
         </div>
-        <div className="flex-1 min-h-0 bg-stone-100 overflow-y-auto p-4" style={{minHeight:"55vh"}}>
-          {pages&&pages.imgs.length?(
-            <div className="space-y-3 flex flex-col items-center">{pages.imgs.map((u,i)=><img key={i} src={u} alt={"Label page "+(i+1)} className="bg-white shadow border border-stone-200 max-w-full" style={{width:"min(100%, 380px)"}}/>)}</div>
-          ):pgErr?(
-            <div className="space-y-2 h-full flex flex-col">
+        <div className="bg-stone-50 px-4 py-3 border-b border-stone-100">
+          {pgErr?(
+            <div className="space-y-2">
               <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">{pgErr}</div>
-              {url&&<iframe src={url} title="Shipping label" className="w-full flex-1 bg-white" style={{minHeight:"45vh"}}/>}
+              {url&&<iframe src={url} title="Shipping label" className="w-full bg-white border border-stone-200" style={{height:"50vh"}}/>}
             </div>
           ):(
-            <div className="flex items-center justify-center h-full text-stone-400 gap-2 text-sm" style={{minHeight:"45vh"}}><Loader2 className="w-4 h-4 animate-spin"/>Rendering label…</div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm text-stone-600 flex items-center gap-2">
+                {pages?<><Printer className="w-4 h-4 text-emerald-600 shrink-0"/>Label sent to your printer dialog.</>:<><Loader2 className="w-4 h-4 animate-spin shrink-0"/>Preparing label…</>}
+              </div>
+              {pages&&<button onClick={()=>setShowLabel(v=>!v)} className="text-xs text-[#006FBF] hover:underline shrink-0">{showLabel?"Hide label":"View label"}</button>}
+            </div>
           )}
+          {showLabel&&pages&&pages.imgs.length>0&&<div className="mt-3 space-y-3 flex flex-col items-center max-h-[55vh] overflow-y-auto">{pages.imgs.map((u,i)=><img key={i} src={u} alt={"Label page "+(i+1)} className="bg-white shadow border border-stone-200 max-w-full" style={{width:"min(100%, 340px)"}}/>)}</div>}
         </div>
         <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-t border-stone-200">
           {data.tracking&&<button onClick={copyTracking} className={`text-sm px-3 py-2 rounded border flex items-center gap-1.5 ${copied?"border-emerald-300 bg-emerald-50 text-emerald-700":"border-stone-200 text-stone-600 hover:bg-stone-50"}`}>{copied?<CheckCircle2 className="w-4 h-4"/>:<Copy className="w-4 h-4"/>}{copied?"Copied":"Copy tracking"}</button>}
@@ -8230,6 +8236,19 @@ function Customize({settings,setSettings,deployMode}){
   return (<div className="max-w-2xl space-y-4">
     {!deployMode&&<div className="text-sm text-stone-500">Make ShippingCloud yours. Every option here changes the app immediately for <b>your login only</b>.</div>}
 
+    <Panel title="Printing">
+      <div className="text-sm text-stone-600 space-y-2">
+        <p>When a label books, the <b>system print dialog opens automatically</b> — pick the label printer once and Chrome remembers it.</p>
+        <p className="text-stone-700 font-medium">Want zero clicks — straight to the printer, no dialog?</p>
+        <ol className="list-decimal ml-5 space-y-1 text-[13px]">
+          <li>Set your label printer as the <b>default printer</b> in Windows (Settings → Bluetooth &amp; devices → Printers), with the paper size set to your label stock (e.g. 4×6).</li>
+          <li>Make a Chrome shortcut just for shipping: right-click the desktop → New → Shortcut → paste <span className="font-mono text-[12px] bg-stone-100 border border-stone-200 rounded px-1">"C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk-printing</span> and name it "ShippingCloud – Direct Print".</li>
+          <li>Open the app from that shortcut. Every print — booked labels, reprints, batch — now goes <b>directly to the default printer instantly</b>, no dialog, no clicks.</li>
+        </ol>
+        <p className="text-[11px] text-stone-400">Per-workstation setting (it's a Chrome launch flag, not an app setting). Regular Chrome windows keep the normal dialog. For raw thermal/ZPL printing over the network, ask about the print-agent upgrade.</p>
+      </div>
+    </Panel>
+
     <Panel title="Ship screen">
       <div className="flex gap-2 mb-3">
         <button onClick={speedMode} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">⚡ Speed mode — hide everything optional</button>
@@ -8299,7 +8318,7 @@ function Customize({settings,setSettings,deployMode}){
     {!deployMode&&<Panel title="Company logo">
       <div className="flex items-center gap-4">
         {settings.companyLogo
-          ?<img src={settings.companyLogo} alt="Company logo" style={{height:Math.round(28*((c.logoScale||100)/100))+"px"}} className="w-auto max-w-[200px] object-contain border border-stone-200 rounded-lg bg-white px-2 py-1"/>
+          ?<img src={settings.companyLogo} alt="Company logo" style={{height:Math.round(28*((c.companyLogoScale||100)/100))+"px"}} className="w-auto max-w-[200px] object-contain border border-stone-200 rounded-lg bg-white px-2 py-1"/>
           :<span className="text-[11px] text-stone-300 border border-dashed border-stone-300 rounded-lg px-3 py-2">No logo yet</span>}
         <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload logo
           <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={e=>{
@@ -8317,9 +8336,10 @@ function Customize({settings,setSettings,deployMode}){
         </label>
         {settings.companyLogo&&<button onClick={()=>setSettings(p=>({...p,companyLogo:""}))} className="text-[11px] text-stone-400 hover:text-rose-600">Remove</button>}
       </div>
-      <label className="block text-sm text-stone-700 mt-1">Logo size <span className="text-[11px] text-stone-400">· {c.logoScale||100}%</span>
-        <input type="range" min="50" max="250" step="5" value={c.logoScale||100} onChange={e=>set("logoScale",+e.target.value)} className="mt-1 w-full accent-[#0086E0]"/>
-      </label>
+      <label className="block text-sm text-stone-700 mt-1">Company logo size <span className="text-[11px] text-stone-400">· {c.companyLogoScale||100}% — your uploaded logo, shown top-right in the header</span>
+        <input type="range" min="50" max="250" step="5" value={c.companyLogoScale||100} onChange={e=>set("companyLogoScale",+e.target.value)} className="mt-1 w-full"/></label>
+      <label className="block text-sm text-stone-700 mt-1">Brand logo size <span className="text-[11px] text-stone-400">· {c.logoScale||100}% — the {BRAND.fw?"Freightwire ShipHub":"ShippingCloud"} mark on the left</span>
+        <input type="range" min="50" max="250" step="5" value={c.logoScale||100} onChange={e=>set("logoScale",+e.target.value)} className="mt-1 w-full"/></label>
       <div className="text-[11px] text-stone-400">Shows in the header next to the brand — the live preview above is exactly the size it will render.</div>
     </Panel>}
 

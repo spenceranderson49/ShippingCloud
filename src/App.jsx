@@ -72,7 +72,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v265";
+const BUILD_TAG="addr-v266";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -4070,6 +4070,30 @@ function AppInner(){
      Unassigned logins get a clean empty placeholder so pricing falls through to the platform
      default only (or raw cost if nothing is set) — never someone else's number by accident. */
   const client=clients.find(c=>c.id===clientId)||(clientId?{id:clientId,name:"(unknown customer — "+clientId+")",_unresolved:true}:{id:"",name:"",_unassigned:true});
+  /* An unresolved customer is often just staleness — a customer created seconds ago on a different tab/domain,
+     and this session hasn't caught up yet. The normal poll is every 20s AND skips entirely while the tab is
+     backgrounded, so switching between the admin tab and this one can leave it stale far longer than 20s.
+     The moment we detect an unresolved customer, force one immediate, unconditional refresh instead of waiting. */
+  useEffect(()=>{
+    if(!client._unresolved||!CLOUD.token||CLOUD.mode!=="cloud")return;
+    let cancelled=false;
+    (async()=>{
+      try{
+        const res=await cloudCall({action:"getAll",token:CLOUD.token});
+        if(cancelled||!(res&&res.ok&&res.stores))return;
+        for(const k in res.stores){
+          if(!GLOBAL_KEYS[k]||k==="session"||k in CLOUD.queue)continue;
+          const j=JSON.stringify(res.stores[k]);
+          if(CLOUD.baseline[k]===j)continue;
+          CLOUD.baseline[k]=j;
+          lsSet(k,res.stores[k]);
+          const bus=PERSIST_BUS[k];
+          if(bus&&bus.size)bus.forEach(fn=>{try{fn(res.stores[k]);}catch(_){ }});
+        }
+      }catch(e){}
+    })();
+    return ()=>{cancelled=true;};
+  },[client._unresolved,client.id]);
   const SandboxBanner=()=>isSandbox?(<div className="bg-amber-500/95 text-white text-xs font-medium text-center py-1.5">{IS_STAGING?"STAGING — separate database, FedEx test mode. Nothing here touches production or books a real label.":"SANDBOX login — play freely, but this is still the live site: real database, real FedEx account unless FEDEX_ENV is set to sandbox here too."}</div>):null;
   const _origOnShippedAudit=(rec)=>{try{window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Booked label",detail:(rec.reference||"")+" · "+(rec.service||"")+" · "+(rec.tracking||"")}}));}catch(x){}};
   const logEmail=(e)=>{

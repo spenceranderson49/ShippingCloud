@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v248";
+const BUILD_TAG="addr-v249";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -4405,7 +4405,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const swap=()=>{const s=sender;setSender(receiver);setReceiver(s);};
   const originZip=(String(sender.zip||"").match(/\d{5}/)||[])[0]||(String(client.origin||"").match(/\d{5}/)||[])[0]||(String((settings&&settings.sender&&settings.sender.zip)||"").match(/\d{5}/)||[])[0]||"";
   const ready=/^\d{5}/.test(receiver.zip||"")&&totalWeight>0;
-  const shipment={fromZip:originZip,toZip:receiver.zip,pieces:pieces.map(p=>({...p,weight:pw(p)})),residential,signature,signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null,intl,packageTypeCode:""};
+  const shipment={fromZip:originZip,toZip:receiver.zip,pieces:pieces.map(p=>({...p,weight:pw(p)})),residential,signature,signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null,intl,packageTypeCode:orBox?orBox.code:""};
   // Front screen shows FedEx only (until a USPS/UPS/DAP deal is added). Blank-price skeleton before rates load.
   const FEDEX_SKELETON=[
     {key:"fedex_ground",carrier:"FedEx",label:"FedEx Ground®",cost:null},

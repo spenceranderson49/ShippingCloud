@@ -186,6 +186,12 @@ exports.handler = async (event) => {
     }
     const rates = [];
     const oneRateOk = !!(orRes && orRes.r && orRes.r.ok);
+    let oneRateError = null;
+    if (oneRateReq && !oneRateOk) {
+      oneRateError = (orRes && orRes._threw)
+        || (orRes && orRes.j && orRes.j.errors && orRes.j.errors[0] && (orRes.j.errors[0].message || orRes.j.errors[0].code))
+        || ("FedEx returned no One Rate pricing for this box/lane" + (orRes && orRes.r ? (" (status " + orRes.r.status + ")") : ""));
+    }
     const batches = [{ replies: (j.output && j.output.rateReplyDetails) || [], oneRate: false }];
     if (oneRateOk) batches.push({ replies: (orRes.j.output && orRes.j.output.rateReplyDetails) || [], oneRate: true });
     for (const batch of batches) for (const rd of batch.replies) {
@@ -239,7 +245,7 @@ exports.handler = async (event) => {
       const alert = j.output && j.output.alerts && j.output.alerts[0] && j.output.alerts[0].message;
       return respond(200, { live: false, error: alert || "FedEx returned no rates for this shipment.", rates: [] });
     }
-    return respond(200, { live: true, provider: "fedex-direct", account: acct.replace(/^(\d{3})\d+(\d{2})$/, "$1****$2"), rates });
+    return respond(200, { live: true, provider: "fedex-direct", account: acct.replace(/^(\d{3})\d+(\d{2})$/, "$1****$2"), rates, oneRateRequested: !!oneRateReq, oneRateOk, oneRateError });
   } catch (e) {
     const msg = e && e.name === "AbortError" ? "FedEx took too long to respond" : ((e && e.message) || "FedEx request failed");
     return respond(200, { live: false, error: msg, rates: [] });

@@ -45,7 +45,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v195fw";
+const BUILD_TAG="addr-v199fw";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -902,7 +902,7 @@ function Login({users,onLogin,brand}){
     setMode("signin");
   };
   return (
-    <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4" style={{fontFamily:"ui-sans-serif,system-ui,sans-serif",...(lsGet("loginBg","")?{backgroundImage:`url(${lsGet("loginBg","")})`,backgroundSize:"cover",backgroundPosition:"center"}:{})}}>
+    <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4" style={{fontFamily:"ui-sans-serif,system-ui,sans-serif"}}>
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center gap-2 mb-6">
           <div className="flex items-center gap-2">
@@ -1805,10 +1805,12 @@ function Landing({onAuth}){
     <div className="font-semibold text-white mb-1.5">{title}</div>
     <div className="text-sm text-stone-400 leading-relaxed">{children}</div>
   </div>);
-  if(BRAND.fw) return (<div className="min-h-screen relative overflow-hidden flex flex-col items-center justify-center px-5 py-10" style={{background:"#faf8f4",...(lsGet("loginBg","")?{backgroundImage:`url(${lsGet("loginBg","")})`,backgroundSize:"cover",backgroundPosition:"center"}:{})}}>
+  if(BRAND.fw) return (<div className="min-h-screen relative overflow-hidden flex flex-col items-center justify-center px-5 py-10" style={{background:"#faf8f4"}}>
     <style>{`@keyframes fwRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}@keyframes fwDrift{0%,100%{transform:translate(-50%,0)}50%{transform:translate(calc(-50% + 18px),-12px)}}`}</style>
-    <div className="relative flex flex-col items-center gap-1.5 mb-2" style={{animation:"fwRise .6s ease both"}}>
-      <img src={FWSHIP_LOGO} alt="FreightwireShip" style={{height:52}} className="w-auto" draggable={false}/>
+    <div className="relative flex items-center gap-4 mb-8" style={{animation:"fwRise .6s ease both"}}>
+      <img src={FW_LOGO} alt="Freightwire" style={{height:46}} className="w-auto" draggable={false}/>
+      <span className="w-px h-9 bg-stone-300"/>
+      <img src={FWSHIP_LOGO} alt="FreightwireShip" style={{height:40}} className="w-auto" draggable={false}/>
     </div>
     <div className="relative w-full flex justify-center py-4" style={{animation:"fwRise .6s .14s ease both",transform:"scale(1.2)",transformOrigin:"top center"}}>
       <CloudAuth onDone={()=>window.location.reload()} initialMode="login"/>
@@ -2286,7 +2288,7 @@ function AppInner(){
   const custom=cz(settings);
   useEffect(()=>{ try{document.documentElement.style.fontSize=(custom.fontScale&&custom.fontScale!==100)?(custom.fontScale/100*16)+"px":"";}catch(e){} },[custom.fontScale]);
   useEffect(()=>{ SLIP_OPTS.thanks=custom.slipThanks||""; SLIP_OPTS.footer=custom.slipFooter||""; CI_OPTS.taxId=settings.taxId||""; },[custom.slipThanks,custom.slipFooter,settings.taxId]);
-  useEffect(()=>{ try{ if(custom.loginBg)lsSet("loginBg",custom.loginBg); }catch(e){} },[custom.loginBg]);
+  useEffect(()=>{ try{ lsSet("loginBg",""); }catch(e){} },[custom.loginBg]);
   useEffect(()=>{ try{ const el=document.documentElement;
     el.classList.toggle("dark",custom.theme==="dark");
     el.classList.toggle("grey",custom.theme==="grey");
@@ -2554,7 +2556,7 @@ function AppInner(){
           {BRAND.fw?(<>
             <button onClick={()=>setTab("ship")} title="Back to Ship" className="flex items-center gap-2.5 cursor-pointer select-none shrink-0">
               <span className="hidden" aria-hidden="true"/>
-              <span className="text-[19px] sm:text-[22px] leading-none text-stone-900" style={LOGO_FONT}><span className="font-bold">Freightwire</span><span className="font-bold" style={{color:custom.accent||"#1E9BF0"}}>Ship</span></span>
+              <img src={FW_LOGO} alt="Freightwire" style={{height:26}} className="w-auto shrink-0" draggable={false}/><span className="w-px h-6 bg-stone-200 shrink-0"/><img src={FWSHIP_LOGO} alt="FreightwireShip" style={{height:22}} className="w-auto shrink-0" draggable={false}/>
             </button>
           </>):(
           <button onClick={()=>setTab("ship")} title="Back to Ship" className="font-bold text-[20px] sm:text-[26px] cursor-pointer flex items-center gap-1.5" style={{...LOGO_FONT,color:(custom.theme==="dark"||custom.theme==="grey")?"#F5F5F4":brand.dark}}><span>{brand.name1}<span style={{color:custom.accent||brand.primary}}>{brand.name2}</span></span></button>)}

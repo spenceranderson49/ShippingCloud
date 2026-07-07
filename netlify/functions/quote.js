@@ -224,12 +224,13 @@ exports.handler = async (event) => {
       if (!surch.length && acctD && acctD.shipmentRateDetail && +acctD.shipmentRateDetail.totalSurcharges > 0) {
         surch = [{ label: "Carrier surcharges", amount: Math.round(+acctD.shipmentRateDetail.totalSurcharges * 100) / 100 }];
       }
+      const boxName = (batch.oneRate && fedexPackaging) ? fedexPackaging.replace(/^FEDEX_/, "").split("_").map(w => w[0] + w.slice(1).toLowerCase()).join(" ") : "";
       rates.push({
         key: batch.oneRate ? "or_" + svc.key : svc.key,
         carrier: "FedEx",
         carrierCode: "fedex",
         serviceCode: batch.oneRate ? rd.serviceType + "_ONE_RATE" : rd.serviceType,
-        label: batch.oneRate ? svc.label + " One Rate" : svc.label,
+        label: batch.oneRate ? (svc.label + " OneRate" + (boxName ? " - " + boxName : "")) : svc.label,
         cost: cost != null ? cost : list,
         list: list,
         packageTypeCode: batch.oneRate ? boxCode : "",

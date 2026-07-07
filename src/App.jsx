@@ -72,7 +72,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v266";
+const BUILD_TAG="addr-v267";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -4021,7 +4021,17 @@ function AppInner(){
     return ()=>{window.removeEventListener("keydown",onKey);clearTimeout(timer);};
   },[custom.hotkeys]);
 
-  useEffect(()=>{ if(currentUser&&currentUser.role==="customer"&&currentUser.clientId) setClientId(currentUser.clientId); },[currentUser]);
+  /* The session’s own clientId is a snapshot from login time — it never updates on its own. If an
+     admin reassigns this login’s customer afterward (Admin → Customers/Users), the person is
+     already-logged-in and would otherwise be stuck on the OLD assignment until they log out and back
+     in, no matter how correct the backend record is. Instead, always trust the live "users" record for
+     THIS person over whatever the session cached, and self-heal the moment they differ. */
+  useEffect(()=>{
+    if(!currentUser||currentUser.role!=="customer")return;
+    const live=users.find(u=>u.id===currentUser.id);
+    const authoritative=live?live.clientId:currentUser.clientId;
+    if((authoritative||"")!==clientId) setClientId(authoritative||"");
+  },[currentUser,users]);
   // Auto-run rules on newly imported/synced orders (any import path) when the toggle is on.
   // Orders are marked _ruled so they aren't reprocessed; the manual "Apply" button ignores this flag.
   useEffect(()=>{
@@ -6381,7 +6391,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
       if(res&&res.ok){
         const carrier=carrierOf(picked.label);
         onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:originZip,toZip:o.zip,weight:(pkB&&pkB.totalWt)||o.weight,pieces:pkB?pkB.pieces:undefined,dims:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,items:o.items||"",note:o.note||"",bookNumber:res.bookNumber},o.id);
-        out.push({o,name:o.name,ok:true,tracking:res.tracking,service:picked.label,carrier,pdf:res.labelPdfBase64||null});
+        out.push({o,name:o.name,orderId:o.id,ok:true,tracking:res.tracking,service:picked.label,carrier,pdf:res.labelPdfBase64||null});
       } else out.push({o,name:o.name,orderId:o.id,ok:false,error:(res&&res.error)||"Booking failed"});
       setResults([...out]);
     }

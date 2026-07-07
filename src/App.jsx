@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v253";
+const BUILD_TAG="addr-v255";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -510,16 +510,21 @@ async function fedexCall(payload,timeout=15000){
 // normalize a service label OR FedEx serviceType to a canonical key for matching
 function canonSvc(s){
   const t=String(s||"").toLowerCase();
-  if(/home/.test(t)) return "home";
-  if(/first.?overnight|first_overnight/.test(t)) return "first_overnight";
-  if(/priority.?overnight|priority_overnight/.test(t)) return "priority_overnight";
-  if(/standard.?overnight|standard_overnight/.test(t)) return "standard_overnight";
-  if(/2.?day|two.?day|2_day/.test(t)) return "2day";
-  if(/express.?saver|saver|3.?day/.test(t)) return "express_saver";
-  if(/overnight/.test(t)) return "standard_overnight";
-  if(/priority/.test(t)) return "intl_priority";
-  if(/ground/.test(t)) return "ground";
-  return t.replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
+  /* One Rate variants get their own "or_" keys — otherwise "FedEx 2Day OneRate - Medium Box"
+     collapses onto plain "2day" and can never be toggled, renamed, or admin-locked independently
+     of the base service it\u2019s built from. */
+  const oneRate=/one\s*rate/.test(t);
+  const pre=oneRate?"or_":"";
+  if(/home/.test(t)) return pre+"home";
+  if(/first.?overnight|first_overnight/.test(t)) return pre+"first_overnight";
+  if(/priority.?overnight|priority_overnight/.test(t)) return pre+"priority_overnight";
+  if(/standard.?overnight|standard_overnight/.test(t)) return pre+"standard_overnight";
+  if(/2.?day|two.?day|2_day/.test(t)) return pre+"2day";
+  if(/express.?saver|saver|3.?day/.test(t)) return pre+"express_saver";
+  if(/overnight/.test(t)) return pre+"standard_overnight";
+  if(/priority/.test(t)) return pre+"intl_priority";
+  if(/ground/.test(t)) return pre+"ground";
+  return (pre+t).replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
 }
 async function fedexTransit(s){
   const body={fromZip:s.fromZip,toZip:s.toZip,fromCountry:s.fromCountry||"US",toCountry:s.toCountry||"US",residential:!!s.residential,pieces:(s.pieces||[]).map(p=>({weight:+p.weight||1}))};
@@ -1013,7 +1018,7 @@ function oneRateBoxFor(L,W,H,lbs){
 function oneRateQuotes(box,ctx){
   if(!box) return [];
   const short=box.name.replace(/FedEx\s*One Rate®?\s*/i,"");
-  const label="FedEx 2Day One Rate · "+short;
+  const label="FedEx 2Day OneRate - "+short;
   /* England's quote API never returns One Rate flat pricing. If the admin imported the One Rate flat
      table (Admin → Rates → Base costs), price it here: table price = cost, customer rule = sell. */
   let cost=null,sell=null;
@@ -1059,6 +1064,7 @@ function applyAccessorials(q, opts){
    CUSTOMER (clientId), so every login a company creates inherits them automatically. */
 const DEFAULT_RATE_RULES={profiles:[{id:"default",name:"Default",services:{},surcharges:{}}],assign:{},baseCosts:{}};
 const OR_RATE_SVCS=[["first_overnight","First Overnight"],["priority_overnight","Priority Overnight"],["standard_overnight","Standard Overnight"],["2day_am","2Day A.M."],["2day","2Day"],["express_saver","Express Saver"]];
+const ONE_RATE_LOCK_SVCS=[["or_first_overnight","FedEx First Overnight® OneRate"],["or_priority_overnight","FedEx Priority Overnight® OneRate"],["or_standard_overnight","FedEx Standard Overnight® OneRate"],["or_2day","FedEx 2Day® OneRate"],["or_express_saver","FedEx Express Saver® OneRate"]].map(([k,l])=>({k,l}));   // same shape as svcQuick (RATE_SERVICES.fedex items)
 const OR_RATE_PKGS=[["envelope","Envelope"],["pak","Pak"],["xs_box","Extra Small Box"],["small_box","Small Box"],["medium_box","Medium Box"],["large_box","Large Box"],["xl_box","Extra Large Box"],["tube","Tube"]];
 const RATE_SERVICES={
   fedex:[
@@ -2061,6 +2067,16 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
           </tr>);})}
       </tbody></table></div>
       <p className="text-[11px] text-stone-400">Zone overrides, weight breaks, One Rate pricing, and printable rate sheets live in the Rate database section. Every login under {c.name} inherits this automatically.</p>
+      <div className="pt-1">
+        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Services {c.name}'s logins are allowed to turn on themselves</div>
+        <p className="text-[11px] text-stone-500 mb-2">Uncheck a service to lock it off platform-wide for this customer — it disappears as a real quote option and greys out (can\u2019t be re-enabled) on their own Settings → Customize → Services screen, no matter what they try to toggle. Checked = the customer\u2019s own toggle controls it. One Rate variants are listed separately from their base service — locking Priority Overnight doesn\u2019t touch Priority Overnight OneRate, and vice versa.</p>
+        <div className="border border-stone-200 rounded-lg bg-white p-3 grid sm:grid-cols-2 lg:grid-cols-3 gap-1.5 max-h-64 overflow-y-auto">
+          {svcQuick.concat(ONE_RATE_LOCK_SVCS).map(sv=>{const blocked=(c.blockedServices||[]).includes(sv.k);return (<label key={sv.k} className="flex items-center gap-1.5 text-sm text-stone-700 cursor-pointer">
+            <input type="checkbox" checked={!blocked} onChange={e=>{const cur=new Set(c.blockedServices||[]);e.target.checked?cur.delete(sv.k):cur.add(sv.k);upClient({blockedServices:[...cur]});}} className="accent-[#0086E0]"/>
+            <span className={blocked?"line-through text-stone-400":""}>{sv.l}</span>
+          </label>);})}
+        </div>
+      </div>
       <div className="pt-1">
         <div className="flex items-center justify-between mb-1.5">
           <div className="text-[10px] uppercase tracking-widest text-stone-400">Accessorial markups — {prof.name} profile</div>
@@ -4503,6 +4519,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(!liveOR) list=list.concat((orRates||[]).filter(q=>q.carrier==="FedEx"));   // table/blank placeholders only when no live One Rate came back
     // Every service FedEx returns is offered — hide services per-login in Settings → Customize → Services.
     if(custom.hiddenServices&&custom.hiddenServices.length){const hs=new Set(custom.hiddenServices);list=list.filter(q=>!hs.has(canonSvc(q.label)));}
+    if(client&&client.blockedServices&&client.blockedServices.length){const bs=new Set(client.blockedServices);list=list.filter(q=>!bs.has(canonSvc(q.label)));}   // admin-locked — can't be bypassed by the customer's own toggle
     return list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,list:q.list,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,client)});})
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
   },[rateSrc,orRates,client.markup,rateRules,fxTransit,residential,addrClassified,sigOption,saturday,insurance]);
@@ -5299,7 +5316,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
     return ()=>{cancel=true;};
   },[rateNonce,o.zip,weight,box.L,box.W,box.H,residential,oneRate,orBox&&orBox.code,eng]);
   const localOrderQuotes=()=>quoteRates({fromZip,toZip:o.zip,pieces:[{weight:+weight||0,L:box.L,W:box.W,H:box.H}],residential,intl:false}).filter(qq=>qq.carrier==="FedEx");
-  const quotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,fromZip:(settings&&settings.sender&&settings.sender.zip)||"",toZip:o.zip,weight:+weight||o.weight||1})})).sort((a,b)=>(a.sell||1e9)-(b.sell||1e9));},[rateSrc,residential,client,settings,rateRules,weight]);
+  const quotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,fromZip:(settings&&settings.sender&&settings.sender.zip)||"",toZip:o.zip,weight:+weight||o.weight||1})})).sort((a,b)=>(a.sell||1e9)-(b.sell||1e9));},[rateSrc,residential,client,settings,rateRules,weight]);
   const best=(rateSrc.live&&quotes[0])?quotes[0].key:null;
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
   const printHere=async(qq)=>{
@@ -5475,7 +5492,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   },[rcv.zip,fromZip,residential,totalWeight,box.L,box.W,box.H]);
   // FedEx One Rate 2Day — flat, zone-independent.
   const orRates=useMemo(()=>selectedOrBox?oneRateQuotes(selectedOrBox,{rules:rateRules,client}):[],[selectedOrBox&&selectedOrBox.code,client,rateRules]);
-  const baseQuotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,fromZip,toZip:rcv.zip,weight:totalWeight})}));},[rateSrc,residential,client,addrClassified,rateRules,settings]);
+  const baseQuotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,fromZip,toZip:rcv.zip,weight:totalWeight})}));},[rateSrc,residential,client,addrClassified,rateRules,settings]);
   const quotes=useMemo(()=>{
     const withTransit=(list)=>list.map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};});
     return withTransit([...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday:sat,insurance,fees:surchargeFees(rateRules,client)}))).sort((a,b)=>(a.sell||0)-(b.sell||0));
@@ -6250,7 +6267,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         if(orderHasHazmat(o,settings.products||[])&&!/ground|home/i.test(String((svcOv[o.id]||"")))){ /* ground-only enforcement happens at pick below */ }
         const pk0=packs[o.id];
         const res=await ratesForOrder(o,{residential:true,weightLb:(pk0&&pk0.totalWt)||o.weight,box:pk0&&pk0.pieces[0]?{L:pk0.pieces[0].L,W:pk0.pieces[0].W,H:pk0.pieces[0].H}:undefined,fromZip:originZip,sender:settings.sender},eng);
-        const _hs=new Set(cz(settings).hiddenServices||[]);let qs=((res&&res.rates)||[]).filter(q=>!_hs.has(canonSvc(q.label))).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:originZip,toZip:o.zip,weight:(pk0&&pk0.totalWt)||o.weight||1})}));
+        const _hs=new Set(cz(settings).hiddenServices||[]);const _bs=new Set((client&&client.blockedServices)||[]);let qs=((res&&res.rates)||[]).filter(q=>!_hs.has(canonSvc(q.label))&&!_bs.has(canonSvc(q.label))).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:originZip,toZip:o.zip,weight:(pk0&&pk0.totalWt)||o.weight||1})}));
         picked=pickByPref(qs,svcOv[o.id]);
         if(!picked){
           if(rule==="ground")picked=qs.filter(q=>/ground|home/i.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
@@ -6726,7 +6743,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="cieditor"&&<CIEditor settings={settings} setSettings={setSettings} shipments={shipments}/>}
         {sec==="cihistory"&&<CIHistory settings={settings} setSettings={setSettings}/>}
         {sec==="otherdocs"&&<OtherDocs settings={settings} setSettings={setSettings}/>}
-        {sec==="customize"&&<Customize settings={settings} setSettings={setSettings}/>}
+        {sec==="customize"&&<Customize settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])}/>}
         {sec==="clients"&&<Clients clients={clients} setClients={setClients}/>}
         {sec==="billing"&&<Billing settings={settings} setSettings={setSettings}/>}
         {sec==="ledger"&&<Ledger ledger={ledger} addLedger={addLedger}/>}
@@ -7611,7 +7628,8 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
       let picked=null;
       try{
         const res=await ratesForOrder(o,{residential:true,weightLb:wt,fromZip:senderZip,sender:settings.sender},eng);
-        const qs=((res&&res.rates)||[]).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:senderZip,toZip:o.zip,weight:wt})}));
+        const _apHs=new Set(cz(settings).hiddenServices||[]);const _apBs=new Set((client&&client.blockedServices)||[]);
+        const qs=((res&&res.rates)||[]).filter(q=>!_apHs.has(canonSvc(q.label))&&!_apBs.has(canonSvc(q.label))).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:senderZip,toZip:o.zip,weight:wt})}));
         picked=pickRate(qs,pref);
       }catch(e){}
       if(!picked){rows.push({name:o.name,orderId:o.id,ok:false,error:"No rate returned"});setApResults({rows:[...rows],heldN});continue;}
@@ -8408,7 +8426,8 @@ function FieldLists({settings,setSettings}){
     <Ed k="po" title="PO # values" ph="e.g. PO-GILLETTE-…" extra={<Opts req="poRequired" lock="poLocked"/>}/>
   </div>);
 }
-function Customize({settings,setSettings,deployMode}){
+function Customize({settings,setSettings,deployMode,blockedKeys}){
+  const locked=blockedKeys||new Set();
   const c=cz(settings);
   const set=(k,v)=>setSettings(p=>({...p,custom:{...(p.custom||{}),[k]:v}}));
   const Tog=({k,label,hint,invert})=>(<label className="flex items-start gap-2 text-sm text-stone-700 cursor-pointer">
@@ -8418,9 +8437,21 @@ function Customize({settings,setSettings,deployMode}){
     <select value={c[k]} onChange={e=>set(k,e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]">{opts.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>);
   const Num=({k,label,hint,step,suffix})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span>
     <span className="flex items-center gap-1"><input type="number" min="0" step={step||1} value={c[k]||""} placeholder="0" onChange={e=>set(k,+e.target.value||0)} className="w-20 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF] text-right"/>{suffix&&<span className="text-xs text-stone-400">{suffix}</span>}</span></label>);
-  const SVC=[["ground","FedEx Ground®"],["home","FedEx Home Delivery®"],["ground_economy","FedEx Ground Economy®"],["express_saver","FedEx Express Saver®"],["2day","FedEx 2Day®"],["2day_am","FedEx 2Day® A.M."],["standard_overnight","FedEx Standard Overnight®"],["priority_overnight","FedEx Priority Overnight®"],["first_overnight","FedEx First Overnight®"],["intl_priority","FedEx International Priority®"],["intl_economy","FedEx International Economy®"],["intl_connect_plus","FedEx International Connect Plus®"]];
+  const SVC=[
+    ["ground","FedEx Ground®"],["home","FedEx Home Delivery®"],["ground_economy","FedEx Ground Economy®"],
+    ["express_saver","FedEx Express Saver®"],["2day","FedEx 2Day®"],["2day_am","FedEx 2Day® A.M."],
+    ["standard_overnight","FedEx Standard Overnight®"],["priority_overnight","FedEx Priority Overnight®"],["first_overnight","FedEx First Overnight®"],
+    ["intl_ground_ca","FedEx International Ground® (Canada)"],["intl_connect_plus","FedEx International Connect Plus®"],
+    ["intl_economy","FedEx International Economy®"],["intl_priority","FedEx International Priority®"],
+    ["intl_priority_express","FedEx International Priority® Express"],["intl_first","FedEx International First®"],
+    ["first_overnight_freight","FedEx First Overnight® Freight"],["1day_freight","FedEx 1Day® Freight"],["2day_freight","FedEx 2Day® Freight"],["3day_freight","FedEx 3Day® Freight"],
+    ["intl_priority_freight","FedEx International Priority® Freight"],["intl_economy_freight","FedEx International Economy® Freight"],
+    // One Rate — flat-price variants FedEx quotes live once a FedEx box is picked; toggle/rename independently of the base service above.
+    ["or_first_overnight","FedEx First Overnight® OneRate"],["or_priority_overnight","FedEx Priority Overnight® OneRate"],["or_standard_overnight","FedEx Standard Overnight® OneRate"],
+    ["or_2day","FedEx 2Day® OneRate"],["or_express_saver","FedEx Express Saver® OneRate"],
+  ];
   const svcHidden=new Set(c.hiddenServices||[]);
-  const togSvc=(k)=>{const nx=new Set(svcHidden); nx.has(k)?nx.delete(k):nx.add(k); set("hiddenServices",[...nx]);};
+  const togSvc=(k)=>{ if(locked.has(k))return; const nx=new Set(svcHidden); nx.has(k)?nx.delete(k):nx.add(k); set("hiddenServices",[...nx]);};
   const setAlias=(k,v)=>set("aliases",{...(c.aliases||{}),[k]:v});
   const tabChoices=ALL_TABS.filter(x=>x[0]!=="admin");
   const hiddenTabs=new Set(c.hiddenTabs||[]);
@@ -8503,12 +8534,12 @@ function Customize({settings,setSettings,deployMode}){
         <Num k="priceWarn" label="Price alert" hint="Flag any rate above this amount. 0 = off" step="1" suffix="$"/>
       </div>
       <div className="border-t border-stone-100 mt-3 pt-3">
-        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Services — hide ones you never use, rename the rest</div>
+        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Services — hide ones you never use, rename the rest{locked.size>0&&<span className="normal-case tracking-normal text-stone-400"> · greyed-out ones are turned off by your admin</span>}</div>
         <div className="space-y-1.5">
-          {SVC.map(([k,l])=>(<div key={k} className="flex items-center gap-3">
-            <label className="flex items-center gap-1.5 text-sm text-stone-700 w-56 shrink-0 cursor-pointer"><input type="checkbox" checked={!svcHidden.has(k)} onChange={()=>togSvc(k)} className="accent-[#0086E0]"/><span className={svcHidden.has(k)?"line-through text-stone-300":""}>{l}</span></label>
-            <input value={(c.aliases||{})[k]||""} onChange={e=>setAlias(k,e.target.value)} placeholder={"rename — e.g. "+(k==="ground"?"Standard":k==="2day"?"Fast":"…")} disabled={svcHidden.has(k)} className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 disabled:opacity-40"/>
-          </div>))}
+          {SVC.map(([k,l])=>{const lk=locked.has(k);const off=svcHidden.has(k)||lk;return (<div key={k} className="flex items-center gap-3">
+            <label className={`flex items-center gap-1.5 text-sm w-56 shrink-0 ${lk?"text-stone-300 cursor-not-allowed":"text-stone-700 cursor-pointer"}`}><input type="checkbox" checked={!off} disabled={lk} onChange={()=>togSvc(k)} className="accent-[#0086E0]"/><span className={off?"line-through text-stone-300":""}>{l}</span>{lk&&<span className="text-[10px] text-stone-400 normal-case">locked</span>}</label>
+            <input value={(c.aliases||{})[k]||""} onChange={e=>setAlias(k,e.target.value)} placeholder={"rename — e.g. "+(k==="ground"?"Standard":k==="2day"?"Fast":"…")} disabled={off} className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 disabled:opacity-40"/>
+          </div>);})}
         </div>
         <div className="text-[11px] text-stone-400 mt-2">Renames are display-only on the Ship screen — labels and carrier paperwork keep the real FedEx name.</div>
       </div>

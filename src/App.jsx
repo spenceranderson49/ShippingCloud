@@ -64,10 +64,13 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v232";
+const BUILD_TAG="addr-v233";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
+/* England-connected mirror sites (england.freightwireship.com) set VITE_CARRIER_BACKEND=england
+   in Netlify — that surfaces the England credential panel + cache tools that FedEx sites hide. */
+const SHOW_ENGLAND=(()=>{ try{ return String((import.meta.env&&import.meta.env.VITE_CARRIER_BACKEND)||"").toLowerCase()==="england"; }catch(e){ return false; } })();
 const BRAND=(()=>{ let k="shippingcloud"; try{ k=(import.meta.env&&import.meta.env.VITE_BRAND)||"shippingcloud"; }catch(e){}
   if(k==="admin")return {key:"admin",fw:false,admin:true,name:"ShippingCloud HQ",short:"HQ",accent:"#0086E0",accent2:"#0072BE"};
   return k==="freightwire"
@@ -3754,6 +3757,10 @@ function AppInner(){
   useEffect(()=>{ if(!isSandbox)return; try{ if((orders||[]).length===0&&(shipments||[]).length===0){ const d=makeDemoData(); setOrders(d.orders); setShipments(d.shipments); setSettings(st=>({...st,...d.settings,sender:st.sender||d.settings.sender})); } }catch(e){} },[isSandbox]);
   useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};setAudit(a=>[{ts:new Date().toLocaleString(),user:(currentUser&&currentUser.email)||"",action:d.action||"",detail:d.detail||""},...a].slice(0,200));};window.addEventListener("sc-audit",h);return()=>window.removeEventListener("sc-audit",h);},[currentUser]);
   const [pendingShips,setPendingShips]=usePersist("pendingShips",[]);
+  /* Booked label PDFs, keyed by shipment id, capped at the 60 newest — powers Shipments → Reprint.
+     Populated by an "sc-label" window event fired wherever a label lands. */
+  const [labelStore,setLabelStore]=usePersist("labels",{});
+  useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};if(!d.id||!d.pdf)return;setLabelStore(m=>{const n={...m,[d.id]:{pdf:d.pdf,ts:Date.now()}};const ids=Object.keys(n).sort((a,b)=>(n[b].ts||0)-(n[a].ts||0));ids.slice(60).forEach(k=>delete n[k]);return n;});};window.addEventListener("sc-label",h);return()=>window.removeEventListener("sc-label",h);},[]);
   const [appLabel,setAppLabel]=useState(null);
   const [pickups,setPickups]=usePersist("pickups",[]);
   const [returns,setReturns]=usePersist("returns",SEED_RETURNS);
@@ -4112,7 +4119,7 @@ function AppInner(){
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
           {tab==="orders"&&<Orders orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} setSettings={setSettings} onShipped={onShipped}/>}
           {tab==="batch"&&<Batch orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
-          {tab==="shipments"&&<Shipments shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels} settings={settings}/>}
+          {tab==="shipments"&&<Shipments labels={labelStore} shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels} settings={settings}/>}
           {hkHelp&&<div onClick={()=>setHkHelp(false)} className="fixed bottom-4 right-4 z-50 bg-stone-900 text-white rounded-xl shadow-lg p-4 text-xs space-y-1.5 cursor-pointer">
             <div className="font-semibold text-sm mb-1">Keyboard shortcuts</div>
             <div><span className="font-mono bg-stone-700 rounded px-1">g</span> then <span className="font-mono bg-stone-700 rounded px-1">s</span> Ship · <span className="font-mono bg-stone-700 rounded px-1">o</span> Orders · <span className="font-mono bg-stone-700 rounded px-1">h</span> Shipments</div>
@@ -4382,7 +4389,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       pieces:pieces.map(p=>({weight:pw(p),length:p.L,width:p.W,height:p.H,declaredValue:intl?(p.value||null):null}))};
     const res=await shipCall({action:"ship",account:acctOf(eng),order});
     if(!res||!res.ok){setShipStatus({state:"error",key:q.key,msg:(res&&res.error)||"Booking failed"});setBought(null);return;}
-    const done=(st)=>{ const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){setLabelPreview({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec});} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setBookedLock({tracking:st.tracking}); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
+    const done=(st)=>{ const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} setLabelPreview({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec});} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setBookedLock({tracking:st.tracking}); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
     if(res.booked){done(res);return;}
     setShipStatus({state:"pending",key:q.key,orderId:res.orderId});
     pollLabel(eng,res.orderId,done).then(r=>{ if(r&&r.timedOut){ onPending&&onPending({orderId:res.orderId,rec:buildRec(q,carrier,{}),service:q.label,carrier,orderRef:selectedOrder}); setShipStatus({state:"pending_timeout",key:q.key});setBought(null);} });
@@ -4651,7 +4658,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {ready&&<div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
           {rateSrc.loading?<><Loader2 className="w-3.5 h-3.5 animate-spin"/>Fetching live rates…</>
           :rateSrc.live?<><Wifi className="w-3.5 h-3.5"/>Live rates from your England account</>
-          :<><Calculator className="w-3.5 h-3.5"/>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""} — connect your England account in Settings → Carrier accounts for live pricing</>}
+          :<><Calculator className="w-3.5 h-3.5"/>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""} — turn on live rates in Settings → Carrier accounts to price with your real account</>}
         </div>}
         {ready&&!rateSrc.live&&!rateSrc.loading&&rateSrc.diag&&<div className="text-[11px] text-stone-400 -mt-1 px-1">
           Tried England on your <b>{rateSrc.diag.src==="customer"?"customer's":"main"}</b> account · from ZIP {rateSrc.diag.fromZip} · customer ID {rateSrc.diag.cust} · key {rateSrc.diag.key} · {rateSrc.diag.enabled?"live toggle ON":"live toggle OFF"}{!rateSrc.diag.hasKey?" · no API key found":""}{!rateSrc.diag.hasCust?" · no customer ID found":""}{rateSrc.diag.fromZip==="(none)"?" — no origin ZIP: set your sender ZIP or the customer's origin.":""}{rateSrc.error&&/401|invalid/i.test(rateSrc.error)?" — England rejected this key/ID pair. Re-enter it in Settings → Carrier accounts and Test again.":""}
@@ -4737,23 +4744,33 @@ const addBizDays=(n)=>{const d=new Date();let added=0;let guard=0;while(added<n&
 const fmtDeliv=(d)=>d.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"});
 function LabelPreviewModal({data,onClose,settings}){
   const [url,setUrl]=useState(null);
-  const frameRef=React.useRef(null);
+  const [pages,setPages]=useState(null);      // {imgs,wIn,hIn} from pdf.js
+  const [pgErr,setPgErr]=useState(null);
   const printed=React.useRef(false);
   const st=settings||{};
   const docCtx=recToDocCtx(data.rec||{...data,recipient:data.recipient,service:data.service,tracking:data.tracking,carrier:data.carrier});
   const rcpLogo=(st.companyLogo)||"";
   const rcCfg=st.receipt, dtCfg=st.docTab;
   useEffect(()=>{
-    try{
-      const bin=atob(data.pdf);const bytes=new Uint8Array(bin.length);
-      for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
-      const blob=new Blob([bytes],{type:"application/pdf"});
-      const u=URL.createObjectURL(blob);setUrl(u);
-      const t=setTimeout(()=>{ if(!printed.current){ printed.current=true; printLabelPdf(data.pdf); } },400);   // print preview pops the moment the label lands
-      return ()=>{clearTimeout(t);URL.revokeObjectURL(u);};
-    }catch(e){}
+    let dead=false;
+    try{ const u=pdfBlobUrl(data.pdf); setUrl(u); setTimeout(()=>{},0); }catch(e){ setPgErr("This label PDF couldn't be decoded."); }
+    (async()=>{
+      try{
+        const r=await pdfToImages(data.pdf,3);
+        if(dead)return;
+        if(!r.imgs.length)throw new Error("no pages");
+        setPages(r);
+        if(!printed.current&&data.autoPrint!==false){ printed.current=true; printImagePages(r.imgs,r.wIn,r.hIn); }   // print preview pops from the rendered pages
+      }catch(e){
+        if(dead)return;
+        setPgErr("Preview renderer unavailable — showing the raw PDF below."+((e&&e.message)?"":""));
+        if(!printed.current&&data.autoPrint!==false){ printed.current=true; try{ const u2=pdfBlobUrl(data.pdf); printPdfUrl(u2); setTimeout(()=>URL.revokeObjectURL(u2),180000); }catch(e2){} }
+      }
+    })();
+    return ()=>{dead=true;};
   },[data.pdf]);
-  const doPrint=()=>{ printLabelPdf(data.pdf); };
+  useEffect(()=>()=>{ if(url)try{URL.revokeObjectURL(url);}catch(e){} },[url]);
+  const doPrint=()=>{ if(pages&&pages.imgs.length){printImagePages(pages.imgs,pages.wIn,pages.hIn);} else { printLabelPdf(data.pdf); } };
   const download=()=>{ if(!url)return; const a=document.createElement("a");a.href=url;a.download=`label-${data.tracking||"shipment"}.pdf`;a.click(); };
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
@@ -4762,8 +4779,17 @@ function LabelPreviewModal({data,onClose,settings}){
           <div><div className="font-semibold text-stone-800 flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-600"/>Label booked</div><div className="text-[11px] text-stone-400">{data.service}{data.tracking?` · ${data.tracking}`:""}</div></div>
           <button onClick={onClose} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button>
         </div>
-        <div className="flex-1 min-h-0 bg-stone-100">
-          {url?<iframe ref={frameRef} src={url} title="Shipping label" className="w-full h-full" style={{minHeight:"55vh"}} />:<div className="flex items-center justify-center h-full text-stone-400" style={{minHeight:"55vh"}}><Loader2 className="w-5 h-5 animate-spin"/></div>}
+        <div className="flex-1 min-h-0 bg-stone-100 overflow-y-auto p-4" style={{minHeight:"55vh"}}>
+          {pages&&pages.imgs.length?(
+            <div className="space-y-3 flex flex-col items-center">{pages.imgs.map((u,i)=><img key={i} src={u} alt={"Label page "+(i+1)} className="bg-white shadow border border-stone-200 max-w-full" style={{width:"min(100%, 380px)"}}/>)}</div>
+          ):pgErr?(
+            <div className="space-y-2 h-full flex flex-col">
+              <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">{pgErr}</div>
+              {url&&<iframe src={url} title="Shipping label" className="w-full flex-1 bg-white" style={{minHeight:"45vh"}}/>}
+            </div>
+          ):(
+            <div className="flex items-center justify-center h-full text-stone-400 gap-2 text-sm" style={{minHeight:"45vh"}}><Loader2 className="w-4 h-4 animate-spin"/>Rendering label…</div>
+          )}
         </div>
         <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-stone-200">
           <button onClick={download} className="text-sm px-3 py-2 rounded border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"><Download className="w-4 h-4"/>Download</button>
@@ -5093,7 +5119,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
     if(!res||!res.ok){ setStatus({state:"error",msg:(res&&res.error)||"Booking failed"}); setBought(null); return; }
     const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:qq.label,recipient:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings?.sender||{})},fromZip,toZip:o.zip,weight:+weight,pieces:[{weight:+weight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference:o.name,bookNumber:res.bookNumber};
     onShipped(rec,o.id);
-    if(res.labelPdfBase64) setLabelPreview({pdf:res.labelPdfBase64,tracking:res.tracking,service:qq.label,carrier,rec});
+    if(res.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:rec.id,pdf:res.labelPdfBase64}}));}catch(e){} setLabelPreview({pdf:res.labelPdfBase64,tracking:res.tracking,service:qq.label,carrier,rec});}
     setStatus({state:"booked",msg:"Label created — saved to Shipments."});fireConfetti();
   };
   const Info=({k,v})=>(<div className="min-w-0"><div className="text-[10px] uppercase tracking-widest text-stone-400">{k}</div><div className="text-sm text-stone-800 truncate">{v||"—"}</div></div>);
@@ -5275,7 +5301,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
     if(!res||!res.ok){ setStatus({state:"error",msg:(res&&res.error)||"Booking failed"}); setBought(null); return; }
     const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,...baseRec,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,bookNumber:res.bookNumber};
     onShipped(rec,o.id);
-    if(res.labelPdfBase64) setLabelPreview({pdf:res.labelPdfBase64,tracking:res.tracking,service:qq.label,carrier,rec});
+    if(res.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:rec.id,pdf:res.labelPdfBase64}}));}catch(e){} setLabelPreview({pdf:res.labelPdfBase64,tracking:res.tracking,service:qq.label,carrier,rec});}
     setStatus({state:"booked",msg:"Label created — saved to Shipments."});fireConfetti();
   };
   const items=(o.lineItems&&o.lineItems.length)?o.lineItems:String(o.items||"").split(",").map(s=>s.trim()).filter(Boolean).map((s,i)=>{const m=s.match(/^(\d+)\s*[×x]\s*(.+)$/);return {id:"i"+i,title:m?m[2]:s,quantity:m?+m[1]:1,price:"",sku:""};});
@@ -5440,7 +5466,9 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   );
 }
 
-function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,settings}){
+function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,settings,labels={}}){
+  const [reprintLp,setReprintLp]=useState(null);
+  const doReprint=(sh)=>{ const e=labels&&labels[sh.id]; if(e&&e.pdf){ setReprintLp({pdf:e.pdf,tracking:sh.tracking,service:sh.service,carrier:sh.carrier,rec:sh}); } else { window.alert("No stored label for this shipment on this account (labels are kept for the 60 most recent bookings). Use Edit & reship to book a fresh one."); } };
   const custom=cz(settings||{});
   const stuck=(sh)=>{ if(!custom.stuckDays)return false; if(!/in transit/i.test(sh.status||""))return false; const t=new Date(sh.date).getTime(); return t&&(Date.now()-t)>custom.stuckDays*864e5; };
   const [open,setOpen]=useState(null);
@@ -5502,7 +5530,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
               </div>
               <div className="flex flex-wrap gap-2">
                 <button onClick={()=>reship(s)} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-800 flex items-center gap-1.5"><RotateCcw className="w-3.5 h-3.5"/>Edit &amp; reship</button>
-                <button className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 flex items-center gap-1.5"><Printer className="w-3.5 h-3.5"/>Reprint</button>
+                <button onClick={(e)=>{e.stopPropagation();doReprint(s);}} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 flex items-center gap-1.5"><Printer className="w-3.5 h-3.5"/>Reprint</button>
                 {s.status!=="Voided"&&<button onClick={()=>voidS(s.id)} className="text-sm text-rose-600 hover:bg-rose-50 rounded-lg px-3 py-1.5 font-medium flex items-center gap-1.5"><X className="w-3.5 h-3.5"/>Void label</button>}
               </div>
             </div>
@@ -5510,6 +5538,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
         </div>
       ))}
       </div>
+      {reprintLp&&<LabelPreviewModal data={reprintLp} onClose={()=>setReprintLp(null)} settings={settings}/>}
     </div>
   );
 }
@@ -8457,28 +8486,28 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
       <p className="text-sm text-stone-500 mb-3">Enter your England API credentials to pull your real negotiated rates on the Ship tab and Quick quote. Until this is on, the app shows estimates.</p>
       <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
         <label className="flex items-center justify-between gap-3">
-          <span className="text-sm font-medium flex items-center gap-2">Use live FedEx rates {eng.enabled&&<Badge tone="green">on</Badge>}</span>
+          <span className="text-sm font-medium flex items-center gap-2">Use live {SHOW_ENGLAND?"England":"FedEx"} rates {eng.enabled&&<Badge tone="green">on</Badge>}</span>
           <button onClick={()=>setEng({enabled:!eng.enabled})}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${eng.enabled?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full"/></span></button>
         </label>
         <div className="grid sm:grid-cols-2 gap-3">
-          <Field label="England API key"><Input type="password" value={eng.apiKey} onChange={e=>setEng({apiKey:e.target.value})} placeholder="paste your key"/></Field>
+          {SHOW_ENGLAND&&<><Field label="England API key"><Input type="password" value={eng.apiKey} onChange={e=>setEng({apiKey:e.target.value})} placeholder="paste your key"/></Field>
           <Field label="England customer ID"><Input value={eng.customerId} onChange={e=>setEng({customerId:e.target.value})} placeholder="e.g. 20602362"/></Field>
           <Field label="Integration ID (for printing labels)"><Input value={eng.integrationId||""} onChange={e=>setEng({integrationId:e.target.value})} placeholder="e.g. 3214"/></Field>
           <Field label="Provider account ID (for booking)"><Input value={eng.providerAccountId||""} onChange={e=>setEng({providerAccountId:e.target.value})} placeholder="auto-filled by Check booking access"/></Field>
-          <Field label="API base URL"><Input value={eng.base} onChange={e=>setEng({base:e.target.value})}/></Field>
+          <Field label="API base URL"><Input value={eng.base} onChange={e=>setEng({base:e.target.value})}/></Field></>}
           <Field label="FedEx account # (optional override)"><Input value={eng.fedexAccount||""} onChange={e=>setEng({fedexAccount:e.target.value.replace(/[^0-9]/g,"")})} placeholder="blank = platform default"/></Field>
         </div>
-        <p className="text-[11px] text-stone-400 -mt-1">The Integration ID enables real label printing. In Webship: gear/settings → eCommerce Integrations → Add → Rest API → Save New Integration → copy the ID. Turn on auto-ship for that integration so labels book automatically. The Provider account ID tells England which carrier account to ship on — click <b>Check booking access</b> to auto-fill it, or paste it manually if England hasn't opened that endpoint on your key.</p>
+        {SHOW_ENGLAND&&<p className="text-[11px] text-stone-400 -mt-1">The Integration ID enables real label printing. In Webship: gear/settings → eCommerce Integrations → Add → Rest API → Save New Integration → copy the ID. Turn on auto-ship for that integration so labels book automatically. The Provider account ID tells England which carrier account to ship on — click <b>Check booking access</b> to auto-fill it, or paste it manually if England hasn't opened that endpoint on your key.</p>}
         <div className="flex flex-wrap items-center gap-3">
           <button onClick={runTest} disabled={false} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{test&&test.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Testing…</>:<><ShieldCheck className="w-4 h-4"/>Test connection</>}</button>
           <button onClick={runDiag} disabled={false} className="text-sm border border-stone-300 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5">{diag&&diag.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Checking…</>:<><Truck className="w-4 h-4"/>Check booking access</>}</button>
-          <button onClick={runFlush} disabled={flush&&flush.loading} className="text-sm border border-stone-300 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5" title="Clear saved quotes so every rate pulls fresh from England — use after changing pricing in England's backend">{flush&&flush.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Refreshing…</>:<><RefreshCw className="w-4 h-4"/>Refresh rates</>}</button>
+          {SHOW_ENGLAND&&<button onClick={runFlush} disabled={flush&&flush.loading} className="text-sm border border-stone-300 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5" title="Clear saved quotes so every rate pulls fresh from England — use after changing pricing in England's backend">{flush&&flush.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Refreshing…</>:<><RefreshCw className="w-4 h-4"/>Refresh rates</>}</button>}
           {test&&!test.loading&&<span className={`text-xs flex items-center gap-1.5 ${test.ok?"text-emerald-700":"text-[#0086E0]"}`}>{test.ok?<CheckCircle2 className="w-4 h-4"/>:<AlertTriangle className="w-4 h-4"/>}{test.msg}</span>}
         </div>
         {flush&&!flush.loading&&<div className={`text-xs rounded px-3 py-2 flex items-start gap-1.5 ${flush.ok?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-amber-50 text-amber-800 border border-amber-200"}`}>{flush.ok?<CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5"/>:<AlertTriangle className="w-4 h-4 shrink-0 mt-0.5"/>}<span>{flush.msg}</span></div>}
         {diag&&!diag.loading&&<div className={`text-xs rounded px-3 py-2 flex items-start gap-1.5 ${diag.ok?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-amber-50 text-amber-800 border border-amber-200"}`}>{diag.ok?<CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5"/>:<AlertTriangle className="w-4 h-4 shrink-0 mt-0.5"/>}<span>{diag.msg}</span></div>}
         {test&&!test.loading&&!test.ok&&test.detail&&<div className="text-[11px] text-stone-500 font-mono bg-stone-100 border border-stone-200 rounded p-2 break-words whitespace-pre-wrap">England said: {typeof test.detail==="string"?test.detail:JSON.stringify(test.detail)}</div>}
-        <p className="text-[11px] text-stone-400">For production, store the API key as a Netlify env var (<span className="font-mono">ENGLAND_API_KEY</span>, <span className="font-mono">ENGLAND_CUSTOMER_ID</span>) instead of here, so it never ships to the browser. England authenticates with the API key + customer ID; if you only have the FedEx account number, try it as the customer ID or confirm the key with your England rep.</p>
+        {SHOW_ENGLAND&&<p className="text-[11px] text-stone-400">For production, store the API key as a Netlify env var (<span className="font-mono">ENGLAND_API_KEY</span>, <span className="font-mono">ENGLAND_CUSTOMER_ID</span>) instead of here, so it never ships to the browser. England authenticates with the API key + customer ID; if you only have the FedEx account number, try it as the customer ID or confirm the key with your England rep.</p>}
       </div>
     </div>
     {byoCarrier&&<>

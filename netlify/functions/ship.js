@@ -157,7 +157,9 @@ exports.handler = async (event) => {
     return it;
   });
 
-  let payment = { paymentType: "SENDER", payor: { responsibleParty: { accountNumber: { value: acct } } } };
+  /* For SENDER, FedEx derives the payor from the shipment's root accountNumber —
+     including an explicit payor invites "Account Number Mismatch" rejections, so omit it. */
+  let payment = { paymentType: "SENDER" };
   if (o.billingParty === "third_party" && o.billingAccount) payment = { paymentType: "THIRD_PARTY", payor: { responsibleParty: { accountNumber: { value: String(o.billingAccount).replace(/\D/g, "") } } } };
   else if (o.billingParty === "receiver" && o.billingAccount) payment = { paymentType: "RECIPIENT", payor: { responsibleParty: { accountNumber: { value: String(o.billingAccount).replace(/\D/g, "") } } } };
 
@@ -182,7 +184,7 @@ exports.handler = async (event) => {
   if (intl) {
     const customsVal = Math.max(1, Math.round((declaredTotal || 1) * 100) / 100);
     requestedShipment.customsClearanceDetail = {
-      dutiesPayment: { paymentType: "SENDER", payor: { responsibleParty: { accountNumber: { value: acct } } } },
+      dutiesPayment: { paymentType: "SENDER" },
       isDocumentOnly: false,
       commodities: [{
         description: String(o.contentDescription || "Merchandise").slice(0, 450),
@@ -208,7 +210,10 @@ exports.handler = async (event) => {
     clearTimeout(t);
     const j = await r.json().catch(() => ({}));
     if (!r.ok) {
-      const msg = (j.errors && j.errors[0] && (j.errors[0].message || j.errors[0].code)) || ("FedEx ship error " + r.status);
+      let msg = (j.errors && j.errors[0] && (j.errors[0].message || j.errors[0].code)) || ("FedEx ship error " + r.status);
+      if (/mismatch|not\s*authorized|account.*(invalid|not\s*found)/i.test(msg)) {
+        msg = "FedEx doesn't recognize account #" + acct + " on your API credentials — it must be added to your FedEx Developer Portal organization (Manage Organization \u2192 Shipping accounts, using the account's billing address) and attached to your project. FedEx said: " + msg;
+      }
       return respond(200, { ok: false, error: msg, _status: r.status });
     }
     const ts = j.output && j.output.transactionShipments && j.output.transactionShipments[0];

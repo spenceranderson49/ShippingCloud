@@ -53,7 +53,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v208fw";
+const BUILD_TAG="addr-v209fw";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1864,17 +1864,6 @@ function Landing({onAuth}){
               <div className={`font-mono text-lg ${i===0?"text-[#0086E0] font-bold":"text-stone-600"}`}>{r[2]}</div>
             </div>))}
         </div>
-      </div>
-    </div>
-    {/* trust / stats strip */}
-    <div className="max-w-6xl mx-auto px-5 pb-14">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-stone-200/70 rounded-2xl overflow-hidden border border-stone-200/70">
-        {[["10–15%","Average savings vs UPS"],["FedEx + DHL","Enterprise-tier rates"],["Same day","Rate comparison turnaround"],["Real people","Support that answers"]].map((x,i)=>(
-          <div key={i} className="bg-[#faf9f7] px-6 py-7 text-center">
-            <div className="text-2xl sm:text-[26px] font-bold text-[#0086E0] leading-none">{x[0]}</div>
-            <div className="mt-2 text-[13px] text-stone-500 leading-snug">{x[1]}</div>
-          </div>
-        ))}
       </div>
     </div>
     {/* features */}

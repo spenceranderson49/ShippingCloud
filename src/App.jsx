@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v246";
+const BUILD_TAG="addr-v248";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -279,7 +279,7 @@ async function pdfToImages(base64,scale){
   try{doc.destroy();}catch(e){}
   return {imgs,wIn:wPt/72,hIn:hPt/72};
 }
-function printImagePages(imgs,wIn,hIn){
+function printImagePages(imgs,wIn,hIn,onDone){
   /* The one print path a browser can't silently swallow: window.print() on the page
      itself (identical to Ctrl+P), with a print-only stylesheet that hides the whole
      app and shows only the label pages, sized exactly to the label stock. */
@@ -296,9 +296,10 @@ function printImagePages(imgs,wIn,hIn){
     const cleanup=()=>{ try{box.remove();st.remove();}catch(e){} window.removeEventListener("afterprint",cleanup); };
     window.addEventListener("afterprint",cleanup);
     setTimeout(cleanup,120000);
-    const go=()=>{ try{window.focus();window.print();}catch(e){cleanup();} };
+    let fired=false;
+    const go=()=>{ if(fired)return; fired=true; try{window.focus();window.print();}catch(e){cleanup();} if(typeof onDone==="function")try{onDone();}catch(e){} };
     const pending=imgs.length&&!box.firstChild.complete;
-    if(pending){ box.firstChild.onload=()=>setTimeout(go,80); setTimeout(go,700); }
+    if(pending){ box.firstChild.onload=()=>setTimeout(go,80); setTimeout(go,700); }   // whichever fires first wins — go() is now one-shot
     else setTimeout(go,60);
   }catch(e){}
 }
@@ -1496,7 +1497,7 @@ const CUSTOM_DEFAULTS={
   slipThanks:"",slipFooter:"",
   density:"comfortable",stuckDays:0,
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
-  logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],theme:"light",accent:"",
+  logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,skipBookedSummary:false,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],theme:"light",accent:"",
   refRequired:false,invRequired:false,poRequired:false,refLocked:false,invLocked:false,poLocked:false,
   confetti:"page",seasonal:true,loginBg:"",appBg:"",headerBg:"",pageBg:"",navBg:"",
 };
@@ -1937,7 +1938,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       <Field label="Email"><Input value={c.email||""} onChange={e=>upClient({email:e.target.value})}/></Field>
       <Field label="Phone"><Input value={c.phone||""} onChange={e=>upClient({phone:e.target.value})}/></Field>
       <Field label="Origin ZIP (ships from)"><Input value={c.origin||""} onChange={e=>upClient({origin:e.target.value})}/></Field>
-      <Field label="Account-wide markup %"><Input type="number" value={c.markup==null?"":c.markup} onChange={e=>upClient({markup:+e.target.value||0})}/></Field>
+      <div className="text-[11px] text-stone-500 bg-stone-50 border border-stone-200 rounded px-3 py-2 sm:col-span-2">Markup is set on the <b>Rates</b> tab \u2014 that\u2019s the only place pricing is edited, so it can\u2019t drift out of sync.</div>
       {(()=>{const g=(rules&&rules.global)||{};const on=g.pct!=null&&g.pct!==""&&!isNaN(+g.pct);return <div className={`text-[11px] rounded px-3 py-2 border ${on?"bg-emerald-50 border-emerald-200 text-emerald-800":"bg-stone-50 border-stone-200 text-stone-500"}`}>Global cost-plus markup: {on?<b>cost + {+g.pct}%{g.min?` (min $${(+g.min).toFixed(2)})`:""}</b>:"off"} — it\u2019s the same account-wide markup editable at the top of this customer\u2019s <b>Rates</b> tab. Per-service rules here override it; this customer's flat markup applies only when global is off.</div>;})()}
       <Field label="Status"><Select value={c.status||"active"} onChange={e=>upClient({status:e.target.value})}><option value="active">active</option><option value="inactive">inactive</option></Select></Field>
       <Field label="Plan"><Input value={c.plan||""} onChange={e=>upClient({plan:e.target.value})}/></Field>
@@ -1990,11 +1991,23 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
     </div>}
 
     {tab==="rates"&&<div className="space-y-3">
-      {/* Account-wide markup — THIS customer's blanket number over every returned rate & service */}
+      {lg.length===0&&<div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">This account has <b>0 logins</b> — nobody can generate a real quote as {c.name} yet, so changes here won\u2019t show up in any quote until a user is added under the <b>Logins</b> tab (or you view them via admin impersonation). The Live check strip below still reflects the math correctly.</div>}
+      {/* Platform default — applies to every account with nothing set below (accounts with no login, no assigned customer, etc). Editable from any customer\u2019s Rates tab; it\u2019s one shared number. */}
+      <div className="border border-stone-200 rounded-lg bg-white p-3 flex flex-wrap items-end gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-stone-800 flex items-center gap-2">Platform default markup — every account {(rules.global&&rules.global.pct!=null&&rules.global.pct!==""&&!isNaN(+rules.global.pct))?<Badge tone="green">on</Badge>:<Badge>off</Badge>}</div>
+          <div className="text-[11px] text-stone-500 mt-0.5 max-w-md">Applies platform-wide over the raw FedEx/England cost the carrier returns. Fills in for any account with no markup of its own set below \u2014 including logins with no customer assigned. A brand-new account with nothing set anywhere sells at <b>exactly the raw carrier cost</b>, no markup.</div>
+        </div>
+        <span className="flex-1"/>
+        <Field label="Markup %"><Input type="number" className="w-24" placeholder="e.g. 20" value={(rules.global&&rules.global.pct)??""} onChange={e=>upRules({global:{...(rules.global||{}),pct:e.target.value}})}/></Field>
+        <Field label="Min $ / label"><Input type="number" className="w-24" placeholder="—" value={(rules.global&&rules.global.min)??""} onChange={e=>upRules({global:{...(rules.global||{}),min:e.target.value}})}/></Field>
+        {rules.global&&rules.global.pct!==""&&rules.global.pct!=null&&<button onClick={()=>{if(window.confirm("Clear the platform default markup? Any account with nothing set of its own will sell at raw cost."))upRules({global:{}});}} className="text-xs text-rose-500 bg-stone-100 rounded-lg px-2.5 py-1.5 hover:bg-rose-50">Clear</button>}
+      </div>
+      {/* Account-wide markup — THIS customer's blanket number, over the England/FedEx cost, beats the platform default */}
       <div className="border border-stone-200 rounded-lg bg-white p-3 flex flex-wrap items-end gap-3">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-stone-800 flex items-center gap-2">Account-wide markup — {c.name} only {(c.markup!=null&&c.markup!==""&&+c.markup!==0)||(c.markupMin!=null&&c.markupMin!==""&&+c.markupMin>0)?<Badge tone="green">on</Badge>:<Badge>off</Badge>}</div>
-          <div className="text-[11px] text-stone-500 mt-0.5 max-w-md">Marks up every rate, service, and accessorial returned for this account. Per-service rules below override it for their service; the platform default in Admin → Rate database fills in only when this is empty.</div>
+          <div className="text-[11px] text-stone-500 mt-0.5 max-w-md">Marks up the England/FedEx cost for every rate, service, and accessorial returned for this account only. Beats the platform default above; per-service rules below beat this. Leave blank for raw cost.</div>
         </div>
         <span className="flex-1"/>
         <Field label="Markup %"><Input type="number" className="w-24" placeholder="e.g. 20" value={c.markup==null?"":c.markup} onChange={e=>upClient({markup:e.target.value===""?"":+e.target.value})}/></Field>
@@ -2002,9 +2015,9 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         {((c.markup!=null&&c.markup!==""&&+c.markup!==0)||(c.markupMin!=null&&c.markupMin!==""))&&<button onClick={()=>upClient({markup:"",markupMin:""})} className="text-xs text-rose-500 bg-stone-100 rounded-lg px-2.5 py-1.5 hover:bg-rose-50">Clear</button>}
       </div>
       <div className="text-[11px] text-stone-600 bg-[#F0F9FF] border border-[#BAE6FD] rounded px-3 py-2">
-        <b>Live check</b> — a $10.00 cost sells right now for:&nbsp;
+        <b>Live check</b> — a $10.00 raw cost sells right now for:&nbsp;
         {["FedEx Ground","FedEx Home Delivery","FedEx 2Day","FedEx Priority Overnight"].map((l,i)=><span key={l}>{i>0&&" · "}{l.replace("FedEx ","")} <b className="font-mono">{money(rateSellFor(10,l,{rules,client:c}))}</b></span>)}
-        &nbsp;— same engine that prices every quote; type a markup above or below and watch these move instantly.
+        &nbsp;— same engine that prices every quote for {c.name}; type a markup above or below and watch these move instantly.
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-stone-600">{c.name} prices from</span>
@@ -2017,7 +2030,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
           <tr key={sv.k} className="border-t border-stone-100 first:border-t-0 hover:bg-stone-50">
             <td className="py-1.5 pl-3 pr-1 w-6"><input type="checkbox" checked={r.on!==false} onChange={e=>upProfSvc(prof.id,sv.k,{on:e.target.checked})} className="accent-[#0086E0]"/></td>
             <td className="py-1.5 pr-2 font-medium text-stone-800 whitespace-nowrap">{sv.l}</td>
-            <td className="py-1.5 pr-2"><Select value={r.basis||"pct"} onChange={e=>upProfSvc(prof.id,sv.k,{basis:e.target.value})}><option value="pct">% Markup</option><option value="list">FedEx list − %</option><option value="fixed">Fixed $ over cost</option></Select></td>
+            <td className="py-1.5 pr-2"><Select value={r.basis||"pct"} onChange={e=>upProfSvc(prof.id,sv.k,{basis:e.target.value})}><option value="pct">% Markup (over England/FedEx cost)</option><option value="list">Discount off FedEx list %</option><option value="fixed">Fixed $ over cost</option></Select></td>
             <td className="py-1.5 pr-2 whitespace-nowrap"><Input type="number" value={r.pct==null?"":r.pct} onChange={e=>upProfSvc(prof.id,sv.k,{pct:e.target.value})} className="w-20 text-right"/> <span className="text-stone-400 text-xs">{r.basis==="fixed"?"$":"%"}</span></td>
             <td className="py-1.5 pr-3 whitespace-nowrap"><span className="text-stone-400 text-xs">Min $</span> <Input type="number" value={r.min==null?"":r.min} onChange={e=>upProfSvc(prof.id,sv.k,{min:e.target.value})} className="w-24 text-right"/></td>
           </tr>);})}
@@ -2388,19 +2401,11 @@ function RatesAdmin({clients=[],brand}){
   const assignedTo=(pid)=>clients.filter(c=>(assign[c.id]||"default")===pid);
   const surRow=(prof.surcharges||{});
   return (<div className="space-y-4">
-    {/* global cost-plus markup — one knob over everything */}
-    <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-2">
-      <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <div className="text-sm font-semibold text-stone-800">Global cost-plus markup</div>
-          <div className="text-[11px] text-stone-500 mt-0.5 max-w-xl">Marks up every rate and app-added accessorial on every carrier. Applies to whatever cost the live quote returns — no rate tables needed. Per-service rules in a profile still override it; per-surcharge rules override the accessorial markup.</div>
-        </div>
-        <span className="flex-1"/>
-        <Field label="Markup %"><Input type="number" className="w-24" placeholder="e.g. 20" value={(rules.global&&rules.global.pct)??""} onChange={e=>upRules({global:{...(rules.global||{}),pct:e.target.value}})}/></Field>
-        <Field label="Min $ / label (optional)"><Input type="number" className="w-28" placeholder="—" value={(rules.global&&rules.global.min)??""} onChange={e=>upRules({global:{...(rules.global||{}),min:e.target.value}})}/></Field>
-        {rules.global&&rules.global.pct!==""&&rules.global.pct!=null&&<button onClick={()=>{if(window.confirm("Clear the global markup? Pricing falls back to per-service rules and each customer's flat markup."))upRules({global:{}});}} className="text-xs text-rose-500 bg-stone-100 rounded-lg px-2.5 py-2 hover:bg-rose-50">Clear</button>}
-      </div>
-      {rules.global&&rules.global.pct!==""&&rules.global.pct!=null&&!isNaN(+rules.global.pct)&&<div className="text-[11px] rounded px-3 py-2 bg-emerald-50 border border-emerald-200 text-emerald-800">Global cost-plus is <b>ON</b>: every quote sells at cost + {+rules.global.pct}%{rules.global.min?` (min $${(+rules.global.min).toFixed(2)})`:""}. It replaces each customer's legacy flat markup while set — customers on profiles with per-service rules keep those rules.</div>}
+    {/* Markup itself is edited from each customer's Rates tab (platform default + account markup) —
+       this screen is for the shared plumbing: profiles, per-service rules, base-cost tables, zones. */}
+    <div className="text-[11px] text-stone-500 bg-stone-50 border border-stone-200 rounded px-3 py-2">
+      Markup is edited on each customer\u2019s <b>Rates</b> tab \u2014 the platform default and every account\u2019s number live there, in one place. This screen holds the shared pieces: rate profiles, per-service rules below, base-cost tables, and zone data.
+      {rules.global&&rules.global.pct!==""&&rules.global.pct!=null&&!isNaN(+rules.global.pct)&&<span> Right now the platform default is <b>cost + {+rules.global.pct}%</b>{rules.global.min?` (min $${(+rules.global.min).toFixed(2)})`:""}.</span>}
     </div>
     {/* top controls */}
     <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
@@ -2452,7 +2457,7 @@ function RatesAdmin({clients=[],brand}){
             <tr className="border-t border-stone-100 hover:bg-stone-50">
               <td className="py-2 pr-1 w-6"><input type="checkbox" checked={r.on!==false} onChange={e=>upSvc(s.k,{on:e.target.checked})} className="accent-[#0086E0]"/></td>
               <td className="py-2 pr-2 font-medium text-stone-800 whitespace-nowrap">{s.l}{s.or&&!(baseCosts.onerate&&baseCosts.onerate[s.k]!=null)&&<Badge tone="stone">needs One Rate table</Badge>}</td>
-              <td className="py-2 pr-2"><Select value={r.basis||"pct"} onChange={e=>upSvc(s.k,{basis:e.target.value})}><option value="pct">% Markup (over cost)</option><option value="list">FedEx list − %</option><option value="fixed">Fixed $ over cost</option></Select></td>
+              <td className="py-2 pr-2"><Select value={r.basis||"pct"} onChange={e=>upSvc(s.k,{basis:e.target.value})}><option value="pct">% Markup (over England/FedEx cost)</option><option value="list">Discount off FedEx list %</option><option value="fixed">Fixed $ over cost</option></Select></td>
               <td className="py-2 pr-2 whitespace-nowrap"><Input type="number" value={r.pct==null?"":r.pct} onChange={e=>upSvc(s.k,{pct:e.target.value})} className="w-20 text-right"/> <span className="text-stone-400 text-xs">{r.basis==="fixed"?"$":"%"}</span></td>
               <td className="py-2 pr-2 whitespace-nowrap"><span className="text-stone-400 text-xs">Min $</span> <Input type="number" value={r.min==null?"":r.min} onChange={e=>upSvc(s.k,{min:e.target.value})} className="w-24 text-right"/></td>
               <td className="py-2 pr-2 whitespace-nowrap">
@@ -4770,7 +4775,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           Tried England on your <b>{rateSrc.diag.src==="customer"?"customer's":"main"}</b> account · from ZIP {rateSrc.diag.fromZip} · customer ID {rateSrc.diag.cust} · key {rateSrc.diag.key} · {rateSrc.diag.enabled?"live toggle ON":"live toggle OFF"}{!rateSrc.diag.hasKey?" · no API key found":""}{!rateSrc.diag.hasCust?" · no customer ID found":""}{rateSrc.diag.fromZip==="(none)"?" — no origin ZIP: set your sender ZIP or the customer's origin.":""}{rateSrc.error&&/401|invalid/i.test(rateSrc.error)?" — England rejected this key/ID pair. Re-enter it in Settings → Carrier accounts and Test again.":""}
         </div>}
         <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn\u2019t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
-        {labelPreview&&<LabelPreviewModal data={labelPreview} settings={settings} onClose={()=>setLabelPreview(null)}/>}
+        {labelPreview&&<LabelPreviewModal data={labelPreview} settings={settings} onClose={()=>{setLabelPreview(null);if(cz(settings).skipBookedSummary)newShipment();}}/>}
         {naming&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setNaming(false)}><div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-sm space-y-3" onClick={e=>e.stopPropagation()}><div className="text-sm font-semibold text-stone-800">Name this draft</div><input autoFocus value={draftName} onChange={e=>setDraftName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")commitDraft(draftName.trim());}} placeholder="e.g. Dana Cole – Miami" className="w-full bg-white border border-stone-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><div className="flex justify-end gap-2"><button onClick={()=>setNaming(false)} className="text-sm px-3 py-1.5 rounded text-stone-600 hover:bg-stone-100">Cancel</button><button onClick={()=>commitDraft(draftName.trim())} className="text-sm px-3 py-1.5 rounded bg-stone-900 text-white font-medium hover:bg-stone-800">Save draft</button></div></div></div>}
         {shipStatus&&<div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2.5 ${shipStatus.state==="error"?"bg-rose-50 text-rose-700 border border-rose-200":shipStatus.state==="booked"?"bg-emerald-50 text-emerald-700 border border-emerald-200":shipStatus.state==="pending_timeout"?"bg-amber-50 text-amber-700 border border-amber-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
           {shipStatus.state==="booking"&&<><Loader2 className="w-4 h-4 animate-spin"/>Booking label on your England account…</>}
@@ -4867,7 +4872,10 @@ function LabelPreviewModal({data,onClose,settings}){
         if(!r.imgs.length)throw new Error("no pages");
         try{ const cc=cz(st); const lg=cc.labelLogo||st.companyLogo||""; r.imgs=await stampLogo(r.imgs,cc,lg); }catch(e){}
         setPages(r);
-        if(!printed.current&&data.autoPrint!==false){ printed.current=true; printImagePages(r.imgs,r.wIn,r.hIn); }   // print preview pops from the rendered pages
+        if(!printed.current&&data.autoPrint!==false){
+          printed.current=true;
+          printImagePages(r.imgs,r.wIn,r.hIn,()=>{ if(cz(st).skipBookedSummary&&!dead)onClose(); });   // fires once the system print dialog closes
+        }
       }catch(e){
         if(dead)return;
         setPgErr("Preview renderer unavailable — showing the raw PDF below."+((e&&e.message)?"":""));
@@ -5208,6 +5216,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
   const commercial=!!(o.company&&o.company.trim());
   const [weight,setWeight]=useState(o.weight||1);
   const [boxIdx,setBoxIdx]=useState(-1);
+  const [dimsOverride,setDimsOverride]=useState(null);   // manual L/W/H when no preset is picked
   const [residential,setRes]=useState(!commercial);
   const [oneRate,setOneRate]=useState(false);
   const [bought,setBought]=useState(null);
@@ -5216,7 +5225,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
   const [rateSrc,setRateSrc]=useState({rates:[],live:false,loading:false});
   const [rateNonce,setRateNonce]=useState(0);
   const boxes=settings?.boxes||SEED_BOXES;
-  const box=boxIdx>=0?boxes[boxIdx]:{L:12,W:9,H:4};
+  const box=boxIdx>=0?boxes[boxIdx]:(dimsOverride||{L:12,W:9,H:4});
   const eng=englandFor(client,settings);
   const canBook=eng&&eng.enabled;
   const fromZip=settings?.sender?.zip||client?.origin||"";
@@ -5278,7 +5287,10 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
       ):(<>
         <div className="flex flex-wrap items-end gap-3 border border-stone-200 rounded-lg bg-white p-3">
           <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Weight (lb)</div><input type="number" value={weight} onChange={e=>{setWeight(+e.target.value);upd({weight:+e.target.value});}} className="w-20 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF]"/></div>
-          <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Box</div><select value={boxIdx} onChange={e=>setBoxIdx(+e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="-1">Default 12×9×4</option>{boxes.map((b,j)=><option key={b.id} value={j}>{b.name}</option>)}</select></div>
+          <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Box</div><select value={boxIdx} onChange={e=>{const j=+e.target.value;setBoxIdx(j);if(j>=0)setDimsOverride(null);}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="-1">Custom size</option>{boxes.map((b,j)=><option key={b.id} value={j}>{b.name}</option>)}</select></div>
+          <div className="flex items-end gap-1.5"><PkgInput label="L" value={box.L} onChange={e=>{setBoxIdx(-1);setDimsOverride(v=>({L:e.target.value,W:(v||box).W,H:(v||box).H}));}}/>
+            <PkgInput label="W" value={box.W} onChange={e=>{setBoxIdx(-1);setDimsOverride(v=>({L:(v||box).L,W:e.target.value,H:(v||box).H}));}}/>
+            <PkgInput label="H" value={box.H} onChange={e=>{setBoxIdx(-1);setDimsOverride(v=>({L:(v||box).L,W:(v||box).W,H:e.target.value}));}}/></div>
           <label className="flex items-center gap-1.5 text-sm text-stone-600"><input type="checkbox" checked={residential} onChange={e=>setRes(e.target.checked)} className="accent-[#0086E0]"/>Residential</label>
           <label className="flex items-center gap-1.5 text-[13px] text-stone-600"><input type="checkbox" checked={oneRate} onChange={e=>setOneRate(e.target.checked)} className="accent-[#0086E0]"/>One Rate</label>
           <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border ${residential?"text-[#006FBF] bg-[#E6F4FF] border-[#99D6FF]":"text-stone-700 bg-stone-100 border-stone-200"}`}>{residential?<Home className="w-3.5 h-3.5"/>:<Building2 className="w-3.5 h-3.5"/>}{residential?"Residential":"Commercial"}</span>
@@ -6631,7 +6643,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
 /* ════════ SETTINGS ════════ */
 function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,audit=[]}){
   const [sec,setSec]=useState("general");
-  const secs=[["general","General",Cog],["customize","Customizations",Sliders],["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["catalog","Product catalog",Boxes],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["reference","Reference Fields",Receipt],["cieditor","Commercial invoice",Receipt],["cihistory","CI history",FileText],["otherdocs","Other documents",FileText],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["ledger","Ledger",Wallet],["integrations","Integrations",Layers],["subscription","Subscription",Star],["company","Company",Building2]];
+  const secs=[["general","General",Cog],["customize","Customizations",Sliders],["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["catalog","Product catalog",Boxes],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["reference","Reference Fields",Receipt],["cieditor","Commercial invoice",Receipt],["cihistory","CI history",FileText],["otherdocs","Other documents",FileText],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["clients","Clients & markup",Users],["billing","Billing",CreditCard],["ledger","Ledger",Wallet],["integrations","Integrations",Layers],["subscription","Subscription",Star]];
   return (
     <div className="flex flex-col md:flex-row gap-6">
       <aside className="md:w-56 shrink-0 space-y-1">{secs.map(([id,l,Icon])=><button key={id} onClick={()=>setSec(id)} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}</button>)}</aside>
@@ -6647,7 +6659,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="manifests"&&<Manifests shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests}/>}
         {sec==="reports"&&<Reports shipments={shipments}/>}
         {sec==="notifications"&&<Notifications settings={settings} setSettings={setSettings} emails={emails}/>}
-        {sec==="general"&&<GeneralSettings settings={settings} setSettings={setSettings} goSec={setSec}/>}
+        {sec==="general"&&<GeneralSettings settings={settings} setSettings={setSettings} goSec={setSec} audit={audit}/>}
         {sec==="cieditor"&&<CIEditor settings={settings} setSettings={setSettings} shipments={shipments}/>}
         {sec==="cihistory"&&<CIHistory settings={settings} setSettings={setSettings}/>}
         {sec==="otherdocs"&&<OtherDocs settings={settings} setSettings={setSettings}/>}
@@ -6657,15 +6669,6 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="ledger"&&<Ledger ledger={ledger} addLedger={addLedger}/>}
         {sec==="integrations"&&<Integrations settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders}/>}
         {sec==="subscription"&&<Subscription settings={settings} setSettings={setSettings}/>}
-        {sec==="company"&&<><Company settings={settings} setSettings={setSettings}/>
-          <div className="max-w-2xl mt-6">
-            <h3 className="text-sm font-semibold text-stone-700 flex items-center gap-2 mb-2"><Clock className="w-4 h-4"/>Activity log</h3>
-            <p className="text-xs text-stone-500 mb-2">Who did what — label bookings and voids, newest first (last 200).</p>
-            <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100 max-h-80 overflow-y-auto">
-              {audit.length===0&&<div className="p-4 text-sm text-stone-400">No activity yet.</div>}
-              {audit.map((a,i)=><div key={i} className="px-3 py-2 text-xs flex items-baseline gap-2"><span className="text-stone-400 shrink-0 w-36">{a.ts}</span><span className="font-medium text-stone-700 shrink-0">{a.action}</span><span className="text-stone-500 truncate">{a.detail}</span><span className="ml-auto text-stone-300 shrink-0">{a.user}</span></div>)}
-            </div>
-          </div></>}
       </div>
     </div>
   );
@@ -8210,8 +8213,10 @@ function OtherDocs({settings,setSettings}){
   </div>);
 }
 
-function GeneralSettings({settings,setSettings,goSec}){
+function GeneralSettings({settings,setSettings,goSec,audit=[]}){
   const set=(k,v)=>setSettings(p=>({...p,[k]:v}));
+  const sn=settings.sender||{};
+  const setSn=(k,v)=>setSettings(p=>({...p,sender:{...(p.sender||{}),[k]:v}}));
   const F=({k,label,ph,hint,type})=>(<label className="block text-sm text-stone-700">{label}
     <input type={type||"text"} value={settings[k]||""} onChange={e=>set(k,e.target.value)} placeholder={ph} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
     {hint&&<span className="block text-[11px] text-stone-400 mt-0.5">{hint}</span>}</label>);
@@ -8225,10 +8230,28 @@ function GeneralSettings({settings,setSettings,goSec}){
         <F k="supportPhone" label="Support phone" ph="(801) 555-0100" type="tel"/>
       </div>
     </Panel>
+    <Panel title="Default sender (ship-from)">
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Name"><Input value={sn.name||""} onChange={e=>setSn("name",e.target.value)}/></Field>
+        <Field label="Company"><Input value={sn.company||""} onChange={e=>setSn("company",e.target.value)}/></Field>
+        <Field label="Address"><Input value={sn.address1||""} onChange={e=>setSn("address1",e.target.value)}/></Field>
+        <Field label="City"><Input value={sn.city||""} onChange={e=>setSn("city",e.target.value)}/></Field>
+        <Field label="State"><Input value={sn.state||""} onChange={e=>setSn("state",e.target.value)}/></Field>
+        <Field label="ZIP"><Input value={sn.zip||""} onChange={e=>setSn("zip",e.target.value)}/></Field>
+        <Field label="Phone"><Input value={sn.phone||""} onChange={e=>setSn("phone",e.target.value)}/></Field>
+        <Field label="Email"><Input value={sn.email||""} onChange={e=>setSn("email",e.target.value)}/></Field>
+      </div>
+    </Panel>
     <Panel title="Shipping defaults">
       <label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>Bill shipments to</span>
         <select value={settings.defaultBillTo||"sender"} onChange={e=>set("defaultBillTo",e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="sender">My account (sender)</option><option value="third">Third-party account</option></select></label>
-      <div className="text-[11px] text-stone-400 mt-1.5">Your default sender address lives on the Ship tab — set it once there and hit the save icon.</div>
+    </Panel>
+    <Panel title="Activity log">
+      <p className="text-xs text-stone-500 -mt-1 mb-2">Who did what — label bookings and voids, newest first (last 200).</p>
+      <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100 max-h-80 overflow-y-auto">
+        {audit.length===0&&<div className="p-4 text-sm text-stone-400">No activity yet.</div>}
+        {audit.map((a,i)=><div key={i} className="px-3 py-2 text-xs flex items-baseline gap-2"><span className="text-stone-400 shrink-0 w-36">{a.ts}</span><span className="font-medium text-stone-700 shrink-0">{a.action}</span><span className="text-stone-500 truncate">{a.detail}</span><span className="ml-auto text-stone-300 shrink-0">{a.user}</span></div>)}
+      </div>
     </Panel>
     <Panel title="Jump to">
       <div className="grid sm:grid-cols-2 gap-2">
@@ -8349,6 +8372,13 @@ function Customize({settings,setSettings,deployMode}){
         </ol>
         <p className="text-[11px] text-stone-400">Per-workstation setting (it's a Chrome launch flag, not an app setting). Regular Chrome windows keep the normal dialog. For raw thermal/ZPL printing over the network, ask about the print-agent upgrade.</p>
       </div>
+    </Panel>
+
+    <Panel title="After booking">
+      <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
+        <span>Skip the booked summary, go straight to a new shipment<span className="block text-[11px] text-stone-400">The label still prints automatically — this just skips the tracking/copy/pickup card afterward and clears the form for the next order. Off by default so you can grab tracking or schedule a pickup right after booking.</span></span>
+        <button onClick={()=>set("skipBookedSummary",!c.skipBookedSummary)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${c.skipBookedSummary?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
+      </label>
     </Panel>
 
     <Panel title="Label branding">

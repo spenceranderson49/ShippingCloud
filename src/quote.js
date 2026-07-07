@@ -17,6 +17,17 @@ const CLIENT_ID = process.env.FEDEX_CLIENT_ID || process.env.FEDEX_API_KEY || pr
 const CLIENT_SECRET = process.env.FEDEX_CLIENT_SECRET || process.env.FEDEX_SECRET_KEY || process.env.FEDEX_SECRET || "";
 const ACCOUNT = process.env.FEDEX_ACCOUNT || process.env.FEDEX_ACCOUNT_NUMBER || process.env.FEDEX_ACCT || "";
 
+/* Country dropdowns in the app store full names ("United States"); FedEx wants ISO-2.
+   2-letter inputs pass through; unknown names pass through raw so FedEx names the problem
+   instead of us silently misrouting a shipment. */
+const ISO2 = { "united states":"US","usa":"US","u.s.":"US","u.s.a.":"US","united states of america":"US","canada":"CA","mexico":"MX","united kingdom":"GB","great britain":"GB","uk":"GB","england":"GB","australia":"AU","germany":"DE","france":"FR","italy":"IT","spain":"ES","netherlands":"NL","belgium":"BE","switzerland":"CH","austria":"AT","sweden":"SE","norway":"NO","denmark":"DK","finland":"FI","ireland":"IE","portugal":"PT","poland":"PL","czech republic":"CZ","czechia":"CZ","greece":"GR","hungary":"HU","romania":"RO","bulgaria":"BG","croatia":"HR","slovakia":"SK","slovenia":"SI","estonia":"EE","latvia":"LV","lithuania":"LT","luxembourg":"LU","iceland":"IS","japan":"JP","china":"CN","hong kong":"HK","taiwan":"TW","south korea":"KR","korea, south":"KR","republic of korea":"KR","singapore":"SG","malaysia":"MY","thailand":"TH","vietnam":"VN","philippines":"PH","indonesia":"ID","india":"IN","pakistan":"PK","bangladesh":"BD","sri lanka":"LK","israel":"IL","saudi arabia":"SA","united arab emirates":"AE","uae":"AE","qatar":"QA","kuwait":"KW","bahrain":"BH","oman":"OM","jordan":"JO","turkey":"TR","egypt":"EG","south africa":"ZA","nigeria":"NG","kenya":"KE","morocco":"MA","ghana":"GH","brazil":"BR","argentina":"AR","chile":"CL","colombia":"CO","peru":"PE","ecuador":"EC","uruguay":"UY","paraguay":"PY","bolivia":"BO","venezuela":"VE","costa rica":"CR","panama":"PA","guatemala":"GT","honduras":"HN","el salvador":"SV","nicaragua":"NI","dominican republic":"DO","jamaica":"JM","bahamas":"BS","barbados":"BB","trinidad and tobago":"TT","puerto rico":"PR","new zealand":"NZ","russia":"RU","ukraine":"UA","belarus":"BY","kazakhstan":"KZ","georgia":"GE","armenia":"AM","azerbaijan":"AZ" };
+function toISO(v) {
+  const s = String(v == null ? "" : v).trim();
+  if (!s) return "US";
+  if (/^[A-Za-z]{2}$/.test(s)) return s.toUpperCase();
+  return ISO2[s.toLowerCase()] || s;
+}
+
 let _tok = null; // {token, exp}
 async function getToken() {
   if (_tok && Date.now() < _tok.exp - 60000) return _tok.token;
@@ -109,8 +120,12 @@ exports.handler = async (event) => {
   const fromZip = String(body.fromZip || "").trim();
   const toZip = String(body.toZip || "").trim();
   if (!fromZip || !toZip) return respond(200, { live: false, error: "Origin and destination ZIP required", rates: [] });
-  const fromCountry = (body.fromCountry || "US").toUpperCase();
-  const toCountry = (body.toCountry || "US").toUpperCase();
+  const PKG_MAP = { fedex_envelope: "FEDEX_ENVELOPE", fedex_pak: "FEDEX_PAK", fedex_extra_small_box: "FEDEX_SMALL_BOX", fedex_small_box: "FEDEX_SMALL_BOX", fedex_medium_box: "FEDEX_MEDIUM_BOX", fedex_large_box: "FEDEX_LARGE_BOX", fedex_tube: "FEDEX_TUBE" };
+  const boxCode = String(body.packageTypeCode || "").trim().toLowerCase();
+  const fedexPackaging = PKG_MAP[boxCode] || (/^FEDEX_/i.test(boxCode) ? boxCode.toUpperCase() : null);
+  const SMARTPOST_HUB = String(body.smartPostHub || process.env.FEDEX_SMARTPOST_HUB || "").trim();
+  const fromCountry = toISO(body.fromCountry || "US");
+  const toCountry = toISO(body.toCountry || "US");
   const acct = String(body.fedexAccount || (body.account && body.account.fedexAccount) || ACCOUNT).replace(/\D/g, "") || ACCOUNT;
   const pieces = (Array.isArray(body.pieces) && body.pieces.length ? body.pieces : [{ weight: 1, length: 12, width: 9, height: 4 }])
     .map(p => ({
@@ -129,26 +144,57 @@ exports.handler = async (event) => {
       requestedPackageLineItems: pieces
     }
   };
+  /* Ground Economy (SmartPost) is only returned when the request carries your hub —
+     set FEDEX_SMARTPOST_HUB in Netlify env (the hub FedEx assigned to the account). */
+  if (SMARTPOST_HUB && toCountry === "US" && fromCountry === "US") {
+    req.requestedShipment.smartPostInfoDetail = { indicia: "PARCEL_SELECT", hubId: SMARTPOST_HUB };
+  }
+  /* One Rate is only returned when asked for with FedEx packaging — when the shipper picked a
+     FedEx box, run a second rate call in parallel and merge its flat prices in. */
+  let oneRateReq = null;
+  if (fedexPackaging && toCountry === "US" && fromCountry === "US") {
+    oneRateReq = JSON.parse(JSON.stringify(req));
+    delete oneRateReq.requestedShipment.smartPostInfoDetail;
+    oneRateReq.requestedShipment.packagingType = fedexPackaging;
+    oneRateReq.requestedShipment.shipmentSpecialServices = { specialServiceTypes: ["FEDEX_ONE_RATE"] };
+    oneRateReq.requestedShipment.requestedPackageLineItems = pieces.map(pp => ({ weight: pp.weight }));
+  }
 
   try {
     const token = await getToken();
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 22000);
-    const r = await fetch(BASE + "/rate/v1/rates/quotes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token, "x-locale": "en_US" },
-      body: JSON.stringify(req),
-      signal: ctrl.signal
-    });
-    clearTimeout(t);
-    const j = await r.json().catch(() => ({}));
+    const rateCall = async (payload) => {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 22000);
+      const rr = await fetch(BASE + "/rate/v1/rates/quotes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token, "x-locale": "en_US" },
+        body: JSON.stringify(payload),
+        signal: ctrl.signal
+      });
+      clearTimeout(t);
+      const jj = await rr.json().catch(() => ({}));
+      return { r: rr, j: jj };
+    };
+    const [main, orRes] = await Promise.all([rateCall(req), oneRateReq ? rateCall(oneRateReq).catch(() => null) : Promise.resolve(null)]);
+    const r = main.r, j = main.j;
     if (!r.ok) {
-      const msg = (j.errors && j.errors[0] && (j.errors[0].message || j.errors[0].code)) || ("FedEx rate error " + r.status);
+      let msg = (j.errors && j.errors[0] && (j.errors[0].message || j.errors[0].code)) || ("FedEx rate error " + r.status);
+      if (/mismatch|should match the shipper|not\s*authorized|account.*(invalid|not\s*found)/i.test(msg)) {
+        msg = "FedEx doesn't recognize account #" + acct + " on your API credentials — add it in the FedEx Developer Portal (Manage Organization \u2192 Shipping accounts, with that account's billing address + EULA), attach it to your project, then retry. FedEx said: " + msg;
+      }
       return respond(200, { live: false, error: msg, rates: [], _status: r.status });
     }
-    const replies = (j.output && j.output.rateReplyDetails) || [];
     const rates = [];
-    for (const rd of replies) {
+    const oneRateOk = !!(orRes && orRes.r && orRes.r.ok);
+    let oneRateError = null;
+    if (oneRateReq && !oneRateOk) {
+      oneRateError = (orRes && orRes._threw)
+        || (orRes && orRes.j && orRes.j.errors && orRes.j.errors[0] && (orRes.j.errors[0].message || orRes.j.errors[0].code))
+        || ("FedEx returned no One Rate pricing for this box/lane" + (orRes && orRes.r ? (" (status " + orRes.r.status + ")") : ""));
+    }
+    const batches = [{ replies: (j.output && j.output.rateReplyDetails) || [], oneRate: false }];
+    if (oneRateOk) batches.push({ replies: (orRes.j.output && orRes.j.output.rateReplyDetails) || [], oneRate: true });
+    for (const batch of batches) for (const rd of batch.replies) {
       const svc = SVC[rd.serviceType] || { key: String(rd.serviceType || "").toLowerCase(), label: String(rd.serviceName || rd.serviceType || "FedEx").replace(/[®™]/g, "").trim() };
       const acctD = pickDetail(rd.ratedShipmentDetails, false);
       const listD = pickDetail(rd.ratedShipmentDetails, true);
@@ -174,16 +220,21 @@ exports.handler = async (event) => {
         const amt = +((x.amount && x.amount.amount != null) ? x.amount.amount : x.amount) || 0;
         if (amt) merged[label] = Math.round(((merged[label] || 0) + amt) * 100) / 100;
       });
-      const surch = Object.keys(merged).map(label => ({ label, amount: merged[label] }));
+      let surch = Object.keys(merged).map(label => ({ label, amount: merged[label] }));
+      if (!surch.length && acctD && acctD.shipmentRateDetail && +acctD.shipmentRateDetail.totalSurcharges > 0) {
+        surch = [{ label: "Carrier surcharges", amount: Math.round(+acctD.shipmentRateDetail.totalSurcharges * 100) / 100 }];
+      }
+      const boxName = (batch.oneRate && fedexPackaging) ? fedexPackaging.replace(/^FEDEX_/, "").split("_").map(w => w[0] + w.slice(1).toLowerCase()).join(" ") : "";
       rates.push({
-        key: svc.key,
+        key: batch.oneRate ? "or_" + svc.key : svc.key,
         carrier: "FedEx",
         carrierCode: "fedex",
-        serviceCode: rd.serviceType,
-        label: svc.label,
+        serviceCode: batch.oneRate ? rd.serviceType + "_ONE_RATE" : rd.serviceType,
+        label: batch.oneRate ? (svc.label + " OneRate" + (boxName ? " - " + boxName : "")) : svc.label,
         cost: cost != null ? cost : list,
         list: list,
-        packageTypeCode: "",
+        packageTypeCode: batch.oneRate ? boxCode : "",
+        _oneRate: batch.oneRate || undefined,
         minDays, maxDays,
         base: cost != null ? Math.round((cost - surch.reduce((a, x) => a + x.amount, 0)) * 100) / 100 : null,
         surcharges: surch,
@@ -195,7 +246,7 @@ exports.handler = async (event) => {
       const alert = j.output && j.output.alerts && j.output.alerts[0] && j.output.alerts[0].message;
       return respond(200, { live: false, error: alert || "FedEx returned no rates for this shipment.", rates: [] });
     }
-    return respond(200, { live: true, provider: "fedex-direct", account: acct.replace(/^(\d{3})\d+(\d{2})$/, "$1****$2"), rates });
+    return respond(200, { live: true, provider: "fedex-direct", account: acct.replace(/^(\d{3})\d+(\d{2})$/, "$1****$2"), rates, oneRateRequested: !!oneRateReq, oneRateOk, oneRateError });
   } catch (e) {
     const msg = e && e.name === "AbortError" ? "FedEx took too long to respond" : ((e && e.message) || "FedEx request failed");
     return respond(200, { live: false, error: msg, rates: [] });

@@ -45,7 +45,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v203fw";
+const BUILD_TAG="addr-v204fw";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1799,10 +1799,10 @@ function Landing({onAuth}){
   const [pub,setPub]=useState(null);
   useEffect(()=>{let on=true;(async()=>{try{const r=await cloudCall({action:"publicConfig"});if(on&&r&&r.ok)setPub(r);}catch{}})();return ()=>{on=false;};},[]);
   const NavTab=({label,onClick})=>(<button onClick={onClick} className="text-sm text-stone-300 hover:text-white px-2.5 py-2">{label}</button>);
-  const F=({icon:I,title,children})=>(<div className="bg-white/[0.04] border border-white/10 rounded-2xl p-6 hover:bg-white/[0.07] transition-colors">
-    <div className="w-10 h-10 rounded-xl bg-[#0086E0]/15 border border-[#0086E0]/30 flex items-center justify-center mb-4"><I className="w-5 h-5 text-[#38b6ff]"/></div>
-    <div className="font-semibold text-white mb-1.5">{title}</div>
-    <div className="text-sm text-stone-400 leading-relaxed">{children}</div>
+  const F=({icon:I,title,children})=>(<div className="bg-white border border-stone-200/80 rounded-2xl p-6 shadow-[0_2px_12px_-4px_rgba(30,50,80,.06)] hover:shadow-[0_8px_28px_-8px_rgba(30,50,80,.14)] hover:-translate-y-0.5 transition-all duration-200">
+    <div className="w-11 h-11 rounded-xl bg-[#0086E0]/10 border border-[#0086E0]/20 flex items-center justify-center mb-4"><I className="w-5 h-5 text-[#0086E0]"/></div>
+    <div className="font-semibold text-stone-900 mb-1.5">{title}</div>
+    <div className="text-sm text-stone-500 leading-relaxed">{children}</div>
   </div>);
   if(BRAND.fw) return (<div className="min-h-screen relative overflow-hidden flex flex-col items-center justify-center px-5 py-10" style={{background:"#faf8f4"}}>
     <style>{`@keyframes fwRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}@keyframes fwDrift{0%,100%{transform:translate(-50%,0)}50%{transform:translate(calc(-50% + 18px),-12px)}}`}</style>
@@ -1815,7 +1815,7 @@ function Landing({onAuth}){
 
     <div className="relative mt-2 text-[11px] text-stone-400 flex items-center gap-2" style={{animation:"fwRise .6s .3s ease both"}}>© {new Date().getFullYear()} Freightwire · <LegalLinks/></div>
   </div>);
-  return (<div className="min-h-screen bg-stone-50 text-stone-700">
+  return (<div className="min-h-screen bg-[#f7f6f3] text-stone-700">
     {/* nav */}
     <div className="max-w-6xl mx-auto px-5 py-5 flex flex-wrap items-center justify-between gap-y-3">
       <button onClick={()=>setPage("home")} className="text-left">
@@ -1828,7 +1828,7 @@ function Landing({onAuth}){
         <NavTab label="Rates" onClick={()=>setPage("home","rates")}/>
         <NavTab label="About" onClick={()=>setPage("about")}/>
         <NavTab label="Contact" onClick={()=>setPage("contact")}/>
-        <a href={"tel:"+CONTACT_PHONE_TEL} className="hidden md:flex items-center gap-2 text-sm text-stone-600 hover:text-stone-900 px-2.5 py-2"><Phone className="w-4 h-4 text-[#38b6ff]"/>{CONTACT_PHONE}</a>
+        <a href={"tel:"+CONTACT_PHONE_TEL} className="hidden md:flex items-center gap-2 text-sm text-stone-600 hover:text-stone-900 px-2.5 py-2"><Phone className="w-4 h-4 text-[#0086E0]"/>{CONTACT_PHONE}</a>
         <button onClick={()=>onAuth("signin")} className="text-sm text-stone-600 hover:text-stone-900 px-2.5 py-2">Sign in</button>
         <button onClick={()=>onAuth("request")} className="text-sm bg-[#0086E0] hover:bg-[#0a76c2] text-stone-900 font-medium rounded-lg px-4 py-2">Create account</button>
       </div>
@@ -1837,23 +1837,23 @@ function Landing({onAuth}){
     {/* hero */}
     <div className="max-w-6xl mx-auto px-5 pt-16 pb-20 lg:min-h-[74vh] grid lg:grid-cols-2 gap-14 items-center">
       <div>
-        <h1 className="text-5xl sm:text-6xl font-bold text-stone-900 leading-tight">Your shipping platform.<br/><span className="text-[#38b6ff]">Your shipping partner.</span></h1>
+        <h1 className="text-5xl sm:text-6xl font-bold text-stone-900 leading-tight">Your shipping platform.<br/><span className="text-[#0086E0]">Your shipping partner.</span></h1>
         <p className="mt-6 text-xl text-stone-400 leading-relaxed">Enterprise FedEx and DHL rates. Industry leading customer service. Customized for you.</p>
         <div className="mt-7 flex flex-wrap gap-3">
           <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0a76c2] text-stone-900 font-semibold rounded-lg px-7 py-3.5 text-[15px]">Create ShippingCloud account</button>
-          <button onClick={()=>onAuth("fedex")} className="border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#38b6ff] font-semibold rounded-lg px-7 py-3.5 text-[15px] flex items-center gap-2"><Truck className="w-4 h-4"/>Get your own FedEx account</button>
+          <button onClick={()=>onAuth("fedex")} className="border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#0086E0] font-semibold rounded-lg px-7 py-3.5 text-[15px] flex items-center gap-2"><Truck className="w-4 h-4"/>Get your own FedEx account</button>
           <button onClick={enterDemo} className="text-[14px] text-stone-400 hover:text-stone-900 flex items-center gap-1.5 px-2 py-3.5 underline underline-offset-4 decoration-stone-600"><Eye className="w-4 h-4"/>Take a peek first</button>
         </div>
       </div>
       {/* hero graphic: mock rate card */}
       <div className="relative hidden lg:block">
-        <div className="absolute -inset-8 bg-[#0086E0]/20 blur-3xl rounded-full"/>
-        <div className="relative text-center text-sm uppercase tracking-widest text-[#38b6ff] font-semibold mb-4">Get FedEx and DHL Enterprise rates</div>
+        <div className="absolute -inset-8 bg-[#0086E0]/10 blur-3xl rounded-full"/>
+        <div className="relative text-center text-sm uppercase tracking-widest text-[#0086E0] font-semibold mb-4">Get FedEx and DHL Enterprise rates</div>
         <div className="relative bg-white border border-stone-200 rounded-2xl p-7 shadow-2xl">
-          {[["FedEx Ground®","2 days","$9.41"],["FedEx One Rate® · 2Day","flat-rate box · 2 days","$14.95"],["FedEx Priority Overnight®","next day","$42.10"],["DHL Express","2 days","$21.66"]].map((r,i)=>(
-            <div key={i} className={`flex items-center justify-between rounded-xl px-4 py-3.5 mb-2 ${i===0?"bg-[#0086E0]/15 border border-[#0086E0]/40":"bg-white/[0.03] border border-white/5"}`}>
-              <div className="flex items-center gap-3.5"><Truck className={`w-5 h-5 ${i===0?"text-[#38b6ff]":"text-stone-400"}`}/><div><div className="text-[15px] text-stone-900 font-medium">{r[0]}</div><div className="text-xs text-stone-400">{r[1]}</div></div></div>
-              <div className={`font-mono text-lg ${i===0?"text-[#38b6ff] font-bold":"text-stone-600"}`}>{r[2]}</div>
+          {[["FedEx Ground®","2 days","$10.15"],["FedEx One Rate® · 2Day","flat-rate box · 2 days","$14.95"],["FedEx Priority Overnight®","next day","$42.10"],["DHL Express","2 days","$21.66"]].map((r,i)=>(
+            <div key={i} className={`flex items-center justify-between rounded-xl px-4 py-3.5 mb-2 ${i===0?"bg-[#0086E0]/8 border border-[#0086E0]/30":"bg-white/[0.03] border border-white/5"}`}>
+              <div className="flex items-center gap-3.5"><Truck className={`w-5 h-5 ${i===0?"text-[#0086E0]":"text-stone-400"}`}/><div><div className="text-[15px] text-stone-900 font-medium">{r[0]}</div><div className="text-xs text-stone-400">{r[1]}</div></div></div>
+              <div className={`font-mono text-lg ${i===0?"text-[#0086E0] font-bold":"text-stone-600"}`}>{r[2]}</div>
             </div>))}
         </div>
       </div>
@@ -1875,7 +1875,7 @@ function Landing({onAuth}){
       <div className="border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-transparent rounded-2xl p-8 sm:p-10 text-center">
         <h2 className="text-2xl sm:text-3xl font-bold text-stone-900 leading-snug">Save 10–15% switching to our FedEx rates.</h2>
         <p className="mt-3 text-stone-400 max-w-2xl mx-auto">No fees. No BS. Send us a recent UPS invoice and get a line-by-line comparison back — the same day.</p>
-        <button onClick={()=>onAuth("fedex")} className="mt-6 border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#38b6ff] font-semibold rounded-lg px-6 py-3 inline-flex items-center gap-2"><Upload className="w-4 h-4"/>Send us your UPS invoice</button>
+        <button onClick={()=>onAuth("fedex")} className="mt-6 border border-[#0086E0]/50 bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#0086E0] font-semibold rounded-lg px-6 py-3 inline-flex items-center gap-2"><Upload className="w-4 h-4"/>Send us your UPS invoice</button>
       </div>
     </div>
     {/* integrations banner */}
@@ -1943,16 +1943,16 @@ function Landing({onAuth}){
       <h1 className="text-3xl sm:text-4xl font-bold text-stone-900">Talk to a real person</h1>
       <p className="mt-4 text-stone-400 leading-relaxed text-lg">No chatbots, no ticket black holes. Call or write — a human who can actually fix it answers.</p>
       <div className="mt-8 grid sm:grid-cols-2 gap-4">
-        <a href={"tel:"+CONTACT_PHONE_TEL} className="bg-white/[0.04] border border-stone-200 hover:bg-white/[0.07] rounded-2xl p-6 block">
-          <Phone className="w-6 h-6 text-[#38b6ff]"/>
+        <a href={"tel:"+CONTACT_PHONE_TEL} className="bg-white border border-stone-200/80 shadow-[0_2px_12px_-4px_rgba(30,50,80,.06)] hover:bg-white/[0.07] rounded-2xl p-6 block">
+          <Phone className="w-6 h-6 text-[#0086E0]"/>
           <div className="mt-3 font-semibold text-stone-900">Call us</div>
-          <div className="text-[#38b6ff] text-lg font-semibold mt-1">{CONTACT_PHONE}</div>
+          <div className="text-[#0086E0] text-lg font-semibold mt-1">{CONTACT_PHONE}</div>
           <div className="text-[13px] text-stone-400 mt-1">Monday–Friday, business hours (MT)</div>
         </a>
-        <a href={"mailto:"+CONTACT_EMAIL} className="bg-white/[0.04] border border-stone-200 hover:bg-white/[0.07] rounded-2xl p-6 block">
-          <Mail className="w-6 h-6 text-[#38b6ff]"/>
+        <a href={"mailto:"+CONTACT_EMAIL} className="bg-white border border-stone-200/80 shadow-[0_2px_12px_-4px_rgba(30,50,80,.06)] hover:bg-white/[0.07] rounded-2xl p-6 block">
+          <Mail className="w-6 h-6 text-[#0086E0]"/>
           <div className="mt-3 font-semibold text-stone-900">Email us</div>
-          <div className="text-[#38b6ff] text-lg font-semibold mt-1 break-all">{CONTACT_EMAIL}</div>
+          <div className="text-[#0086E0] text-lg font-semibold mt-1 break-all">{CONTACT_EMAIL}</div>
           <div className="text-[13px] text-stone-400 mt-1">We reply the same business day.</div>
         </a>
       </div>

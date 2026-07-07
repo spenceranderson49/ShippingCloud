@@ -9,9 +9,9 @@ function BrandCloud({className,color,style}){return (
 );}
 // Scalable ShippingCloud lockup: cloud sized a touch larger than cap-height, heavier wordmark. size = font px.
 function ShipCloudLogo({size=30,dark="#1c1917",accent="#0086E0"}){
-  const cloud=Math.round(size*1.35);
+  const cloud=Math.round(size*1.08);
   return (<span className="inline-flex items-center" style={{gap:Math.round(size*0.18)}}>
-    <BrandCloud color={accent} style={{height:cloud,width:"auto",marginBottom:Math.round(size*0.06)}}/>
+    <BrandCloud color={accent} style={{height:cloud,width:"auto",marginBottom:Math.round(size*0.03)}}/>
     <span style={{fontFamily:"'Space Grotesk',Inter,system-ui,sans-serif",letterSpacing:"-0.035em",fontWeight:800,fontSize:size,lineHeight:1,color:dark}}>Shipping<span style={{color:accent}}>Cloud</span></span>
   </span>);
 }
@@ -53,7 +53,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v209fw";
+const BUILD_TAG="addr-v212fw";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -915,7 +915,7 @@ function Login({users,onLogin,brand}){
         <div className="flex flex-col items-center gap-2 mb-6">
           <div className="flex items-center gap-2">
             {(!B.name1||B.name1==="Shipping")&&(!B.name2||B.name2==="Cloud")
-              ? <img src={SC_LOGO} alt="ShippingCloud" style={{height:40}} className="w-auto" draggable={false}/>
+              ? <ShipCloudLogo size={28}/>
               : <><BrandCloud className="h-9 w-auto -mr-2.5" color={B.primary}/><span className="font-bold text-3xl" style={{...LOGO_FONT,color:B.dark}}>{B.name1}<span style={{color:B.primary}}>{B.name2}</span></span></>}
           </div>
           {B.showLogo&&B.logo&&<div className="flex items-center gap-1.5 text-stone-400 text-xs">{B.partnerLabel}<img src={B.logo} alt="partner" className="h-3.5 w-auto object-contain"/></div>}
@@ -1012,7 +1012,7 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
     <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
       <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400">Live preview</div>
       <div className="p-5 flex items-center gap-3">
-        {(!b.name1||b.name1==="Shipping")&&(!b.name2||b.name2==="Cloud")?<img src={SC_LOGO} alt="ShippingCloud" style={{height:32}} className="w-auto" draggable={false}/>:<><BrandCloud className="h-9 w-auto -mr-2.5" color={b.primary}/><span className="font-bold text-[26px]" style={{...LOGO_FONT,color:b.dark}}>{b.name1}<span style={{color:b.primary}}>{b.name2}</span></span></>}
+        {(!b.name1||b.name1==="Shipping")&&(!b.name2||b.name2==="Cloud")?<ShipCloudLogo size={24}/>:<><BrandCloud className="h-9 w-auto -mr-2.5" color={b.primary}/><span className="font-bold text-[26px]" style={{...LOGO_FONT,color:b.dark}}>{b.name1}<span style={{color:b.primary}}>{b.name2}</span></span></>}
         {b.showLogo&&b.logo&&<span className="flex items-center gap-1.5 text-stone-400 text-xs"><span className="w-px h-5 bg-stone-200"/>{b.partnerLabel}<img src={b.logo} alt="partner" className="h-3.5 w-auto object-contain"/></span>}
       </div>
     </div>
@@ -2563,7 +2563,7 @@ function AppInner(){
               <img src={FW_LOGO} alt="Freightwire" style={{height:Math.round(28*((custom.logoScale||100)/100))+"px"}} className="w-auto shrink-0" draggable={false}/>
             </button>
           </>):(
-          <button onClick={()=>setTab("ship")} title="Back to Ship" className="cursor-pointer flex items-center shrink-0">{(!brand.name1||brand.name1==="Shipping")&&(!brand.name2||brand.name2==="Cloud")?<img src={SC_LOGO} alt="ShippingCloud" style={{height:Math.round(30*((custom.logoScale||100)/100))+"px"}} className="w-auto" draggable={false}/>:<span className="font-bold text-[20px] sm:text-[26px]" style={{...LOGO_FONT,color:(custom.theme==="dark"||custom.theme==="grey")?"#F5F5F4":brand.dark}}>{brand.name1}<span style={{color:custom.accent||brand.primary}}>{brand.name2}</span></span>}</button>)}
+          <button onClick={()=>setTab("ship")} title="Back to Ship" className="cursor-pointer flex items-center shrink-0">{(!brand.name1||brand.name1==="Shipping")&&(!brand.name2||brand.name2==="Cloud")?<ShipCloudLogo size={Math.round(22*((custom.logoScale||100)/100))}/>:<span className="font-bold text-[20px] sm:text-[26px]" style={{...LOGO_FONT,color:(custom.theme==="dark"||custom.theme==="grey")?"#F5F5F4":brand.dark}}>{brand.name1}<span style={{color:custom.accent||brand.primary}}>{brand.name2}</span></span>}</button>)}
           {custom.seasonal!==false&&seasonalEmoji()&&<span className="text-base select-none shrink-0 -ml-0.5" title="Seasonal touch — turn off in Customizations">{seasonalEmoji()}</span>}
           {(()=>{const cl=(myFlags&&myFlags._logoB64)||settings.companyLogo||"";return cl?<span className="flex items-center gap-2.5 sm:gap-3 min-w-0 self-center"><span className="w-px h-6 bg-stone-200 shrink-0 hidden sm:block"/><img src={cl} alt={settings.company||"Company logo"} style={{height:Math.round(28*((custom.companyLogoScale||100)/100))+"px"}} className={`w-auto max-w-[110px] sm:max-w-[200px] object-contain block ${(custom.theme==="dark"||custom.theme==="grey")?"bg-white rounded-md px-1.5 py-0.5 box-content":""}`} draggable={false}/></span>:null;})()}
           {brand.showLogo&&brand.logo&&<span className="hidden sm:flex items-center gap-1.5 text-stone-400 text-xs"><span className="w-px h-5 bg-stone-200"/>{brand.partnerLabel}<img src={brand.logo} alt="partner" className="h-3 w-auto object-contain"/></span>}

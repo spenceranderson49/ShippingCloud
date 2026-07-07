@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v230";
+const BUILD_TAG="addr-v231";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -239,15 +239,37 @@ async function shipCall(payload){
     return data||{ok:false,error:"Empty response"};
   }catch(e){clearTimeout(t);return {ok:false,error:(e&&e.message)||"Network error"};}
 }
+/* ── reliable PDF printing: hidden body-level iframe + print(), because calling
+   print() on a modal's preview iframe is exactly what Chrome's PDF viewer
+   sometimes silently ignores. onload doesn't always fire for PDFs, so a timed
+   retry backs it up; if the frame is inaccessible we fall back to a tab+print. */
+function printPdfUrl(url){
+  if(!url)return false;
+  try{
+    const f=document.createElement("iframe");
+    f.style.cssText="position:fixed;right:0;bottom:0;width:2px;height:2px;border:0;opacity:0;pointer-events:none;";
+    f.setAttribute("aria-hidden","true");
+    let fired=false;
+    const go=()=>{ if(fired)return; try{ if(f.contentWindow){ f.contentWindow.focus(); f.contentWindow.print(); fired=true; } }catch(e){} };
+    f.onload=()=>setTimeout(go,250);
+    f.src=url;
+    document.body.appendChild(f);
+    setTimeout(go,1200);                                   // PDFs don't reliably fire onload
+    setTimeout(()=>{ if(!fired){ try{ const w=window.open(url,"_blank"); if(w) setTimeout(()=>{try{w.focus();w.print();}catch(e){}},700); }catch(e){} } },2600);
+    setTimeout(()=>{ try{document.body.removeChild(f);}catch(e){} },180000);
+    return true;
+  }catch(e){ try{window.open(url,"_blank");}catch(e2){} return false; }
+}
+function pdfBlobUrl(base64){
+  const bin=atob(base64);const len=bin.length;const bytes=new Uint8Array(len);
+  for(let i=0;i<len;i++)bytes[i]=bin.charCodeAt(i);
+  return URL.createObjectURL(new Blob([bytes],{type:"application/pdf"}));
+}
 function openLabelPdf(base64){
   try{
-    const bin=atob(base64);const len=bin.length;const bytes=new Uint8Array(len);
-    for(let i=0;i<len;i++)bytes[i]=bin.charCodeAt(i);
-    const blob=new Blob([bytes],{type:"application/pdf"});
-    const url=URL.createObjectURL(blob);
-    const w=window.open(url,"_blank");
-    if(!w){const a=document.createElement("a");a.href=url;a.download="label.pdf";a.click();}
-    setTimeout(()=>URL.revokeObjectURL(url),60000);
+    const url=pdfBlobUrl(base64);
+    printPdfUrl(url);
+    setTimeout(()=>URL.revokeObjectURL(url),180000);
     return true;
   }catch(e){return false;}
 }
@@ -4675,10 +4697,11 @@ function LabelPreviewModal({data,onClose,settings}){
       for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
       const blob=new Blob([bytes],{type:"application/pdf"});
       const u=URL.createObjectURL(blob);setUrl(u);
-      return ()=>URL.revokeObjectURL(u);
+      const t=setTimeout(()=>{ if(!printed.current){ printed.current=true; printPdfUrl(u); } },600);   // print preview pops the moment the label lands
+      return ()=>{clearTimeout(t);URL.revokeObjectURL(u);};
     }catch(e){}
   },[data.pdf]);
-  const doPrint=()=>{ const f=frameRef.current; try{ if(f&&f.contentWindow){f.contentWindow.focus();f.contentWindow.print();return;} }catch(e){} if(url)window.open(url,"_blank"); };
+  const doPrint=()=>{ const f=frameRef.current; try{ if(f&&f.contentWindow){f.contentWindow.focus();f.contentWindow.print();return;} }catch(e){} printPdfUrl(url); };
   const download=()=>{ if(!url)return; const a=document.createElement("a");a.href=url;a.download=`label-${data.tracking||"shipment"}.pdf`;a.click(); };
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>

@@ -55,6 +55,7 @@ const FEATURE_CATALOG=[
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own UPS / other carrier accounts on the Connections page (England always shows; admins always have this)",default:false},
 ];
 const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All logins"],["rates","Rate database"],["labelcert","FedEx labels"],["customizations","Features & access"],["branding","Branding"],["platforms","Carrier accounts"],["domains","Domains"]];
+const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,labelcert:Printer,customizations:Sliders,branding:Sparkles,platforms:Truck,domains:ExternalLink};
 /* A restricted admin ALWAYS keeps access to "users" — without it there is no self-service way
    to ever fix a permission set that’s missing something, for yourself or anyone else. A wrong
    restriction otherwise becomes a permanent lockout with no way back in. */
@@ -72,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v267";
+const BUILD_TAG="addr-v268";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -2635,10 +2636,11 @@ function RatesAdmin({clients=[],brand}){
 }
 
 
-function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,currentUser,settings,setSettings,brand,signupRequests,setSignupRequests,featureFlags,setFeatureFlags,customFeatures,setCustomFeatures,fedexRequests=[],setFedexRequests,publicBrand,setPublicBrand,companyAdminRequests=[],setCompanyAdminRequests}){
-  const [sec,setSec]=useState(BRAND.admin?"customers":"overview");
+function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,currentUser,settings,setSettings,brand,signupRequests,setSignupRequests,featureFlags,setFeatureFlags,customFeatures,setCustomFeatures,fedexRequests=[],setFedexRequests,publicBrand,setPublicBrand,companyAdminRequests=[],setCompanyAdminRequests,activeSection=null}){
+  const sidebarDriven=!!activeSection;   // BRAND.admin: the left sidebar picks the section directly, so the internal top-tab bar/launcher is redundant and hidden
+  const [sec,setSec]=useState(activeSection||(BRAND.admin?"customers":"overview"));
   const ALLOWED=adminSectionsFor(currentUser);
-  if(ALLOWED.length&&!ALLOWED.some(x=>x[0]===sec))setSec(ALLOWED[0][0]);
+  if(!sidebarDriven&&ALLOWED.length&&!ALLOWED.some(x=>x[0]===sec))setSec(ALLOWED[0][0]);
   /* v143: platform-wide numbers. Admin's cloud snapshot contains every login's stores
      (u/<uid>/shipments, u/<uid>/orders); fall back to the admin's own stores in local mode. */
   const platform=useMemo(()=>{
@@ -2682,12 +2684,20 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
      of which login opens it. Pre-opening the core tabs means nobody has to discover the "+ Open" launcher
      to find rates/services; they're just already sitting there the moment Admin opens. */
   const [tabs,setTabs]=useState(()=>{
+    if(sidebarDriven)return [{kind:"section",key:activeSection}];   // the left sidebar is the only nav; this just tracks what's on screen (plus any customer records opened from within it)
     const core=["overview","customers","rates"].filter(k=>allowedKeys.has(k));
     const seeded=core.length?core.map(key=>({kind:"section",key})):[{kind:"section",key:sec}];
     if(!seeded.some(t=>t.key===sec))seeded.unshift({kind:"section",key:sec});
     return seeded;
   });
   const [active,setActive]=useState(0);
+  /* Sidebar-driven mode: clicking a different item in the left sidebar changes activeSection — swap
+     straight to that section and drop any customer-record tabs that were open under the old one. */
+  useEffect(()=>{
+    if(!sidebarDriven)return;
+    setTabs([{kind:"section",key:activeSection}]);
+    setActive(0);
+  },[sidebarDriven,activeSection]);
   const openSection=(key)=>{setTabs(ts=>{const i=ts.findIndex(t=>t.kind==="section"&&t.key===key);if(i>=0){setActive(i);return ts;}const n=[...ts,{kind:"section",key}];setActive(n.length-1);return n;});setSec(key);};
   const openCustomer=(id)=>{setTabs(ts=>{const i=ts.findIndex(t=>t.kind==="customer"&&t.id===id);if(i>=0){setActive(i);return ts;}const n=[...ts,{kind:"customer",id}];setActive(n.length-1);return n;});};
   const closeTab=(i)=>{setTabs(ts=>{if(ts.length===1)return ts;const n=ts.filter((_,j)=>j!==i);setActive(a=>{const na=i<a?a-1:(a>=n.length?n.length-1:a);return Math.max(0,na);});return n;});};
@@ -2707,7 +2717,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
   </>);
   return (
     <div className="-mt-2">
-      <div className="flex items-center gap-1 border-b border-stone-200 mb-4 overflow-x-auto">
+      {!sidebarDriven&&<div className="flex items-center gap-1 border-b border-stone-200 mb-4 overflow-x-auto">
         <div className="relative">
           <button onClick={()=>setLaunch(l=>!l)} className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 rounded-t-lg whitespace-nowrap"><Plus className="w-4 h-4"/>Open</button>
           {launch&&<div className="absolute left-0 top-full z-30 mt-1 w-56 bg-white border border-stone-200 rounded-lg shadow-lg p-2" onMouseLeave={()=>setLaunch(false)}>
@@ -2722,7 +2732,14 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
             {Icon&&<Icon className="w-3.5 h-3.5 shrink-0"/>}{tabTitle(t)}
             {tabs.length>1&&<button onClick={(e)=>{e.stopPropagation();closeTab(i);}} className="ml-1 p-0.5 rounded hover:bg-stone-200 opacity-40 group-hover:opacity-100"><X className="w-3 h-3"/></button>}
           </div>);})}
-      </div>
+      </div>}
+      {sidebarDriven&&tabs.length>1&&<div className="flex items-center gap-1 border-b border-stone-200 mb-4 overflow-x-auto">
+        {tabs.map((t,i)=>{const Icon=t.kind==="section"?(SECTION_META[t.key]||{}).Icon:Building2;return (
+          <div key={t.kind+(t.key||t.id)} onClick={()=>setActive(i)} className={`group flex items-center gap-1.5 pl-3 pr-2 py-2 text-sm rounded-t-lg cursor-pointer whitespace-nowrap border-b-2 -mb-px ${i===active?"border-[#0086E0] text-stone-900 font-medium bg-white":"border-transparent text-stone-500 hover:bg-stone-50"}`}>
+            {Icon&&<Icon className="w-3.5 h-3.5 shrink-0"/>}{tabTitle(t)}
+            {t.kind==="customer"&&<button onClick={(e)=>{e.stopPropagation();closeTab(i);}} className="ml-1 p-0.5 rounded hover:bg-stone-200 opacity-40 group-hover:opacity-100"><X className="w-3 h-3"/></button>}
+          </div>);})}
+      </div>}
       <div className="min-w-0">
         {cur.kind==="section"?<SectionBody k={cur.key}/>
           :<CustomerDetail cid={cur.id} clients={clients} setClients={setClients} users={users} setUsers={setUsers} currentUser={currentUser} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} settings={settings} onClose={()=>closeTab(active)}/>}
@@ -4272,7 +4289,7 @@ function AppInner(){
       if(ord.length){ const rank=(k)=>{const i2=ord.indexOf(k);return i2<0?999:i2;}; out=[...out].sort((a,b)=>rank(a[0])-rank(b[0])); }
       return out;
     };
-    if(BRAND.admin)return [["admin","Admin HQ",ShieldCheck]];
+    if(BRAND.admin)return adminSectionsFor(currentUser).map(([k,l])=>["admin:"+k,l,ADMIN_SECTION_ICONS[k]||ShieldCheck]);
     if(isAdmin)return applyPrefs(ALL_TABS);
     const t=ALL_TABS.filter(x=>x[0]!=="admin"&&(x[0]==="ship"||featureOn(x[0],currentUser,myFlags)));
     if(isCompanyAdmin){const entry=["companyadmin","Company admin",Building2];const i=t.findIndex(x=>x[0]==="settings");i>=0?t.splice(i,0,entry):t.push(entry);}
@@ -4379,7 +4396,7 @@ function AppInner(){
           {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings} client={client} onShipped={onShipped}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
           {tab==="companyadmin"&&isCompanyAdmin&&<CompanyAdmin currentUser={currentUser} companyUsers={companyUsers} setCompanyUsers={setCompanyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} settings={settings}/>}
-          {tab==="admin"&&isAdmin&&<AdminPortal clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} publicBrand={publicBrand} setPublicBrand={setPublicBrand} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
+          {(tab==="admin"||tab.startsWith("admin:"))&&isAdmin&&<AdminPortal activeSection={tab.startsWith("admin:")?tab.slice(6):null} clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} publicBrand={publicBrand} setPublicBrand={setPublicBrand} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
           {tab==="settings"&&<Settings uid={currentUser&&currentUser.id} audit={audit} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
         </main>
       </div>

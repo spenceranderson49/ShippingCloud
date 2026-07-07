@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v240";
+const BUILD_TAG="addr-v241";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -302,8 +302,35 @@ function printImagePages(imgs,wIn,hIn){
     else setTimeout(go,60);
   }catch(e){}
 }
-async function printLabelPdf(base64){
-  try{ const r=await pdfToImages(base64,4); if(!r.imgs.length)throw new Error("no pages"); printImagePages(r.imgs,r.wIn,r.hIn); return true; }
+/* Draw the company logo onto rendered label pages before printing. Our own overlay
+   (FedEx's image feature covers invoices, not labels) — corners chosen to sit in the
+   label's blank margins; keep the size modest so barcodes stay untouched. */
+async function stampLogo(imgs,cfg,logoSrc){
+  if(!cfg||!cfg.labelLogoOn||!logoSrc||!imgs||!imgs.length) return imgs;
+  const logo=await new Promise((res)=>{const im=new Image();im.onload=()=>res(im);im.onerror=()=>res(null);im.src=logoSrc;});
+  if(!logo) return imgs;
+  const out=[];
+  for(const u of imgs){
+    const page=await new Promise((res)=>{const im=new Image();im.onload=()=>res(im);im.onerror=()=>res(null);im.src=u;});
+    if(!page){out.push(u);continue;}
+    const cv=document.createElement("canvas");cv.width=page.width;cv.height=page.height;
+    const cx=cv.getContext("2d");cx.drawImage(page,0,0);
+    const w=Math.round(page.width*Math.min(45,Math.max(8,+cfg.labelLogoScale||22))/100);
+    const h=Math.round(w*(logo.height/logo.width));
+    const pad=Math.round(page.width*0.025);
+    let x=pad,y=page.height-h-pad;
+    if(cfg.labelLogoPos==="bottom_right"){x=page.width-w-pad;}
+    else if(cfg.labelLogoPos==="top_right"){x=page.width-w-pad;y=pad;}
+    else if(cfg.labelLogoPos==="top_left"){y=pad;}
+    cx.fillStyle="#ffffff";cx.fillRect(x-2,y-2,w+4,h+4);
+    cx.drawImage(logo,x,y,w,h);
+    out.push(cv.toDataURL("image/png"));
+  }
+  return out;
+}
+async function printLabelPdf(base64,stForLogo){
+  try{ const r=await pdfToImages(base64,4);
+    if(stForLogo){ try{ const cc=cz(stForLogo); r.imgs=await stampLogo(r.imgs,cc,cc.labelLogo||stForLogo.companyLogo||""); }catch(e){} } if(!r.imgs.length)throw new Error("no pages"); printImagePages(r.imgs,r.wIn,r.hIn); return true; }
   catch(e){ try{ const u=pdfBlobUrl(base64); printPdfUrl(u); setTimeout(()=>URL.revokeObjectURL(u),180000); return true; }catch(e2){ return false; } }
 }
 /* ── reliable PDF printing: hidden body-level iframe + print(), because calling
@@ -1462,7 +1489,7 @@ const CUSTOM_DEFAULTS={
   slipThanks:"",slipFooter:"",
   density:"comfortable",stuckDays:0,
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
-  logoScale:100,companyLogoScale:100,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],theme:"light",accent:"",
+  logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],theme:"light",accent:"",
   refRequired:false,invRequired:false,poRequired:false,refLocked:false,invLocked:false,poLocked:false,
   confetti:"page",seasonal:true,loginBg:"",appBg:"",headerBg:"",pageBg:"",navBg:"",
 };
@@ -4794,6 +4821,7 @@ function LabelPreviewModal({data,onClose,settings}){
         const r=await pdfToImages(data.pdf,3);
         if(dead)return;
         if(!r.imgs.length)throw new Error("no pages");
+        try{ const cc=cz(st); const lg=cc.labelLogo||st.companyLogo||""; r.imgs=await stampLogo(r.imgs,cc,lg); }catch(e){}
         setPages(r);
         if(!printed.current&&data.autoPrint!==false){ printed.current=true; printImagePages(r.imgs,r.wIn,r.hIn); }   // print preview pops from the rendered pages
       }catch(e){
@@ -4805,7 +4833,7 @@ function LabelPreviewModal({data,onClose,settings}){
     return ()=>{dead=true;};
   },[data.pdf]);
   useEffect(()=>()=>{ if(url)try{URL.revokeObjectURL(url);}catch(e){} },[url]);
-  const doPrint=()=>{ if(pages&&pages.imgs.length){printImagePages(pages.imgs,pages.wIn,pages.hIn);} else { printLabelPdf(data.pdf); } };
+  const doPrint=()=>{ if(pages&&pages.imgs.length){printImagePages(pages.imgs,pages.wIn,pages.hIn);} else { printLabelPdf(data.pdf,st); } };
   const [copied,setCopied]=useState(false);
   const [showLabel,setShowLabel]=useState(false);
   const copyTracking=async()=>{ const t=String(data.tracking||""); if(!t)return;
@@ -8276,6 +8304,29 @@ function Customize({settings,setSettings,deployMode}){
         </ol>
         <p className="text-[11px] text-stone-400">Per-workstation setting (it's a Chrome launch flag, not an app setting). Regular Chrome windows keep the normal dialog. For raw thermal/ZPL printing over the network, ask about the print-agent upgrade.</p>
       </div>
+    </Panel>
+
+    <Panel title="Label branding">
+      <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
+        <span>Print my logo on every label<span className="block text-[11px] text-stone-400">Stamped onto the label when it prints or reprints — FedEx's own file stays untouched. Keep it small and in a corner so barcodes stay clear.</span></span>
+        <button onClick={()=>set("labelLogoOn",!c.labelLogoOn)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${c.labelLogoOn?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
+      </label>
+      {c.labelLogoOn&&<div className="mt-3 space-y-3">
+        <div className="flex items-center gap-3">
+          {(c.labelLogo||settings.companyLogo)?<img src={c.labelLogo||settings.companyLogo} alt="label logo" className="h-8 max-w-[120px] object-contain bg-white border border-stone-200 rounded px-1"/>:<span className="text-[11px] text-stone-400">No logo yet — company logo used when set</span>}
+          <label className="text-[11px] text-[#006FBF] hover:underline cursor-pointer">Upload a label-specific logo<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>set("labelLogo",String(rd.result));rd.readAsDataURL(f);}}/></label>
+          {c.labelLogo&&<button onClick={()=>set("labelLogo","")} className="text-[11px] text-stone-400 hover:text-rose-500">Remove (use company logo)</button>}
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <label className="block text-sm text-stone-700">Position
+            <select value={c.labelLogoPos||"bottom_left"} onChange={e=>set("labelLogoPos",e.target.value)} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm">
+              <option value="bottom_left">Bottom left (safest)</option><option value="bottom_right">Bottom right</option><option value="top_left">Top left</option><option value="top_right">Top right</option>
+            </select></label>
+          <label className="block text-sm text-stone-700">Size <span className="text-[11px] text-stone-400">· {c.labelLogoScale||22}% of label width</span>
+            <input type="range" min="8" max="45" step="1" value={c.labelLogoScale||22} onChange={e=>set("labelLogoScale",+e.target.value)} className="mt-1 w-full"/></label>
+        </div>
+        <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">Print one test label and check the logo isn't near a barcode before running volume — carriers can refuse labels with obscured barcodes.</p>
+      </div>}
     </Panel>
 
     <Panel title="Ship screen">

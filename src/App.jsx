@@ -64,7 +64,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v241";
+const BUILD_TAG="addr-v242";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1229,9 +1229,14 @@ function rateSellFor(cost,label,ctx){
   const g=(c.rules&&c.rules.global)||{};
   const gPct=(g.pct==null||g.pct===""||isNaN(+g.pct))?null:+g.pct;
   const gMin=(g.min==null||g.min===""||isNaN(+g.min))?null:+g.min;
+  /* Account-wide markup (this customer's blanket number) beats the platform-wide
+     global default; per-service rules in the profile beat both. */
+  const aPct=(c.client&&c.client.markup!=null&&c.client.markup!==""&&!isNaN(+c.client.markup)&&+c.client.markup!==0)?+c.client.markup:null;
+  const aMin=(c.client&&c.client.markupMin!=null&&c.client.markupMin!==""&&!isNaN(+c.client.markupMin)&&+c.client.markupMin>0)?+c.client.markupMin:null;
   const fallback=()=>{
+    if(aPct!=null||aMin!=null){let s=cost*(1+((aPct||0))/100);if(aMin!=null&&s<cost+aMin)s=cost+aMin;return Math.round(s*100)/100;}
     if(gPct!=null){let s=cost*(1+gPct/100);if(gMin!=null&&s<gMin)s=gMin;return Math.round(s*100)/100;}
-    return Math.round(cost*(1+(((c.client&&c.client.markup)||0))/100)*100)/100;
+    return Math.round(cost*100)/100;
   };
   const rules=c.rules; if(!rules)return fallback();
   const prof=c.prof||rateProfileFor(rules,c.client&&c.client.id);
@@ -1274,7 +1279,9 @@ function surchargeFees(rules,client){
   const sc=(prof&&prof.surcharges)||{};
   const g=(rules&&rules.global)||{};
   const gPct=(g.pct==null||g.pct===""||isNaN(+g.pct))?null:+g.pct;
-  const gUp=(d)=>gPct!=null?Math.round(d*(1+gPct/100)*100)/100:d;
+  const aPct=(client&&client.markup!=null&&client.markup!==""&&!isNaN(+client.markup)&&+client.markup!==0)?+client.markup:null;
+  const upPct=aPct!=null?aPct:gPct;
+  const gUp=(d)=>upPct!=null?Math.round(d*(1+upPct/100)*100)/100:d;
   const val=(id,def)=>{const r=sc[id];if(!r||r.amount==null||r.amount==="")return gUp(def);const a=+r.amount;return r.type==="percent"?Math.round(def*(1+a/100)*100)/100:Math.round(a*100)/100;};
   return {sig:{direct:val("SIG-D",SIG_FEE.direct),indirect:val("SIG-I",SIG_FEE.indirect),adult:val("SIG-A",SIG_FEE.adult)},sat:val("SAT",SAT_FEE),insUnit:val("INS",1.15),insMin:gUp(3.45)};
 }
@@ -1930,8 +1937,8 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       <Field label="Email"><Input value={c.email||""} onChange={e=>upClient({email:e.target.value})}/></Field>
       <Field label="Phone"><Input value={c.phone||""} onChange={e=>upClient({phone:e.target.value})}/></Field>
       <Field label="Origin ZIP (ships from)"><Input value={c.origin||""} onChange={e=>upClient({origin:e.target.value})}/></Field>
-      <Field label="Legacy flat markup %"><Input type="number" value={c.markup==null?"":c.markup} onChange={e=>upClient({markup:+e.target.value||0})}/></Field>
-      {(()=>{const g=(rules&&rules.global)||{};const on=g.pct!=null&&g.pct!==""&&!isNaN(+g.pct);return <div className={`text-[11px] rounded px-3 py-2 border ${on?"bg-emerald-50 border-emerald-200 text-emerald-800":"bg-stone-50 border-stone-200 text-stone-500"}`}>Global cost-plus markup: {on?<b>cost + {+g.pct}%{g.min?` (min $${(+g.min).toFixed(2)})`:""}</b>:"off"} — edit it at the top of this customer\u2019s <b>Rates</b> tab (it\u2019s platform-wide). Per-service rules here override it; this customer's flat markup applies only when global is off.</div>;})()}
+      <Field label="Account-wide markup %"><Input type="number" value={c.markup==null?"":c.markup} onChange={e=>upClient({markup:+e.target.value||0})}/></Field>
+      {(()=>{const g=(rules&&rules.global)||{};const on=g.pct!=null&&g.pct!==""&&!isNaN(+g.pct);return <div className={`text-[11px] rounded px-3 py-2 border ${on?"bg-emerald-50 border-emerald-200 text-emerald-800":"bg-stone-50 border-stone-200 text-stone-500"}`}>Global cost-plus markup: {on?<b>cost + {+g.pct}%{g.min?` (min $${(+g.min).toFixed(2)})`:""}</b>:"off"} — it\u2019s the same account-wide markup editable at the top of this customer\u2019s <b>Rates</b> tab. Per-service rules here override it; this customer's flat markup applies only when global is off.</div>;})()}
       <Field label="Status"><Select value={c.status||"active"} onChange={e=>upClient({status:e.target.value})}><option value="active">active</option><option value="inactive">inactive</option></Select></Field>
       <Field label="Plan"><Input value={c.plan||""} onChange={e=>upClient({plan:e.target.value})}/></Field>
       <Field label="Account number (yours)"><Input value={c.acctNo||""} onChange={e=>upClient({acctNo:e.target.value})} placeholder="internal ref"/></Field>
@@ -1983,16 +1990,16 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
     </div>}
 
     {tab==="rates"&&<div className="space-y-3">
-      {/* Global cost-plus markup — same store the Rate database section edits; shown here so all pricing lives on one screen */}
+      {/* Account-wide markup — THIS customer's blanket number over every returned rate & service */}
       <div className="border border-stone-200 rounded-lg bg-white p-3 flex flex-wrap items-end gap-3">
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-stone-800 flex items-center gap-2">Global cost-plus markup {(rules.global&&rules.global.pct!=null&&rules.global.pct!==""&&!isNaN(+rules.global.pct))?<Badge tone="green">on — every customer</Badge>:<Badge>off</Badge>}</div>
-          <div className="text-[11px] text-stone-500 mt-0.5 max-w-md">One number over cost, platform-wide: every customer, every service, every accessorial. The per-service rules below override it for this profile; while it's set it replaces customers' legacy flat markups.</div>
+          <div className="text-sm font-semibold text-stone-800 flex items-center gap-2">Account-wide markup — {c.name} only {(c.markup!=null&&c.markup!==""&&+c.markup!==0)||(c.markupMin!=null&&c.markupMin!==""&&+c.markupMin>0)?<Badge tone="green">on</Badge>:<Badge>off</Badge>}</div>
+          <div className="text-[11px] text-stone-500 mt-0.5 max-w-md">Marks up every rate, service, and accessorial returned for this account. Per-service rules below override it for their service; the platform default in Admin → Rate database fills in only when this is empty.</div>
         </div>
         <span className="flex-1"/>
-        <Field label="Markup %"><Input type="number" className="w-24" placeholder="e.g. 20" value={(rules.global&&rules.global.pct)??""} onChange={e=>upRules({global:{...(rules.global||{}),pct:e.target.value}})}/></Field>
-        <Field label="Min $ / label"><Input type="number" className="w-24" placeholder="—" value={(rules.global&&rules.global.min)??""} onChange={e=>upRules({global:{...(rules.global||{}),min:e.target.value}})}/></Field>
-        {rules.global&&rules.global.pct!==""&&rules.global.pct!=null&&<button onClick={()=>{if(window.confirm("Clear the global markup? Pricing falls back to per-service rules and each customer\u2019s flat markup."))upRules({global:{}});}} className="text-xs text-rose-500 bg-stone-100 rounded-lg px-2.5 py-1.5 hover:bg-rose-50">Clear</button>}
+        <Field label="Markup %"><Input type="number" className="w-24" placeholder="e.g. 20" value={c.markup==null?"":c.markup} onChange={e=>upClient({markup:e.target.value===""?"":+e.target.value})}/></Field>
+        <Field label="Min $ profit / label"><Input type="number" className="w-24" placeholder="—" value={c.markupMin==null?"":c.markupMin} onChange={e=>upClient({markupMin:e.target.value===""?"":+e.target.value})}/></Field>
+        {((c.markup!=null&&c.markup!==""&&+c.markup!==0)||(c.markupMin!=null&&c.markupMin!==""))&&<button onClick={()=>upClient({markup:"",markupMin:""})} className="text-xs text-rose-500 bg-stone-100 rounded-lg px-2.5 py-1.5 hover:bg-rose-50">Clear</button>}
       </div>
       <div className="text-[11px] text-stone-600 bg-[#F0F9FF] border border-[#BAE6FD] rounded px-3 py-2">
         <b>Live check</b> — a $10.00 cost sells right now for:&nbsp;

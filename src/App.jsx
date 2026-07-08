@@ -21,14 +21,14 @@ function ShipCloudLogo({size=30,dark="#1c1917",accent="#0086E0"}){
     <span style={{fontFamily:"'Space Grotesk',Inter,system-ui,sans-serif",letterSpacing:"-0.035em",fontWeight:800,fontSize:size,lineHeight:1,color:dark}}>Shipping<span style={{color:accent}}>Cloud</span></span>
   </span>);
 }
-function FreightwireShipHub({logoH=44,sub=true}){
+function FreightwireShipHub({logoH=44,sub=true,subText="Client Portal"}){
   const nameSize=Math.round(logoH*0.5);
   return (<span className="inline-flex items-center" style={{gap:Math.round(logoH*0.32)}}>
     <img src={FW_LOGO} alt="Freightwire" style={{height:logoH}} className="w-auto shrink-0" draggable={false}/>
     <span style={{width:1,height:Math.round(logoH*0.82),background:"#d6d3ce"}} className="shrink-0"/>
     <span className="inline-flex flex-col" style={{gap:1}}>
       <span style={{fontFamily:"Inter,system-ui,sans-serif",fontWeight:800,fontSize:nameSize,letterSpacing:"0.1em",lineHeight:1,color:"#1F1B18",textTransform:"uppercase"}}>Ship<span style={{color:"#0198FF"}}>Hub</span></span>
-      {sub&&<span style={{fontFamily:"Inter,system-ui,sans-serif",fontSize:Math.max(9,Math.round(logoH*0.2)),letterSpacing:"0.12em",color:"#78716c",fontWeight:500,textTransform:"uppercase",lineHeight:1}}>Client Portal</span>}
+      {sub&&<span style={{fontFamily:"Inter,system-ui,sans-serif",fontSize:Math.max(9,Math.round(logoH*0.2)),letterSpacing:"0.12em",color:"#78716c",fontWeight:500,textTransform:"uppercase",lineHeight:1}}>{subText}</span>}
     </span>
   </span>);
 }
@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v279";
+const BUILD_TAG="addr-v288";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -85,15 +85,18 @@ const BUILD_TAG="addr-v279";
 const IS_STAGING=(()=>{ try{ return String((import.meta.env&&import.meta.env.VITE_STAGING)||"").toLowerCase()==="true"; }catch(e){ return false; } })();
 const SHOW_ENGLAND=(()=>{ try{ return String((import.meta.env&&import.meta.env.VITE_CARRIER_BACKEND)||"").toLowerCase()==="england"; }catch(e){ return false; } })();
 const BRAND=(()=>{ let k="shippingcloud"; try{ k=(import.meta.env&&import.meta.env.VITE_BRAND)||"shippingcloud"; }catch(e){}
-  if(k==="admin")return {key:"admin",fw:true,admin:true,name:"ShipHub Admin",short:"Admin HQ",accent:"#1e3a5f",accent2:"#2d5a8e"};
-  return k==="freightwire"
-    ?{key:"freightwire",fw:true,name:"ShipHub",short:"ShipHub",accent:"#1e3a5f",accent2:"#2d5a8e"}
-    :{key:"shippingcloud",fw:false,name:"ShippingCloud",short:"ShippingCloud",accent:"#0086E0",accent2:"#0072BE"}; })();
+  if(k==="admin")return {key:"admin",fw:true,admin:true,name:"ShipHub Admin",short:"Admin HQ",product:"ShipHub",accent:"#1e3a5f",accent2:"#2d5a8e"};
+  /* "shiphub" accepted as an alias for "freightwire" — the Netlify sites and the build checks
+     have used both spellings, and an unrecognized key silently rendered the RETAIL brand on
+     freightwireship.com. product = the name used inside shared app copy. */
+  return (k==="freightwire"||k==="shiphub")
+    ?{key:"freightwire",fw:true,name:"ShipHub",short:"ShipHub",product:"ShipHub",accent:"#1e3a5f",accent2:"#2d5a8e"}
+    :{key:"shippingcloud",fw:false,name:"ShippingCloud",short:"ShippingCloud",product:"ShippingCloud",accent:"#0086E0",accent2:"#0072BE"}; })();
 /* v137: on the Freightwire build, the browser tab shows the FW "F" mark (auto-cropped out of FW_LOGO
    by scanning for the transparent gap before the wordmark) instead of the ShippingCloud cloud, plus
    the FreightwireShip tab title. Crop bounds verified against the shipped asset: mark = 78x78 at x5,y2. */
 if(typeof window!=="undefined"&&BRAND.fw){
-  try{ document.title="ShipHub — Freightwire"; }catch(e){}
+  try{ document.title=BRAND.admin?"ShipHub Admin — Freightwire":"ShipHub — Freightwire"; }catch(e){}
   try{
     const setIcon=(href)=>{ try{
       document.querySelectorAll('link[rel*="icon"]').forEach(l=>l.parentNode&&l.parentNode.removeChild(l));
@@ -264,6 +267,24 @@ function orderToEngland(o,opts,sender,eng){
 }
 async function bookOrderLabel(o,opts,eng,sender){
   return shipCall({action:"ship",account:acctOf(eng),order:orderToEngland(o,opts,sender,eng)});
+}
+/* One Rate bookings: auto-fill the chosen box name ("FedEx Medium Box") into the reference
+   field picked in Settings → Reference fields → "Auto-fill One Rate box name" — the same
+   behavior the Ship tab and order modal already have, applied to Autopilot + Batch bookings.
+   In "reference" mode the box is APPENDED after the order number, never replacing it —
+   shipmentReference is England's only reference field and losing the order # would be worse. */
+function orBoxRefFill(q,orBoxField,orderName){
+  const lbl=String((q&&q.label)||"");
+  if(!/one\s*rate/i.test(lbl))return {};
+  const f=orBoxField||"invoice";
+  if(f==="off")return {};
+  const byCode=q&&q.packageTypeCode?FEDEX_ONERATE.find(b=>b.code===q.packageTypeCode):null;
+  const nm=byCode?byCode.name.replace(/FedEx\s*One Rate\u00ae?\s*/i,""):String(lbl.split(/\s[-\u2013]\s/)[1]||"").trim();
+  if(!nm)return {};
+  const val=/^fedex/i.test(nm)?nm:"FedEx "+nm;
+  if(f==="po")return {poNo:val};
+  if(f==="reference")return {reference:(orderName?orderName+" \u00b7 ":"")+val};
+  return {invoiceNo:val};
 }
 async function shipCall(payload){
   const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),20000);
@@ -687,13 +708,13 @@ function parseItemsList(order){
   }).filter(r=>r.name);
 }
 function slipFromOrder(o,sender){
-  return {company:(sender&&(sender.company||sender.name))||"ShippingCloud shipper",orderName:o.name||"",date:new Date().toLocaleDateString(),
+  return {company:(sender&&(sender.company||sender.name))||BRAND.product+" shipper",orderName:o.name||"",date:new Date().toLocaleDateString(),
     to:{name:o.customer||"",company:o.company||"",address1:o.address1||"",city:o.city||"",state:o.state||"",zip:o.zip||""},
     items:parseItemsList(o),note:o.note||o.giftMessage||"",tracking:o.tracking||"",service:""};
 }
 function slipFromShipment(sh){
   const r=sh.recipient||{};
-  return {company:(sh.sender&&(sh.sender.company||sh.sender.name))||"ShippingCloud shipper",orderName:sh.reference||"",date:sh.date||"",
+  return {company:(sh.sender&&(sh.sender.company||sh.sender.name))||BRAND.product+" shipper",orderName:sh.reference||"",date:sh.date||"",
     to:{name:r.name||"",company:r.company||"",address1:r.address1||"",city:r.city||"",state:r.state||"",zip:r.zip||""},
     items:parseItemsList({items:sh.items||""}),note:sh.note||"",tracking:sh.tracking||"",service:sh.service||""};
 }
@@ -1251,7 +1272,9 @@ function svcPrefHit(pref,label){
   const pk=rateSvcKey(P),lk=rateSvcKey(label);
   if(/one\s*rate/i.test(P)){
     const base=pk.replace(/_(pak|envelope|xs_box|small_box|medium_box|large_box|xl_box|tube)$/,"");
-    return lk===pk||lk===base||lk.indexOf(base+"_")===0;
+    if(lk===pk||lk===base)return true;
+    /* prefix must extend into a BOX token only — "or_2day_" must not swallow "or_2day_am_*" */
+    return lk.indexOf(base+"_")===0&&/^(pak|envelope|xs_box|small_box|medium_box|large_box|xl_box|tube)$/.test(lk.slice(base.length+1));
   }
   return lk===pk;
 }
@@ -1522,8 +1545,8 @@ const CHECKOUT_DEFAULTS={registered:true,presentation:"named",handling:0,freeThr
 
 /* ════════ PLATFORM CARRIER ACCOUNTS ════════ */
 const PLATFORM_CARRIERS=[
-  {id:"ups",name:"UPS",blurb:"ShippingCloud negotiated UPS rates",tint:"text-amber-700"},
-  {id:"usps",name:"USPS",blurb:"Commercial Plus pricing via ShippingCloud",tint:"text-[#0086E0]"},
+  {id:"ups",name:"UPS",blurb:BRAND.product+" negotiated UPS rates",tint:"text-amber-700"},
+  {id:"usps",name:"USPS",blurb:"Commercial Plus pricing via "+BRAND.product,tint:"text-[#0086E0]"},
   {id:"amazon",name:"Amazon Shipping",blurb:"Amazon's ground & next-day network",tint:"text-stone-700"},
   {id:"uniuni",name:"UniUni",blurb:"Last-mile DSP for lightweight e-comm",tint:"text-violet-600"},
 ];
@@ -1680,7 +1703,7 @@ function Login({users,onLogin,brand}){
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center gap-2 mb-6">
           <div className="flex items-center gap-2">
-            {(!B.name1||B.name1==="Shipping")&&(!B.name2||B.name2==="Cloud")?<ShipCloudLogo size={28}/>:<><BrandCloud className="h-10 w-auto" color={B.primary}/><span className="font-extrabold tracking-tight text-3xl" style={{color:B.dark}}>{B.name1}<span style={{color:B.primary}}>{B.name2}</span></span></>}
+            {BRAND.fw?<FreightwireShipHub logoH={46} subText={BRAND.admin?"Admin HQ":"Client Portal"}/>:(!B.name1||B.name1==="Shipping")&&(!B.name2||B.name2==="Cloud")?<ShipCloudLogo size={28}/>:<><BrandCloud className="h-10 w-auto" color={B.primary}/><span className="font-extrabold tracking-tight text-3xl" style={{color:B.dark}}>{B.name1}<span style={{color:B.primary}}>{B.name2}</span></span></>}
           </div>
           {B.showLogo&&B.logo&&<div className="flex items-center gap-1.5 text-stone-400 text-xs">{B.partnerLabel}<img src={B.logo} alt="partner" className="h-3.5 w-auto object-contain"/></div>}
         </div>
@@ -2865,7 +2888,7 @@ function PlatformAccountsAdmin({settings,setSettings}){
       {PLATFORM_CARRIERS.map(c=>(
         <div key={c.id} className="flex items-center gap-3 px-4 py-3">
           <div className={`w-12 text-xs font-bold ${c.tint}`}>{c.name}</div>
-          <div className="flex-1 min-w-0"><div className="text-sm font-medium">{c.blurb}</div><div className="text-[11px] text-stone-400">ShippingCloud account · instant</div></div>
+          <div className="flex-1 min-w-0"><div className="text-sm font-medium">{c.blurb}</div><div className="text-[11px] text-stone-400">{BRAND.product} account · instant</div></div>
           {plat[c.id]&&<Badge tone="green">on</Badge>}
           <button onClick={()=>togglePlat(c.id)}><span className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${plat[c.id]?"bg-[#0086E0] justify-end":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></span></button>
         </div>
@@ -3183,7 +3206,7 @@ const isScratch=(key)=>String(key).indexOf("ship.")===0;
 const SCRATCH_KEYS=["ship.receiver","ship.pieces","ship.reference","ship.invoiceNo","ship.poNo","ship.insurance","ship.residential"];
 const clearScratchFor=(uid)=>SCRATCH_KEYS.forEach(k=>lsDel("u/"+uid+"/"+k));
 
-/* Copilot: does an order match a Claude-staged batch filter? Pure, testable. */
+/* Copilot: does an order match a ShipHub AI-staged batch filter? Pure, testable. */
 function batchCmdMatch(o,f,zone){
   const has=(arr)=>Array.isArray(arr)&&arr.length;
   if(f.productContains&&!String(o.items||o.product||"").toLowerCase().includes(String(f.productContains).toLowerCase()))return false;
@@ -3451,7 +3474,7 @@ function FedExIntake({onDone,onClose}){
     </div>
     {err&&<div className="text-xs text-red-600">{err}</div>}
     <button onClick={()=>onDone({volume:f.volume,carrier:f.carrier,invoice:inv})} className="w-full bg-[#0086E0] text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-[#0a76c2]">Continue</button>
-    <p className="text-[11px] text-stone-400 text-center">Next step: create your ShippingCloud login so we can attach this to your account.</p>
+    <p className="text-[11px] text-stone-400 text-center">Next step: create your {BRAND.product} login so we can attach this to your account.</p>
   </div>);
 }
 function CloudAuth({onDone,initialMode,intake}){
@@ -3562,7 +3585,7 @@ function LegalLinks(){
         <div className="overflow-y-auto px-6 py-4 pb-8">
           <p className="text-[11px] text-stone-400">Last updated July 2026 · Contact: support@shippingcloud.net</p>
           {open==="terms"&&<>
-            <H>1. The service</H><P>ShippingCloud (operated by Freightwire) is software for quoting, purchasing, and managing parcel shipping. We are a software platform and shipping reseller — not a carrier. Transportation is performed by carriers (e.g. FedEx, DHL) under their own service terms, tariffs, and liability limits, which govern the physical handling of every shipment.</P>
+            <H>1. The service</H><P>{BRAND.product} (operated by Freightwire) is software for quoting, purchasing, and managing parcel shipping. We are a software platform and shipping reseller — not a carrier. Transportation is performed by carriers (e.g. FedEx, DHL) under their own service terms, tariffs, and liability limits, which govern the physical handling of every shipment.</P>
             <H>2. Accounts</H><P>You're responsible for activity under your login, for keeping credentials confidential, and for the accuracy of shipment details you submit. You must have the right to ship what you ship; items prohibited or restricted by carrier rules or applicable law may not be tendered through the platform.</P>
             <H>3. Rates & billing</H><P>Quoted rates are based on the details you provide. Carriers may adjust charges after delivery (dimensional reweighs, address corrections, residential surcharges, and similar), and adjusted amounts are your responsibility. Rate estimates shown before purchase are estimates until a label is issued. Fees owed to us are due as invoiced; unpaid balances may result in suspension.</P>
             <H>4. Delivery estimates</H><P>Transit times and delivery dates shown anywhere in the platform (including at your store's checkout) are estimates, not guarantees, except where a carrier's own money-back service commitment applies.</P>
@@ -3686,16 +3709,16 @@ function Landing({onAuth}){
         ))}
       </div>
     </div>
-    {/* built-in Claude */}
+    {/* built-in ShipHub AI */}
     <div className="max-w-6xl mx-auto px-5 pb-4">
       <div className="rounded-2xl p-8 sm:p-12 border border-[#0086E0]/25 bg-gradient-to-br from-[#0086E0]/10 via-white/40 to-transparent">
-        <div className="flex items-center gap-2 text-[#0086E0] font-semibold text-sm"><Sparkles className="w-4 h-4"/>Built-in AI · powered by Claude</div>
-        <h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="mt-3 text-3xl sm:text-4xl font-bold text-stone-900 leading-tight max-w-3xl">Let Claude do the shipping busywork for you.</h2>
-        <p className="mt-4 text-stone-600 max-w-2xl text-[15px] leading-relaxed">ShippingCloud has Anthropic’s Claude built right in — not a canned help bot, but an assistant that actually works your account. Ask in plain English and it sets things up for you to approve.</p>
+        <div className="flex items-center gap-2 text-[#0086E0] font-semibold text-sm"><Sparkles className="w-4 h-4"/>Built-in assistant · ShipHub AI</div>
+        <h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="mt-3 text-3xl sm:text-4xl font-bold text-stone-900 leading-tight max-w-3xl">Let ShipHub AI do the shipping busywork for you.</h2>
+        <p className="mt-4 text-stone-600 max-w-2xl text-[15px] leading-relaxed">ShippingCloud has ShipHub AI built right in — not a canned help bot, but an assistant that actually works your account. Ask in plain English and it sets things up for you to approve.</p>
         <div className="mt-8 grid sm:grid-cols-3 gap-4 max-w-4xl">
           <div className="bg-white border border-stone-200/80 rounded-xl p-5">
             <div className="flex items-center gap-2 text-stone-900 font-semibold"><Layers className="w-4 h-4 text-[#0086E0]"/>Batch by voice</div>
-            <p className="mt-2 text-[13px] text-stone-500 leading-relaxed">“Batch every Shopify order under 5 lb to Texas as cheapest ground.” Claude filters, selects, and stages the whole run.</p>
+            <p className="mt-2 text-[13px] text-stone-500 leading-relaxed">“Batch every Shopify order under 5 lb to Texas as cheapest ground.” ShipHub AI filters, selects, and stages the whole run.</p>
           </div>
           <div className="bg-white border border-stone-200/80 rounded-xl p-5">
             <div className="flex items-center gap-2 text-stone-900 font-semibold"><Zap className="w-4 h-4 text-[#0086E0]"/>Rules in plain English</div>
@@ -3708,7 +3731,7 @@ function Landing({onAuth}){
         </div>
         <div className="mt-7 flex flex-wrap items-center gap-4">
           <button onClick={enterDemo} className="inline-flex items-center gap-2 bg-white text-stone-900 font-semibold rounded-lg px-6 py-3 hover:bg-stone-200"><Eye className="w-4 h-4"/>Try it in the demo</button>
-          <span className="inline-flex items-center gap-1.5 text-[13px] text-stone-500"><ShieldCheck className="w-4 h-4 text-[#0086E0]"/>It stages, you approve — Claude never prints a label without you.</span>
+          <span className="inline-flex items-center gap-1.5 text-[13px] text-stone-500"><ShieldCheck className="w-4 h-4 text-[#0086E0]"/>It stages, you approve — ShipHub AI never prints a label without you.</span>
         </div>
       </div>
     </div>
@@ -3716,7 +3739,7 @@ function Landing({onAuth}){
     <div className="max-w-6xl mx-auto px-5 pb-16 pt-8">
       <div className="bg-gradient-to-br from-[#0086E0]/15 to-transparent border border-[#0086E0]/25 rounded-2xl p-8 sm:p-10 text-center">
         <h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-2xl sm:text-3xl font-bold text-stone-900 leading-snug">Real people answer the phone.</h2>
-        <p className="mt-3 text-stone-500 max-w-xl mx-auto">Claude handles the busywork inside the app — but when you need a human, you get one. No week-old tickets, no runaround. One call covers your shipping and your tech, from someone who knows your account.</p>
+        <p className="mt-3 text-stone-500 max-w-xl mx-auto">ShipHub AI handles the busywork inside the app — but when you need a human, you get one. No week-old tickets, no runaround. One call covers your shipping and your tech, from someone who knows your account.</p>
         <a href={"tel:"+CONTACT_PHONE_TEL} className="mt-6 inline-flex items-center gap-2 bg-white text-stone-900 font-semibold rounded-lg px-6 py-3 hover:bg-stone-200"><Phone className="w-4 h-4"/>{CONTACT_PHONE}</a>
       </div>
     </div>
@@ -3917,7 +3940,7 @@ function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,set
 /* ════════ ASSISTANT CHAT ════════ */
 function AssistantChat({who,getContext,onAction}){
   const [open,setOpen]=useState(false);
-  const [msgs,setMsgs]=useState([{role:"assistant",content:who==="demo"?"Hi, I’m Claude! Ask me anything about ShippingCloud — how a tab works, what Autopilot does, shipping advice, whatever. Everything in this demo is sample data, so click around freely.":"Hi, I’m Claude! Ask me anything about ShippingCloud — how features work, or general shipping advice."}]);
+  const [msgs,setMsgs]=useState([{role:"assistant",content:who==="demo"?`Hi, I’m ShipHub AI! Ask me anything about ${BRAND.product} — how a tab works, what Autopilot does, shipping advice, whatever. Everything in this demo is sample data, so click around freely.`:`Hi, I’m ShipHub AI! Ask me anything about ${BRAND.product} — how features work, or general shipping advice.`}]);
   const [input,setInput]=useState("");
   const [busy,setBusy]=useState(false);
   const endRef=React.useRef(null);
@@ -3932,7 +3955,7 @@ function AssistantChat({who,getContext,onAction}){
     const next=[...msgs,{role:"user",content:q}];
     setMsgs(next);setInput("");setBusy(true);
     try{
-      const r=await fetch("/.netlify/functions/assistant",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:next.filter(m=>!m.act).slice(-16),context:who,appContext:getContext?getContext():undefined})});
+      const r=await fetch("/.netlify/functions/assistant",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:next.filter(m=>!m.act).slice(-16),context:who,appContext:getContext?getContext():undefined,brand:BRAND.product})});
       const d=await r.json().catch(()=>null);
       setMsgs(m=>[...m,{role:"assistant",content:(d&&d.ok&&d.text)||(d&&d.error)||"Couldn’t reach the assistant just now — try again in a moment."}]);
       if(d&&d.ok&&Array.isArray(d.actions)&&d.actions.length&&onAction){
@@ -3954,27 +3977,27 @@ function AssistantChat({who,getContext,onAction}){
   return (<>
     {open&&<div className="fixed bottom-20 right-4 sm:right-5 w-[min(92vw,370px)] h-[480px] max-h-[70vh] bg-white border border-stone-200 rounded-2xl shadow-2xl z-40 flex flex-col overflow-hidden">
       <div className="px-4 py-3 border-b border-stone-200 bg-stone-50 flex items-center gap-2">
-        <span className="w-7 h-7 rounded-full bg-[#D97757] text-stone-900 flex items-center justify-center"><Sparkles className="w-3.5 h-3.5"/></span>
-        <div className="flex-1"><div className="text-sm font-semibold text-stone-800 leading-tight">Ask Claude</div><div className="text-[11px] text-stone-500 leading-tight">answers, advice — and it can batch, rule &amp; route for you</div></div>
+        <span className="w-7 h-7 rounded-full bg-[#0086E0] text-white flex items-center justify-center"><Sparkles className="w-3.5 h-3.5"/></span>
+        <div className="flex-1"><div className="text-sm font-semibold text-stone-800 leading-tight">Ask ShipHub AI</div><div className="text-[11px] text-stone-500 leading-tight">answers, advice — and it can batch, rule &amp; route for you</div></div>
         <button onClick={()=>setOpen(false)} className="p-1 rounded hover:bg-stone-200"><X className="w-4 h-4 text-stone-500"/></button>
       </div>
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 text-sm">
         {msgs.map((m,i)=>(<div key={i} className={`flex ${m.role==="user"?"justify-end":"justify-start"}`}>
-          <div className={`max-w-[85%] rounded-2xl px-3 py-2 whitespace-pre-wrap leading-relaxed ${m.act?"bg-violet-50 border border-violet-200 text-violet-900 rounded-bl-sm":m.role==="user"?"bg-[#0086E0] text-stone-900 rounded-br-sm":"bg-[#faf3ef] border border-[#D97757]/20 text-stone-800 rounded-bl-sm"}`}>{m.content}</div>
+          <div className={`max-w-[85%] rounded-2xl px-3 py-2 whitespace-pre-wrap leading-relaxed ${m.act?"bg-violet-50 border border-violet-200 text-violet-900 rounded-bl-sm":m.role==="user"?"bg-[#0086E0] text-white rounded-br-sm":"bg-[#E6F4FF] border border-[#99D6FF]/60 text-stone-800 rounded-bl-sm"}`}>{m.content}</div>
         </div>))}
         {msgs.length<=1&&!busy&&<div className="flex flex-wrap gap-1.5 pt-1">
-          {CHIPS.map(c=><button key={c} onClick={()=>send(c)} className="text-[11px] text-left rounded-full px-2.5 py-1.5 border border-[#D97757]/30 bg-white text-[#c2410c] hover:bg-[#faf3ef]">{c}</button>)}
+          {CHIPS.map(c=><button key={c} onClick={()=>send(c)} className="text-[11px] text-left rounded-full px-2.5 py-1.5 border border-[#99D6FF] bg-white text-[#006FBF] hover:bg-[#E6F4FF]">{c}</button>)}
         </div>}
         {busy&&<div className="flex justify-start"><div className="bg-stone-100 rounded-2xl rounded-bl-sm px-3 py-2"><Loader2 className="w-4 h-4 animate-spin text-stone-500"/></div></div>}
         <div ref={endRef}/>
       </div>
       <div className="border-t border-stone-200 p-2 flex items-end gap-2">
         <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}} rows={1} placeholder="Ask about the platform…" className="flex-1 resize-none text-sm border border-stone-300 rounded-lg px-3 py-2 focus:outline-none focus:border-[#0086E0] max-h-24"/>
-        <button onClick={send} disabled={busy||!input.trim()} className="bg-[#D97757] hover:bg-[#c9663f] disabled:opacity-40 text-stone-900 rounded-lg p-2.5"><Send className="w-4 h-4"/></button>
+        <button onClick={send} disabled={busy||!input.trim()} className="bg-[#0086E0] hover:bg-[#0072BE] disabled:opacity-40 text-white rounded-lg p-2.5"><Send className="w-4 h-4"/></button>
       </div>
-      <div className="text-center text-[10px] text-stone-500 pb-1.5 -mt-0.5">Powered by Claude</div>
+      <div className="text-center text-[10px] text-stone-500 pb-1.5 -mt-0.5">Powered by ShipHub AI</div>
     </div>}
-    <button onClick={()=>setOpen(v=>!v)} title="Ask Claude about ShippingCloud" className="fixed bottom-4 right-4 sm:bottom-5 sm:right-5 z-40 w-12 h-12 rounded-full bg-[#D97757] hover:bg-[#c9663f] text-stone-900 shadow-lg flex items-center justify-center">
+    <button onClick={()=>setOpen(v=>!v)} title={"Ask ShipHub AI about "+BRAND.product} className="fixed bottom-4 right-4 sm:bottom-5 sm:right-5 z-40 w-12 h-12 rounded-full bg-[#0086E0] hover:bg-[#0072BE] text-white shadow-lg flex items-center justify-center">
       {open?<X className="w-5 h-5"/>:<Sparkles className="w-5 h-5"/>}
     </button>
   </>);
@@ -4416,7 +4439,7 @@ function AppInner(){
     <div className="min-h-screen bg-stone-50 text-stone-800" style={{fontFamily:"ui-sans-serif,system-ui,sans-serif"}}><SandboxBanner/>
       {adminReturn&&<div className="bg-[#0086E0] text-white text-[13px] px-4 py-2 flex items-center justify-center gap-3 sticky top-0 z-40">
         <ShieldCheck className="w-4 h-4 shrink-0"/>
-        <span>Admin preview — you’re seeing ShippingCloud exactly as <b>{currentUser&&(currentUser.name||currentUser.email)}</b> sees it. Anything you change here changes their account.</span>
+        <span>Admin preview — you’re seeing {BRAND.product} exactly as <b>{currentUser&&(currentUser.name||currentUser.email)}</b> sees it. Anything you change here changes their account.</span>
         <button onClick={exitImpersonation} className="bg-white text-[#0086E0] font-semibold rounded-lg px-3 py-1 hover:bg-blue-50 shrink-0">Return to admin</button>
       </div>}
       {isDemo&&!adminReturn&&<div className="bg-amber-500 text-white text-[13px] px-4 py-2 flex items-center justify-center gap-3 sticky top-0 z-40 flex-wrap">
@@ -4548,15 +4571,20 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const [selectedOrder,setSelectedOrder]=usePersist("ship.selectedOrder",null);
   const [scanVal,setScanVal]=useState("");
   const [scanMsg,setScanMsg]=useState(null);
-  const scanApply=(code)=>{ const c=String(code||"").trim().toLowerCase(); setScanVal(""); if(!c)return;
+  /* auto=true: fired by the debounce while typing/scanning — EXACT matches only, silent on
+     miss, and never clears the box mid-type. Enter keeps the old behavior: exact first, then
+     fuzzy contains-match, with the red "no match" flash. */
+  const scanApply=(code,auto)=>{ const c=String(code||"").trim().toLowerCase(); if(!c){setScanVal("");return;}
     const o=orders.find(x=>[x.name,x.id,x.sku,x.tracking,x.customer,x.zip,x.barcode].filter(Boolean).some(v=>String(v).toLowerCase()===c))
-      ||orders.find(x=>[x.name,x.sku,x.tracking,x.customer].filter(Boolean).some(v=>String(v).toLowerCase().includes(c)));
-    if(!o){ setScanMsg({ok:false,t:`no match for “${code}”`}); setTimeout(()=>setScanMsg(null),4000); return; }
+      ||(auto?null:orders.find(x=>[x.name,x.sku,x.tracking,x.customer].filter(Boolean).some(v=>String(v).toLowerCase().includes(c))));
+    if(!o){ if(!auto){ setScanVal(""); setScanMsg({ok:false,t:`no match for “${code}”`}); setTimeout(()=>setScanMsg(null),4000); } return; }
+    setScanVal("");
     setReceiver({...empty,name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email});
     if(o.weight)setPieces([{weight:o.weight,L:12,W:9,H:4}]);
     setReference(o.name||""); setSelectedOrder(o.id);
     setScanMsg({ok:true,t:String(o.name||o.id)}); setTimeout(()=>setScanMsg(null),4000);
   };
+  useEffect(()=>{ const v=scanVal; if(!String(v||"").trim())return; const t=setTimeout(()=>scanApply(v,true),400); return ()=>clearTimeout(t); },[scanVal]);   // scan guns finish in <100ms/char — 400ms of silence means the code is complete
   const [verify,setVerify]=useState(null);
   const [verifyNonce,setVerifyNonce]=useState(0);
   const [saved,setSaved]=useState(false);
@@ -4588,7 +4616,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     try{ const rs=await fetch("/.netlify/functions/hs-lookup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({description:l0.desc,destination:receiver.country||""})});
       if(rs.status===404){setShipHsMsg({err:"The AI lookup isn't deployed yet: commit netlify/functions/hs-lookup.js to the repo, then add ANTHROPIC_API_KEY on Netlify and redeploy."});setShipHsBusy(-1);return;}
       const d=await rs.json();
-      if(d&&d.ok&&(d.options||d.code)){ const opts=(d.options&&d.options.length)?d.options:[{code:d.code,reason:d.reason||""}]; setShipHsOpts({line:i,opts}); setShipHsMsg({ok:"Claude suggests — pick the code that fits best (verify before filing; classification is the shipper's responsibility):"}); }
+      if(d&&d.ok&&(d.options||d.code)){ const opts=(d.options&&d.options.length)?d.options:[{code:d.code,reason:d.reason||""}]; setShipHsOpts({line:i,opts}); setShipHsMsg({ok:"ShipHub AI suggests — pick the code that fits best (verify before filing; classification is the shipper's responsibility):"}); }
       else setShipHsMsg({err:(d&&d.error)||"Lookup failed — is ANTHROPIC_API_KEY set on Netlify (non-secret) with a redeploy after?"});
     }catch(e){ setShipHsMsg({err:"Lookup failed — likely hs-lookup.js isn't committed or ANTHROPIC_API_KEY isn't set on Netlify."}); }
     setShipHsBusy(-1);
@@ -4889,7 +4917,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New shipment</button>
             {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}
-            <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Ship "}}))} title="Describe a shipment in plain English and Claude fills the form" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded-lg px-3 py-1.5 font-medium hover:bg-[#f5e6de] whitespace-nowrap"><Sparkles className="w-4 h-4"/><span className="sm:hidden">Ask Claude</span><span className="hidden sm:inline">Ask Claude to help</span></button>
+            <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Ship "}}))} title="Describe a shipment in plain English and ShipHub AI fills the form" className="flex items-center gap-1.5 text-sm bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-3 py-1.5 font-medium hover:bg-[#CCEAFF] whitespace-nowrap"><Sparkles className="w-4 h-4"/><span className="sm:hidden">Ask ShipHub AI</span><span className="hidden sm:inline">Ask ShipHub AI to help</span></button>
           </div>
         </div>
         <div className="relative grid lg:grid-cols-3 gap-4">
@@ -5000,7 +5028,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                   <input type="number" value={l.wkg??""} onChange={e=>setLine(i,{wkg:e.target.value})} placeholder="kg" className="w-[120px] bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/>}
                   <input type="number" value={l.qty} onChange={e=>setLine(i,{qty:+e.target.value})} className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
                   <input type="number" value={l.value} onChange={e=>setLine(i,{value:e.target.value})} placeholder="0.00" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
-                  <button onClick={()=>shipSuggestHS(i)} disabled={!l.desc||shipHsBusy===i} title="Claude reads the item description and suggests an HTS code" className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap self-center">{shipHsBusy===i?"Searching…":"✨ Search HTS codes"}</button>
+                  <button onClick={()=>shipSuggestHS(i)} disabled={!l.desc||shipHsBusy===i} title="ShipHub AI reads the item description and suggests an HTS code" className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap self-center">{shipHsBusy===i?"Searching…":"✨ Search HTS codes"}</button>
                   {!!(l.desc&&l.hts)&&<button onClick={()=>saveHtsToCatalog(l)} title="Save this HTS code to your product catalog for next time" className="text-xs text-[#006FBF] hover:underline whitespace-nowrap self-center">💾 Save to catalog</button>}
                   <button onClick={()=>delLine(i)} className="text-stone-300 hover:text-rose-500 w-5"><X className="w-4 h-4"/></button>
                 </div>
@@ -5048,19 +5076,24 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                   </select>}
                 </div>}
                 {selectedOrder&&(()=>{const so=orders.find(o=>o.id===selectedOrder);return so&&(so.shippingService||so.source)?<div className="flex items-center gap-2 text-xs text-stone-600 bg-stone-100 border border-stone-200 rounded-lg px-3 py-2"><Truck className="w-3.5 h-3.5 text-stone-400"/>From order <b>{so.name}</b>{so.source?` (${so.source})`:""} — buyer requested <b>{so.shippingService||"Standard"}</b>.</div>:null;})()}
-        {ready&&<div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
-          {rateSrc.loading?<><Loader2 className="w-3.5 h-3.5 animate-spin"/>Fetching live rates…</>
-          :rateSrc.live?<><Wifi className="w-3.5 h-3.5"/>Live rates from your FedEx account</>
-          :<><Calculator className="w-3.5 h-3.5"/>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""} — turn on live rates in Settings → Carrier accounts to price with your real account</>}
-        </div>}
+        {/* Live-rates switch lives right on this bar — same setting as Settings → Carrier
+            accounts → "Use live rates", so either place controls it. Flipping it re-runs the
+            rate effect (it depends on settings.england) and refetches immediately. */}
+        {ready&&(()=>{const liveOn=!!(settings.england&&settings.england.enabled);return <div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
+          <span className="flex items-center gap-2 flex-1 min-w-0">
+          {rateSrc.loading?<><Loader2 className="w-3.5 h-3.5 animate-spin shrink-0"/>Fetching live rates…</>
+          :rateSrc.live?<><Wifi className="w-3.5 h-3.5 shrink-0"/>Live rates from your FedEx account</>
+          :liveOn?<><Calculator className="w-3.5 h-3.5 shrink-0"/>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""} — live rates are on but no live prices came back, so estimates are shown</>
+          :<><Calculator className="w-3.5 h-3.5 shrink-0"/>Estimated rates — flip the switch to price with your real FedEx account</>}
+          </span>
+          <button onClick={()=>setSettings(p=>({...p,england:{...(p.england||{}),enabled:!(p.england&&p.england.enabled)}}))} title={liveOn?"Live FedEx rates are on — click to switch to estimates":"Live FedEx rates are off — click to price with your real account"} className="flex items-center gap-1.5 shrink-0 font-medium">
+            <span>Live rates {liveOn?"on":"off"}</span>
+            <span className={`w-8 h-5 rounded-full flex items-center px-0.5 transition-colors ${liveOn?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></span>
+          </button>
+        </div>;})()}
         {ready&&!rateSrc.live&&!rateSrc.loading&&rateSrc.diag&&<div className="text-[11px] text-stone-400 -mt-1 px-1">
           Tried England on your <b>{rateSrc.diag.src==="customer"?"customer's":"main"}</b> account · from ZIP {rateSrc.diag.fromZip} · customer ID {rateSrc.diag.cust} · key {rateSrc.diag.key} · {rateSrc.diag.enabled?"live toggle ON":"live toggle OFF"}{!rateSrc.diag.hasKey?" · no API key found":""}{!rateSrc.diag.hasCust?" · no customer ID found":""}{rateSrc.diag.fromZip==="(none)"?" — no origin ZIP: set your sender ZIP or the customer's origin.":""}{rateSrc.error&&/401|invalid/i.test(rateSrc.error)?" — England rejected this key/ID pair. Re-enter it in Settings → Carrier accounts and Test again.":""}
         </div>}
-        {/* Autopilot on this screen is optional — this pill is the switch. Same setting as
-            Settings → Customize → "Run my Autopilot rules here too", so either place controls it. */}
-        <div className="flex justify-end mb-1">
-          <button onClick={()=>setSettings(p=>({...p,custom:{...(p.custom||{}),autoRulesOnShip:!cz(p).autoRulesOnShip}}))} title={custom.autoRulesOnShip?"Autopilot is checking loaded orders against your rules on this screen — click to turn it off":"Autopilot is off on this screen — click to check loaded orders against your rules"} className={`text-[11px] rounded-full px-2.5 py-1 border font-medium flex items-center gap-1 ${custom.autoRulesOnShip?"bg-[#0086E0] text-white border-[#0086E0]":"bg-white text-stone-500 border-stone-200 hover:border-[#99D6FF]"}`}><Zap className="w-3 h-3"/>Autopilot {custom.autoRulesOnShip?"on":"off"}</button>
-        </div>
         {liveRuleStatus&&<div className={`text-[11px] rounded px-3 py-2 mb-2 flex items-center gap-1.5 ${liveRuleStatus.state==="fired"?"bg-emerald-50 border border-emerald-200 text-emerald-800":liveRuleStatus.state==="error"?"bg-rose-50 border border-rose-200 text-rose-700":"bg-stone-50 border border-stone-200 text-stone-500"}`}>
           <Zap className="w-3.5 h-3.5 shrink-0"/>
           {liveRuleStatus.state==="fired"&&(()=>{const _sw=groundFamilySwap(liveRuleStatus.service,addrClassified?residential:null);return <span>Autopilot rule <b>"{liveRuleStatus.rule}"</b> matched this order — highlighted <b>{_sw}</b> below{_sw!==liveRuleStatus.service&&<span> (rule says {liveRuleStatus.service}, but FedEx classified this address {residential?"residential, so Home Delivery applies":"commercial, so Ground applies"})</span>}.</span>;})()}
@@ -5108,7 +5141,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <p className="text-[11px] text-stone-400">Emails the buyer a tracking link or a printable label PDF. Logged under Settings → Email automation.</p>
         </div>
         <div className="flex justify-end gap-2 pt-1">
-          <button onClick={()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);printPackingSlips([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||"ShippingCloud shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:(shipStatus&&shipStatus.tracking)||"",service:""}]);}} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-200"><FileText className="w-4 h-4"/>Packing slip</button>
+          <button onClick={()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);printPackingSlips([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:(shipStatus&&shipStatus.tracking)||"",service:""}]);}} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-200"><FileText className="w-4 h-4"/>Packing slip</button>
           <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-300"><Plus className="w-4 h-4"/>New shipment</button>
           <button onClick={saveDraft} className={`flex items-center gap-1.5 text-sm rounded px-4 py-2 font-medium ${saved?"bg-emerald-600 text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{saved?<><Check className="w-4 h-4"/>Saved to drafts</>:<><FileText className="w-4 h-4"/>Save draft</>}</button>
         </div>
@@ -5121,7 +5154,7 @@ function CommercialInvoice({sender,receiver,customs,total,reference,pieces,total
   return (
     <div className="overflow-x-auto"><div className="bg-white border border-stone-300 rounded-lg p-5 text-xs text-stone-700 min-w-[520px]" style={{fontFamily:"ui-sans-serif,system-ui"}}>
       <div className="flex items-start justify-between border-b border-stone-300 pb-3 mb-3">
-        <div><div className="text-lg font-bold tracking-tight text-stone-900">COMMERCIAL INVOICE</div><div className="text-stone-400">ShippingCloud · for customs clearance</div></div>
+        <div><div className="text-lg font-bold tracking-tight text-stone-900">COMMERCIAL INVOICE</div><div className="text-stone-400">{BRAND.product} · for customs clearance</div></div>
         <div className="text-right"><div>Invoice # <span className="font-mono">{customs.ci||"CI-PREVIEW"}</span></div><div>Date {new Date().toLocaleDateString()}</div><div>Ref {reference||"—"}</div></div>
       </div>
       <div className="grid grid-cols-2 gap-4 mb-3">
@@ -5288,7 +5321,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
           {matched===q.key&&<span className="text-[10px] font-semibold uppercase tracking-wide bg-[#E6F4FF] text-[#0086E0] border border-[#99D6FF] rounded px-1.5 py-0.5 shrink-0 inline-flex items-center gap-1">{matchedSrc==="autopilot"&&<Zap className="w-3 h-3"/>}{matchedSrc==="autopilot"?"Autopilot":"Requested"}</span>}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2"><span className="text-sm truncate">{(custom.aliases&&custom.aliases[canonSvc(q.label)])||q.label}</span></div>
-            <div className="text-[11px] text-stone-500 flex items-center gap-1"><Calendar className="w-3 h-3"/>Transit Time: {days?(custom.transitStyle==="days"?<>{days} business day{days>1?"s":""}</>:<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}{fxLive&&days?<span className="text-[#0086E0] font-medium ml-1">FedEx</span>:""}</div>
+            <div className="text-[11px] text-stone-500 flex items-center gap-1"><Calendar className="w-3 h-3"/>Transit Time: {days?(custom.transitStyle==="days"?<>{days} business day{days>1?"s":""}</>:<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}</div>
           </div>
           <div className="text-right font-mono">{!!(custom.priceWarn>0&&ready&&hasPrice&&sell>custom.priceWarn)&&<div className="text-[10px] text-amber-600 flex items-center justify-end gap-0.5" title={"Above your $"+custom.priceWarn+" price alert"}><AlertTriangle className="w-3 h-3"/>over limit</div>}<div className="text-base font-semibold text-stone-900">{ready&&hasPrice?money(sell):<span className="text-stone-300">—</span>}</div></div>
           {action&&<button onClick={(e)=>{e.stopPropagation();action(q);}} disabled={!ready||!hasPrice} title={!hasPrice&&q._oneRate?"England’s rate API doesn’t return One Rate flat pricing — pick a priced service, or book One Rate in Webship.":undefined} className={`shrink-0 w-32 text-sm rounded px-3 py-2 font-medium flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed ${bought===q.key?"bg-[#0086E0] text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{bought===q.key?<><Check className="w-4 h-4"/>{doneLabel}</>:!hasPrice&&q._oneRate?<>No quote</>:<><Printer className="w-4 h-4"/>{label}</>}</button>}
@@ -5299,15 +5332,12 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
             {comps.map((c,i)=><div key={i} className="flex justify-between text-[13px]"><span className="text-stone-600">{c.label}</span><span className="font-mono text-stone-700">{money(c.amount)}</span></div>)}
             <div className="flex justify-between text-[13px] border-t border-stone-200 pt-1 mt-1 font-semibold"><span>Total</span><span className="font-mono">{money(sell)}</span></div>
           </div>
-          {billing&&(q._oneRate
-            ?<div className="text-[11px] text-stone-500 bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 mt-2">One Rate is a flat price for this box — weight doesn't change it (up to the box's limit).</div>
-            :<div className="text-[11px] text-stone-500 bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 mt-2 space-y-0.5">
-              <div>Quoted at <b>{q.quotedWeight||billing.billed} lb</b>{billing.rounded&&!billing.dimApplies&&<> — you entered {fmtLbOz(billing.act)}; FedEx bills every fraction as the next full pound</>}.</div>
-              {(q.dimWeight||billing.dimApplies)&&<div className="text-amber-700 flex items-center gap-1"><AlertTriangle className="w-3 h-3 shrink-0"/>Dimensional weight applies: {billing.dims?billing.dims+" ÷ 139 = ":""}<b>{q.quotedWeight||billing.dim} lb</b>, more than the {billing.quoted} lb actual — FedEx bills the higher.</div>}
-              {!q.dimWeight&&!billing.dimApplies&&billing.dim!=null&&<div>Dim weight {billing.dim} lb ({billing.dims?billing.dims+" ":""}÷ 139) — under the actual weight, so actual applies.</div>}
-            </div>)}
+          {/* Weight note shows ONLY when dimensional weight governs — no box on ordinary actual-weight quotes */}
+          {billing&&!q._oneRate&&(q.dimWeight||billing.dimApplies)&&<div className="text-[11px] text-stone-500 bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 mt-2 space-y-0.5">
+              <div>Quoted at <b>{q.quotedWeight||billing.billed} lb</b>.</div>
+              <div className="text-amber-700 flex items-center gap-1"><AlertTriangle className="w-3 h-3 shrink-0"/>Dimensional weight applies: {billing.dims?billing.dims+" ÷ 139 = ":""}<b>{q.quotedWeight||billing.dim} lb</b>, more than the {billing.quoted} lb actual — FedEx bills the higher.</div>
+            </div>}
           {!billing&&q.dimWeight&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 mt-2 flex items-center gap-1.5"><AlertTriangle className="w-3 h-3 shrink-0"/>Billed at <b>{q.quotedWeight?`${q.quotedWeight} lb `:""}dimensional weight</b>.</div>}
-          {eta&&<div className="text-[11px] text-stone-400 mt-2 flex items-center gap-1"><Calendar className="w-3 h-3"/>{fxLive?"FedEx delivery":"Estimated delivery"} {fmtDeliv(eta)}{days?` · ${days} business day${days>1?"s":""} in transit`:""}</div>}
         </div>}
       </div>
     );
@@ -5477,7 +5507,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
             <div className="flex-1 relative min-w-[160px]"><Search className="w-4 h-4 absolute left-2.5 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search orders, items, recipient…" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-3 py-2 text-sm outline-none focus:border-[#0099FF]"/></div>
             <div className="flex items-center gap-1.5 text-sm"><span className="text-stone-500 hidden sm:inline">Sort</span><select value={sort} onChange={e=>setSort(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="total">Order total</option><option value="customer">Recipient</option><option value="state">Dest. state</option><option value="weight">Weight</option><option value="source">Store</option></select></div>
             <button onClick={()=>downloadCSV("shippingcloud-orders.csv",[["Order","Customer","Company","Address","City","State","ZIP","Country","Items","SKU","Weight","Total","Source","Date","Note"],...orders.map(o=>[o.name,o.customer,o.company||"",o.address1||"",o.city,o.state,o.zip,o.country||"US",o.items||"",o.sku||"",o.weight,o.total||"",o.source||"",o.date||"",o.note||""])])} title="Download every open order as CSV" className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 px-2 py-2"><Download className="w-4 h-4"/>Export</button>
-            <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Batch "}}))} title="e.g. ‘batch everything going to Texas under 5 lb as cheapest ground’" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded-lg px-3 py-2 font-medium hover:bg-[#f5e6de]"><Sparkles className="w-4 h-4"/>Ask Claude to batch these</button>
+            <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Batch "}}))} title="e.g. ‘batch everything going to Texas under 5 lb as cheapest ground’" className="flex items-center gap-1.5 text-sm bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-3 py-2 font-medium hover:bg-[#CCEAFF]"><Sparkles className="w-4 h-4"/>Ask ShipHub AI to batch these</button>
             {orderSources.length>0&&<button onClick={syncAll} disabled={syncing} title={orderSources.length>1?`Syncs: ${orderSources.map(s=>s.name).join(", ")}`:undefined} className="flex items-center gap-1.5 text-sm border border-[#0086E0]/30 bg-[#E6F4FF] text-[#006FBF] rounded-lg px-3 py-2 font-medium hover:bg-[#CDE9FF] disabled:opacity-40">{syncing?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>{syncLabel}</>}</button>}
             <button onClick={()=>setAdding(true)} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800"><Plus className="w-4 h-4"/>New order</button>
           </div>
@@ -5525,7 +5555,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
                       <td className="px-3 py-2.5 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button onClick={(e)=>{e.stopPropagation();setOpen(o);}} className={`text-sm rounded px-3 py-1.5 font-medium ${o.status==="fulfilled"?"bg-stone-100 text-stone-600 hover:bg-stone-200":"bg-stone-900 text-white hover:bg-stone-800"}`}>{o.status==="fulfilled"?"View":"Ship"}</button>
-                          <button onClick={(e)=>{e.stopPropagation();if(window.confirm(`Delete order ${o.name}? This removes it from ShippingCloud completely.`))setOrders(os=>os.filter(x=>x.id!==o.id));}} title="Delete order" className="text-stone-300 hover:text-rose-500 p-1"><Trash2 className="w-4 h-4"/></button>
+                          <button onClick={(e)=>{e.stopPropagation();if(window.confirm(`Delete order ${o.name}? This removes it from ${BRAND.product} completely.`))setOrders(os=>os.filter(x=>x.id!==o.id));}} title="Delete order" className="text-stone-300 hover:text-rose-500 p-1"><Trash2 className="w-4 h-4"/></button>
                         </div>
                       </td>
                     </tr>
@@ -5602,7 +5632,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
       });
     } else setRateSrc({rates:localOrderQuotes(),live:false,loading:false});
     return ()=>{cancel=true;};
-  },[rateNonce,o.zip,weight,box.L,box.W,box.H,residential,oneRate,orBox&&orBox.code,eng]);
+  },[rateNonce,o.zip,weight,box.L,box.W,box.H,residential,oneRate,orBox&&orBox.code,eng.enabled,eng.apiKey,eng.customerId,eng.base,eng.fedexAccount]);   /* eng is a fresh object every render (englandFor) — depend on its primitives or this effect loops forever */
   const localOrderQuotes=()=>quoteRates({fromZip,toZip:o.zip,pieces:[{weight:+weight||0,L:box.L,W:box.W,H:box.H}],residential,intl:false}).filter(qq=>qq.carrier==="FedEx");
   const quotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,fromZip:(settings&&settings.sender&&settings.sender.zip)||"",toZip:o.zip,weight:+weight||o.weight||1})})).sort((a,b)=>(a.sell||1e9)-(b.sell||1e9));},[rateSrc,residential,client,settings,rateRules,weight]);
   const best=(rateSrc.live&&quotes[0])?quotes[0].key:null;
@@ -5770,7 +5800,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
       });
     } else setRateSrc({rates:localOrderQuotes(),live:false,loading:false});
     return ()=>{cancel=true;};
-  },[rateNonce,rcv.zip,totalWeight,box.L,box.W,box.H,residential,eng,sigOption,sat,insurance]);
+  },[rateNonce,rcv.zip,totalWeight,box.L,box.W,box.H,residential,eng.enabled,eng.apiKey,eng.customerId,eng.base,eng.fedexAccount,sigOption,sat,insurance,orPkg]);   /* eng primitives, not the object (englandFor returns a new object each render — object identity in deps = infinite refetch). orPkg added: an explicit One Rate box pick changes packageTypeCode and must requote */
   // FedEx transit times via the FedEx API
   useEffect(()=>{
     let cancel=false;
@@ -6000,7 +6030,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
       {chkMsg&&<div className={`text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${chkMsg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{chkMsg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{chkMsg.err||chkMsg.ok}</div>}
       <div className="flex items-center gap-2">
       <div className="relative flex-1"><Search className="w-4 h-4 absolute left-3 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by name, tracking, order, reference or PO #" className="w-full bg-white border border-stone-200 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:border-[#0099FF]"/></div>
-      <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude"))} title="e.g. ‘how many delivered this week?’ or ‘anything stuck in transit?’" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded-lg px-3 py-2 font-medium hover:bg-[#f5e6de] shrink-0"><Sparkles className="w-4 h-4"/><span className="hidden sm:inline">Ask Claude about shipments</span><span className="sm:hidden">Ask Claude</span></button>
+      <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude"))} title="e.g. ‘how many delivered this week?’ or ‘anything stuck in transit?’" className="flex items-center gap-1.5 text-sm bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-3 py-2 font-medium hover:bg-[#CCEAFF] shrink-0"><Sparkles className="w-4 h-4"/><span className="hidden sm:inline">Ask ShipHub AI about shipments</span><span className="sm:hidden">Ask ShipHub AI</span></button>
       </div>
       <div className="border border-stone-200 rounded-lg overflow-hidden bg-white divide-y divide-stone-100">
         <div className="flex items-center gap-3 px-4 py-2 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50"><div className="w-4"/><div className="w-24">Created</div><div className="flex-1">Recipient</div><div className="w-52 hidden lg:block">Ship-to address</div><div className="w-24 hidden xl:block">Reference</div><div className="w-40 hidden md:block">Tracking</div><div className="w-24 text-right">Status</div></div>
@@ -6368,7 +6398,7 @@ function Dashboard({shipments,orders,returns,goTab}){
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <button onClick={()=>goTab("orders")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><ShoppingBag className="w-4 h-4"/><span className="font-semibold">{unful} orders to ship</span></div><div className="text-[11px] text-stone-400 mt-1">Open the queue →</div></button>
         <button onClick={()=>goTab("rules")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><Zap className="w-4 h-4"/><span className="font-semibold">Run Autopilot</span></div><div className="text-[11px] text-stone-400 mt-1">Rules → labels, one click →</div></button>
-        <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude"))} className="border border-[#D97757]/30 rounded-2xl bg-[#faf3ef] p-4 text-left hover:border-[#D97757]/60 hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#c2410c]"><Sparkles className="w-4 h-4"/><span className="font-semibold">Ask Claude</span></div><div className="text-[11px] text-[#c2410c]/70 mt-1">Batch, rule &amp; route by chat →</div></button>
+        <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude"))} className="border border-[#99D6FF] rounded-2xl bg-[#E6F4FF] p-4 text-left hover:border-[#0086E0] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#006FBF]"><Sparkles className="w-4 h-4"/><span className="font-semibold">Ask ShipHub AI</span></div><div className="text-[11px] text-[#006FBF]/70 mt-1">Batch, rule &amp; route by chat →</div></button>
         <button onClick={()=>goTab("returns")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><Undo2 className="w-4 h-4"/><span className="font-semibold">{returns.length} open returns</span></div><div className="text-[11px] text-stone-400 mt-1">Manage RMAs →</div></button>
       </div>
     </div>
@@ -6549,9 +6579,9 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
       setSel(new Set(hit.filter(o=>!holds[o.id]).map(o=>o.id)));
       if(f.service){
         setSvcOv(v=>{const n={...v};hit.forEach(o=>{n[o.id]=f.service;});return n;});
-        setOvWhy(w=>{const n={...w};hit.forEach(o=>{n[o.id]="Claude";});return n;});
+        setOvWhy(w=>{const n={...w};hit.forEach(o=>{n[o.id]="ShipHub AI";});return n;});
       }
-      setMsg(hit.length?`Claude selected ${hit.length} order${hit.length!==1?"s":""}${f.service?` · service: ${f.service}`:""} — review below, then hit Create labels.`:"Claude’s filter matched no open orders — nothing was selected.");
+      setMsg(hit.length?`ShipHub AI selected ${hit.length} order${hit.length!==1?"s":""}${f.service?` · service: ${f.service}`:""} — review below, then hit Create labels.`:"ShipHub AI’s filter matched no open orders — nothing was selected.");
       setTimeout(()=>setMsg(""),9000);
     }
     onBatchCmdDone&&onBatchCmdDone();
@@ -6603,10 +6633,11 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
       const need=[]; if(!o.customer&&!o.company)need.push("name"); if(String(o.phone||"").replace(/\D/g,"").length<10)need.push("phone"); if(!o.email)need.push("email");
       if(need.length){ out.push({o,name:o.name,orderId:o.id,ok:false,error:"Missing "+need.join(", ")}); setResults([...out]); continue; }
       const pkB=packs[o.id];
-      const res=await bookOrderLabel(o,{quote:picked,weightLb:(pkB&&pkB.totalWt)||o.weight,box:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:undefined,residential:_resFlagB,sender:settings.sender},eng,settings.sender);
+      const _orFill=orBoxRefFill(picked,settings.orBoxField,o.name);
+      const res=await bookOrderLabel(o,{quote:picked,weightLb:(pkB&&pkB.totalWt)||o.weight,box:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:undefined,residential:_resFlagB,sender:settings.sender,..._orFill},eng,settings.sender);
       if(res&&res.ok){
         const carrier=carrierOf(picked.label);
-        onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:originZip,toZip:o.zip,weight:(pkB&&pkB.totalWt)||o.weight,pieces:pkB?pkB.pieces:undefined,dims:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,items:o.items||"",note:o.note||"",bookNumber:res.bookNumber},o.id);
+        onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:originZip,toZip:o.zip,weight:(pkB&&pkB.totalWt)||o.weight,pieces:pkB?pkB.pieces:undefined,dims:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,items:o.items||"",note:o.note||"",bookNumber:res.bookNumber,..._orFill},o.id);
         out.push({o,name:o.name,orderId:o.id,ok:true,tracking:res.tracking,service:picked.label,carrier,pdf:res.labelPdfBase64||null});
       } else out.push({o,name:o.name,orderId:o.id,ok:false,error:(res&&res.error)||"Booking failed"});
       setResults([...out]);
@@ -6745,7 +6776,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
           <div className="flex-1"/>
           <button onClick={applyAutopilot} disabled={!(ruleset||[]).some(r=>r.enabled)||!visible.length} title="Run your Autopilot rules on the orders below: routes services, applies holds" className="text-sm bg-violet-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-violet-700 disabled:opacity-40 flex items-center gap-1.5"><Zap className="w-4 h-4"/>Apply Autopilot rules</button>
           <button onClick={()=>setQrOpen(v=>!v)} className={`text-sm rounded-lg px-3 py-1.5 font-medium border flex items-center gap-1.5 ${qrOpen?"bg-violet-50 border-violet-300 text-violet-700":"bg-white border-stone-200 text-stone-600 hover:bg-stone-100"}`}><Plus className="w-3.5 h-3.5"/>Quick rule</button>
-          <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Batch "}}))} title="Tell Claude what to batch in plain English — e.g. ‘batch the camp mugs to Texas as cheapest ground’" className="text-sm rounded-lg px-3 py-1.5 font-medium border bg-[#faf3ef] border-[#D97757]/40 text-[#c2410c] hover:bg-[#f5e6de] flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/>Ask Claude to batch</button>
+          <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Batch "}}))} title="Tell ShipHub AI what to batch in plain English — e.g. ‘batch the camp mugs to Texas as cheapest ground’" className="text-sm rounded-lg px-3 py-1.5 font-medium border bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF] hover:bg-[#CCEAFF] flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/>Ask ShipHub AI to batch</button>
           {(Object.keys(svcOv).length>0||Object.keys(holds).length>0)&&<button onClick={clearAutopilot} className="text-xs text-stone-400 hover:text-stone-600 underline">reset routing</button>}
         </div>
         {qrOpen&&<div className="border-t border-stone-100 pt-3 flex flex-wrap items-center gap-2 text-sm">
@@ -6938,7 +6969,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
       const r=await fetch(SHOPIFY_SYNC,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({shop,token,action,uid})});
       const d=await r.json().catch(()=>null);
       if(!d||!d.ok)setCs({err:(d&&d.error)||"Shopify call failed."});
-      else setCs(action==="installCarrier"?{ok:d.updated?"Carrier service updated — live rates are on at checkout.":"Installed! Your checkout now quotes through ShippingCloud.",installed:true}:{installed:d.installed,ok:d.installed?"Installed — your checkout is quoting through ShippingCloud.":"Not installed yet — hit Install below."});
+      else setCs(action==="installCarrier"?{ok:d.updated?"Carrier service updated — live rates are on at checkout.":"Installed! Your checkout now quotes through "+BRAND.product+".",installed:true}:{installed:d.installed,ok:d.installed?"Installed — your checkout is quoting through ShippingCloud.":"Not installed yet — hit Install below."});
     }catch(e){setCs({err:"Network error — try again."});}
     setCBusy("");
   };
@@ -6967,7 +6998,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
       <div className="space-y-4">
         <div>
           <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2 mb-1"><ShoppingBag className="w-4 h-4"/>Live checkout rates</h2>
-          <p className="text-sm text-stone-500">Show live, calculated shipping rates inside your Shopify checkout. ShippingCloud answers Shopify's CarrierService callback in real time, so buyers always see an accurate rate.</p>
+          <p className="text-sm text-stone-500">Show live, calculated shipping rates inside your Shopify checkout. {BRAND.product} answers Shopify's CarrierService callback in real time, so buyers always see an accurate rate.</p>
         </div>
         <div className="border border-stone-200 rounded-lg bg-white p-4">
           <div className="flex items-center gap-3">
@@ -7091,7 +7122,7 @@ function ReferenceFields({settings,setSettings}){
   return (<div className="max-w-2xl space-y-4">
     <div>
       <h2 className="text-base font-semibold text-stone-800">Reference fields</h2>
-      <p className="text-sm text-stone-500 mt-1">When you pick a <b>FedEx One Rate</b> service, ShippingCloud can auto-fill the chosen box name into a reference field so it prints on the label and your team knows which box to grab. Pick where it goes — or turn it off.</p>
+      <p className="text-sm text-stone-500 mt-1">When you pick a <b>FedEx One Rate</b> service, {BRAND.product} can auto-fill the chosen box name into a reference field so it prints on the label and your team knows which box to grab. Pick where it goes — or turn it off.</p>
     </div>
     <div className="bg-white border border-stone-200 rounded-lg p-4 flex items-center justify-between">
       <div><div className="text-sm font-medium text-stone-800">Auto-fill One Rate box name</div><div className="text-[13px] text-stone-500">{on?`Currently filling the ${fieldName} field.`:"Currently off."}</div></div>
@@ -7300,7 +7331,7 @@ function BoxesSettings({settings,setSettings}){
   const add=()=>{if(!n.name)return;setSettings({...settings,boxes:[...boxes,{id:"bx"+Date.now(),name:n.name,L:+n.L||1,W:+n.W||1,H:+n.H||1,maxWt:+n.maxWt||50,empty:+n.empty||0.3}]});setN({name:"",L:"",W:"",H:"",maxWt:"",empty:""});};
   const del=(id)=>setSettings({...settings,boxes:boxes.filter(b=>b.id!==id)});
   return (<div className="max-w-2xl space-y-3">
-    <p className="text-sm text-stone-500">Your box catalog. ShippingCloud's box logic auto-picks the smallest box that fits each order — used on the Ship tab and for live Shopify checkout rates.</p>
+    <p className="text-sm text-stone-500">Your box catalog. {BRAND.product}'s box logic auto-picks the smallest box that fits each order — used on the Ship tab and for live Shopify checkout rates.</p>
     <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
       <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="flex-1">Box</div><div className="w-28">Dimensions</div><div className="w-16 text-right">Max wt</div><div className="w-16 text-right">Empty</div><div className="w-6"/></div>
       <div className="divide-y divide-stone-100">{boxes.map(b=>(
@@ -7393,6 +7424,9 @@ const DEFAULT_RECEIPT_LINES=[{id:"rl1",field:"recipientName",label:"To",custom:"
 function PrinterSettings({settings,setSettings}){
   const pr=settings.printer||{labelSize:"4x6",format:"PDF",printer:"",packingSlip:true,autoPrint:false,slipSize:"letter",rotate:false};
   const set=(patch)=>setSettings({...settings,printer:{...pr,...patch}});
+  // Labels & printing (moved here from Customizations → Labels & printing) writes to settings.custom
+  const cust=cz(settings);
+  const setCust=(k,v)=>setSettings(p=>({...p,custom:{...(p.custom||{}),[k]:v}}));
   // Doc tabs + receipt config (per-login settings)
   const dt=settings.docTab||{enabled:false,stock:"trailing",zones:DEFAULT_DOCTABS,showLabels:true};
   const setDt=(patch)=>setSettings({...settings,docTab:{...dt,...patch}});
@@ -7547,6 +7581,49 @@ function PrinterSettings({settings,setSettings}){
       </>}
     </Panel>
     <div className="flex items-center gap-2 text-xs text-stone-400"><Printer className="w-4 h-4"/>Thermal sizes (4×6 / ZPL) print fastest on label printers; choose Letter/PDF if you print on a standard office printer.</div>
+
+    <Panel title="Printing">
+      <div className="text-sm text-stone-600 space-y-2">
+        <p>When a label books, the <b>system print dialog opens automatically</b> — pick the label printer once and Chrome remembers it.</p>
+        <p className="text-stone-700 font-medium">Want zero clicks — straight to the printer, no dialog?</p>
+        <ol className="list-decimal ml-5 space-y-1 text-[13px]">
+          <li>Set your label printer as the <b>default printer</b> in Windows (Settings → Bluetooth &amp; devices → Printers), with the paper size set to your label stock (e.g. 4×6).</li>
+          <li>Make a Chrome shortcut just for shipping: right-click the desktop → New → Shortcut → paste <span className="font-mono text-[12px] bg-stone-100 border border-stone-200 rounded px-1">"C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk-printing</span> and name it "{BRAND.product} – Direct Print".</li>
+          <li>Open the app from that shortcut. Every print — booked labels, reprints, batch — now goes <b>directly to the default printer instantly</b>, no dialog, no clicks.</li>
+        </ol>
+        <p className="text-[11px] text-stone-400">Per-workstation setting (it's a Chrome launch flag, not an app setting). Regular Chrome windows keep the normal dialog. For raw thermal/ZPL printing over the network, ask about the print-agent upgrade.</p>
+      </div>
+    </Panel>
+
+    <Panel title="After booking">
+      <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
+        <span>Skip the booked summary, go straight to a new shipment<span className="block text-[11px] text-stone-400">The label still prints automatically — this just skips the tracking/copy/pickup card afterward and clears the form for the next order. Off by default so you can grab tracking or schedule a pickup right after booking.</span></span>
+        <button onClick={()=>setCust("skipBookedSummary",!cust.skipBookedSummary)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${cust.skipBookedSummary?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
+      </label>
+    </Panel>
+
+    <Panel title="Label branding">
+      <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
+        <span>Print my logo on every label<span className="block text-[11px] text-stone-400">Stamped onto the label when it prints or reprints — FedEx's own file stays untouched. Keep it small and in a corner so barcodes stay clear.</span></span>
+        <button onClick={()=>setCust("labelLogoOn",!cust.labelLogoOn)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${cust.labelLogoOn?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
+      </label>
+      {cust.labelLogoOn&&<div className="mt-3 space-y-3">
+        <div className="flex items-center gap-3">
+          {(cust.labelLogo||settings.companyLogo)?<img src={cust.labelLogo||settings.companyLogo} alt="label logo" className="h-8 max-w-[120px] object-contain bg-white border border-stone-200 rounded px-1"/>:<span className="text-[11px] text-stone-400">No logo yet — company logo used when set</span>}
+          <label className="text-[11px] text-[#006FBF] hover:underline cursor-pointer">Upload a label-specific logo<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>setCust("labelLogo",String(rd.result));rd.readAsDataURL(f);}}/></label>
+          {cust.labelLogo&&<button onClick={()=>setCust("labelLogo","")} className="text-[11px] text-stone-400 hover:text-rose-500">Remove (use company logo)</button>}
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <label className="block text-sm text-stone-700">Position
+            <select value={cust.labelLogoPos||"bottom_left"} onChange={e=>setCust("labelLogoPos",e.target.value)} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm">
+              <option value="bottom_left">Bottom left (safest)</option><option value="bottom_right">Bottom right</option><option value="top_left">Top left</option><option value="top_right">Top right</option>
+            </select></label>
+          <label className="block text-sm text-stone-700">Size <span className="text-[11px] text-stone-400">· {cust.labelLogoScale||22}% of label width</span>
+            <input type="range" min="8" max="45" step="1" value={cust.labelLogoScale||22} onChange={e=>setCust("labelLogoScale",+e.target.value)} className="mt-1 w-full"/></label>
+        </div>
+        <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">Print one test label and check the logo isn't near a barcode before running volume — carriers can refuse labels with obscured barcodes.</p>
+      </div>}
+    </Panel>
   </div>);
 }
 function Notifications({settings,setSettings,emails}){
@@ -7628,7 +7705,7 @@ const RULE_PROPERTIES={
 const RULE_PROP_NAMES=Object.keys(RULE_PROPERTIES);
 const RULE_OPERATORS={text:["CONTAINS","NOT CONTAINS","IN","NOT IN","=","!="],list:["IN","NOT IN","=","!="],number:["=","!=",">","<",">=","<="],date:["=","!=",">","<"]};
 const RULE_ACTION_TYPES=["Set Service","Set Package","Set One Rate Box","Request Signature","Set Insurance","Saturday Delivery","Add Order Tag","Add Note","Assign To","Set Weight","Set Custom Field","Mark as Gift","Split Packages","Assign Hold","Set From Address","Route to Printer"];
-const RULE_SERVICES=["ANY - Cheapest","ANY - Cheapest Ground","ANY - Cheapest 2 Day","ANY - Fastest","FedEx - Ground","FedEx - Home Delivery","FedEx - Express Saver","FedEx - 2Day","FedEx - 2Day OneRate","FedEx - Priority Overnight OneRate","FedEx - Standard Overnight OneRate","FedEx - Standard Overnight","FedEx - Priority Overnight","DHL - Express Worldwide"];
+const RULE_SERVICES=["ANY - Cheapest","ANY - Cheapest Ground","ANY - Cheapest 2 Day","ANY - Fastest","FedEx - Ground Economy","FedEx - Ground","FedEx - Home Delivery","FedEx - Express Saver","FedEx - 2Day","FedEx - 2Day A.M.","FedEx - Standard Overnight","FedEx - Priority Overnight","FedEx - First Overnight","FedEx - Express Saver OneRate","FedEx - 2Day OneRate","FedEx - 2Day A.M. OneRate","FedEx - Standard Overnight OneRate","FedEx - Priority Overnight OneRate","FedEx - First Overnight OneRate","FedEx - International Ground (Canada)","FedEx - International Connect Plus","FedEx - International Economy","FedEx - International Priority","FedEx - International Priority Express","FedEx - International First","DHL - Express Worldwide"];   /* every entry verified against svcPrefHit/rateSvcKey — see v286 */
 const RULE_PACKAGES=["Custom","FedEx Envelope","FedEx Small Box","FedEx Medium Box","FedEx Large Box","FedEx Extra Large Box"];
 const RULE_SIG=["direct","indirect","adult"];
 const SEED_RULESET=[];   // real accounts start with zero Autopilot rules — nothing pre-configured to silently reroute or hold real shipments
@@ -7996,10 +8073,11 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
       if(!picked){rows.push({name:o.name,orderId:o.id,ok:false,error:"No rate returned"});setApResults({rows:[...rows],heldN});continue;}
       const need=[];if(!o.customer&&!o.company)need.push("name");if(String(o.phone||"").replace(/\D/g,"").length<10)need.push("phone");if(!o.email)need.push("email");
       if(need.length){rows.push({name:o.name,orderId:o.id,ok:false,error:"Missing "+need.join(", ")});setApResults({rows:[...rows],heldN});continue;}
-      const res=await bookOrderLabel(o,{quote:picked,weightLb:wt,residential:_resFlag,sender:settings.sender},eng,settings.sender);
+      const _orFill=orBoxRefFill(picked,settings.orBoxField,o.name);
+      const res=await bookOrderLabel(o,{quote:picked,weightLb:wt,residential:_resFlag,sender:settings.sender,..._orFill},eng,settings.sender);
       if(res&&res.ok){
         const carrier=/dhl/i.test(picked.label)?"DHL":"FedEx";
-        onShipped&&onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:senderZip,toZip:o.zip,weight:wt,dims:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,items:o.items||"",note:o.note||"",bookNumber:res.bookNumber},o.id);
+        onShipped&&onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:senderZip,toZip:o.zip,weight:wt,dims:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,items:o.items||"",note:o.note||"",bookNumber:res.bookNumber,..._orFill},o.id);
         rows.push({name:o.name,ok:true,service:picked.label,tracking:res.tracking,pdf:res.labelPdfBase64||null});
       } else rows.push({name:o.name,orderId:o.id,ok:false,error:(res&&res.error)||"Booking failed"});
       setApResults({rows:[...rows],heldN});
@@ -8031,14 +8109,14 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Zap className="w-5 h-5 text-[#0086E0]"/>Autopilot</h2>
-        <p className="text-sm text-stone-500 mt-0.5">Tell ShippingCloud how you ship — it handles the rest.</p>
+        <p className="text-sm text-stone-500 mt-0.5">Tell {BRAND.product} how you ship — it handles the rest.</p>
       </div>
       <div className="flex items-center gap-2">
         {setSettings&&<button onClick={()=>setSettings(s=>({...s,autoRunRules:!autoRun}))} title="When on, newly imported/synced orders are run through enabled rules automatically" className={`text-sm rounded-lg px-3 py-2 font-medium flex items-center gap-1.5 border ${autoRun?"bg-emerald-50 border-emerald-300 text-emerald-800":"bg-white border-stone-200 text-stone-600 hover:bg-stone-100"}`}><span className={`w-8 h-4 rounded-full relative transition ${autoRun?"bg-emerald-500":"bg-stone-300"}`}><span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${autoRun?"left-4":"left-0.5"}`}/></span>Auto-run on import</button>}
         <button onClick={exportJSON} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-100 flex items-center gap-1.5"><Download className="w-4 h-4"/>Export JSON</button>
         <button onClick={applyToOrders} disabled={run.summary.touched===0} title="Write rule outcomes onto matching orders without creating labels" className="text-sm bg-white border border-stone-200 text-stone-600 rounded-lg px-3 py-2 font-medium hover:bg-stone-100 disabled:opacity-40 flex items-center gap-1.5"><Check className="w-4 h-4"/>Apply only</button>
         <button onClick={newRule} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium flex items-center gap-1.5 hover:bg-stone-100"><Plus className="w-4 h-4"/>New rule</button>
-        <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Make a rule: "}}))} title="Describe a rule in plain English — Claude writes it into the pipeline" className="text-sm rounded-lg px-3 py-2 font-medium border bg-[#faf3ef] border-[#D97757]/40 text-[#c2410c] hover:bg-[#f5e6de] flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/>Ask Claude to write a rule</button>
+        <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Make a rule: "}}))} title="Describe a rule in plain English — ShipHub AI writes it into the pipeline" className="text-sm rounded-lg px-3 py-2 font-medium border bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF] hover:bg-[#CCEAFF] flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/>Ask ShipHub AI to write a rule</button>
         <button onClick={runAutopilot} disabled={apRunning||ords.filter(o=>o.status!=="fulfilled").length===0} title="Apply your rules and create labels for every unfulfilled order (held orders are skipped)" className="text-sm bg-emerald-600 text-white rounded-lg px-4 py-2.5 font-semibold hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-2 shadow-sm">{apRunning?<Loader2 className="w-4 h-4 animate-spin"/>:<Zap className="w-4 h-4"/>}Run Autopilot{!apRunning&&run?` — label ${run.results.filter(r=>r.order.status!=="fulfilled"&&!r.view.hold).length} orders`:""}</button>
       </div>
     </div>
@@ -8195,7 +8273,7 @@ function AddressBook({settings,setSettings}){
   return (<div className="max-w-3xl space-y-3">
     <div className="flex flex-wrap items-center gap-3">
       <p className="text-sm text-stone-500 flex-1">Saved contacts for fast ship-to / ship-from. Import your whole list from a CSV.</p>
-      <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Save this address: "}}))} title="Dictate a contact and Claude saves it" className="flex items-center gap-1.5 text-sm bg-[#faf3ef] border border-[#D97757]/40 text-[#c2410c] rounded-lg px-3 py-2 font-medium hover:bg-[#f5e6de]"><Sparkles className="w-4 h-4"/>Ask Claude to add one</button>
+      <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Save this address: "}}))} title="Dictate a contact and ShipHub AI saves it" className="flex items-center gap-1.5 text-sm bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-3 py-2 font-medium hover:bg-[#CCEAFF]"><Sparkles className="w-4 h-4"/>Ask ShipHub AI to add one</button>
       <label className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
     </div>
     {msg&&<div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{msg}</div>}
@@ -8587,7 +8665,7 @@ function CIEditor({settings,setSettings,shipments}){
         <In v={r.qty} on={v=>setRow(i,{qty:v})} ph="1" cls="w-14"/>
         <In v={r.unit} on={v=>setRow(i,{unit:v})} ph="0.00" cls="w-20"/>
         <input value={r.hs} onChange={e=>setRow(i,{hs:e.target.value})} list="sc-hts-list-ci" placeholder="HS" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-        <button onClick={()=>suggestHS(i)} disabled={!r.name||hsBusy===i} title="Claude reads the item description and suggests an HTS code" className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap">{hsBusy===i?"Searching…":"✨ Search HTS"}</button>
+        <button onClick={()=>suggestHS(i)} disabled={!r.name||hsBusy===i} title="ShipHub AI reads the item description and suggests an HTS code" className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap">{hsBusy===i?"Searching…":"✨ Search HTS"}</button>
         <select value={r.origin} onChange={e=>setRow(i,{origin:e.target.value})} className="w-32 bg-white border border-stone-200 rounded-lg px-1 py-1.5 text-sm outline-none focus:border-[#0099FF]">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
         <button onClick={()=>setDoc(d=>({...d,rows:d.rows.filter((_,j)=>j!==i)}))} className="text-stone-300 hover:text-rose-500">×</button>
       </div>))}
@@ -8830,20 +8908,20 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
   const speedMode=()=>setSettings(p=>({...p,custom:{...(p.custom||{}),hideInvoice:true,hidePO:true,hideAddr23:true,hideOz:true,hideInsure:true}}));
   const fullMode=()=>setSettings(p=>({...p,custom:{...(p.custom||{}),hideInvoice:false,hidePO:false,hideAddr23:false,hideOz:false,hideInsure:false}}));
   const [cs,setCs]=useState("autopilot");
-  const CTABS=[["autopilot","Autopilot"],["services","Services"],["ship","Ship screen"],["labels","Labels & printing"],["orders","Orders & lists"],["appearance","Appearance"],["slips","Packing slips"]];
+  const CTABS=[["autopilot","Autopilot"],["services","Services"],["ship","Ship screen"],["orders","Orders & lists"],["appearance","Appearance"],["slips","Packing slips"]];   // Labels & printing moved to Settings → Printer settings (v281)
   const Toggle=({k,label,hint})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700">
     <span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span>
     <button onClick={()=>set(k,!c[k])}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${c[k]?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
   </label>);
   return (<div className="max-w-2xl space-y-4">
-    {!deployMode&&<div className="text-sm text-stone-500">Make ShippingCloud yours. Every option here changes the app immediately for <b>your login only</b>.</div>}
+    {!deployMode&&<div className="text-sm text-stone-500">Make {BRAND.product} yours. Every option here changes the app immediately for <b>your login only</b>.</div>}
     <div className="flex items-center gap-1 border-b border-stone-200 overflow-x-auto">
       {CTABS.map(([v,l])=><button key={v} onClick={()=>setCs(v)} className={`px-3 py-2 text-sm rounded-t-lg whitespace-nowrap border-b-2 -mb-px ${cs===v?"border-[#0086E0] text-stone-900 font-medium":"border-transparent text-stone-500 hover:bg-stone-50"}`}>{l}</button>)}
     </div>
 
     {cs==="autopilot"&&<>
     <Panel title="Autopilot on the Ship screen">
-      <Toggle k="autoRulesOnShip" label="Run my Autopilot rules on the Ship tab" hint="When an order you pull into Ship matches a rule, pre-highlight the service that rule picks — live, no separate Autopilot run. (Same switch as the pill on the Ship screen.)"/>
+      <Toggle k="autoRulesOnShip" label="Run my Autopilot rules on the Ship tab" hint="When an order you pull into Ship matches a rule, pre-highlight the service that rule picks — live, no separate Autopilot run."/>
     </Panel>
     <Panel title="Autopilot in Batch">
       <div className="space-y-3">
@@ -8857,51 +8935,6 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
     <div className="text-[11px] text-stone-400 bg-stone-50 border border-stone-200 rounded px-3 py-2">The rules themselves live on the <b>Autopilot</b> tab. These switches only control where and how automatically those rules are applied.</div>
     </>}
 
-    {cs==="labels"&&<>
-    <Panel title="Printing">
-      <div className="text-sm text-stone-600 space-y-2">
-        <p>When a label books, the <b>system print dialog opens automatically</b> — pick the label printer once and Chrome remembers it.</p>
-        <p className="text-stone-700 font-medium">Want zero clicks — straight to the printer, no dialog?</p>
-        <ol className="list-decimal ml-5 space-y-1 text-[13px]">
-          <li>Set your label printer as the <b>default printer</b> in Windows (Settings → Bluetooth &amp; devices → Printers), with the paper size set to your label stock (e.g. 4×6).</li>
-          <li>Make a Chrome shortcut just for shipping: right-click the desktop → New → Shortcut → paste <span className="font-mono text-[12px] bg-stone-100 border border-stone-200 rounded px-1">"C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk-printing</span> and name it "ShippingCloud – Direct Print".</li>
-          <li>Open the app from that shortcut. Every print — booked labels, reprints, batch — now goes <b>directly to the default printer instantly</b>, no dialog, no clicks.</li>
-        </ol>
-        <p className="text-[11px] text-stone-400">Per-workstation setting (it's a Chrome launch flag, not an app setting). Regular Chrome windows keep the normal dialog. For raw thermal/ZPL printing over the network, ask about the print-agent upgrade.</p>
-      </div>
-    </Panel>
-
-    <Panel title="After booking">
-      <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
-        <span>Skip the booked summary, go straight to a new shipment<span className="block text-[11px] text-stone-400">The label still prints automatically — this just skips the tracking/copy/pickup card afterward and clears the form for the next order. Off by default so you can grab tracking or schedule a pickup right after booking.</span></span>
-        <button onClick={()=>set("skipBookedSummary",!c.skipBookedSummary)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${c.skipBookedSummary?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
-      </label>
-    </Panel>
-
-    <Panel title="Label branding">
-      <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
-        <span>Print my logo on every label<span className="block text-[11px] text-stone-400">Stamped onto the label when it prints or reprints — FedEx's own file stays untouched. Keep it small and in a corner so barcodes stay clear.</span></span>
-        <button onClick={()=>set("labelLogoOn",!c.labelLogoOn)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${c.labelLogoOn?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
-      </label>
-      {c.labelLogoOn&&<div className="mt-3 space-y-3">
-        <div className="flex items-center gap-3">
-          {(c.labelLogo||settings.companyLogo)?<img src={c.labelLogo||settings.companyLogo} alt="label logo" className="h-8 max-w-[120px] object-contain bg-white border border-stone-200 rounded px-1"/>:<span className="text-[11px] text-stone-400">No logo yet — company logo used when set</span>}
-          <label className="text-[11px] text-[#006FBF] hover:underline cursor-pointer">Upload a label-specific logo<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>set("labelLogo",String(rd.result));rd.readAsDataURL(f);}}/></label>
-          {c.labelLogo&&<button onClick={()=>set("labelLogo","")} className="text-[11px] text-stone-400 hover:text-rose-500">Remove (use company logo)</button>}
-        </div>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <label className="block text-sm text-stone-700">Position
-            <select value={c.labelLogoPos||"bottom_left"} onChange={e=>set("labelLogoPos",e.target.value)} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm">
-              <option value="bottom_left">Bottom left (safest)</option><option value="bottom_right">Bottom right</option><option value="top_left">Top left</option><option value="top_right">Top right</option>
-            </select></label>
-          <label className="block text-sm text-stone-700">Size <span className="text-[11px] text-stone-400">· {c.labelLogoScale||22}% of label width</span>
-            <input type="range" min="8" max="45" step="1" value={c.labelLogoScale||22} onChange={e=>set("labelLogoScale",+e.target.value)} className="mt-1 w-full"/></label>
-        </div>
-        <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">Print one test label and check the logo isn't near a barcode before running volume — carriers can refuse labels with obscured barcodes.</p>
-      </div>}
-    </Panel>
-
-    </>}
 
     {cs==="ship"&&<Panel title="Ship screen">
       <div className="flex gap-2 mb-3">
@@ -9268,7 +9301,7 @@ function Subscription({settings,setSettings}){
   const current=settings.plan||"starter";
   const order=["free","starter","pro","scale"];
   return (<div className="space-y-4">
-    <p className="text-sm text-stone-500">Your ShippingCloud plan. Upgrade to unlock more volume, integrations, and tools. Downgrade anytime.</p>
+    <p className="text-sm text-stone-500">Your {BRAND.product} plan. Upgrade to unlock more volume, integrations, and tools. Downgrade anytime.</p>
     <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
       {PLANS.map(p=>{const active=p.id===current;const isUp=order.indexOf(p.id)>order.indexOf(current);return (
         <div key={p.id} className={`rounded-xl border p-4 flex flex-col ${active?"border-[#0099FF] bg-[#E6F4FF]/40 ring-1 ring-[#99D6FF]":"border-stone-200 bg-white"}`}>

@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v275";
+const BUILD_TAG="addr-v276";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -5301,8 +5301,61 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
 }
 
 /* ════════ ORDERS ════════ */
+/* Orders-tab rate cell — prices exactly like the Ship tab: LIVE England rates when the
+   account is enabled (falling back to the offline estimator), rate-rules markup via
+   rateSellFor, hidden/blocked services filtered out, and the Autopilot rule engine's
+   service pick honored per order. Live fetches are cached per order+inputs and limited
+   to 3 in flight so a 200-row table doesn't stampede the England API. */
+const EST_CACHE={};
+let EST_INFLIGHT=0;const EST_QUEUE=[];
+const estSlot=(fn)=>{ if(EST_INFLIGHT<3){EST_INFLIGHT++;fn();} else EST_QUEUE.push(fn); };
+const estDone=()=>{ EST_INFLIGHT=Math.max(0,EST_INFLIGHT-1); const nx=EST_QUEUE.shift(); if(nx){EST_INFLIGHT++;nx();} };
+function LiveEstRate({o,client,settings,rateRules,ruleset}){
+  const fromZip=(client&&client.origin)||(settings&&settings.sender&&settings.sender.zip)||"";
+  const key=o.id+"|"+(o.zip||"")+"|"+(o.weight||1)+"|"+fromZip;
+  const [v,setV]=useState(EST_CACHE[key]||null);
+  useEffect(()=>{
+    if(!o.zip||!fromZip)return;
+    if(EST_CACHE[key]){setV(EST_CACHE[key]);return;}
+    let cancel=false;
+    let pref=null;
+    try{ const enabled=(ruleset||[]).filter(r=>r&&r.enabled); if(enabled.length){ const rr=runRuleEngine(enabled,[o],fromZip); const r0=rr.results&&rr.results[0]; if(r0&&r0.fires&&r0.fires.length&&r0.view&&r0.view.selectedService)pref=r0.view.selectedService; } }catch(e){}
+    const wt=+o.weight||1;
+    const sellCtx=(list)=>({rules:rateRules,client,list,fromZip,toZip:o.zip,weight:wt});
+    const pickFrom=(qs,live)=>{
+      if(!qs||!qs.length)return {none:true};
+      const hit=pref?qs.filter(q=>svcPrefHit(pref,q.label)).sort((a,b)=>(a.cost||0)-(b.cost||0))[0]:null;
+      const pick=hit||qs.slice().sort((a,b)=>((a.sell!=null?a.sell:1e9))-((b.sell!=null?b.sell:1e9)))[0];
+      return pick?{sell:pick.sell!=null?pick.sell:pick.cost,label:pick.label,live,ruled:!!hit}:{none:true};
+    };
+    const finish=(val)=>{ EST_CACHE[key]=val; if(!cancel)setV(val); };
+    const offline=()=>{ try{
+      const qs=quoteRates({fromZip,toZip:o.zip,pieces:[{weight:wt,L:12,W:9,H:4}],residential:true}).filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:rateSellFor(q.cost,q.label,sellCtx(undefined))}));
+      finish(pickFrom(qs,false));
+    }catch(e){ finish({none:true}); } };
+    const eng=englandFor(client,settings);
+    if(eng&&eng.enabled){
+      estSlot(async()=>{
+        try{
+          const res=await ratesForOrder(o,{residential:true,weightLb:wt,fromZip,sender:settings&&settings.sender},eng);
+          const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);
+          const qs=((res&&res.rates)||[]).filter(q=>!hs.has(canonSvc(q.label))&&!bs.has(canonSvc(q.label))).map(q=>({...q,sell:rateSellFor(q.cost,q.label,sellCtx(q.list))}));
+          if(qs.length)finish(pickFrom(qs,true)); else offline();
+        }catch(e){ offline(); }
+        finally{ estDone(); }
+      });
+    } else offline();
+    return ()=>{cancel=true;};
+  },[key]);
+  if(!o.zip)return <span className="text-stone-300" title="This order has no destination ZIP">—</span>;
+  if(!fromZip)return <span className="text-[10px] text-amber-600" title="Estimates need a ship-from ZIP — set your sender ZIP in Settings → Sender info (or the customer's origin ZIP in Admin → Customers)">no ship-from ZIP</span>;
+  if(!v)return <span className="text-stone-300 text-xs animate-pulse">…</span>;
+  if(v.none)return <span className="text-stone-300">—</span>;
+  return <span className="text-stone-600 font-mono whitespace-nowrap" title={v.label+(v.ruled?" — picked by your Autopilot rule":"")}>{money(v.sell)}<span className="text-stone-300 font-sans"> {v.live?"live":"est."}</span>{v.ruled&&<Zap className="w-3 h-3 inline ml-0.5 text-[#0086E0]" />}</span>;
+}
 function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,openOrderId=null,onOpenedOrder}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // Est. Rate shows the SELL estimate — raw carrier cost must never render in a customer-visible table
+  const [ruleset]=usePersist("ruleset",SEED_RULESET);              // Autopilot rules drive the service the rate column prices
   useEffect(()=>{ if(!openOrderId)return; const found=orders.find(o=>o.id===openOrderId); if(found)setOpen(found); if(onOpenedOrder)onOpenedOrder(); },[openOrderId,orders]);
   const custom=cz(settings||{});
   const ordPad=custom.density==="compact"?"px-3 py-1":"px-3 py-2.5";
@@ -5434,15 +5487,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
                       {!hideCol.has("items")&&<td className={ordPad}><div className="text-stone-700 truncate max-w-[220px]">{o.items||"—"}</div>{o.lineItems&&o.lineItems[0]&&o.lineItems[0].sku?<div className="text-[11px] text-stone-400 truncate max-w-[220px]">SKU {o.lineItems[0].sku}</div>:null}</td>}
                       {!hideCol.has("recipient")&&<td className={ordPad}><div className="text-stone-800 truncate max-w-[160px]">{o.customer||"—"}</div><div className="text-[11px] text-stone-400 truncate max-w-[160px]">{o.city}{o.state?`, ${o.state}`:""}</div></td>}
                       {!hideCol.has("requested")&&<td className="px-3 py-2.5 text-stone-500 whitespace-nowrap">{o.shippingService||"—"}</td>}
-                      {!hideCol.has("estRate")&&<td className="px-3 py-2.5 text-right whitespace-nowrap">{(()=>{
-                        if(!o.zip)return <span className="text-stone-300" title="This order has no destination ZIP">—</span>;
-                        try{
-                          const fromZip=(client&&client.origin)||(settings&&settings.sender&&settings.sender.zip)||"";
-                          if(!fromZip)return <span className="text-[10px] text-amber-600" title="Estimates need a ship-from ZIP — set your sender ZIP in Settings → Sender info (or the customer's origin ZIP in Admin → Customers)">no ship-from ZIP</span>;
-                          const est=quoteRates({fromZip,toZip:o.zip,pieces:[{weight:+o.weight||1,L:12,W:9,H:4}],residential:true}).filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,fromZip,toZip:o.zip,weight:+o.weight||1})})).sort((a,b)=>(a.sell!=null?a.sell:a.cost)-(b.sell!=null?b.sell:b.cost))[0];
-                          return est?<span className="text-stone-600 font-mono">{money(est.sell!=null?est.sell:est.cost)}<span className="text-stone-300 font-sans"> est.</span></span>:<span className="text-stone-300">—</span>;
-                        }catch(e){ return <span className="text-stone-300">—</span>; }
-                      })()}</td>}
+                      {!hideCol.has("estRate")&&<td className="px-3 py-2.5 text-right whitespace-nowrap"><LiveEstRate o={o} client={client} settings={settings} rateRules={rateRules} ruleset={ruleset}/></td>}
                       {!hideCol.has("qty")&&<td className="px-3 py-2.5 text-right text-stone-600">{o.itemCount||"—"}</td>}
                       {!hideCol.has("total")&&<td className="px-3 py-2.5 text-right font-mono text-stone-800 whitespace-nowrap">${o.total}</td>}
                       {!hideCol.has("status")&&<td className={ordPad}><div className="flex items-center gap-1 flex-wrap"><Badge tone={o.status==="fulfilled"?"green":"amber"}>{o.status==="fulfilled"?"Shipped":"Awaiting"}</Badge>{o.hold&&<span title={o.hold}><Badge tone="rose">Held</Badge></span>}{o.gift&&<span title={o.giftMessage||"Gift"}><Badge tone="blue">Gift</Badge></span>}{o.assignee&&<span title={"Assigned to "+o.assignee}><Badge tone="stone">{o.assignee}</Badge></span>}</div></td>}
@@ -6322,6 +6367,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
   const [showAll,setShowAll]=useState(()=>new Set());
   const [done,setDone]=useState(0);
   const [openRow,setOpenRow]=useState(null);
+  const [editRow,setEditRow]=useState(null);   // order being edited inline (Save-gated)
   const [svcOv,setSvcOv]=useState({});
   const [ovWhy,setOvWhy]=useState({});
   const [holds,setHolds]=useState({});
@@ -6570,6 +6616,9 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         <Info k="Packs into" v={packs[o.id]?packs[o.id].boxNames+(packs[o.id].unresolved.length?` · ${packs[o.id].unresolved.length} item${packs[o.id].unresolved.length===1?"":"s"} not in catalog`:""):"Not in catalog — using order weight + default box"}/>
         <Info k="Service for this label" v={held?`HELD — ${held}`:svcOv[o.id]?`${svcOv[o.id]}${ovWhy[o.id]?" (Autopilot: "+ovWhy[o.id]+")":" (your pick)"}`:q.label+" (by rate rule)"}/>
         <Info k="Rate" v={money(q.sell)}/>
+        <div className="sm:col-span-2 pt-1">{editRow===o.id
+          ? <OrderEditForm order={o} onCancel={()=>setEditRow(null)} onSave={(patch)=>{setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));setEditRow(null);}}/>
+          : <button onClick={(e)=>{e.stopPropagation();setEditRow(o.id);}} className="text-xs bg-stone-100 text-stone-600 rounded-lg px-2.5 py-1.5 hover:bg-stone-200 flex items-center gap-1"><Edit3 className="w-3.5 h-3.5"/>Edit order</button>}</div>
       </div>}
     </div>
   );};
@@ -7693,6 +7742,25 @@ function rulePatchesFor(run){
   return patchById;
 }
 
+/* Inline order editor used by the Batch and Autopilot floors — draft state, nothing touches
+   the order until Save is clicked. */
+function OrderEditForm({order,onSave,onCancel}){
+  const [d,setD]=useState({customer:order.customer||"",company:order.company||"",address1:order.address1||"",address2:order.address2||"",city:order.city||"",state:order.state||"",zip:order.zip||"",phone:order.phone||"",email:order.email||"",weight:order.weight==null?"":order.weight});
+  const F=(k,ph,cls)=>(<input value={d[k]} onChange={e=>setD(p=>({...p,[k]:e.target.value}))} placeholder={ph} className={"bg-white border border-stone-200 rounded px-2 py-1 text-xs outline-none focus:border-[#0099FF] "+(cls||"")}/>);
+  return (<div className="border border-[#BAE6FD] bg-[#F0F9FF] rounded-lg p-2.5 space-y-1.5" onClick={e=>e.stopPropagation()}>
+    <div className="grid sm:grid-cols-2 gap-1.5">
+      {F("customer","Name")}{F("company","Company")}
+      <div className="sm:col-span-2 grid grid-cols-1 gap-1.5">{F("address1","Street address","w-full")}{F("address2","Suite / unit (optional)","w-full")}</div>
+      {F("city","City")}<div className="flex gap-1.5">{F("state","ST","w-14")}{F("zip","ZIP","flex-1")}</div>
+      {F("phone","Phone")}{F("email","Email")}
+      <label className="flex items-center gap-1.5 text-xs text-stone-500">Weight (lb){F("weight","","w-20 text-right")}</label>
+    </div>
+    <div className="flex gap-2 pt-0.5">
+      <button onClick={()=>onSave({customer:d.customer,company:d.company,address1:d.address1,address2:d.address2,city:d.city,state:d.state.toUpperCase(),zip:d.zip,phone:d.phone,email:d.email,weight:d.weight===""?order.weight:(+d.weight||order.weight)})} className="text-xs bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1"><Save className="w-3.5 h-3.5"/>Save changes</button>
+      <button onClick={onCancel} className="text-xs bg-stone-100 text-stone-600 rounded-lg px-3 py-1.5 hover:bg-stone-200">Cancel</button>
+    </div>
+  </div>);
+}
 function RuleEditorModal({rule,onSave,onClose,onDelete,warehouses}){
   const [r,setR]=useState(()=>JSON.parse(JSON.stringify(rule)));
   const upd=(patch)=>setR(p=>({...p,...patch}));
@@ -7791,6 +7859,8 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
   const [view,setView]=useState("all");
   const [applied,setApplied]=useState(null);
   const [apRunning,setApRunning]=useState(false);
+  const [apSvcOv,setApSvcOv]=useState({});     // per-order service override — beats the rule's pick when booking
+  const [apEditRow,setApEditRow]=useState(null);   // order being edited inline (Save-gated)
   const [apProg,setApProg]=useState(null);
   const [apResults,setApResults]=useState(null);
   const ords=orders||[];
@@ -7840,7 +7910,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
     const rows=[];
     setApRunning(true);setApResults(null);setApProg({n:0,total:eligible.length});
     for(let i=0;i<eligible.length;i++){
-      const o=eligible[i];const patch=patchById[o.id]||{};const pref=patch.ruleService||o.ruleService||null;const wt=patch.weight||o.weight||1;
+      const o=eligible[i];const patch=patchById[o.id]||{};const pref=apSvcOv[o.id]||patch.ruleService||o.ruleService||null;const wt=patch.weight||o.weight||1;
       setApProg({n:i+1,total:eligible.length});
       if(!canBook){
         const qs=quoteRates({fromZip:senderZip,toZip:o.zip,L:12,W:9,H:4,weight:wt,residential:true});
@@ -8000,11 +8070,18 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
         <div className="space-y-2">
           {viewResults.map(res=>{
             const o=res.order;
-            return (<div key={o.id} className={`border rounded-lg bg-white p-3 ${res.view.hold?"border-rose-200":"border-stone-200"}`}>
+            const ruledSvc=res.view&&res.view.selectedService;
+            return (<div key={o.id} className={`border rounded-lg bg-white p-3 cursor-pointer ${res.view.hold?"border-rose-200":"border-stone-200"} ${apEditRow===o.id?"ring-1 ring-[#BAE6FD]":""}`} onClick={()=>setApEditRow(apEditRow===o.id?null:o.id)}>
               <div className="flex items-center gap-2 mb-1.5">
                 <span className="font-semibold text-sm text-stone-800">{o.name}</span>
                 <span className="text-[11px] text-stone-400 truncate">{o.customer} · {o.city}{o.state?", "+o.state:""} {o.country&&o.country!=="US"?`(${o.country})`:""}</span>
                 <div className="flex-1"/>
+                <div onClick={e=>e.stopPropagation()}>
+                  <select value={apSvcOv[o.id]||""} onChange={e=>setApSvcOv(v=>{const n={...v};if(e.target.value)n[o.id]=e.target.value;else delete n[o.id];return n;})} title={ruledSvc?"Rule picks "+ruledSvc+" — choosing here overrides it for this order only":"Overrides the service Autopilot books for this order"} className={`bg-white border rounded px-2 py-1 text-xs outline-none focus:border-[#0099FF] ${apSvcOv[o.id]?"border-[#0099FF] text-[#006FBF] font-medium":"border-stone-200 text-stone-500"}`}>
+                    <option value="">{ruledSvc?"Rule — "+ruledSvc:"Auto — best rate"}</option>
+                    {RULE_SERVICES.map(sv=><option key={sv} value={sv}>{sv}</option>)}
+                  </select>
+                </div>
                 <span className="text-[11px] font-mono text-stone-500">${o.total} · {o.weight||"?"}lb{res.view.zone?` · zone ${res.view.zone}`:""}</span>
               </div>
               {res.fires.length===0
@@ -8019,6 +8096,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
                     {res.changed.length>0&&<div className="flex flex-wrap gap-1 pt-1">{res.changed.map(c=><Badge key={c} tone={chgTone[c]||"stone"}>{c}</Badge>)}</div>}
                     {res.view.hold&&<div className="text-xs text-rose-600 flex items-center gap-1.5 mt-1"><AlertTriangle className="w-3.5 h-3.5"/>Held: {res.view.hold}</div>}
                   </div>}
+              {apEditRow===o.id&&<div className="mt-2"><OrderEditForm order={o} onCancel={()=>setApEditRow(null)} onSave={(patch)=>{setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));setApEditRow(null);}}/></div>}
             </div>);
           })}
         </div>

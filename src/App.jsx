@@ -73,7 +73,8 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v330";
+const BUILD_TAG="addr-v333";
+try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -396,6 +397,8 @@ async function pdfToImages(base64,scale){
     imgs.push(c.toDataURL("image/png"));
   }
   try{doc.destroy();}catch(e){}
+  // guard: a malformed/empty PDF can report a 0 or NaN viewport → printing at 0in prints BLANK paper.
+  if(!(wIn>0.5&&wIn<20))wIn=4; if(!(hIn>0.5&&hIn<30))hIn=6;
   return {imgs,wIn,hIn,cropped};
 }
 /* Assemble a real PDF from JPEG pages — pure string/byte work, no libraries. Used to hand
@@ -592,6 +595,11 @@ function printImagePages(imgs,wIn,hIn,onDone){
   /* The one print path a browser can't silently swallow: window.print() on the page
      itself (identical to Ctrl+P), with a print-only stylesheet that hides the whole
      app and shows only the label pages, sized exactly to the label stock. */
+  /* HARD guard: if width/height arrive as 0, NaN, undefined, or absurd, the @page/img sizing
+     collapses to zero and the printer spits BLANK paper. Clamp to a sane 4×6 label first. */
+  wIn=(typeof wIn==="number"&&isFinite(wIn)&&wIn>0.5&&wIn<20)?wIn:4;
+  hIn=(typeof hIn==="number"&&isFinite(hIn)&&hIn>0.5&&hIn<30)?hIn:6;
+  if(!imgs||!imgs.length)return;   // nothing to print → don't emit a blank page
   try{
     document.querySelectorAll(".sc-print-label,.sc-print-style").forEach(n=>n.remove());
     const st=document.createElement("style");
@@ -607,9 +615,17 @@ function printImagePages(imgs,wIn,hIn,onDone){
     setTimeout(cleanup,120000);
     let fired=false;
     const go=()=>{ if(fired)return; fired=true; try{window.focus();window.print();}catch(e){cleanup();} if(typeof onDone==="function")try{onDone();}catch(e){} };
-    const pending=imgs.length&&!box.firstChild.complete;
-    if(pending){ box.firstChild.onload=()=>setTimeout(go,80); setTimeout(go,700); }   // whichever fires first wins — go() is now one-shot
-    else setTimeout(go,60);
+    /* Wait for EVERY label image to finish decoding before printing — firing window.print() while an
+       image is still loading prints a blank page. All-loaded triggers the print; a generous timeout is
+       only a last resort so a single stuck image can't hang forever. */
+    const nodes=Array.prototype.slice.call(box.querySelectorAll("img"));
+    const allLoaded=()=>nodes.every(im=>im.complete&&im.naturalWidth>0);
+    if(!nodes.length||allLoaded()){ setTimeout(go,60); }
+    else {
+      let remaining=nodes.length;
+      nodes.forEach(im=>{ const done=()=>{ if(--remaining<=0)setTimeout(go,80); }; if(im.complete&&im.naturalWidth>0){done();} else { im.onload=done; im.onerror=done; } });
+      setTimeout(go,4000);   // last-resort fallback (was 700ms — too short, printed before slow labels finished loading)
+    }
   }catch(e){}
 }
 /* Draw the company logo onto rendered label pages before printing. Our own overlay
@@ -5307,6 +5323,14 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     // Every service FedEx returns is offered — hide services per-login in Settings → Customize → Services.
     if(custom.hiddenServices&&custom.hiddenServices.length){const hs=new Set(custom.hiddenServices);list=list.filter(q=>!hs.has(canonSvc(q.label)));}
     if(client&&client.blockedServices&&client.blockedServices.length){const bs=new Set(client.blockedServices);list=list.filter(q=>!bs.has(canonSvc(q.label)));}   // admin-locked — can't be bypassed by the customer's own toggle
+    /* Ground and Home Delivery are the same shipment mutually exclusive by address type: FedEx uses
+       Home Delivery for residential, Ground for commercial. Once the address is classified, show ONLY
+       the one that applies and drop the other, so you never see both. Before classification we don't
+       know yet, so both stay (skeleton/loading). */
+    if(addrClassified){
+      const dropKey = residential ? "ground" : "home";   // residential → hide Ground; commercial → hide Home Delivery
+      list=list.filter(q=>canonSvc(q.label)!==dropKey);
+    }
     return list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,list:q.list,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,client)});})
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
   },[rateSrc,orRates,client,JSON.stringify(custom.hiddenServices||[]),JSON.stringify(client&&client.blockedServices||[]),rateRules,fxTransit,residential,addrClassified,sigOption,saturday,insurance]);

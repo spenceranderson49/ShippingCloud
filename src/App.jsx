@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v271";
+const BUILD_TAG="addr-v272";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1049,7 +1049,7 @@ function applyAccessorials(q, opts){
    CUSTOMER (clientId), so every login a company creates inherits them automatically. */
 const DEFAULT_RATE_RULES={profiles:[{id:"default",name:"Default",services:{},surcharges:{}}],assign:{},baseCosts:{}};
 const OR_RATE_SVCS=[["first_overnight","First Overnight"],["priority_overnight","Priority Overnight"],["standard_overnight","Standard Overnight"],["2day_am","2Day A.M."],["2day","2Day"],["express_saver","Express Saver"]];
-const ONE_RATE_LOCK_SVCS=[["or_first_overnight","FedEx First Overnight® OneRate"],["or_priority_overnight","FedEx Priority Overnight® OneRate"],["or_standard_overnight","FedEx Standard Overnight® OneRate"],["or_2day","FedEx 2Day® OneRate"],["or_express_saver","FedEx Express Saver® OneRate"]].map(([k,l])=>({k,l}));   // same shape as svcQuick (RATE_SERVICES.fedex items)
+const ONE_RATE_LOCK_SVCS=[["or_first_overnight","FedEx First Overnight® OneRate"],["or_priority_overnight","FedEx Priority Overnight® OneRate"],["or_standard_overnight","FedEx Standard Overnight® OneRate"],["or_2day_am","FedEx 2Day® A.M. OneRate"],["or_2day","FedEx 2Day® OneRate"],["or_express_saver","FedEx Express Saver® OneRate"]].map(([k,l])=>({k,l}));   // same shape as svcQuick (RATE_SERVICES.fedex items)
 const OR_RATE_PKGS=[["envelope","Envelope"],["pak","Pak"],["xs_box","Extra Small Box"],["small_box","Small Box"],["medium_box","Medium Box"],["large_box","Large Box"],["xl_box","Extra Large Box"],["tube","Tube"]];
 const RATE_SERVICES={
   fedex:[
@@ -1525,7 +1525,7 @@ const CUSTOM_DEFAULTS={
   slipThanks:"",slipFooter:"",
   density:"comfortable",stuckDays:0,
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
-  logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,skipBookedSummary:false,autoRulesOnShip:false,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],theme:"light",accent:"",
+  logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,skipBookedSummary:false,autoRulesOnShip:true,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],theme:"light",accent:"",
   refRequired:false,invRequired:false,poRequired:false,refLocked:false,invLocked:false,poLocked:false,
   confetti:"page",seasonal:true,loginBg:"",appBg:"",headerBg:"",pageBg:"",navBg:"",
 };
@@ -5224,6 +5224,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
 
 /* ════════ ORDERS ════════ */
 function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,openOrderId=null,onOpenedOrder}){
+  const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // Est. Rate shows the SELL estimate — raw carrier cost must never render in a customer-visible table
   useEffect(()=>{ if(!openOrderId)return; const found=orders.find(o=>o.id===openOrderId); if(found)setOpen(found); if(onOpenedOrder)onOpenedOrder(); },[openOrderId,orders]);
   const custom=cz(settings||{});
   const ordPad=custom.density==="compact"?"px-3 py-1":"px-3 py-2.5";
@@ -5356,12 +5357,12 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
                       {!hideCol.has("recipient")&&<td className={ordPad}><div className="text-stone-800 truncate max-w-[160px]">{o.customer||"—"}</div><div className="text-[11px] text-stone-400 truncate max-w-[160px]">{o.city}{o.state?`, ${o.state}`:""}</div></td>}
                       {!hideCol.has("requested")&&<td className="px-3 py-2.5 text-stone-500 whitespace-nowrap">{o.shippingService||"—"}</td>}
                       {!hideCol.has("estRate")&&<td className="px-3 py-2.5 text-right whitespace-nowrap">{(()=>{
-                        if(!o.zip)return <span className="text-stone-300">—</span>;
+                        if(!o.zip)return <span className="text-stone-300" title="This order has no destination ZIP">—</span>;
                         try{
                           const fromZip=(client&&client.origin)||(settings&&settings.sender&&settings.sender.zip)||"";
-                          if(!fromZip)return <span className="text-stone-300">—</span>;
-                          const est=quoteRates({fromZip,toZip:o.zip,pieces:[{weight:+o.weight||1,L:12,W:9,H:4}],residential:true}).filter(q=>q.carrier==="FedEx").sort((a,b)=>a.cost-b.cost)[0];
-                          return est?<span className="text-stone-600 font-mono">{money(est.cost)}<span className="text-stone-300 font-sans"> est.</span></span>:<span className="text-stone-300">—</span>;
+                          if(!fromZip)return <span className="text-[10px] text-amber-600" title="Estimates need a ship-from ZIP — set your sender ZIP in Settings → Sender info (or the customer's origin ZIP in Admin → Customers)">no ship-from ZIP</span>;
+                          const est=quoteRates({fromZip,toZip:o.zip,pieces:[{weight:+o.weight||1,L:12,W:9,H:4}],residential:true}).filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,fromZip,toZip:o.zip,weight:+o.weight||1})})).sort((a,b)=>(a.sell!=null?a.sell:a.cost)-(b.sell!=null?b.sell:b.cost))[0];
+                          return est?<span className="text-stone-600 font-mono">{money(est.sell!=null?est.sell:est.cost)}<span className="text-stone-300 font-sans"> est.</span></span>:<span className="text-stone-300">—</span>;
                         }catch(e){ return <span className="text-stone-300">—</span>; }
                       })()}</td>}
                       {!hideCol.has("qty")&&<td className="px-3 py-2.5 text-right text-stone-600">{o.itemCount||"—"}</td>}
@@ -8595,7 +8596,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
     ["intl_priority_freight","FedEx International Priority® Freight"],["intl_economy_freight","FedEx International Economy® Freight"],
     // One Rate — flat-price variants FedEx quotes live once a FedEx box is picked; toggle/rename independently of the base service above.
     ["or_first_overnight","FedEx First Overnight® OneRate"],["or_priority_overnight","FedEx Priority Overnight® OneRate"],["or_standard_overnight","FedEx Standard Overnight® OneRate"],
-    ["or_2day","FedEx 2Day® OneRate"],["or_express_saver","FedEx Express Saver® OneRate"],
+    ["or_2day_am","FedEx 2Day® A.M. OneRate"],["or_2day","FedEx 2Day® OneRate"],["or_express_saver","FedEx Express Saver® OneRate"],
   ];
   const svcHidden=new Set(c.hiddenServices||[]);
   const togSvc=(k)=>{ if(locked.has(k))return; const nx=new Set(svcHidden); nx.has(k)?nx.delete(k):nx.add(k); set("hiddenServices",[...nx]);};

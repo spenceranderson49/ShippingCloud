@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v305";
+const BUILD_TAG="addr-v307";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -287,6 +287,16 @@ function orBoxRefFill(q,orBoxField,orderName){
   if(f==="reference")return {reference:(orderName?orderName+" \u00b7 ":"")+val};
   return {invoiceNo:val};
 }
+/* Booking-time safety net for the One Rate box auto-fill: whichever screen booked the label,
+   if it's a One Rate service and the chosen field (Settings → Reference fields) is still empty,
+   fill it here. Never overwrites something the person typed. */
+function orFillMerge(target,fill){
+  const o={...(target||{})};const f=fill||{};
+  if(f.invoiceNo&&!String(o.invoiceNo||"").trim())o.invoiceNo=f.invoiceNo;
+  if(f.poNo&&!String(o.poNo||"").trim())o.poNo=f.poNo;
+  if(f.reference&&!String(o.reference||"").trim())o.reference=f.reference;
+  return o;
+}
 async function shipCall(payload){
   const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),20000);
   try{
@@ -400,6 +410,8 @@ function _assembleJpegPdf(jpegs,W,H){
 /* Label stock catalog. Everything below 4×6 tall is the label itself; the extra height on
    doc-tab stocks is the tear-off strip composeForStock fills from Settings → Doc tab. */
 function stockDims(size){
+  if(size==="4x625")return [4,6.25];
+  if(size==="4x65")return [4,6.5];
   if(size==="4x675")return [4,6.75];
   if(size==="4x8")return [4,8];
   if(size==="4x9")return [4,9];
@@ -432,7 +444,8 @@ async function composeForStock(imgs,wIn,hIn,ctx){
       g.beginPath();g.moveTo(0,lh+1);g.lineTo(c.width,lh+1);g.stroke();g.setLineDash([]);
       const lines=(cfg&&cfg.docTab&&cfg.docTab.enabled)?buildDocTabLines(cfg.docTab,ctx||{}):[];
       g.fillStyle="#111";
-      const pad=Math.round(0.14*dpi);let ty=lh+pad;
+      const tabIn=SH-(hIn||6);   // small tabs (¼", ½") get proportionally tighter padding
+      const pad=Math.round(Math.min(0.14,Math.max(0.03,tabIn*0.18))*dpi);let ty=lh+pad;
       lines.forEach(l=>{
         const fs=Math.max(8,Math.round((l.size||9)*dpi/72));
         g.font="600 "+fs+"px system-ui,Arial,sans-serif";
@@ -5152,7 +5165,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     }
     setBought(q.key);setShipStatus({state:"booking",key:q.key});
     if(!q.serviceCode||!q.carrierCode){setShipStatus({state:"error",key:q.key,msg:"Enter the shipment details so live rates load, then print (need the carrier/service from the rate)."});setBought(null);return;}
-    const order={reference:reference||invoiceNo||"",orderNumber:invoiceNo||reference||"",invoiceNo,poNo,shipmentDate:shipDate,
+    const _orF=orFillMerge({reference:reference||invoiceNo||"",invoiceNo,poNo},orBoxRefFill({...q,packageTypeCode:q.packageTypeCode||(orBox?orBox.code:"")},settings.orBoxField,invoiceNo||reference||""));
+    const order={reference:_orF.reference||"",orderNumber:invoiceNo||reference||"",invoiceNo:_orF.invoiceNo,poNo:_orF.poNo,shipmentDate:shipDate,
       carrierCode:q.carrierCode,serviceCode:q.serviceCode,packageTypeCode:(/one\s*rate/i.test(String(q.label||""))?(q.packageTypeCode||(orBox?orBox.code:"")):""),
       shippingService:q.label,shippingTotal:String(q.sell??q.cost??"0.00"),contentDescription:"Merchandise",
       signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null,residential,
@@ -6014,7 +6028,8 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
     const need=[]; if(!o.customer&&!o.company)need.push("name"); if(String(o.phone||"").replace(/\D/g,"").length<10)need.push("10-digit phone"); if(!o.email)need.push("email");
     if(need.length){ setStatus({state:"error",msg:"FedEx needs the receiver's "+need.join(", ")+". Edit the order or open in Ship tab."}); return; }
     setBought(qq.key); setStatus({state:"booking",msg:"Booking with FedEx…"});
-    const res=await bookOrderLabel(o,{quote:qq,box,weightLb:+weight,residential,packageTypeCode:orBox?orBox.code:(qq.packageTypeCode||""),sender:settings.sender},eng,settings.sender);
+    const _orFD=orBoxRefFill({...qq,packageTypeCode:qq.packageTypeCode||(orBox?orBox.code:"")},settings.orBoxField,o.name);
+    const res=await bookOrderLabel(o,{quote:qq,box,weightLb:+weight,residential,packageTypeCode:orBox?orBox.code:(qq.packageTypeCode||""),sender:settings.sender,..._orFD},eng,settings.sender);
     if(!res||!res.ok){ setStatus({state:"error",msg:(res&&res.error)||"Booking failed"}); setBought(null); return; }
     const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:qq.label,recipient:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings?.sender||{})},fromZip,toZip:o.zip,weight:+weight,pieces:[{weight:+weight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference:o.name,bookNumber:res.bookNumber};
     onShipped(rec,o.id);
@@ -6199,7 +6214,8 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
     const need=[]; if(!rcv.name&&!rcv.company)need.push("name"); if(String(rcv.phone||"").replace(/\D/g,"").length<10)need.push("10-digit phone"); if(!rcv.email)need.push("email");
     if(need.length){ setStatus({state:"error",msg:"FedEx needs the receiver's "+need.join(", ")+"."}); return; }
     setBought(qq.key); setStatus({state:"booking",msg:"Booking with FedEx…"});
-    const res=await bookOrderLabel(dest,{quote:qq,box,weightLb:totalWeight,residential,packageTypeCode:qq.packageTypeCode||"",sender:settings.sender,reference:reference||o.name,invoiceNo,poNo},eng,settings.sender);
+    const _orFM=orFillMerge({reference:reference||o.name,invoiceNo,poNo},orBoxRefFill(qq,settings.orBoxField,o.name));
+    const res=await bookOrderLabel(dest,{quote:qq,box,weightLb:totalWeight,residential,packageTypeCode:qq.packageTypeCode||"",sender:settings.sender,reference:_orFM.reference,invoiceNo:_orFM.invoiceNo,poNo:_orFM.poNo},eng,settings.sender);
     if(!res||!res.ok){ setStatus({state:"error",msg:(res&&res.error)||"Booking failed"}); setBought(null); return; }
     const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,...baseRec,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,bookNumber:res.bookNumber};
     onShipped(rec,o.id);
@@ -7937,13 +7953,15 @@ function PrinterSettings({settings,setSettings}){
       <div className="grid grid-cols-2 gap-2">
         <Field label="Label size">
           <Select value={pr.labelSize} onChange={e=>set({labelSize:e.target.value})}>
-            <option value="4x6">4×6 — thermal (recommended)</option>
-            <option value="4x675">4×6.75 — thermal with doc tab</option>
-            <option value="4x8">4×8 — thermal with doc tab / packing area</option>
-            <option value="4x9">4×9 — thermal with large doc tab</option>
-            <option value="letter">8.5×11 — laser/inkjet sheet</option>
+            <option value="4x6">4×6 — thermal · no doc tab</option>
+            <option value="4x625">4×6.25 — thermal · doc tab (¼″)</option>
+            <option value="4x65">4×6.5 — thermal · doc tab (½″)</option>
+            <option value="4x675">4×6.75 — thermal · doc tab (¾″ — FedEx standard)</option>
+            <option value="4x8">4×8 — thermal · doc tab (2″)</option>
+            <option value="4x9">4×9 — thermal · doc tab (3″)</option>
+            <option value="letter">8.5×11 — laser sheet · doc tab on lower half</option>
           </Select>
-          <p className="text-[11px] text-stone-400 mt-1">On doc-tab stocks the label prints at the top and the tear-off strip below is filled with your Doc tab fields (configured further down this page). Every print path uses this size — booked labels, reprints, batch, and direct printing.</p>
+          <p className="text-[11px] text-stone-400 mt-1">On every doc-tab size the label prints at the top and the tear-off strip below is filled with your Doc tab fields (configured further down this page). ¼″ fits one small line; ½″ two; ¾″ and up fit the full field list. Every print path honors this size — booked labels, reprints, batch, and direct printing. FedEx only manufactures label stock codes for 4×6, 4×6.75, 4×8, 4×9 and letter, so on 4×6.25 and 4×6.5 the carrier is asked for a plain 4×6 label and the app builds the tab itself — identical output, just built on our side.</p>
         </Field>
         <Field label="File format">
           <Select value={pr.format} onChange={e=>set({format:e.target.value})}>

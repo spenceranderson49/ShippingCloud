@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v292";
+const BUILD_TAG="addr-v294";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -309,8 +309,8 @@ function loadPdfJs(){
   _pdfjsLoad=new Promise((res,rej)=>{
     const sc=document.createElement("script");
     sc.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-    sc.onload=()=>{ try{ window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"; res(window.pdfjsLib); }catch(e){rej(e);} };
-    sc.onerror=()=>rej(new Error("pdf.js failed to load"));
+    sc.onload=()=>{ try{ window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"; res(window.pdfjsLib); }catch(e){ _pdfjsLoad=null; rej(e); } };
+    sc.onerror=()=>{ _pdfjsLoad=null; try{sc.remove();}catch(e){} rej(new Error("pdf.js failed to load")); };   // don't cache failure — a blocked CDN load shouldn't doom the whole session
     document.head.appendChild(sc);
   });
   return _pdfjsLoad;
@@ -427,6 +427,27 @@ async function printLabelPdf(base64,stForLogo){
    print() on a modal's preview iframe is exactly what Chrome's PDF viewer
    sometimes silently ignores. onload doesn't always fire for PDFs, so a timed
    retry backs it up; if the frame is inaccessible we fall back to a tab+print. */
+/* Last-ditch print when pdf.js is unavailable AND the direct PDF-frame print didn't fire:
+   an HTML wrapper frame pinned to @page 4in×6in with zero margin, embedding the PDF at
+   exactly 4in×6in. Unlike the old window.open tab, this never prints at letter size and
+   never adds the browser's header/footer (those only exist on default-margin pages). */
+function printPdf4x6(url){
+  if(!url)return false;
+  try{
+    const f=document.createElement("iframe");
+    f.style.cssText="position:fixed;right:0;bottom:0;width:2px;height:2px;border:0;opacity:0;pointer-events:none;";
+    f.setAttribute("aria-hidden","true");
+    document.body.appendChild(f);
+    const d=f.contentDocument||(f.contentWindow&&f.contentWindow.document);
+    if(!d)throw new Error("no frame doc");
+    d.open();
+    d.write('<!doctype html><html><head><title>Label</title><style>@page{size:4in 6in;margin:0}html,body{margin:0;padding:0}embed{display:block;width:4in;height:6in}</style></head><body><embed src="'+url+'#toolbar=0&view=Fit" type="application/pdf"/></body></html>');
+    d.close();
+    setTimeout(()=>{ try{ f.contentWindow.focus(); f.contentWindow.print(); }catch(e){} },900);   // give the embedded PDF a beat to attach
+    setTimeout(()=>{ try{document.body.removeChild(f);}catch(e){} },180000);
+    return true;
+  }catch(e){ return false; }
+}
 function printPdfUrl(url){
   if(!url)return false;
   try{
@@ -439,10 +460,10 @@ function printPdfUrl(url){
     f.src=url;
     document.body.appendChild(f);
     setTimeout(go,1200);                                   // PDFs don't reliably fire onload
-    setTimeout(()=>{ if(!fired){ try{ const w=window.open(url,"_blank"); if(w) setTimeout(()=>{try{w.focus();w.print();}catch(e){}},700); }catch(e){} } },2600);
+    setTimeout(()=>{ if(!fired){ printPdf4x6(url); } },2600);   // never a raw tab — that printed 4×6 labels at letter size with browser chrome
     setTimeout(()=>{ try{document.body.removeChild(f);}catch(e){} },180000);
     return true;
-  }catch(e){ try{window.open(url,"_blank");}catch(e2){} return false; }
+  }catch(e){ return printPdf4x6(url); }
 }
 function pdfBlobUrl(base64){
   const bin=atob(base64);const len=bin.length;const bytes=new Uint8Array(len);
@@ -1399,17 +1420,26 @@ function rateSellFor(cost,label,ctx){
     const amt=num(rule.pct); if(amt==null)return fallback();
     return Math.round(amt*100)/100;
   } else {
+    /* Weight-break × zone matrix (England-style). Resolution, most specific wins:
+       break's zone cell → rule-level zone % → break % → service %.
+       Rule-level zones still beat a break's plain % (pre-existing behavior, unchanged). */
     let pct=num(rule.pct);
+    const zn=(c.fromZip&&c.toZip&&/^\d/.test(String(c.toZip)))?String(zoneEst(c.fromZip,c.toZip)):null;
+    let brk=null;
     if(rule.breaks&&rule.breaks.length&&c.weight!=null){
-      const b=rule.breaks.find(x=>+c.weight<=+x.upTo)||rule.breaks[rule.breaks.length-1];
-      if(b&&num(b.pct)!=null)pct=num(b.pct);
+      const sorted=rule.breaks.filter(x=>x.upTo!=null&&x.upTo!=="").sort((a,b)=>+a.upTo-+b.upTo);
+      brk=sorted.find(x=>+c.weight<=+x.upTo)||sorted[sorted.length-1]||null;
+      if(brk&&num(brk.pct)!=null)pct=num(brk.pct);
     }
-    if(rule.zones&&c.fromZip&&c.toZip&&/^\d/.test(String(c.toZip))){
-      const zp=num(rule.zones[String(zoneEst(c.fromZip,c.toZip))]);
+    if(rule.zones&&zn!=null){
+      const zp=num(rule.zones[zn]);
       if(zp!=null)pct=zp;
     }
+    if(brk&&brk.zones&&zn!=null){const bz=num(brk.zones[zn]);if(bz!=null)pct=bz;}
     if(pct==null)return fallback();
     sell=cost*(1+pct/100);
+    const bmn=brk?num(brk.min):null;
+    if(bmn!=null){ if(sell<bmn)sell=bmn; return Math.round(sell*100)/100; }   // per-range Min $ overrides the service Min $
   }
   const min=num(rule.min);
   if(min!=null&&sell<min)sell=min;
@@ -2085,6 +2115,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
   };
   const [surQ,setSurQ]=useState("");
   const [showHiddenSvc,setShowHiddenSvc]=useState(false);   // reveal service rows hidden from the rates grid
+  const [openBrk,setOpenBrk]=useState({});                  // which service rows have the weight-break editor expanded
   const lg=users.filter(u=>u.role!=="admin"&&u.clientId===cid);
   const say=(m)=>{setFlash(m);setTimeout(()=>setFlash(""),2200);};
   if(!c)return <div className="text-sm text-stone-400 py-10 text-center">This customer was deleted. <button onClick={onClose} className="text-[#0086E0] hover:underline">Close tab</button></div>;
@@ -2209,15 +2240,48 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
           if(!items.length)return null;
           return (<React.Fragment key={g.g}>
           <tr><td colSpan={6} className="pt-3 pb-1 pl-3 text-[10px] uppercase tracking-widest text-stone-400 font-semibold">{g.g}{g.g==="One Rate"&&<span className="normal-case tracking-normal font-normal"> — price these Flat $ (always sells at exactly that), or import the One Rate table under Advanced below</span>}</td></tr>
-          {items.map(sv=>{const r=(prof.services||{})[sv.k]||{};return (
-          <tr key={sv.k} className={`border-t border-stone-100 hover:bg-stone-50 ${svcHiddenMap[sv.k]?"opacity-50":""}`}>
+          {items.map(sv=>{const r=(prof.services||{})[sv.k]||{};
+          const brkSorted=(r.breaks||[]).map((b,_i)=>({...b,_i})).sort((a,b)=>{const A=(a.upTo==null||a.upTo==="")?1e12:+a.upTo,B=(b.upTo==null||b.upTo==="")?1e12:+b.upTo;return A-B;});
+          const upBrkAt=(idx,patch)=>{const br=[...(r.breaks||[])];br[idx]={...br[idx],...patch};upProfSvc(prof.id,sv.k,{breaks:br});};
+          const rmBrkAt=(idx)=>upProfSvc(prof.id,sv.k,{breaks:(r.breaks||[]).filter((_,j)=>j!==idx)});
+          const seedStd=()=>{ if(r.breaks&&r.breaks.length&&!window.confirm("Replace the existing weight breaks with the standard ranges (0–5, 6–10, 11–30, 31–75, 76+)?"))return; upProfSvc(prof.id,sv.k,{breaks:[{upTo:5},{upTo:10},{upTo:30},{upTo:75},{upTo:99999}].map(b=>({...b,pct:"",min:"",zones:{}}))}); };
+          return (<React.Fragment key={sv.k}>
+          <tr className={`border-t border-stone-100 hover:bg-stone-50 ${svcHiddenMap[sv.k]?"opacity-50":""}`}>
             <td className="py-1.5 pl-3 pr-1 w-6"><input type="checkbox" checked={r.on!==false} onChange={e=>upProfSvc(prof.id,sv.k,{on:e.target.checked})} className="accent-[#0086E0]"/></td>
             <td className="py-1.5 pr-2 font-medium text-stone-800 whitespace-nowrap">{sv.l}</td>
             <td className="py-1.5 pr-2"><Select value={r.basis||"pct"} onChange={e=>upProfSvc(prof.id,sv.k,{basis:e.target.value})}><option value="pct">% Markup (over England/FedEx cost)</option><option value="list">Discount off FedEx list %</option><option value="fixed">Fixed $ over cost</option><option value="flat">Flat $ (always sells at exactly this)</option></Select></td>
             <td className="py-1.5 pr-2 whitespace-nowrap"><Input type="number" value={r.pct==null?"":r.pct} onChange={e=>upProfSvc(prof.id,sv.k,{pct:e.target.value})} className="w-20 text-right"/> <span className="text-stone-400 text-xs">{(r.basis==="fixed"||r.basis==="flat")?"$":"%"}</span></td>
-            <td className="py-1.5 pr-3 whitespace-nowrap"><span className="text-stone-400 text-xs">Min $</span> <Input type="number" value={r.min==null?"":r.min} onChange={e=>upProfSvc(prof.id,sv.k,{min:e.target.value})} className="w-24 text-right"/></td>
+            <td className="py-1.5 pr-3 whitespace-nowrap"><span className="text-stone-400 text-xs">Min $</span> <Input type="number" value={r.min==null?"":r.min} onChange={e=>upProfSvc(prof.id,sv.k,{min:e.target.value})} className="w-24 text-right"/> {(r.basis||"pct")==="pct"&&<button onClick={()=>setOpenBrk(o=>({...o,[sv.k]:!o[sv.k]}))} className={`text-[11px] rounded px-2 py-1 ml-1 align-middle ${r.breaks&&r.breaks.length?"bg-sky-100 text-sky-700":"bg-stone-100 text-stone-500 hover:bg-stone-200"}`}>{r.breaks&&r.breaks.length?r.breaks.length+" breaks":"Breaks"}</button>}</td>
             <td className="py-1.5 pr-2 w-6 text-right"><button onClick={()=>togHide(sv.k)} title={svcHiddenMap[sv.k]?"Show this row again":"Hide this row to declutter — pricing untouched; the checkbox turns the rule off"} className="text-stone-300 hover:text-stone-500">{svcHiddenMap[sv.k]?<Eye className="w-3.5 h-3.5"/>:<EyeOff className="w-3.5 h-3.5"/>}</button></td>
-          </tr>);})}
+          </tr>
+          {openBrk[sv.k]&&(r.basis||"pct")==="pct"&&<tr className="border-t border-stone-100 bg-sky-50/50">
+            <td colSpan={6} className="py-2.5 pl-10 pr-3">
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[10px] uppercase tracking-widest text-stone-500 font-semibold">Weight breaks — {sv.l}</span>
+                  {(sv.k==="ground"||sv.k==="home")&&<button onClick={seedStd} className="text-[11px] bg-white border border-stone-200 rounded px-2 py-1 hover:bg-stone-50">Use standard ranges (0–5, 6–10, 11–30, 31–75, 76+)</button>}
+                  <button onClick={()=>upProfSvc(prof.id,sv.k,{breaks:[...(r.breaks||[]),{upTo:"",pct:"",min:"",zones:{}}]})} className="text-[11px] bg-white border border-stone-200 rounded px-2 py-1 hover:bg-stone-50">＋ Add weight break</button>
+                </div>
+                {!brkSorted.length&&<p className="text-[11px] text-stone-400">No breaks yet — the service-level % applies at every weight. Add breaks to price weight ranges differently, each with its own Min $ and per-zone %.</p>}
+                {!!brkSorted.length&&<div className="overflow-x-auto"><table className="text-xs"><thead><tr className="text-stone-400">
+                  <th className="text-left font-medium pr-2 py-1">Range</th><th className="text-left font-medium pr-2">Up to lb</th><th className="text-left font-medium pr-2">%</th><th className="text-left font-medium pr-3">Min $</th>
+                  {["2","3","4","5","6","7","8"].map(z=><th key={z} className="font-semibold px-1 text-center w-14">Z{z}</th>)}<th/>
+                </tr></thead><tbody>
+                  {brkSorted.map((b,si)=>{const lo=si===0?0:(+brkSorted[si-1].upTo+1||0);const hi=(b.upTo==null||b.upTo==="")?null:+b.upTo;const lbl=hi==null?"—":(hi>=99999?lo+"+ lb":lo+"–"+hi+" lb");return (
+                  <tr key={b._i} className="border-t border-sky-100">
+                    <td className="pr-2 py-1 whitespace-nowrap font-medium text-stone-600">{lbl}</td>
+                    <td className="pr-2">{hi!=null&&hi>=99999?<span className="text-stone-400 px-1">∞</span>:<Input type="number" value={b.upTo??""} onChange={e=>upBrkAt(b._i,{upTo:e.target.value})} className="w-16 text-right"/>}</td>
+                    <td className="pr-2"><Input type="number" value={b.pct==null?"":b.pct} onChange={e=>upBrkAt(b._i,{pct:e.target.value})} className="w-16 text-right"/></td>
+                    <td className="pr-3"><Input type="number" value={b.min==null?"":b.min} onChange={e=>upBrkAt(b._i,{min:e.target.value})} className="w-16 text-right"/></td>
+                    {["2","3","4","5","6","7","8"].map(z=><td key={z} className="px-0.5"><Input type="number" value={(b.zones&&b.zones[z])??""} onChange={e=>upBrkAt(b._i,{zones:{...(b.zones||{}),[z]:e.target.value}})} className="w-14 text-right" placeholder={b.pct==null||b.pct===""?"":String(b.pct)}/></td>)}
+                    <td className="pl-1"><button onClick={()=>rmBrkAt(b._i)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button></td>
+                  </tr>);})}
+                </tbody></table></div>}
+                {!!brkSorted.length&&<p className="text-[11px] text-stone-400">A shipment uses the first range its weight fits. Zone cells (domestic zones 2–8) beat the range %, which beats the service %. Blank zone cells fall back to the range %. Min $ on a range overrides the service Min $ for that range.</p>}
+              </div>
+            </td>
+          </tr>}
+          </React.Fragment>);})}
           </React.Fragment>);})}
         </tbody></table></div>
         </>);
@@ -2505,7 +2569,7 @@ function RatesAdmin({clients=[],brand}){
     let sell=null;
     if(rule.basis==="list"){const yr=String((prof&&prof.listYear)||"2026");const list=yr==="2025"?(baseCostLookup(rules,"list2025:"+key,weight,zone)??list2025Lookup(key,weight,zone)):baseCostLookup(rules,"list:"+key,weight,zone);const d=num(rule.pct);if(list==null||d==null)return gFall();sell=list*(1-d/100);}
     else if(rule.basis==="fixed"){const a=num(rule.pct);if(a==null)return gFall();sell=cost+a;}
-    else{let pct=num(rule.pct);if(rule.breaks&&rule.breaks.length){const b=rule.breaks.find(x=>+weight<=+x.upTo)||rule.breaks[rule.breaks.length-1];if(b&&num(b.pct)!=null)pct=num(b.pct);}const zp=rule.zones?num(rule.zones[String(zone)]):null;if(zp!=null)pct=zp;if(pct==null)return gFall();sell=cost*(1+pct/100);}
+    else{let pct=num(rule.pct);let brk=null;if(rule.breaks&&rule.breaks.length){const sorted=rule.breaks.filter(x=>x.upTo!=null&&x.upTo!=="").sort((a,b)=>+a.upTo-+b.upTo);brk=sorted.find(x=>+weight<=+x.upTo)||sorted[sorted.length-1]||null;if(brk&&num(brk.pct)!=null)pct=num(brk.pct);}const zp=rule.zones?num(rule.zones[String(zone)]):null;if(zp!=null)pct=zp;if(brk&&brk.zones){const bz=num(brk.zones[String(zone)]);if(bz!=null)pct=bz;}if(brk&&num(brk.min)!=null&&pct!=null){let s0=cost*(1+pct/100);const bm=num(brk.min);const st=s0<bm;if(st)s0=bm;return {sell:Math.round(s0*100)/100,starred:st};};if(pct==null)return gFall();sell=cost*(1+pct/100);}
     const mn=num(rule.min);let starred=false;
     if(mn!=null&&sell<mn){sell=mn;starred=true;}
     return {sell:Math.round(sell*100)/100,starred};

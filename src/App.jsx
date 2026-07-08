@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v322";
+const BUILD_TAG="addr-v330";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -515,6 +515,16 @@ async function composeForStock(imgs,wIn,hIn,ctx){
     g.beginPath();g.rect(0,geo.labelY,c.width,regionPx);g.clip();
     g.drawImage(im,0,geo.labelY,c.width,drawH);
     g.restore();
+    /* SAFETY: confirm the label region actually got ink. If it's essentially blank, the draw failed
+       (bad source dims, off-canvas placement, etc.) — abort compose and send the ORIGINAL label so a
+       blank never reaches the printer. */
+    try{
+      const sx=Math.max(1,Math.round(c.width/40)), sy=Math.max(1,Math.round(regionPx/60));
+      const dat=g.getImageData(0,geo.labelY,c.width,regionPx).data;
+      let dark=0,checked=0;
+      for(let py=0;py<regionPx;py+=sy){ for(let px=0;px<c.width;px+=sx){ const idx=(py*c.width+px)*4; checked++; if(dat[idx]<235||dat[idx+1]<235||dat[idx+2]<235)dark++; } }
+      if(checked>0 && dark/checked < 0.002){ return {imgs,wIn,hIn,changed:false}; }   // <0.2% ink → treat as blank, use original
+    }catch(e){}
     /* Tear line exactly on the perforation between label region and tab. */
     g.strokeStyle="#b8b2ab";g.setLineDash([Math.round(dpi*0.07),Math.round(dpi*0.07)]);
     g.beginPath();g.moveTo(0,geo.tearY+(leading?-1:1));g.lineTo(c.width,geo.tearY+(leading?-1:1));g.stroke();g.setLineDash([]);
@@ -656,7 +666,15 @@ function openLabelOrDirectPrint(payload,settings,setLabelPreview){
        • directNoPreview   (you still hit Ship and see the booked summary — just no preview popup).
      If PrintNode rejects, we fall back to opening the modal so no label is lost. */
   if(dp&&dp.enabled&&(c.skipBookedSummary||c.directNoPreview)&&payload&&payload.pdf){
-    directPrintPdf(payload.pdf,"Shipping label"+(payload.tracking?" "+payload.tracking:""),docCtxFor(payload.rec,payload.tracking)).then(sent=>{ if(!sent)setLabelPreview(payload); });
+    directPrintPdf(payload.pdf,"Shipping label"+(payload.tracking?" "+payload.tracking:""),docCtxFor(payload.rec,payload.tracking)).then(sent=>{
+      if(!sent){
+        /* Silent print was requested (kiosk / no-preview) but the local PrintNode agent didn't accept
+           the job — almost always because it isn't connected. Fall back to the dialog so no label is
+           lost, and tell the user WHY, so "kiosk isn't printing" stops being a mystery. */
+        try{ window.dispatchEvent(new CustomEvent("sc-direct-print-failed",{detail:{reason:(!dp.apiKey||!dp.printerId)?"not-configured":"agent-unreachable"}})); }catch(e){}
+        setLabelPreview(payload);
+      }
+    });
     return;
   }
   setLabelPreview(payload);
@@ -834,6 +852,11 @@ function canonSvc(s){
   const k=rateSvcKey(t);
   return k.replace(/^(or_[a-z0-9_]+?)_(pak|envelope|xs_box|small_box|medium_box|large_box|xl_box|tube)$/,"$1");
 }
+/* Stable "family" key for React list rendering: FedEx Ground and FedEx Home Delivery are the SAME
+   physical row that just re-labels/re-prices when the address is classified residential vs commercial.
+   Keying both to one value lets React reuse the same DOM node across the swap instead of destroying
+   and recreating it — so the list updates in place instead of popping/re-flowing. */
+function svcFamilyKey(label){ const k=canonSvc(label); return (k==="ground"||k==="home")?"ground_family":k; }
 async function fedexTransit(s){
   const body={fromZip:s.fromZip,toZip:s.toZip,fromCountry:s.fromCountry||"US",toCountry:s.toCountry||"US",residential:!!s.residential,pieces:(s.pieces||[]).map(p=>({weight:Math.ceil(+p.weight||1)}))};
   const res=await fedexCall(body);
@@ -1960,9 +1983,11 @@ function SaveToast(){
   useEffect(()=>{
     const onSaved=()=>{ const id=Date.now()+Math.random(); setMsgs(m=>[...m,{id,ok:true}]); setTimeout(()=>setMsgs(m=>m.filter(x=>x.id!==id)),2200); };
     const onFailed=(e)=>{ const id=Date.now()+Math.random(); const err=(e&&e.detail&&e.detail.error)||"offline"; setMsgs(m=>[...m,{id,ok:false,err}]); setTimeout(()=>setMsgs(m=>m.filter(x=>x.id!==id)),6000); };
+    const onDirectFail=(e)=>{ const id=Date.now()+Math.random(); const reason=(e&&e.detail&&e.detail.reason)||"agent-unreachable"; setMsgs(m=>[...m,{id,ok:false,err:reason==="not-configured"?"Direct printing isn't set up — add your PrintNode key & printer in Printer settings":"Printer agent not reachable — check PrintNode is running. Showing the dialog instead"}]); setTimeout(()=>setMsgs(m=>m.filter(x=>x.id!==id)),7000); };
     window.addEventListener("sc-saved",onSaved);
     window.addEventListener("sc-save-failed",onFailed);
-    return ()=>{ window.removeEventListener("sc-saved",onSaved); window.removeEventListener("sc-save-failed",onFailed); };
+    window.addEventListener("sc-direct-print-failed",onDirectFail);
+    return ()=>{ window.removeEventListener("sc-saved",onSaved); window.removeEventListener("sc-save-failed",onFailed); window.removeEventListener("sc-direct-print-failed",onDirectFail); };
   },[]);
   if(!msgs.length)return null;
   const last=msgs[msgs.length-1];
@@ -2819,9 +2844,39 @@ function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureF
 }
 
 
+/* Draft editing: edit a working copy freely, then Save commits it to the real (auto-syncing) store.
+   Undo reverts to the last saved state; Reset restores the provided default. `committed` is the live
+   persisted value; `commit` writes it for real. Returns the draft + a setter that mutates only the
+   draft, plus dirty/save/undo/reset. */
+function useDraft(committed,commit,defaultVal){
+  const [draft,setDraft]=React.useState(committed);
+  const [base,setBase]=React.useState(committed);   // last-saved snapshot we diff against
+  // if the committed value changes underneath us (e.g. cloud poll) and we have no pending edits, follow it
+  React.useEffect(()=>{ const j=JSON.stringify(committed); if(j!==JSON.stringify(base)&&JSON.stringify(draft)===JSON.stringify(base)){ setDraft(committed); setBase(committed); } },[committed]);
+  const dirty=JSON.stringify(draft)!==JSON.stringify(base);
+  const setDraftVal=React.useCallback((v)=>setDraft(prev=>typeof v==="function"?v(prev):v),[]);
+  const save=React.useCallback(()=>{ commit(draft); setBase(draft); },[draft,commit]);
+  const undo=React.useCallback(()=>setDraft(base),[base]);
+  const reset=React.useCallback(()=>setDraft(defaultVal),[defaultVal]);
+  return {draft,setDraft:setDraftVal,dirty,save,undo,reset};
+}
+/* Sticky action bar shown while a draft has unsaved edits. */
+function DraftBar({dirty,onSave,onUndo,onReset,resetLabel,savedNote}){
+  return (<div className={`sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 mb-3 flex items-center gap-2 border-b transition-colors ${dirty?"bg-amber-50 border-amber-200":"bg-white border-stone-100"}`}>
+    {dirty
+      ? <span className="text-[13px] font-medium text-amber-800 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>Unsaved changes</span>
+      : <span className="text-[13px] text-stone-400 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500"/>{savedNote||"All changes saved"}</span>}
+    <div className="flex-1"/>
+    {onReset&&<button onClick={onReset} className="text-[13px] text-stone-500 hover:text-stone-700 px-2.5 py-1.5 rounded-lg hover:bg-stone-100">{resetLabel||"Restore defaults"}</button>}
+    <button onClick={onUndo} disabled={!dirty} className="text-[13px] text-stone-600 disabled:opacity-40 px-3 py-1.5 rounded-lg border border-stone-200 hover:bg-stone-50">Undo changes</button>
+    <button onClick={onSave} disabled={!dirty} className="text-[13px] font-semibold text-white bg-[#0086E0] disabled:opacity-40 disabled:bg-stone-300 px-4 py-1.5 rounded-lg hover:bg-[#0072BF]">Save</button>
+  </div>);
+}
 /* ════════ ADMIN → RATES (v196) — the rate markup database ════════ */
 function RatesAdmin({clients=[],brand}){
-  const [rules,setRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
+  const [storeRules,commitRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
+  const _d=useDraft(storeRules,commitRules,DEFAULT_RATE_RULES);
+  const rules=_d.draft; const setRules=_d.setDraft;   // editor now works on the DRAFT; Save commits
   const [carrier,setCarrier]=useState("fedex");
   const [tab,setTab]=useState("services");
   const [profId,setProfId]=useState("default");
@@ -2984,6 +3039,7 @@ function RatesAdmin({clients=[],brand}){
   const assignedTo=(pid)=>clients.filter(c=>(assign[c.id]||"default")===pid);
   const surRow=(prof.surcharges||{});
   return (<div className="space-y-4">
+    <DraftBar dirty={_d.dirty} onSave={_d.save} onUndo={_d.undo} onReset={()=>{ if(window.confirm("Reset ALL rate rules to the blank default? This clears every profile, markup, and imported cost. You'll still need to click Save to make it permanent.")) _d.reset(); }} resetLabel="Reset all rates to default" savedNote="Rates saved"/>
     {/* Markup itself is edited from each customer's Rates tab — this screen is for the shared plumbing: profiles, per-service rules, base-cost tables, zones. */}
     <div className="text-[11px] text-stone-500 bg-stone-50 border border-stone-200 rounded px-3 py-2">
       Markup is edited on each customer’s <b>Rates</b> tab — every account’s number lives there. There's no platform-wide default: an account with nothing set of its own sells at raw carrier cost. This screen holds the shared pieces: rate profiles, per-service rules below, base-cost tables, and zone data.
@@ -3847,10 +3903,37 @@ function startCloudPoll(){
 async function cloudLoadAll(){
   const res=await cloudCall({action:"getAll",token:CLOUD.token});
   if(res&&res.ok&&res.stores){
-    CLOUD.snapshot=res.stores;
-    CLOUD.baseline={}; for(const k in res.stores)CLOUD.baseline[k]=JSON.stringify(res.stores[k]);
-    for(const k in res.stores)lsSet(k,res.stores[k]);
-    return {ok:true};
+    const cloud=res.stores;
+    /* Guard against losing edits made while a prior save was offline/failed: for any GLOBAL key,
+       if this device has a locally-cached value that differs from the cloud's, the local edit never
+       confirmed. Keep the local value, put it back in the snapshot, and re-queue it so it saves now.
+       This is why "my rate edits vanish on re-login" happened — a failed cloud write left the edit
+       only in localStorage, and the next load overwrote it with the empty cloud copy. */
+    const recovered=[];
+    try{
+      for(const k in GLOBAL_KEYS){
+        if(k==="session")continue;
+        const localRaw=lsRaw(k);
+        if(localRaw==null)continue;
+        const cloudRaw=(k in cloud)?JSON.stringify(cloud[k]):null;
+        if(cloudRaw!==null && localRaw===cloudRaw)continue;         // already in sync
+        // there IS a local value the cloud doesn't match — treat local as the newer edit
+        let localVal; try{ localVal=JSON.parse(localRaw); }catch(e){ continue; }
+        // don't resurrect an empty/default over real cloud data
+        // "empty" = nothing meaningful to preserve. For rateRules, empty means no baseCosts and only
+        // the default/blank profile; for arrays, zero length; for plain objects, no keys.
+        const isBlankRules=(v)=>v&&typeof v==="object"&&(!v.baseCosts||!Object.keys(v.baseCosts).length)&&(!v.assign||!Object.keys(v.assign).length)&&(!v.profiles||v.profiles.every(p=>p&&(!p.services||!Object.keys(p.services).length)&&(!p.surcharges||!Object.keys(p.surcharges).length)));
+        const localEmpty=localVal==null||(Array.isArray(localVal)&&!localVal.length)||(typeof localVal==="object"&&!Array.isArray(localVal)&&!Object.keys(localVal).length)||(k==="rateRules"&&isBlankRules(localVal));
+        if(localEmpty&&cloudRaw!==null)continue;                    // cloud has data, local is empty → trust cloud
+        cloud[k]=localVal; recovered.push(k);
+      }
+    }catch(e){}
+    CLOUD.snapshot=cloud;
+    CLOUD.baseline={}; for(const k in cloud)CLOUD.baseline[k]=JSON.stringify(cloud[k]);
+    for(const k in cloud)lsSet(k,cloud[k]);
+    // re-queue recovered edits so they actually reach the server this session
+    if(recovered.length){ for(const k of recovered){ delete CLOUD.baseline[k]; cloudQueue(k,cloud[k]); } }
+    return {ok:true,recovered};
   }
   return res||{ok:false,error:"No response"};
 }
@@ -3989,11 +4072,13 @@ function LegalLinks(){
     <button onClick={()=>setOpen("terms")} className="hover:text-stone-400 underline-offset-2 hover:underline">Terms</button>
     <span>·</span>
     <button onClick={()=>setOpen("privacy")} className="hover:text-stone-400 underline-offset-2 hover:underline">Privacy</button>
+    <span>·</span>
+    <button onClick={()=>setOpen("billing")} className="hover:text-stone-400 underline-offset-2 hover:underline">Billing &amp; rate accuracy</button>
     {open&&<div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={()=>setOpen(null)}>
       <div onClick={e=>e.stopPropagation()} className="bg-white rounded-2xl max-w-2xl w-full max-h-[82vh] flex flex-col text-left">
         <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100">
           <div className="flex gap-1 bg-stone-100 rounded-lg p-0.5 text-sm">
-            {[["terms","Terms of Service"],["privacy","Privacy Policy"]].map(([k,l])=><button key={k} onClick={()=>setOpen(k)} className={`rounded-lg px-3 py-1.5 ${open===k?"bg-white shadow text-stone-800 font-medium":"text-stone-500"}`}>{l}</button>)}
+            {[["terms","Terms of Service"],["privacy","Privacy Policy"],["billing","Billing & Rate Accuracy"]].map(([k,l])=><button key={k} onClick={()=>setOpen(k)} className={`rounded-lg px-3 py-1.5 ${open===k?"bg-white shadow text-stone-800 font-medium":"text-stone-500"}`}>{l}</button>)}
           </div>
           <button onClick={()=>setOpen(null)} className="text-stone-400 hover:text-stone-600"><X className="w-5 h-5"/></button>
         </div>
@@ -4018,6 +4103,17 @@ function LegalLinks(){
             <H>5. Retention & your choices</H><P>We keep data while your account is active and as needed for legal, tax, and dispute purposes. You can export your data from within the platform, and you can request deletion of your account data by emailing support@shippingcloud.net.</P>
             <H>6. Security</H><P>Data is encrypted in transit, access is credentialed and scoped, and secrets are stored server-side. No system is perfectly secure, but we take reasonable measures appropriate to the data we handle.</P>
             <H>7. Changes</H><P>We'll update this policy as the service evolves; material changes will be reflected on this page with a new date.</P>
+          </>}
+          {open==="billing"&&<>
+            <H>1. Quotes are estimates, not final prices</H><P>Every rate, price, surcharge, and total shown in the platform — at quote time, in a batch preview, at your store's checkout, or on any label or document — is an <b>estimate</b> generated from the shipment details supplied by you or imported from your systems (weight, dimensions, package type, service level, origin and destination, residential status, and declared value). Estimates are based on published carrier rate tables and the information available at the moment of quoting. They are not a guarantee of the final amount the carrier will bill, and they do not constitute a binding price, offer, or contract for a fixed shipping cost.</P>
+            <H>2. Carrier reweighs, re-rates, and post-shipment adjustments</H><P>FedEx and other carriers independently inspect, weigh, and measure packages after they enter the network. Carriers routinely adjust ("rebill," "re-rate," "reweigh," or "audit") the charge for a shipment after the label is created or the package is delivered. Common reasons include: actual weight differing from entered weight; <b>dimensional (DIM) weight</b> exceeding actual weight; incorrect or understated package dimensions; address corrections; residential/commercial reclassification; delivery-area, remote-area, or extended-area surcharges; additional handling, oversize, or unauthorized-package fees; Saturday, signature, or special-handling charges; fuel surcharge changes; and declared-value or insurance adjustments. <b>These adjustments originate with the carrier and are outside our control.</b></P>
+            <H>3. You are responsible for adjusted charges — and we will pass them through</H><P>When a carrier rebills or adjusts a shipment, that adjustment is your responsibility. <b>You agree that we may bill, re-bill, charge, or invoice you for the corrected amount, including any difference between the original estimate and the carrier's final charge, plus any associated carrier fees, penalties, or accessorials.</b> We will update the affected invoice and/or issue a supplemental invoice reflecting the carrier's adjustment, and such amounts are due on the same terms as your other charges. You authorize these adjustment charges as a condition of using the service. Carrier adjustments can arrive days or weeks after a shipment; there is no time limit on our right to pass through a legitimate carrier adjustment once we receive it.</P>
+            <H>4. Accuracy of the details you provide</H><P>Accurate quotes depend on accurate inputs. You are responsible for entering correct weights, dimensions, package types, addresses, and service selections. Under-declaring weight or dimensions, mis-classifying a residential address as commercial, or selecting the wrong service will produce an inaccurate estimate and will typically result in a carrier adjustment for which you are responsible. We are not liable for estimate inaccuracies caused by incorrect, incomplete, or outdated information supplied by you, your customers, your store, or any connected system.</P>
+            <H>5. No liability for quoting inaccuracies</H><P>To the maximum extent permitted by law, we are <b>not liable</b> for any loss, cost, expense, overcharge, undercharge, lost profit, or damage of any kind arising out of or relating to an inaccurate, incomplete, delayed, or erroneous rate quote, price estimate, surcharge calculation, delivery-time estimate, or total — whether caused by carrier rate changes, carrier adjustments, DIM-weight recalculation, data-entry error, integration or import error, software error, or any other cause. Your sole remedy for a disputed carrier adjustment is to pursue it with the carrier under the carrier's own dispute process; we will provide reasonable documentation to assist, but we do not guarantee any outcome.</P>
+            <H>6. Markup and reseller pricing</H><P>Prices shown to you may include our margin over negotiated carrier rates and do not necessarily reflect the carrier's own list or account rate. Pricing, discounts, and surcharges may change at any time without notice. Nothing in a displayed price obligates us to honor a rate that was displayed in error or that is superseded by a carrier's adjustment.</P>
+            <H>7. Estimates at checkout</H><P>Where shipping rates are displayed to your buyers at your store's checkout, those rates are estimates presented on your behalf and under your authority. You are responsible for how shipping is priced and disclosed to your customers, and for any difference between what your customer paid you and what the shipment ultimately costs.</P>
+            <H>8. Disputes and documentation</H><P>If you believe a carrier adjustment is incorrect, notify us promptly and we will share the carrier's stated basis for the adjustment (e.g., reweigh dimensions or corrected address) where available. Disputes over a carrier's measurement or classification are resolved between you and the carrier. Adjustment amounts remain payable while a dispute is pending unless and until the carrier reverses the charge.</P>
+            <H>9. Not legal advice; entire agreement on billing</H><P>This statement supplements the Terms of Service and controls on matters of rate accuracy and carrier adjustments. It does not limit any broader limitation of liability, disclaimer, or indemnification in the Terms. By using the service you acknowledge that quoted amounts are estimates and that carrier adjustments are your responsibility.</P>
           </>}
         </div>
       </div>
@@ -4927,7 +5023,7 @@ function AppInner(){
               </React.Fragment>
             ))}
             {!isAdmin&&!isDemo&&!isCompanyAdmin&&CLOUD.mode==="cloud"&&<CompanyAdminRequestButton currentUser={currentUser}/>}
-            <div className="px-3 pt-3 text-[9px] text-stone-300 select-none">{BUILD_TAG}</div>
+            <div className="px-3 pt-3 text-[9px] text-stone-300 select-none flex items-center gap-1.5"><span>{BUILD_TAG}</span><span className="text-stone-200">·</span><LegalLinks/></div>
           </nav>
         </aside>
       </div>}
@@ -4943,7 +5039,7 @@ function AppInner(){
               </React.Fragment>
             ))}
             {!isAdmin&&!isDemo&&!isCompanyAdmin&&CLOUD.mode==="cloud"&&<CompanyAdminRequestButton currentUser={currentUser}/>}
-            <div className="px-3 pt-3 text-[9px] text-stone-300 select-none">{BUILD_TAG}</div>
+            <div className="px-3 pt-3 text-[9px] text-stone-300 select-none flex items-center gap-1.5"><span>{BUILD_TAG}</span><span className="text-stone-200">·</span><LegalLinks/></div>
           </nav>
         </aside>
         <main className="flex-1 min-w-0 overflow-x-clip px-3 sm:px-6 py-4 sm:py-6" style={(custom.appBg||custom.pageBg)?{...(custom.pageBg?{backgroundColor:custom.pageBg}:{}),...(custom.appBg?{backgroundImage:`url(${custom.appBg})`,backgroundSize:"cover",backgroundPosition:"center",backgroundAttachment:"fixed"}:{})}:undefined}>
@@ -5810,7 +5906,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
     comps=[...comps,...acc.map(a=>({label:a.label,amount:a.amount}))];
     const hasPrice=sell!=null;
     return (
-      <div key={q.key} className={"border rounded-lg bg-white "+(matched===q.key?"border-[#0086E0] ring-1 ring-[#0086E0]":"border-stone-200")}>
+      <div key={svcFamilyKey(q.label)} className={"border rounded-lg bg-white transition-all duration-200 "+(matched===q.key?"border-[#0086E0] ring-1 ring-[#0086E0]":"border-stone-200")}>
         <div onClick={()=>{setOpen(isOpen?null:q.key); if(q._oneRate&&q.packageTypeCode&&onOneRate)onOneRate(q.packageTypeCode);}} className="px-3 py-2 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
           <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isOpen?"rotate-90":""}`}/>
           {matched===q.key&&<span className="text-[10px] font-semibold uppercase tracking-wide bg-[#E6F4FF] text-[#0086E0] border border-[#99D6FF] rounded px-1.5 py-0.5 shrink-0 inline-flex items-center gap-1">{matchedSrc==="autopilot"&&<Zap className="w-3 h-3"/>}{matchedSrc==="autopilot"?"Autopilot":"Requested"}</span>}
@@ -8174,7 +8270,7 @@ function PrinterSettings({settings,setSettings}){
     <Panel title="Direct printing — zero clicks, no dialog">
       <div className="space-y-3">
         {(()=>{ const armed=!!pnc.enabled&&!!cust.skipBookedSummary; const ready=!!String(pnc.apiKey||"").trim()&&!!pnc.printerId;
-          const setKiosk=(on)=>{ setPnCfg({enabled:on}); setCust("skipBookedSummary",on); };
+          const setKiosk=(on)=>{ setPnCfg({enabled:on}); setCust("skipBookedSummary",on); if(on)setCust("directNoPreview",false); };
           return (<div className={`rounded-xl border p-3 ${armed?"border-emerald-300 bg-emerald-50/60":"border-stone-200 bg-stone-50"}`}>
             <label className="flex items-center justify-between gap-3">
               <span className="text-sm font-semibold text-stone-800 flex items-center gap-1.5"><Zap className={`w-4 h-4 ${armed?"text-emerald-600":"text-stone-400"}`}/>Hands-free kiosk mode
@@ -8186,7 +8282,7 @@ function PrinterSettings({settings,setSettings}){
             <div className="mt-3 pt-3 border-t border-stone-200/70">
               <label className="flex items-center justify-between gap-3">
                 <span className="text-sm font-medium text-stone-700">Print with no preview — but keep the review<span className="block text-[11px] font-normal text-stone-500 mt-0.5">You still hit Ship and see the booked summary; the label just goes straight to the printer with no preview popup. Also needs the printer connected below.</span></span>
-                <button onClick={()=>setCust("directNoPreview",!cust.directNoPreview)} className="shrink-0"><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${cust.directNoPreview?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
+                <button onClick={()=>{const nv=!cust.directNoPreview; setCust("directNoPreview",nv); if(nv){ setCust("skipBookedSummary",false); setPnCfg({enabled:true}); } }} className="shrink-0"><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${cust.directNoPreview?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
               </label>
             </div>
           </div>);
@@ -9633,8 +9729,10 @@ function FieldLists({settings,setSettings}){
 }
 function Customize({settings,setSettings,deployMode,blockedKeys}){
   const locked=blockedKeys||new Set();
-  const c=cz(settings);
-  const set=(k,v)=>setSettings(p=>({...p,custom:{...(p.custom||{}),[k]:v}}));
+  const committedCustom=cz(settings);
+  const _cd=useDraft(committedCustom,(v)=>setSettings(p=>({...p,custom:v})),CUSTOM_DEFAULTS);
+  const c=_cd.draft;   // read from the draft
+  const set=(k,v)=>_cd.setDraft(prev=>({...(prev||{}),[k]:v}));   // edits go to the draft; Save commits
   const Tog=({k,label,hint,invert})=>(<label className="flex items-start gap-2 text-sm text-stone-700 cursor-pointer">
     <input type="checkbox" checked={invert?c[k]===false:!!c[k]} onChange={e=>set(k,invert?!e.target.checked:e.target.checked)} className="accent-[#0086E0] mt-0.5"/>
     <span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span></label>);
@@ -9670,6 +9768,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
     <button onClick={()=>set(k,!c[k])}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${c[k]?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
   </label>);
   return (<div className="max-w-2xl space-y-4">
+    <DraftBar dirty={_cd.dirty} onSave={_cd.save} onUndo={_cd.undo} onReset={()=>{ if(window.confirm("Reset all customizations to their defaults? You'll still need to click Save to keep it.")) _cd.reset(); }} resetLabel="Reset to defaults" savedNote="Customizations saved"/>
     {!deployMode&&<div className="text-sm text-stone-500">Make {BRAND.product} yours. Every option here changes the app immediately for <b>your login only</b>.</div>}
     <div className="flex items-center gap-1 border-b border-stone-200 overflow-x-auto">
       {CTABS.map(([v,l])=><button key={v} onClick={()=>setCs(v)} className={`px-3 py-2 text-sm rounded-t-lg whitespace-nowrap border-b-2 -mb-px ${cs===v?"border-[#0086E0] text-stone-900 font-medium":"border-transparent text-stone-500 hover:bg-stone-50"}`}>{l}</button>)}

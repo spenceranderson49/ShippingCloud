@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v310";
+const BUILD_TAG="addr-v315";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -251,7 +251,7 @@ function orderToEngland(o,opts,sender,eng){
   const q=opts.quote||{};
   return {
     reference:opts.reference||o.name||"",orderNumber:o.name||"",invoiceNo:opts.invoiceNo||"",poNo:opts.poNo||"",shipmentDate:opts.shipDate||new Date().toISOString().slice(0,10),
-    labelStock:(typeof window!=="undefined"&&window.__scLabelStock&&window.__scLabelStock.size)||"4x6",
+    labelStock:(typeof window!=="undefined"&&window.__scLabelStock&&(window.__scLabelStock.carrierStock||window.__scLabelStock.size))||"4x6",
     carrierCode:q.carrierCode,serviceCode:q.serviceCode,
     /* FedEx criteria: FedEx packaging (envelope/pak/boxes/tube) is only valid on Express services and
        REQUIRED for One Rate; Ground/Home Delivery must book as YOUR_PACKAGING. Only OneRate bookings
@@ -480,6 +480,12 @@ function tabGeom(leading,lhPx,pageHpx){
 async function composeForStock(imgs,wIn,hIn,ctx){
   const cfg=(typeof window!=="undefined"&&window.__scLabelStock)||null;
   const size=(cfg&&cfg.size)||"4x6";
+  const src=(cfg&&cfg.source)||"app";
+  const dtEnabled=!!(cfg&&cfg.docTab&&cfg.docTab.enabled);
+  /* FedEx is drawing its own tab on real stock → leave the carrier PDF exactly as-is. */
+  if(src==="fedex")return {imgs,wIn,hIn,changed:false};
+  /* Our tab is off entirely → nothing to compose. */
+  if(!dtEnabled)return {imgs,wIn,hIn,changed:false};
   const [SW,SH]=stockDims(size);
   if(size==="4x6"||!imgs.length)return {imgs,wIn,hIn,changed:false};
   if(hIn>=SH-0.2)return {imgs,wIn,hIn,changed:false};   // already stock-sized
@@ -489,17 +495,24 @@ async function composeForStock(imgs,wIn,hIn,ctx){
     const dpi=Math.max(96,Math.round(im.naturalWidth/(wIn||4)));
     const c=document.createElement("canvas");c.width=Math.round(SW*dpi);c.height=Math.round(SH*dpi);
     const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);
-    const lw=Math.round((wIn||4)*dpi),lh=Math.round((hIn||6)*dpi);
+    /* The physical label area on doc-tab stock is ALWAYS 6″ — the tab is only what's beyond it
+       (0.75″ on FedEx 4×6.75). The bbox crop trims a label's bottom whitespace, so the artwork
+       can come back shorter than 6″; sizing the tab as "whatever's left over" inflated it past
+       the perforation and printed fields onto the label. Pin the region to 6″, draw the artwork
+       top-aligned inside it, and the tab boundary lands exactly on the perf. */
+    const lrIn=Math.min(6,SH);
+    const lrPx=Math.round(lrIn*dpi);
+    const lw=Math.round((wIn||4)*dpi),lh=Math.round(Math.min(hIn||6,lrIn)*dpi);
     const x=Math.max(0,Math.round((c.width-lw)/2));
     const leading=!!(cfg&&cfg.docTab&&cfg.docTab.stock==="leading");
-    const geo=tabGeom(leading,lh,c.height);
+    const geo=tabGeom(leading,lrPx,c.height);
     g.drawImage(im,x,geo.labelY,lw,lh);
     if(geo.tabPx>Math.round(0.2*dpi)){
       g.strokeStyle="#b8b2ab";g.setLineDash([Math.round(dpi*0.07),Math.round(dpi*0.07)]);
       g.beginPath();g.moveTo(0,geo.tearY+(leading?-1:1));g.lineTo(c.width,geo.tearY+(leading?-1:1));g.stroke();g.setLineDash([]);
       const lines=(cfg&&cfg.docTab&&cfg.docTab.enabled)?buildDocTabLines(cfg.docTab,ctx||{}):[];
       g.fillStyle="#111";
-      const tabIn=SH-(hIn||6);   // small tabs (¼", ½") get proportionally tighter padding
+      const tabIn=SH-lrIn;   // exact physical tab height — small tabs (¼", ½") get proportionally tighter padding
       const pad=Math.round(Math.min(0.14,Math.max(0.03,tabIn*0.18))*dpi);
       const items=lines.map(l=>({txt:((l.label?l.label+": ":"")+l.value).slice(0,90),fs:Math.max(8,Math.round((l.size||9)*dpi/72)),x:l.x,y:l.y}));
       const placed=layoutDocTab(items,c.width,geo.textTop,geo.textBottom,pad,(txt,fs)=>{g.font="600 "+fs+"px system-ui,Arial,sans-serif";return g.measureText(txt).width;});
@@ -4623,7 +4636,17 @@ function AppInner(){
     }catch(e){}
   },[]);
   useEffect(()=>{ const pn=(settings&&settings.printNode)||{}; try{ window.__scDirectPrint={enabled:!!pn.enabled,apiKey:pn.apiKey||"",printerId:+pn.printerId||0}; }catch(e){} },[settings&&settings.printNode]);
-  useEffect(()=>{ try{ window.__scLabelStock={size:((settings&&settings.printer)||{}).labelSize||"4x6",docTab:(settings&&settings.docTab)||null}; }catch(e){} },[settings&&settings.printer,settings&&settings.docTab]);
+  useEffect(()=>{ try{
+      const size=((settings&&settings.printer)||{}).labelSize||"4x6";
+      const dtb=(settings&&settings.docTab)||null;
+      /* Doc-tab source: "app" (our designer owns the tab) tells the carrier to print a PLAIN 4×6
+         label with no FedEx tab, and our composition builds the tab on the taller stock — so the
+         two tab systems never fight. "fedex" keeps requesting the real stock and lets FedEx fill
+         its own tab (we then skip our compose). */
+      const src=(dtb&&dtb.source)||"app";
+      const carrierStock=(dtb&&dtb.enabled&&src==="app")?"4x6":size;
+      window.__scLabelStock={size,carrierStock,docTab:dtb,source:src};
+    }catch(e){} },[settings&&settings.printer,settings&&settings.docTab]);
   const brand=BRAND.fw
     ?{...DEFAULT_BRAND,name1:"FREIGHT",name2:"WIRE SHIP",dark:"#1c1917",primary:"#1E9BF0",...(settings.brand||{})}
     :{...DEFAULT_BRAND,...(settings.brand||{})};
@@ -6233,7 +6256,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
       ratesForOrder(dest,{residential,box,weightLb:totalWeight,fromZip,sender:settings.sender,packageTypeCode:selectedOrBox?selectedOrBox.code:"",signatureOption:sigOption,saturdayDelivery:sat,insuranceAmount:insurance||null},eng).then(res=>{ if(cancel)return;
         if(res&&res.live&&res.rates&&res.rates.length)setRateSrc({rates:res.rates,live:true,loading:false});
         else setRateSrc({rates:localOrderQuotes(),live:false,loading:false});
-      });
+      }).catch(()=>{ if(!cancel)setRateSrc({rates:localOrderQuotes(),live:false,loading:false}); });   // England reject/timeout/DNS flake must not strand the spinner — fall back to local estimates like the Ship tab does
     } else setRateSrc({rates:localOrderQuotes(),live:false,loading:false});
     return ()=>{cancel=true;};
   },[rateNonce,rcv.zip,totalWeight,box.L,box.W,box.H,residential,eng.enabled,eng.apiKey,eng.customerId,eng.base,eng.fedexAccount,sigOption,sat,insurance,orPkg]);   /* eng primitives, not the object (englandFor returns a new object each render — object identity in deps = infinite refetch). orPkg added: an explicit One Rate box pick changes packageTypeCode and must requote */
@@ -7139,7 +7162,18 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
     const keys=Object.keys(g);
     return keys.length>1?keys.map(k=>({name:k,rows:g[k]})):null;
   })();
-  const keyOf=(o)=>{if(groupBy==="sku")return o.sku||"—";if(groupBy==="product")return prodOf(o);if(groupBy==="zone")return "Zone "+zoneOf(o);if(groupBy==="service")return rateFor(o).label;if(groupBy==="carrier")return carrierOf(rateFor(o).label);if(groupBy==="state")return o.state||"—";return "All orders";};
+  const dayKey=(o)=>{const t=Date.parse(o.date||"");if(isNaN(t))return "No date";const d=new Date(t);return d.toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});};
+  const keyOf=(o)=>{try{
+    if(groupBy==="sku")return o.sku||"—";
+    if(groupBy==="product")return prodOf(o);
+    if(groupBy==="zone")return "Zone "+zoneOf(o);
+    if(groupBy==="service")return rateFor(o).label||"—";
+    if(groupBy==="carrier")return carrierOf(rateFor(o).label||"");
+    if(groupBy==="state")return (o.state||"—").toUpperCase();
+    if(groupBy==="source")return o.source||"Manual";
+    if(groupBy==="day")return dayKey(o);
+    return "All orders";
+  }catch(e){return "—";}};
   const groups={}; visible.forEach(o=>{const k=keyOf(o);(groups[k]=groups[k]||[]).push(o);});
   const groupKeys=Object.keys(groups).sort();
   const selectGroup=(arr)=>setSel(s=>{const n=new Set(s);const ok=arr.filter(o=>!holds[o.id]);const allOn=ok.every(o=>n.has(o.id));ok.forEach(o=>allOn?n.delete(o.id):n.add(o.id));return n;});
@@ -7250,10 +7284,21 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
             <select value={specCarrier} onChange={e=>{setSpecCarrier(e.target.value);setSpecSvc(SERVICE_OPTIONS[e.target.value][0]);}} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">{Object.keys(SERVICE_OPTIONS).map(c=><option key={c}>{c}</option>)}</select>
             <select value={specSvc} onChange={e=>setSpecSvc(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">{(SERVICE_OPTIONS[specCarrier]||[]).map(sv=><option key={sv}>{sv}</option>)}</select>
           </>}
-          <span className="text-[10px] uppercase tracking-widest text-stone-400 ml-2">Group</span>
-          <select value={groupBy} onChange={e=>setGroupBy(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">
-            <option value="none">No grouping</option><option value="zone">By zone</option><option value="state">By state</option><option value="sku">By SKU</option><option value="product">By product</option><option value="service">By service</option><option value="carrier">By carrier</option>
-          </select>
+          <label className="flex items-center gap-1.5 ml-2 bg-white border border-stone-200 rounded-lg pl-2.5 pr-1 py-1">
+            <Layers className="w-3.5 h-3.5 text-stone-400"/>
+            <span className="text-[11px] font-medium text-stone-500">Group by</span>
+            <select value={groupBy} onChange={e=>setGroupBy(e.target.value)} className="bg-transparent text-sm font-medium text-stone-700 outline-none cursor-pointer py-0.5 pr-1">
+              <option value="none">Nothing (flat list)</option>
+              <option value="day">Ship day</option>
+              <option value="service">Service</option>
+              <option value="carrier">Carrier</option>
+              <option value="zone">Zone</option>
+              <option value="state">State</option>
+              <option value="source">Store / source</option>
+              <option value="sku">SKU</option>
+              <option value="product">Product</option>
+            </select>
+          </label>
           <div className="flex-1"/>
           <button onClick={applyAutopilot} disabled={!(ruleset||[]).some(r=>r.enabled)||!visible.length} title="Run your Autopilot rules on the orders below: routes services, applies holds" className="text-sm bg-violet-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-violet-700 disabled:opacity-40 flex items-center gap-1.5"><Zap className="w-4 h-4"/>Apply Autopilot rules</button>
           <button onClick={()=>setQrOpen(v=>!v)} className={`text-sm rounded-lg px-3 py-1.5 font-medium border flex items-center gap-1.5 ${qrOpen?"bg-violet-50 border-violet-300 text-violet-700":"bg-white border-stone-200 text-stone-600 hover:bg-stone-100"}`}><Plus className="w-3.5 h-3.5"/>Quick rule</button>
@@ -7991,6 +8036,18 @@ function PrinterSettings({settings,setSettings}){
     <p className="text-sm text-stone-500">Controls how labels are generated and printed when you buy a label or run a batch.</p>
     <Panel title="Direct printing — zero clicks, no dialog">
       <div className="space-y-3">
+        {(()=>{ const armed=!!pnc.enabled&&!!cust.skipBookedSummary; const ready=!!String(pnc.apiKey||"").trim()&&!!pnc.printerId;
+          const setKiosk=(on)=>{ setPnCfg({enabled:on}); setCust("skipBookedSummary",on); };
+          return (<div className={`rounded-xl border p-3 ${armed?"border-emerald-300 bg-emerald-50/60":"border-stone-200 bg-stone-50"}`}>
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-sm font-semibold text-stone-800 flex items-center gap-1.5"><Zap className={`w-4 h-4 ${armed?"text-emerald-600":"text-stone-400"}`}/>Hands-free kiosk mode
+                <span className="block text-[11px] font-normal text-stone-500 mt-0.5">Book a label and it prints itself — no Print button, no dialog, and the screen jumps straight to the next shipment. Perfect for a counter or a shared station.</span></span>
+              <button onClick={()=>setKiosk(!armed)} className="shrink-0"><span className={`w-11 h-6 rounded-full flex items-center px-0.5 transition-colors ${armed?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
+            </label>
+            {armed&&!ready&&<p className="text-[11px] text-amber-600 mt-2">Kiosk mode is on, but finish the one-time printer setup below (API key + pick a printer) or labels will fall back to the print dialog.</p>}
+            {armed&&ready&&<p className="text-[11px] text-emerald-700 mt-2">Active — booking a label sends it straight to <b>{pnc.printerName||("printer "+pnc.printerId)}</b> and resets for the next one.</p>}
+          </div>);
+        })()}
         <p className="text-xs text-stone-500">Browsers can't skip the print dialog on their own — a tiny agent on the label computer does it. One-time setup: install the free <a href="https://www.printnode.com/en/download" target="_blank" rel="noreferrer" className="text-[#0086E0] hover:underline">PrintNode client</a> on the computer the printer is plugged into, sign in, then paste your API key (PrintNode dashboard → API Keys) here. After that, every label prints itself.</p>
         <div className="flex flex-wrap items-end gap-2">
           <label className="block text-sm text-stone-700 flex-1 min-w-[220px]">PrintNode API key
@@ -8082,6 +8139,15 @@ function PrinterSettings({settings,setSettings}){
         {dt.enabled&&<label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={dt.showLabels!==false} onChange={e=>setDt({showLabels:e.target.checked})}/>Show field labels</label>}
       </div>
       {dt.enabled&&<>
+        <Field label="Doc-tab source">
+          <Select value={dt.source||"app"} onChange={e=>setDt({source:e.target.value})}>
+            <option value="app">My designer layout (below)</option>
+            <option value="fedex">FedEx's built-in tab</option>
+          </Select>
+        </Field>
+        {(dt.source||"app")==="app"
+          ? <p className="text-[11px] text-stone-500 -mt-1">The carrier prints a plain 4×6 label; ShipHub adds your designed tab on the taller stock. This is what the designer below controls.</p>
+          : <p className="text-[11px] text-amber-600 -mt-1">FedEx fills the tab from the shipment's reference fields and your designer layout is ignored. Use this only if you prefer FedEx's format.</p>}
         <Field label="Doc-tab position on label stock">
           <Select value={dt.stock||"trailing"} onChange={e=>setDt({stock:e.target.value})}>
             <option value="trailing">Trailing (bottom of label)</option>

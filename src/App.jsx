@@ -74,7 +74,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v357";
+const BUILD_TAG="addr-v359";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2038,7 +2038,7 @@ const NOTIFY_DEFAULTS={orderConfirm:true,shipped:true,delivered:true,returnLabel
 const CUSTOM_DEFAULTS={
   hideInvoice:false,hidePO:false,hideAddr23:false,hideOz:false,hideInsure:false,
   phoneRequired:true,emailRequired:true,
-  defaultSignature:"none",autoInsurePct:0,autoInsureValue:0,autoSigValue:0,autoSigType:"indirect",
+  defaultSignature:"none",autoInsurePct:0,autoInsureValue:0,autoSigValue:0,autoSigType:"indirect",shipDateCutoff:"",
   defaultView:"cheapest",showRateViewToggle:false,hiddenServices:[],priceWarn:0,transitStyle:"date",aliases:{},matchedOnly:false,
   slipThanks:"",slipFooter:"",
   density:"comfortable",stuckDays:0,
@@ -4678,7 +4678,8 @@ function AppInner(){
   const [companyAdminRequests,setCompanyAdminRequests]=usePersist("companyAdminRequests",[]);
   const [tab,setTab]=useState(BRAND.admin?"admin":"ship");
   const [pendingOpenOrderId,setPendingOpenOrderId]=useState(null);
-  useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};if(d.tab)setTab(d.tab);if(d.openOrderId)setPendingOpenOrderId(d.openOrderId);};window.addEventListener("sc-nav",h);return()=>window.removeEventListener("sc-nav",h);},[]);
+  const [pendingOpenShipTracking,setPendingOpenShipTracking]=useState(null);
+  useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};if(d.tab)setTab(d.tab);if(d.openOrderId)setPendingOpenOrderId(d.openOrderId);if(d.openShipTracking)setPendingOpenShipTracking(d.openShipTracking);};window.addEventListener("sc-nav",h);return()=>window.removeEventListener("sc-nav",h);},[]);
   useEffect(()=>{ try{
     if(localStorage.getItem("scPurge")!=="2"){
       ["orders","shipments","returns","ledger","invoices","emails","drafts","pendingShips","rules","accounts"].forEach(k=>localStorage.removeItem(k));
@@ -5143,7 +5144,7 @@ function AppInner(){
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
           {tab==="orders"&&<Orders orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} setSettings={setSettings} onShipped={onShipped} openOrderId={pendingOpenOrderId} onOpenedOrder={()=>setPendingOpenOrderId(null)}/>}
           {tab==="batch"&&<Batch orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
-          {tab==="shipments"&&<Shipments isAdmin={isAdmin} labels={labelStore} shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels} settings={settings}/>}
+          {tab==="shipments"&&<Shipments openShipTracking={pendingOpenShipTracking} onOpenedShip={()=>setPendingOpenShipTracking(null)} isAdmin={isAdmin} labels={labelStore} shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels} settings={settings}/>}
           {hkHelp&&<div onClick={()=>setHkHelp(false)} className="fixed bottom-4 right-4 z-50 bg-stone-900 text-white rounded-xl shadow-lg p-4 text-xs space-y-1.5 cursor-pointer">
             <div className="font-semibold text-sm mb-1">Keyboard shortcuts</div>
             <div><span className="font-mono bg-stone-700 rounded px-1">g</span> then <span className="font-mono bg-stone-700 rounded px-1">s</span> Ship · <span className="font-mono bg-stone-700 rounded px-1">o</span> Orders · <span className="font-mono bg-stone-700 rounded px-1">h</span> Shipments</div>
@@ -5175,6 +5176,23 @@ function AppInner(){
 }
 
 /* ════════ SHIP ════════ */
+/* The default ship date for a new shipment. If a cutoff time is configured (custom.shipDateCutoff,
+   e.g. "15:00") and the current local time is at or past it, roll to the next day — so late-day
+   shipments are dated for tomorrow automatically. Empty cutoff = always today. */
+function shipDateDefault(settings){
+  const d=new Date();
+  try{
+    const cut=settings&&settings.custom&&settings.custom.shipDateCutoff;
+    if(cut&&/^\d{1,2}:\d{2}$/.test(cut)){
+      const [hh,mm]=cut.split(":").map(Number);
+      const nowMin=d.getHours()*60+d.getMinutes();
+      if(nowMin>=hh*60+mm) d.setDate(d.getDate()+1);
+    }
+  }catch(e){}
+  // local-date ISO (avoid UTC shifting the day)
+  const off=d.getTimezoneOffset();
+  return new Date(d.getTime()-off*60000).toISOString().slice(0,10);
+}
 function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,drafts,setDrafts,prefill,clearPrefill,onShipped,onPending,logEmail,onQuickQuote,onRefresh,syncing,currentUser,setUsers,setCurrentUser,clients=[]}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 rate database — global, follows the customer's profile
   const empty={country:"United States",name:"",company:"",zip:"",state:"",city:"",address1:"",address2:"",address3:"",phone:"",email:""};
@@ -5205,7 +5223,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const [labelPreview,setLabelPreview]=useState(null); // {pdf, tracking, service, carrier}
   const [pendingReprint,setPendingReprint]=useState(null); // {q, order, shipment} — set when re-processing an already-shipped order
   const justBookedRef=React.useRef(null); // the order id we ourselves just booked this session — skip the reprint guard for it (it's our own print, not a user reprint attempt)
-  const [shipDate,setShipDate]=useState(()=>new Date().toISOString().slice(0,10));
+  const [shipDate,setShipDate]=useState(()=>shipDateDefault(settings));
   const orBox=oneRateBoxFor(pieces[0]&&pieces[0].L,pieces[0]&&pieces[0].W,pieces[0]&&pieces[0].H,(+(pieces[0]&&pieces[0].weight)||0)+(+(pieces[0]&&pieces[0].oz)||0)/16);
   const [recErrors,setRecErrors]=useState([]);
   const custom=cz(settings);
@@ -5564,7 +5582,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const saveDraft=()=>{setDraftName(reference||receiver.name||receiver.city||"");setNaming(true);};
   /* box-logic explanation banner shown while a packed order is loaded */
   const PackNote=()=>packNote?(<div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800 flex items-center gap-2"><Boxes className="w-3.5 h-3.5 shrink-0"/><span className="flex-1">Box logic packed this order: <b>{packNote.boxNames}</b> · {packNote.totalWt} lb billable{packNote.unresolved.length?` · ${packNote.unresolved.length} item${packNote.unresolved.length===1?"":"s"} not in your catalog (weight may be low)`:""} — dims are editable below.</span><button onClick={()=>setPackNote(null)} className="text-emerald-500 hover:text-emerald-700"><X className="w-3.5 h-3.5"/></button></div>):null;
-  const newShipment=()=>{justBookedRef.current=null;setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setRes(true);setResTouched(false);setSig(custom.defaultSignature&&custom.defaultSignature!=="none");setSigOption(custom.defaultSignature||"none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");};
+  const newShipment=()=>{justBookedRef.current=null;setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setRes(true);setResTouched(false);setSig(custom.defaultSignature&&custom.defaultSignature!=="none");setSigOption(custom.defaultSignature||"none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");setShipDate(shipDateDefault(settings));};
   const addressCheck=(
     <div className="text-xs space-y-2">
       <div className="text-[10px] uppercase tracking-widest text-stone-500 font-semibold flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5"/>Address check</div>
@@ -6806,13 +6824,20 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   );
 }
 
-function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,settings,labels={},isAdmin=false}){
+function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,settings,labels={},isAdmin=false,openShipTracking=null,onOpenedShip}){
   const [reprintLp,setReprintLp]=useState(null);
   const doReprint=(sh)=>{ const e=labels&&labels[sh.id]; if(e&&e.pdf){ setReprintLp({pdf:e.pdf,tracking:sh.tracking,service:sh.service,carrier:sh.carrier,rec:sh}); } else { window.alert("No stored label for this shipment on this account (labels are kept for the 60 most recent bookings). Use Edit & reship to book a fresh one."); } };
   const custom=cz(settings||{});
   const stuck=(sh)=>{ if(!custom.stuckDays)return false; if(!/in transit/i.test(sh.status||""))return false; const t=new Date(sh.date).getTime(); return t&&(Date.now()-t)>custom.stuckDays*864e5; };
   const [open,setOpen]=useState(null);
   const [rateOpen,setRateOpen]=useState(null);
+  // When navigated here with a target tracking (e.g. from Batch complete → See details), expand that shipment.
+  useEffect(()=>{
+    if(!openShipTracking)return;
+    const hit=(shipments||[]).find(s=>s&&(s.tracking===openShipTracking));
+    if(hit){ setOpen(hit.id); setTimeout(()=>{ try{ const el=document.getElementById("ship-row-"+hit.id); if(el&&el.scrollIntoView)el.scrollIntoView({behavior:"smooth",block:"center"}); }catch(e){} },120); }
+    if(onOpenedShip)onOpenedShip();
+  },[openShipTracking]);
   const [q,setQ]=useState("");
   const [checking,setChecking]=useState(false);
   const [chkMsg,setChkMsg]=useState(null);
@@ -6842,7 +6867,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
         <div className="flex items-center gap-3 px-4 py-2 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50"><div className="w-4"/><div className="w-24">Created</div><div className="flex-1">Recipient</div><div className="w-52 hidden lg:block">Ship-to address</div><div className="w-24 hidden xl:block">Reference</div><div className="w-40 hidden md:block">Tracking</div><div className="w-24 text-right">Status</div></div>
         {list.length===0&&<div className="p-8 text-center text-sm text-stone-400">No shipments match “{q}”.</div>}
         {list.map(s=>(
-        <div key={s.id}>
+        <div key={s.id} id={"ship-row-"+s.id}>
           <div onClick={()=>setOpen(open===s.id?null:s.id)} className={`flex items-center gap-3 px-4 ${custom.density==="compact"?"py-1.5":"py-3"} hover:bg-stone-50 cursor-pointer ${stuck(s)?"border-l-2 border-amber-400":""}`} title={stuck(s)?"No delivery after "+custom.stuckDays+"+ days in transit — possibly stuck":undefined}>
             <button className="text-stone-400"><ChevronRight className={`w-4 h-4 transition-transform ${open===s.id?"rotate-90":""}`}/></button>
             <div className="w-24"><div className="text-sm font-mono text-stone-500">{s.date}</div><div className="text-[10px] text-stone-400">{s.time||""}</div></div>
@@ -7514,6 +7539,11 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
     logBatch(out.filter(r=>r.ok).length,out.filter(r=>!r.ok).length);
     setRunning(false);
     setSel(new Set());
+    /* Creating labels now also PRINTS them — one action. If per-printer routing groups exist, we leave
+       printing to the per-group buttons (they need the user to pick each device); otherwise print all the
+       fresh labels straight away. */
+    const freshPdfs=out.filter(r=>r.ok&&r.pdf).map(r=>r.pdf);
+    if(freshPdfs.length&&!((settings.printers||[]).length>1)){ setPrintBusy(true); try{ await printImagePagesBatch(freshPdfs,settings); }catch(e){}finally{ setPrintBusy(false); } }
   };
   const [printBusy,setPrintBusy]=useState(false);
   const printAll=async(only)=>{
@@ -7701,7 +7731,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         {svcMixSel.length>0&&<span className="hidden lg:flex items-center gap-1.5">{svcMixSel.map(([l,n])=><Badge key={l} tone="stone">{l.replace(/^FedEx /,"")} ×{n}</Badge>)}</span>}
         <button onClick={()=>printPackingSlips(rows.map(r=>slipFromOrder(r.o,settings.sender)))} disabled={rows.length===0} title="Print a packing slip for every selected order" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5"><FileText className="w-4 h-4"/>Packing slips</button>
         <button onClick={()=>printPickList(rows.map(r=>r.o))} disabled={rows.length===0} title="One sheet: every item in this batch aggregated by product, with checkboxes" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5"><ClipboardList className="w-4 h-4"/>Pick list</button>
-        <button onClick={run} disabled={running||rows.length===0} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-semibold hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{running?<Loader2 className="w-4 h-4 animate-spin"/>:<Printer className="w-4 h-4"/>}{running?`Booking ${progress.n}/${progress.total}…`:`Create ${rows.length} label${rows.length!==1?"s":""}`}</button>
+        <button onClick={run} disabled={running||rows.length===0} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-semibold hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{running?<Loader2 className="w-4 h-4 animate-spin"/>:<Printer className="w-4 h-4"/>}{running?`Booking ${progress.n}/${progress.total}…`:`Create & print ${rows.length} label${rows.length!==1?"s":""}`}</button>
       </div>
       {done>0&&<div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{done} shipment{done!==1?"s":""} recorded — see the Shipments tab. Connect your carrier account for live labels.</div>}
       {results.length>0&&<div className="border border-stone-200 rounded-lg bg-white p-4 space-y-2">
@@ -7710,7 +7740,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
           <Badge tone="green">{results.filter(r=>r.ok).length} labeled</Badge>
           {results.filter(r=>!r.ok).length>0&&<Badge tone="rose">{results.filter(r=>!r.ok).length} failed</Badge>}
           <div className="flex-1"/>
-          {results.some(r=>r.ok&&r.pdf)&&!printGroups&&<button disabled={printBusy} onClick={()=>printAll()} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE] disabled:opacity-60 flex items-center gap-1.5">{printBusy?<Loader2 className="w-4 h-4 animate-spin"/>:<Printer className="w-4 h-4"/>}{printBusy?"Preparing…":"Print all labels"}</button>}
+          {printBusy&&!printGroups&&<span className="text-sm text-stone-500 flex items-center gap-1.5"><Loader2 className="w-4 h-4 animate-spin"/>Printing labels…</span>}
         {printGroups&&printGroups.map(gp=><button key={gp.name} onClick={()=>printAll(gp.rows)} title="Opens these labels as their own print run — pick this printer in the dialog once" className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE] flex items-center gap-1.5"><Printer className="w-4 h-4"/>{gp.rows.length} → {gp.name}</button>)}
         {results.some(r=>r.ok)&&<button onClick={()=>printPackingSlips(results.filter(r=>r.ok&&r.o).map(r=>slipFromOrder(r.o,settings.sender)))} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-4 h-4"/>Print packing slips</button>}
           <button onClick={()=>setResults([])} className="text-stone-300 hover:text-stone-600"><X className="w-4 h-4"/></button>
@@ -7722,6 +7752,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
           {r.ok?<CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0"/>:<AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0"/>}
           <span className="font-medium text-stone-700 w-16">{r.name}</span>
           {r.ok?<span className="text-stone-500 truncate">{r.service}{r.tracking?` · ${r.tracking}`:""}</span>:<span className="text-rose-600 truncate underline decoration-dotted">{r.error}{oid?" — click to fix":""}</span>}
+          {r.ok&&r.tracking&&<><span className="flex-1"/><button onClick={(e)=>{e.stopPropagation();try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:r.tracking}}));}catch(err){}}} className="shrink-0 text-[11px] font-medium text-[#006FBF] hover:bg-[#E6F4FF] border border-[#99D6FF] rounded px-2 py-0.5 flex items-center gap-1"><FileText className="w-3 h-3"/>See details</button></>}
         </div>);})}
       </div>}
 
@@ -10040,6 +10071,8 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
         <Num k="autoInsurePct" label="Auto-insure orders (% of value)" hint="Legacy: insures this % of order value on load. Ignored if the $ threshold above is set. 0 = off" suffix="%"/>
         <Num k="autoSigValue" label="Auto-add signature over" hint="When you load an order worth this much or more, a signature is added automatically. 0 = off. Uses the signature type below." prefix="$"/>
         <Sel k="autoSigType" label="Signature type to auto-add" opts={[["indirect","Indirect"],["direct","Direct"],["adult","Adult"]]}/>
+        <label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>Ship-date cutoff time<span className="block text-[11px] text-stone-400">After this local time, new shipments default to the NEXT day's ship date. Leave blank to always use today.</span></span>
+          <span className="flex items-center gap-1"><input type="time" value={c.shipDateCutoff||""} onChange={e=>set("shipDateCutoff",e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"/>{c.shipDateCutoff&&<button onClick={()=>set("shipDateCutoff","")} className="text-[11px] text-stone-400 hover:text-rose-500">clear</button>}</span></label>
       </div>
     </Panel>}
 

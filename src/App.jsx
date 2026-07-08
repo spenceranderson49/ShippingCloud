@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v316";
+const BUILD_TAG="addr-v318";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -650,7 +650,12 @@ async function directPrintPdf(base64,title,ctx){
    rejects the job, so the dialog fallback still has a home and no label is ever lost. */
 function openLabelOrDirectPrint(payload,settings,setLabelPreview){
   const dp=(typeof window!=="undefined"&&window.__scDirectPrint)||null;
-  if(dp&&dp.enabled&&cz(settings).skipBookedSummary&&payload&&payload.pdf){
+  const c=cz(settings);
+  /* Silent-to-printer when direct printing is on AND either:
+       • skipBookedSummary (kiosk: no modal, auto-advance), or
+       • directNoPreview   (you still hit Ship and see the booked summary — just no preview popup).
+     If PrintNode rejects, we fall back to opening the modal so no label is lost. */
+  if(dp&&dp.enabled&&(c.skipBookedSummary||c.directNoPreview)&&payload&&payload.pdf){
     directPrintPdf(payload.pdf,"Shipping label"+(payload.tracking?" "+payload.tracking:""),docCtxFor(payload.rec,payload.tracking)).then(sent=>{ if(!sent)setLabelPreview(payload); });
     return;
   }
@@ -7961,33 +7966,48 @@ const DEFAULT_RECEIPT_LINES=[{id:"rl1",field:"recipientName",label:"To",custom:"
 function DocTabDesigner({zones,setZone,onClearLayout,showLabels,tabHIn}){
   const ref=React.useRef(null);
   const [drag,setDrag]=React.useState(null);
-  const W=384,H=Math.max(30,Math.round(tabHIn*96));
+  const DPI=96;const W=4*DPI;const H=Math.max(26,Math.round(tabHIn*DPI));
   const SAMPLE={reference:"SIM-1042",invoiceNo:"INV-88",orderNo:"#1042",shipDate:"7/8/26",service:"FedEx 2Day",weight:"3 lb",pieces:"1",declaredValue:"$100",recipientName:"Jane Doe",recipientCompany:"Acme Co",recipientZip:"84084",senderName:"S. Anderson",senderCompany:"ShipHub",cost:"$9.12",tracking:"794912345678"};
   if(tabHIn<=0.01)return <div className="text-[11px] text-stone-400">Pick a doc-tab label size above (4×6.25 and up) to design the tab layout.</div>;
-  const posOf=(z,i)=>({x:z.x!=null?+z.x:((i%3)*0.33+0.02),y:z.y!=null?+z.y:(Math.min(0.8,Math.floor(i/3)*0.42+0.06))});
+  const txtOf=(z)=>(showLabels&&z.label?z.label+": ":"")+(z.field==="custom"?(z.custom||"TEXT"):(SAMPLE[z.field]||z.field));
+  /* Preview uses the EXACT same layoutDocTab engine the printer uses, so what you see is what
+     prints. Un-positioned chips auto-flow across the tab (wrapping, never overlapping); a chip
+     you drag gets a saved x/y and pins there. A hidden canvas measures text just like the printer. */
+  const meas=React.useMemo(()=>{const c=document.createElement("canvas");const g=c.getContext("2d");return (txt,fs)=>{g.font="600 "+fs+"px system-ui,Arial,sans-serif";return g.measureText(txt).width;};},[]);
+  const pad=Math.round(Math.min(0.14,Math.max(0.03,tabHIn*0.18))*DPI);
+  const items=zones.map(z=>({id:z.id,txt:txtOf(z),fs:Math.max(8,Math.round((z.size||9)*DPI/72)),x:z.x,y:z.y}));
+  const placed=layoutDocTab(items.map(it=>({txt:it.txt,fs:it.fs,x:it.x,y:it.y})),W,0,H,pad,meas);
+  // pair each placed result back to its zone id (layoutDocTab preserves order, dropping only overflow)
+  let pi=0;const placedById={};items.forEach(it=>{ if(pi<placed.length){ /* overflow-dropped items won't align 1:1; match by text */ } });
+  // robust pairing: re-run mentally — layoutDocTab keeps input order, so walk both and match by text+fs
+  const byZone={};{let k=0;for(const it of items){const p=placed[k];if(p&&p.txt===it.txt&&p.fs===it.fs){byZone[it.id]=p;k++;}}}
   const move=(e)=>{ if(!drag||!ref.current)return; const r=ref.current.getBoundingClientRect();
-    const x=Math.min(0.97,Math.max(0,(e.clientX-r.left-drag.dx)/r.width));
+    const x=Math.min(0.95,Math.max(0,(e.clientX-r.left-drag.dx)/r.width));
     const y=Math.min(0.9,Math.max(0,(e.clientY-r.top-drag.dy)/r.height));
     setZone(drag.id,{x:Math.round(x*1000)/1000,y:Math.round(y*1000)/1000});
   };
   return (<div>
-    <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Tab layout — drag each field exactly where you want it</div>
+    <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Tab layout — drag any field to pin it; undragged fields auto-flow</div>
     <div ref={ref} onPointerMove={move} onPointerUp={()=>setDrag(null)} onPointerLeave={()=>setDrag(null)}
       className="relative border-2 border-dashed border-stone-300 bg-white rounded select-none touch-none overflow-hidden" style={{width:W+"px",height:H+"px"}}>
-      {zones.map((z,i)=>{const p=posOf(z,i);return (
+      {zones.map((z)=>{ const p=byZone[z.id];
+        // position: pinned chips at their saved fraction; flowed chips at the engine's computed px (top-left of the text = py - fs)
+        const leftPct = z.x!=null ? z.x*100 : (p? (p.px/W)*100 : 1);
+        const topPx   = z.y!=null ? z.y*H   : (p? (p.py - p.fs) : 2);
+        return (
         <div key={z.id}
           onPointerDown={(e)=>{e.preventDefault();const cr=e.currentTarget.getBoundingClientRect();const rr=ref.current.getBoundingClientRect();
-            if(z.x==null)setZone(z.id,{x:Math.round((cr.left-rr.left)/rr.width*1000)/1000,y:Math.round((cr.top-rr.top)/rr.height*1000)/1000});
+            setZone(z.id,{x:Math.round((cr.left-rr.left)/rr.width*1000)/1000,y:Math.round((cr.top-rr.top)/rr.height*1000)/1000});
             setDrag({id:z.id,dx:e.clientX-cr.left,dy:e.clientY-cr.top});}}
-          className="absolute cursor-grab active:cursor-grabbing font-mono whitespace-nowrap text-stone-800 bg-[#E6F4FF]/80 border border-[#99D6FF] rounded px-1 hover:border-[#0086E0]"
-          style={{left:(p.x*100)+"%",top:(p.y*100)+"%",fontSize:((z.size||9)*96/72)+"px",lineHeight:1.2}}>
-          {showLabels&&z.label?z.label+": ":""}{z.field==="custom"?(z.custom||"TEXT"):(SAMPLE[z.field]||z.field)}
+          className={`absolute cursor-grab active:cursor-grabbing font-mono whitespace-nowrap rounded px-0.5 ${z.x!=null?"bg-[#CCEAFF] border border-[#0086E0] text-stone-900":"bg-stone-100/70 border border-stone-200 text-stone-700"} hover:border-[#0086E0]`}
+          style={{left:`${leftPct}%`,top:`${topPx}px`,fontSize:((z.size||9)*DPI/72)+"px",lineHeight:1.15}}>
+          {txtOf(z)}
         </div>);})}
-      {!zones.length&&<div className="absolute inset-0 flex items-center justify-center text-[11px] text-stone-400">Add zones above, then drag them into place here</div>}
+      {!zones.length&&<div className="absolute inset-0 flex items-center justify-center text-[11px] text-stone-400">Add zones above — they'll appear here</div>}
     </div>
     <div className="flex flex-wrap items-center gap-3 mt-1.5">
       <button onClick={onClearLayout} className="text-xs text-stone-500 hover:text-stone-700 underline">Reset layout — auto-flow across the tab</button>
-      <span className="text-[11px] text-stone-400">Shown at actual size (4″ × {tabHIn}″ tab). Positions save instantly and print exactly here.</span>
+      <span className="text-[11px] text-stone-400">Actual size (4″ × {tabHIn}″ tab). Blue = pinned where you dragged it; grey = auto-flowing. This is exactly what prints.</span>
     </div>
   </div>);
 }
@@ -8235,6 +8255,10 @@ function PrinterSettings({settings,setSettings}){
     </Panel>
 
     <Panel title="After booking">
+      <label className="flex items-center justify-between gap-3 text-sm text-stone-700 mb-3">
+        <span>Print straight to the printer, no preview popup<span className="block text-[11px] text-stone-400">You still hit Ship and review the booked summary — the label just goes to the printer with no preview window to click through. Needs direct printing set up in Printer settings.</span></span>
+        <button onClick={()=>setCust("directNoPreview",!cust.directNoPreview)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${cust.directNoPreview?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
+      </label>
       <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
         <span>Skip the booked summary, go straight to a new shipment<span className="block text-[11px] text-stone-400">The label still prints automatically — this just skips the tracking/copy/pickup card afterward and clears the form for the next order. Off by default so you can grab tracking or schedule a pickup right after booking.</span></span>
         <button onClick={()=>setCust("skipBookedSummary",!cust.skipBookedSummary)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${cust.skipBookedSummary?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>

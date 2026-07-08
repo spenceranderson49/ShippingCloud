@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v291";
+const BUILD_TAG="addr-v292";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -403,7 +403,22 @@ async function stampLogo(imgs,cfg,logoSrc){
   }
   return out;
 }
+/* Direct (zero-dialog) printing via a PrintNode agent on the workstation. Config synced
+   from settings.printNode into window.__scDirectPrint by the App shell. Returns true only
+   when the job was ACCEPTED by PrintNode — callers fall back to the dialog on false, so a
+   dead agent never silently swallows a label. Browsers cannot print silently on their own;
+   the local agent is what makes "no dialog" possible. */
+async function directPrintPdf(base64,title){
+  const cfg=(typeof window!=="undefined"&&window.__scDirectPrint)||null;
+  if(!cfg||!cfg.enabled||!cfg.apiKey||!cfg.printerId||!base64)return false;
+  try{
+    const r=await fetch("/.netlify/functions/printnode",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"print",apiKey:cfg.apiKey,printerId:cfg.printerId,title:title||"Shipping label",pdfBase64:base64})});
+    const d=await r.json().catch(()=>null);
+    return !!(d&&d.ok);
+  }catch(e){ return false; }
+}
 async function printLabelPdf(base64,stForLogo){
+  if(await directPrintPdf(base64))return true;   // straight to the printer — no dialog
   try{ const r=await pdfToImages(base64,4);
     if(stForLogo){ try{ const cc=cz(stForLogo); r.imgs=await stampLogo(r.imgs,cc,cc.labelLogo||stForLogo.companyLogo||""); }catch(e){} } if(!r.imgs.length)throw new Error("no pages"); printImagePages(r.imgs,r.wIn,r.hIn); return true; }
   catch(e){ try{ const u=pdfBlobUrl(base64); printPdfUrl(u); setTimeout(()=>URL.revokeObjectURL(u),180000); return true; }catch(e2){ return false; } }
@@ -4252,6 +4267,7 @@ function AppInner(){
       }
     }catch(e){}
   },[]);
+  useEffect(()=>{ const pn=(settings&&settings.printNode)||{}; try{ window.__scDirectPrint={enabled:!!pn.enabled,apiKey:pn.apiKey||"",printerId:+pn.printerId||0}; }catch(e){} },[settings&&settings.printNode]);
   const brand=BRAND.fw
     ?{...DEFAULT_BRAND,name1:"FREIGHT",name2:"WIRE SHIP",dark:"#1c1917",primary:"#1E9BF0",...(settings.brand||{})}
     :{...DEFAULT_BRAND,...(settings.brand||{})};
@@ -5246,18 +5262,20 @@ function LabelPreviewModal({data,onClose,settings}){
         setPages(r);
         if(!printed.current&&data.autoPrint!==false){
           printed.current=true;
-          printImagePages(r.imgs,r.wIn,r.hIn,()=>{ if(cz(st).skipBookedSummary&&!dead)onClose(); });   // fires once the system print dialog closes
+          const sent=await directPrintPdf(data.pdf);
+          if(sent){ if(cz(st).skipBookedSummary&&!dead)onClose(); }
+          else printImagePages(r.imgs,r.wIn,r.hIn,()=>{ if(cz(st).skipBookedSummary&&!dead)onClose(); });   // fires once the system print dialog closes
         }
       }catch(e){
         if(dead)return;
         setPgErr("Preview renderer unavailable — showing the raw PDF below."+((e&&e.message)?"":""));
-        if(!printed.current&&data.autoPrint!==false){ printed.current=true; try{ const u2=pdfBlobUrl(data.pdf); printPdfUrl(u2); setTimeout(()=>URL.revokeObjectURL(u2),180000); }catch(e2){} }
+        if(!printed.current&&data.autoPrint!==false){ printed.current=true; if(!(await directPrintPdf(data.pdf))){ try{ const u2=pdfBlobUrl(data.pdf); printPdfUrl(u2); setTimeout(()=>URL.revokeObjectURL(u2),180000); }catch(e2){} } }
       }
     })();
     return ()=>{dead=true;};
   },[data.pdf]);
   useEffect(()=>()=>{ if(url)try{URL.revokeObjectURL(url);}catch(e){} },[url]);
-  const doPrint=()=>{ if(pages&&pages.imgs.length){printImagePages(pages.imgs,pages.wIn,pages.hIn);} else { printLabelPdf(data.pdf,st); } };
+  const doPrint=async()=>{ if(await directPrintPdf(data.pdf))return; if(pages&&pages.imgs.length){printImagePages(pages.imgs,pages.wIn,pages.hIn);} else { printLabelPdf(data.pdf,st); } };
   const [copied,setCopied]=useState(false);
   const [showLabel,setShowLabel]=useState(false);
   const copyTracking=async()=>{ const t=String(data.tracking||""); if(!t)return;
@@ -7494,8 +7512,54 @@ function PrinterSettings({settings,setSettings}){
   const addRoute=()=>setSettings({...settings,printRoutes:[...routes,{id:"rt"+Date.now(),enabled:true,field:"carrier",op:"contains",value:"",printerId:(printers[0]||{}).id}]});
   const setRoute=(id,patch)=>setSettings({...settings,printRoutes:routes.map(r=>r.id===id?{...r,...patch}:r)});
   const delRoute=(id)=>setSettings({...settings,printRoutes:routes.filter(r=>r.id!==id)});
+  // Direct (zero-dialog) printing via PrintNode
+  const pnc=settings.printNode||{enabled:false,apiKey:"",printerId:"",printerName:""};
+  const setPnCfg=(patch)=>setSettings(p=>({...p,printNode:{...(p.printNode||{}),...patch}}));
+  const [pnList,setPnList]=useState(null);
+  const [pnBusy,setPnBusy]=useState("");
+  const [pnMsg,setPnMsg]=useState(null);
+  const pnCall=async(body)=>{const r=await fetch("/.netlify/functions/printnode",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});return r.json().catch(()=>null);};
+  const pnFind=async()=>{ setPnBusy("find");setPnMsg(null);
+    const d=await pnCall({action:"printers",apiKey:pnc.apiKey});
+    setPnBusy("");
+    if(d&&d.ok){ setPnList(d.printers||[]); setPnMsg(d.printers&&d.printers.length?{ok:`Found ${d.printers.length} printer${d.printers.length!==1?"s":""} — pick yours below.`}:{err:"Connected, but no printers found — is the PrintNode client running on the label computer with the printer installed?"}); }
+    else setPnMsg({err:(d&&d.error)||"Couldn't reach PrintNode."});
+  };
+  const PN_TEST_PDF="JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCAyODggNDMyXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA0IDAgUiA+PiA+PiAvQ29udGVudHMgNSAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhLUJvbGQgPj4KZW5kb2JqCjUgMCBvYmoKPDwgL0xlbmd0aCA5MyA+PgpzdHJlYW0KQlQgL0YxIDI0IFRmIDQwIDM4MCBUZCAoUFJJTlQgVEVTVCkgVGogMCAtMzYgVGQgL0YxIDEyIFRmIChEaXJlY3QgcHJpbnRpbmcgaXMgd29ya2luZy4pIFRqIEVUCmVuZHN0cmVhbQplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAowMDAwMDAwMjQxIDAwMDAwIG4gCjAwMDAwMDAzMTYgMDAwMDAgbiAKdHJhaWxlcgo8PCAvU2l6ZSA2IC9Sb290IDEgMCBSID4+CnN0YXJ0eHJlZgo0NTkKJSVFT0Y=";
+  const pnTest=async()=>{ if(!pnc.printerId)return; setPnBusy("test");setPnMsg(null);
+    const d=await pnCall({action:"print",apiKey:pnc.apiKey,printerId:pnc.printerId,title:"ShippingCloud test page",pdfBase64:PN_TEST_PDF});
+    setPnBusy("");
+    setPnMsg(d&&d.ok?{ok:"Test page sent — it should be printing right now."}:{err:(d&&d.error)||"Test failed."});
+  };
   return (<div className="max-w-2xl space-y-4">
     <p className="text-sm text-stone-500">Controls how labels are generated and printed when you buy a label or run a batch.</p>
+    <Panel title="Direct printing — zero clicks, no dialog">
+      <div className="space-y-3">
+        <p className="text-xs text-stone-500">Browsers can't skip the print dialog on their own — a tiny agent on the label computer does it. One-time setup: install the free <a href="https://www.printnode.com/en/download" target="_blank" rel="noreferrer" className="text-[#0086E0] hover:underline">PrintNode client</a> on the computer the printer is plugged into, sign in, then paste your API key (PrintNode dashboard → API Keys) here. After that, every label prints itself.</p>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="block text-sm text-stone-700 flex-1 min-w-[220px]">PrintNode API key
+            <input type="password" value={pnc.apiKey||""} onChange={e=>setPnCfg({apiKey:e.target.value})} placeholder="paste your key" className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/>
+          </label>
+          <button onClick={pnFind} disabled={!String(pnc.apiKey||"").trim()||pnBusy==="find"} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{pnBusy==="find"?<><Loader2 className="w-4 h-4 animate-spin"/>Finding…</>:<><Search className="w-4 h-4"/>Find my printers</>}</button>
+        </div>
+        {(pnList||pnc.printerId)&&<div className="flex flex-wrap items-end gap-2">
+          <label className="block text-sm text-stone-700 flex-1 min-w-[220px]">Label printer
+            <select value={String(pnc.printerId||"")} onChange={e=>{const p=(pnList||[]).find(x=>String(x.id)===e.target.value);setPnCfg({printerId:e.target.value,printerName:p?p.name:pnc.printerName});}} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm">
+              {!pnList&&pnc.printerId&&<option value={String(pnc.printerId)}>{pnc.printerName||("Printer "+pnc.printerId)}</option>}
+              {pnList&&<option value="">— pick a printer —</option>}
+              {(pnList||[]).map(p=><option key={p.id} value={String(p.id)}>{p.name}{p.computer?` — ${p.computer}`:""}{p.state&&p.state!=="online"?` (${p.state})`:""}</option>)}
+            </select>
+          </label>
+          <button onClick={pnTest} disabled={!pnc.printerId||pnBusy==="test"} className="text-sm border border-stone-300 text-stone-700 rounded-lg px-3.5 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5">{pnBusy==="test"?<><Loader2 className="w-4 h-4 animate-spin"/>Sending…</>:<><Printer className="w-4 h-4"/>Send test page</>}</button>
+        </div>}
+        <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
+          <span>Automatically print every label to this printer<span className="block text-[11px] text-stone-400">Booked labels, reprints, and batch labels go straight to the printer — no dialog, no clicks. If the agent is offline, the normal print dialog opens instead so nothing is ever lost.</span></span>
+          <button onClick={()=>setPnCfg({enabled:!pnc.enabled})} disabled={!pnc.apiKey||!pnc.printerId}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${pnc.enabled?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"} ${(!pnc.apiKey||!pnc.printerId)?"opacity-40":""}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
+        </label>
+        {pnMsg&&<div className={`text-xs rounded px-2.5 py-1.5 ${pnMsg.ok?"bg-emerald-50 border border-emerald-200 text-emerald-700":"bg-rose-50 border border-rose-200 text-rose-700"}`}>{pnMsg.ok||pnMsg.err}</div>}
+        <p className="text-[11px] text-stone-400">Setting is per-login but works from any computer — jobs route through PrintNode to whichever machine the printer is on. The Chrome kiosk-printing shortcut below stays as the free, no-agent alternative. Note: the label logo stamp applies to dialog printing only; direct printing sends the carrier's original PDF.</p>
+      </div>
+    </Panel>
     <Panel title="Printers & routing">
       <p className="text-xs text-stone-500">Name your printers (e.g. “Zebra — Station A”, “Office laser”), then route labels to them by rule. Batch splits its printing into one run per printer — each opens as its own job so you pick that device once. Autopilot rules can also route with the “Route to Printer” action (use the printer’s exact name as the value).</p>
       <div className="space-y-1.5">

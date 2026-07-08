@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, EyeOff, MessageCircle, Sparkles, ClipboardList, Ban, Tag, Copy, Sliders, Save} from "lucide-react";
 const FW_BLUE="#0099FF";
 const FW_DARK="#111418";
@@ -73,7 +74,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v339";
+const BUILD_TAG="addr-v342";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -538,20 +539,31 @@ async function composeForStock(imgs,wIn,hIn,ctx){
     /* Fit the label image into the region, scaled to fill the width and clipped to the region
        height so a carrier PDF that's slightly taller/shorter than a perfect 4×6 can never bleed
        past the perforation. Aspect preserved; centered horizontally. */
+    /* Nudge the whole label DOWN, away from the tear line, so the carrier's own header (phone,
+       ship date, etc.) can't crowd or bleed into the perforation. Default ~0.12"; tunable via
+       Settings -> Printer settings -> Doc tab -> "Label offset". The label is shifted toward the
+       page-body side of the tear (down for a leading/top tab, up for a trailing/bottom tab) and the
+       gap stays WHITE so nothing prints in it. */
+    const nudgeIn=Math.max(0,Math.min(0.5,(cfg&&cfg.docTab&&+cfg.docTab.labelOffset)||0.12));
+    const nudgePx=Math.round(nudgeIn*dpi);
     const scale=c.width/(im.naturalWidth||c.width);
     const drawH=Math.round((im.naturalHeight||regionPx)*scale);
+    /* Clip to the region MINUS the nudge (keeps the gap clean), and draw the label shifted into it. */
+    const clipY = leading ? geo.labelY+nudgePx : geo.labelY;   // leading tab is above: push label down
+    const clipH = Math.max(1, regionPx - nudgePx);
+    const drawY = leading ? geo.labelY+nudgePx : geo.labelY;   // trailing tab is below: label already starts at top, shrink from bottom
     g.save();
-    g.beginPath();g.rect(0,geo.labelY,c.width,regionPx);g.clip();
-    g.drawImage(im,0,geo.labelY,c.width,drawH);
+    g.beginPath();g.rect(0,clipY,c.width,clipH);g.clip();
+    g.drawImage(im,0,drawY,c.width,drawH);
     g.restore();
     /* SAFETY: confirm the label region actually got ink. If it's essentially blank, the draw failed
        (bad source dims, off-canvas placement, etc.) — abort compose and send the ORIGINAL label so a
        blank never reaches the printer. */
     try{
-      const sx=Math.max(1,Math.round(c.width/40)), sy=Math.max(1,Math.round(regionPx/60));
-      const dat=g.getImageData(0,geo.labelY,c.width,regionPx).data;
+      const sx=Math.max(1,Math.round(c.width/40)), sy=Math.max(1,Math.round(clipH/60));
+      const dat=g.getImageData(0,clipY,c.width,clipH).data;
       let dark=0,checked=0;
-      for(let py=0;py<regionPx;py+=sy){ for(let px=0;px<c.width;px+=sx){ const idx=(py*c.width+px)*4; checked++; if(dat[idx]<235||dat[idx+1]<235||dat[idx+2]<235)dark++; } }
+      for(let py=0;py<clipH;py+=sy){ for(let px=0;px<c.width;px+=sx){ const idx=(py*c.width+px)*4; checked++; if(dat[idx]<235||dat[idx+1]<235||dat[idx+2]<235)dark++; } }
       if(checked>0 && dark/checked < 0.002){ return {imgs,wIn,hIn,changed:false}; }   // <0.2% ink → treat as blank, use original
     }catch(e){}
     /* Tear line exactly on the perforation between label region and tab. */
@@ -2022,7 +2034,7 @@ const CUSTOM_DEFAULTS={
   hideInvoice:false,hidePO:false,hideAddr23:false,hideOz:false,hideInsure:false,
   phoneRequired:true,emailRequired:true,
   defaultSignature:"none",autoInsurePct:0,
-  defaultView:"cheapest",hiddenServices:[],priceWarn:0,transitStyle:"date",aliases:{},matchedOnly:false,
+  defaultView:"cheapest",showRateViewToggle:false,hiddenServices:[],priceWarn:0,transitStyle:"date",aliases:{},matchedOnly:false,
   slipThanks:"",slipFooter:"",
   density:"comfortable",stuckDays:0,
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
@@ -4137,7 +4149,7 @@ function LegalLinks(){
     <button onClick={()=>setOpen("privacy")} className="hover:text-stone-400 underline-offset-2 hover:underline">Privacy</button>
     <span>·</span>
     <button onClick={()=>setOpen("billing")} className="hover:text-stone-400 underline-offset-2 hover:underline">Billing &amp; rate accuracy</button>
-    {open&&<div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={()=>setOpen(null)}>
+    {open&&createPortal(<div className="fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center p-4 overflow-y-auto" onClick={()=>setOpen(null)}>
       <div onClick={e=>e.stopPropagation()} className="bg-white rounded-2xl max-w-2xl w-full max-h-[82vh] flex flex-col text-left">
         <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100">
           <div className="flex gap-1 bg-stone-100 rounded-lg p-0.5 text-sm">
@@ -4180,7 +4192,7 @@ function LegalLinks(){
           </>}
         </div>
       </div>
-    </div>}
+    </div>, document.body)}
   </>);
 }
 
@@ -5034,7 +5046,7 @@ function AppInner(){
   const exitImpersonation=()=>{ lsSet("session",adminReturn); lsDel("adminReturn"); window.location.reload(); };
   /* shell */
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-800" style={{fontFamily:"ui-sans-serif,system-ui,sans-serif"}}><SandboxBanner/>
+    <div className="min-h-screen flex flex-col bg-stone-50 text-stone-800" style={{fontFamily:"ui-sans-serif,system-ui,sans-serif"}}><SandboxBanner/>
       {adminReturn&&<div className="bg-[#0086E0] text-white text-[13px] px-4 py-2 flex items-center justify-center gap-3 sticky top-0 z-40">
         <ShieldCheck className="w-4 h-4 shrink-0"/>
         <span>Admin preview — you’re seeing {BRAND.product} exactly as <b>{currentUser&&(currentUser.name||currentUser.email)}</b> sees it. Anything you change here changes their account.</span>
@@ -5090,7 +5102,7 @@ function AppInner(){
           </nav>
         </aside>
       </div>}
-      <div className="flex">
+      <div className="flex flex-1">
         <aside style={custom.navBg?{background:custom.navBg}:undefined} className={`hidden md:block w-52 shrink-0 border-r border-stone-200 ${custom.navBg?"":"bg-white"} min-h-screen`}>
           <nav className="p-2 space-y-0.5 sticky top-14">
             {TABS.map(([id,l,Icon])=>(
@@ -5129,6 +5141,14 @@ function AppInner(){
           {tab==="settings"&&<Settings uid={currentUser&&currentUser.id} audit={audit} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
         </main>
       </div>
+      {/* Page footer: version + legal, centered at the very bottom of the whole page. */}
+      <footer className="border-t border-stone-200/70 mt-auto py-4 px-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[11px] text-stone-400">
+        <span>© {new Date().getFullYear()} Freightwire</span>
+        <span className="text-stone-300">·</span>
+        <span className="font-mono text-stone-300">{BUILD_TAG}</span>
+        <span className="text-stone-300">·</span>
+        <LegalLinks/>
+      </footer>
     </div>
   );
 }
@@ -6022,12 +6042,12 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
       <div className="flex items-center justify-between mb-2">
         {oneRateWarning&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-2">{oneRateWarning}</div>}
         <h2 className="text-sm font-semibold text-stone-700">Select service</h2>
-        <div className="flex items-center gap-2">
+        {custom.showRateViewToggle&&<div className="flex items-center gap-2">
           {!ready&&<span className="text-[11px] text-stone-400">enter ZIP &amp; weight to see rates</span>}
           <div className="flex bg-stone-100 rounded-lg p-0.5 text-xs">
             {[["cheapest","Cheapest"],["carrier","By carrier"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-2.5 py-1 rounded-lg ${view===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}
           </div>
-        </div>
+        </div>}
       </div>
       {view==="cheapest"
         ? <div className="space-y-1">{[...(collapse?quotes.filter(q=>q.key===matched):quotes)].sort((a,b)=>(((a.sell??a.cost)||1e9))-(((b.sell??b.cost)||1e9))).map(Row)}{collapse&&<button onClick={()=>setShowAll(true)} className="w-full text-xs text-stone-500 hover:text-stone-700 border border-dashed border-stone-300 rounded-lg py-1.5 flex items-center justify-center gap-1">Show all services <ChevronRight className="w-3.5 h-3.5 rotate-90"/></button>}</div>
@@ -8474,6 +8494,13 @@ function PrinterSettings({settings,setSettings}){
             <option value="leading">Leading (top of label)</option>
           </Select>
         </Field>
+        <Field label="Label offset from tear line">
+          <div className="flex items-center gap-2">
+            <input type="number" min="0" max="0.5" step="0.02" value={dt.labelOffset==null?0.12:dt.labelOffset} onChange={e=>setDt({labelOffset:Math.max(0,Math.min(0.5,+e.target.value||0))})} className="w-24 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"/>
+            <span className="text-sm text-stone-500">inches</span>
+            <span className="text-[11px] text-stone-400">Pushes the whole label away from the perforation so the carrier's own header can't bleed into the tab. Default 0.12″. Raise it if you still see label text at the tear line.</span>
+          </div>
+        </Field>
         <div className="space-y-1.5">
           <div className="text-[10px] uppercase tracking-widest text-stone-400">Zones · print in order</div>
           {dtZones.map(z=>(<div key={z.id} className="flex flex-wrap items-center gap-1.5 text-[13px] bg-stone-50 rounded-lg px-2 py-1.5">
@@ -9914,6 +9941,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
     {cs==="services"&&<Panel title="Rates & services">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         <Sel k="defaultView" label="Default rate view" opts={[["cheapest","Cheapest first"],["carrier","Grouped by carrier"]]}/>
+        {(isAdmin||deployMode)&&<div className="rounded-lg border border-blue-100 bg-blue-50/40 p-2.5"><div className="text-[10px] uppercase tracking-widest text-blue-400 mb-1.5 flex items-center gap-1"><ShieldCheck className="w-3 h-3"/>Admin only</div><Tog k="showRateViewToggle" label="Show the Cheapest / By carrier switch on Ship" hint="Off = the rate list just uses the default view above, with no toggle or 'enter ZIP & weight' hint shown. Only you (admin) can turn this on."/></div>}
         <Sel k="transitStyle" label="Transit display" opts={[["date","Days + arrival date"],["days","Day count only"]]}/>
         <Num k="priceWarn" label="Price alert" hint="Flag any rate above this amount. 0 = off" step="1" suffix="$"/>
       </div>

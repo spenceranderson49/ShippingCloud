@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v268";
+const BUILD_TAG="addr-v269";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -6284,9 +6284,13 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
   };
   const rateFor=(o)=>{
     const pk=packs[o.id];
+    const hs=new Set(cz(settings).hiddenServices||[]);
+    const bs=new Set((client&&client.blockedServices)||[]);
     const qs=quoteRates(pk&&pk.pieces&&pk.pieces.length
       ?{fromZip:client.origin,toZip:o.zip,pieces:pk.pieces,residential:true}
-      :{fromZip:client.origin,toZip:o.zip,L:12,W:9,H:4,weight:o.weight,residential:true});
+      :{fromZip:client.origin,toZip:o.zip,L:12,W:9,H:4,weight:o.weight,residential:true})
+      .filter(q=>!hs.has(canonSvc(q.label))&&!bs.has(canonSvc(q.label)))
+      .map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:client.origin,toZip:o.zip,weight:(pk&&pk.totalWt)||o.weight||1})}));
     let pick=pickByPref(qs,svcOv[o.id]);
     if(!pick){
       if(rule==="ground") pick=qs.filter(q=>/Ground|Home/.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
@@ -6294,8 +6298,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
       else if(rule==="specific") pick=qs.find(q=>String(q.label).toLowerCase().includes(specSvc.toLowerCase().replace(/^(fedex|ups|dhl)\s*/,"")))||qs.filter(q=>carrierOf(q.label)===specCarrier).sort((a,b)=>a.cost-b.cost)[0];
       else pick=qs.slice().sort((a,b)=>a.cost-b.cost)[0];
     }
-    pick=pick||qs[0]||{label:"—",cost:0};
-    return {...pick,sell:Math.round((pick.cost||0)*(1+client.markup/100)*100)/100};
+    return pick||{label:"—",cost:0,sell:0};
   };
   const zoneOf=(o)=>String(zoneEst(client.origin,o.zip));
   const prodOf=(o)=>o.product||o.items||"—";

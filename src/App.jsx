@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v269";
+const BUILD_TAG="addr-v270";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -500,22 +500,16 @@ async function fedexCall(payload,timeout=15000){
 }
 // normalize a service label OR FedEx serviceType to a canonical key for matching
 function canonSvc(s){
-  const t=String(s||"").toLowerCase();
-  /* One Rate variants get their own "or_" keys — otherwise "FedEx 2Day OneRate - Medium Box"
-     collapses onto plain "2day" and can never be toggled, renamed, or admin-locked independently
-     of the base service it’s built from. */
-  const oneRate=/one\s*rate/.test(t);
-  const pre=oneRate?"or_":"";
-  if(/home/.test(t)) return pre+"home";
-  if(/first.?overnight|first_overnight/.test(t)) return pre+"first_overnight";
-  if(/priority.?overnight|priority_overnight/.test(t)) return pre+"priority_overnight";
-  if(/standard.?overnight|standard_overnight/.test(t)) return pre+"standard_overnight";
-  if(/2.?day|two.?day|2_day/.test(t)) return pre+"2day";
-  if(/express.?saver|saver|3.?day/.test(t)) return pre+"express_saver";
-  if(/overnight/.test(t)) return pre+"standard_overnight";
-  if(/priority/.test(t)) return pre+"intl_priority";
-  if(/ground/.test(t)) return pre+"ground";
-  return (pre+t).replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
+  /* Canonical toggle/lock/alias key for a service label. Delegates to rateSvcKey so the
+     key vocabulary is IDENTICAL to the Customize services list, the admin lock list, and
+     the Rate Database — the old inline patterns collapsed "Ground Economy"→ground,
+     "2Day A.M."→2day, every Freight service and most International services onto the
+     wrong base key, so hiding, admin-locking, or aliasing those services never matched a
+     live quote. OneRate keys are reduced to the box-less or_<svc> form the toggle lists
+     use (rateSvcKey's or_<svc>_<box> keys stay for per-box rate rules). */
+  const t=String(s||"").replace(/[_\-]+/g," ");
+  const k=rateSvcKey(t);
+  return k.replace(/^(or_[a-z0-9_]+?)_(pak|envelope|xs_box|small_box|medium_box|large_box|xl_box|tube)$/,"$1");
 }
 async function fedexTransit(s){
   const body={fromZip:s.fromZip,toZip:s.toZip,fromCountry:s.fromCountry||"US",toCountry:s.toCountry||"US",residential:!!s.residential,pieces:(s.pieces||[]).map(p=>({weight:+p.weight||1}))};
@@ -1183,7 +1177,10 @@ const FEDEX_SURCHARGES=[
 const RATE_ZONES=["2","3","4","5","6","7","8"];
 /* Finer-grained than canonSvc — rate rules need 2Day ≠ 2Day A.M., intl economy ≠ priority, One Rate per packaging. */
 function rateSvcKey(label){
-  const t=String(label||"").toLowerCase();
+  /* ®/™ stripped first — "FedEx 2Day® A.M." otherwise fails the A.M. pattern (the ® sits
+     between "day" and "a.m." where \s* can't match) and keys to plain 2day, silently
+     applying the 2Day rate rule to A.M. shipments. */
+  const t=String(label||"").toLowerCase().replace(/[®™]/g,"");
   if(/one\s*rate/.test(t)){
     let svc="2day";
     if(/first\s*overnight/.test(t))svc="first_overnight";
@@ -1228,6 +1225,21 @@ function rateSvcKey(label){
   if(/priority/.test(t))return "intl_priority";
   if(/economy/.test(t))return "intl_economy";
   return t.replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
+}
+/* Does a live quote row satisfy a "Set Service" preference string ("FedEx - 2Day",
+   "FedEx - 2Day OneRate", "DHL - Express Worldwide")? Exact rateSvcKey equality —
+   the old substring matching let a plain "2Day" preference grab a OneRate row and a
+   "Ground" preference grab Ground Economy depending on which the quote listed first,
+   which is exactly how Autopilot booked the wrong FedEx service. OneRate preferences
+   (no box in the string) match any box variant of that OneRate service. */
+function svcPrefHit(pref,label){
+  const P=String(pref||"").replace(/\s+-\s+/," ");
+  const pk=rateSvcKey(P),lk=rateSvcKey(label);
+  if(/one\s*rate/i.test(P)){
+    const base=pk.replace(/_(pak|envelope|xs_box|small_box|medium_box|large_box|xl_box|tube)$/,"");
+    return lk===pk||lk===base||lk.indexOf(base+"_")===0;
+  }
+  return lk===pk;
 }
 function rateProfileFor(rules,clientId){
   const profs=(rules&&rules.profiles&&rules.profiles.length)?rules.profiles:DEFAULT_RATE_RULES.profiles;
@@ -5136,7 +5148,7 @@ function matchServiceForOrder(quotes,o){
 function matchRequestedService(quotes,requested){
   if(!requested)return null;
   const c=canonSvc(requested);
-  const KNOWN=["home","ground","2day","express_saver","standard_overnight","priority_overnight","first_overnight","intl_priority"];
+  const KNOWN=["home","ground","ground_economy","2day","2day_am","express_saver","standard_overnight","priority_overnight","first_overnight","intl_priority"];
   if(!KNOWN.includes(c))return null;   // "Standard Shipping" etc. — no honest FedEx match, so no highlight
   const hit=quotes.find(q=>canonSvc(q.label)===c&&(q.sell??q.cost)!=null);
   return hit?hit.key:null;
@@ -6275,12 +6287,13 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
     const P=String(pref);
     if(/^ANY/i.test(P)){
       if(/ground/i.test(P))return qs.filter(q=>/ground|home/i.test(q.label||"")).sort((a,b)=>(a.cost||0)-(b.cost||0))[0]||cheap;
-      if(/2\s*day/i.test(P))return qs.filter(q=>/2.?day/i.test(q.label||"")).sort((a,b)=>(a.cost||0)-(b.cost||0))[0]||cheap;
+      if(/2\s*day/i.test(P))return qs.filter(q=>/^(or_)?2day/.test(rateSvcKey(q.label))).sort((a,b)=>(a.cost||0)-(b.cost||0))[0]||cheap;
       if(/fastest/i.test(P))return qs.slice().sort((a,b)=>speedRank(a.label)-speedRank(b.label)||(a.cost||0)-(b.cost||0))[0];
       return cheap;
     }
-    const dash=P.indexOf(" - ");const prefCarrier=dash>0?P.slice(0,dash).trim().toLowerCase():"";const prefSvc=(dash>0?P.slice(dash+3):P).replace(/^(fedex|dhl)\s*/i,"").trim().toLowerCase();
-    return qs.find(q=>(!prefCarrier||String(q.carrier||q.label||"").toLowerCase().includes(prefCarrier))&&String(q.label||"").toLowerCase().includes(prefSvc))||null;
+    /* Exact key match — substring matching let "2Day" grab OneRate rows and "Ground" grab
+       Ground Economy, so the Batch preview showed a different service than run() booked. */
+    return qs.filter(q=>svcPrefHit(P,q.label)).sort((a,b)=>(a.cost||0)-(b.cost||0))[0]||null;
   };
   const rateFor=(o)=>{
     const pk=packs[o.id];
@@ -6295,7 +6308,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
     if(!pick){
       if(rule==="ground") pick=qs.filter(q=>/Ground|Home/.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
       else if(rule==="fastest") pick=qs.slice().sort((a,b)=>speedRank(a.label)-speedRank(b.label)||a.cost-b.cost)[0];
-      else if(rule==="specific") pick=qs.find(q=>String(q.label).toLowerCase().includes(specSvc.toLowerCase().replace(/^(fedex|ups|dhl)\s*/,"")))||qs.filter(q=>carrierOf(q.label)===specCarrier).sort((a,b)=>a.cost-b.cost)[0];
+      else if(rule==="specific") pick=qs.filter(q=>svcPrefHit(specSvc,q.label)).sort((a,b)=>a.cost-b.cost)[0]||qs.filter(q=>carrierOf(q.label)===specCarrier).sort((a,b)=>a.cost-b.cost)[0];
       else pick=qs.slice().sort((a,b)=>a.cost-b.cost)[0];
     }
     return pick||{label:"—",cost:0,sell:0};
@@ -7718,12 +7731,20 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
   // honor the rule-chosen service when picking a rate; fall back to cheapest
   const pickRate=(qs,pref)=>{
     if(!qs||!qs.length)return null;
-    const cheap=qs.slice().sort((a,b)=>(a.cost||a.sell||0)-(b.cost||b.sell||0))[0];
+    const byCost=(a,b)=>(a.cost||a.sell||0)-(b.cost||b.sell||0);
+    const cheap=qs.slice().sort(byCost)[0];
     if(!pref)return cheap;
     const P=String(pref);
-    if(/^ANY/i.test(P)){ if(/ground/i.test(P)){const g=qs.filter(q=>/ground|home/i.test(q.label||"")).sort((a,b)=>(a.cost||a.sell||0)-(b.cost||b.sell||0))[0]; return g||cheap;} return cheap; }
-    const dash=P.indexOf(" - ");const prefCarrier=dash>0?P.slice(0,dash).trim().toLowerCase():"";const prefSvc=(dash>0?P.slice(dash+3):P).trim().toLowerCase();
-    const hit=qs.find(q=>(!prefCarrier||String(q.carrier||q.label||"").toLowerCase().includes(prefCarrier))&&String(q.label||"").toLowerCase().includes(prefSvc));
+    if(/^ANY/i.test(P)){
+      if(/ground/i.test(P)){const g=qs.filter(q=>/ground|home/i.test(q.label||"")).sort(byCost)[0]; return g||cheap;}
+      /* "ANY - Cheapest 2 Day" and "ANY - Fastest" are in RULE_SERVICES but had no handler
+         here — both silently returned the cheapest service overall, so a Cheapest-2Day rule
+         booked Home Delivery. */
+      if(/2\s*day/i.test(P)){const d=qs.filter(q=>/^(or_)?2day/.test(rateSvcKey(q.label))).sort(byCost)[0]; return d||cheap;}
+      if(/fastest/i.test(P))return qs.slice().sort((a,b)=>speedRank(a.label)-speedRank(b.label)||byCost(a,b))[0];
+      return cheap;
+    }
+    const hit=qs.filter(q=>svcPrefHit(P,q.label)).sort(byCost)[0];
     return hit||cheap;
   };
   const runAutopilot=async()=>{

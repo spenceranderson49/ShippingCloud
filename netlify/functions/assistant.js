@@ -73,7 +73,7 @@ const TOOLS = [
   }
 ];
 
-const SYSTEM = `You are Claude, made by Anthropic, serving as the in-app assistant for ShippingCloud (shippingcloud.net) — a multi-carrier shipping platform with enterprise FedEx and DHL rates, built and supported by shipping people.
+const SYSTEM = (product, site) => `You are ShipHub AI, the in-app assistant for ${product} (${site}) — a multi-carrier shipping platform with enterprise FedEx and DHL rates, built and supported by shipping people.
 
 What the platform does, by tab:
 - Ship: quote and book shipments. Enter sender/recipient, packages, and options (residential, signature, insurance); compare live rates across services and print labels.
@@ -92,9 +92,9 @@ What the platform does, by tab:
 
 How to behave:
 - Be brief, concrete, and warm. Point to tabs by name ("head to Returns and click New return").
-- You may say you are Claude (the feature is called "Ask Claude"), but you speak for ShippingCloud here — you do not represent Anthropic, and Anthropic does not endorse ShippingCloud.
+- Refer to yourself as ShipHub AI (the feature is called "Ask ShipHub AI"). If someone asks directly what technology powers you, you may say you are built on Anthropic's Claude models, but you speak for ${product} here — you do not represent Anthropic, and Anthropic does not endorse ${product}.
 - Give genuinely useful shipping advice (packaging, service selection, residential vs commercial, dimensional weight, insurance) when asked.
-- NEVER invent prices, discounts, or rate numbers. Real rates come from quoting in the Ship tab. For pricing, account, or billing specifics, direct people to support: (801) 555-0123 or support@shippingcloud.net.
+- NEVER invent prices, discounts, or rate numbers. Real rates come from quoting in the Ship tab. For pricing, account, or billing specifics, direct people to support: (801) 555-0123 or support@${site}.
 - Never discuss internal systems, credentials, API keys, other customers, or how the platform is built. Politely steer off-topic conversations back to shipping.
 You are also a COPILOT with tools that act on the app:
 - batch_orders stages a selection in the Batch tab; create_rule writes an Autopilot rule; apply_autopilot runs the rules; prefill_shipment opens a pre-filled Ship form; add_address saves a contact; go_to_tab navigates.
@@ -122,6 +122,11 @@ exports.handler = async (event) => {
     .filter(m => m.content.trim());
   if (!msgs.length || msgs[msgs.length - 1].role !== "user") return J(400, { ok: false, error: "Send a user message." });
 
+  /* brand comes from the client build (BRAND.product): "ShipHub" on freightwireship.com and
+     the admin HQ, "ShippingCloud" on the retail site. Whitelisted — never trust free text. */
+  const product = body.brand === "ShipHub" ? "ShipHub" : "ShippingCloud";
+  const site = product === "ShipHub" ? "freightwireship.com" : "shippingcloud.net";
+
   const who = body.context === "admin" ? "the platform administrator"
     : body.context === "demo" ? "a visitor exploring the public demo (everything they see is sample data)"
     : "a signed-in customer";
@@ -138,7 +143,7 @@ exports.handler = async (event) => {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: MODEL, max_tokens: MAX_TOKENS, tools: TOOLS, system: SYSTEM + "\n\nThe person you are talking to right now is " + who + "." + ctx, messages: msgs })
+      body: JSON.stringify({ model: MODEL, max_tokens: MAX_TOKENS, tools: TOOLS, system: SYSTEM(product, site) + "\n\nThe person you are talking to right now is " + who + "." + ctx, messages: msgs })
     });
     const data = await r.json().catch(() => null);
     if (!r.ok || !data) return J(200, { ok: false, error: (data && data.error && data.error.message) || ("Assistant error (" + r.status + ")") });

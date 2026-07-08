@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v273";
+const BUILD_TAG="addr-v274";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1235,6 +1235,30 @@ function svcPrefHit(pref,label){
     return lk===pk||lk===base||lk.indexOf(base+"_")===0;
   }
   return lk===pk;
+}
+/* FedEx runs one ground network under two names: Ground (business addresses) and Home
+   Delivery (residential). Once an address is CLASSIFIED, a preference for either
+   ground-family service means "the one that matches this address" — a rule that says
+   Ground never books Home Delivery to a storefront, and vice versa. residential=null
+   (unclassified) leaves the preference untouched. One Rate is exempt (no Ground/Home split). */
+function groundFamilySwap(pref,residential){
+  if(residential==null||!pref)return pref;
+  const P=String(pref);
+  if(/one\s*rate/i.test(P))return pref;
+  const k=rateSvcKey(P.replace(/\s+-\s+/," "));
+  if(k==="ground"&&residential===true)return P.replace(/ground/i,"Home Delivery");
+  if(k==="home"&&residential===false)return P.replace(/home\s*delivery|home/i,"Ground");
+  return pref;
+}
+/* Classify an order's destination via FedEx address validation. true = residential,
+   false = commercial, null = couldn't classify (callers keep their residential default). */
+async function classifyOrderAddress(o,fromZip){
+  try{
+    const va=await fedexValidateAddress({address1:o.address1,address2:o.address2,city:o.city,state:o.state,zip:o.zip,country:o.country},fromZip);
+    if(va&&va.ok&&va.classification==="RESIDENTIAL")return true;
+    if(va&&va.ok&&va.classification==="BUSINESS")return false;
+  }catch(e){}
+  return null;
 }
 function rateProfileFor(rules,clientId){
   const profs=(rules&&rules.profiles&&rules.profiles.length)?rules.profiles:DEFAULT_RATE_RULES.profiles;
@@ -4660,10 +4684,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   },[rateSrc,orRates,client,JSON.stringify(custom.hiddenServices||[]),JSON.stringify(client&&client.blockedServices||[]),rateRules,fxTransit,residential,addrClassified,sigOption,saturday,insurance]);
   const best=null;
   const matched=useMemo(()=>{
-    if(liveRuleMatch){ const rc=canonSvc(liveRuleMatch); const hit=quotes.find(q=>canonSvc(q.label)===rc&&(q.sell??q.cost)!=null); if(hit)return {key:hit.key,src:"autopilot"}; }
+    const resKnown=addrClassified?residential:null;   // ground↔home swap only once FedEx (or the override) has classified the address
+    if(liveRuleMatch){ const rc=canonSvc(groundFamilySwap(liveRuleMatch,resKnown)); const hit=quotes.find(q=>canonSvc(q.label)===rc&&(q.sell??q.cost)!=null); if(hit)return {key:hit.key,src:"autopilot"}; }
     const so=selectedOrder?orders.find(x=>x.id===selectedOrder):null;
-    return matchServiceForOrder(quotes,so);
-  },[quotes,selectedOrder,orders,liveRuleMatch]);
+    return matchServiceForOrder(quotes,so,resKnown);
+  },[quotes,selectedOrder,orders,liveRuleMatch,residential,addrClassified]);
 
   const buildRec=(q,carrier,extra)=>({id:Date.now(),date:new Date().toLocaleDateString(),tracking:(extra&&extra.tracking)||newTracking(carrier),carrier,service:q.label,recipient:{...receiver},sender:{...sender},fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,pieces:pieces.map(p=>({...p})),dims:pieces[0],insurance,cost:q.cost,sell:q.sell,billTo,thirdAcct,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference,invoiceNo,poNo,residential,intl,bookNumber:extra&&extra.bookNumber,customs:intl?{...customs,total:customsTotal,ci:"CI-"+rnd(5)}:null});
   const print=async(q)=>{
@@ -4984,7 +5009,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         </div>}
         {liveRuleStatus&&<div className={`text-[11px] rounded px-3 py-2 mb-2 flex items-center gap-1.5 ${liveRuleStatus.state==="fired"?"bg-emerald-50 border border-emerald-200 text-emerald-800":liveRuleStatus.state==="error"?"bg-rose-50 border border-rose-200 text-rose-700":"bg-stone-50 border border-stone-200 text-stone-500"}`}>
           <Zap className="w-3.5 h-3.5 shrink-0"/>
-          {liveRuleStatus.state==="fired"&&<span>Autopilot rule <b>"{liveRuleStatus.rule}"</b> matched this order — highlighted <b>{liveRuleStatus.service}</b> below.</span>}
+          {liveRuleStatus.state==="fired"&&(()=>{const _sw=groundFamilySwap(liveRuleStatus.service,addrClassified?residential:null);return <span>Autopilot rule <b>"{liveRuleStatus.rule}"</b> matched this order — highlighted <b>{_sw}</b> below{_sw!==liveRuleStatus.service&&<span> (rule says {liveRuleStatus.service}, but FedEx classified this address {residential?"residential, so Home Delivery applies":"commercial, so Ground applies"})</span>}.</span>;})()}
           {liveRuleStatus.state==="no-order"&&<span>Autopilot is on, but no order is loaded on this screen — it only checks orders pulled in from the sidebar, not manually-typed shipments.</span>}
           {liveRuleStatus.state==="no-rules"&&<span>Autopilot is on, but you have no enabled rules — check Autopilot \u2192 your rules aren’t toggled off.</span>}
           {liveRuleStatus.state==="no-match"&&<span>Autopilot is on — none of your rules matched this order, so nothing was auto-selected.</span>}
@@ -5162,15 +5187,15 @@ function CarrierMark({carrier,className}){
   if(carrier==="FedEx") return <img src={FEDEX_LOGO} alt="FedEx" className={className||"h-6 w-auto"}/>;
   return <span className={`font-bold ${CARRIER_TINT[carrier]||"text-stone-700"} ${className||""}`}>{carrier}</span>;
 }
-function matchServiceForOrder(quotes,o){
+function matchServiceForOrder(quotes,o,res=null){
   if(!o)return null;
-  if(o.ruleService){ const rc=canonSvc(o.ruleService); const hit=quotes.find(q=>canonSvc(q.label)===rc&&(q.sell??q.cost)!=null); if(hit)return {key:hit.key,src:"autopilot"}; }
-  const req=matchRequestedService(quotes,o.shippingService);
+  if(o.ruleService){ const rc=canonSvc(groundFamilySwap(o.ruleService,res)); const hit=quotes.find(q=>canonSvc(q.label)===rc&&(q.sell??q.cost)!=null); if(hit)return {key:hit.key,src:"autopilot"}; }
+  const req=matchRequestedService(quotes,o.shippingService,res);
   return req?{key:req,src:"requested"}:null;
 }
-function matchRequestedService(quotes,requested){
+function matchRequestedService(quotes,requested,res=null){
   if(!requested)return null;
-  const c=canonSvc(requested);
+  const c=canonSvc(groundFamilySwap(requested,res));
   const KNOWN=["home","ground","ground_economy","2day","2day_am","express_saver","standard_overnight","priority_overnight","first_overnight","intl_priority"];
   if(!KNOWN.includes(c))return null;   // "Standard Shipping" etc. — no honest FedEx match, so no highlight
   const hit=quotes.find(q=>canonSvc(q.label)===c&&(q.sell??q.cost)!=null);
@@ -5655,7 +5680,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
     return withTransit([...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday:sat,insurance,fees:surchargeFees(rateRules,client)}))).sort((a,b)=>(a.sell||0)-(b.sell||0));
   },[baseQuotes,orRates,fxTransit,sigOption,sat,insurance,rateRules]);
   const best=null;
-  const matched=useMemo(()=>matchServiceForOrder(quotes,o),[quotes,o&&o.shippingService,o&&o.ruleService]);
+  const matched=useMemo(()=>matchServiceForOrder(quotes,o,addrClassified?residential:null),[quotes,o&&o.shippingService,o&&o.ruleService,residential,addrClassified]);
   const applyORBox=(code)=>{const b=FEDEX_ONERATE.find(x=>x.code===code);if(!b)return;if(b.dims){setDims({L:b.dims.L,W:b.dims.W,H:b.dims.H});}setBoxIdx(-1);setOrPkg(code);const val="FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,"");const f=settings?.orBoxField||"invoice";const fill=(set)=>set(prev=>prev&&prev.trim()?prev:val);if(f==="invoice")fill(setInvoiceNo);else if(f==="po")fill(setPoNo);else if(f==="reference")fill(setReference);};
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
   const pickBox=(j)=>{ setBoxIdx(j); if(j>=0){const b=boxes[j];setDims({L:b.L,W:b.W,H:b.H});} };
@@ -6304,11 +6329,11 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
     reader.readAsText(file); e.target.value="";
   };
   // pick a rate honoring a service preference ("FedEx - 2Day", "FedEx Ground", "ANY - Cheapest Ground"...)
-  const pickByPref=(qs,pref)=>{
+  const pickByPref=(qs,pref,residential=null)=>{
     if(!qs||!qs.length)return null;
     const cheap=qs.slice().sort((a,b)=>(a.cost||0)-(b.cost||0))[0];
     if(!pref)return null;
-    const P=String(pref);
+    const P=String(groundFamilySwap(pref,residential));
     if(/^ANY/i.test(P)){
       if(/ground/i.test(P))return qs.filter(q=>/ground|home/i.test(q.label||"")).sort((a,b)=>(a.cost||0)-(b.cost||0))[0]||cheap;
       if(/2\s*day/i.test(P))return qs.filter(q=>/^(or_)?2day/.test(rateSvcKey(q.label))).sort((a,b)=>(a.cost||0)-(b.cost||0))[0]||cheap;
@@ -6422,6 +6447,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
       const o=chosen[i];
       setProgress({n:i+1,total:chosen.length});
       let picked=null;
+      let _resKnownB=null,_resFlagB=true;   // classification survives past the try — booking uses it too
       try{
         const dup=dupShipment(o.name,shipments);
         if(dup){ out.push({o,name:o.name,orderId:o.id,ok:false,error:"Skipped — already shipped "+dup.date+" ("+dup.tracking+"). Void that label first if this is intentional."}); setResults([...out]); setProgress(pr0=>({...pr0,n:pr0.n+1})); continue; }
@@ -6430,9 +6456,11 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         const _wt0=(pk0&&pk0.totalWt)||o.weight||0;
         const _box0=pk0&&pk0.pieces[0]?{L:pk0.pieces[0].L,W:pk0.pieces[0].W,H:pk0.pieces[0].H}:{L:12,W:9,H:4};
         const _orBox0=oneRateBoxFor(_box0.L,_box0.W,_box0.H,_wt0);   // same live-One-Rate detection the Ship tab uses — Batch never asked for this before
-        const res=await ratesForOrder(o,{residential:true,weightLb:_wt0,box:pk0&&pk0.pieces[0]?_box0:undefined,fromZip:originZip,sender:settings.sender,packageTypeCode:_orBox0?_orBox0.code:""},eng);
+        _resKnownB=await classifyOrderAddress(o,originZip);   // ground↔home follows the FedEx classification, same as Autopilot
+        _resFlagB=_resKnownB==null?true:_resKnownB;
+        const res=await ratesForOrder(o,{residential:_resFlagB,weightLb:_wt0,box:pk0&&pk0.pieces[0]?_box0:undefined,fromZip:originZip,sender:settings.sender,packageTypeCode:_orBox0?_orBox0.code:""},eng);
         const _hs=new Set(cz(settings).hiddenServices||[]);const _bs=new Set((client&&client.blockedServices)||[]);let qs=((res&&res.rates)||[]).filter(q=>!_hs.has(canonSvc(q.label))&&!_bs.has(canonSvc(q.label))).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:originZip,toZip:o.zip,weight:(pk0&&pk0.totalWt)||o.weight||1})}));
-        picked=pickByPref(qs,svcOv[o.id]);
+        picked=pickByPref(qs,svcOv[o.id],_resKnownB);
         if(!picked){
           if(rule==="ground")picked=qs.filter(q=>/ground|home/i.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
           else if(rule==="fastest")picked=qs.slice().sort((a,b)=>speedRank(a.label)-speedRank(b.label)||a.cost-b.cost)[0];
@@ -6444,7 +6472,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
       const need=[]; if(!o.customer&&!o.company)need.push("name"); if(String(o.phone||"").replace(/\D/g,"").length<10)need.push("phone"); if(!o.email)need.push("email");
       if(need.length){ out.push({o,name:o.name,orderId:o.id,ok:false,error:"Missing "+need.join(", ")}); setResults([...out]); continue; }
       const pkB=packs[o.id];
-      const res=await bookOrderLabel(o,{quote:picked,weightLb:(pkB&&pkB.totalWt)||o.weight,box:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:undefined,residential:true,sender:settings.sender},eng,settings.sender);
+      const res=await bookOrderLabel(o,{quote:picked,weightLb:(pkB&&pkB.totalWt)||o.weight,box:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:undefined,residential:_resFlagB,sender:settings.sender},eng,settings.sender);
       if(res&&res.ok){
         const carrier=carrierOf(picked.label);
         onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:originZip,toZip:o.zip,weight:(pkB&&pkB.totalWt)||o.weight,pieces:pkB?pkB.pieces:undefined,dims:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,items:o.items||"",note:o.note||"",bookNumber:res.bookNumber},o.id);
@@ -7753,12 +7781,12 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
   const eng=englandFor(client,settings);
   const canBook=!!(eng&&eng.enabled);
   // honor the rule-chosen service when picking a rate; fall back to cheapest
-  const pickRate=(qs,pref)=>{
+  const pickRate=(qs,pref,residential=null)=>{
     if(!qs||!qs.length)return null;
     const byCost=(a,b)=>(a.cost||a.sell||0)-(b.cost||b.sell||0);
     const cheap=qs.slice().sort(byCost)[0];
     if(!pref)return cheap;
-    const P=String(pref);
+    const P=String(groundFamilySwap(pref,residential));
     if(/^ANY/i.test(P)){
       if(/ground/i.test(P)){const g=qs.filter(q=>/ground|home/i.test(q.label||"")).sort(byCost)[0]; return g||cheap;}
       /* "ANY - Cheapest 2 Day" and "ANY - Fastest" are in RULE_SERVICES but had no handler
@@ -7795,18 +7823,25 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
         continue;
       }
       let picked=null;
+      let _resFlag=true;   // classification result must survive past the try — booking uses it too
       try{
         const _dims0=o.dims||{}; const _box0=(+o.length||+_dims0.L)?{L:+o.length||+_dims0.L,W:+o.width||+_dims0.W,H:+o.height||+_dims0.H}:{L:12,W:9,H:4};
         const _orBox0=oneRateBoxFor(_box0.L,_box0.W,_box0.H,wt);   // same live-One-Rate detection the Ship tab uses — Autopilot never asked for this before
-        const res=await ratesForOrder(o,{residential:true,weightLb:wt,fromZip:senderZip,sender:settings.sender,box:_box0,packageTypeCode:_orBox0?_orBox0.code:""},eng);
+        /* Classify the destination first — Autopilot used to rate everything residential:true,
+           so commercial addresses got residential surcharges AND Home Delivery no matter what
+           the rule said. A classified-commercial address rates commercial and a Ground/Home
+           rule swaps to the ground-family service that matches the address. */
+        const _resKnown=await classifyOrderAddress(o,senderZip);
+        _resFlag=_resKnown==null?true:_resKnown;
+        const res=await ratesForOrder(o,{residential:_resFlag,weightLb:wt,fromZip:senderZip,sender:settings.sender,box:_box0,packageTypeCode:_orBox0?_orBox0.code:""},eng);
         const _apHs=new Set(cz(settings).hiddenServices||[]);const _apBs=new Set((client&&client.blockedServices)||[]);
         const qs=((res&&res.rates)||[]).filter(q=>!_apHs.has(canonSvc(q.label))&&!_apBs.has(canonSvc(q.label))).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:senderZip,toZip:o.zip,weight:wt})}));
-        picked=pickRate(qs,pref);
+        picked=pickRate(qs,pref,_resKnown);
       }catch(e){}
       if(!picked){rows.push({name:o.name,orderId:o.id,ok:false,error:"No rate returned"});setApResults({rows:[...rows],heldN});continue;}
       const need=[];if(!o.customer&&!o.company)need.push("name");if(String(o.phone||"").replace(/\D/g,"").length<10)need.push("phone");if(!o.email)need.push("email");
       if(need.length){rows.push({name:o.name,orderId:o.id,ok:false,error:"Missing "+need.join(", ")});setApResults({rows:[...rows],heldN});continue;}
-      const res=await bookOrderLabel(o,{quote:picked,weightLb:wt,residential:true,sender:settings.sender},eng,settings.sender);
+      const res=await bookOrderLabel(o,{quote:picked,weightLb:wt,residential:_resFlag,sender:settings.sender},eng,settings.sender);
       if(res&&res.ok){
         const carrier=/dhl/i.test(picked.label)?"DHL":"FedEx";
         onShipped&&onShipped({id:Date.now()+o.id,date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:senderZip,toZip:o.zip,weight:wt,dims:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,items:o.items||"",note:o.note||"",bookNumber:res.bookNumber},o.id);

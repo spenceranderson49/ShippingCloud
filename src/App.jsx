@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v315";
+const BUILD_TAG="addr-v316";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -488,36 +488,43 @@ async function composeForStock(imgs,wIn,hIn,ctx){
   if(!dtEnabled)return {imgs,wIn,hIn,changed:false};
   const [SW,SH]=stockDims(size);
   if(size==="4x6"||!imgs.length)return {imgs,wIn,hIn,changed:false};
-  if(hIn>=SH-0.2)return {imgs,wIn,hIn,changed:false};   // already stock-sized
+  /* Label region = fixed physical height. For every 4-inch-wide doc-tab stock the shipping label
+     is 6″ and the tab is the remainder (0.75″ on 4×6.75, 2″ on 4×8, etc.). We treat the incoming
+     image as THE label and scale it to fill the region by width — because in app mode we asked the
+     carrier for a plain PAPER_4X6, the input is a clean 4×6 on FedEx, UPS, or DHL alike. No bbox
+     crop or height snap is trusted here; the region is authoritative, so nothing can spill onto
+     the tab regardless of the carrier's exact PDF dimensions. */
+  const labelRegionIn=(SW>4.5)?SH:6;   // letter top-half uses full height; 4-wide stocks pin label to 6″
+  const tabIn=SH-labelRegionIn;
+  if(tabIn<=0.05)return {imgs,wIn,hIn,changed:false};   // no real tab (e.g. plain 4×6) → leave as-is
+  const leading=!!(cfg&&cfg.docTab&&cfg.docTab.stock==="leading");
   const out=[];
-  for(const src of imgs){
-    const im=await _loadImg(src);
-    const dpi=Math.max(96,Math.round(im.naturalWidth/(wIn||4)));
+  for(const srcImg of imgs){
+    const im=await _loadImg(srcImg);
+    const dpi=Math.max(150,Math.round((im.naturalWidth||1)/SW));   // resolution from the source, min 150
     const c=document.createElement("canvas");c.width=Math.round(SW*dpi);c.height=Math.round(SH*dpi);
     const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);
-    /* The physical label area on doc-tab stock is ALWAYS 6″ — the tab is only what's beyond it
-       (0.75″ on FedEx 4×6.75). The bbox crop trims a label's bottom whitespace, so the artwork
-       can come back shorter than 6″; sizing the tab as "whatever's left over" inflated it past
-       the perforation and printed fields onto the label. Pin the region to 6″, draw the artwork
-       top-aligned inside it, and the tab boundary lands exactly on the perf. */
-    const lrIn=Math.min(6,SH);
-    const lrPx=Math.round(lrIn*dpi);
-    const lw=Math.round((wIn||4)*dpi),lh=Math.round(Math.min(hIn||6,lrIn)*dpi);
-    const x=Math.max(0,Math.round((c.width-lw)/2));
-    const leading=!!(cfg&&cfg.docTab&&cfg.docTab.stock==="leading");
-    const geo=tabGeom(leading,lrPx,c.height);
-    g.drawImage(im,x,geo.labelY,lw,lh);
-    if(geo.tabPx>Math.round(0.2*dpi)){
-      g.strokeStyle="#b8b2ab";g.setLineDash([Math.round(dpi*0.07),Math.round(dpi*0.07)]);
-      g.beginPath();g.moveTo(0,geo.tearY+(leading?-1:1));g.lineTo(c.width,geo.tearY+(leading?-1:1));g.stroke();g.setLineDash([]);
-      const lines=(cfg&&cfg.docTab&&cfg.docTab.enabled)?buildDocTabLines(cfg.docTab,ctx||{}):[];
-      g.fillStyle="#111";
-      const tabIn=SH-lrIn;   // exact physical tab height — small tabs (¼", ½") get proportionally tighter padding
-      const pad=Math.round(Math.min(0.14,Math.max(0.03,tabIn*0.18))*dpi);
-      const items=lines.map(l=>({txt:((l.label?l.label+": ":"")+l.value).slice(0,90),fs:Math.max(8,Math.round((l.size||9)*dpi/72)),x:l.x,y:l.y}));
-      const placed=layoutDocTab(items,c.width,geo.textTop,geo.textBottom,pad,(txt,fs)=>{g.font="600 "+fs+"px system-ui,Arial,sans-serif";return g.measureText(txt).width;});
-      placed.forEach(p=>{g.font="600 "+p.fs+"px system-ui,Arial,sans-serif";g.fillText(p.txt,p.px,p.py);});
-    }
+    const regionPx=Math.round(labelRegionIn*dpi);
+    const geo=tabGeom(leading,regionPx,c.height);
+    /* Fit the label image into the region, scaled to fill the width and clipped to the region
+       height so a carrier PDF that's slightly taller/shorter than a perfect 4×6 can never bleed
+       past the perforation. Aspect preserved; centered horizontally. */
+    const scale=c.width/(im.naturalWidth||c.width);
+    const drawH=Math.round((im.naturalHeight||regionPx)*scale);
+    g.save();
+    g.beginPath();g.rect(0,geo.labelY,c.width,regionPx);g.clip();
+    g.drawImage(im,0,geo.labelY,c.width,drawH);
+    g.restore();
+    /* Tear line exactly on the perforation between label region and tab. */
+    g.strokeStyle="#b8b2ab";g.setLineDash([Math.round(dpi*0.07),Math.round(dpi*0.07)]);
+    g.beginPath();g.moveTo(0,geo.tearY+(leading?-1:1));g.lineTo(c.width,geo.tearY+(leading?-1:1));g.stroke();g.setLineDash([]);
+    /* Our tab fields, laid out ACROSS the tab (positioned zones honored), clipped to the tab. */
+    const lines=(cfg&&cfg.docTab&&cfg.docTab.enabled)?buildDocTabLines(cfg.docTab,ctx||{}):[];
+    g.fillStyle="#111";
+    const pad=Math.round(Math.min(0.14,Math.max(0.03,tabIn*0.18))*dpi);
+    const items=lines.map(l=>({txt:((l.label?l.label+": ":"")+l.value).slice(0,90),fs:Math.max(8,Math.round((l.size||9)*dpi/72)),x:l.x,y:l.y}));
+    const placed=layoutDocTab(items,c.width,geo.textTop,geo.textBottom,pad,(txt,fs)=>{g.font="600 "+fs+"px system-ui,Arial,sans-serif";return g.measureText(txt).width;});
+    placed.forEach(p=>{g.font="600 "+p.fs+"px system-ui,Arial,sans-serif";g.fillText(p.txt,p.px,p.py);});
     out.push(c.toDataURL("image/png"));
   }
   return {imgs:out,wIn:SW,hIn:SH,changed:true};

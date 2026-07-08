@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v276";
+const BUILD_TAG="addr-v277";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -5037,6 +5037,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {ready&&!rateSrc.live&&!rateSrc.loading&&rateSrc.diag&&<div className="text-[11px] text-stone-400 -mt-1 px-1">
           Tried England on your <b>{rateSrc.diag.src==="customer"?"customer's":"main"}</b> account · from ZIP {rateSrc.diag.fromZip} · customer ID {rateSrc.diag.cust} · key {rateSrc.diag.key} · {rateSrc.diag.enabled?"live toggle ON":"live toggle OFF"}{!rateSrc.diag.hasKey?" · no API key found":""}{!rateSrc.diag.hasCust?" · no customer ID found":""}{rateSrc.diag.fromZip==="(none)"?" — no origin ZIP: set your sender ZIP or the customer's origin.":""}{rateSrc.error&&/401|invalid/i.test(rateSrc.error)?" — England rejected this key/ID pair. Re-enter it in Settings → Carrier accounts and Test again.":""}
         </div>}
+        {/* Autopilot on this screen is optional — this pill is the switch. Same setting as
+            Settings → Customize → "Run my Autopilot rules here too", so either place controls it. */}
+        <div className="flex justify-end mb-1">
+          <button onClick={()=>setSettings(p=>({...p,custom:{...(p.custom||{}),autoRulesOnShip:!cz(p).autoRulesOnShip}}))} title={custom.autoRulesOnShip?"Autopilot is checking loaded orders against your rules on this screen — click to turn it off":"Autopilot is off on this screen — click to check loaded orders against your rules"} className={`text-[11px] rounded-full px-2.5 py-1 border font-medium flex items-center gap-1 ${custom.autoRulesOnShip?"bg-[#0086E0] text-white border-[#0086E0]":"bg-white text-stone-500 border-stone-200 hover:border-[#99D6FF]"}`}><Zap className="w-3 h-3"/>Autopilot {custom.autoRulesOnShip?"on":"off"}</button>
+        </div>
         {liveRuleStatus&&<div className={`text-[11px] rounded px-3 py-2 mb-2 flex items-center gap-1.5 ${liveRuleStatus.state==="fired"?"bg-emerald-50 border border-emerald-200 text-emerald-800":liveRuleStatus.state==="error"?"bg-rose-50 border border-rose-200 text-rose-700":"bg-stone-50 border border-stone-200 text-stone-500"}`}>
           <Zap className="w-3.5 h-3.5 shrink-0"/>
           {liveRuleStatus.state==="fired"&&(()=>{const _sw=groundFamilySwap(liveRuleStatus.service,addrClassified?residential:null);return <span>Autopilot rule <b>"{liveRuleStatus.rule}"</b> matched this order — highlighted <b>{_sw}</b> below{_sw!==liveRuleStatus.service&&<span> (rule says {liveRuleStatus.service}, but FedEx classified this address {residential?"residential, so Home Delivery applies":"commercial, so Ground applies"})</span>}.</span>;})()}

@@ -74,7 +74,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v342";
+const BUILD_TAG="addr-v348";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -544,17 +544,22 @@ async function composeForStock(imgs,wIn,hIn,ctx){
        Settings -> Printer settings -> Doc tab -> "Label offset". The label is shifted toward the
        page-body side of the tear (down for a leading/top tab, up for a trailing/bottom tab) and the
        gap stays WHITE so nothing prints in it. */
-    const nudgeIn=Math.max(0,Math.min(0.5,(cfg&&cfg.docTab&&+cfg.docTab.labelOffset)||0.12));
+    const nudgeIn=Math.max(0,Math.min(0.6,(cfg&&cfg.docTab&&cfg.docTab.labelOffset!=null?+cfg.docTab.labelOffset:0.28)));
     const nudgePx=Math.round(nudgeIn*dpi);
-    const scale=c.width/(im.naturalWidth||c.width);
-    const drawH=Math.round((im.naturalHeight||regionPx)*scale);
-    /* Clip to the region MINUS the nudge (keeps the gap clean), and draw the label shifted into it. */
-    const clipY = leading ? geo.labelY+nudgePx : geo.labelY;   // leading tab is above: push label down
-    const clipH = Math.max(1, regionPx - nudgePx);
-    const drawY = leading ? geo.labelY+nudgePx : geo.labelY;   // trailing tab is below: label already starts at top, shrink from bottom
+    /* Reserve the gap below the tear line, then FIT the whole label into what's left (scaled down to
+       fit, so nothing is clipped off the bottom) and center it horizontally. The label is shifted down
+       by the nudge so the carrier's own header can't reach the perforation. */
+    const availH = Math.max(1, regionPx - nudgePx);
+    const fitScale = Math.min(c.width/(im.naturalWidth||c.width), availH/(im.naturalHeight||regionPx));
+    const drawW = Math.round((im.naturalWidth||c.width)*fitScale);
+    const drawH = Math.round((im.naturalHeight||regionPx)*fitScale);
+    const clipY = leading ? geo.labelY+nudgePx : geo.labelY;
+    const clipH = availH;
+    const drawX = Math.round((c.width-drawW)/2);
+    const drawY = leading ? geo.labelY+nudgePx : geo.labelY;
     g.save();
     g.beginPath();g.rect(0,clipY,c.width,clipH);g.clip();
-    g.drawImage(im,0,drawY,c.width,drawH);
+    g.drawImage(im,drawX,drawY,drawW,drawH);
     g.restore();
     /* SAFETY: confirm the label region actually got ink. If it's essentially blank, the draw failed
        (bad source dims, off-canvas placement, etc.) — abort compose and send the ORIGINAL label so a
@@ -2033,7 +2038,7 @@ const NOTIFY_DEFAULTS={orderConfirm:true,shipped:true,delivered:true,returnLabel
 const CUSTOM_DEFAULTS={
   hideInvoice:false,hidePO:false,hideAddr23:false,hideOz:false,hideInsure:false,
   phoneRequired:true,emailRequired:true,
-  defaultSignature:"none",autoInsurePct:0,
+  defaultSignature:"none",autoInsurePct:0,autoSigValue:0,autoSigType:"indirect",
   defaultView:"cheapest",showRateViewToggle:false,hiddenServices:[],priceWarn:0,transitStyle:"date",aliases:{},matchedOnly:false,
   slipThanks:"",slipFooter:"",
   density:"comfortable",stuckDays:0,
@@ -5098,7 +5103,6 @@ function AppInner(){
               </React.Fragment>
             ))}
             {!isAdmin&&!isDemo&&!isCompanyAdmin&&CLOUD.mode==="cloud"&&<CompanyAdminRequestButton currentUser={currentUser}/>}
-            <div className="px-3 pt-3 text-[9px] text-stone-300 select-none flex items-center gap-1.5"><span>{BUILD_TAG}</span><span className="text-stone-200">·</span><LegalLinks/></div>
           </nav>
         </aside>
       </div>}
@@ -5114,7 +5118,6 @@ function AppInner(){
               </React.Fragment>
             ))}
             {!isAdmin&&!isDemo&&!isCompanyAdmin&&CLOUD.mode==="cloud"&&<CompanyAdminRequestButton currentUser={currentUser}/>}
-            <div className="px-3 pt-3 text-[9px] text-stone-300 select-none flex items-center gap-1.5"><span>{BUILD_TAG}</span><span className="text-stone-200">·</span><LegalLinks/></div>
           </nav>
         </aside>
         <main className="flex-1 min-w-0 overflow-x-clip px-3 sm:px-6 py-4 sm:py-6" style={(custom.appBg||custom.pageBg)?{...(custom.pageBg?{backgroundColor:custom.pageBg}:{}),...(custom.appBg?{backgroundImage:`url(${custom.appBg})`,backgroundSize:"cover",backgroundPosition:"center",backgroundAttachment:"fixed"}:{})}:undefined}>
@@ -5311,11 +5314,12 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const setOverride=(on)=>{ setResTouched(on); if(!on) setVerifyNonce(x=>x+1); };  // turning override off re-asks FedEx
 
   const [packNote,setPackNote]=useState(null);
-  const applyOrder=(o)=>{setSelectedOrder(o.id);setReference(o.name);setReceiver({...empty,name:o.customer||"",company:o.company||"",zip:o.zip||"",state:o.state||"",city:o.city||"",address1:o.address1||"",phone:o.phone||"",email:o.email||""});
+  const applyOrder=(o)=>{setSelectedOrder(o.id);setReference(o.name);setInvoiceNo("");setPoNo("");setPieces(ps=>ps.map((p,j)=>j===0?{...p,orBox:undefined}:p));setReceiver({...empty,name:o.customer||"",company:o.company||"",zip:o.zip||"",state:o.state||"",city:o.city||"",address1:o.address1||"",phone:o.phone||"",email:o.email||""});
     const pk=packOrder(o,settings.products||[],settings.boxes||SEED_BOXES,settings.boxLogic);
     if(pk&&pk.pieces.length){ setPieces(pk.pieces.map(x=>({weight:x.weight,L:x.L,W:x.W,H:x.H}))); setPackNote(pk); }
     else { setPieces([{weight:o.weight||1,L:12,W:9,H:4}]); setPackNote(null); }
     if(custom.autoInsurePct>0&&o.total){const v=Math.round((+o.total||0)*custom.autoInsurePct)/100;if(v>0)setInsurance(String(v));}   // auto-insure % of order value
+    if(custom.autoSigValue>0&&o.total&&(+o.total||0)>=custom.autoSigValue){ const t=custom.autoSigType||"indirect"; setSigOption(t); setSig(t!=="none"); }   // auto-add signature when the order value meets the $ threshold
   };
   useEffect(()=>{ if(!prefill)return;
     if(prefill.draft){const s=prefill.draft;setSender(s.sender);setReceiver(s.receiver);setReference(s.reference||"");setInvoiceNo(s.invoiceNo||"");setPoNo(s.poNo||"");setPieces(s.pieces||[{weight:3,L:12,W:9,H:4}]);setRes(s.residential);setSig(s.signature);setBillTo(s.billTo);setThirdAcct(s.thirdAcct||"");setInsurance(s.insurance||"");setSelectedOrder(s.selectedOrder||null);if(s.customs)setCustoms(s.customs);clearPrefill();return;}
@@ -5419,6 +5423,16 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     const so=selectedOrder?orders.find(x=>x.id===selectedOrder):null;
     return matchServiceForOrder(quotes,so,resKnown);
   },[quotes,selectedOrder,orders,liveRuleMatch,residential,addrClassified]);
+
+  /* If Autopilot's matched service is a FedEx One Rate box, auto-fill the One Rate box name into the
+     configured field (invoice # by default) WITHOUT waiting for the user to click the rate row — so the
+     invoice # is populated the moment Autopilot picks One Rate. Only fills an empty field; never
+     overwrites something the user typed. */
+  useEffect(()=>{
+    if(!matched)return;
+    const mq=quotes.find(q=>q.key===matched);
+    if(mq&&mq._oneRate&&mq.packageTypeCode){ try{ applyOneRateBox(mq.packageTypeCode); }catch(e){} }
+  },[matched,quotes]);
 
   const buildRec=(q,carrier,extra)=>({id:Date.now(),date:new Date().toLocaleDateString(),tracking:(extra&&extra.tracking)||newTracking(carrier),carrier,service:q.label,recipient:{...receiver},sender:{...sender},fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,pieces:pieces.map(p=>({...p})),dims:pieces[0],insurance,cost:q.cost,sell:q.sell,billTo,thirdAcct,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference,invoiceNo,poNo,residential,intl,bookNumber:extra&&extra.bookNumber,customs:intl?{...customs,total:customsTotal,ci:"CI-"+rnd(5)}:null});
   const print=async(q,force)=>{
@@ -5776,7 +5790,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           {liveRuleStatus.state==="no-match"&&<span>Autopilot is on — none of your rules matched this order, so nothing was auto-selected.</span>}
           {liveRuleStatus.state==="error"&&<span>Autopilot hit an error checking this order: {liveRuleStatus.msg}</span>}
         </div>}
-        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
+        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
         {labelPreview&&<LabelPreviewModal data={labelPreview} settings={settings} onClose={()=>{setLabelPreview(null);if(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint)newShipment();}}/>}
         {pendingReprint&&(()=>{ const pr=pendingReprint; const trk=pr.shipment&&pr.shipment.tracking;
           return (<div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm" onClick={()=>setPendingReprint(null)}>
@@ -5983,7 +5997,7 @@ function matchRequestedService(quotes,requested,res=null){
   const hit=quotes.find(q=>canonSvc(q.label)===c&&(q.sell??q.cost)!=null);
   return hit?hit.key:null;
 }
-function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=true,onOneRate,custom=CUSTOM_DEFAULTS,matched=null,matchedSrc=null,collapsible=false,oneRateWarning=null,billing=null}){
+function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=true,onOneRate,custom=CUSTOM_DEFAULTS,matched=null,matchedSrc=null,collapsible=false,oneRateWarning=null,billing=null,live=false,loading=false}){
   const [showAll,setShowAll]=useState(false);
   const collapse=collapsible&&custom.matchedOnly&&matched&&!showAll&&quotes.some(q=>q.key===matched);
   const [view,setView]=useState(custom.defaultView||"cheapest");
@@ -6018,7 +6032,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
             <div className="flex items-center gap-2"><span className="text-sm truncate">{(custom.aliases&&custom.aliases[canonSvc(q.label)])||q.label}</span></div>
             <div className="text-[11px] text-stone-500 flex items-center gap-1"><Calendar className="w-3 h-3"/>Transit Time: {days?(custom.transitStyle==="days"?<>{days} business day{days>1?"s":""}</>:<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}</div>
           </div>
-          <div className="text-right font-mono">{!!(custom.priceWarn>0&&ready&&hasPrice&&sell>custom.priceWarn)&&<div className="text-[10px] text-amber-600 flex items-center justify-end gap-0.5" title={"Above your $"+custom.priceWarn+" price alert"}><AlertTriangle className="w-3 h-3"/>over limit</div>}<div className="text-base font-semibold text-stone-900">{ready&&hasPrice?money(sell):<span className="text-stone-300">—</span>}</div></div>
+          <div className="text-right font-mono">{!!(custom.priceWarn>0&&ready&&hasPrice&&sell>custom.priceWarn)&&<div className="text-[10px] text-amber-600 flex items-center justify-end gap-0.5" title={"Above your $"+custom.priceWarn+" price alert"}><AlertTriangle className="w-3 h-3"/>over limit</div>}<div className="text-base font-semibold text-stone-900">{!ready?<span className="text-stone-300">—</span>:(live||fxLive)?(hasPrice?money(sell):<span className="text-stone-300">—</span>):loading?<span className="text-[11px] font-normal text-stone-400">pricing…</span>:(hasPrice?money(sell):<span className="text-stone-300">—</span>)}</div></div>
           {action&&<button onClick={(e)=>{e.stopPropagation();action(q);}} disabled={!ready||!hasPrice} title={!hasPrice&&q._oneRate?"England’s rate API doesn’t return One Rate flat pricing — pick a priced service, or book One Rate in Webship.":undefined} className={`shrink-0 w-32 text-sm rounded px-3 py-2 font-medium flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed ${bought===q.key?"bg-[#0086E0] text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{bought===q.key?<><Check className="w-4 h-4"/>{doneLabel}</>:!hasPrice&&q._oneRate?<>No quote</>:<><Printer className="w-4 h-4"/>{label}</>}</button>}
         </div>
         {isOpen&&ready&&hasPrice&&<div className="px-4 pb-3 pt-1 border-t border-stone-100">
@@ -7153,7 +7167,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
   const [presetSel,setPresetSel]=useState("");
   const [fs,setFs]=useState({state:new Set(),zone:new Set(),source:new Set(),sku:new Set(),product:new Set(),service:new Set(),carrier:new Set()});
   const [fOpen,setFOpen]=useState(true);
-  const presetBar=(
+  const presetBar=()=>(
     <div className="flex flex-wrap items-center gap-2 bg-white border border-stone-200 rounded-lg px-3 py-2">
       <Zap className="w-3.5 h-3.5 text-[#0086E0]"/>
       <span className="text-xs font-semibold text-stone-700">Saved batches</span>
@@ -7486,7 +7500,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
   );};
   return (
     <div className="space-y-3">
-      {presetBar}
+      {presetBar()}
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Layers className="w-4 h-4"/>Batch shipping</h2>
         <span className="text-[11px] text-stone-400">{pool.length} open order{pool.length===1?"":"s"}</span>
@@ -8496,9 +8510,9 @@ function PrinterSettings({settings,setSettings}){
         </Field>
         <Field label="Label offset from tear line">
           <div className="flex items-center gap-2">
-            <input type="number" min="0" max="0.5" step="0.02" value={dt.labelOffset==null?0.12:dt.labelOffset} onChange={e=>setDt({labelOffset:Math.max(0,Math.min(0.5,+e.target.value||0))})} className="w-24 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"/>
+            <input type="number" min="0" max="0.6" step="0.02" value={dt.labelOffset==null?0.28:dt.labelOffset} onChange={e=>setDt({labelOffset:Math.max(0,Math.min(0.6,+e.target.value||0))})} className="w-24 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"/>
             <span className="text-sm text-stone-500">inches</span>
-            <span className="text-[11px] text-stone-400">Pushes the whole label away from the perforation so the carrier's own header can't bleed into the tab. Default 0.12″. Raise it if you still see label text at the tear line.</span>
+            <span className="text-[11px] text-stone-400">Pushes the whole label away from the perforation so the carrier's own header can't bleed into the tab. Default 0.28″. Raise it if you still see label text at the tear line.</span>
           </div>
         </Field>
         <div className="space-y-1.5">
@@ -9858,8 +9872,8 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
     <span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span></label>);
   const Sel=({k,label,opts})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>{label}</span>
     <select value={c[k]} onChange={e=>set(k,e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]">{opts.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>);
-  const Num=({k,label,hint,step,suffix})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span>
-    <span className="flex items-center gap-1"><input type="number" min="0" step={step||1} value={c[k]||""} placeholder="0" onChange={e=>set(k,+e.target.value||0)} className="w-20 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF] text-right"/>{suffix&&<span className="text-xs text-stone-400">{suffix}</span>}</span></label>);
+  const Num=({k,label,hint,step,suffix,prefix})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span>
+    <span className="flex items-center gap-1">{prefix&&<span className="text-stone-400 text-sm">{prefix}</span>}<input type="number" min="0" step={step||1} value={c[k]||""} placeholder="0" onChange={e=>set(k,+e.target.value||0)} className="w-20 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF] text-right"/>{suffix&&<span className="text-xs text-stone-400">{suffix}</span>}</span></label>);
   const SVC=[
     ["ground","FedEx Ground®"],["home","FedEx Home Delivery®"],["ground_economy","FedEx Ground Economy®"],
     ["express_saver","FedEx Express Saver®"],["2day","FedEx 2Day®"],["2day_am","FedEx 2Day® A.M."],
@@ -9935,6 +9949,8 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
         <Tog k="emailRequired" label="Require receiver email to book" hint="Uncheck to make email optional"/>
         <Sel k="defaultSignature" label="Default signature on new shipments" opts={[["none","None"],["indirect","Indirect"],["direct","Direct"],["adult","Adult"]]}/>
         <Num k="autoInsurePct" label="Auto-insure orders" hint="% of order value, applied when you load an order. 0 = off" suffix="%"/>
+        <Num k="autoSigValue" label="Auto-add signature over" hint="When you load an order worth this much or more, a signature is added automatically. 0 = off. Uses the signature type below." prefix="$"/>
+        <Sel k="autoSigType" label="Signature type to auto-add" opts={[["indirect","Indirect"],["direct","Direct"],["adult","Adult"]]}/>
       </div>
     </Panel>}
 

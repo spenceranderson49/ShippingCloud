@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v278";
+const BUILD_TAG="addr-v279";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1577,7 +1577,7 @@ const CUSTOM_DEFAULTS={
   slipThanks:"",slipFooter:"",
   density:"comfortable",stuckDays:0,
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
-  logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,skipBookedSummary:false,autoRulesOnShip:true,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],theme:"light",accent:"",
+  logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,skipBookedSummary:false,autoRulesOnShip:true,autoRulesInBatch:false,autoBookBatch:false,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],theme:"light",accent:"",
   refRequired:false,invRequired:false,poRequired:false,refLocked:false,invLocked:false,poLocked:false,
   confetti:"page",seasonal:true,loginBg:"",appBg:"",headerBg:"",pageBg:"",navBg:"",
 };
@@ -6505,6 +6505,30 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
     setTimeout(()=>setApMsg(null),7000);
   };
   const clearAutopilot=()=>{setSvcOv({});setOvWhy({});setHolds({});};
+  /* Auto-apply Autopilot rules when the floor loads / orders change, if the setting is on —
+     so you don't hit "Apply Autopilot rules" every time. Runs once per distinct order set.
+     If "auto-book in batch" is ALSO on, it selects the ruled orders and books them hands-free. */
+  const bcz=cz(settings);
+  const _autoApplied=React.useRef("");
+  useEffect(()=>{
+    if(!bcz.autoRulesInBatch)return;
+    if(!visible.length){_autoApplied.current="";return;}
+    if(!(ruleset||[]).some(r=>r&&r.enabled))return;
+    const sig=visible.map(o=>o.id).join(",");
+    if(_autoApplied.current===sig)return;
+    _autoApplied.current=sig;
+    applyAutopilot();
+    if(bcz.autoBookBatch&&canBook){
+      // select every ruled, non-held order and book after the overrides settle
+      setTimeout(()=>{
+        const engine=runRuleEngine((ruleset||[]).filter(r=>r.enabled),visible,originZip);
+        const patches=rulePatchesFor(engine);
+        const ids=visible.filter(o=>patches[o.id]&&patches[o.id].ruleService&&!(patches[o.id].hold)).map(o=>o.id);
+        if(ids.length){ setSel(new Set(ids)); setTimeout(()=>{ if(!running)run(); },400); }
+      },300);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[visible.map(o=>o.id).join(","),bcz.autoRulesInBatch,bcz.autoBookBatch]);
   const saveQuickRule=()=>{
     const meta=RULE_PROPERTIES[qr.property]||{type:"text"};
     if(!String(qr.value).trim())return;
@@ -8805,9 +8829,35 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
   const move=(k,dir)=>{const a=[...order];const i=a.indexOf(k);const j=i+dir;if(i<0||j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];set("tabOrder",a);};
   const speedMode=()=>setSettings(p=>({...p,custom:{...(p.custom||{}),hideInvoice:true,hidePO:true,hideAddr23:true,hideOz:true,hideInsure:true}}));
   const fullMode=()=>setSettings(p=>({...p,custom:{...(p.custom||{}),hideInvoice:false,hidePO:false,hideAddr23:false,hideOz:false,hideInsure:false}}));
+  const [cs,setCs]=useState("autopilot");
+  const CTABS=[["autopilot","Autopilot"],["services","Services"],["ship","Ship screen"],["labels","Labels & printing"],["orders","Orders & lists"],["appearance","Appearance"],["slips","Packing slips"]];
+  const Toggle=({k,label,hint})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700">
+    <span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span>
+    <button onClick={()=>set(k,!c[k])}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${c[k]?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
+  </label>);
   return (<div className="max-w-2xl space-y-4">
     {!deployMode&&<div className="text-sm text-stone-500">Make ShippingCloud yours. Every option here changes the app immediately for <b>your login only</b>.</div>}
+    <div className="flex items-center gap-1 border-b border-stone-200 overflow-x-auto">
+      {CTABS.map(([v,l])=><button key={v} onClick={()=>setCs(v)} className={`px-3 py-2 text-sm rounded-t-lg whitespace-nowrap border-b-2 -mb-px ${cs===v?"border-[#0086E0] text-stone-900 font-medium":"border-transparent text-stone-500 hover:bg-stone-50"}`}>{l}</button>)}
+    </div>
 
+    {cs==="autopilot"&&<>
+    <Panel title="Autopilot on the Ship screen">
+      <Toggle k="autoRulesOnShip" label="Run my Autopilot rules on the Ship tab" hint="When an order you pull into Ship matches a rule, pre-highlight the service that rule picks — live, no separate Autopilot run. (Same switch as the pill on the Ship screen.)"/>
+    </Panel>
+    <Panel title="Autopilot in Batch">
+      <div className="space-y-3">
+        <Toggle k="autoRulesInBatch" label="Auto-apply rules when Batch loads" hint="Fills in each order's service from your rules automatically — no need to click ‘Apply Autopilot rules’. You still review and click Create labels."/>
+        <div className={c.autoRulesInBatch?"":"opacity-40 pointer-events-none"}>
+          <Toggle k="autoBookBatch" label="Also auto-book the batch (no click)" hint="After rules apply, select every ruled order and create labels automatically. Only runs when live booking is available. Held orders are always skipped. Use with care — this books real labels without a confirmation step."/>
+        </div>
+        {c.autoRulesInBatch&&c.autoBookBatch&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5 flex items-start gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5"/>Fully hands-free: opening Batch will book labels for every rule-matched order. Your Spending cap and held-order rules still apply.</div>}
+      </div>
+    </Panel>
+    <div className="text-[11px] text-stone-400 bg-stone-50 border border-stone-200 rounded px-3 py-2">The rules themselves live on the <b>Autopilot</b> tab. These switches only control where and how automatically those rules are applied.</div>
+    </>}
+
+    {cs==="labels"&&<>
     <Panel title="Printing">
       <div className="text-sm text-stone-600 space-y-2">
         <p>When a label books, the <b>system print dialog opens automatically</b> — pick the label printer once and Chrome remembers it.</p>
@@ -8851,7 +8901,9 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
       </div>}
     </Panel>
 
-    <Panel title="Ship screen">
+    </>}
+
+    {cs==="ship"&&<Panel title="Ship screen">
       <div className="flex gap-2 mb-3">
         <button onClick={speedMode} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">⚡ Speed mode — hide everything optional</button>
         <button onClick={fullMode} className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200">Full detail — show it all</button>
@@ -8860,7 +8912,6 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
         <Tog k="hideInvoice" label="Hide Invoice # field"/>
         <Tog k="hidePO" label="Hide PO # field"/>
         <Tog k="matchedOnly" label="Only show the requested service" hint="When a store order names the service the buyer paid for, show just that one — pre-highlighted, ready to print. Other services sit behind ‘Show all services’."/>
-        <Tog k="autoRulesOnShip" label="Run my Autopilot rules here too" hint="When an order you pull into the Ship tab matches one of your Autopilot rules, pre-highlight the service that rule picks — live, without running a separate Autopilot batch first."/>
         <Tog k="hideAddr23" label="Hide Address 2 & 3" hint="On both sender and receiver cards"/>
         <Tog k="hideOz" label="Hide the oz box" hint="Whole pounds are enough for most shops"/>
         <Tog k="hideInsure" label="Hide the Insure $ field"/>
@@ -8871,9 +8922,9 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
         <Sel k="defaultSignature" label="Default signature on new shipments" opts={[["none","None"],["indirect","Indirect"],["direct","Direct"],["adult","Adult"]]}/>
         <Num k="autoInsurePct" label="Auto-insure orders" hint="% of order value, applied when you load an order. 0 = off" suffix="%"/>
       </div>
-    </Panel>
+    </Panel>}
 
-    <Panel title="Rates & services">
+    {cs==="services"&&<Panel title="Rates & services">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         <Sel k="defaultView" label="Default rate view" opts={[["cheapest","Cheapest first"],["carrier","Grouped by carrier"]]}/>
         <Sel k="transitStyle" label="Transit display" opts={[["date","Days + arrival date"],["days","Day count only"]]}/>
@@ -8889,17 +8940,17 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
         </div>
         <div className="text-[11px] text-stone-400 mt-2">Renames are display-only on the Ship screen — labels and carrier paperwork keep the real FedEx name.</div>
       </div>
-    </Panel>
+    </Panel>}
 
-    <Panel title="Packing slips">
+    {cs==="slips"&&<Panel title="Packing slips">
       <div className="space-y-2.5">
         <label className="block text-sm text-stone-700">Thank-you message<textarea value={c.slipThanks} onChange={e=>set("slipThanks",e.target.value)} rows={2} placeholder="Thanks for your order! We appreciate you." className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></label>
         <label className="block text-sm text-stone-700">Footer line<input value={c.slipFooter} onChange={e=>set("slipFooter",e.target.value)} placeholder="Returns within 30 days · support@yourstore.com" className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></label>
         <div className="text-[11px] text-stone-400">Prints on every packing slip — Ship, Batch, and Orders.</div>
       </div>
-    </Panel>
+    </Panel>}
 
-    <Panel title="Lists & alerts">
+    {cs==="orders"&&<Panel title="Lists & alerts">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         <Sel k="density" label="List density" opts={[["comfortable","Comfortable"],["compact","Compact — more rows per screen"]]}/>
         <Num k="spendCap" label="Spending cap" hint="Hard-blocks booking any label above this. 0 = off" suffix="$"/>
@@ -8916,8 +8967,9 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
         <div className="text-[11px] text-stone-400 mt-1.5">Order # and actions always show.</div>
         <Num k="stuckDays" label="Stuck-shipment flag" hint="Highlight in-transit shipments older than this many days. 0 = off" suffix="days"/>
       </div>
-    </Panel>
+    </Panel>}
 
+    {cs==="appearance"&&<>
     {!deployMode&&<Panel title="Company logo">
       <div className="flex items-center gap-4">
         {settings.companyLogo
@@ -9040,6 +9092,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
     <div className="border border-dashed border-stone-300 rounded-lg p-3 text-[12px] text-stone-400">
       Coming soon: custom email wording, company-wide customization deployment, manager approvals, branded tracking pages.
     </div>
+    </>}
   </div>);
 }
 

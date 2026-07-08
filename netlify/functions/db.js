@@ -149,7 +149,16 @@ exports.handler = async (event) => {
         if (!w.ok) return J({ ok: false, error: "Could not create the admin account: " + ((w.err && w.err.text) || "").slice(0, 200) });
         return J({ ok: true, bootstrap: true, token: makeToken(admin), user: { ...admin, passHash: undefined } });
       }
-      const u = users.find((x) => x && String(x.email || "").toLowerCase() === email);
+      let u = users.find((x) => x && String(x.email || "").toLowerCase() === email);
+      /* Self-heal stale hashes: if the scrypt hash doesn't match but the record still carries
+         a plaintext password that DOES (legacy accounts, or a password changed through the old
+         local-mode path which couldn't re-hash), accept it and migrate to a fresh hash. */
+      if (u && !checkPw(password, u.passHash) && u.password && String(u.password) === password) {
+        const nh = hashPw(password);
+        const merged = users.map((x) => x && x.id === u.id ? { ...x, password: "", passHash: nh } : x);
+        await putStores({ users: merged });
+        u = { ...u, passHash: nh };
+      }
       if (!u || !checkPw(password, u.passHash)) return J({ ok: false, error: "Incorrect email or password." });
       if (u.status && u.status !== "active") return J({ ok: false, error: "This account is inactive. Contact your administrator." });
       return J({ ok: true, token: makeToken(u), user: { ...u, password: "", passHash: undefined } });
@@ -226,11 +235,16 @@ exports.handler = async (event) => {
         : ('Ship<span style="color:#0086E0;">Hub</span>' + (product === "ShipHub Admin" ? ' <span style="font-weight:600;color:#78716c;font-size:13px;">Admin</span>' : '') + '<div style="font-size:11px;color:#a8a29e;font-weight:600;margin-top:2px;">by Freightwire</div>');
       const link = appUrl + "/?reset=" + encodeURIComponent(rtoken);
       const key = (process.env.RESEND_API_KEY || "").trim();
-      if (!key) return J({ ...generic, configured: false });
+      if (!key) { console.log("[requestReset] NOT SENT — RESEND_API_KEY is missing on this site. Set it (as a normal, non-secret var) and redeploy."); return J({ ...generic, configured: false }); }
       const from = (process.env.EMAIL_FROM || "ShippingCloud <notify@shippingcloud.net>").trim();
-      await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
-        body: JSON.stringify({ from, to: [email], subject: "Reset your " + product + " password",
-          html: `<body style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;"><div style="max-width:480px;margin:0 auto;padding:28px 20px;"><div style="font-size:20px;font-weight:800;color:#0c4a6e;">${wordmark}</div><p style="font-size:14px;color:#57534e;">Someone (hopefully you) asked to reset the password for this account. This link works for 1 hour.</p><a href="${link}" style="display:inline-block;background:#0086E0;color:#fff;text-decoration:none;font-weight:600;border-radius:8px;padding:10px 18px;font-size:14px;">Choose a new password</a><p style="font-size:11px;color:#a8a29e;margin-top:16px;">Didn\u2019t ask for this? Ignore this email \u2014 nothing changes.</p></div></body>` }) }).catch(() => {});
+      try {
+        const rr = await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
+          body: JSON.stringify({ from, to: [email], subject: "Reset your " + product + " password",
+            html: `<body style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;"><div style="max-width:480px;margin:0 auto;padding:28px 20px;"><div style="font-size:20px;font-weight:800;color:#0c4a6e;">${wordmark}</div><p style="font-size:14px;color:#57534e;">Someone (hopefully you) asked to reset the password for this account. This link works for 1 hour.</p><a href="${link}" style="display:inline-block;background:#0086E0;color:#fff;text-decoration:none;font-weight:600;border-radius:8px;padding:10px 18px;font-size:14px;">Choose a new password</a><p style="font-size:11px;color:#a8a29e;margin-top:16px;">Didn\u2019t ask for this? Ignore this email \u2014 nothing changes.</p></div></body>` }) });
+        const rt = await rr.text().catch(() => "");
+        if (rr.ok) console.log("[requestReset] sent OK via Resend from <" + from + "> (origin " + (reqOrigin || "none") + ")");
+        else console.log("[requestReset] Resend REJECTED the send (" + rr.status + "): " + rt.slice(0, 300) + " — common causes: wrong API key, or the EMAIL_FROM domain isn't verified in the Resend dashboard.");
+      } catch (e) { console.log("[requestReset] network error reaching Resend: " + ((e && e.message) || e)); }
       return J(generic);
     }
     if (action === "resetPassword") {

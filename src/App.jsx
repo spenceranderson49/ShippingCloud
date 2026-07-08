@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v319";
+const BUILD_TAG="addr-v321";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -5841,6 +5841,30 @@ const EST_CACHE={};
 let EST_INFLIGHT=0;const EST_QUEUE=[];
 const estSlot=(fn)=>{ if(EST_INFLIGHT<3){EST_INFLIGHT++;fn();} else EST_QUEUE.push(fn); };
 const estDone=()=>{ EST_INFLIGHT=Math.max(0,EST_INFLIGHT-1); const nx=EST_QUEUE.shift(); if(nx){EST_INFLIGHT++;nx();} };
+/* Per-order Autopilot preview: runs the SAME runRuleEngine the Batch/Ship auto-book uses, so the
+   cell shows exactly what Autopilot would do to this order — the service it'd pick, a hold, or
+   "no rule matches". Pure rule eval (no rate fetch), so it's instant. */
+function AutopilotCell({o,ruleset,fromZip}){
+  const pred=React.useMemo(()=>{
+    const enabled=(ruleset||[]).filter(r=>r&&r.enabled);
+    if(!enabled.length)return {state:"no-rules"};
+    try{
+      const rr=runRuleEngine(enabled,[o],fromZip);
+      const r0=rr.results&&rr.results[0];
+      if(!r0||!r0.fires||!r0.fires.length)return {state:"no-match"};
+      const v=r0.view||{};
+      if(v.hold)return {state:"hold",rule:r0.fires[0].ruleName};
+      if(v.selectedService)return {state:"service",service:v.selectedService,rule:r0.fires[0].ruleName};
+      return {state:"other",rule:r0.fires[0].ruleName};
+    }catch(e){return {state:"err"};}
+  },[o.id,o.zip,o.weight,o.state,o.source,o.sku,ruleset,fromZip]);
+  if(pred.state==="no-rules")return <span className="text-[11px] text-stone-300">no rules</span>;
+  if(pred.state==="no-match")return <span className="text-[11px] text-stone-400">no rule matches</span>;
+  if(pred.state==="err")return <span className="text-[11px] text-stone-300">—</span>;
+  if(pred.state==="hold")return <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700" title={"Autopilot rule: "+pred.rule}><Pause className="w-3 h-3"/>Hold</span>;
+  if(pred.state==="service")return <span className="inline-flex items-center gap-1 text-[11px] font-medium text-violet-700" title={"Autopilot rule: "+pred.rule}><Zap className="w-3 h-3"/>{String(pred.service).replace(/^FedEx /,"")}</span>;
+  return <span className="inline-flex items-center gap-1 text-[11px] text-violet-600" title={"Autopilot rule: "+pred.rule}><Zap className="w-3 h-3"/>rule fires</span>;
+}
 function LiveEstRate({o,client,settings,rateRules,ruleset}){
   const fromZip=(client&&client.origin)||(settings&&settings.sender&&settings.sender.zip)||"";
   const key=o.id+"|"+(o.zip||"")+"|"+(o.weight||1)+"|"+fromZip;
@@ -6001,6 +6025,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
                     {!hideCol.has("items")&&<th className="text-left font-medium px-3 py-2">Items</th>}
                     {!hideCol.has("recipient")&&<th className="text-left font-medium px-3 py-2">Recipient</th>}
                     {!hideCol.has("requested")&&<th className="text-left font-medium px-3 py-2 whitespace-nowrap">Requested</th>}
+                    {custom.autopilotPreview&&!hideCol.has("autopilot")&&<th className="text-left font-medium px-3 py-2 whitespace-nowrap"><span className="inline-flex items-center gap-1"><Zap className="w-3 h-3 text-violet-500"/>Autopilot</span></th>}
                     {!hideCol.has("estRate")&&<th className="text-right font-medium px-3 py-2 whitespace-nowrap">Est. Rate</th>}
                     {!hideCol.has("qty")&&<th className="text-right font-medium px-3 py-2">Qty</th>}
                     {!hideCol.has("total")&&<th className="text-right font-medium px-3 py-2 whitespace-nowrap">Order total</th>}
@@ -6018,6 +6043,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
                       {!hideCol.has("items")&&<td className={ordPad}><div className="text-stone-700 truncate max-w-[220px]">{o.items||"—"}</div>{o.lineItems&&o.lineItems[0]&&o.lineItems[0].sku?<div className="text-[11px] text-stone-400 truncate max-w-[220px]">SKU {o.lineItems[0].sku}</div>:null}</td>}
                       {!hideCol.has("recipient")&&<td className={ordPad}><div className="text-stone-800 truncate max-w-[160px]">{o.customer||"—"}</div><div className="text-[11px] text-stone-400 truncate max-w-[160px]">{o.city}{o.state?`, ${o.state}`:""}</div></td>}
                       {!hideCol.has("requested")&&<td className="px-3 py-2.5 text-stone-500 whitespace-nowrap">{o.shippingService||"—"}</td>}
+                      {custom.autopilotPreview&&!hideCol.has("autopilot")&&<td className="px-3 py-2.5 whitespace-nowrap"><AutopilotCell o={o} ruleset={ruleset} fromZip={(client&&client.origin)||(settings&&settings.sender&&settings.sender.zip)||""}/></td>}
                       {!hideCol.has("estRate")&&<td className="px-3 py-2.5 text-right whitespace-nowrap"><LiveEstRate o={o} client={client} settings={settings} rateRules={rateRules} ruleset={ruleset}/></td>}
                       {!hideCol.has("qty")&&<td className="px-3 py-2.5 text-right text-stone-600">{o.itemCount||"—"}</td>}
                       {!hideCol.has("total")&&<td className="px-3 py-2.5 text-right font-mono text-stone-800 whitespace-nowrap">${o.total}</td>}
@@ -7963,6 +7989,62 @@ const DEFAULT_RECEIPT_LINES=[{id:"rl1",field:"recipientName",label:"To",custom:"
    draggable chip. Dropping a chip saves x/y fractions into settings; the printer places text at
    the same fractions, so the designer IS the print preview. Chips never dragged keep no x/y and
    auto-flow across the tab at print time. */
+/* Whole-stock preview: a scaled picture of exactly what comes out of the printer for the chosen
+   label size — a mock 4×6 shipping label in the label region, the dashed tear line on the
+   perforation, and YOUR doc-tab fields (via the real layoutDocTab engine) on the tab. Updates
+   live as label size or tab layout changes, so it's a true before-you-print preview. */
+function LabelStockPreview({size,zones,showLabels,tabStock}){
+  const [SW,SH]=stockDims(size);
+  const PXIN=44;                                  // on-screen inches → px (small, fits the panel)
+  const W=Math.round(SW*PXIN),H=Math.round(SH*PXIN);
+  const labelRegionIn=(SW>4.5)?SH:6;
+  const tabIn=Math.max(0,Math.round((SH-labelRegionIn)*100)/100);
+  const leading=tabStock==="leading";
+  const regionPx=Math.round(labelRegionIn*PXIN);
+  const geo=tabGeom(leading,regionPx,H);
+  const hasTab=tabIn>0.05&&zones&&zones.length;
+  // lay the tab fields out with the print engine at this preview scale
+  const meas=React.useMemo(()=>{const c=document.createElement("canvas");const g=c.getContext("2d");return (txt,fs)=>{g.font=fs+"px system-ui,Arial";return g.measureText(txt).width;};},[]);
+  const SAMPLE={reference:"SIM-1042",invoiceNo:"INV-88",orderNo:"#1042",shipDate:"7/8/26",service:"FedEx 2Day",weight:"3 lb",pieces:"1",declaredValue:"$100",recipientName:"Jane Doe",recipientCompany:"Acme Co",recipientZip:"84084",senderName:"S. Anderson",senderCompany:"ShipHub",cost:"$9.12",tracking:"794912345678"};
+  const txtOf=(z)=>(showLabels&&z.label?z.label+": ":"")+(z.field==="custom"?(z.custom||"TEXT"):(SAMPLE[z.field]||z.field));
+  const pad=Math.round(Math.min(0.14,Math.max(0.03,(tabIn||0.75)*0.18))*PXIN);
+  const items=(zones||[]).map(z=>({txt:txtOf(z),fs:Math.max(6,Math.round((z.size||9)*PXIN/72)),x:z.x,y:z.y}));
+  const placed=hasTab?layoutDocTab(items,W,geo.textTop,geo.textBottom,pad,meas):[];
+  return (<div className="flex items-start gap-4">
+    <div className="relative bg-white border border-stone-300 shadow-sm rounded-sm overflow-hidden shrink-0" style={{width:W+"px",height:H+"px"}}>
+      {/* label region: a simplified FedEx-style 4×6 */}
+      <div className="absolute left-0 right-0 overflow-hidden" style={{top:geo.labelY+"px",height:regionPx+"px"}}>
+        <div className="absolute inset-0 p-1.5 flex flex-col" style={{fontSize:"6px",lineHeight:1.25}}>
+          <div className="flex justify-between text-stone-500"><span>ORIGIN ID:JDYA</span><span>SHIP DATE: 08JUL26</span></div>
+          <div className="text-stone-700 font-semibold mt-0.5">LAGENCE · BELL, CA 90201</div>
+          <div className="mt-1 border-t border-stone-300 pt-1"><span className="text-stone-400">TO </span><span className="font-bold text-stone-900" style={{fontSize:"9px"}}>JANE DOE</span></div>
+          <div className="font-bold text-stone-900" style={{fontSize:"8px"}}>123 MAIN ST</div>
+          <div className="font-bold text-stone-900" style={{fontSize:"9px"}}>AUSTIN TX 78701</div>
+          <div className="mt-auto">
+            <div className="flex items-end justify-between">
+              <div className="font-black tracking-tight text-stone-900" style={{fontSize:"12px"}}>FedEx</div>
+              <div className="w-5 h-5 border-2 border-stone-800 flex items-center justify-center font-bold" style={{fontSize:"9px"}}>E</div>
+            </div>
+            <div className="mt-0.5 flex gap-px h-6 items-stretch">{Array.from({length:60}).map((_,i)=><span key={i} className="bg-stone-900" style={{width:(i%4?1:2)+"px",opacity:i%3?1:0.5}}/>)}</div>
+            <div className="flex justify-between text-stone-700 mt-0.5" style={{fontSize:"7px"}}><span>7941 2345 6789</span><span>2DAY</span></div>
+          </div>
+        </div>
+      </div>
+      {/* tear line + our tab */}
+      {tabIn>0.05&&<>
+        <div className="absolute left-0 right-0 border-t border-dashed border-stone-400" style={{top:geo.tearY+"px"}}/>
+        {placed.map((p,i)=><div key={i} className="absolute font-mono text-stone-900 whitespace-nowrap" style={{left:p.px+"px",top:(p.py-p.fs)+"px",fontSize:p.fs+"px",lineHeight:1}}>{p.txt}</div>)}
+        {!zones.length&&<div className="absolute inset-x-0 text-center text-stone-300" style={{top:(geo.textTop+2)+"px",fontSize:"7px"}}>your tab fields appear here</div>}
+      </>}
+    </div>
+    <div className="text-[11px] text-stone-500 leading-relaxed pt-1">
+      <div className="font-semibold text-stone-700 mb-1">This is what prints on {size==="4x6"?"4×6":size==="4x625"?"4×6.25":size==="4x65"?"4×6.5":size==="4x675"?"4×6.75":size==="4x8"?"4×8":size==="4x9"?"4×9":"letter"} stock</div>
+      {tabIn>0.05
+        ? <>The {tabIn}″ doc tab is {leading?"above":"below"} the tear line. The shipping label is a plain 4×6; your tab fields print exactly where the designer shows them.</>
+        : <>Plain 4×6 label — no doc tab on this size. Pick 4×6.25 or larger to get a tab.</>}
+    </div>
+  </div>);
+}
 function DocTabDesigner({zones,setZone,onClearLayout,showLabels,tabHIn}){
   const ref=React.useRef(null);
   const [drag,setDrag]=React.useState(null);
@@ -8191,6 +8273,10 @@ function PrinterSettings({settings,setSettings}){
             <button onClick={()=>delZone(z.id)} className="text-stone-300 hover:text-rose-500 ml-auto"><Trash2 className="w-3.5 h-3.5"/></button>
           </div>))}
           <button onClick={addZone} className="text-xs text-[#0086E0] font-medium flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add zone</button>
+        </div>
+        <div className="rounded-lg border border-stone-200 bg-stone-50/60 p-3">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Label preview — what actually prints</div>
+          <LabelStockPreview size={(settings.printer||{}).labelSize||"4x6"} zones={dtZones} showLabels={dt.showLabels!==false} tabStock={dt.stock||"trailing"}/>
         </div>
         <div className="rounded-lg border border-stone-200 bg-white p-3">
           <DocTabDesigner zones={dtZones} setZone={setZone} showLabels={dt.showLabels!==false}
@@ -9639,8 +9725,9 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
       </div>
       <div className="border-t border-stone-100 mt-3 pt-3">
         <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Orders table columns</div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-          {[["age","Age"],["date","Order date"],["items","Items"],["recipient","Recipient"],["requested","Requested"],["qty","Qty"],["total","Order total"],["status","Status"]].map(([k,l])=>{
+        <Tog k="autopilotPreview" label="Show an Autopilot preview column" hint="Adds a column to the Orders table showing what your Autopilot rules would pick for each order — the service, a hold, or 'no rule matches' — before you ship. Runs your real rules, updates live."/>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mt-2">
+          {[["age","Age"],["date","Order date"],["items","Items"],["recipient","Recipient"],["requested","Requested"],["qty","Qty"],["total","Order total"],["status","Status"],...(c.autopilotPreview?[["autopilot","Autopilot"]]:[])].map(([k,l])=>{
             const hidden=(c.orderCols||[]).includes(k);
             return <label key={k} className="flex items-center gap-1.5 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!hidden} onChange={()=>{const nx=new Set(c.orderCols||[]);hidden?nx.delete(k):nx.add(k);set("orderCols",[...nx]);}} className="accent-[#0086E0]"/><span className={hidden?"text-stone-300":""}>{l}</span></label>;
           })}

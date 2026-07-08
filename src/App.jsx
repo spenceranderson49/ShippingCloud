@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v288";
+const BUILD_TAG="addr-v289";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -4815,6 +4815,27 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     setShipStatus({state:"pending",key:q.key,orderId:res.orderId});
     pollLabel(eng,res.orderId,done).then(r=>{ if(r&&r.timedOut){ onPending&&onPending({orderId:res.orderId,rec:buildRec(q,carrier,{}),service:q.label,carrier,orderRef:selectedOrder}); setShipStatus({state:"pending_timeout",key:q.key});setBought(null);} });
   };
+  /* Fully-automated Ship: when enabled, a rule-matched order books itself the moment its
+     LIVE rate is in and FedEx has classified the address. Guards: live booking only, never
+     estimates; never before address classification (Ground↔Home swap must resolve first);
+     once per order (ref), never while booking/booked. print() still runs its own required-
+     field validation — a missing phone/email surfaces the normal error instead of booking. */
+  const autoBookedRef=React.useRef(null);
+  useEffect(()=>{
+    if(!custom.autoBookOnShip||!custom.autoRulesOnShip)return;
+    if(!selectedOrder||autoBookedRef.current===selectedOrder)return;
+    if(!ready||rateSrc.loading||!rateSrc.live)return;
+    if(!addrClassified)return;
+    if(bought||shipStatus)return;
+    if(!matched||matched.src!=="autopilot")return;
+    const q=quotes.find(x=>x.key===matched.key);
+    if(!q||(q.sell??q.cost)==null)return;
+    const eng=englandFor(client,settings);
+    if(!(eng&&eng.enabled))return;
+    autoBookedRef.current=selectedOrder;
+    print(q);
+  },[selectedOrder,matched,quotes,ready,rateSrc.live,rateSrc.loading,addrClassified,bought,shipStatus,custom.autoBookOnShip,custom.autoRulesOnShip]);
+
   const sendEmail=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Tracking for your ${settings.company} shipment ☁️`,type:"Shipped",body:emailMsg});setSent("email");setTimeout(()=>setSent(""),1800);};
   const sendLabel=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Your shipping label from ${settings.company}`,type:"Label",body:emailMsg});setSent("label");setTimeout(()=>setSent(""),1800);};
   const saveMsgDefault=()=>{setSettings&&setSettings(s=>({...s,emailMessage:emailMsg}));setMsgSaved(true);setTimeout(()=>setMsgSaved(false),1600);};
@@ -5076,25 +5097,16 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                   </select>}
                 </div>}
                 {selectedOrder&&(()=>{const so=orders.find(o=>o.id===selectedOrder);return so&&(so.shippingService||so.source)?<div className="flex items-center gap-2 text-xs text-stone-600 bg-stone-100 border border-stone-200 rounded-lg px-3 py-2"><Truck className="w-3.5 h-3.5 text-stone-400"/>From order <b>{so.name}</b>{so.source?` (${so.source})`:""} — buyer requested <b>{so.shippingService||"Standard"}</b>.</div>:null;})()}
-        {/* Live-rates switch lives right on this bar — same setting as Settings → Carrier
-            accounts → "Use live rates", so either place controls it. Flipping it re-runs the
-            rate effect (it depends on settings.england) and refetches immediately. */}
-        {ready&&(()=>{const liveOn=!!(settings.england&&settings.england.enabled);return <div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
-          <span className="flex items-center gap-2 flex-1 min-w-0">
-          {rateSrc.loading?<><Loader2 className="w-3.5 h-3.5 animate-spin shrink-0"/>Fetching live rates…</>
-          :rateSrc.live?<><Wifi className="w-3.5 h-3.5 shrink-0"/>Live rates from your FedEx account</>
-          :liveOn?<><Calculator className="w-3.5 h-3.5 shrink-0"/>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""} — live rates are on but no live prices came back, so estimates are shown</>
-          :<><Calculator className="w-3.5 h-3.5 shrink-0"/>Estimated rates — flip the switch to price with your real FedEx account</>}
-          </span>
-          <button onClick={()=>setSettings(p=>({...p,england:{...(p.england||{}),enabled:!(p.england&&p.england.enabled)}}))} title={liveOn?"Live FedEx rates are on — click to switch to estimates":"Live FedEx rates are off — click to price with your real account"} className="flex items-center gap-1.5 shrink-0 font-medium">
-            <span>Live rates {liveOn?"on":"off"}</span>
-            <span className={`w-8 h-5 rounded-full flex items-center px-0.5 transition-colors ${liveOn?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></span>
-          </button>
-        </div>;})()}
-        {ready&&!rateSrc.live&&!rateSrc.loading&&rateSrc.diag&&<div className="text-[11px] text-stone-400 -mt-1 px-1">
+        {/* Rate-source banner — hideable via Settings → Customizations → Ship screen */}
+        {ready&&!custom.hideRateSrcBar&&<div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
+          {rateSrc.loading?<><Loader2 className="w-3.5 h-3.5 animate-spin"/>Fetching live rates…</>
+          :rateSrc.live?<><Wifi className="w-3.5 h-3.5"/>Live rates from your FedEx account</>
+          :<><Calculator className="w-3.5 h-3.5"/>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""} — turn on live rates in Settings → Carrier accounts to price with your real account</>}
+        </div>}
+        {ready&&!custom.hideRateSrcBar&&!rateSrc.live&&!rateSrc.loading&&rateSrc.diag&&<div className="text-[11px] text-stone-400 -mt-1 px-1">
           Tried England on your <b>{rateSrc.diag.src==="customer"?"customer's":"main"}</b> account · from ZIP {rateSrc.diag.fromZip} · customer ID {rateSrc.diag.cust} · key {rateSrc.diag.key} · {rateSrc.diag.enabled?"live toggle ON":"live toggle OFF"}{!rateSrc.diag.hasKey?" · no API key found":""}{!rateSrc.diag.hasCust?" · no customer ID found":""}{rateSrc.diag.fromZip==="(none)"?" — no origin ZIP: set your sender ZIP or the customer's origin.":""}{rateSrc.error&&/401|invalid/i.test(rateSrc.error)?" — England rejected this key/ID pair. Re-enter it in Settings → Carrier accounts and Test again.":""}
         </div>}
-        {liveRuleStatus&&<div className={`text-[11px] rounded px-3 py-2 mb-2 flex items-center gap-1.5 ${liveRuleStatus.state==="fired"?"bg-emerald-50 border border-emerald-200 text-emerald-800":liveRuleStatus.state==="error"?"bg-rose-50 border border-rose-200 text-rose-700":"bg-stone-50 border border-stone-200 text-stone-500"}`}>
+        {liveRuleStatus&&!custom.hideAutopilotBox&&<div className={`text-[11px] rounded px-3 py-2 mb-2 flex items-center gap-1.5 ${liveRuleStatus.state==="fired"?"bg-emerald-50 border border-emerald-200 text-emerald-800":liveRuleStatus.state==="error"?"bg-rose-50 border border-rose-200 text-rose-700":"bg-stone-50 border border-stone-200 text-stone-500"}`}>
           <Zap className="w-3.5 h-3.5 shrink-0"/>
           {liveRuleStatus.state==="fired"&&(()=>{const _sw=groundFamilySwap(liveRuleStatus.service,addrClassified?residential:null);return <span>Autopilot rule <b>"{liveRuleStatus.rule}"</b> matched this order — highlighted <b>{_sw}</b> below{_sw!==liveRuleStatus.service&&<span> (rule says {liveRuleStatus.service}, but FedEx classified this address {residential?"residential, so Home Delivery applies":"commercial, so Ground applies"})</span>}.</span>;})()}
           {liveRuleStatus.state==="no-order"&&<span>Autopilot is on, but no order is loaded on this screen — it only checks orders pulled in from the sidebar, not manually-typed shipments.</span>}
@@ -8905,8 +8917,6 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
   const togTab=(k)=>{const nx=new Set(hiddenTabs); nx.has(k)?nx.delete(k):nx.add(k); set("hiddenTabs",[...nx]);};
   const order=(c.tabOrder&&c.tabOrder.length)?c.tabOrder:tabChoices.map(x=>x[0]);
   const move=(k,dir)=>{const a=[...order];const i=a.indexOf(k);const j=i+dir;if(i<0||j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];set("tabOrder",a);};
-  const speedMode=()=>setSettings(p=>({...p,custom:{...(p.custom||{}),hideInvoice:true,hidePO:true,hideAddr23:true,hideOz:true,hideInsure:true}}));
-  const fullMode=()=>setSettings(p=>({...p,custom:{...(p.custom||{}),hideInvoice:false,hidePO:false,hideAddr23:false,hideOz:false,hideInsure:false}}));
   const [cs,setCs]=useState("autopilot");
   const CTABS=[["autopilot","Autopilot"],["services","Services"],["ship","Ship screen"],["orders","Orders & lists"],["appearance","Appearance"],["slips","Packing slips"]];   // Labels & printing moved to Settings → Printer settings (v281)
   const Toggle=({k,label,hint})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700">
@@ -8921,7 +8931,13 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
 
     {cs==="autopilot"&&<>
     <Panel title="Autopilot on the Ship screen">
-      <Toggle k="autoRulesOnShip" label="Run my Autopilot rules on the Ship tab" hint="When an order you pull into Ship matches a rule, pre-highlight the service that rule picks — live, no separate Autopilot run."/>
+      <div className="space-y-3">
+        <Toggle k="autoRulesOnShip" label="Run my Autopilot rules on the Ship tab" hint="When an order you pull into Ship matches a rule, pre-highlight the service that rule picks — live, no separate Autopilot run."/>
+        <div className={c.autoRulesOnShip?"":"opacity-40 pointer-events-none"}>
+          <Toggle k="autoBookOnShip" label="Also print the label automatically (no click)" hint="When a rule matches an order you pull into Ship AND live FedEx rates are in AND the address is classified, the matched service books and prints by itself — zero clicks. Only fires on live booking, once per order."/>
+        </div>
+        {c.autoRulesOnShip&&c.autoBookOnShip&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5 flex items-start gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5"/>Fully hands-free: pulling a rule-matched order into Ship books a real label immediately, with no confirmation step.</div>}
+      </div>
     </Panel>
     <Panel title="Autopilot in Batch">
       <div className="space-y-3">
@@ -8937,11 +8953,9 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
 
 
     {cs==="ship"&&<Panel title="Ship screen">
-      <div className="flex gap-2 mb-3">
-        <button onClick={speedMode} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">⚡ Speed mode — hide everything optional</button>
-        <button onClick={fullMode} className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200">Full detail — show it all</button>
-      </div>
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
+        <Tog k="hideRateSrcBar" label="Hide the rate-source banner" hint="Removes the ‘Live rates from your FedEx account / Estimated rates’ strip above the service list."/>
+        <Tog k="hideAutopilotBox" label="Hide the Autopilot match banner" hint="Removes the ‘Autopilot rule matched…’ box above Select service. Rules still run and still pre-highlight the service."/>
         <Tog k="hideInvoice" label="Hide Invoice # field"/>
         <Tog k="hidePO" label="Hide PO # field"/>
         <Tog k="matchedOnly" label="Only show the requested service" hint="When a store order names the service the buyer paid for, show just that one — pre-highlighted, ready to print. Other services sit behind ‘Show all services’."/>

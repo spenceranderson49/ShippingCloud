@@ -264,6 +264,27 @@ exports.handler = async (event) => {
         const allUsers = (usersRow && Array.isArray(usersRow.value)) ? usersRow.value : [];
         const me = allUsers.find((x) => x && x.id === auth.uid) || null;
         stores.myAccess = { companyAdmin: !!(me && me.companyAdmin), clientId: (me && me.clientId) || null };
+        /* Pricing facts a customer session needs to quote correctly. Withholding ALL global
+           stores from non-admins also withheld the customer's OWN client record and rate
+           profile — so every customer login resolved to "unknown customer" (the amber banner)
+           and priced at raw carrier cost with no markup, because rateSellFor runs in the
+           browser and had neither the client nor the rules. Send exactly the slice that
+           belongs to them: their own client record and their assigned profile — never other
+           customers' records, other profiles, or the assignment map. */
+        const myCid = (me && me.clientId) || null;
+        if (myCid) {
+          const cRow = rows.find((row) => row && row.key === "clients");
+          const myClient = (cRow && Array.isArray(cRow.value)) ? cRow.value.find((c) => c && c.id === myCid) : null;
+          if (myClient) stores.clients = [myClient];
+          const rrRow = rows.find((row) => row && row.key === "rateRules");
+          const rr = (rrRow && rrRow.value && typeof rrRow.value === "object") ? rrRow.value : null;
+          if (rr) {
+            const profs = Array.isArray(rr.profiles) ? rr.profiles : [];
+            const pid = (rr.assign && rr.assign[myCid]) || "default";
+            const prof = profs.find((p) => p && p.id === pid) || profs.find((p) => p && p.id === "default") || null;
+            stores.rateRules = { profiles: prof ? [prof] : [], assign: { [myCid]: prof ? prof.id : "default" }, baseCosts: (rr.baseCosts && typeof rr.baseCosts === "object") ? rr.baseCosts : {} };
+          }
+        }
         if (me && me.companyAdmin && me.clientId) {
           stores.companyUsers = allUsers
             .filter((x) => x && x.role !== "admin" && x.clientId === me.clientId)

@@ -73,8 +73,34 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v335";
+const BUILD_TAG="addr-v339";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
+
+/* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
+   RUNNING build tag — instead of white-screening the whole app via the root boundary. The build tag
+   makes a stale deploy obvious at a glance, and Retry re-mounts just this subtree; "Hard refresh"
+   purges caches + service workers so a stale cached bundle can't keep crashing. */
+class TabBoundary extends React.Component {
+  constructor(p){ super(p); this.state={err:null}; }
+  static getDerivedStateFromError(err){ return {err}; }
+  componentDidCatch(err,info){ try{ console.error("[TabBoundary]",(this.props.name||"tab")+" crashed:",err&&err.message,"\n",info&&info.componentStack); }catch(e){} }
+  render(){
+    if(this.state.err){
+      const b=(typeof window!=="undefined"&&window.__SC_BUILD__)||"unknown";
+      const hard=()=>{ try{ if(window.caches&&caches.keys)caches.keys().then(ks=>ks.forEach(k=>caches.delete(k))); }catch(e){} try{ if(navigator.serviceWorker&&navigator.serviceWorker.getRegistrations)navigator.serviceWorker.getRegistrations().then(rs=>rs.forEach(r=>r.unregister())); }catch(e){} try{ const u=new URL(window.location.href); u.searchParams.set("_fresh",String(Date.now())); window.location.replace(u.toString()); }catch(e){ window.location.reload(); } };
+      return (<div className="max-w-md mx-auto mt-10 bg-white border border-stone-200 rounded-xl shadow-sm p-6">
+        <div className="flex items-center gap-2 text-amber-600 mb-2"><AlertTriangle className="w-5 h-5"/><span className="font-semibold text-stone-800">This screen hit an error</span></div>
+        <p className="text-sm text-stone-600 mb-3">The rest of the app is fine — only this tab stopped. Try again, and if it keeps happening do a hard refresh to clear any stale cached version.</p>
+        <div className="text-[11px] font-mono text-stone-400 mb-4">build {b}{this.state.err&&this.state.err.message?" \u00b7 "+String(this.state.err.message).slice(0,90):""}</div>
+        <div className="flex gap-2">
+          <button onClick={()=>this.setState({err:null})} className="text-sm font-semibold text-white bg-[#0086E0] rounded-lg px-4 py-2 hover:bg-[#0072BF]">Try again</button>
+          <button onClick={hard} className="text-sm text-stone-700 bg-stone-100 rounded-lg px-4 py-2 hover:bg-stone-200">Hard refresh (clears cache)</button>
+        </div>
+      </div>);
+    }
+    return this.props.children;
+  }
+}
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -674,9 +700,28 @@ async function directPrintPdf(base64,title,ctx){
    enabled, the label goes straight to the printer with NOTHING on screen — the preview modal
    used to flash open for a second just to auto-close itself. It now only appears if PrintNode
    rejects the job, so the dialog fallback still has a home and no label is ever lost. */
+/* Is this base64 actually a PDF? A real PDF's bytes begin with "%PDF" (base64 "JVBER"). FedEx/England
+   occasionally return an empty, truncated, or wrong-format payload; without this check the app would
+   render those as BLANK paper. We verify at the print chokepoint so a bad label is caught before it can
+   ever reach a printer — the single guarantee that "blank label" cannot recur silently. */
+function labelPdfLooksValid(base64){
+  if(!base64||typeof base64!=="string")return false;
+  const b=base64.replace(/^data:[^,]*,/,"").trim();
+  if(b.length<200)return false;                 // a real 4x6 label is many KB; sub-200 chars = empty/garbage
+  if(/^JVBER/i.test(b))return true;             // "%PDF" in base64 — the normal, correct case
+  try{ const head=atob(b.slice(0,12)); if(head.indexOf("%PDF")>=0)return true; }catch(e){ return false; }
+  return false;
+}
 function openLabelOrDirectPrint(payload,settings,setLabelPreview){
   const dp=(typeof window!=="undefined"&&window.__scDirectPrint)||null;
   const c=cz(settings);
+  /* HARD STOP on a blank/invalid label: never send non-PDF bytes to a printer or the renderer. Tell the
+     user plainly and keep the raw payload available, instead of quietly printing a blank page. */
+  if(payload&&payload.pdf&&!labelPdfLooksValid(payload.pdf)){
+    try{ window.dispatchEvent(new CustomEvent("sc-label-invalid",{detail:{tracking:payload.tracking||""}})); }catch(e){}
+    setLabelPreview({...payload,invalid:true});
+    return;
+  }
   /* Silent-to-printer when direct printing is on AND either:
        • skipBookedSummary (kiosk: no modal, auto-advance), or
        • directNoPreview   (you still hit Ship and see the booked summary — just no preview popup).
@@ -2000,10 +2045,12 @@ function SaveToast(){
     const onSaved=()=>{ const id=Date.now()+Math.random(); setMsgs(m=>[...m,{id,ok:true}]); setTimeout(()=>setMsgs(m=>m.filter(x=>x.id!==id)),2200); };
     const onFailed=(e)=>{ const id=Date.now()+Math.random(); const err=(e&&e.detail&&e.detail.error)||"offline"; setMsgs(m=>[...m,{id,ok:false,err}]); setTimeout(()=>setMsgs(m=>m.filter(x=>x.id!==id)),6000); };
     const onDirectFail=(e)=>{ const id=Date.now()+Math.random(); const reason=(e&&e.detail&&e.detail.reason)||"agent-unreachable"; setMsgs(m=>[...m,{id,ok:false,err:reason==="not-configured"?"Direct printing isn't set up — add your PrintNode key & printer in Printer settings":"Printer agent not reachable — check PrintNode is running. Showing the dialog instead"}]); setTimeout(()=>setMsgs(m=>m.filter(x=>x.id!==id)),7000); };
+    const onLabelInvalid=(e)=>{ const id=Date.now()+Math.random(); const t=(e&&e.detail&&e.detail.tracking)||""; setMsgs(m=>[...m,{id,ok:false,err:"The carrier returned a blank/invalid label"+(t?" for "+t:"")+" — nothing was sent to the printer. Re-book or check the carrier account."}]); setTimeout(()=>setMsgs(m=>m.filter(x=>x.id!==id)),9000); };
     window.addEventListener("sc-saved",onSaved);
     window.addEventListener("sc-save-failed",onFailed);
     window.addEventListener("sc-direct-print-failed",onDirectFail);
-    return ()=>{ window.removeEventListener("sc-saved",onSaved); window.removeEventListener("sc-save-failed",onFailed); window.removeEventListener("sc-direct-print-failed",onDirectFail); };
+    window.addEventListener("sc-label-invalid",onLabelInvalid);
+    return ()=>{ window.removeEventListener("sc-label-invalid",onLabelInvalid); window.removeEventListener("sc-saved",onSaved); window.removeEventListener("sc-save-failed",onFailed); window.removeEventListener("sc-direct-print-failed",onDirectFail); };
   },[]);
   if(!msgs.length)return null;
   const last=msgs[msgs.length-1];
@@ -5063,7 +5110,7 @@ function AppInner(){
           {tab==="ship"&&<Ship client={client} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={ruleset} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders} currentUser={currentUser} setUsers={setUsers} setCurrentUser={setCurrentUser} clients={clients}/>}
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
           {tab==="orders"&&<Orders orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} setSettings={setSettings} onShipped={onShipped} openOrderId={pendingOpenOrderId} onOpenedOrder={()=>setPendingOpenOrderId(null)}/>}
-          {tab==="batch"&&<Batch orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
+          {tab==="batch"&&<TabBoundary name="Batch"><Batch orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/></TabBoundary>}
           {tab==="shipments"&&<Shipments isAdmin={isAdmin} labels={labelStore} shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels} settings={settings}/>}
           {hkHelp&&<div onClick={()=>setHkHelp(false)} className="fixed bottom-4 right-4 z-50 bg-stone-900 text-white rounded-xl shadow-lg p-4 text-xs space-y-1.5 cursor-pointer">
             <div className="font-semibold text-sm mb-1">Keyboard shortcuts</div>
@@ -5579,7 +5626,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <PackNote/>
           {isPOBox(receiver.address1)&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-xs text-rose-700 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>This looks like a PO Box — FedEx can’t deliver to PO Boxes. Use a street address (or USPS when available).</div>}
           {(()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);return so&&orderHasHazmat(so,settings.products||[])?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Contains a hazmat / lithium-battery item — ship ground only; air services aren’t allowed.</div>:null;})()}
-          {(()=>{const d=dupShipment(reference,shipments);return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}). Booking again creates a second charge.</div>:null;})()}
+          {(()=>{const d=dupShipment(reference,shipments);return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}).</div>:null;})()}
           {pieces.map((p,i)=>(
             <div key={i} className="flex flex-wrap items-end gap-2 bg-white border border-stone-200 rounded-lg px-2 py-2">
               <div className="text-[11px] text-stone-400 font-mono w-6">#{i+1}</div>
@@ -5815,6 +5862,8 @@ function LabelPreviewModal({data,onClose,settings}){
   const rcCfg=st.receipt, dtCfg=st.docTab;
   useEffect(()=>{
     let dead=false;
+    /* Invalid/blank label: never attempt to render or print it — show a clear message instead. */
+    if(data.invalid){ setPgErr("The carrier returned a blank or invalid label. Nothing was printed. Try re-booking, or check the carrier account / label format."); return ()=>{dead=true;}; }
     try{ const u=pdfBlobUrl(data.pdf); setUrl(u); setTimeout(()=>{},0); }catch(e){ setPgErr("This label PDF couldn't be decoded."); }
     (async()=>{
       try{
@@ -7802,8 +7851,13 @@ function CheckoutRates({settings,setSettings,client,uid}){
 
 /* ════════ SETTINGS ════════ */
 function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,audit=[]}){
-  const [sec,setSec]=useState("general");
+  /* Remember which Settings sub-section you were on, so leaving Settings and coming back returns you to
+     the same panel instead of resetting to General. Persisted so it survives a full reload too. */
+  const [sec,setSecRaw]=useState(()=>lsGet("settingsSec","general"));
+  const setSec=(k)=>{ setSecRaw(k); lsSet("settingsSec",k); };
   const secs=[["general","General",Cog],["customize","Customizations",Sliders],["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["catalog","Product catalog",Boxes],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["reference","Reference Fields",Receipt],["cieditor","Commercial invoice",Receipt],["cihistory","CI history",FileText],["otherdocs","Other documents",FileText],["printer","Printer settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["billing","Billing",CreditCard],["integrations","Integrations",Layers],["subscription","Subscription",Star]];
+  /* If a previously-saved section no longer exists for this login, fall back to General. */
+  if(!secs.some(x=>x[0]===sec)) { if(sec!=="general") setSecRaw("general"); }
   return (
     <div className="flex flex-col md:flex-row gap-6">
       <aside className="md:w-56 shrink-0 space-y-1">{secs.map(([id,l,Icon])=><button key={id} onClick={()=>setSec(id)} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}</button>)}</aside>

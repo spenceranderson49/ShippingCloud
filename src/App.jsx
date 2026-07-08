@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v307";
+const BUILD_TAG="addr-v308";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -419,9 +419,19 @@ function stockDims(size){
   return [4,6];
 }
 function _loadImg(src){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error("img"));i.src=src;});}
-/* Compose the printed page at the selected stock size: label pinned to the top, a dashed tear
-   line, and the doc-tab fields below (Settings → Printer settings → Doc tab). This is what makes
-   the doc tab actually ride on the label instead of printing as a separate popup page.
+/* Tab geometry for both real-world doc-tab stock orientations: trailing (tab below the label —
+   UPS rolls and FedEx trailing stock) and leading (tab above the label — FedEx leading stock).
+   Pure math so it's unit-testable without a canvas. */
+function tabGeom(leading,lhPx,pageHpx){
+  const tabPx=Math.max(0,pageHpx-lhPx);
+  return leading
+    ? {labelY:tabPx, tearY:tabPx, textTop:0,    textBottom:tabPx,  tabPx}
+    : {labelY:0,     tearY:lhPx,  textTop:lhPx, textBottom:pageHpx, tabPx};
+}
+/* Compose the printed page at the selected stock size: label pinned to one end, a dashed tear
+   line, and the doc-tab fields on the tab (Settings → Printer settings → Doc tab, including the
+   Leading/Trailing stock position). This is what makes the doc tab actually ride on the label
+   instead of printing as a separate popup page.
    If the incoming PDF is already stock-height (England honored the requested stock and printed
    its own tab), the pages pass through untouched — never a double tab. */
 async function composeForStock(imgs,wIn,hIn,ctx){
@@ -438,19 +448,21 @@ async function composeForStock(imgs,wIn,hIn,ctx){
     const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);
     const lw=Math.round((wIn||4)*dpi),lh=Math.round((hIn||6)*dpi);
     const x=Math.max(0,Math.round((c.width-lw)/2));
-    g.drawImage(im,x,0,lw,lh);
-    if(c.height-lh>Math.round(0.2*dpi)){
+    const leading=!!(cfg&&cfg.docTab&&cfg.docTab.stock==="leading");
+    const geo=tabGeom(leading,lh,c.height);
+    g.drawImage(im,x,geo.labelY,lw,lh);
+    if(geo.tabPx>Math.round(0.2*dpi)){
       g.strokeStyle="#b8b2ab";g.setLineDash([Math.round(dpi*0.07),Math.round(dpi*0.07)]);
-      g.beginPath();g.moveTo(0,lh+1);g.lineTo(c.width,lh+1);g.stroke();g.setLineDash([]);
+      g.beginPath();g.moveTo(0,geo.tearY+(leading?-1:1));g.lineTo(c.width,geo.tearY+(leading?-1:1));g.stroke();g.setLineDash([]);
       const lines=(cfg&&cfg.docTab&&cfg.docTab.enabled)?buildDocTabLines(cfg.docTab,ctx||{}):[];
       g.fillStyle="#111";
       const tabIn=SH-(hIn||6);   // small tabs (¼", ½") get proportionally tighter padding
-      const pad=Math.round(Math.min(0.14,Math.max(0.03,tabIn*0.18))*dpi);let ty=lh+pad;
+      const pad=Math.round(Math.min(0.14,Math.max(0.03,tabIn*0.18))*dpi);let ty=geo.textTop+pad;
       lines.forEach(l=>{
         const fs=Math.max(8,Math.round((l.size||9)*dpi/72));
         g.font="600 "+fs+"px system-ui,Arial,sans-serif";
         ty+=fs;
-        if(ty>c.height-Math.round(0.06*dpi))return;   // clip to the tab — never overflow the stock
+        if(ty>geo.textBottom-Math.round(0.06*dpi))return;   // clip to the tab — never overflow onto the label
         g.fillText(((l.label?l.label+": ":"")+l.value).slice(0,90),pad,ty);
         ty+=Math.round(fs*0.5);
       });
@@ -581,7 +593,7 @@ async function directPrintPdf(base64,title,ctx){
 function openLabelOrDirectPrint(payload,settings,setLabelPreview){
   const dp=(typeof window!=="undefined"&&window.__scDirectPrint)||null;
   if(dp&&dp.enabled&&cz(settings).skipBookedSummary&&payload&&payload.pdf){
-    directPrintPdf(payload.pdf,"Shipping label"+(payload.tracking?" "+payload.tracking:""),recToDocCtx(payload.rec)).then(sent=>{ if(!sent)setLabelPreview(payload); });
+    directPrintPdf(payload.pdf,"Shipping label"+(payload.tracking?" "+payload.tracking:""),docCtxFor(payload.rec,payload.tracking)).then(sent=>{ if(!sent)setLabelPreview(payload); });
     return;
   }
   setLabelPreview(payload);
@@ -981,6 +993,7 @@ function resolveDocField(field,ctx,custom){
     case "senderName": return (c.sender&&c.sender.name)||c.senderName||"";
     case "senderCompany": return (c.sender&&c.sender.company)||c.senderCompany||"";
     case "cost": return c.cost!=null?("$"+c.cost):"";
+    case "tracking": return c.tracking||"";
     default: return "";
   }
 }
@@ -1041,6 +1054,9 @@ function recToDocCtx(rec){
     carrier:r.carrier||"", tracking:r.tracking||""
   };
 }
+/* Doc-tab context with a tracking fallback: freshly booked labels carry tracking on the
+   payload before the record settles, so the tab never prints a blank tracking line. */
+function docCtxFor(rec,tracking){const c=recToDocCtx(rec);if(!c.tracking&&tracking)c.tracking=String(tracking);return c;}
 /* Compact doc-tab strip — the tear-off reference block that rides with a thermal label. */
 function docTabHTML(docTab,ctx,tracking){
   const esc=(x)=>String(x==null?"":x).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
@@ -5577,11 +5593,11 @@ function LabelPreviewModal({data,onClose,settings}){
         if(dead)return;
         if(!r.imgs.length)throw new Error("no pages");
         try{ const cc=cz(st); const lg=cc.labelLogo||st.companyLogo||""; r.imgs=await stampLogo(r.imgs,cc,lg); }catch(e){}
-        try{ r=await composeForStock(r.imgs,r.wIn,r.hIn,recToDocCtx(data.rec)); }catch(e){}
+        try{ r=await composeForStock(r.imgs,r.wIn,r.hIn,docCtxFor(data.rec,data.tracking)); }catch(e){}
         setPages(r);
         if(!printed.current&&data.autoPrint!==false){
           printed.current=true;
-          const sent=await directPrintPdf(data.pdf,undefined,recToDocCtx(data.rec));
+          const sent=await directPrintPdf(data.pdf,undefined,docCtxFor(data.rec,data.tracking));
           if(sent){ if(cz(st).skipBookedSummary&&!dead)onClose(); }
           else printImagePages(r.imgs,r.wIn,r.hIn,()=>{ if(cz(st).skipBookedSummary&&!dead)onClose(); });   // fires once the system print dialog closes
         }
@@ -5594,7 +5610,7 @@ function LabelPreviewModal({data,onClose,settings}){
     return ()=>{dead=true;};
   },[data.pdf]);
   useEffect(()=>()=>{ if(url)try{URL.revokeObjectURL(url);}catch(e){} },[url]);
-  const doPrint=async()=>{ if(await directPrintPdf(data.pdf,undefined,recToDocCtx(data.rec)))return; if(pages&&pages.imgs.length){printImagePages(pages.imgs,pages.wIn,pages.hIn);} else { printLabelPdf(data.pdf,st,recToDocCtx(data.rec)); } };
+  const doPrint=async()=>{ if(await directPrintPdf(data.pdf,undefined,docCtxFor(data.rec,data.tracking)))return; if(pages&&pages.imgs.length){printImagePages(pages.imgs,pages.wIn,pages.hIn);} else { printLabelPdf(data.pdf,st,docCtxFor(data.rec,data.tracking)); } };
   const [copied,setCopied]=useState(false);
   const [showLabel,setShowLabel]=useState(false);
   const copyTracking=async()=>{ const t=String(data.tracking||""); if(!t)return;
@@ -7844,7 +7860,7 @@ function BoxLogic({settings,setSettings}){
   </div>);
 }
 // Fields that can be bound onto a doc tab zone or receipt line, resolved from shipment data at print time
-const DOCTAB_FIELDS=[["reference","Reference / PO"],["invoiceNo","Invoice #"],["orderNo","Order #"],["shipDate","Ship date"],["service","Service"],["weight","Weight"],["pieces","Piece count"],["declaredValue","Declared value"],["recipientName","Recipient name"],["recipientCompany","Recipient company"],["recipientZip","Recipient ZIP"],["senderName","Sender name"],["senderCompany","Sender company"],["cost","Your cost"],["custom","Custom text…"]];
+const DOCTAB_FIELDS=[["reference","Reference / PO"],["invoiceNo","Invoice #"],["orderNo","Order #"],["shipDate","Ship date"],["service","Service"],["weight","Weight"],["pieces","Piece count"],["declaredValue","Declared value"],["recipientName","Recipient name"],["recipientCompany","Recipient company"],["recipientZip","Recipient ZIP"],["senderName","Sender name"],["senderCompany","Sender company"],["cost","Your cost"],["tracking","Tracking number"],["custom","Custom text…"]];
 const DOCTAB_LABEL={};DOCTAB_FIELDS.forEach(([k,l])=>{DOCTAB_LABEL[k]=l;});
 const DEFAULT_DOCTABS=[{id:"dt1",zone:"01",field:"reference",label:"REF",custom:"",size:9},{id:"dt2",zone:"02",field:"shipDate",label:"SHIP DATE",custom:"",size:9},{id:"dt3",zone:"03",field:"weight",label:"WEIGHT",custom:"",size:9}];
 const DEFAULT_RECEIPT_LINES=[{id:"rl1",field:"recipientName",label:"To",custom:""},{id:"rl2",field:"reference",label:"Ref",custom:""},{id:"rl3",field:"service",label:"Service",custom:""},{id:"rl4",field:"weight",label:"Weight",custom:""},{id:"rl5",field:"cost",label:"Cost",custom:""}];

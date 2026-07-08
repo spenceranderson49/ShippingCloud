@@ -64,6 +64,12 @@ function serviceTypeFor(order) {
 const PKG = {
   envelope: "FEDEX_ENVELOPE", pak: "FEDEX_PAK", xs_box: "FEDEX_EXTRA_SMALL_BOX", small_box: "FEDEX_SMALL_BOX",
   medium_box: "FEDEX_MEDIUM_BOX", large_box: "FEDEX_LARGE_BOX", xl_box: "FEDEX_EXTRA_LARGE_BOX", tube: "FEDEX_TUBE",
+  /* the app's FEDEX_ONERATE .code vocabulary (what quote rows carry) — missing these meant every
+     One Rate booking fell to YOUR_PACKAGING + the FEDEX_ONE_RATE special, which FedEx rejects as
+     "package type not valid" */
+  fedex_envelope: "FEDEX_ENVELOPE", fedex_pak: "FEDEX_PAK", fedex_extra_small_box: "FEDEX_EXTRA_SMALL_BOX",
+  fedex_small_box: "FEDEX_SMALL_BOX", fedex_medium_box: "FEDEX_MEDIUM_BOX", fedex_large_box: "FEDEX_LARGE_BOX",
+  fedex_extra_large_box: "FEDEX_EXTRA_LARGE_BOX", fedex_tube: "FEDEX_TUBE",
   FEDEX_ENVELOPE: "FEDEX_ENVELOPE", FEDEX_PAK: "FEDEX_PAK", FEDEX_SMALL_BOX: "FEDEX_SMALL_BOX",
   FEDEX_MEDIUM_BOX: "FEDEX_MEDIUM_BOX", FEDEX_LARGE_BOX: "FEDEX_LARGE_BOX", FEDEX_EXTRA_LARGE_BOX: "FEDEX_EXTRA_LARGE_BOX",
   FEDEX_EXTRA_SMALL_BOX: "FEDEX_EXTRA_SMALL_BOX", FEDEX_TUBE: "FEDEX_TUBE"
@@ -178,12 +184,23 @@ exports.handler = async (event) => {
   if (o.saturdayDelivery) shipmentSpecial.push("SATURDAY_DELIVERY");
   if (oneRate) shipmentSpecial.push("FEDEX_ONE_RATE");
 
+  /* FedEx packaging criteria, enforced here so bad combos fail with a plain-English message
+     instead of FedEx's "package type not valid":
+     1. One Rate REQUIRES FedEx packaging (envelope/pak/box/tube) — YOUR_PACKAGING + ONE_RATE is invalid.
+     2. FedEx packaging is Express-only — Ground / Home Delivery / Ground Economy must be YOUR_PACKAGING. */
+  let packagingType = PKG[String(o.packageTypeCode || "").trim()] || PKG[String(o.packageTypeCode || "").toLowerCase()] || "YOUR_PACKAGING";
+  const groundish = /GROUND|HOME_DELIVERY|SMART_POST/.test(serviceType);
+  if (oneRate && packagingType === "YOUR_PACKAGING") {
+    return respond(200, { ok: false, error: "One Rate needs a FedEx box/envelope: this booking arrived with no recognizable FedEx packaging code (got \"" + (o.packageTypeCode || "none") + "\"). Pick the FedEx box on the shipment, or book the standard (non-One Rate) service instead." });
+  }
+  if (!oneRate && groundish && packagingType !== "YOUR_PACKAGING") packagingType = "YOUR_PACKAGING";   // FedEx boxes are invalid on ground services — coerce rather than fail the label
+
   const requestedShipment = {
     shipper: party({ ...sender, country: sender.country || "US" }),
     recipients: [Object.assign(party({ ...receiver, country: receiver.country || "US" }), {})],
     shipDatestamp: (o.shipmentDate && /^\d{4}-\d{2}-\d{2}$/.test(o.shipmentDate)) ? o.shipmentDate : new Date().toISOString().slice(0, 10),
     serviceType,
-    packagingType: PKG[String(o.packageTypeCode || "").trim()] || PKG[String(o.packageTypeCode || "").toLowerCase()] || "YOUR_PACKAGING",
+    packagingType,
     pickupType: "USE_SCHEDULED_PICKUP",
     blockInsightVisibility: false,
     shippingChargesPayment: payment,

@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v272";
+const BUILD_TAG="addr-v273";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1011,8 +1011,9 @@ function oneRateQuotes(box,ctx){
   const or=(rules&&rules.baseCosts&&rules.baseCosts.onerate)||null;
   if(or){
     const v=or[rateSvcKey(label)];
-    if(v!=null&&v!==""){ cost=Math.round(+v*100)/100; sell=rateSellFor(cost,label,ctx); }
+    if(v!=null&&v!==""){ cost=Math.round(+v*100)/100; }
   }
+  sell=rateSellFor(cost,label,ctx);   // flat rules price even with no imported table (cost stays null — margin unknown, sell exact)
   return [{key:"or_2day_"+box.code, carrier:"FedEx", carrierCode:"FEDEX", serviceCode:"fedex_2_day_one_rate", label, cost, sell, _oneRate:true, packageTypeCode:box.code, minDays:2, maxDays:2}];
 }
 /* Optional accessorials are fixed published fees — England's rate call does not return them, so we add the
@@ -1068,12 +1069,6 @@ const RATE_SERVICES={
     {k:"intl_priority",l:"FedEx International Priority",g:"International"},
     {k:"intl_priority_express",l:"FedEx International Priority Express",g:"International"},
     {k:"intl_first",l:"FedEx International First",g:"International"},
-    {k:"first_overnight_freight",l:"FedEx First Overnight Freight",g:"Express Freight"},
-    {k:"1day_freight",l:"FedEx 1Day Freight",g:"Express Freight"},
-    {k:"2day_freight",l:"FedEx 2Day Freight",g:"Express Freight"},
-    {k:"3day_freight",l:"FedEx 3Day Freight",g:"Express Freight"},
-    {k:"intl_priority_freight",l:"FedEx International Priority Freight",g:"Express Freight"},
-    {k:"intl_economy_freight",l:"FedEx International Economy Freight",g:"Express Freight"}
   ].concat(OR_RATE_SVCS.reduce((acc,sv)=>acc.concat(OR_RATE_PKGS.map(pk=>({k:"or_"+sv[0]+"_"+pk[0],l:"One Rate "+sv[1]+" "+pk[1],g:"One Rate",or:true}))),[])),
   dhl:[
     {k:"dhl_worldwide",l:"DHL Express Worldwide",g:"International"},
@@ -1259,8 +1254,18 @@ function baseCostLookup(rules,key,weight,zone){
 /* Sell price for one quote. ctx: {rules, client, prof?, fromZip, toZip, weight}. Falls back to the
    customer's legacy flat markup whenever no rule answers — nothing changes until a rule is set. */
 function rateSellFor(cost,label,ctx){
-  if(cost==null)return null;
   const c=ctx||{};
+  if(cost==null){
+    /* Flat-priced services sell at exactly their flat price even when the carrier cost is
+       unknown (e.g. One Rate with no imported table) — the whole point of flat is that the
+       sell never depends on cost. Everything else still needs a cost to price. */
+    if(c.rules){
+      const prof0=c.prof||rateProfileFor(c.rules,c.client&&c.client.id);
+      const r0=prof0&&prof0.services&&prof0.services[rateSvcKey(label)];
+      if(r0&&r0.on!==false&&r0.basis==="flat"&&r0.pct!=null&&r0.pct!==""&&!isNaN(+r0.pct))return Math.round(+r0.pct*100)/100;
+    }
+    return null;
+  }
   /* No platform-wide default markup — each account sells at its own account-wide
      markup, or per-service rules, or raw cost if nothing is set. Nothing applies
      to an account that hasn’t been explicitly priced. */
@@ -1288,6 +1293,10 @@ function rateSellFor(cost,label,ctx){
   } else if(rule.basis==="fixed"){
     const amt=num(rule.pct); if(amt==null)return fallback();
     sell=cost+amt;
+  } else if(rule.basis==="flat"){
+    /* Always sells at exactly this price — cost only moves the margin, never the sell. */
+    const amt=num(rule.pct); if(amt==null)return fallback();
+    return Math.round(amt*100)/100;
   } else {
     let pct=num(rule.pct);
     if(rule.breaks&&rule.breaks.length&&c.weight!=null){
@@ -2074,8 +2083,8 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
           <tr key={sv.k} className="border-t border-stone-100 first:border-t-0 hover:bg-stone-50">
             <td className="py-1.5 pl-3 pr-1 w-6"><input type="checkbox" checked={r.on!==false} onChange={e=>upProfSvc(prof.id,sv.k,{on:e.target.checked})} className="accent-[#0086E0]"/></td>
             <td className="py-1.5 pr-2 font-medium text-stone-800 whitespace-nowrap">{sv.l}</td>
-            <td className="py-1.5 pr-2"><Select value={r.basis||"pct"} onChange={e=>upProfSvc(prof.id,sv.k,{basis:e.target.value})}><option value="pct">% Markup (over England/FedEx cost)</option><option value="list">Discount off FedEx list %</option><option value="fixed">Fixed $ over cost</option></Select></td>
-            <td className="py-1.5 pr-2 whitespace-nowrap"><Input type="number" value={r.pct==null?"":r.pct} onChange={e=>upProfSvc(prof.id,sv.k,{pct:e.target.value})} className="w-20 text-right"/> <span className="text-stone-400 text-xs">{r.basis==="fixed"?"$":"%"}</span></td>
+            <td className="py-1.5 pr-2"><Select value={r.basis||"pct"} onChange={e=>upProfSvc(prof.id,sv.k,{basis:e.target.value})}><option value="pct">% Markup (over England/FedEx cost)</option><option value="list">Discount off FedEx list %</option><option value="fixed">Fixed $ over cost</option><option value="flat">Flat $ (always sells at exactly this)</option></Select></td>
+            <td className="py-1.5 pr-2 whitespace-nowrap"><Input type="number" value={r.pct==null?"":r.pct} onChange={e=>upProfSvc(prof.id,sv.k,{pct:e.target.value})} className="w-20 text-right"/> <span className="text-stone-400 text-xs">{(r.basis==="fixed"||r.basis==="flat")?"$":"%"}</span></td>
             <td className="py-1.5 pr-3 whitespace-nowrap"><span className="text-stone-400 text-xs">Min $</span> <Input type="number" value={r.min==null?"":r.min} onChange={e=>upProfSvc(prof.id,sv.k,{min:e.target.value})} className="w-24 text-right"/></td>
           </tr>);})}
       </tbody></table></div>
@@ -2304,6 +2313,7 @@ function RatesAdmin({clients=[],brand}){
   const [custView,setCustView]=useState("");
   const [openZ,setOpenZ]=useState({});
   const [openB,setOpenB]=useState({});
+  const [showHidden,setShowHidden]=useState(false);   // reveal rows hidden from the services table (cosmetic hide — pricing untouched)
   const [surEdit,setSurEdit]=useState(null);
   const [surQ,setSurQ]=useState("");
   const [sheet,setSheet]=useState(null);
@@ -2345,10 +2355,11 @@ function RatesAdmin({clients=[],brand}){
   const num2=(v)=>v==null||v===""||isNaN(+v)?"—":"$"+(+v).toFixed(2);
   /* sheet pricing with an explicit zone (the live resolver derives zone from zips) */
   const sheetSell=(rule,cost,weight,zone,key)=>{
-    if(cost==null)return null;
     const gFall=()=>null;   // no platform-wide default — a rate sheet cell with no rule shows "—", never an invented price
     if(!rule||rule.on===false)return gFall();
     const num=(x)=>(x==null||x==="")?null:+x;
+    if(rule.basis==="flat"){const a=num(rule.pct);if(a==null)return gFall();return {sell:Math.round(a*100)/100,starred:false};}
+    if(cost==null)return null;
     let sell=null;
     if(rule.basis==="list"){const list=baseCostLookup(rules,"list:"+key,weight,zone);const d=num(rule.pct);if(list==null||d==null)return gFall();sell=list*(1-d/100);}
     else if(rule.basis==="fixed"){const a=num(rule.pct);if(a==null)return gFall();sell=cost+a;}
@@ -2448,6 +2459,12 @@ function RatesAdmin({clients=[],brand}){
   const dropTable=(key)=>{if(!window.confirm("Remove this table?"))return;const bc={...baseCosts};delete bc[key];upRules({baseCosts:bc});};
   const svcList=RATE_SERVICES[carrier]||[];
   const groups=[];svcList.forEach(s=>{let g=groups.find(x=>x.g===s.g);if(!g){g={g:s.g,items:[]};groups.push(g);}g.items.push(s);});
+  /* Cosmetic row-hiding so the services table isn't cluttered by services you never sell.
+     Hiding a row does NOT change pricing — the on/off checkbox does that. Stored once in
+     rateRules (shared across profiles), admin-only UI. */
+  const svcHiddenMap=rules.svcHidden||{};
+  const hiddenCount=svcList.filter(s=>svcHiddenMap[s.k]).length;
+  const togHideSvc=(k)=>upRules({svcHidden:{...svcHiddenMap,[k]:!svcHiddenMap[k]}});
   const custName=(id)=>{const c=clients.find(x=>x.id===id);return c?c.name:id;};
   const assignedTo=(pid)=>clients.filter(c=>(assign[c.id]||"default")===pid);
   const surRow=(prof.surcharges||{});
@@ -2493,40 +2510,46 @@ function RatesAdmin({clients=[],brand}){
         {[["services","Services"],["surcharges","Surcharges"],["base","Base costs"]].map(([v,l])=><button key={v} onClick={()=>setTab(v)} className={`text-sm px-3 py-1.5 rounded-lg ${tab===v?"bg-stone-100 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-50"}`}>{l}</button>)}
       </div>
 
-      {tab==="services"&&<div className="overflow-x-auto"><table className="w-full text-sm min-w-[860px]">
+      {tab==="services"&&<div className="overflow-x-auto">
+        {hiddenCount>0&&<div className="flex justify-end mb-1"><button onClick={()=>setShowHidden(v=>!v)} className="text-xs text-stone-500 hover:text-stone-700 flex items-center gap-1">{showHidden?<EyeOff className="w-3.5 h-3.5"/>:<Eye className="w-3.5 h-3.5"/>}{showHidden?"Done — collapse hidden rows":hiddenCount+" hidden row"+(hiddenCount>1?"s":"")+" — show"}</button></div>}
+        <table className="w-full text-sm min-w-[860px]">
         <tbody>
-        {groups.map(g=>(<React.Fragment key={g.g}>
-          <tr><td colSpan={7} className="pt-4 pb-1 text-[10px] uppercase tracking-widest text-stone-400 font-semibold">{g.g}{g.g==="One Rate"&&<span className="normal-case tracking-normal font-normal"> — England's quote API doesn't return One Rate pricing; these price from the imported One Rate table under Base costs</span>}</td></tr>
-          {g.items.map(s=>{
+        {groups.map(g=>{
+          const items=showHidden?g.items:g.items.filter(s=>!svcHiddenMap[s.k]);
+          if(!items.length)return null;
+          return (<React.Fragment key={g.g}>
+          <tr><td colSpan={8} className="pt-4 pb-1 text-[10px] uppercase tracking-widest text-stone-400 font-semibold">{g.g}{g.g==="One Rate"&&<span className="normal-case tracking-normal font-normal"> — priced from the imported One Rate table under Base costs, or exactly at a Flat $ rule</span>}</td></tr>
+          {items.map(s=>{
             const r=(prof.services||{})[s.k]||{};
             const zOn=!!(openZ[s.k]||(r.zones&&Object.keys(r.zones).length));
             const bOn=!!openB[s.k];
             const hasCost=!!baseCosts[s.k];const hasList=!!baseCosts["list:"+s.k];
             return (<React.Fragment key={s.k}>
-            <tr className="border-t border-stone-100 hover:bg-stone-50">
+            <tr className={`border-t border-stone-100 hover:bg-stone-50 ${svcHiddenMap[s.k]?"opacity-50":""}`}>
               <td className="py-2 pr-1 w-6"><input type="checkbox" checked={r.on!==false} onChange={e=>upSvc(s.k,{on:e.target.checked})} className="accent-[#0086E0]"/></td>
-              <td className="py-2 pr-2 font-medium text-stone-800 whitespace-nowrap">{s.l}{s.or&&!(baseCosts.onerate&&baseCosts.onerate[s.k]!=null)&&<Badge tone="stone">needs One Rate table</Badge>}</td>
-              <td className="py-2 pr-2"><Select value={r.basis||"pct"} onChange={e=>upSvc(s.k,{basis:e.target.value})}><option value="pct">% Markup (over England/FedEx cost)</option><option value="list">Discount off FedEx list %</option><option value="fixed">Fixed $ over cost</option></Select></td>
-              <td className="py-2 pr-2 whitespace-nowrap"><Input type="number" value={r.pct==null?"":r.pct} onChange={e=>upSvc(s.k,{pct:e.target.value})} className="w-20 text-right"/> <span className="text-stone-400 text-xs">{r.basis==="fixed"?"$":"%"}</span></td>
+              <td className="py-2 pr-2 font-medium text-stone-800 whitespace-nowrap">{s.l}{s.or&&r.basis!=="flat"&&!(baseCosts.onerate&&baseCosts.onerate[s.k]!=null)&&<Badge tone="stone">needs One Rate table or Flat $</Badge>}</td>
+              <td className="py-2 pr-2"><Select value={r.basis||"pct"} onChange={e=>upSvc(s.k,{basis:e.target.value})}><option value="pct">% Markup (over England/FedEx cost)</option><option value="list">Discount off FedEx list %</option><option value="fixed">Fixed $ over cost</option><option value="flat">Flat $ (always sells at exactly this)</option></Select></td>
+              <td className="py-2 pr-2 whitespace-nowrap"><Input type="number" value={r.pct==null?"":r.pct} onChange={e=>upSvc(s.k,{pct:e.target.value})} className="w-20 text-right"/> <span className="text-stone-400 text-xs">{(r.basis==="fixed"||r.basis==="flat")?"$":"%"}</span></td>
               <td className="py-2 pr-2 whitespace-nowrap"><span className="text-stone-400 text-xs">Min $</span> <Input type="number" value={r.min==null?"":r.min} onChange={e=>upSvc(s.k,{min:e.target.value})} className="w-24 text-right"/></td>
               <td className="py-2 pr-2 whitespace-nowrap">
                 <button onClick={()=>{setSheet(s);setSheetMargin(false);}} className="text-xs bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8]">View</button>{" "}
                 <button onClick={()=>setOpenB(o=>({...o,[s.k]:!o[s.k]}))} className={`text-xs rounded-lg px-2.5 py-1.5 ${r.breaks&&r.breaks.length?"bg-sky-100 text-sky-700":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>{r.breaks&&r.breaks.length?r.breaks.length+" weight breaks":"Weight breaks"}</button>
               </td>
               <td className="py-2 whitespace-nowrap">{s.z?<label className="flex items-center gap-1.5 text-xs text-stone-500 cursor-pointer"><input type="checkbox" checked={zOn} onChange={e=>{setOpenZ(o=>({...o,[s.k]:e.target.checked}));if(!e.target.checked)upSvc(s.k,{zones:null});}} className="accent-[#0086E0]"/>By zone</label>:<span className="text-[11px] text-stone-300">{hasList&&r.basis==="list"?<Badge tone="green">list table ✓</Badge>:null}</span>}</td>
+              <td className="py-2 pl-1 w-6 text-right"><button onClick={()=>togHideSvc(s.k)} title={svcHiddenMap[s.k]?"Show this row again":"Hide this row to declutter the table — pricing is untouched; the checkbox turns the rule off"} className="text-stone-300 hover:text-stone-500">{svcHiddenMap[s.k]?<Eye className="w-3.5 h-3.5"/>:<EyeOff className="w-3.5 h-3.5"/>}</button></td>
             </tr>
-            {zOn&&s.z&&<tr><td colSpan={7}><div className="ml-7 mb-2 border border-stone-200 bg-stone-50 rounded-lg p-2.5">
+            {zOn&&s.z&&<tr><td colSpan={8}><div className="ml-7 mb-2 border border-stone-200 bg-stone-50 rounded-lg p-2.5">
               <div className="flex gap-2 flex-wrap">{RATE_ZONES.map(z=>(<div key={z} className="text-center"><div className="text-[10px] font-semibold text-stone-500 mb-0.5">{z}</div><Input type="number" value={(r.zones&&r.zones[z])==null?"":r.zones[z]} onChange={e=>upSvc(s.k,{zones:{...(r.zones||{}),[z]:e.target.value}})} className="w-14 text-center"/></div>))}</div>
               <div className="text-[11px] text-stone-400 mt-1.5">Zone % overrides the service % when the lane's zone is known. Blank = fall back to the service %. AK/HI/territory zone columns light up once real FedEx zone charts are imported (today zones are estimated 2–8).</div>
             </div></td></tr>}
-            {bOn&&<tr><td colSpan={7}><div className="ml-7 mb-2 border border-stone-200 bg-stone-50 rounded-lg p-2.5 space-y-1.5">
+            {bOn&&<tr><td colSpan={8}><div className="ml-7 mb-2 border border-stone-200 bg-stone-50 rounded-lg p-2.5 space-y-1.5">
               {(r.breaks||[]).map((b,i)=>(<div key={i} className="flex items-center gap-2 text-sm"><span className="text-stone-500 text-xs">Up to</span><Input type="number" value={b.upTo} onChange={e=>{const br=[...r.breaks];br[i]={...br[i],upTo:e.target.value};upSvc(s.k,{breaks:br});}} className="w-20 text-right"/><span className="text-stone-500 text-xs">lb →</span><Input type="number" value={b.pct==null?"":b.pct} onChange={e=>{const br=[...r.breaks];br[i]={...br[i],pct:e.target.value};upSvc(s.k,{breaks:br});}} className="w-20 text-right"/><span className="text-stone-500 text-xs">%</span><button onClick={()=>upSvc(s.k,{breaks:r.breaks.filter((_,j)=>j!==i)})} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button></div>))}
               <button onClick={()=>upSvc(s.k,{breaks:[...(r.breaks||[]),{upTo:"",pct:""}]})} className="text-xs bg-stone-100 rounded-lg px-2.5 py-1.5 hover:bg-stone-200">＋ Add weight break</button>
               <div className="text-[11px] text-stone-400">Weight-band % overrides the service % (heaviest band applies above the last break). Zone % still wins over both.</div>
             </div></td></tr>}
             </React.Fragment>);
           })}
-        </React.Fragment>))}
+        </React.Fragment>);})}
         </tbody>
       </table></div>}
 

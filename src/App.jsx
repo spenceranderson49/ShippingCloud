@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v310";
+const BUILD_TAG="addr-v312";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -489,17 +489,24 @@ async function composeForStock(imgs,wIn,hIn,ctx){
     const dpi=Math.max(96,Math.round(im.naturalWidth/(wIn||4)));
     const c=document.createElement("canvas");c.width=Math.round(SW*dpi);c.height=Math.round(SH*dpi);
     const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);
-    const lw=Math.round((wIn||4)*dpi),lh=Math.round((hIn||6)*dpi);
+    /* The physical label area on doc-tab stock is ALWAYS 6″ — the tab is only what's beyond it
+       (0.75″ on FedEx 4×6.75). The bbox crop trims a label's bottom whitespace, so the artwork
+       can come back shorter than 6″; sizing the tab as "whatever's left over" inflated it past
+       the perforation and printed fields onto the label. Pin the region to 6″, draw the artwork
+       top-aligned inside it, and the tab boundary lands exactly on the perf. */
+    const lrIn=Math.min(6,SH);
+    const lrPx=Math.round(lrIn*dpi);
+    const lw=Math.round((wIn||4)*dpi),lh=Math.round(Math.min(hIn||6,lrIn)*dpi);
     const x=Math.max(0,Math.round((c.width-lw)/2));
     const leading=!!(cfg&&cfg.docTab&&cfg.docTab.stock==="leading");
-    const geo=tabGeom(leading,lh,c.height);
+    const geo=tabGeom(leading,lrPx,c.height);
     g.drawImage(im,x,geo.labelY,lw,lh);
     if(geo.tabPx>Math.round(0.2*dpi)){
       g.strokeStyle="#b8b2ab";g.setLineDash([Math.round(dpi*0.07),Math.round(dpi*0.07)]);
       g.beginPath();g.moveTo(0,geo.tearY+(leading?-1:1));g.lineTo(c.width,geo.tearY+(leading?-1:1));g.stroke();g.setLineDash([]);
       const lines=(cfg&&cfg.docTab&&cfg.docTab.enabled)?buildDocTabLines(cfg.docTab,ctx||{}):[];
       g.fillStyle="#111";
-      const tabIn=SH-(hIn||6);   // small tabs (¼", ½") get proportionally tighter padding
+      const tabIn=SH-lrIn;   // exact physical tab height — small tabs (¼", ½") get proportionally tighter padding
       const pad=Math.round(Math.min(0.14,Math.max(0.03,tabIn*0.18))*dpi);
       const items=lines.map(l=>({txt:((l.label?l.label+": ":"")+l.value).slice(0,90),fs:Math.max(8,Math.round((l.size||9)*dpi/72)),x:l.x,y:l.y}));
       const placed=layoutDocTab(items,c.width,geo.textTop,geo.textBottom,pad,(txt,fs)=>{g.font="600 "+fs+"px system-ui,Arial,sans-serif";return g.measureText(txt).width;});
@@ -6233,7 +6240,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
       ratesForOrder(dest,{residential,box,weightLb:totalWeight,fromZip,sender:settings.sender,packageTypeCode:selectedOrBox?selectedOrBox.code:"",signatureOption:sigOption,saturdayDelivery:sat,insuranceAmount:insurance||null},eng).then(res=>{ if(cancel)return;
         if(res&&res.live&&res.rates&&res.rates.length)setRateSrc({rates:res.rates,live:true,loading:false});
         else setRateSrc({rates:localOrderQuotes(),live:false,loading:false});
-      });
+      }).catch(()=>{ if(!cancel)setRateSrc({rates:localOrderQuotes(),live:false,loading:false}); });   // England reject/timeout/DNS flake must not strand the spinner — fall back to local estimates like the Ship tab does
     } else setRateSrc({rates:localOrderQuotes(),live:false,loading:false});
     return ()=>{cancel=true;};
   },[rateNonce,rcv.zip,totalWeight,box.L,box.W,box.H,residential,eng.enabled,eng.apiKey,eng.customerId,eng.base,eng.fedexAccount,sigOption,sat,insurance,orPkg]);   /* eng primitives, not the object (englandFor returns a new object each render — object identity in deps = infinite refetch). orPkg added: an explicit One Rate box pick changes packageTypeCode and must requote */

@@ -210,14 +210,27 @@ exports.handler = async (event) => {
       if (!u) return J(generic); // never reveal which emails exist
       const payload = b64u(JSON.stringify({ uid: String(u.id), kind: "pwreset", exp: Date.now() + 60 * 60 * 1000 }));
       const rtoken = payload + "." + sign(payload);
-      const appUrl = (process.env.APP_URL || "").replace(/\/+$/, "");
+      /* Send the person back to the site they asked from, with that site's branding.
+         Origin is whitelisted — never trusted raw — so a reset email can't be pointed
+         at an attacker's domain. Unknown origins fall back to APP_URL (retail). */
+      const ORIGIN_BRANDS = {
+        "https://shippingcloud.net": "ShippingCloud", "https://www.shippingcloud.net": "ShippingCloud",
+        "https://freightwireship.com": "ShipHub", "https://www.freightwireship.com": "ShipHub",
+        "https://admin.freightwireship.com": "ShipHub Admin"
+      };
+      const reqOrigin = String((event.headers && (event.headers.origin || event.headers.Origin)) || "").replace(/\/+$/, "");
+      const appUrl = ORIGIN_BRANDS[reqOrigin] ? reqOrigin : (process.env.APP_URL || "").replace(/\/+$/, "");
+      const product = ORIGIN_BRANDS[reqOrigin] || "ShippingCloud";
+      const wordmark = product === "ShippingCloud"
+        ? 'Shipping<span style="color:#0086E0;">Cloud</span>'
+        : ('Ship<span style="color:#0086E0;">Hub</span>' + (product === "ShipHub Admin" ? ' <span style="font-weight:600;color:#78716c;font-size:13px;">Admin</span>' : '') + '<div style="font-size:11px;color:#a8a29e;font-weight:600;margin-top:2px;">by Freightwire</div>');
       const link = appUrl + "/?reset=" + encodeURIComponent(rtoken);
       const key = (process.env.RESEND_API_KEY || "").trim();
       if (!key) return J({ ...generic, configured: false });
       const from = (process.env.EMAIL_FROM || "ShippingCloud <notify@shippingcloud.net>").trim();
       await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
-        body: JSON.stringify({ from, to: [email], subject: "Reset your ShippingCloud password",
-          html: `<body style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;"><div style="max-width:480px;margin:0 auto;padding:28px 20px;"><div style="font-size:20px;font-weight:800;color:#0c4a6e;">Shipping<span style=\"color:#0086E0;\">Cloud</span></div><p style="font-size:14px;color:#57534e;">Someone (hopefully you) asked to reset the password for this account. This link works for 1 hour.</p><a href="${link}" style="display:inline-block;background:#0086E0;color:#fff;text-decoration:none;font-weight:600;border-radius:8px;padding:10px 18px;font-size:14px;">Choose a new password</a><p style="font-size:11px;color:#a8a29e;margin-top:16px;">Didn\u2019t ask for this? Ignore this email \u2014 nothing changes.</p></div></body>` }) }).catch(() => {});
+        body: JSON.stringify({ from, to: [email], subject: "Reset your " + product + " password",
+          html: `<body style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;"><div style="max-width:480px;margin:0 auto;padding:28px 20px;"><div style="font-size:20px;font-weight:800;color:#0c4a6e;">${wordmark}</div><p style="font-size:14px;color:#57534e;">Someone (hopefully you) asked to reset the password for this account. This link works for 1 hour.</p><a href="${link}" style="display:inline-block;background:#0086E0;color:#fff;text-decoration:none;font-weight:600;border-radius:8px;padding:10px 18px;font-size:14px;">Choose a new password</a><p style="font-size:11px;color:#a8a29e;margin-top:16px;">Didn\u2019t ask for this? Ignore this email \u2014 nothing changes.</p></div></body>` }) }).catch(() => {});
       return J(generic);
     }
     if (action === "resetPassword") {

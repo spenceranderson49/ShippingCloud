@@ -204,7 +204,7 @@ exports.handler = async (event) => {
     pickupType: "USE_SCHEDULED_PICKUP",
     blockInsightVisibility: false,
     shippingChargesPayment: payment,
-    labelSpecification: { imageType: "PDF", labelStockType: "PAPER_4X6" },
+    labelSpecification: { imageType: "PDF", labelStockType: ({ "4x6": "PAPER_4X6", "4x625": "PAPER_4X6", "4x65": "PAPER_4X6", "4x675": "PAPER_4X675", "4x8": "PAPER_4X8", "4x9": "PAPER_4X9", "letter": "PAPER_85X11_TOP_HALF_LABEL" })[o.labelStock] || "PAPER_4X6" },
     requestedPackageLineItems: lineItems
   };
   requestedShipment.recipients[0].address.residential = !!o.residential;

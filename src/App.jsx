@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v333";
+const BUILD_TAG="addr-v335";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
@@ -2885,7 +2885,7 @@ function DraftBar({dirty,onSave,onUndo,onReset,resetLabel,savedNote}){
     <div className="flex-1"/>
     {onReset&&<button onClick={onReset} className="text-[13px] text-stone-500 hover:text-stone-700 px-2.5 py-1.5 rounded-lg hover:bg-stone-100">{resetLabel||"Restore defaults"}</button>}
     <button onClick={onUndo} disabled={!dirty} className="text-[13px] text-stone-600 disabled:opacity-40 px-3 py-1.5 rounded-lg border border-stone-200 hover:bg-stone-50">Undo changes</button>
-    <button onClick={onSave} disabled={!dirty} className="text-[13px] font-semibold text-white bg-[#0086E0] disabled:opacity-40 disabled:bg-stone-300 px-4 py-1.5 rounded-lg hover:bg-[#0072BF]">Save</button>
+    <button onClick={onSave} disabled={!dirty} className="text-[13px] font-semibold text-white bg-[#0086E0] disabled:opacity-40 disabled:bg-stone-300 px-4 py-1.5 rounded-lg hover:bg-[#0072BF]">Yes, proceed</button>
   </div>);
 }
 /* ════════ ADMIN → RATES (v196) — the rate markup database ════════ */
@@ -5331,6 +5331,17 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       const dropKey = residential ? "ground" : "home";   // residential → hide Ground; commercial → hide Home Delivery
       list=list.filter(q=>canonSvc(q.label)!==dropKey);
     }
+    /* De-duplicate by service family: a blank skeleton row and a live priced row for the SAME service
+       (e.g. "FedEx Ground®" placeholder + "FedEx Ground" live) must never both show. Keep the priced
+       one; if neither is priced, keep the first. This is what caused two identical Ground rows. */
+    {
+      const byFam={};
+      for(const q of list){ const fk=svcFamilyKey(q.label); const priced=(q.sell??q.cost)!=null;
+        if(!(fk in byFam)){ byFam[fk]=q; }
+        else { const cur=byFam[fk]; const curPriced=(cur.sell??cur.cost)!=null; if(priced&&!curPriced)byFam[fk]=q; }
+      }
+      list=list.filter(q=>byFam[svcFamilyKey(q.label)]===q);
+    }
     return list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,list:q.list,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,client)});})
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
   },[rateSrc,orRates,client,JSON.stringify(custom.hiddenServices||[]),JSON.stringify(client&&client.blockedServices||[]),rateRules,fxTransit,residential,addrClassified,sigOption,saturday,insurance]);
@@ -5394,7 +5405,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       pieces:pieces.map(p=>({weight:Math.ceil(pw(p)||1),length:p.L,width:p.W,height:p.H,declaredValue:intl?(p.value||null):null}))};   // book at the rounded-up billing weight the quote priced
     const res=await shipCall({action:"ship",account:acctOf(eng),order});
     if(!res||!res.ok){setShipStatus({state:"error",key:q.key,msg:(res&&res.error)||"Booking failed"});setBought(null);return;}
-    const done=(st)=>{ const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec},settings,setLabelPreview); if(cz(settings).skipBookedSummary){ setTimeout(()=>{ try{newShipment();}catch(e){} },900); };} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
+    const done=(st)=>{ const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec},settings,setLabelPreview); if(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint){ setTimeout(()=>{ try{newShipment();}catch(e){} },900); };} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
     if(res.booked){done(res);return;}
     setShipStatus({state:"pending",key:q.key,orderId:res.orderId});
     pollLabel(eng,res.orderId,done).then(r=>{ if(r&&r.timedOut){ onPending&&onPending({orderId:res.orderId,rec:buildRec(q,carrier,{}),service:q.label,carrier,orderRef:selectedOrder}); setShipStatus({state:"pending_timeout",key:q.key});setBought(null);} });
@@ -5699,17 +5710,17 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           {liveRuleStatus.state==="error"&&<span>Autopilot hit an error checking this order: {liveRuleStatus.msg}</span>}
         </div>}
         <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
-        {labelPreview&&<LabelPreviewModal data={labelPreview} settings={settings} onClose={()=>{setLabelPreview(null);if(cz(settings).skipBookedSummary)newShipment();}}/>}
+        {labelPreview&&<LabelPreviewModal data={labelPreview} settings={settings} onClose={()=>{setLabelPreview(null);if(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint)newShipment();}}/>}
         {pendingReprint&&(()=>{ const pr=pendingReprint; const trk=pr.shipment&&pr.shipment.tracking;
           return (<div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm" onClick={()=>setPendingReprint(null)}>
             <div className="bg-white rounded-xl border border-stone-200 shadow-xl w-full max-w-md" onClick={e=>e.stopPropagation()}>
               <div className="p-5">
                 <div className="flex items-center gap-2 text-amber-600 mb-2"><AlertTriangle className="w-5 h-5"/><span className="font-semibold text-stone-800">Order already processed</span></div>
-                <p className="text-sm text-stone-600">This order{pr.order&&pr.order.name?" ("+pr.order.name+")":""} already has a label{trk?" — tracking "+trk:""}. Are you sure you want to process and print it again? This books a <b>new, separate</b> label and you'll be charged again.</p>
+                <p className="text-sm text-stone-600">This order{pr.order&&pr.order.name?" ("+pr.order.name+")":""} already has a label{trk?" — tracking "+trk:""}. Do you want to process and print it again?</p>
               </div>
               <div className="px-5 pb-5 flex flex-wrap items-center gap-2">
                 <button onClick={()=>{const q=pr.q;setPendingReprint(null);print(q,true);}} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-semibold hover:bg-[#0072BF]">Proceed — print again</button>
-                <button onClick={()=>setPendingReprint(null)} className="text-sm bg-stone-100 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-200">Cancel</button>
+                <button onClick={()=>setPendingReprint(null)} className="text-sm bg-stone-100 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-200">No</button>
                 <div className="flex-1"/>
                 <button onClick={()=>{setPendingReprint(null);try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments"}}));}catch(e){}}} className="text-sm text-[#0086E0] rounded-lg px-3 py-2 font-medium hover:bg-[#E6F4FF] flex items-center gap-1.5"><Truck className="w-4 h-4"/>Go to Shipments</button>
               </div>
@@ -8477,6 +8488,10 @@ function PrinterSettings({settings,setSettings}){
       <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
         <span>Skip the booked summary, go straight to a new shipment<span className="block text-[11px] text-stone-400">The label still prints automatically — this just skips the tracking/copy/pickup card afterward and clears the form for the next order. Off by default so you can grab tracking or schedule a pickup right after booking.</span></span>
         <button onClick={()=>setCust("skipBookedSummary",!cust.skipBookedSummary)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${cust.skipBookedSummary?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
+      </label>
+      <label className="flex items-center justify-between gap-3 text-sm text-stone-700 mt-3">
+        <span>Start a fresh blank shipment after each print<span className="block text-[11px] text-stone-400">As soon as a label prints, the Ship form clears itself for the next order \u2014 keeps the booked summary, just resets the canvas. Independent of kiosk mode.</span></span>
+        <button onClick={()=>setCust("resetAfterPrint",!cust.resetAfterPrint)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${cust.resetAfterPrint?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
       </label>
     </Panel>
 

@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v297";
+const BUILD_TAG="addr-v305";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -251,6 +251,7 @@ function orderToEngland(o,opts,sender,eng){
   const q=opts.quote||{};
   return {
     reference:opts.reference||o.name||"",orderNumber:o.name||"",invoiceNo:opts.invoiceNo||"",poNo:opts.poNo||"",shipmentDate:opts.shipDate||new Date().toISOString().slice(0,10),
+    labelStock:(typeof window!=="undefined"&&window.__scLabelStock&&window.__scLabelStock.size)||"4x6",
     carrierCode:q.carrierCode,serviceCode:q.serviceCode,
     /* FedEx criteria: FedEx packaging (envelope/pak/boxes/tube) is only valid on Express services and
        REQUIRED for One Rate; Ground/Home Delivery must book as YOUR_PACKAGING. Only OneRate bookings
@@ -343,7 +344,7 @@ async function pdfToImages(base64,scale){
     /* England returns letter-size PDFs with the 4×6 label drawn in the top-left corner.
        When the page is clearly bigger than label stock, crop to the content's bounding
        box so previews and prints show the label full size instead of a tiny corner. */
-    if(v1.width>400||v1.height>620){
+    if(v1.width>400){   // letter-width pages only — tall doc-tab label stocks (4×6.75/4×8/4×9) must pass through untouched
       try{
         const bb=_labelBBox(ctx.getImageData(0,0,c.width,c.height).data,c.width,c.height);
         if(bb){
@@ -396,6 +397,55 @@ function _assembleJpegPdf(jpegs,W,H){
   out+="trailer\n<< /Size "+(objs.length+1)+" /Root 1 0 R >>\nstartxref\n"+xr+"\n%%EOF";
   return out;
 }
+/* Label stock catalog. Everything below 4×6 tall is the label itself; the extra height on
+   doc-tab stocks is the tear-off strip composeForStock fills from Settings → Doc tab. */
+function stockDims(size){
+  if(size==="4x675")return [4,6.75];
+  if(size==="4x8")return [4,8];
+  if(size==="4x9")return [4,9];
+  if(size==="letter")return [8.5,11];
+  return [4,6];
+}
+function _loadImg(src){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error("img"));i.src=src;});}
+/* Compose the printed page at the selected stock size: label pinned to the top, a dashed tear
+   line, and the doc-tab fields below (Settings → Printer settings → Doc tab). This is what makes
+   the doc tab actually ride on the label instead of printing as a separate popup page.
+   If the incoming PDF is already stock-height (England honored the requested stock and printed
+   its own tab), the pages pass through untouched — never a double tab. */
+async function composeForStock(imgs,wIn,hIn,ctx){
+  const cfg=(typeof window!=="undefined"&&window.__scLabelStock)||null;
+  const size=(cfg&&cfg.size)||"4x6";
+  const [SW,SH]=stockDims(size);
+  if(size==="4x6"||!imgs.length)return {imgs,wIn,hIn,changed:false};
+  if(hIn>=SH-0.2)return {imgs,wIn,hIn,changed:false};   // already stock-sized
+  const out=[];
+  for(const src of imgs){
+    const im=await _loadImg(src);
+    const dpi=Math.max(96,Math.round(im.naturalWidth/(wIn||4)));
+    const c=document.createElement("canvas");c.width=Math.round(SW*dpi);c.height=Math.round(SH*dpi);
+    const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);
+    const lw=Math.round((wIn||4)*dpi),lh=Math.round((hIn||6)*dpi);
+    const x=Math.max(0,Math.round((c.width-lw)/2));
+    g.drawImage(im,x,0,lw,lh);
+    if(c.height-lh>Math.round(0.2*dpi)){
+      g.strokeStyle="#b8b2ab";g.setLineDash([Math.round(dpi*0.07),Math.round(dpi*0.07)]);
+      g.beginPath();g.moveTo(0,lh+1);g.lineTo(c.width,lh+1);g.stroke();g.setLineDash([]);
+      const lines=(cfg&&cfg.docTab&&cfg.docTab.enabled)?buildDocTabLines(cfg.docTab,ctx||{}):[];
+      g.fillStyle="#111";
+      const pad=Math.round(0.14*dpi);let ty=lh+pad;
+      lines.forEach(l=>{
+        const fs=Math.max(8,Math.round((l.size||9)*dpi/72));
+        g.font="600 "+fs+"px system-ui,Arial,sans-serif";
+        ty+=fs;
+        if(ty>c.height-Math.round(0.06*dpi))return;   // clip to the tab — never overflow the stock
+        g.fillText(((l.label?l.label+": ":"")+l.value).slice(0,90),pad,ty);
+        ty+=Math.round(fs*0.5);
+      });
+    }
+    out.push(c.toDataURL("image/png"));
+  }
+  return {imgs:out,wIn:SW,hIn:SH,changed:true};
+}
 async function imgsToLabelPdf(imgs,wIn,hIn){
   const W=Math.round((wIn||4)*72),H=Math.round((hIn||6)*72);
   const jpegs=[];
@@ -412,6 +462,22 @@ async function imgsToLabelPdf(imgs,wIn,hIn){
    one dialog per label (which is what tripped up the app UI suppression when many overlapping
    print calls raced each other, and is not what anyone means by "print all"). */
 async function printImagePagesBatch(base64List,settingsForLogo,onProgress){
+  /* Direct printing overrides the preview/dialog here too: with PrintNode enabled, every label
+     in a Batch or Autopilot run goes straight to the printer — no preview window, no dialog.
+     Labels PrintNode rejects fall through to the normal single-dialog batch print below, so a
+     dead agent mid-run can never eat labels. directPrintPdf handles crop + stock composition. */
+  const _dp=(typeof window!=="undefined"&&window.__scDirectPrint)||null;
+  if(_dp&&_dp.enabled&&base64List.length){
+    const leftovers=[]; let sent=0;
+    for(let i=0;i<base64List.length;i++){
+      let ok=false;
+      try{ ok=await directPrintPdf(base64List[i],"Batch label "+(i+1)+" of "+base64List.length); }catch(e){}
+      if(ok)sent++; else leftovers.push(base64List[i]);
+      if(onProgress)onProgress(i+1,base64List.length);
+    }
+    if(!leftovers.length) return {ok:true,printed:sent,failed:0,direct:true};
+    base64List=leftovers; onProgress=null;   // dialog-print only the stragglers, one dialog
+  }
   let allImgs=[]; let wIn=4, hIn=6; let failed=0;
   for(let i=0;i<base64List.length;i++){
     try{
@@ -419,8 +485,9 @@ async function printImagePagesBatch(base64List,settingsForLogo,onProgress){
       if(!r.imgs.length)throw new Error("no pages");
       let imgs=r.imgs;
       if(settingsForLogo){ try{ const cc=cz(settingsForLogo); const lg=cc.labelLogo||settingsForLogo.companyLogo||""; imgs=await stampLogo(imgs,cc,lg); }catch(e){} }
-      allImgs=allImgs.concat(imgs);
-      if(i===0){ wIn=r.wIn; hIn=r.hIn; }
+      const comp=await composeForStock(imgs,r.wIn,r.hIn,null);
+      allImgs=allImgs.concat(comp.imgs);
+      if(i===0){ wIn=comp.wIn; hIn=comp.hIn; }
     }catch(e){ failed++; }
     if(onProgress)onProgress(i+1,base64List.length);
   }
@@ -483,21 +550,35 @@ async function stampLogo(imgs,cfg,logoSrc){
    when the job was ACCEPTED by PrintNode — callers fall back to the dialog on false, so a
    dead agent never silently swallows a label. Browsers cannot print silently on their own;
    the local agent is what makes "no dialog" possible. */
-async function directPrintPdf(base64,title){
+async function directPrintPdf(base64,title,ctx){
   const cfg=(typeof window!=="undefined"&&window.__scDirectPrint)||null;
   if(!cfg||!cfg.enabled||!cfg.apiKey||!cfg.printerId||!base64)return false;
   let payload=base64;
-  try{ const r0=await pdfToImages(base64,3); if(r0&&r0.cropped&&r0.imgs.length){ payload=await imgsToLabelPdf(r0.imgs,r0.wIn,r0.hIn); } }catch(e){}   // pdf.js down → send the original untouched
+  try{ const r0=await pdfToImages(base64,3); if(r0&&r0.imgs.length){ const comp=await composeForStock(r0.imgs,r0.wIn,r0.hIn,ctx); if(r0.cropped||comp.changed){ payload=await imgsToLabelPdf(comp.imgs,comp.wIn,comp.hIn); } } }catch(e){}   // pdf.js down → send the original untouched
   try{
     const r=await fetch("/.netlify/functions/printnode",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"print",apiKey:cfg.apiKey,printerId:cfg.printerId,title:title||"Shipping label",pdfBase64:payload})});
     const d=await r.json().catch(()=>null);
     return !!(d&&d.ok);
   }catch(e){ return false; }
 }
-async function printLabelPdf(base64,stForLogo){
-  if(await directPrintPdf(base64))return true;   // straight to the printer — no dialog
-  try{ const r=await pdfToImages(base64,4);
-    if(stForLogo){ try{ const cc=cz(stForLogo); r.imgs=await stampLogo(r.imgs,cc,cc.labelLogo||stForLogo.companyLogo||""); }catch(e){} } if(!r.imgs.length)throw new Error("no pages"); printImagePages(r.imgs,r.wIn,r.hIn); return true; }
+/* Booking handoff: when direct printing is on AND the person has "skip the booked summary"
+   enabled, the label goes straight to the printer with NOTHING on screen — the preview modal
+   used to flash open for a second just to auto-close itself. It now only appears if PrintNode
+   rejects the job, so the dialog fallback still has a home and no label is ever lost. */
+function openLabelOrDirectPrint(payload,settings,setLabelPreview){
+  const dp=(typeof window!=="undefined"&&window.__scDirectPrint)||null;
+  if(dp&&dp.enabled&&cz(settings).skipBookedSummary&&payload&&payload.pdf){
+    directPrintPdf(payload.pdf,"Shipping label"+(payload.tracking?" "+payload.tracking:""),recToDocCtx(payload.rec)).then(sent=>{ if(!sent)setLabelPreview(payload); });
+    return;
+  }
+  setLabelPreview(payload);
+}
+async function printLabelPdf(base64,stForLogo,ctx){
+  if(await directPrintPdf(base64,undefined,ctx))return true;   // straight to the printer — no dialog
+  try{ const r0=await pdfToImages(base64,4);
+    if(stForLogo){ try{ const cc=cz(stForLogo); r0.imgs=await stampLogo(r0.imgs,cc,cc.labelLogo||stForLogo.companyLogo||""); }catch(e){} }
+    const r=await composeForStock(r0.imgs,r0.wIn,r0.hIn,ctx);
+    if(!r.imgs.length)throw new Error("no pages"); printImagePages(r.imgs,r.wIn,r.hIn); return true; }
   catch(e){ try{ const u=pdfBlobUrl(base64); printPdfUrl(u); setTimeout(()=>URL.revokeObjectURL(u),180000); return true; }catch(e2){ return false; } }
 }
 /* ── reliable PDF printing: hidden body-level iframe + print(), because calling
@@ -518,7 +599,8 @@ function printPdf4x6(url){
     const d=f.contentDocument||(f.contentWindow&&f.contentWindow.document);
     if(!d)throw new Error("no frame doc");
     d.open();
-    d.write('<!doctype html><html><head><title>Label</title><style>@page{size:4in 6in;margin:0}html,body{margin:0;padding:0}embed{display:block;width:4in;height:6in}</style></head><body><embed src="'+url+'#toolbar=0&view=Fit" type="application/pdf"/></body></html>');
+    const [pw,ph]=stockDims(((typeof window!=="undefined"&&window.__scLabelStock)||{}).size||"4x6");
+    d.write('<!doctype html><html><head><title>Label</title><style>@page{size:'+pw+'in '+ph+'in;margin:0}html,body{margin:0;padding:0}embed{display:block;width:'+pw+'in;height:'+ph+'in}</style></head><body><embed src="'+url+'#toolbar=0&view=Fit" type="application/pdf"/></body></html>');
     d.close();
     setTimeout(()=>{ try{ f.contentWindow.focus(); f.contentWindow.print(); }catch(e){} },900);   // give the embedded PDF a beat to attach
     setTimeout(()=>{ try{document.body.removeChild(f);}catch(e){} },180000);
@@ -1153,21 +1235,36 @@ function oneRateBoxFor(L,W,H,lbs){
 /* Show the One Rate box the shipment qualifies for, but with NO price. England's rate call doesn't return
    One Rate pricing, so the price stays blank unless England itself returns a One Rate service for this shipment.
    No hardcoded/flat values. */
+/* Every One Rate service, in speed order. serviceCode follows England's fedex_*_one_rate naming;
+   only fedex_2_day_one_rate has been proven end-to-end with a live England booking — the other
+   codes follow the same documented pattern but haven't shipped a real label yet. */
+const OR_QUOTE_SVCS=[
+  ["first_overnight","FedEx First Overnight OneRate","fedex_first_overnight_one_rate",1,1],
+  ["priority_overnight","FedEx Priority Overnight OneRate","fedex_priority_overnight_one_rate",1,1],
+  ["standard_overnight","FedEx Standard Overnight OneRate","fedex_standard_overnight_one_rate",1,1],
+  ["2day_am","FedEx 2Day A.M. OneRate","fedex_2_day_am_one_rate",2,2],
+  ["2day","FedEx 2Day OneRate","fedex_2_day_one_rate",2,2],
+  ["express_saver","FedEx Express Saver OneRate","fedex_express_saver_one_rate",3,3]
+];
 function oneRateQuotes(box,ctx){
   if(!box) return [];
   const short=box.name.replace(/FedEx\s*One Rate®?\s*/i,"");
-  const label="FedEx 2Day OneRate - "+short;
   /* England's quote API never returns One Rate flat pricing. If the admin imported the One Rate flat
      table (Admin → Rates → Base costs), price it here: table price = cost, customer rule = sell. */
-  let cost=null,sell=null;
   const rules=ctx&&ctx.rules;
   const or=(rules&&rules.baseCosts&&rules.baseCosts.onerate)||null;
-  if(or){
-    const v=or[rateSvcKey(label)];
-    if(v!=null&&v!==""){ cost=Math.round(+v*100)/100; }
-  }
-  sell=rateSellFor(cost,label,ctx);   // flat rules price even with no imported table (cost stays null — margin unknown, sell exact)
-  return [{key:"or_2day_"+box.code, carrier:"FedEx", carrierCode:"FEDEX", serviceCode:"fedex_2_day_one_rate", label, cost, sell, _oneRate:true, packageTypeCode:box.code, minDays:2, maxDays:2}];
+  const out=[];
+  OR_QUOTE_SVCS.forEach(([sk,base,serviceCode,minDays,maxDays])=>{
+    const label=base+" - "+short;
+    let cost=null;
+    if(or){ const v=or[rateSvcKey(label)]; if(v!=null&&v!==""){ cost=Math.round(+v*100)/100; } }
+    const sell=rateSellFor(cost,label,ctx);   // flat rules price even with no imported table (cost stays null — margin unknown, sell exact)
+    /* 2Day keeps its legacy always-visible behavior; the other services appear once they're
+       actually priceable (an imported One Rate price for this box, or a flat rule). */
+    if(sk!=="2day"&&cost==null&&sell==null)return;
+    out.push({key:"or_"+sk+"_"+box.code, carrier:"FedEx", carrierCode:"FEDEX", serviceCode, label, cost, sell, _oneRate:true, packageTypeCode:box.code, minDays, maxDays});
+  });
+  return out;
 }
 /* Optional accessorials are fixed published fees — England's rate call does not return them, so we add the
    flat amounts here so they actually change the price. Tune to your exact England fees. */
@@ -1486,9 +1583,20 @@ function rateSellFor(cost,label,ctx){
     const list=yr==="2025"
       ?(zone!=null?(baseCostLookup(rules,"list2025:"+key,c.weight,zone)??list2025Lookup(key,c.weight,zone)):null)
       :(live!=null?live:(zone!=null?baseCostLookup(rules,"list:"+key,c.weight,zone):null));
-    const disc=num(rule.pct);
+    /* Weight breaks apply to list pricing too: the range's zone cell beats the range %,
+       which beats the service % — all read as the DISCOUNT off list for that range. */
+    let disc=num(rule.pct);
+    let brkL=null;
+    if(rule.breaks&&rule.breaks.length&&c.weight!=null){
+      const sortedL=rule.breaks.filter(x=>x.upTo!=null&&x.upTo!=="").sort((a,b)=>+a.upTo-+b.upTo);
+      brkL=sortedL.find(x=>+c.weight<=+x.upTo)||sortedL[sortedL.length-1]||null;
+      if(brkL&&num(brkL.pct)!=null)disc=num(brkL.pct);
+      if(brkL&&brkL.zones&&zone!=null){const bz=num(brkL.zones[String(zone)]);if(bz!=null)disc=bz;}
+    }
     if(list==null||disc==null)return fallback();          // no live list and no table → honest fallback
     sell=list*(1-disc/100);
+    const bmnL=brkL?num(brkL.min):null;
+    if(bmnL!=null){ if(sell<bmnL)sell=bmnL; return Math.round(sell*100)/100; }   // per-range Min $ overrides the service Min $
   } else if(rule.basis==="fixed"){
     const amt=num(rule.pct); if(amt==null)return fallback();
     sell=cost+amt;
@@ -1844,7 +1952,7 @@ function Login({users,onLogin,brand}){
     /* Cloud-first: server-side scrypt check covers accounts created or reset in cloud mode.
        The plaintext-array check stays as the fallback for legacy/local logins. */
     try{
-      const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"signin",email:email.trim(),password:pw})});
+      const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"login",email:email.trim(),password:pw})});
       const d=await r.json().catch(()=>null);
       if(d&&d.ok&&d.user){ try{CLOUD.token=d.token;lsSet("cloud.token",d.token);}catch(e){} setBusy(false); onLogin(d.user); return; }
     }catch(e){}
@@ -2221,6 +2329,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
   };
   const [surQ,setSurQ]=useState("");
   const [showHiddenSvc,setShowHiddenSvc]=useState(false);   // reveal service rows hidden from the rates grid
+  const [svcFilter,setSvcFilter]=useState("");               // quick find across 60+ service rows — matches hidden rows too
   const [openBrk,setOpenBrk]=useState({});                  // which service rows have the weight-break editor expanded
   const lg=users.filter(u=>u.role!=="admin"&&u.clientId===cid);
   const say=(m)=>{setFlash(m);setTimeout(()=>setFlash(""),2200);};
@@ -2339,10 +2448,12 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         const hiddenN=full.filter(sv=>svcHiddenMap[sv.k]).length;
         const togHide=(k)=>upRules({svcHidden:{...svcHiddenMap,[k]:!svcHiddenMap[k]}});
         return (<>
+        <div className="flex items-center gap-2"><Search className="w-3.5 h-3.5 text-stone-400"/><input value={svcFilter} onChange={e=>setSvcFilter(e.target.value)} placeholder="Find a service… (e.g. 2day extra large)" className="flex-1 max-w-xs bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>{svcFilter&&<button onClick={()=>setSvcFilter("")} className="text-xs text-stone-400 hover:text-stone-600">clear</button>}{svcFilter&&<span className="text-[11px] text-stone-400">search includes hidden rows — hidden ones show dimmed</span>}</div>
         {hiddenN>0&&<div className="flex justify-end"><button onClick={()=>setShowHiddenSvc(v=>!v)} className="text-xs text-stone-500 hover:text-stone-700 flex items-center gap-1">{showHiddenSvc?<EyeOff className="w-3.5 h-3.5"/>:<Eye className="w-3.5 h-3.5"/>}{showHiddenSvc?"Done — collapse hidden rows":hiddenN+" hidden row"+(hiddenN>1?"s":"")+" — show"}</button></div>}
         <div className="border border-stone-200 rounded-lg bg-white overflow-x-auto"><table className="w-full text-sm min-w-[640px]"><tbody>
         {gs.map(g=>{
-          const items=showHiddenSvc?g.items:g.items.filter(sv=>!svcHiddenMap[sv.k]);
+          const f=svcFilter.trim().toLowerCase();
+          const items=g.items.filter(sv=>f?f.split(/\s+/).every(w=>sv.l.toLowerCase().includes(w)):(showHiddenSvc||!svcHiddenMap[sv.k]));
           if(!items.length)return null;
           return (<React.Fragment key={g.g}>
           <tr><td colSpan={6} className="pt-3 pb-1 pl-3 text-[10px] uppercase tracking-widest text-stone-400 font-semibold">{g.g}{g.g==="One Rate"&&<span className="normal-case tracking-normal font-normal"> — price these Flat $ (always sells at exactly that), or import the One Rate table under Advanced below</span>}</td></tr>
@@ -2355,12 +2466,12 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
           <tr className={`border-t border-stone-100 hover:bg-stone-50 ${svcHiddenMap[sv.k]?"opacity-50":""}`}>
             <td className="py-1.5 pl-3 pr-1 w-6"><input type="checkbox" checked={r.on!==false} onChange={e=>upProfSvc(prof.id,sv.k,{on:e.target.checked})} className="accent-[#0086E0]"/></td>
             <td className="py-1.5 pr-2 font-medium text-stone-800 whitespace-nowrap">{sv.l}</td>
-            <td className="py-1.5 pr-2"><Select value={r.basis||"pct"} onChange={e=>upProfSvc(prof.id,sv.k,{basis:e.target.value})}><option value="pct">% Markup (over England/FedEx cost)</option><option value="list">Discount off FedEx list %</option><option value="fixed">Fixed $ over cost</option><option value="flat">Flat $ (always sells at exactly this)</option></Select></td>
+            <td className="py-1.5 pr-2"><Select value={r.basis||"pct"} onChange={e=>upProfSvc(prof.id,sv.k,{basis:e.target.value})}><option value="pct">% Markup over England cost</option><option value="list">Discount off FedEx list %</option><option value="fixed">Fixed $ over cost</option><option value="flat">Flat $ (always sells at exactly this)</option></Select></td>
             <td className="py-1.5 pr-2 whitespace-nowrap"><Input type="number" value={r.pct==null?"":r.pct} onChange={e=>upProfSvc(prof.id,sv.k,{pct:e.target.value})} className="w-20 text-right"/> <span className="text-stone-400 text-xs">{(r.basis==="fixed"||r.basis==="flat")?"$":"%"}</span></td>
-            <td className="py-1.5 pr-3 whitespace-nowrap"><span className="text-stone-400 text-xs">Min $</span> <Input type="number" value={r.min==null?"":r.min} onChange={e=>upProfSvc(prof.id,sv.k,{min:e.target.value})} className="w-24 text-right"/> {(r.basis||"pct")==="pct"&&<button onClick={()=>setOpenBrk(o=>({...o,[sv.k]:!o[sv.k]}))} className={`text-[11px] rounded px-2 py-1 ml-1 align-middle ${r.breaks&&r.breaks.length?"bg-sky-100 text-sky-700":"bg-stone-100 text-stone-500 hover:bg-stone-200"}`}>{r.breaks&&r.breaks.length?r.breaks.length+" breaks":"Breaks"}</button>}</td>
+            <td className="py-1.5 pr-3 whitespace-nowrap"><span className="text-stone-400 text-xs">Min $</span> <Input type="number" value={r.min==null?"":r.min} onChange={e=>upProfSvc(prof.id,sv.k,{min:e.target.value})} className="w-24 text-right"/> {["pct","list"].includes(r.basis||"pct")&&<button onClick={()=>setOpenBrk(o=>({...o,[sv.k]:!o[sv.k]}))} className={`text-[11px] rounded px-2 py-1 ml-1 align-middle ${r.breaks&&r.breaks.length?"bg-sky-100 text-sky-700":"bg-stone-100 text-stone-500 hover:bg-stone-200"}`}>{r.breaks&&r.breaks.length?r.breaks.length+" breaks":"Breaks"}</button>}</td>
             <td className="py-1.5 pr-2 w-6 text-right"><button onClick={()=>togHide(sv.k)} title={svcHiddenMap[sv.k]?"Show this row again":"Hide this row to declutter — pricing untouched; the checkbox turns the rule off"} className="text-stone-300 hover:text-stone-500">{svcHiddenMap[sv.k]?<Eye className="w-3.5 h-3.5"/>:<EyeOff className="w-3.5 h-3.5"/>}</button></td>
           </tr>
-          {openBrk[sv.k]&&(r.basis||"pct")==="pct"&&<tr className="border-t border-stone-100 bg-sky-50/50">
+          {openBrk[sv.k]&&["pct","list"].includes(r.basis||"pct")&&<tr className="border-t border-stone-100 bg-sky-50/50">
             <td colSpan={6} className="py-2.5 pl-10 pr-3">
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
@@ -2370,7 +2481,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
                 </div>
                 {!brkSorted.length&&<p className="text-[11px] text-stone-400">No breaks yet — the service-level % applies at every weight. Add breaks to price weight ranges differently, each with its own Min $ and per-zone %.</p>}
                 {!!brkSorted.length&&<div className="overflow-x-auto"><table className="text-xs"><thead><tr className="text-stone-400">
-                  <th className="text-left font-medium pr-2 py-1">Range</th><th className="text-left font-medium pr-2">Up to lb</th><th className="text-left font-medium pr-2">%</th><th className="text-left font-medium pr-3">Min $</th>
+                  <th className="text-left font-medium pr-2 py-1">Range</th><th className="text-left font-medium pr-2">Up to lb</th><th className="text-left font-medium pr-2">{(r.basis||"pct")==="list"?"% off list":"%"}</th><th className="text-left font-medium pr-3">Min $</th>
                   {["2","3","4","5","6","7","8"].map(z=><th key={z} className="font-semibold px-1 text-center w-14">Z{z}</th>)}<th/>
                 </tr></thead><tbody>
                   {brkSorted.map((b,si)=>{const lo=si===0?0:(+brkSorted[si-1].upTo+1||0);const hi=(b.upTo==null||b.upTo==="")?null:+b.upTo;const lbl=hi==null?"—":(hi>=99999?lo+"+ lb":lo+"–"+hi+" lb");return (
@@ -2383,7 +2494,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
                     <td className="pl-1"><button onClick={()=>rmBrkAt(b._i)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button></td>
                   </tr>);})}
                 </tbody></table></div>}
-                {!!brkSorted.length&&<p className="text-[11px] text-stone-400">A shipment uses the first range its weight fits. Zone cells (domestic zones 2–8) beat the range %, which beats the service %. Blank zone cells fall back to the range %. Min $ on a range overrides the service Min $ for that range.</p>}
+                {!!brkSorted.length&&<p className="text-[11px] text-stone-400">A shipment uses the first range its weight fits. Zone cells (domestic zones 2–8) beat the range %, which beats the service %. Blank zone cells fall back to the range %. Min $ on a range overrides the service Min $ for that range.{(r.basis||"pct")==="list"&&<> Because this service is priced off FedEx list, every % here is the <b>discount off list</b> for that range/zone.</>}</p>}
               </div>
             </td>
           </tr>}
@@ -2673,7 +2784,7 @@ function RatesAdmin({clients=[],brand}){
     if(rule.basis==="flat"){const a=num(rule.pct);if(a==null)return gFall();return {sell:Math.round(a*100)/100,starred:false};}
     if(cost==null)return null;
     let sell=null;
-    if(rule.basis==="list"){const yr=String((prof&&prof.listYear)||"2026");const list=yr==="2025"?(baseCostLookup(rules,"list2025:"+key,weight,zone)??list2025Lookup(key,weight,zone)):baseCostLookup(rules,"list:"+key,weight,zone);const d=num(rule.pct);if(list==null||d==null)return gFall();sell=list*(1-d/100);}
+    if(rule.basis==="list"){const yr=String((prof&&prof.listYear)||"2026");const list=yr==="2025"?(baseCostLookup(rules,"list2025:"+key,weight,zone)??list2025Lookup(key,weight,zone)):baseCostLookup(rules,"list:"+key,weight,zone);let d=num(rule.pct);let brkL=null;if(rule.breaks&&rule.breaks.length){const sl=rule.breaks.filter(x=>x.upTo!=null&&x.upTo!=="").sort((a,b)=>+a.upTo-+b.upTo);brkL=sl.find(x=>+weight<=+x.upTo)||sl[sl.length-1]||null;if(brkL&&num(brkL.pct)!=null)d=num(brkL.pct);if(brkL&&brkL.zones){const bz=num(brkL.zones[String(zone)]);if(bz!=null)d=bz;}}if(list==null||d==null)return gFall();sell=list*(1-d/100);if(brkL&&num(brkL.min)!=null){const bm=num(brkL.min);const st=sell<bm;if(st)sell=bm;return {sell:Math.round(sell*100)/100,starred:st};}}
     else if(rule.basis==="fixed"){const a=num(rule.pct);if(a==null)return gFall();sell=cost+a;}
     else{let pct=num(rule.pct);let brk=null;if(rule.breaks&&rule.breaks.length){const sorted=rule.breaks.filter(x=>x.upTo!=null&&x.upTo!=="").sort((a,b)=>+a.upTo-+b.upTo);brk=sorted.find(x=>+weight<=+x.upTo)||sorted[sorted.length-1]||null;if(brk&&num(brk.pct)!=null)pct=num(brk.pct);}const zp=rule.zones?num(rule.zones[String(zone)]):null;if(zp!=null)pct=zp;if(brk&&brk.zones){const bz=num(brk.zones[String(zone)]);if(bz!=null)pct=bz;}if(brk&&num(brk.min)!=null&&pct!=null){let s0=cost*(1+pct/100);const bm=num(brk.min);const st=s0<bm;if(st)s0=bm;return {sell:Math.round(s0*100)/100,starred:st};};if(pct==null)return gFall();sell=cost*(1+pct/100);}
     const mn=num(rule.min);let starred=false;
@@ -2840,7 +2951,7 @@ function RatesAdmin({clients=[],brand}){
             <tr className={`border-t border-stone-100 hover:bg-stone-50 ${svcHiddenMap[s.k]?"opacity-50":""}`}>
               <td className="py-2 pr-1 w-6"><input type="checkbox" checked={r.on!==false} onChange={e=>upSvc(s.k,{on:e.target.checked})} className="accent-[#0086E0]"/></td>
               <td className="py-2 pr-2 font-medium text-stone-800 whitespace-nowrap">{s.l}{s.or&&r.basis!=="flat"&&!(baseCosts.onerate&&baseCosts.onerate[s.k]!=null)&&<Badge tone="stone">needs One Rate table or Flat $</Badge>}</td>
-              <td className="py-2 pr-2"><Select value={r.basis||"pct"} onChange={e=>upSvc(s.k,{basis:e.target.value})}><option value="pct">% Markup (over England/FedEx cost)</option><option value="list">Discount off FedEx list %</option><option value="fixed">Fixed $ over cost</option><option value="flat">Flat $ (always sells at exactly this)</option></Select></td>
+              <td className="py-2 pr-2"><Select value={r.basis||"pct"} onChange={e=>upSvc(s.k,{basis:e.target.value})}><option value="pct">% Markup over England cost</option><option value="list">Discount off FedEx list %</option><option value="fixed">Fixed $ over cost</option><option value="flat">Flat $ (always sells at exactly this)</option></Select></td>
               <td className="py-2 pr-2 whitespace-nowrap"><Input type="number" value={r.pct==null?"":r.pct} onChange={e=>upSvc(s.k,{pct:e.target.value})} className="w-20 text-right"/> <span className="text-stone-400 text-xs">{(r.basis==="fixed"||r.basis==="flat")?"$":"%"}</span></td>
               <td className="py-2 pr-2 whitespace-nowrap"><span className="text-stone-400 text-xs">Min $</span> <Input type="number" value={r.min==null?"":r.min} onChange={e=>upSvc(s.k,{min:e.target.value})} className="w-24 text-right"/></td>
               <td className="py-2 pr-2 whitespace-nowrap">
@@ -3033,10 +3144,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
      to find rates/services; they're just already sitting there the moment Admin opens. */
   const [tabs,setTabs]=useState(()=>{
     if(sidebarDriven)return [{kind:"section",key:activeSection}];   // the left sidebar is the only nav; this just tracks what's on screen (plus any customer records opened from within it)
-    const core=["overview","customers"].filter(k=>allowedKeys.has(k));
-    const seeded=core.length?core.map(key=>({kind:"section",key})):[{kind:"section",key:sec}];
-    if(!seeded.some(t=>t.key===sec))seeded.unshift({kind:"section",key:sec});
-    return seeded;
+    return [{kind:"section",key:sec}];   // retail Admin tab: same model — the built-in left rail is the nav
   });
   const [active,setActive]=useState(0);
   /* Sidebar-driven mode: clicking a different item in the left sidebar changes activeSection — swap
@@ -3046,6 +3154,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
     setTabs([{kind:"section",key:activeSection}]);
     setActive(0);
   },[sidebarDriven,activeSection]);
+  const railPick=(key)=>{setTabs([{kind:"section",key}]);setActive(0);setSec(key);};   // same behavior as the dedicated portal's left sidebar: swap section, drop open customer tabs
   const openSection=(key)=>{setTabs(ts=>{const i=ts.findIndex(t=>t.kind==="section"&&t.key===key);if(i>=0){setActive(i);return ts;}const n=[...ts,{kind:"section",key}];setActive(n.length-1);return n;});setSec(key);};
   const openCustomer=(id)=>{setTabs(ts=>{const i=ts.findIndex(t=>t.kind==="customer"&&t.id===id);if(i>=0){setActive(i);return ts;}const n=[...ts,{kind:"customer",id}];setActive(n.length-1);return n;});};
   const closeTab=(i)=>{setTabs(ts=>{if(ts.length===1)return ts;const n=ts.filter((_,j)=>j!==i);setActive(a=>{const na=i<a?a-1:(a>=n.length?n.length-1:a);return Math.max(0,na);});return n;});};
@@ -3065,33 +3174,30 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
   </>);
   return (
     <div className="-mt-2">
-      {!sidebarDriven&&<div className="flex items-center gap-1 border-b border-stone-200 mb-4 overflow-x-auto">
-        <div className="relative">
-          <button onClick={()=>setLaunch(l=>!l)} className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-stone-600 hover:bg-stone-100 rounded-t-lg whitespace-nowrap"><Plus className="w-4 h-4"/>Open</button>
-          {launch&&<div className="absolute left-0 top-full z-30 mt-1 w-56 bg-white border border-stone-200 rounded-lg shadow-lg p-2" onMouseLeave={()=>setLaunch(false)}>
-            {groups.map(g=>(<div key={g.label} className="mb-1.5 last:mb-0">
-              <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold px-2 mb-1">{g.label}</div>
-              {g.items.map(([v,l,Icon])=><button key={v} onClick={()=>{openSection(v);setLaunch(false);}} className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-sm text-stone-600 hover:bg-stone-100"><Icon className="w-4 h-4 shrink-0"/>{l}</button>)}
-            </div>))}
-          </div>}
-        </div>
-        {tabs.map((t,i)=>{const Icon=t.kind==="section"?(SECTION_META[t.key]||{}).Icon:Building2;return (
-          <div key={t.kind+(t.key||t.id)} onClick={()=>{setActive(i);if(t.kind==="section")setSec(t.key);}} className={`group flex items-center gap-1.5 pl-3 pr-2 py-2 text-sm rounded-t-lg cursor-pointer whitespace-nowrap border-b-2 -mb-px ${i===active?"border-[#0086E0] text-stone-900 font-medium bg-white":"border-transparent text-stone-500 hover:bg-stone-50"}`}>
-            {Icon&&<Icon className="w-3.5 h-3.5 shrink-0"/>}{tabTitle(t)}
-            {tabs.length>1&&<button onClick={(e)=>{e.stopPropagation();closeTab(i);}} className="ml-1 p-0.5 rounded hover:bg-stone-200 opacity-40 group-hover:opacity-100"><X className="w-3 h-3"/></button>}
-          </div>);})}
+    <div className={!sidebarDriven?"flex gap-5 items-start":""}>
+      {!sidebarDriven&&<div className="w-48 shrink-0 sticky top-4 space-y-4 pt-1">
+        {groups.map(g=>(<div key={g.label}>
+          <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold px-2 mb-1">{g.label}</div>
+          <div className="space-y-0.5">
+            {g.items.map(([v,l,Icon])=>{const on=cur&&cur.kind==="section"&&cur.key===v;return (
+              <button key={v} onClick={()=>railPick(v)} className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-sm text-left ${on?"bg-[#E6F4FF] text-[#006FBF] font-medium":"text-stone-600 hover:bg-stone-100"}`}>{Icon&&<Icon className="w-4 h-4 shrink-0"/>}<span className="truncate">{l}</span></button>);})}
+          </div>
+        </div>))}
       </div>}
-      {sidebarDriven&&tabs.length>1&&<div className="flex items-center gap-1 border-b border-stone-200 mb-4 overflow-x-auto">
+      <div className={!sidebarDriven?"flex-1 min-w-0":""}>
+      {tabs.length>1&&<div className="flex items-center gap-1 border-b border-stone-200 mb-4 overflow-x-auto">
         {tabs.map((t,i)=>{const Icon=t.kind==="section"?(SECTION_META[t.key]||{}).Icon:Building2;return (
           <div key={t.kind+(t.key||t.id)} onClick={()=>setActive(i)} className={`group flex items-center gap-1.5 pl-3 pr-2 py-2 text-sm rounded-t-lg cursor-pointer whitespace-nowrap border-b-2 -mb-px ${i===active?"border-[#0086E0] text-stone-900 font-medium bg-white":"border-transparent text-stone-500 hover:bg-stone-50"}`}>
             {Icon&&<Icon className="w-3.5 h-3.5 shrink-0"/>}{tabTitle(t)}
-            {t.kind==="customer"&&<button onClick={(e)=>{e.stopPropagation();closeTab(i);}} className="ml-1 p-0.5 rounded hover:bg-stone-200 opacity-40 group-hover:opacity-100"><X className="w-3 h-3"/></button>}
+            {(t.kind==="customer"||!sidebarDriven)&&<button onClick={(e)=>{e.stopPropagation();closeTab(i);}} className="ml-1 p-0.5 rounded hover:bg-stone-200 opacity-40 group-hover:opacity-100"><X className="w-3 h-3"/></button>}
           </div>);})}
       </div>}
       <div className="min-w-0">
         {cur.kind==="section"?<SectionBody k={cur.key}/>
           :<CustomerDetail cid={cur.id} clients={clients} setClients={setClients} users={users} setUsers={setUsers} currentUser={currentUser} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} settings={settings} onClose={()=>closeTab(active)} openSection={openSection}/>}
       </div>
+      </div>
+    </div>
     </div>
   );
 }
@@ -4240,8 +4346,19 @@ export default function App(){
   const [phase,setPhase]=useState("boot");
   const [bootMsg,setBootMsg]=useState("");
   const start=async()=>{
-    const ping=await cloudCall({action:"ping"});
-    if(!ping||ping.network||!ping.configured){ CLOUD.mode="local"; setPhase("local"); return; }
+    /* A single failed ping used to silently demote the whole session to local mode — on the
+       admin portal that meant the legacy login against locally-cached users whose passwords
+       are blanked by design, i.e. "my login just doesn't work" on any transient blip.
+       Now: retry the ping (cold starts, DNS hiccups), and if the network is genuinely down,
+       say so and offer Retry — local mode is reserved for a truly unconfigured backend. */
+    let ping=null;
+    for(let i=0;i<3;i++){ ping=await cloudCall({action:"ping"}); if(ping&&!ping.network)break; await new Promise(r=>setTimeout(r,700*(i+1))); }
+    if(ping&&ping.ok&&!ping.configured){ CLOUD.mode="local"; setPhase("local"); return; }
+    if(!ping||ping.network){
+      CLOUD.mode="cloud"; CLOUD.offline=true;
+      if(lsGet("session",null)&&CLOUD.token){ setPhase("ready"); setBootMsg("Can’t reach the server right now — showing this device’s saved data; changes sync when the connection returns."); return; }
+      setPhase("netfail"); return;
+    }
     CLOUD.mode="cloud";
     const sess=lsGet("session",null);
     if(sess&&sess.id==="demo"){
@@ -4257,6 +4374,7 @@ export default function App(){
   };
   useEffect(()=>{start();},[]);
   if(phase==="boot"||phase==="loading") return <div className="min-h-screen bg-neutral-950 flex items-center justify-center"><div className="text-stone-400 text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>Loading your workspace…</div></div>;
+  if(phase==="netfail") return (<div className="min-h-screen bg-neutral-950 flex items-center justify-center p-6"><div className="text-center space-y-3 max-w-sm"><div className="text-stone-200 font-semibold">Can’t reach the server</div><p className="text-stone-500 text-sm">Your connection or the server hiccuped — nothing is wrong with your login. Give it a second and try again.</p><button onClick={()=>{setPhase("boot");start();}} className="text-sm bg-white text-stone-900 rounded-lg px-5 py-2 font-medium">Retry</button></div></div>);
   if(phase==="login") return <LandingGate onDone={async()=>{ setPhase("loading"); const r=await cloudLoadAll(); setPhase("ready"); if(!r.ok)setBootMsg("Signed in — first sync will complete in the background."); }}/>;
   return (<>
     {bootMsg&&<div className="bg-amber-50 border-b border-amber-200 text-amber-800 text-xs px-4 py-2 text-center">{bootMsg}</div>}
@@ -4438,6 +4556,7 @@ function AppInner(){
     }catch(e){}
   },[]);
   useEffect(()=>{ const pn=(settings&&settings.printNode)||{}; try{ window.__scDirectPrint={enabled:!!pn.enabled,apiKey:pn.apiKey||"",printerId:+pn.printerId||0}; }catch(e){} },[settings&&settings.printNode]);
+  useEffect(()=>{ try{ window.__scLabelStock={size:((settings&&settings.printer)||{}).labelSize||"4x6",docTab:(settings&&settings.docTab)||null}; }catch(e){} },[settings&&settings.printer,settings&&settings.docTab]);
   const brand=BRAND.fw
     ?{...DEFAULT_BRAND,name1:"FREIGHT",name2:"WIRE SHIP",dark:"#1c1917",primary:"#1E9BF0",...(settings.brand||{})}
     :{...DEFAULT_BRAND,...(settings.brand||{})};
@@ -5043,7 +5162,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       pieces:pieces.map(p=>({weight:Math.ceil(pw(p)||1),length:p.L,width:p.W,height:p.H,declaredValue:intl?(p.value||null):null}))};   // book at the rounded-up billing weight the quote priced
     const res=await shipCall({action:"ship",account:acctOf(eng),order});
     if(!res||!res.ok){setShipStatus({state:"error",key:q.key,msg:(res&&res.error)||"Booking failed"});setBought(null);return;}
-    const done=(st)=>{ const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} setLabelPreview({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec});} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
+    const done=(st)=>{ const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec},settings,setLabelPreview);} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
     if(res.booked){done(res);return;}
     setShipStatus({state:"pending",key:q.key,orderId:res.orderId});
     pollLabel(eng,res.orderId,done).then(r=>{ if(r&&r.timedOut){ onPending&&onPending({orderId:res.orderId,rec:buildRec(q,carrier,{}),service:q.label,carrier,orderRef:selectedOrder}); setShipStatus({state:"pending_timeout",key:q.key});setBought(null);} });
@@ -5440,14 +5559,15 @@ function LabelPreviewModal({data,onClose,settings}){
     try{ const u=pdfBlobUrl(data.pdf); setUrl(u); setTimeout(()=>{},0); }catch(e){ setPgErr("This label PDF couldn't be decoded."); }
     (async()=>{
       try{
-        const r=await pdfToImages(data.pdf,3);
+        let r=await pdfToImages(data.pdf,3);
         if(dead)return;
         if(!r.imgs.length)throw new Error("no pages");
         try{ const cc=cz(st); const lg=cc.labelLogo||st.companyLogo||""; r.imgs=await stampLogo(r.imgs,cc,lg); }catch(e){}
+        try{ r=await composeForStock(r.imgs,r.wIn,r.hIn,recToDocCtx(data.rec)); }catch(e){}
         setPages(r);
         if(!printed.current&&data.autoPrint!==false){
           printed.current=true;
-          const sent=await directPrintPdf(data.pdf);
+          const sent=await directPrintPdf(data.pdf,undefined,recToDocCtx(data.rec));
           if(sent){ if(cz(st).skipBookedSummary&&!dead)onClose(); }
           else printImagePages(r.imgs,r.wIn,r.hIn,()=>{ if(cz(st).skipBookedSummary&&!dead)onClose(); });   // fires once the system print dialog closes
         }
@@ -5460,7 +5580,7 @@ function LabelPreviewModal({data,onClose,settings}){
     return ()=>{dead=true;};
   },[data.pdf]);
   useEffect(()=>()=>{ if(url)try{URL.revokeObjectURL(url);}catch(e){} },[url]);
-  const doPrint=async()=>{ if(await directPrintPdf(data.pdf))return; if(pages&&pages.imgs.length){printImagePages(pages.imgs,pages.wIn,pages.hIn);} else { printLabelPdf(data.pdf,st); } };
+  const doPrint=async()=>{ if(await directPrintPdf(data.pdf,undefined,recToDocCtx(data.rec)))return; if(pages&&pages.imgs.length){printImagePages(pages.imgs,pages.wIn,pages.hIn);} else { printLabelPdf(data.pdf,st,recToDocCtx(data.rec)); } };
   const [copied,setCopied]=useState(false);
   const [showLabel,setShowLabel]=useState(false);
   const copyTracking=async()=>{ const t=String(data.tracking||""); if(!t)return;
@@ -5898,7 +6018,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
     if(!res||!res.ok){ setStatus({state:"error",msg:(res&&res.error)||"Booking failed"}); setBought(null); return; }
     const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:qq.label,recipient:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings?.sender||{})},fromZip,toZip:o.zip,weight:+weight,pieces:[{weight:+weight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference:o.name,bookNumber:res.bookNumber};
     onShipped(rec,o.id);
-    if(res.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:rec.id,pdf:res.labelPdfBase64}}));}catch(e){} setLabelPreview({pdf:res.labelPdfBase64,tracking:res.tracking,service:qq.label,carrier,rec});}
+    if(res.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:rec.id,pdf:res.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:res.labelPdfBase64,tracking:res.tracking,service:qq.label,carrier,rec},settings,setLabelPreview);}
     setStatus({state:"booked",msg:"Label created — saved to Shipments."});fireConfetti();
   };
   const Info=({k,v})=>(<div className="min-w-0"><div className="text-[10px] uppercase tracking-widest text-stone-400">{k}</div><div className="text-sm text-stone-800 truncate">{v||"—"}</div></div>);
@@ -6083,7 +6203,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
     if(!res||!res.ok){ setStatus({state:"error",msg:(res&&res.error)||"Booking failed"}); setBought(null); return; }
     const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,...baseRec,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,bookNumber:res.bookNumber};
     onShipped(rec,o.id);
-    if(res.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:rec.id,pdf:res.labelPdfBase64}}));}catch(e){} setLabelPreview({pdf:res.labelPdfBase64,tracking:res.tracking,service:qq.label,carrier,rec});}
+    if(res.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:rec.id,pdf:res.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:res.labelPdfBase64,tracking:res.tracking,service:qq.label,carrier,rec},settings,setLabelPreview);}
     setStatus({state:"booked",msg:"Label created — saved to Shipments."});fireConfetti();
   };
   const items=(o.lineItems&&o.lineItems.length)?o.lineItems:String(o.items||"").split(",").map(s=>s.trim()).filter(Boolean).map((s,i)=>{const m=s.match(/^(\d+)\s*[×x]\s*(.+)$/);return {id:"i"+i,title:m?m[2]:s,quantity:m?+m[1]:1,price:"",sku:""};});
@@ -6669,8 +6789,24 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
   const [wMin,setWMin]=useState("");const [wMax,setWMax]=useState("");
   const [tMin,setTMin]=useState("");const [tMax,setTMax]=useState("");
   const [age,setAge]=useState("any");
+  const [dFrom,setDFrom]=useState("");const [dTo,setDTo]=useState("");   // batch by order date (inclusive)
+  const [presets,setPresets]=usePersist("batchPresets",[]);              // saved criteria: pick a batch, print it
+  const [presetSel,setPresetSel]=useState("");
   const [fs,setFs]=useState({state:new Set(),zone:new Set(),source:new Set(),sku:new Set(),product:new Set(),service:new Set(),carrier:new Set()});
   const [fOpen,setFOpen]=useState(true);
+  const presetBar=(
+    <div className="flex flex-wrap items-center gap-2 bg-white border border-stone-200 rounded-lg px-3 py-2">
+      <Zap className="w-3.5 h-3.5 text-[#0086E0]"/>
+      <span className="text-xs font-semibold text-stone-700">Saved batches</span>
+      <select value={presetSel} onChange={e=>{setPresetSel(e.target.value);const p=(presets||[]).find(x=>x.id===e.target.value);if(p)applyPreset(p);}} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF] min-w-[180px]">
+        <option value="">— pick a saved batch —</option>
+        {(presets||[]).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+      </select>
+      <button onClick={savePreset} className="text-xs bg-stone-100 rounded-lg px-2.5 py-1 hover:bg-stone-200">Save current criteria…</button>
+      {presetSel&&<button onClick={deletePreset} className="text-xs text-stone-400 hover:text-rose-500">Delete</button>}
+      <span className="text-[11px] text-stone-400 flex-1 min-w-[220px]">Captures dates, filters, and the service rule below — one pick rebuilds the whole batch. Then Select all → Autopilot / Book &amp; print as usual.</span>
+    </div>
+  );
   const [prodQ,setProdQ]=useState("");
   const [showAll,setShowAll]=useState(()=>new Set());
   const [done,setDone]=useState(0);
@@ -6756,6 +6892,9 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
     if(wMin!==""&&w<+wMin)return false; if(wMax!==""&&w>+wMax)return false;
     if(tMin!==""&&t<+tMin)return false; if(tMax!==""&&t>+tMax)return false;
     if(age!=="any"){const a=ageDays(o); if(a==null)return false; if(age==="today"&&a>0)return false; if(age==="2"&&a>2)return false; if(age==="7"&&a>7)return false; if(age==="old"&&a<=7)return false;}
+    if(dFrom||dTo){const t=Date.parse(o.date||""); if(isNaN(t))return false;
+      if(dFrom&&t<Date.parse(dFrom+"T00:00:00"))return false;
+      if(dTo&&t>Date.parse(dTo+"T23:59:59"))return false;}
     const q=search.trim().toLowerCase();
     if(q&&!((o.name+" "+(o.customer||"")+" "+(o.company||"")+" "+(o.city||"")+" "+(o.state||"")+" "+(o.zip||"")+" "+(o.sku||"")+" "+(o.items||"")+" "+(o.source||"")+" "+(o.email||"")).toLowerCase().includes(q)))return false;
     return true;
@@ -6763,8 +6902,28 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
   const SORTS={newest:(a,b)=>(Date.parse(b.date||0)||0)-(Date.parse(a.date||0)||0),oldest:(a,b)=>(Date.parse(a.date||0)||0)-(Date.parse(b.date||0)||0),heaviest:(a,b)=>(+b.weight||0)-(+a.weight||0),lightest:(a,b)=>(+a.weight||0)-(+b.weight||0),value:(a,b)=>(+b.total||0)-(+a.total||0),state:(a,b)=>String(a.state||"").localeCompare(String(b.state||"")),zone:(a,b)=>(+zoneOf(a))-(+zoneOf(b))};
   const visible=pool.filter(matches).sort(SORTS[sortBy]||(()=>0));
   const toggleDim=(d,v)=>setFs(f=>{const n={...f,[d]:new Set(f[d])};n[d].has(v)?n[d].delete(v):n[d].add(v);return n;});
-  const activeFilters=Object.values(fs).reduce((a,st)=>a+st.size,0)+(wMin!==""?1:0)+(wMax!==""?1:0)+(tMin!==""?1:0)+(tMax!==""?1:0)+(age!=="any"?1:0);
-  const clearFilters=()=>{setFs({state:new Set(),zone:new Set(),source:new Set(),sku:new Set(),product:new Set(),service:new Set(),carrier:new Set()});setWMin("");setWMax("");setTMin("");setTMax("");setAge("any");setSearch("");setProdQ("");};
+  const activeFilters=Object.values(fs).reduce((a,st)=>a+st.size,0)+(wMin!==""?1:0)+(wMax!==""?1:0)+(tMin!==""?1:0)+(tMax!==""?1:0)+(age!=="any"?1:0)+(dFrom?1:0)+(dTo?1:0);
+  const clearFilters=()=>{setFs({state:new Set(),zone:new Set(),source:new Set(),sku:new Set(),product:new Set(),service:new Set(),carrier:new Set()});setWMin("");setWMax("");setTMin("");setTMax("");setAge("any");setDFrom("");setDTo("");setSearch("");setProdQ("");};
+  /* Saved batches: one click restores a whole set of criteria (dates, filters, service rule)
+     so recurring runs — "yesterday's Shopify ground", "this week's TX orders" — are a pick,
+     not a rebuild. Presets are per-login. */
+  const snapshotCriteria=()=>({search,wMin,wMax,tMin,tMax,age,dFrom,dTo,rule,specCarrier,specSvc,fs:Object.fromEntries(Object.keys(fs).map(k=>[k,[...fs[k]]]))});
+  const applyPreset=(p)=>{ if(!p||!p.crit)return; const c=p.crit;
+    setSearch(c.search||"");setWMin(c.wMin||"");setWMax(c.wMax||"");setTMin(c.tMin||"");setTMax(c.tMax||"");
+    setAge(c.age||"any");setDFrom(c.dFrom||"");setDTo(c.dTo||"");
+    if(c.rule)setRule(c.rule); if(c.specCarrier)setSpecCarrier(c.specCarrier); if(c.specSvc)setSpecSvc(c.specSvc);
+    setFs({state:new Set((c.fs&&c.fs.state)||[]),zone:new Set((c.fs&&c.fs.zone)||[]),source:new Set((c.fs&&c.fs.source)||[]),sku:new Set((c.fs&&c.fs.sku)||[]),product:new Set((c.fs&&c.fs.product)||[]),service:new Set((c.fs&&c.fs.service)||[]),carrier:new Set((c.fs&&c.fs.carrier)||[])});
+    setSel(new Set());
+  };
+  const savePreset=()=>{ const name=window.prompt("Name this batch (e.g. \u201cYesterday \u2014 Shopify ground\u201d):"); if(!name||!name.trim())return;
+    const p={id:"bp"+Date.now(),name:name.trim(),crit:snapshotCriteria()};
+    setPresets(ps=>[...(ps||[]).filter(x=>x.name.toLowerCase()!==p.name.toLowerCase()),p]); setPresetSel(p.id);
+    setMsg("Saved \u201c"+p.name+"\u201d \u2014 pick it any time to restore these exact criteria.");setTimeout(()=>setMsg(""),3000);
+  };
+  const deletePreset=()=>{ const p=(presets||[]).find(x=>x.id===presetSel); if(!p)return;
+    if(!window.confirm("Delete the saved batch \u201c"+p.name+"\u201d?"))return;
+    setPresets(ps=>(ps||[]).filter(x=>x.id!==presetSel)); setPresetSel("");
+  };
   const dimValues=(d)=>{const m={};pool.forEach(o=>{const k=dimOf(o,d);m[k]=(m[k]||0)+1;});return Object.entries(m).sort((a,b)=>b[1]-a[1]);};
   // ── Autopilot inside Batch ──
   const applyAutopilot=()=>{
@@ -6957,6 +7116,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
   );};
   return (
     <div className="space-y-3">
+      {presetBar}
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Layers className="w-4 h-4"/>Batch shipping</h2>
         <span className="text-[11px] text-stone-400">{pool.length} open order{pool.length===1?"":"s"}</span>
@@ -7002,6 +7162,10 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
             <input value={tMin} onChange={e=>setTMin(e.target.value)} placeholder="min" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>–<input value={tMax} onChange={e=>setTMax(e.target.value)} placeholder="max" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>
             <span className="text-xs text-stone-500 ml-2">Age</span>
             <select value={age} onChange={e=>setAge(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"><option value="any">Any</option><option value="today">Today</option><option value="2">≤ 2 days</option><option value="7">≤ 7 days</option><option value="old">Over 7 days</option></select>
+            <span className="text-xs text-stone-500 ml-2">Order date</span>
+            <input type="date" value={dFrom} onChange={e=>setDFrom(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>
+            <span className="text-xs text-stone-400">to</span>
+            <input type="date" value={dTo} onChange={e=>setDTo(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>
           </div>
         </div>}
         <div className="border-t border-stone-100 pt-3 flex flex-wrap items-center gap-2 sm:gap-3">
@@ -7774,9 +7938,12 @@ function PrinterSettings({settings,setSettings}){
         <Field label="Label size">
           <Select value={pr.labelSize} onChange={e=>set({labelSize:e.target.value})}>
             <option value="4x6">4×6 — thermal (recommended)</option>
-            <option value="4x8">4×8 — thermal with packing slip</option>
+            <option value="4x675">4×6.75 — thermal with doc tab</option>
+            <option value="4x8">4×8 — thermal with doc tab / packing area</option>
+            <option value="4x9">4×9 — thermal with large doc tab</option>
             <option value="letter">8.5×11 — laser/inkjet sheet</option>
           </Select>
+          <p className="text-[11px] text-stone-400 mt-1">On doc-tab stocks the label prints at the top and the tear-off strip below is filled with your Doc tab fields (configured further down this page). Every print path uses this size — booked labels, reprints, batch, and direct printing.</p>
         </Field>
         <Field label="File format">
           <Select value={pr.format} onChange={e=>set({format:e.target.value})}>

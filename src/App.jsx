@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v308";
+const BUILD_TAG="addr-v310";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -327,6 +327,19 @@ function loadPdfJs(){
   return _pdfjsLoad;
 }
 /* Bounding box of non-white content in raw RGBA data. Pure so it's unit-testable. */
+/* Pure + unit-testable: snap cropped label dims to real stock sizes. Width to 4″ when
+   plausibly thermal; height to the nearest catalog height only when within 0.15″. */
+function _snapLabelDims(pw,ph){
+  let w=pw,h=ph;
+  if(pw>3.7&&pw<4.3)w=4;
+  if(w===4){
+    const H=[6,6.25,6.5,6.75,8,9];
+    let best=null,bd=0.15+1e-9;
+    for(const hh of H){ const d=Math.abs(ph-hh); if(d<bd){bd=d;best=hh;} }
+    if(best!=null)h=best;
+  }
+  return [w,h];
+}
 function _labelBBox(data,W,H){
   let minX=W,minY=H,maxX=-1,maxY=-1;
   for(let y=0;y<H;y+=2){const row=y*W*4;
@@ -368,7 +381,13 @@ async function pdfToImages(base64,scale){
             g.drawImage(c,x0,y0,c2.width,c2.height,0,0,c2.width,c2.height);
             c=c2; cropped=true;
             pw=c2.width/(72*sc); ph=c2.height/(72*sc);
-            if(pw>3.3&&pw<4.7&&ph>5.1&&ph<6.9){pw=4;ph=6;}   // snap to true 4×6 stock
+            /* Snap to the NEAREST known stock height (±0.15″), never blanket-snap to 6″:
+               the old rule squeezed up to 6.9″ of artwork into a "6-inch" label, so when the
+               carrier honors a doc-tab stock (label + its own tab = 6.75″ of ink on a letter
+               page) the tab content got compressed onto the label and we stacked a second
+               tab below it. Tight per-stock snapping keeps 6.75″ artwork at 6.75″, which the
+               compose pass-through then leaves untouched. */
+            const snapped=_snapLabelDims(pw,ph);pw=snapped[0];ph=snapped[1];
           }
         }
       }catch(e){}
@@ -422,6 +441,30 @@ function _loadImg(src){return new Promise((res,rej)=>{const i=new Image();i.onlo
 /* Tab geometry for both real-world doc-tab stock orientations: trailing (tab below the label —
    UPS rolls and FedEx trailing stock) and leading (tab above the label — FedEx leading stock).
    Pure math so it's unit-testable without a canvas. */
+/* Lay doc-tab items out across the tab instead of stacking them. Items with a saved x/y
+   (fractions from the drag-and-drop designer) go exactly there; the rest flow left→right,
+   wrapping like words in a sentence, so the whole 4-inch width is used. Pure function with an
+   injected text-measurer so it's unit-testable without a canvas. Returns [{txt,fs,px,py}]
+   with py as the text BASELINE; anything that would cross the tab boundary is dropped. */
+function layoutDocTab(items,widthPx,tabTopPx,tabBotPx,padPx,measure){
+  const out=[];let fx=padPx,fy=tabTopPx+padPx;
+  items.forEach(it=>{
+    const fs=it.fs;
+    if(it.x!=null&&it.y!=null){
+      const px=Math.round(it.x*widthPx);
+      const py=tabTopPx+Math.round(it.y*(tabBotPx-tabTopPx))+fs;
+      if(py<=tabBotPx-2&&px<widthPx-4)out.push({txt:it.txt,fs,px,py});
+      return;
+    }
+    const w=measure(it.txt,fs);
+    if(fx>padPx&&fx+w>widthPx-padPx){fx=padPx;fy+=Math.round(fs*1.5);}
+    const py=fy+fs;
+    if(py>tabBotPx-2)return;
+    out.push({txt:it.txt,fs,px:fx,py});
+    fx+=w+Math.round(fs*1.1);
+  });
+  return out;
+}
 function tabGeom(leading,lhPx,pageHpx){
   const tabPx=Math.max(0,pageHpx-lhPx);
   return leading
@@ -457,15 +500,10 @@ async function composeForStock(imgs,wIn,hIn,ctx){
       const lines=(cfg&&cfg.docTab&&cfg.docTab.enabled)?buildDocTabLines(cfg.docTab,ctx||{}):[];
       g.fillStyle="#111";
       const tabIn=SH-(hIn||6);   // small tabs (¼", ½") get proportionally tighter padding
-      const pad=Math.round(Math.min(0.14,Math.max(0.03,tabIn*0.18))*dpi);let ty=geo.textTop+pad;
-      lines.forEach(l=>{
-        const fs=Math.max(8,Math.round((l.size||9)*dpi/72));
-        g.font="600 "+fs+"px system-ui,Arial,sans-serif";
-        ty+=fs;
-        if(ty>geo.textBottom-Math.round(0.06*dpi))return;   // clip to the tab — never overflow onto the label
-        g.fillText(((l.label?l.label+": ":"")+l.value).slice(0,90),pad,ty);
-        ty+=Math.round(fs*0.5);
-      });
+      const pad=Math.round(Math.min(0.14,Math.max(0.03,tabIn*0.18))*dpi);
+      const items=lines.map(l=>({txt:((l.label?l.label+": ":"")+l.value).slice(0,90),fs:Math.max(8,Math.round((l.size||9)*dpi/72)),x:l.x,y:l.y}));
+      const placed=layoutDocTab(items,c.width,geo.textTop,geo.textBottom,pad,(txt,fs)=>{g.font="600 "+fs+"px system-ui,Arial,sans-serif";return g.measureText(txt).width;});
+      placed.forEach(p=>{g.font="600 "+p.fs+"px system-ui,Arial,sans-serif";g.fillText(p.txt,p.px,p.py);});
     }
     out.push(c.toDataURL("image/png"));
   }
@@ -1001,7 +1039,7 @@ function resolveDocField(field,ctx,custom){
    Returns an array of {label,value,size} lines, skipping empties. */
 function buildDocTabLines(docTab,ctx){
   if(!docTab||!docTab.enabled)return [];
-  return (docTab.zones||[]).map(z=>({label:docTab.showLabels!==false?z.label:"",value:resolveDocField(z.field,ctx,z.custom),size:z.size||9})).filter(l=>l.value!=="");
+  return (docTab.zones||[]).map(z=>({label:docTab.showLabels!==false?z.label:"",value:resolveDocField(z.field,ctx,z.custom),size:z.size||9,x:(z.x!=null?+z.x:null),y:(z.y!=null?+z.y:null)})).filter(l=>l.value!=="");
 }
 function receiptHTML(rc,ctx,logoUrl){
   const esc=(x)=>String(x||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
@@ -5192,7 +5230,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       pieces:pieces.map(p=>({weight:Math.ceil(pw(p)||1),length:p.L,width:p.W,height:p.H,declaredValue:intl?(p.value||null):null}))};   // book at the rounded-up billing weight the quote priced
     const res=await shipCall({action:"ship",account:acctOf(eng),order});
     if(!res||!res.ok){setShipStatus({state:"error",key:q.key,msg:(res&&res.error)||"Booking failed"});setBought(null);return;}
-    const done=(st)=>{ const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec},settings,setLabelPreview);} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
+    const done=(st)=>{ const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec},settings,setLabelPreview); if(cz(settings).skipBookedSummary){ setTimeout(()=>{ try{newShipment();}catch(e){} },900); };} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
     if(res.booked){done(res);return;}
     setShipStatus({state:"pending",key:q.key,orderId:res.orderId});
     pollLabel(eng,res.orderId,done).then(r=>{ if(r&&r.timedOut){ onPending&&onPending({orderId:res.orderId,rec:buildRec(q,carrier,{}),service:q.label,carrier,orderRef:selectedOrder}); setShipStatus({state:"pending_timeout",key:q.key});setBought(null);} });
@@ -7864,6 +7902,43 @@ const DOCTAB_FIELDS=[["reference","Reference / PO"],["invoiceNo","Invoice #"],["
 const DOCTAB_LABEL={};DOCTAB_FIELDS.forEach(([k,l])=>{DOCTAB_LABEL[k]=l;});
 const DEFAULT_DOCTABS=[{id:"dt1",zone:"01",field:"reference",label:"REF",custom:"",size:9},{id:"dt2",zone:"02",field:"shipDate",label:"SHIP DATE",custom:"",size:9},{id:"dt3",zone:"03",field:"weight",label:"WEIGHT",custom:"",size:9}];
 const DEFAULT_RECEIPT_LINES=[{id:"rl1",field:"recipientName",label:"To",custom:""},{id:"rl2",field:"reference",label:"Ref",custom:""},{id:"rl3",field:"service",label:"Service",custom:""},{id:"rl4",field:"weight",label:"Weight",custom:""},{id:"rl5",field:"cost",label:"Cost",custom:""}];
+/* Drag-and-drop doc-tab designer: the tab at true on-screen scale (96 px/inch), every zone a
+   draggable chip. Dropping a chip saves x/y fractions into settings; the printer places text at
+   the same fractions, so the designer IS the print preview. Chips never dragged keep no x/y and
+   auto-flow across the tab at print time. */
+function DocTabDesigner({zones,setZone,onClearLayout,showLabels,tabHIn}){
+  const ref=React.useRef(null);
+  const [drag,setDrag]=React.useState(null);
+  const W=384,H=Math.max(30,Math.round(tabHIn*96));
+  const SAMPLE={reference:"SIM-1042",invoiceNo:"INV-88",orderNo:"#1042",shipDate:"7/8/26",service:"FedEx 2Day",weight:"3 lb",pieces:"1",declaredValue:"$100",recipientName:"Jane Doe",recipientCompany:"Acme Co",recipientZip:"84084",senderName:"S. Anderson",senderCompany:"ShipHub",cost:"$9.12",tracking:"794912345678"};
+  if(tabHIn<=0.01)return <div className="text-[11px] text-stone-400">Pick a doc-tab label size above (4×6.25 and up) to design the tab layout.</div>;
+  const posOf=(z,i)=>({x:z.x!=null?+z.x:((i%3)*0.33+0.02),y:z.y!=null?+z.y:(Math.min(0.8,Math.floor(i/3)*0.42+0.06))});
+  const move=(e)=>{ if(!drag||!ref.current)return; const r=ref.current.getBoundingClientRect();
+    const x=Math.min(0.97,Math.max(0,(e.clientX-r.left-drag.dx)/r.width));
+    const y=Math.min(0.9,Math.max(0,(e.clientY-r.top-drag.dy)/r.height));
+    setZone(drag.id,{x:Math.round(x*1000)/1000,y:Math.round(y*1000)/1000});
+  };
+  return (<div>
+    <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Tab layout — drag each field exactly where you want it</div>
+    <div ref={ref} onPointerMove={move} onPointerUp={()=>setDrag(null)} onPointerLeave={()=>setDrag(null)}
+      className="relative border-2 border-dashed border-stone-300 bg-white rounded select-none touch-none overflow-hidden" style={{width:W+"px",height:H+"px"}}>
+      {zones.map((z,i)=>{const p=posOf(z,i);return (
+        <div key={z.id}
+          onPointerDown={(e)=>{e.preventDefault();const cr=e.currentTarget.getBoundingClientRect();const rr=ref.current.getBoundingClientRect();
+            if(z.x==null)setZone(z.id,{x:Math.round((cr.left-rr.left)/rr.width*1000)/1000,y:Math.round((cr.top-rr.top)/rr.height*1000)/1000});
+            setDrag({id:z.id,dx:e.clientX-cr.left,dy:e.clientY-cr.top});}}
+          className="absolute cursor-grab active:cursor-grabbing font-mono whitespace-nowrap text-stone-800 bg-[#E6F4FF]/80 border border-[#99D6FF] rounded px-1 hover:border-[#0086E0]"
+          style={{left:(p.x*100)+"%",top:(p.y*100)+"%",fontSize:((z.size||9)*96/72)+"px",lineHeight:1.2}}>
+          {showLabels&&z.label?z.label+": ":""}{z.field==="custom"?(z.custom||"TEXT"):(SAMPLE[z.field]||z.field)}
+        </div>);})}
+      {!zones.length&&<div className="absolute inset-0 flex items-center justify-center text-[11px] text-stone-400">Add zones above, then drag them into place here</div>}
+    </div>
+    <div className="flex flex-wrap items-center gap-3 mt-1.5">
+      <button onClick={onClearLayout} className="text-xs text-stone-500 hover:text-stone-700 underline">Reset layout — auto-flow across the tab</button>
+      <span className="text-[11px] text-stone-400">Shown at actual size (4″ × {tabHIn}″ tab). Positions save instantly and print exactly here.</span>
+    </div>
+  </div>);
+}
 function PrinterSettings({settings,setSettings}){
   const pr=settings.printer||{labelSize:"4x6",format:"PDF",printer:"",packingSlip:true,autoPrint:false,slipSize:"letter",rotate:false};
   const set=(patch)=>setSettings({...settings,printer:{...pr,...patch}});
@@ -8027,12 +8102,9 @@ function PrinterSettings({settings,setSettings}){
           <button onClick={addZone} className="text-xs text-[#0086E0] font-medium flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add zone</button>
         </div>
         <div className="rounded-lg border border-stone-200 bg-white p-3">
-          <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Preview</div>
-          <div className="inline-block border border-dashed border-stone-300 rounded bg-stone-50 px-3 py-2 min-w-[180px]">
-            {dtZones.length===0?<div className="text-[11px] text-stone-400">No zones yet</div>:dtZones.map(z=>(
-              <div key={z.id} style={{fontSize:(z.size||9)+"pt",lineHeight:1.35}} className="font-mono text-stone-700 whitespace-nowrap">{dt.showLabels!==false&&z.label?<span className="text-stone-400">{z.label}: </span>:null}{z.field==="custom"?(z.custom||"—"):("{"+DOCTAB_LABEL[z.field]+"}")}</div>
-            ))}
-          </div>
+          <DocTabDesigner zones={dtZones} setZone={setZone} showLabels={dt.showLabels!==false}
+            tabHIn={(()=>{const d=stockDims((settings.printer||{}).labelSize||"4x6");return d[0]===8.5?5:Math.max(0,Math.round((d[1]-6)*100)/100);})()}
+            onClearLayout={()=>setDt({zones:dtZones.map(z=>({...z,x:null,y:null}))})}/>
         </div>
       </>}
     </Panel>

@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v294";
+const BUILD_TAG="addr-v297";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -315,22 +315,97 @@ function loadPdfJs(){
   });
   return _pdfjsLoad;
 }
+/* Bounding box of non-white content in raw RGBA data. Pure so it's unit-testable. */
+function _labelBBox(data,W,H){
+  let minX=W,minY=H,maxX=-1,maxY=-1;
+  for(let y=0;y<H;y+=2){const row=y*W*4;
+    for(let x=0;x<W;x+=2){const i=row+x*4;
+      if(data[i+3]>16&&(data[i]<244||data[i+1]<244||data[i+2]<244)){
+        if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y;
+      }}}
+  return maxX<0?null:{minX,minY,maxX,maxY};
+}
 async function pdfToImages(base64,scale){
   const lib=await loadPdfJs();
   const bin=atob(base64);const bytes=new Uint8Array(bin.length);
   for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
   const doc=await lib.getDocument({data:bytes}).promise;
-  const imgs=[];let wPt=288,hPt=432;
+  const sc=scale||4;
+  const imgs=[];let wIn=4,hIn=6,cropped=false;
   for(let n=1;n<=doc.numPages;n++){
     const page=await doc.getPage(n);
-    const v1=page.getViewport({scale:1}); if(n===1){wPt=v1.width;hPt=v1.height;}
-    const vp=page.getViewport({scale:scale||4});
-    const c=document.createElement("canvas");c.width=Math.round(vp.width);c.height=Math.round(vp.height);
-    await page.render({canvasContext:c.getContext("2d"),viewport:vp}).promise;
+    const v1=page.getViewport({scale:1});
+    const vp=page.getViewport({scale:sc});
+    let c=document.createElement("canvas");c.width=Math.round(vp.width);c.height=Math.round(vp.height);
+    const ctx=c.getContext("2d");
+    await page.render({canvasContext:ctx,viewport:vp}).promise;
+    let pw=v1.width/72, ph=v1.height/72;
+    /* England returns letter-size PDFs with the 4×6 label drawn in the top-left corner.
+       When the page is clearly bigger than label stock, crop to the content's bounding
+       box so previews and prints show the label full size instead of a tiny corner. */
+    if(v1.width>400||v1.height>620){
+      try{
+        const bb=_labelBBox(ctx.getImageData(0,0,c.width,c.height).data,c.width,c.height);
+        if(bb){
+          const bw=bb.maxX-bb.minX+1,bh=bb.maxY-bb.minY+1;
+          if(bw*bh<0.8*c.width*c.height){
+            const pad=Math.round(sc*2);   // ~2pt breathing room
+            const x0=Math.max(0,bb.minX-pad),y0=Math.max(0,bb.minY-pad);
+            const x1=Math.min(c.width,bb.maxX+1+pad),y1=Math.min(c.height,bb.maxY+1+pad);
+            const c2=document.createElement("canvas");c2.width=x1-x0;c2.height=y1-y0;
+            const g=c2.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c2.width,c2.height);
+            g.drawImage(c,x0,y0,c2.width,c2.height,0,0,c2.width,c2.height);
+            c=c2; cropped=true;
+            pw=c2.width/(72*sc); ph=c2.height/(72*sc);
+            if(pw>3.3&&pw<4.7&&ph>5.1&&ph<6.9){pw=4;ph=6;}   // snap to true 4×6 stock
+          }
+        }
+      }catch(e){}
+    }
+    if(n===1){wIn=pw;hIn=ph;}
     imgs.push(c.toDataURL("image/png"));
   }
   try{doc.destroy();}catch(e){}
-  return {imgs,wIn:wPt/72,hIn:hPt/72};
+  return {imgs,wIn,hIn,cropped};
+}
+/* Assemble a real PDF from JPEG pages — pure string/byte work, no libraries. Used to hand
+   PrintNode a genuine 4×6 label PDF when the carrier's PDF was letter-size with the label
+   in a corner. jpegs: [{bin,w,h}] where bin is the raw JPEG bytes as a latin-1 string. */
+function _assembleJpegPdf(jpegs,W,H){
+  const objs=[];
+  objs.push("<< /Type /Catalog /Pages 2 0 R >>");
+  const kids=jpegs.map((_,i)=>String(3+i*3)+" 0 R").join(" ");
+  objs.push("<< /Type /Pages /Kids ["+kids+"] /Count "+jpegs.length+" >>");
+  jpegs.forEach((j,i)=>{
+    const pg=3+i*3,im=4+i*3,ct=5+i*3;
+    objs.push("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 "+W+" "+H+"] /Resources << /XObject << /Im0 "+im+" 0 R >> >> /Contents "+ct+" 0 R >>");
+    objs.push({head:"<< /Type /XObject /Subtype /Image /Width "+j.w+" /Height "+j.h+" /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "+j.bin.length+" >>",stream:j.bin});
+    const cs="q "+W+" 0 0 "+H+" 0 0 cm /Im0 Do Q";
+    objs.push({head:"<< /Length "+cs.length+" >>",stream:cs});
+  });
+  let out="%PDF-1.4\n";const offs=[];
+  objs.forEach((o,i)=>{
+    offs.push(out.length);
+    out+=(i+1)+" 0 obj\n";
+    if(typeof o==="string")out+=o+"\nendobj\n";
+    else out+=o.head+"\nstream\n"+o.stream+"\nendstream\nendobj\n";
+  });
+  const xr=out.length;
+  out+="xref\n0 "+(objs.length+1)+"\n0000000000 65535 f \n";
+  offs.forEach(off=>{out+=("0000000000"+off).slice(-10)+" 00000 n \n";});
+  out+="trailer\n<< /Size "+(objs.length+1)+" /Root 1 0 R >>\nstartxref\n"+xr+"\n%%EOF";
+  return out;
+}
+async function imgsToLabelPdf(imgs,wIn,hIn){
+  const W=Math.round((wIn||4)*72),H=Math.round((hIn||6)*72);
+  const jpegs=[];
+  for(const src of imgs){
+    const im=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error("img load"));i.src=src;});
+    const c=document.createElement("canvas");c.width=im.naturalWidth||1;c.height=im.naturalHeight||1;
+    const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);g.drawImage(im,0,0);
+    jpegs.push({bin:atob(c.toDataURL("image/jpeg",0.92).split(",")[1]),w:c.width,h:c.height});
+  }
+  return btoa(_assembleJpegPdf(jpegs,W,H));
 }
 /* Batch print: renders every label's pages once, concatenates them, and fires exactly ONE
    print job — the system dialog opens a single time with all labels back to back, instead of
@@ -411,8 +486,10 @@ async function stampLogo(imgs,cfg,logoSrc){
 async function directPrintPdf(base64,title){
   const cfg=(typeof window!=="undefined"&&window.__scDirectPrint)||null;
   if(!cfg||!cfg.enabled||!cfg.apiKey||!cfg.printerId||!base64)return false;
+  let payload=base64;
+  try{ const r0=await pdfToImages(base64,3); if(r0&&r0.cropped&&r0.imgs.length){ payload=await imgsToLabelPdf(r0.imgs,r0.wIn,r0.hIn); } }catch(e){}   // pdf.js down → send the original untouched
   try{
-    const r=await fetch("/.netlify/functions/printnode",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"print",apiKey:cfg.apiKey,printerId:cfg.printerId,title:title||"Shipping label",pdfBase64:base64})});
+    const r=await fetch("/.netlify/functions/printnode",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"print",apiKey:cfg.apiKey,printerId:cfg.printerId,title:title||"Shipping label",pdfBase64:payload})});
     const d=await r.json().catch(()=>null);
     return !!(d&&d.ok);
   }catch(e){ return false; }
@@ -1752,8 +1829,27 @@ function Login({users,onLogin,brand}){
   const [company,setCompany]=useState("");
   const [err,setErr]=useState("");
   const [note,setNote]=useState("");
-  const signin=()=>{
-    const u=users.find(x=>x.email.toLowerCase()===email.trim().toLowerCase()&&x.password===pw);
+  const [busy,setBusy]=useState(false);
+  /* Forgot-password flow — same server actions CloudAuth uses (db.js requestReset /
+     resetPassword), so it works identically on ShippingCloud, ShipHub, and the admin HQ. */
+  const [fp,setFp]=useState(null);          // null | "ask" | "sent" | {reset:token} | "done"
+  const [fpEmail,setFpEmail]=useState("");
+  const [fpPw,setFpPw]=useState("");
+  const [fpErr,setFpErr]=useState("");
+  useEffect(()=>{try{const t=new URLSearchParams(window.location.search).get("reset");if(t)setFp({reset:t});}catch(e){}},[]);
+  const fpAsk=async()=>{setFpErr("");try{await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"requestReset",email:fpEmail})});setFp("sent");}catch(e){setFpErr("Network error — try again.");}};
+  const fpSave=async()=>{setFpErr("");try{const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"resetPassword",rtoken:fp.reset,password:fpPw})});const d=await r.json();if(d&&d.ok){setFp("done");try{window.history.replaceState({},"",window.location.pathname);}catch(e){}}else setFpErr((d&&d.error)||"Could not reset.");}catch(e){setFpErr("Network error — try again.");}};
+  const signin=async()=>{
+    if(busy)return; setBusy(true); setErr("");
+    /* Cloud-first: server-side scrypt check covers accounts created or reset in cloud mode.
+       The plaintext-array check stays as the fallback for legacy/local logins. */
+    try{
+      const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"signin",email:email.trim(),password:pw})});
+      const d=await r.json().catch(()=>null);
+      if(d&&d.ok&&d.user){ try{CLOUD.token=d.token;lsSet("cloud.token",d.token);}catch(e){} setBusy(false); onLogin(d.user); return; }
+    }catch(e){}
+    const u=users.find(x=>x.email.toLowerCase()===email.trim().toLowerCase()&&x.password===pw&&x.password!=="");
+    setBusy(false);
     if(!u){setErr("Incorrect email or password.");return;}
     if(u.status!=="active"){setErr("This account is inactive. Contact your administrator.");return;}
     onLogin(u);
@@ -1781,7 +1877,17 @@ function Login({users,onLogin,brand}){
           <Field label="Password"><div className="relative"><Input type={showPw?"text":"password"} value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")mode==="signin"?signin():signup();}} placeholder="••••••••" className="pr-9"/><button type="button" onClick={()=>setShowPw(v=>!v)} tabIndex={-1} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">{showPw?<EyeOff className="w-4 h-4"/>:<Eye className="w-4 h-4"/>}</button></div></Field>
           {err&&<div className="text-sm text-rose-600 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4"/>{err}</div>}
           {note&&<div className="text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2">{note}</div>}
-          <button onClick={mode==="signin"?signin:signup} className="w-full bg-stone-900 text-white rounded-lg px-4 py-2.5 font-medium hover:bg-stone-800">{mode==="signin"?"Sign in":"Request account"}</button>
+          <button onClick={mode==="signin"?signin:signup} className="w-full bg-stone-900 text-white rounded-lg px-4 py-2.5 font-medium hover:bg-stone-800 disabled:opacity-50" disabled={busy}>{busy?"One moment…":(mode==="signin"?"Sign in":"Request account")}</button>
+          {mode==="signin"&&<button onClick={()=>{setFp("ask");setFpEmail(email);setFpErr("");}} className="w-full text-center text-xs text-stone-400 hover:text-stone-600 underline underline-offset-2">Forgot password?</button>}
+          {fp&&<div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={()=>fp!=="done"&&setFp(null)}>
+            <div onClick={e=>e.stopPropagation()} className="bg-white rounded-2xl p-6 max-w-sm w-full space-y-3 text-left">
+              {fp==="ask"&&<><div className="font-semibold text-stone-800">Reset your password</div><p className="text-[13px] text-stone-500">Enter your login email and we’ll send a one-hour reset link.</p><input value={fpEmail} onChange={e=>setFpEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&fpAsk()} placeholder="you@company.com" autoFocus className="w-full border border-stone-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0086E0]/30"/><button onClick={fpAsk} className="w-full text-sm bg-stone-900 text-white rounded-lg py-2 font-medium hover:bg-stone-800">Send reset link</button></>}
+              {fp==="sent"&&<><div className="font-semibold text-stone-800">Check your email</div><p className="text-[13px] text-stone-500">If that address has an account, a reset link is on its way. It works for one hour.</p><button onClick={()=>setFp(null)} className="w-full text-sm bg-stone-100 text-stone-700 rounded-lg py-2 font-medium hover:bg-stone-200">Close</button></>}
+              {fp&&fp.reset&&<><div className="font-semibold text-stone-800">Choose a new password</div><input type="password" value={fpPw} onChange={e=>setFpPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&fpSave()} placeholder="New password (min 6 characters)" autoFocus className="w-full border border-stone-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0086E0]/30"/><button onClick={fpSave} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium hover:bg-[#0072BE]">Save new password</button></>}
+              {fp==="done"&&<><div className="font-semibold text-emerald-700 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>Password updated</div><p className="text-[13px] text-stone-500">Sign in with your new password.</p><button onClick={()=>setFp(null)} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium">Sign in</button></>}
+              {fpErr&&<div className="text-xs text-rose-600">{fpErr}</div>}
+            </div>
+          </div>}
         </div>
         <div className="mt-4 bg-white/60 border border-stone-200 rounded-lg p-3 text-xs text-stone-500 space-y-1">
           <div className="font-medium text-stone-600">Demo logins</div>
@@ -4682,11 +4788,26 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const custom=cz(settings);
   const [selectedOrder,setSelectedOrder]=usePersist("ship.selectedOrder",null);
   const [scanVal,setScanVal]=useState("");
+  const scanRef=React.useRef(null);
+  /* Scan mode: the scan box is always ready — focused on load and re-armed whenever focus
+     falls back to the page (after booking, closing a modal, clicking whitespace). It never
+     steals focus from another input/textarea/select, so editing weights etc. still works;
+     it only catches keystrokes that would otherwise land on the page body. */
+  const scanMode=!!cz(settings).scanAutoFocus;
+  useEffect(()=>{ if(scanMode&&scanRef.current)try{scanRef.current.focus();}catch(e){} },[scanMode]);
+  useEffect(()=>{ if(!scanMode)return;
+    const armed=()=>{ const a=document.activeElement; return !a||a===document.body||a.tagName==="BUTTON"; };
+    const onKey=(e)=>{ if(e.ctrlKey||e.metaKey||e.altKey)return; if(e.key.length!==1&&e.key!=="Enter")return;
+      if(armed()&&scanRef.current){ try{scanRef.current.focus();}catch(err){} } };
+    window.addEventListener("keydown",onKey,true);
+    return ()=>window.removeEventListener("keydown",onKey,true);
+  },[scanMode]);
   const [scanMsg,setScanMsg]=useState(null);
   /* auto=true: fired by the debounce while typing/scanning — EXACT matches only, silent on
      miss, and never clears the box mid-type. Enter keeps the old behavior: exact first, then
      fuzzy contains-match, with the red "no match" flash. */
   const scanApply=(code,auto)=>{ const c=String(code||"").trim().toLowerCase(); if(!c){setScanVal("");return;}
+    if(cz(settings).scanAutoFocus)setTimeout(()=>{try{scanRef.current&&scanRef.current.focus();}catch(e){}},50);   // scan mode: re-arm for the next barcode
     const o=orders.find(x=>[x.name,x.id,x.sku,x.tracking,x.customer,x.zip,x.barcode].filter(Boolean).some(v=>String(v).toLowerCase()===c))
       ||(auto?null:orders.find(x=>[x.name,x.sku,x.tracking,x.customer].filter(Boolean).some(v=>String(v).toLowerCase().includes(c))));
     if(!o){ if(!auto){ setScanVal(""); setScanMsg({ok:false,t:`no match for “${code}”`}); setTimeout(()=>setScanMsg(null),4000); } return; }
@@ -5058,7 +5179,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-1/3 top-11 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-4 h-4"/></button>
           <div className="min-w-0 lg:col-span-2"><AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} scanSlot={<div className="relative">
             <ScanLine className="w-4 h-4 text-[#0086E0] absolute left-2.5 top-2.5 pointer-events-none"/>
-            <input value={scanVal} onChange={e=>setScanVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();scanApply(scanVal);}}} placeholder="Scan order # / SKU" title={scanMsg&&!scanMsg.ok?scanMsg.t:undefined} className={`w-full border border-dashed rounded-lg pl-8 pr-7 py-1.5 text-sm outline-none placeholder:text-stone-400 ${scanMsg?(scanMsg.ok?"border-emerald-300 bg-emerald-50":"border-rose-300 bg-rose-50"):"border-[#66C2FF] bg-[#E6F4FF]/50 focus:border-[#0086E0] focus:bg-white"}`}/>
+            <input ref={scanRef} value={scanVal} onChange={e=>setScanVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();scanApply(scanVal);}}} placeholder="Scan order # / SKU" title={scanMsg&&!scanMsg.ok?scanMsg.t:undefined} className={`w-full border border-dashed rounded-lg pl-8 pr-7 py-1.5 text-sm outline-none placeholder:text-stone-400 ${scanMsg?(scanMsg.ok?"border-emerald-300 bg-emerald-50":"border-rose-300 bg-rose-50"):"border-[#66C2FF] bg-[#E6F4FF]/50 focus:border-[#0086E0] focus:bg-white"}`}/>
             {scanMsg&&<span className="absolute right-2 top-2">{scanMsg.ok?<CheckCircle2 className="w-4 h-4 text-emerald-500"/>:<AlertTriangle className="w-4 h-4 text-rose-400"/>}</span>}
           </div>} contactFallback={{phone:sender.phone,email:sender.email}} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }} hideAddr23={custom.hideAddr23} reqOverrides={{phone:custom.phoneRequired!==false,email:custom.emailRequired!==false}} side={addressCheck}/></div>
         </div>
@@ -9117,6 +9238,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys}){
         <Tog k="hideRateSrcBar" label="Hide the rate-source banner" hint="Removes the ‘Live rates from your FedEx account / Estimated rates’ strip above the service list."/>
         <Tog k="hideAutopilotBox" label="Hide the Autopilot match banner" hint="Removes the ‘Autopilot rule matched…’ box above Select service. Rules still run and still pre-highlight the service."/>
         <Tog k="hideNotifyBox" label="Hide the Send label & notify box" hint="Removes the email panel at the bottom of the Ship tab. Automated notifications in Settings → Email automation still send."/>
+        <Tog k="scanAutoFocus" label="Scan mode — keep the scan box ready" hint="The scan box is focused the moment the Ship tab opens and re-arms itself after every scan and booking — scan barcode after barcode without touching the mouse. It never steals focus while you're typing in another field."/>
         <Tog k="hideInvoice" label="Hide Invoice # field"/>
         <Tog k="hidePO" label="Hide PO # field"/>
         <Tog k="matchedOnly" label="Only show the requested service" hint="When a store order names the service the buyer paid for, show just that one — pre-highlighted, ready to print. Other services sit behind ‘Show all services’."/>

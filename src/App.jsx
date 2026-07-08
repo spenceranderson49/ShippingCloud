@@ -54,7 +54,7 @@ const FEATURE_CATALOG=[
   {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:true},
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own UPS / other carrier accounts on the Connections page (England always shows; admins always have this)",default:false},
 ];
-const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All logins"],["rates","Rate database"],["labelcert","FedEx labels"],["customizations","Features & access"],["branding","Branding"],["platforms","Carrier accounts"],["domains","Domains"]];
+const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All logins"],["labelcert","FedEx labels"],["customizations","Features & access"],["branding","Branding"],["platforms","Carrier accounts"],["domains","Domains"]];
 const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,labelcert:Printer,customizations:Sliders,branding:Sparkles,platforms:Truck,domains:ExternalLink};
 /* A restricted admin ALWAYS keeps access to "users" — without it there is no self-service way
    to ever fix a permission set that’s missing something, for yourself or anyone else. A wrong
@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v274";
+const BUILD_TAG="addr-v275";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -1974,7 +1974,7 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection}){
 
 /* ════════ ADMIN → CUSTOMER DETAIL (opens as its own tab) ════════ */
 const SUPPLY_ITEMS=["Thermal 4×6 labels","Laser label sheets","Poly mailers","Boxes — small","Boxes — medium","Boxes — large","Packing tape","Bubble mailers","Dunnage / void fill","Thermal printer ribbon"];
-function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featureFlags={},setFeatureFlags,customFeatures=[],settings,onClose}){
+function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featureFlags={},setFeatureFlags,customFeatures=[],settings,onClose,openSection}){
   const CATALOG=[...FEATURE_CATALOG,...(customFeatures||[]).map(c=>({...c,custom:true}))];
   const [rules,setRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
   const [tab,setTab]=useState("profile");
@@ -1989,9 +1989,21 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
   const upPrefs=(patch)=>setClients(cs=>cs.map(x=>x.id===cid?{...x,prefs:{...(x.prefs||{}),...patch}}:x));
   const upEng=(patch)=>setClients(cs=>cs.map(x=>x.id===cid?{...x,england:{...(x.england||{}),...patch}}:x));
   const upRules=(patch)=>setRules(r=>({...DEFAULT_RATE_RULES,...r,...patch}));
-  const upProfSvc=(pid,k,patch)=>upRules({profiles:profiles.map(p=>p.id===pid?{...p,services:{...(p.services||{}),[k]:{...((p.services||{})[k]||{}),...patch}}}:p)});
-  const upProfSur=(pid,id,patch)=>upRules({profiles:profiles.map(p=>p.id===pid?{...p,surcharges:{...(p.surcharges||{}),[id]:{...((p.surcharges||{})[id]||{}),...patch}}}:p)});
+  /* Auto-fork: editing rates while this customer sits on the shared Default profile silently
+     creates their own dedicated copy first and applies the edit there — so per-customer edits
+     can NEVER accidentally reprice every other Default customer. The profile machinery still
+     runs underneath; it's just invisible unless you go looking. */
+  const forkProfile=(mutate)=>{const id="p"+Date.now();const forked={id,name:c.name,services:JSON.parse(JSON.stringify(prof.services||{})),surcharges:JSON.parse(JSON.stringify(prof.surcharges||{}))};mutate(forked);upRules({profiles:[...profiles,forked],assign:{...assign,[cid]:id}});say("Created "+c.name+"'s own rates — the shared Default stays untouched.");};
+  const upProfSvc=(pid,k,patch)=>{
+    if(pid==="default")return forkProfile(f=>{f.services[k]={...(f.services[k]||{}),...patch};});
+    upRules({profiles:profiles.map(p=>p.id===pid?{...p,services:{...(p.services||{}),[k]:{...((p.services||{})[k]||{}),...patch}}}:p)});
+  };
+  const upProfSur=(pid,id,patch)=>{
+    if(pid==="default")return forkProfile(f=>{f.surcharges[id]={...(f.surcharges[id]||{}),...patch};});
+    upRules({profiles:profiles.map(p=>p.id===pid?{...p,surcharges:{...(p.surcharges||{}),[id]:{...((p.surcharges||{})[id]||{}),...patch}}}:p)});
+  };
   const [surQ,setSurQ]=useState("");
+  const [showHiddenSvc,setShowHiddenSvc]=useState(false);   // reveal service rows hidden from the rates grid
   const lg=users.filter(u=>u.role!=="admin"&&u.clientId===cid);
   const say=(m)=>{setFlash(m);setTimeout(()=>setFlash(""),2200);};
   if(!c)return <div className="text-sm text-stone-400 py-10 text-center">This customer was deleted. <button onClick={onClose} className="text-[#0086E0] hover:underline">Close tab</button></div>;
@@ -2100,19 +2112,36 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         <span className="text-sm text-stone-600">{c.name} prices from</span>
         <Select value={assign[cid]||"default"} onChange={e=>upRules({assign:{...assign,[cid]:e.target.value}})}>{profiles.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</Select>
         {prof.id==="default"&&<button onClick={dedicated} className="text-xs bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-800">Create dedicated "{c.name}" profile</button>}
-        <span className="text-[11px] text-stone-400">{prof.id==="default"?"On Default — editing below changes every Default customer. Make a dedicated profile to price this one alone.":"Changes below hit only this profile."}</span>
+        <span className="text-[11px] text-stone-400">{prof.id==="default"?"On shared Default — your first edit below automatically forks "+c.name+"'s own copy, so other customers are never touched.":"Changes below price only "+c.name+"."}</span>
       </div>
-      <div className="border border-stone-200 rounded-lg bg-white overflow-x-auto"><table className="w-full text-sm min-w-[640px]"><tbody>
-        {svcQuick.map(sv=>{const r=(prof.services||{})[sv.k]||{};return (
-          <tr key={sv.k} className="border-t border-stone-100 first:border-t-0 hover:bg-stone-50">
+      {(()=>{
+        const svcHiddenMap=rules.svcHidden||{};
+        const full=RATE_SERVICES.fedex;
+        const gs=[];full.forEach(sv=>{let g=gs.find(x=>x.g===sv.g);if(!g){g={g:sv.g,items:[]};gs.push(g);}g.items.push(sv);});
+        const hiddenN=full.filter(sv=>svcHiddenMap[sv.k]).length;
+        const togHide=(k)=>upRules({svcHidden:{...svcHiddenMap,[k]:!svcHiddenMap[k]}});
+        return (<>
+        {hiddenN>0&&<div className="flex justify-end"><button onClick={()=>setShowHiddenSvc(v=>!v)} className="text-xs text-stone-500 hover:text-stone-700 flex items-center gap-1">{showHiddenSvc?<EyeOff className="w-3.5 h-3.5"/>:<Eye className="w-3.5 h-3.5"/>}{showHiddenSvc?"Done — collapse hidden rows":hiddenN+" hidden row"+(hiddenN>1?"s":"")+" — show"}</button></div>}
+        <div className="border border-stone-200 rounded-lg bg-white overflow-x-auto"><table className="w-full text-sm min-w-[640px]"><tbody>
+        {gs.map(g=>{
+          const items=showHiddenSvc?g.items:g.items.filter(sv=>!svcHiddenMap[sv.k]);
+          if(!items.length)return null;
+          return (<React.Fragment key={g.g}>
+          <tr><td colSpan={6} className="pt-3 pb-1 pl-3 text-[10px] uppercase tracking-widest text-stone-400 font-semibold">{g.g}{g.g==="One Rate"&&<span className="normal-case tracking-normal font-normal"> — price these Flat $ (always sells at exactly that), or import the One Rate table under Advanced below</span>}</td></tr>
+          {items.map(sv=>{const r=(prof.services||{})[sv.k]||{};return (
+          <tr key={sv.k} className={`border-t border-stone-100 hover:bg-stone-50 ${svcHiddenMap[sv.k]?"opacity-50":""}`}>
             <td className="py-1.5 pl-3 pr-1 w-6"><input type="checkbox" checked={r.on!==false} onChange={e=>upProfSvc(prof.id,sv.k,{on:e.target.checked})} className="accent-[#0086E0]"/></td>
             <td className="py-1.5 pr-2 font-medium text-stone-800 whitespace-nowrap">{sv.l}</td>
             <td className="py-1.5 pr-2"><Select value={r.basis||"pct"} onChange={e=>upProfSvc(prof.id,sv.k,{basis:e.target.value})}><option value="pct">% Markup (over England/FedEx cost)</option><option value="list">Discount off FedEx list %</option><option value="fixed">Fixed $ over cost</option><option value="flat">Flat $ (always sells at exactly this)</option></Select></td>
             <td className="py-1.5 pr-2 whitespace-nowrap"><Input type="number" value={r.pct==null?"":r.pct} onChange={e=>upProfSvc(prof.id,sv.k,{pct:e.target.value})} className="w-20 text-right"/> <span className="text-stone-400 text-xs">{(r.basis==="fixed"||r.basis==="flat")?"$":"%"}</span></td>
             <td className="py-1.5 pr-3 whitespace-nowrap"><span className="text-stone-400 text-xs">Min $</span> <Input type="number" value={r.min==null?"":r.min} onChange={e=>upProfSvc(prof.id,sv.k,{min:e.target.value})} className="w-24 text-right"/></td>
+            <td className="py-1.5 pr-2 w-6 text-right"><button onClick={()=>togHide(sv.k)} title={svcHiddenMap[sv.k]?"Show this row again":"Hide this row to declutter — pricing untouched; the checkbox turns the rule off"} className="text-stone-300 hover:text-stone-500">{svcHiddenMap[sv.k]?<Eye className="w-3.5 h-3.5"/>:<EyeOff className="w-3.5 h-3.5"/>}</button></td>
           </tr>);})}
-      </tbody></table></div>
-      <p className="text-[11px] text-stone-400">Zone overrides, weight breaks, One Rate pricing, and printable rate sheets live in the Rate database section. Every login under {c.name} inherits this automatically.</p>
+          </React.Fragment>);})}
+        </tbody></table></div>
+        </>);
+      })()}
+      <p className="text-[11px] text-stone-400">Every login under {c.name} inherits this automatically.{openSection&&<> Advanced (shared across all customers): <button onClick={()=>openSection("rates")} className="text-[#0086E0] hover:underline">imported cost &amp; FedEx list tables, zone overrides, weight breaks, printable rate sheets →</button></>}</p>
       <div className="pt-1">
         <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Services {c.name}'s logins are allowed to turn on themselves</div>
         <p className="text-[11px] text-stone-500 mb-2">Uncheck a service to lock it off platform-wide for this customer — it disappears as a real quote option and greys out (can’t be re-enabled) on their own Settings → Customize → Services screen, no matter what they try to toggle. Checked = the customer’s own toggle controls it. One Rate variants are listed separately from their base service — locking Priority Overnight doesn’t touch Priority Overnight OneRate, and vice versa.</p>
@@ -2733,10 +2762,11 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
   const NAV_GROUPS=[
     {label:"Overview",items:[["overview","Dashboard",BarChart3]]},
     {label:"Accounts",items:[["customers","Customers",Building2],["users","All logins",Users]]},
-    {label:"Pricing",items:[["rates","Rate database",DollarSign],["labelcert","FedEx labels",Printer]]},
+    {label:"Pricing",items:[["labelcert","FedEx labels",Printer]]},
     {label:"Experience",items:[["customizations","Features & access",Sliders],["branding","Branding",Sparkles],["platforms","Carrier accounts",Truck],["domains","Domains",ExternalLink]]},
   ];
   const SECTION_META={};NAV_GROUPS.forEach(g=>g.items.forEach(([v,l,Icon])=>{SECTION_META[v]={label:l,Icon};}));
+  SECTION_META.rates={label:"Advanced rates — tables & sheets",Icon:DollarSign};   // off the sidebar (customers each have a Rates tab now); reachable from a customer record for shared imports, zones, weight breaks, and printable rate sheets
   const allowedKeys=new Set(ALLOWED.map(x=>x[0]));
   const groups=NAV_GROUPS.map(g=>({...g,items:g.items.filter(it=>allowedKeys.has(it[0]))})).filter(g=>g.items.length);
   /* Every admin capability lives in this one workspace — Customers, Rate database, everything — regardless
@@ -2744,7 +2774,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
      to find rates/services; they're just already sitting there the moment Admin opens. */
   const [tabs,setTabs]=useState(()=>{
     if(sidebarDriven)return [{kind:"section",key:activeSection}];   // the left sidebar is the only nav; this just tracks what's on screen (plus any customer records opened from within it)
-    const core=["overview","customers","rates"].filter(k=>allowedKeys.has(k));
+    const core=["overview","customers"].filter(k=>allowedKeys.has(k));
     const seeded=core.length?core.map(key=>({kind:"section",key})):[{kind:"section",key:sec}];
     if(!seeded.some(t=>t.key===sec))seeded.unshift({kind:"section",key:sec});
     return seeded;
@@ -2801,7 +2831,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
       </div>}
       <div className="min-w-0">
         {cur.kind==="section"?<SectionBody k={cur.key}/>
-          :<CustomerDetail cid={cur.id} clients={clients} setClients={setClients} users={users} setUsers={setUsers} currentUser={currentUser} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} settings={settings} onClose={()=>closeTab(active)}/>}
+          :<CustomerDetail cid={cur.id} clients={clients} setClients={setClients} users={users} setUsers={setUsers} currentUser={currentUser} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} settings={settings} onClose={()=>closeTab(active)} openSection={openSection}/>}
       </div>
     </div>
   );

@@ -73,7 +73,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v318";
+const BUILD_TAG="addr-v319";
 /* ── BRAND: one codebase, two front doors (Webship/XPS model) ──
    Netlify site env var VITE_BRAND=freightwire renders the quiet, login-only,
    FedEx-focused client portal. Default = ShippingCloud retail. */
@@ -4655,7 +4655,7 @@ function AppInner(){
          label with no FedEx tab, and our composition builds the tab on the taller stock — so the
          two tab systems never fight. "fedex" keeps requesting the real stock and lets FedEx fill
          its own tab (we then skip our compose). */
-      const src=(dtb&&dtb.source)||"app";
+      const src="app";   /* only mode: our designer owns the tab; carrier prints a plain 4×6 */
       const carrierStock=(dtb&&dtb.enabled&&src==="app")?"4x6":size;
       window.__scLabelStock={size,carrierStock,docTab:dtb,source:src};
     }catch(e){} },[settings&&settings.printer,settings&&settings.docTab]);
@@ -8071,8 +8071,14 @@ function PrinterSettings({settings,setSettings}){
                 <span className="block text-[11px] font-normal text-stone-500 mt-0.5">Book a label and it prints itself — no Print button, no dialog, and the screen jumps straight to the next shipment. Perfect for a counter or a shared station.</span></span>
               <button onClick={()=>setKiosk(!armed)} className="shrink-0"><span className={`w-11 h-6 rounded-full flex items-center px-0.5 transition-colors ${armed?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
             </label>
-            {armed&&!ready&&<p className="text-[11px] text-amber-600 mt-2">Kiosk mode is on, but finish the one-time printer setup below (API key + pick a printer) or labels will fall back to the print dialog.</p>}
+            {armed&&!ready&&<p className="text-[11px] text-amber-600 mt-2 font-medium">⚠ Kiosk mode is ON but the printer isn't connected yet — so labels still open the print dialog. A browser physically cannot skip that dialog on its own; finish the one-time PrintNode setup just below (paste the API key → Find my printers → pick your printer) and the dialog disappears.</p>}
             {armed&&ready&&<p className="text-[11px] text-emerald-700 mt-2">Active — booking a label sends it straight to <b>{pnc.printerName||("printer "+pnc.printerId)}</b> and resets for the next one.</p>}
+            <div className="mt-3 pt-3 border-t border-stone-200/70">
+              <label className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-stone-700">Print with no preview — but keep the review<span className="block text-[11px] font-normal text-stone-500 mt-0.5">You still hit Ship and see the booked summary; the label just goes straight to the printer with no preview popup. Also needs the printer connected below.</span></span>
+                <button onClick={()=>setCust("directNoPreview",!cust.directNoPreview)} className="shrink-0"><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${cust.directNoPreview?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
+              </label>
+            </div>
           </div>);
         })()}
         <p className="text-xs text-stone-500">Browsers can't skip the print dialog on their own — a tiny agent on the label computer does it. One-time setup: install the free <a href="https://www.printnode.com/en/download" target="_blank" rel="noreferrer" className="text-[#0086E0] hover:underline">PrintNode client</a> on the computer the printer is plugged into, sign in, then paste your API key (PrintNode dashboard → API Keys) here. After that, every label prints itself.</p>
@@ -8166,15 +8172,7 @@ function PrinterSettings({settings,setSettings}){
         {dt.enabled&&<label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={dt.showLabels!==false} onChange={e=>setDt({showLabels:e.target.checked})}/>Show field labels</label>}
       </div>
       {dt.enabled&&<>
-        <Field label="Doc-tab source">
-          <Select value={dt.source||"app"} onChange={e=>setDt({source:e.target.value})}>
-            <option value="app">My designer layout (below)</option>
-            <option value="fedex">FedEx's built-in tab</option>
-          </Select>
-        </Field>
-        {(dt.source||"app")==="app"
-          ? <p className="text-[11px] text-stone-500 -mt-1">The carrier prints a plain 4×6 label; ShipHub adds your designed tab on the taller stock. This is what the designer below controls.</p>
-          : <p className="text-[11px] text-amber-600 -mt-1">FedEx fills the tab from the shipment's reference fields and your designer layout is ignored. Use this only if you prefer FedEx's format.</p>}
+        <p className="text-[11px] text-stone-500 -mt-1">The carrier prints a plain 4×6 shipping label; ShipHub adds <b>your</b> designed tab (below) on the taller stock. FedEx has no separate fillable tab of its own — its reference block is just part of the 4×6 label — so the tab you design here is the only tab. Turn this off to print a plain 4×6 with no tab.</p>
         <Field label="Doc-tab position on label stock">
           <Select value={dt.stock||"trailing"} onChange={e=>setDt({stock:e.target.value})}>
             <option value="trailing">Trailing (bottom of label)</option>
@@ -8241,24 +8239,7 @@ function PrinterSettings({settings,setSettings}){
     </Panel>
     <div className="flex items-center gap-2 text-xs text-stone-400"><Printer className="w-4 h-4"/>Thermal sizes (4×6 / ZPL) print fastest on label printers; choose Letter/PDF if you print on a standard office printer.</div>
 
-    <Panel title="Printing">
-      <div className="text-sm text-stone-600 space-y-2">
-        <p>When a label books, the <b>system print dialog opens automatically</b> — pick the label printer once and Chrome remembers it.</p>
-        <p className="text-stone-700 font-medium">Want zero clicks — straight to the printer, no dialog?</p>
-        <ol className="list-decimal ml-5 space-y-1 text-[13px]">
-          <li>Set your label printer as the <b>default printer</b> in Windows (Settings → Bluetooth &amp; devices → Printers), with the paper size set to your label stock (e.g. 4×6).</li>
-          <li>Make a Chrome shortcut just for shipping: right-click the desktop → New → Shortcut → paste <span className="font-mono text-[12px] bg-stone-100 border border-stone-200 rounded px-1">"C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk-printing</span> and name it "{BRAND.product} – Direct Print".</li>
-          <li>Open the app from that shortcut. Every print — booked labels, reprints, batch — now goes <b>directly to the default printer instantly</b>, no dialog, no clicks.</li>
-        </ol>
-        <p className="text-[11px] text-stone-400">Per-workstation setting (it's a Chrome launch flag, not an app setting). Regular Chrome windows keep the normal dialog. For raw thermal/ZPL printing over the network, ask about the print-agent upgrade.</p>
-      </div>
-    </Panel>
-
-    <Panel title="After booking">
-      <label className="flex items-center justify-between gap-3 text-sm text-stone-700 mb-3">
-        <span>Print straight to the printer, no preview popup<span className="block text-[11px] text-stone-400">You still hit Ship and review the booked summary — the label just goes to the printer with no preview window to click through. Needs direct printing set up in Printer settings.</span></span>
-        <button onClick={()=>setCust("directNoPreview",!cust.directNoPreview)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${cust.directNoPreview?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
-      </label>
+<Panel title="After booking">
       <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
         <span>Skip the booked summary, go straight to a new shipment<span className="block text-[11px] text-stone-400">The label still prints automatically — this just skips the tracking/copy/pickup card afterward and clears the form for the next order. Off by default so you can grab tracking or schedule a pickup right after booking.</span></span>
         <button onClick={()=>setCust("skipBookedSummary",!cust.skipBookedSummary)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${cust.skipBookedSummary?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>

@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v382";
+const BUILD_TAG="addr-v383";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -8970,11 +8970,11 @@ function PrinterSettings({settings,setSettings}){
         <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2.5">
           <div className="text-[10px] uppercase tracking-widest text-stone-400">1 · When a matching order comes in</div>
           <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
-            <span>On the Ship tab<span className="block text-[11px] text-stone-400">Your Autopilot rules choose the service.</span></span>
-            <select value={cust.autoRulesOnShip===false?"off":(cust.autoBookOnShip?"auto":"preselect")} onChange={e=>{const v=e.target.value;setCust("autoRulesOnShip",v!=="off");setCust("autoBookOnShip",v==="auto");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] shrink-0">
+            <span>On the Ship tab<span className="block text-[11px] text-stone-400">Your Autopilot rules pre-select a service — you always click Book. Choose whether the other services stay visible.</span></span>
+            <select value={cust.autoRulesOnShip===false?"off":(cust.matchedOnly?"hidden":"shown")} onChange={e=>{const v=e.target.value;setCust("autoRulesOnShip",v!=="off");setCust("autoBookOnShip",false);setCust("matchedOnly",v==="hidden");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] shrink-0">
               <option value="off">I choose the service</option>
-              <option value="preselect">Pre-select it — I click Book</option>
-              <option value="auto">Book &amp; print automatically</option>
+              <option value="shown">Pre-select it — other services still show</option>
+              <option value="hidden">Pre-select it — hide the other services</option>
             </select>
           </label>
           <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
@@ -9009,7 +9009,6 @@ function PrinterSettings({settings,setSettings}){
             <Opt v="handsfree" title="Hands-free — print & move on" desc="The label prints straight to the printer and the screen jumps to the next shipment. No Print button, no popup, no preview."/>
             <Opt v="nopreview" title="Print automatically, keep the summary" desc="The label prints straight to the printer, then a summary popup shows the tracking number with Copy, Track and pickup buttons. No label preview."/>
             <Opt v="preview" title="Show a preview first" desc="Nothing prints until you check the label and click Print. Best when you want to eyeball each one."/>
-            {cust.autoBookOnShip&&mode==="preview"&&<p className="text-[11px] text-amber-600 mt-1 font-medium">Note: with “Book &amp; print automatically” chosen above, a preview still waits for your Print click — pick Hands-free or Keep-summary for true no-touch.</p>}
             {mode!=="preview"&&!ready&&<p className="text-[11px] text-amber-600 mt-1 font-medium">⚠ Finish the one-time printer setup below (paste the API key → Find my printers → pick your printer). Until then, labels open the normal print window.</p>}
             {mode!=="preview"&&ready&&<p className="text-[11px] text-emerald-700 mt-1">Active — labels print straight to <b>{pnc.printerName||("printer "+pnc.printerId)}</b>.</p>}
           </div>);
@@ -10616,7 +10615,6 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
         <Tog k="scanAutoFocus" label="Scan mode — keep the scan box ready" hint="The scan box is focused the moment the Ship tab opens and re-arms itself after every scan and booking — scan barcode after barcode without touching the mouse. It never steals focus while you're typing in another field."/>
         <Tog k="hideInvoice" label="Hide Invoice # field"/>
         <Tog k="hidePO" label="Hide PO # field"/>
-        <Tog k="matchedOnly" label="Only show the requested service" hint="When a store order names the service the buyer paid for, show just that one — pre-highlighted, ready to print. Other services sit behind ‘Show all services’."/>
         <Tog k="hideAddr23" label="Hide Address 2 & 3" hint="On both sender and receiver cards"/>
         <Tog k="hideOz" label="Hide the oz box" hint="Whole pounds are enough for most shops"/>
         <Tog k="hideInsure" label="Hide the Insure $ field"/>

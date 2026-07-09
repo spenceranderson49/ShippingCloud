@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v378";
+const BUILD_TAG="addr-v379";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -8956,12 +8956,19 @@ function PrinterSettings({settings,setSettings}){
     <p className="text-sm text-stone-500">Controls how labels are generated and printed when you buy a label or run a batch.</p>
     <Panel title="Direct printing — zero clicks, no dialog">
       <div className="space-y-3">
-        {(()=>{ const armed=!!pnc.enabled&&!!cust.skipBookedSummary; const ready=!!String(pnc.apiKey||"").trim()&&!!pnc.printerId;
+        {(()=>{ const ready=!!String(pnc.apiKey||"").trim()&&!!pnc.printerId;
           const mode=cust.skipBookedSummary?"handsfree":cust.directNoPreview?"nopreview":"preview";
+          const armed=ready&&mode!=="preview";
+          /* One control drives everything. Picking a mode sets the after-booking behaviour AND arms
+             direct printing to the configured printer — no separate "print automatically" switch.
+             It also clears the legacy "auto-open the print dialog" checkbox so a label can never
+             both print silently AND pop a dialog/preview. */
           const setMode=(m)=>{
-            if(m==="handsfree"){ setCust("skipBookedSummary",true); setCust("directNoPreview",false); setPnCfg({enabled:true}); }
-            else if(m==="nopreview"){ setCust("skipBookedSummary",false); setCust("directNoPreview",true); setPnCfg({enabled:true}); }
+            set({autoPrint:false});
+            if(m==="handsfree"){ setCust("skipBookedSummary",true); setCust("directNoPreview",false); }
+            else if(m==="nopreview"){ setCust("skipBookedSummary",false); setCust("directNoPreview",true); }
             else { setCust("skipBookedSummary",false); setCust("directNoPreview",false); }
+            setPnCfg({enabled:ready});
           };
           const Opt=({v,title,desc})=>(<label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${mode===v?"border-emerald-300 bg-emerald-50/60":"border-stone-200 bg-white hover:bg-stone-50"}`}>
             <input type="radio" name="printmode" checked={mode===v} onChange={()=>setMode(v)} className="mt-0.5 accent-emerald-600"/>
@@ -8969,11 +8976,11 @@ function PrinterSettings({settings,setSettings}){
           </label>);
           return (<div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2">
             <div className="text-[10px] uppercase tracking-widest text-stone-400 flex items-center gap-1"><Zap className={`w-3 h-3 ${armed?"text-emerald-600":"text-stone-400"}`}/>What happens after you book a label</div>
-            <Opt v="handsfree" title="Hands free mode" desc="Book a label and it prints itself — no Print button, no dialog, no preview, and the screen jumps straight to the next shipment. Perfect for a counter or shared station."/>
-            <Opt v="nopreview" title="Print with no preview — but keep the review" desc="You still see the booked summary (tracking, buttons); the label just goes straight to the printer with no preview popup."/>
-            <Opt v="preview" title="Keep the print preview" desc="After booking, a real print preview of the LABEL opens — nothing prints anywhere until you click Print label in the preview."/>
-            {mode!=="preview"&&!ready&&<p className="text-[11px] text-amber-600 mt-1 font-medium">⚠ This needs the printer connected — otherwise labels still open the print dialog. Finish the one-time PrintNode setup just below (paste the API key → Find my printers → pick your printer).</p>}
-            {mode!=="preview"&&ready&&<p className="text-[11px] text-emerald-700 mt-1">Active — labels send straight to <b>{pnc.printerName||("printer "+pnc.printerId)}</b>.</p>}
+            <Opt v="handsfree" title="Hands-free — print & move on" desc="The label prints itself and the screen jumps to the next shipment. No Print button, no popup. Best for a counter or shared station."/>
+            <Opt v="nopreview" title="Print automatically, keep the summary" desc="The label prints itself, then a summary popup shows the tracking number with Copy, Track and pickup buttons. No label preview."/>
+            <Opt v="preview" title="Show a preview first" desc="Nothing prints until you check the label and click Print. Best when you want to eyeball each one."/>
+            {mode!=="preview"&&!ready&&<p className="text-[11px] text-amber-600 mt-1 font-medium">⚠ Finish the one-time printer setup below (paste the API key → Find my printers → pick your printer). Until then, labels open the normal print window.</p>}
+            {mode!=="preview"&&ready&&<p className="text-[11px] text-emerald-700 mt-1">Active — labels print straight to <b>{pnc.printerName||("printer "+pnc.printerId)}</b>.</p>}
           </div>);
         })()}
         <p className="text-xs text-stone-500">Browsers can't skip the print dialog on their own — a tiny agent on the label computer does it. One-time setup: install the free <a href="https://www.printnode.com/en/download" target="_blank" rel="noreferrer" className="text-[#0086E0] hover:underline">PrintNode client</a> on the computer the printer is plugged into, sign in, then paste your API key (PrintNode dashboard → API Keys) here. After that, every label prints itself.</p>
@@ -9010,10 +9017,6 @@ function PrinterSettings({settings,setSettings}){
             {(pnc.savedPrinters||[]).map(p=>(<span key={p.id} className="inline-flex items-center gap-1 text-[11px] bg-white border border-stone-200 rounded-full pl-2 pr-1 py-0.5 text-stone-600">{p.name}{p.computer?` · ${p.computer}`:""}<button onClick={()=>delSavedPrinter(p.id)} title="Forget this printer (clears any assignments it had)" className="text-stone-300 hover:text-rose-500"><X className="w-3 h-3"/></button></span>))}
           </div>}
         </div>}
-        <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
-          <span>Automatically print every label to this printer<span className="block text-[11px] text-stone-400">Booked labels, reprints, and batch labels go straight to the printer — no dialog, no clicks. If the agent is offline, the normal print dialog opens instead so nothing is ever lost.</span></span>
-          <button onClick={()=>setPnCfg({enabled:!pnc.enabled})} disabled={!pnc.apiKey||!pnc.printerId}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${pnc.enabled?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"} ${(!pnc.apiKey||!pnc.printerId)?"opacity-40":""}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
-        </label>
         {pnMsg&&<div className={`text-xs rounded px-2.5 py-1.5 ${pnMsg.ok?"bg-emerald-50 border border-emerald-200 text-emerald-700":"bg-rose-50 border border-rose-200 text-rose-700"}`}>{pnMsg.ok||pnMsg.err}</div>}
         <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2.5">
           <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
@@ -9031,25 +9034,6 @@ function PrinterSettings({settings,setSettings}){
         </div>
         <p className="text-[11px] text-stone-400">Setting is per-login but works from any computer — jobs route through PrintNode to whichever machine the printer is on. The Chrome kiosk-printing shortcut below stays as the free, no-agent alternative. Note: the label logo stamp applies to dialog printing only; direct printing sends the carrier's original PDF.</p>
       </div>
-    </Panel>
-    <Panel title="Autopilot — auto-print on the Ship screen">
-      <div className="space-y-3">
-        <ApTog k="autoRulesOnShip" label="Run my Autopilot rules on the Ship tab" hint="When an order you pull into Ship matches a rule, pre-select that service automatically."/>
-        <div className={c.autoRulesOnShip?"":"opacity-40 pointer-events-none"}>
-          <ApTog k="autoBookOnShip" label="Also print the label automatically (no click)" hint="When a rule matches an order you pull into Ship, book & print the label with no click."/>
-        </div>
-        {c.autoRulesOnShip&&c.autoBookOnShip&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">Labels will print the moment a matching order is loaded — make sure your rules are exactly how you want them.</div>}
-      </div>
-    </Panel>
-    <Panel title="Autopilot — auto-print in Batch">
-      <div className="space-y-3">
-        <ApTog k="autoRulesInBatch" label="Auto-apply rules when Batch loads" hint="Fills in each order's service from your rules automatically when the Batch screen opens."/>
-        <div className={c.autoRulesInBatch?"":"opacity-40 pointer-events-none"}>
-          <ApTog k="autoBookBatch" label="Also auto-book the batch (no click)" hint="After rules apply, select every ruled order and create labels automatically."/>
-        </div>
-        {c.autoRulesInBatch&&c.autoBookBatch&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">The whole batch will book automatically — double-check your rules first.</div>}
-      </div>
-      <p className="text-[11px] text-stone-400 mt-2">The rules themselves live on the <b>Autopilot</b> tab. These toggles just control when they run and whether labels print automatically.</p>
     </Panel>
     <Panel title="Printers & routing">
       <p className="text-xs text-stone-500">Name your printers (e.g. “Zebra — Station A”, “Office laser”), then route labels to them by rule. Batch splits its printing into one run per printer — each opens as its own job so you pick that device once. Autopilot rules can also route with the “Route to Printer” action (use the printer’s exact name as the value).</p>
@@ -9099,7 +9083,6 @@ function PrinterSettings({settings,setSettings}){
       </div>
       <Field label="Default printer (optional)"><Input value={pr.printer} onChange={e=>set({printer:e.target.value})} placeholder="e.g. Zebra ZP 450"/></Field>
       <label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={pr.rotate} onChange={e=>set({rotate:e.target.checked})} className="accent-[#0086E0]"/>Rotate label 180° (for some thermal printers)</label>
-      <label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={pr.autoPrint} onChange={e=>set({autoPrint:e.target.checked})} className="accent-[#0086E0]"/>Auto-open the print dialog after a label is bought</label>
     </Panel>
     <Panel title="Packing slip">
       <label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={pr.packingSlip} onChange={e=>set({packingSlip:e.target.checked})} className="accent-[#0086E0]"/>Generate a packing slip with each label</label>
@@ -10626,6 +10609,23 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
         <span>Start a fresh blank shipment after each print<span className="block text-[11px] text-stone-400">As soon as a label prints, the Ship form clears itself for the next order — keeps the booked summary, just resets the canvas. Independent of kiosk mode.</span></span>
         <button onClick={()=>set("resetAfterPrint",!c.resetAfterPrint)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${c.resetAfterPrint?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
       </label>
+    </Panel>
+    <Panel title="Autopilot — automatic service &amp; printing">
+      <div className="space-y-2.5">
+        <Tog k="autoRulesOnShip" label="Pre-select the service on Ship using my Autopilot rules" hint="When you pull a matching order into Ship, its service is chosen for you automatically. You still press Book yourself."/>
+        <div className={c.autoRulesOnShip?"":"opacity-40 pointer-events-none"}>
+          <Tog k="autoBookOnShip" label="Advanced: also book & print with NO click" hint="A matching order books and prints the instant it loads on Ship — nobody presses Book. Leave this OFF if you want to review each shipment before it ships."/>
+        </div>
+        {c.autoRulesOnShip&&c.autoBookOnShip&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">Heads up: labels print the moment a matching order loads — make sure your rules are exactly right.</div>}
+        <div className="border-t border-stone-100 pt-2.5 space-y-2.5">
+          <Tog k="autoRulesInBatch" label="Auto-apply rules when the Batch screen opens" hint="Fills each order's service from your rules as soon as Batch loads."/>
+          <div className={c.autoRulesInBatch?"":"opacity-40 pointer-events-none"}>
+            <Tog k="autoBookBatch" label="Advanced: also auto-book the whole batch" hint="After rules apply, every ruled order books automatically with no click."/>
+          </div>
+          {c.autoRulesInBatch&&c.autoBookBatch&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">The whole batch books automatically — double-check your rules first.</div>}
+        </div>
+        <p className="text-[11px] text-stone-400">The rules themselves live on the <b>Autopilot</b> tab — these switches only control when they run.</p>
+      </div>
     </Panel></>}
 
     {cs==="services"&&<Panel title="Rates & services">

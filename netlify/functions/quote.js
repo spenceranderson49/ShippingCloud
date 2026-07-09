@@ -144,6 +144,27 @@ exports.handler = async (event) => {
       requestedPackageLineItems: pieces
     }
   };
+  /* INTERNATIONAL: FedEx's rate API only returns international services when the request
+     carries a customs block (commodities + customs value). Without this, an intl request
+     errors out and the app showed NO services — the root cause of "no international rates".
+     Declared value falls back to the insurance amount, then $100. */
+  if (toCountry !== fromCountry) {
+    const totalWt = pieces.reduce((a, p) => a + ((p.weight && p.weight.value) || 1), 0);
+    const declared = Math.max(1, +body.declaredValue || +body.insuranceAmount || 100);
+    req.requestedShipment.customsClearanceDetail = {
+      dutiesPayment: { paymentType: "SENDER" },
+      commodities: [{
+        description: String(body.contentsDesc || "Merchandise").slice(0, 70),
+        countryOfManufacture: fromCountry || "US",
+        quantity: 1,
+        quantityUnits: "PCS",
+        weight: { units: "LB", value: Math.max(0.1, totalWt) },
+        unitPrice: { amount: declared, currency: "USD" },
+        customsValue: { amount: declared, currency: "USD" }
+      }]
+    };
+    delete req.requestedShipment.recipient.address.residential;   // classification is US-only; intl requests reject it on some lanes
+  }
   /* Ground Economy (SmartPost) is only returned when the request carries your hub —
      set FEDEX_SMARTPOST_HUB in Netlify env (the hub FedEx assigned to the account). */
   if (SMARTPOST_HUB && toCountry === "US" && fromCountry === "US") {

@@ -13,7 +13,7 @@
 const J = (o) => ({ statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify(o) });
 const S = (v) => (v == null ? "" : String(v));
 
-function CC(c){if(!c)return "US";const t=String(c).trim();if(t.length===2)return t.toUpperCase();const m={"united states":"US","united states of america":"US","usa":"US","canada":"CA","mexico":"MX","united kingdom":"GB","puerto rico":"PR"};return m[t.toLowerCase()]||"US";}
+function CC(c){if(!c)return "US";const t=String(c).trim();if(t.length===2)return t.toUpperCase();const m={"united states":"US","united states of america":"US","usa":"US","u.s.":"US","u.s.a.":"US","canada":"CA","mexico":"MX","united kingdom":"GB","great britain":"GB","uk":"GB","england":"GB","puerto rico":"PR","australia":"AU","germany":"DE","france":"FR","italy":"IT","spain":"ES","netherlands":"NL","belgium":"BE","switzerland":"CH","austria":"AT","sweden":"SE","norway":"NO","denmark":"DK","finland":"FI","ireland":"IE","portugal":"PT","poland":"PL","czech republic":"CZ","czechia":"CZ","greece":"GR","hungary":"HU","romania":"RO","bulgaria":"BG","croatia":"HR","slovakia":"SK","slovenia":"SI","estonia":"EE","latvia":"LV","lithuania":"LT","luxembourg":"LU","iceland":"IS","japan":"JP","china":"CN","hong kong":"HK","taiwan":"TW","south korea":"KR","republic of korea":"KR","singapore":"SG","malaysia":"MY","thailand":"TH","vietnam":"VN","philippines":"PH","indonesia":"ID","india":"IN","israel":"IL","saudi arabia":"SA","united arab emirates":"AE","uae":"AE","qatar":"QA","kuwait":"KW","bahrain":"BH","oman":"OM","jordan":"JO","turkey":"TR","egypt":"EG","south africa":"ZA","nigeria":"NG","kenya":"KE","morocco":"MA","brazil":"BR","argentina":"AR","chile":"CL","colombia":"CO","peru":"PE","ecuador":"EC","uruguay":"UY","paraguay":"PY","bolivia":"BO","costa rica":"CR","panama":"PA","guatemala":"GT","honduras":"HN","el salvador":"SV","nicaragua":"NI","dominican republic":"DO","jamaica":"JM","bahamas":"BS","barbados":"BB","trinidad and tobago":"TT","new zealand":"NZ","ukraine":"UA"};return m[t.toLowerCase()]||"US";}
 const DAYS = { ZERO_DAYS:0, ONE_DAY:1, TWO_DAYS:2, THREE_DAYS:3, FOUR_DAYS:4, FIVE_DAYS:5, SIX_DAYS:6, SEVEN_DAYS:7, EIGHT_DAYS:8, NINE_DAYS:9, TEN_DAYS:10, ELEVEN_DAYS:11, TWELVE_DAYS:12 };
 
 let _tok = null; // { token, exp }  in-memory cache across warm invocations
@@ -54,19 +54,34 @@ function bizDaysBetween(fromISO, toISO) {
 
 async function transit(c, body, tk) {
   const today = new Date().toISOString().slice(0, 10);
+  /* Countries arrive as full names from the app ("Canada") — FedEx wants ISO-2. The old code
+     passed them RAW, so every international transit request errored and intl lanes showed no
+     transit times. Also: international transit quotes need the same minimal customs block the
+     rate call needs, or FedEx returns nothing. */
+  const fromISO = CC(body.fromCountry || "US");
+  const toISO = CC(body.toCountry || "US");
+  const intl = fromISO !== toISO;
   const payload = {
     accountNumber: { value: c.account },
     // FedEx returns transit/commit data ONLY when asked here (per FedEx Rates & Transit Times API spec)
     rateRequestControlParameters: { returnTransitTimes: true },
     requestedShipment: {
-      shipper: { address: { postalCode: S(body.fromZip), countryCode: body.fromCountry || "US", stateOrProvinceCode: S(body.fromState) || undefined } },
-      recipient: { address: { postalCode: S(body.toZip), countryCode: body.toCountry || "US", residential: !!body.residential } },
+      shipper: { address: { postalCode: S(body.fromZip), countryCode: fromISO, stateOrProvinceCode: S(body.fromState) || undefined } },
+      recipient: { address: { postalCode: S(body.toZip), countryCode: toISO, residential: intl ? undefined : !!body.residential } },
       pickupType: "USE_SCHEDULED_PICKUP",
       shipDateStamp: body.shipDate || today,
       rateRequestType: ["LIST", "ACCOUNT"],
       requestedPackageLineItems: (Array.isArray(body.pieces) && body.pieces.length ? body.pieces : [{ weight: body.weight || 1 }]).map((p) => ({ weight: { units: "LB", value: Number(p.weight || p.wt || 1) } })),
     },
   };
+  if (intl) {
+    const totalWt = (Array.isArray(body.pieces) && body.pieces.length ? body.pieces : [{ weight: body.weight || 1 }]).reduce((a, p) => a + Number(p.weight || p.wt || 1), 0);
+    const declared = Math.max(1, +body.declaredValue || +body.insuranceAmount || 100);
+    payload.requestedShipment.customsClearanceDetail = {
+      dutiesPayment: { paymentType: "SENDER" },
+      commodities: [{ description: "Merchandise", countryOfManufacture: fromISO, quantity: 1, quantityUnits: "PCS", weight: { units: "LB", value: Math.max(0.1, totalWt) }, unitPrice: { amount: declared, currency: "USD" }, customsValue: { amount: declared, currency: "USD" } }]
+    };
+  }
   const r = await fetch(c.base + "/rate/v1/rates/quotes", {
     method: "POST",
     headers: { "Authorization": "Bearer " + tk, "Content-Type": "application/json", "X-locale": "en_US" },

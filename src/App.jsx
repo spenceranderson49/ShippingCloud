@@ -74,7 +74,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v366";
+const BUILD_TAG="addr-v369";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -1140,6 +1140,26 @@ function printPackingSlips(slips){
   w.document.write(packingSlipHTML(list));
   w.document.close();
 }
+/* Auto-print a packing slip after a label. If direct printing is on AND a separate slip printer is
+   chosen (packSlipPrinterId), the slip is sent straight to THAT printer via PrintNode (raw HTML).
+   Otherwise it falls back to the normal browser print window. */
+async function printPackingSlipAuto(slips,settings){
+  const list=(slips||[]).filter(Boolean);
+  if(!list.length)return;
+  const c=cz(settings);
+  const dp=(typeof window!=="undefined"&&window.__scDirectPrint)||null;
+  const slipPrinter=c.packSlipPrinterId&&String(c.packSlipPrinterId).trim();
+  if(dp&&dp.enabled&&dp.apiKey&&slipPrinter){
+    try{
+      const html=packingSlipHTML(list);
+      const r=await fetch("/.netlify/functions/printnode",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"print",apiKey:dp.apiKey,printerId:slipPrinter,title:"Packing slip",contentType:"raw_html",html})});
+      const d=await r.json().catch(()=>null);
+      if(d&&d.ok)return;   // routed to the slip printer
+    }catch(e){}
+    // fall through to browser print if the routed print failed
+  }
+  printPackingSlips(list);
+}
 
 /* Resolve a doc-tab / receipt field binding to a printable string from shipment data.
    ctx carries the shipment fields; z is the zone/line config ({field,custom,label}). */
@@ -2042,7 +2062,7 @@ const NOTIFY_DEFAULTS={orderConfirm:true,shipped:true,delivered:true,returnLabel
 const CUSTOM_DEFAULTS={
   hideInvoice:false,hidePO:false,hideAddr23:false,hideOz:false,hideInsure:false,
   phoneRequired:true,emailRequired:true,
-  defaultSignature:"none",autoInsurePct:0,autoInsureValue:0,autoSigValue:0,autoSigType:"indirect",shipDateCutoff:"",fallbackService:"",
+  defaultSignature:"none",autoInsurePct:0,autoInsureValue:0,autoSigValue:0,autoSigType:"indirect",shipDateCutoff:"",fallbackService:"",autoPackSlip:false,packSlipPrinterId:"",
   defaultView:"cheapest",showRateViewToggle:false,hiddenServices:[],priceWarn:0,transitStyle:"date",aliases:{},matchedOnly:false,
   slipThanks:"",slipFooter:"",
   density:"comfortable",stuckDays:0,
@@ -5152,7 +5172,7 @@ function AppInner(){
           {tab==="ship"&&<Ship client={client} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={ruleset} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders} currentUser={currentUser} setUsers={setUsers} setCurrentUser={setCurrentUser} clients={clients}/>}
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
           {tab==="orders"&&<Orders orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} setSettings={setSettings} onShipped={onShipped} openOrderId={pendingOpenOrderId} onOpenedOrder={()=>setPendingOpenOrderId(null)}/>}
-          {tab==="batch"&&<Batch orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
+          {tab==="batch"&&<Batch orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} setSettings={setSettings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
           {tab==="shipments"&&<Shipments openShipTracking={pendingOpenShipTracking} onOpenedShip={()=>setPendingOpenShipTracking(null)} isAdmin={isAdmin} labels={labelStore} shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels} settings={settings}/>}
           {hkHelp&&<div onClick={()=>setHkHelp(false)} className="fixed bottom-4 right-4 z-50 bg-stone-900 text-white rounded-xl shadow-lg p-4 text-xs space-y-1.5 cursor-pointer">
             <div className="font-semibold text-sm mb-1">Keyboard shortcuts</div>
@@ -5469,9 +5489,21 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const matched=useMemo(()=>{
     const resKnown=addrClassified?residential:null;   // ground↔home swap only once FedEx (or the override) has classified the address
     if(liveRuleMatch){ const rc=canonSvc(groundFamilySwap(liveRuleMatch,resKnown)); const hit=quotes.find(q=>canonSvc(q.label)===rc&&(q.sell??q.cost)!=null); if(hit)return {key:hit.key,src:"autopilot"}; }
+    /* Fallback service: if an order is loaded, Autopilot ran, and NO rule matched, honor the configured
+       fallback (Settings/Batch/Autopilot → Fallback) here on the Ship screen too. */
+    if(selectedOrder&&!liveRuleMatch&&liveRuleStatus&&liveRuleStatus.state==="no-match"){
+      const fb=(cz(settings).fallbackService||"").trim();
+      if(fb){
+        const priced=quotes.filter(q=>(q.sell??q.cost)!=null);
+        if(fb==="cheapest"){ const c=[...priced].sort((a,b)=>((a.sell??a.cost)||1e9)-((b.sell??b.cost)||1e9))[0]; if(c)return {key:c.key,src:"autopilot"}; }
+        else if(fb==="fastest"){ const f=priced.find(q=>/overnight|priority/i.test(q.label))||priced.find(q=>/2\s*day/i.test(q.label)); if(f)return {key:f.key,src:"autopilot"}; }
+        else if(fb==="ground"){ const g=priced.filter(q=>/ground|home/i.test(q.label)).sort((a,b)=>((a.sell??a.cost)||1e9)-((b.sell??b.cost)||1e9))[0]; if(g)return {key:g.key,src:"autopilot"}; }
+        else { const rc=canonSvc(groundFamilySwap(fb,resKnown)); const hit=priced.find(q=>canonSvc(q.label)===rc); if(hit)return {key:hit.key,src:"autopilot"}; }
+      }
+    }
     const so=selectedOrder?orders.find(x=>x.id===selectedOrder):null;
     return matchServiceForOrder(quotes,so,resKnown);
-  },[quotes,selectedOrder,orders,liveRuleMatch,residential,addrClassified]);
+  },[quotes,selectedOrder,orders,liveRuleMatch,liveRuleStatus,residential,addrClassified,settings]);
 
   /* If Autopilot's matched service is a FedEx One Rate box, auto-fill the One Rate box name into the
      configured field (invoice # by default) WITHOUT waiting for the user to click the rate row — so the
@@ -5529,7 +5561,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       pieces:pieces.map(p=>({weight:Math.ceil(pw(p)||1),length:p.L,width:p.W,height:p.H,declaredValue:intl?(p.value||null):null}))};   // book at the rounded-up billing weight the quote priced
     const res=await shipCall({action:"ship",account:acctOf(eng),order});
     if(!res||!res.ok){setShipStatus({state:"error",key:q.key,msg:(res&&res.error)||"Booking failed"});setBought(null);return;}
-    const done=(st)=>{ justBookedRef.current=selectedOrder; const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec},settings,setLabelPreview); if(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint){ setTimeout(()=>{ try{newShipment();}catch(e){} },900); };} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
+    const done=(st)=>{ justBookedRef.current=selectedOrder; const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec},settings,setLabelPreview); if(cz(settings).autoPackSlip){ const so=selectedOrder&&orders.find(x=>x.id===selectedOrder); setTimeout(()=>{ try{ printPackingSlipAuto([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:st.tracking||"",service:q.label}],settings); }catch(e){} },700); } if(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint){ setTimeout(()=>{ try{newShipment();}catch(e){} },900); };} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
     if(res.booked){done(res);return;}
     setShipStatus({state:"pending",key:q.key,orderId:res.orderId});
     pollLabel(eng,res.orderId,done).then(r=>{ if(r&&r.timedOut){ onPending&&onPending({orderId:res.orderId,rec:buildRec(q,carrier,{}),service:q.label,carrier,orderRef:selectedOrder}); setShipStatus({state:"pending_timeout",key:q.key});setBought(null);} });
@@ -7224,10 +7256,6 @@ function Dashboard({shipments,orders,returns,goTab}){
         </div>
         <div className="space-y-4">
           <div className="border border-stone-200 rounded-2xl bg-white p-4">
-            <h3 className="text-sm font-semibold text-stone-700 mb-3">Carrier mix</h3>
-            <MixBar rows={carriers} total={a.count} tint={CARRIER_TINT}/>
-          </div>
-          <div className="border border-stone-200 rounded-2xl bg-white p-4">
             <h3 className="text-sm font-semibold text-stone-700 mb-3">Top services</h3>
             {svcMix.length===0?<div className="text-sm text-stone-400">No shipments yet.</div>:<MixBar rows={svcMix} total={live.length}/>}
           </div>
@@ -7252,7 +7280,7 @@ function Dashboard({shipments,orders,returns,goTab}){
 const US_STATES=["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
 const SERVICE_OPTIONS={FedEx:["FedEx Ground","FedEx Home Delivery","FedEx 2Day","FedEx Express Saver","FedEx Standard Overnight","FedEx Priority Overnight"]};
 const speedRank=(label)=>{const t=String(label||"").toLowerCase();if(/first overnight/.test(t))return 1;if(/priority overnight/.test(t))return 2;if(/standard overnight|next day/.test(t))return 3;if(/2.?day|2nd day air/.test(t))return 4;if(/express saver|3 day/.test(t))return 5;if(/home|ground/.test(t))return 7;return 6;};
-function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings,onShipped,batchCmd,onBatchCmdDone}){
+function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings,setSettings,onShipped,batchCmd,onBatchCmdDone}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
   const pool=orders.filter(o=>o.status==="unfulfilled");
   const [sel,setSel]=useState(()=>new Set());
@@ -7524,7 +7552,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         const carrier=carrierOf(picked.label);
         const _rec={id:Date.now()+o.id,date:batchShipDate?new Date(batchShipDate+"T12:00:00").toLocaleDateString():new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:originZip,toZip:o.zip,weight:(pkB&&pkB.totalWt)||o.weight,pieces:pkB?pkB.pieces:undefined,dims:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,items:o.items||"",note:o.note||"",bookNumber:res.bookNumber,..._orFill};
         onShipped(_rec,o.id);
-        out.push({o,name:o.name,orderId:o.id,ok:true,tracking:res.tracking,service:picked.label,carrier,pdf:res.labelPdfBase64||null,rec:_rec});
+        out.push({o,name:o.name,orderId:o.id,ok:true,tracking:res.tracking,service:picked.label,carrier,pdf:res.labelPdfBase64||null,rec:_rec,ctx:docCtxFor(_rec,res.tracking)});
       } else out.push({o,name:o.name,orderId:o.id,ok:false,error:(res&&res.error)||"Booking failed"});
       setResults([...out]);
     }
@@ -7534,12 +7562,12 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
     /* Creating labels now also PRINTS them — one action. If per-printer routing groups exist, we leave
        printing to the per-group buttons (they need the user to pick each device); otherwise print all the
        fresh labels straight away. */
-    const freshPdfs=out.filter(r=>r.ok&&r.pdf).map(r=>({pdf:r.pdf,rec:r.rec,tracking:r.tracking}));
+    const freshPdfs=out.filter(r=>r.ok&&r.pdf).map(r=>({pdf:r.pdf,rec:r.rec,ctx:r.ctx,tracking:r.tracking}));
     if(freshPdfs.length&&!((settings.printers||[]).length>1)){ setPrintBusy(true); try{ await printImagePagesBatch(freshPdfs,settings); }catch(e){}finally{ setPrintBusy(false); } }
   };
   const [printBusy,setPrintBusy]=useState(false);
   const printAll=async(only)=>{
-    const pdfs=results.filter(r=>r.ok&&r.pdf&&(!only||only.includes(r))).map(r=>({pdf:r.pdf,rec:r.rec,tracking:r.tracking}));
+    const pdfs=results.filter(r=>r.ok&&r.pdf&&(!only||only.includes(r))).map(r=>({pdf:r.pdf,rec:r.rec,ctx:r.ctx,tracking:r.tracking}));
     if(!pdfs.length)return;
     setPrintBusy(true);
     try{ await printImagePagesBatch(pdfs,settings); }finally{ setPrintBusy(false); }
@@ -7701,7 +7729,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
           <span className="text-stone-500">If</span>
           <select value={qr.property} onChange={e=>{const p=e.target.value;const t=(RULE_PROPERTIES[p]||{}).type||"text";setQr({...qr,property:p,operator:RULE_OPERATORS[t][0]});}} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-violet-400">{RULE_PROP_NAMES.map(pn=><option key={pn}>{pn}</option>)}</select>
           <select value={qr.operator} onChange={e=>setQr({...qr,operator:e.target.value})} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-violet-400">{(RULE_OPERATORS[(RULE_PROPERTIES[qr.property]||{}).type||"text"]||[]).map(op=><option key={op}>{op}</option>)}</select>
-          <input value={qr.value} onChange={e=>setQr({...qr,value:e.target.value})} placeholder="value (commas = list)" className="w-40 bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-violet-400"/>
+          <input type={(RULE_PROPERTIES[qr.property]||{}).type==="date"?"date":(RULE_PROPERTIES[qr.property]||{}).type==="number"?"number":"text"} value={qr.value} onChange={e=>setQr({...qr,value:e.target.value})} placeholder="value (commas = list)" className="w-40 bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-violet-400"/>
           <span className="text-stone-500">→ ship</span>
           <select value={qr.service} onChange={e=>setQr({...qr,service:e.target.value})} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-violet-400">{RULE_SERVICES.map(sv=><option key={sv}>{sv}</option>)}</select>
           <button onClick={saveQuickRule} disabled={!String(qr.value).trim()} className="text-sm bg-violet-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-violet-700 disabled:opacity-40">Save to Autopilot</button>
@@ -7723,6 +7751,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         {svcMixSel.length>0&&<span className="hidden lg:flex items-center gap-1.5">{svcMixSel.map(([l,n])=><Badge key={l} tone="stone">{l.replace(/^FedEx /,"")} ×{n}</Badge>)}</span>}
         <button onClick={()=>printPackingSlips(rows.map(r=>slipFromOrder(r.o,settings.sender)))} disabled={rows.length===0} title="Print a packing slip for every selected order" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5"><FileText className="w-4 h-4"/>Packing slips</button>
         <button onClick={()=>printPickList(rows.map(r=>r.o))} disabled={rows.length===0} title="One sheet: every item in this batch aggregated by product, with checkboxes" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5"><ClipboardList className="w-4 h-4"/>Pick list</button>
+        <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Fallback</span><select value={cz(settings).fallbackService||""} onChange={e=>setSettings&&setSettings(s=>({...s,custom:{...(s.custom||{}),fallbackService:e.target.value}}))} title="Service used for orders that match no rule" className="text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-[#0086E0]"><option value="">No fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
         <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Ship date</span><input type="date" value={batchShipDate} onChange={e=>setBatchShipDate(e.target.value)} className="text-sm font-mono text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-[#0086E0]"/></label>
         <button onClick={run} disabled={running||rows.length===0} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-semibold hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{running?<Loader2 className="w-4 h-4 animate-spin"/>:<Printer className="w-4 h-4"/>}{running?`Booking ${progress.n}/${progress.total}…`:`Create & print ${rows.length} label${rows.length!==1?"s":""}`}</button>
       </div>
@@ -8383,7 +8412,7 @@ function LabelStockPreview({size,zones,showLabels,tabStock}){
           <div className="font-bold text-stone-900" style={{fontSize:"9px"}}>AUSTIN TX 78701</div>
           <div className="mt-auto">
             <div className="flex items-end justify-between">
-              <div className="font-black tracking-tight text-stone-900" style={{fontSize:"12px"}}>FedEx</div>
+              <div className="font-black tracking-tighter" style={{fontSize:"13px",fontFamily:"Helvetica,Arial,sans-serif",letterSpacing:"-0.5px"}}><span style={{color:"#4D148C"}}>Fed</span><span style={{color:"#FF6600"}}>Ex</span></div>
               <div className="w-5 h-5 border-2 border-stone-800 flex items-center justify-center font-bold" style={{fontSize:"9px"}}>E</div>
             </div>
             <div className="mt-0.5 flex gap-px h-6 items-stretch">{Array.from({length:60}).map((_,i)=><span key={i} className="bg-stone-900" style={{width:(i%4?1:2)+"px",opacity:i%3?1:0.5}}/>)}</div>
@@ -8509,21 +8538,23 @@ function PrinterSettings({settings,setSettings}){
     <Panel title="Direct printing — zero clicks, no dialog">
       <div className="space-y-3">
         {(()=>{ const armed=!!pnc.enabled&&!!cust.skipBookedSummary; const ready=!!String(pnc.apiKey||"").trim()&&!!pnc.printerId;
-          const setKiosk=(on)=>{ setPnCfg({enabled:on}); setCust("skipBookedSummary",on); if(on)setCust("directNoPreview",false); };
-          return (<div className={`rounded-xl border p-3 ${armed?"border-emerald-300 bg-emerald-50/60":"border-stone-200 bg-stone-50"}`}>
-            <label className="flex items-center justify-between gap-3">
-              <span className="text-sm font-semibold text-stone-800 flex items-center gap-1.5"><Zap className={`w-4 h-4 ${armed?"text-emerald-600":"text-stone-400"}`}/>Hands-free kiosk mode
-                <span className="block text-[11px] font-normal text-stone-500 mt-0.5">Book a label and it prints itself — no Print button, no dialog, and the screen jumps straight to the next shipment. Perfect for a counter or a shared station.</span></span>
-              <button onClick={()=>setKiosk(!armed)} className="shrink-0"><span className={`w-11 h-6 rounded-full flex items-center px-0.5 transition-colors ${armed?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
-            </label>
-            {armed&&!ready&&<p className="text-[11px] text-amber-600 mt-2 font-medium">⚠ Kiosk mode is ON but the printer isn't connected yet — so labels still open the print dialog. A browser physically cannot skip that dialog on its own; finish the one-time PrintNode setup just below (paste the API key → Find my printers → pick your printer) and the dialog disappears.</p>}
-            {armed&&ready&&<p className="text-[11px] text-emerald-700 mt-2">Active — booking a label sends it straight to <b>{pnc.printerName||("printer "+pnc.printerId)}</b> and resets for the next one.</p>}
-            <div className="mt-3 pt-3 border-t border-stone-200/70">
-              <label className="flex items-center justify-between gap-3">
-                <span className="text-sm font-medium text-stone-700">Print with no preview — but keep the review<span className="block text-[11px] font-normal text-stone-500 mt-0.5">You still hit Ship and see the booked summary; the label just goes straight to the printer with no preview popup. Also needs the printer connected below.</span></span>
-                <button onClick={()=>{const nv=!cust.directNoPreview; setCust("directNoPreview",nv); if(nv){ setCust("skipBookedSummary",false); setPnCfg({enabled:true}); } }} className="shrink-0"><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${cust.directNoPreview?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
-              </label>
-            </div>
+          const mode=cust.skipBookedSummary?"handsfree":cust.directNoPreview?"nopreview":"preview";
+          const setMode=(m)=>{
+            if(m==="handsfree"){ setCust("skipBookedSummary",true); setCust("directNoPreview",false); setPnCfg({enabled:true}); }
+            else if(m==="nopreview"){ setCust("skipBookedSummary",false); setCust("directNoPreview",true); setPnCfg({enabled:true}); }
+            else { setCust("skipBookedSummary",false); setCust("directNoPreview",false); }
+          };
+          const Opt=({v,title,desc})=>(<label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${mode===v?"border-emerald-300 bg-emerald-50/60":"border-stone-200 bg-white hover:bg-stone-50"}`}>
+            <input type="radio" name="printmode" checked={mode===v} onChange={()=>setMode(v)} className="mt-0.5 accent-emerald-600"/>
+            <span><span className="text-sm font-semibold text-stone-800">{title}</span><span className="block text-[11px] font-normal text-stone-500 mt-0.5">{desc}</span></span>
+          </label>);
+          return (<div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2">
+            <div className="text-[10px] uppercase tracking-widest text-stone-400 flex items-center gap-1"><Zap className={`w-3 h-3 ${armed?"text-emerald-600":"text-stone-400"}`}/>What happens after you book a label</div>
+            <Opt v="handsfree" title="Hands free mode" desc="Book a label and it prints itself — no Print button, no dialog, no preview, and the screen jumps straight to the next shipment. Perfect for a counter or shared station."/>
+            <Opt v="nopreview" title="Print with no preview — but keep the review" desc="You still see the booked summary (tracking, buttons); the label just goes straight to the printer with no preview popup."/>
+            <Opt v="preview" title="Keep the print preview" desc="After booking, the label preview popup opens so you can look it over and print it yourself. The classic flow."/>
+            {mode!=="preview"&&!ready&&<p className="text-[11px] text-amber-600 mt-1 font-medium">⚠ This needs the printer connected — otherwise labels still open the print dialog. Finish the one-time PrintNode setup just below (paste the API key → Find my printers → pick your printer).</p>}
+            {mode!=="preview"&&ready&&<p className="text-[11px] text-emerald-700 mt-1">Active — labels send straight to <b>{pnc.printerName||("printer "+pnc.printerId)}</b>.</p>}
           </div>);
         })()}
         <p className="text-xs text-stone-500">Browsers can't skip the print dialog on their own — a tiny agent on the label computer does it. One-time setup: install the free <a href="https://www.printnode.com/en/download" target="_blank" rel="noreferrer" className="text-[#0086E0] hover:underline">PrintNode client</a> on the computer the printer is plugged into, sign in, then paste your API key (PrintNode dashboard → API Keys) here. After that, every label prints itself.</p>
@@ -8548,6 +8579,20 @@ function PrinterSettings({settings,setSettings}){
           <button onClick={()=>setPnCfg({enabled:!pnc.enabled})} disabled={!pnc.apiKey||!pnc.printerId}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${pnc.enabled?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"} ${(!pnc.apiKey||!pnc.printerId)?"opacity-40":""}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
         </label>
         {pnMsg&&<div className={`text-xs rounded px-2.5 py-1.5 ${pnMsg.ok?"bg-emerald-50 border border-emerald-200 text-emerald-700":"bg-rose-50 border border-rose-200 text-rose-700"}`}>{pnMsg.ok||pnMsg.err}</div>}
+        <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2.5">
+          <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
+            <span className="font-semibold">Auto-print a packing slip after each label<span className="block text-[11px] font-normal text-stone-400">When you book a label, its packing slip prints automatically right after.</span></span>
+            <button onClick={()=>setCust("autoPackSlip",!cust.autoPackSlip)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${cust.autoPackSlip?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
+          </label>
+          {cust.autoPackSlip&&<label className="block text-sm text-stone-700">Send packing slips to
+            <select value={String(cust.packSlipPrinterId||"")} onChange={e=>setCust("packSlipPrinterId",e.target.value)} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm">
+              <option value="">Same as label printer / browser print</option>
+              {(pnList||[]).map(p=><option key={p.id} value={String(p.id)}>{p.name}{p.computer?` · ${p.computer}`:""}</option>)}
+              {!pnList&&cust.packSlipPrinterId&&<option value={String(cust.packSlipPrinterId)}>Printer {cust.packSlipPrinterId}</option>}
+            </select>
+            <span className="block text-[11px] text-stone-400 mt-1">Pick a different printer (e.g. a regular paper printer) to route slips there while labels go to the thermal printer. Needs PrintNode connected and printers found above. Leave on "Same as label printer" to just print slips the normal way.</span>
+          </label>}
+        </div>
         <p className="text-[11px] text-stone-400">Setting is per-login but works from any computer — jobs route through PrintNode to whichever machine the printer is on. The Chrome kiosk-printing shortcut below stays as the free, no-agent alternative. Note: the label logo stamp applies to dialog printing only; direct printing sends the carrier's original PDF.</p>
       </div>
     </Panel>
@@ -8823,7 +8868,7 @@ const RULE_PROPERTIES={
   "Custom Field 3":{key:"custom3",type:"text"},
   "Order Note":{key:"note",type:"text"},
   "Status":{key:"status",type:"text"},
-  "Created":{key:"date",type:"date"},
+  "Order Date (created)":{key:"date",type:"date"},
 };
 const RULE_PROP_NAMES=Object.keys(RULE_PROPERTIES);
 const RULE_OPERATORS={text:["CONTAINS","NOT CONTAINS","IN","NOT IN","=","!="],list:["IN","NOT IN","=","!="],number:["=","!=",">","<",">=","<="],date:["=","!=",">","<"]};
@@ -9070,7 +9115,7 @@ function RuleEditorModal({rule,onSave,onClose,onDelete,warehouses}){
                 return (<div key={c.id} className="flex items-center gap-2">
                   <select value={c.property} onChange={e=>{const np=e.target.value;const m=RULE_PROPERTIES[np];const o2=RULE_OPERATORS[m.type];setCond(i,{property:np,operator:o2.includes(c.operator)?c.operator:o2[0]});}} className={inC+" w-40 shrink-0"}>{RULE_PROP_NAMES.map(p=><option key={p}>{p}</option>)}</select>
                   <select value={c.operator} onChange={e=>setCond(i,{operator:e.target.value})} className={inC+" w-24 shrink-0"}>{ops.map(op=><option key={op}>{op}</option>)}</select>
-                  <input value={c.value} onChange={e=>setCond(i,{value:e.target.value})} placeholder={meta.type==="list"?"a, b, c":meta.type==="number"?"10":meta.type==="date"?"2026-01-01":"value"} className={inC+" flex-1 min-w-0"}/>
+                  <input type={meta.type==="date"?"date":meta.type==="number"?"number":"text"} value={c.value} onChange={e=>setCond(i,{value:e.target.value})} placeholder={meta.type==="list"?"a, b, c":meta.type==="number"?"10":meta.type==="date"?"":"value"} className={inC+" flex-1 min-w-0"}/>
                   <button onClick={()=>delCond(i)} className="text-stone-300 hover:text-rose-500 shrink-0"><Trash2 className="w-4 h-4"/></button>
                 </div>);
               })}
@@ -9203,7 +9248,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
         const carrier=/dhl/i.test(picked.label)?"DHL":"FedEx";
         const _apRec={id:Date.now()+o.id,date:apShipDate?new Date(apShipDate+"T12:00:00").toLocaleDateString():new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:senderZip,toZip:o.zip,weight:wt,dims:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,items:o.items||"",note:o.note||"",bookNumber:res.bookNumber,..._orFill};
         onShipped&&onShipped(_apRec,o.id);
-        rows.push({name:o.name,ok:true,service:picked.label,tracking:res.tracking,pdf:res.labelPdfBase64||null,rec:_apRec});
+        rows.push({name:o.name,ok:true,service:picked.label,tracking:res.tracking,pdf:res.labelPdfBase64||null,rec:_apRec,ctx:docCtxFor(_apRec,res.tracking)});
       } else rows.push({name:o.name,orderId:o.id,ok:false,error:(res&&res.error)||"Booking failed"});
       setApResults({rows:[...rows],heldN});
     }
@@ -9211,7 +9256,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
   };
   const [apPrintBusy,setApPrintBusy]=useState(false);
   const apPrintAll=async()=>{
-    const pdfs=((apResults&&apResults.rows)||[]).filter(r=>r.ok&&r.pdf).map(r=>({pdf:r.pdf,rec:r.rec,tracking:r.tracking}));
+    const pdfs=((apResults&&apResults.rows)||[]).filter(r=>r.ok&&r.pdf).map(r=>({pdf:r.pdf,rec:r.rec,ctx:r.ctx,tracking:r.tracking}));
     if(!pdfs.length)return;
     setApPrintBusy(true);
     try{ await printImagePagesBatch(pdfs,settings); }finally{ setApPrintBusy(false); }
@@ -9235,7 +9280,6 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
       <div>
         <h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Zap className="w-5 h-5 text-[#0086E0]"/>Autopilot</h2>
         <p className="text-sm text-stone-500 mt-0.5">Tell {BRAND.product} how you ship — it handles the rest.</p>
-        <p className="text-[11px] text-stone-400 mt-1 flex items-center gap-1"><Info className="w-3 h-3"/>Auto-run &amp; auto-print toggles (run rules on Ship / in Batch, auto-book) now live in <b className="text-stone-500">Settings → Print settings</b>. Set a <b className="text-stone-500">Fallback service</b> and <b className="text-stone-500">Ship-date cutoff</b> in Settings → Customizations.</p>
       </div>
       <div className="flex items-center gap-2">
         {setSettings&&<button onClick={()=>setSettings(s=>({...s,autoRunRules:!autoRun}))} title="When on, newly imported/synced orders are run through enabled rules automatically" className={`text-sm rounded-lg px-3 py-2 font-medium flex items-center gap-1.5 border ${autoRun?"bg-emerald-50 border-emerald-300 text-emerald-800":"bg-white border-stone-200 text-stone-600 hover:bg-stone-100"}`}><span className={`w-8 h-4 rounded-full relative transition ${autoRun?"bg-emerald-500":"bg-stone-300"}`}><span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${autoRun?"left-4":"left-0.5"}`}/></span>Auto-run on import</button>}
@@ -9243,6 +9287,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
         <button onClick={applyToOrders} disabled={run.summary.touched===0} title="Write rule outcomes onto matching orders without creating labels" className="text-sm bg-white border border-stone-200 text-stone-600 rounded-lg px-3 py-2 font-medium hover:bg-stone-100 disabled:opacity-40 flex items-center gap-1.5"><Check className="w-4 h-4"/>Apply only</button>
         <button onClick={newRule} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium flex items-center gap-1.5 hover:bg-stone-100"><Plus className="w-4 h-4"/>New rule</button>
         <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Make a rule: "}}))} title="Describe a rule in plain English — ShipHub AI writes it into the pipeline" className="text-sm rounded-lg px-3 py-2 font-medium border bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF] hover:bg-[#CCEAFF] flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/>Ask ShipHub AI to write a rule</button>
+        <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Fallback</span><select value={cz(settings).fallbackService||""} onChange={e=>setSettings&&setSettings(s=>({...s,custom:{...(s.custom||{}),fallbackService:e.target.value}}))} title="Service used for orders that match no rule" className="text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-emerald-500"><option value="">No fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
         <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Ship date</span><input type="date" value={apShipDate} onChange={e=>setApShipDate(e.target.value)} className="text-sm font-mono text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-emerald-500"/></label>
         <button onClick={runAutopilot} disabled={apRunning||ords.filter(o=>o.status!=="fulfilled").length===0} title="Apply your rules and create labels for every unfulfilled order (held orders are skipped)" className="text-sm bg-emerald-600 text-white rounded-lg px-4 py-2.5 font-semibold hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-2 shadow-sm">{apRunning?<Loader2 className="w-4 h-4 animate-spin"/>:<Zap className="w-4 h-4"/>}Run Autopilot{!apRunning&&run?` — label ${run.results.filter(r=>r.order.status!=="fulfilled"&&!r.view.hold).length} orders`:""}</button>
       </div>

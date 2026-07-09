@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v385";
+const BUILD_TAG="addr-v386";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9037,10 +9037,17 @@ function PrinterSettings({settings,setSettings}){
           </label>
           <button onClick={pnTest} disabled={!pnc.printerId||pnBusy==="test"} className="text-sm border border-stone-300 text-stone-700 rounded-lg px-3.5 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5">{pnBusy==="test"?<><Loader2 className="w-4 h-4 animate-spin"/>Sending…</>:<><Printer className="w-4 h-4"/>Send test page</>}</button>
           <button onClick={async()=>{ const dp=(typeof window!=="undefined"&&window.__scDirectPrint)||{}; setPnBusy("diag"); setPnMsg(null);
-            let res; try{ res=await pnCall({action:"print",apiKey:dp.apiKey||"",printerId:dp.printerId||"",title:"Hands-free diagnostic",pdfBase64:PN_TEST_PDF}); }catch(e){ res={ok:false,error:String((e&&e.message)||e)}; }
+            const liveKey=String(pnc.apiKey||"").trim(); const syncKey=String(dp.apiKey||"").trim();
+            const tail=(k)=>k?("ends …"+k.slice(-5)+", "+k.length+" chars"):"(empty)";
+            /* Step 1 — is the key in the box VALID? Ask PrintNode to list printers with it. */
+            let kres; try{ kres=await pnCall({action:"printers",apiKey:liveKey}); }catch(e){ kres={ok:false,error:String((e&&e.message)||e)}; }
+            const keyInfo=" · key in box: "+tail(liveKey)+(liveKey===syncKey?" · saved copy matches":" · ⚠ SAVED COPY DIFFERS ("+tail(syncKey)+")");
+            if(!kres||!kres.ok){ setPnBusy(""); setPnMsg({err:"✗ PrintNode rejected the key: "+((kres&&kres.error)||"no response")+keyInfo+". Re-copy the key from printnode.com → API Keys and paste it fresh."}); return; }
+            /* Step 2 — key works. Now the real hands-free path. */
+            let pres; try{ pres=await pnCall({action:"print",apiKey:dp.apiKey||liveKey,printerId:dp.printerId||pnc.printerId,title:"Hands-free diagnostic",pdfBase64:PN_TEST_PDF}); }catch(e){ pres={ok:false,error:String((e&&e.message)||e)}; }
             setPnBusy("");
-            const cfg=" · direct-print sees: on="+String(!!dp.enabled)+", printer="+JSON.stringify(dp.printerId||"")+", key="+(dp.apiKey?"yes":"NO");
-            setPnMsg(res&&res.ok?{ok:"✓ Automatic print WORKED — this test went straight to the printer with no dialog. Hands-free should behave the same."+cfg}:{err:"✗ Automatic print failed: "+((res&&res.error)||"no response from the print relay")+cfg}); }}
+            const cfg=" · direct-print sees on="+String(!!dp.enabled)+", printer="+JSON.stringify(dp.printerId||"")+keyInfo;
+            setPnMsg(pres&&pres.ok?{ok:"✓ Key is VALID and the test page PRINTED — hands-free is good to go."+cfg}:{err:"✓ Key is valid ("+((kres.printers||[]).length)+" printers) but the print failed: "+((pres&&pres.error)||"no response")+cfg}); }}
             disabled={pnBusy==="diag"} className="text-sm border border-amber-300 text-amber-700 rounded-lg px-3.5 py-2 font-medium hover:bg-amber-50 disabled:opacity-40 flex items-center gap-1.5">{pnBusy==="diag"?<><Loader2 className="w-4 h-4 animate-spin"/>Testing…</>:<>Diagnose hands-free</>}</button>
         </div>}
         {knownPrinters.length>0&&<div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2.5">

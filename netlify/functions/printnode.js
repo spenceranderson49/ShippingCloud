@@ -34,8 +34,23 @@ exports.handler = async (event) => {
     if (b.action === "print") {
       const printerId = +b.printerId;
       const content = String(b.pdfBase64 || "");
+      if (b.contentType === "raw_html" || (!content && b.html)) return J(200, { ok: false, error: "PrintNode can only print PDFs — HTML documents fall back to the browser print window." });
       if (!printerId || !content) return J(200, { ok: false, error: "printerId and pdfBase64 are required" });
       if (content.length > 8 * 1024 * 1024) return J(200, { ok: false, error: "Label PDF too large" });
+      /* THE silent black hole: PrintNode happily ACCEPTS jobs while the desktop agent is offline —
+         they just sit in a cloud queue, nothing prints, and the app thought everything was fine.
+         Check the printer's computer state first and refuse loudly, so the app falls back to the
+         visible print dialog and tells the person WHY. */
+      try {
+        const pr = await fetch(API + "/printers/" + printerId, { headers: { Authorization: auth } });
+        const pd = await pr.json().catch(() => null);
+        const pinfo = Array.isArray(pd) ? pd[0] : pd;
+        const compState = String((pinfo && pinfo.computer && pinfo.computer.state) || "").toLowerCase();
+        const compName = (pinfo && pinfo.computer && pinfo.computer.name) || "the label computer";
+        if (compState === "disconnected") {
+          return J(200, { ok: false, offline: true, error: "The PrintNode app on \"" + compName + "\" is OFFLINE — nothing can print. Open PrintNode on that computer and sign in, then try again." });
+        }
+      } catch (e) { /* state check failed — don't block the job on it */ }
       const r = await fetch(API + "/printjobs", {
         method: "POST",
         headers: { Authorization: auth, "Content-Type": "application/json" },

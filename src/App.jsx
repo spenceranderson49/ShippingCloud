@@ -74,7 +74,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v365";
+const BUILD_TAG="addr-v366";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -1169,7 +1169,7 @@ function resolveDocField(field,ctx,custom){
    Returns an array of {label,value,size} lines, skipping empties. */
 function buildDocTabLines(docTab,ctx){
   if(!docTab||!docTab.enabled)return [];
-  return (docTab.zones||[]).map(z=>({label:docTab.showLabels!==false?(z.label||(DOCTAB_LABEL[z.field]||"").toUpperCase()):"",value:resolveDocField(z.field,ctx,z.custom),size:z.size||9,x:(z.x!=null?+z.x:null),y:(z.y!=null?+z.y:null)})).filter(l=>l.value!=="");
+  return (docTab.zones||[]).map(z=>({label:docTab.showLabels!==false?z.label:"",value:resolveDocField(z.field,ctx,z.custom),size:z.size||9,x:(z.x!=null?+z.x:null),y:(z.y!=null?+z.y:null)})).filter(l=>l.value!=="");
 }
 function receiptHTML(rc,ctx,logoUrl){
   const esc=(x)=>String(x||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
@@ -8652,12 +8652,14 @@ function PrinterSettings({settings,setSettings}){
         </Field>
         <div className="space-y-1.5">
           <div className="text-[10px] uppercase tracking-widest text-stone-400">Zones · print in order</div>
-          {dtZones.map(z=>(<div key={z.id} className="flex items-center gap-1.5 text-[12px] bg-stone-50 rounded px-2 py-1">
-            <span className="text-[10px] text-stone-400 w-8 shrink-0">Z{z.zone}</span>
-            <Select value={z.field} onChange={e=>setZone(z.id,{field:e.target.value})} className="!w-auto !py-0.5 !text-[12px]">{DOCTAB_FIELDS.map(([v,l])=><option key={v} value={v}>{l}</option>)}</Select>
-            {z.field==="custom"&&<Input value={z.custom} onChange={e=>setZone(z.id,{custom:e.target.value})} placeholder="Text to print" className="!w-32 !py-0.5 !text-[12px]"/>}
-            <Select value={z.size||9} onChange={e=>setZone(z.id,{size:+e.target.value})} className="!w-auto !py-0.5 !text-[12px]">{[7,8,9,10,11,12,14].map(n=><option key={n} value={n}>{n}pt</option>)}</Select>
-            <button onClick={()=>delZone(z.id)} className="text-stone-300 hover:text-rose-500 ml-auto shrink-0"><Trash2 className="w-3.5 h-3.5"/></button>
+          {dtZones.map(z=>(<div key={z.id} className="flex flex-wrap items-center gap-1.5 text-[13px] bg-stone-50 rounded-lg px-2 py-1.5">
+            <span className="text-[11px] text-stone-400 w-9">Zone {z.zone}</span>
+            <Input value={z.label} onChange={e=>setZone(z.id,{label:e.target.value})} placeholder="Label (e.g. REF)" className="!w-24"/>
+            <Select value={z.field} onChange={e=>setZone(z.id,{field:e.target.value})} className="!w-auto">{DOCTAB_FIELDS.map(([v,l])=><option key={v} value={v}>{l}</option>)}</Select>
+            {z.field==="custom"&&<Input value={z.custom} onChange={e=>setZone(z.id,{custom:e.target.value})} placeholder="Text to print" className="!w-32"/>}
+            <span className="text-[11px] text-stone-400">font</span>
+            <Select value={z.size||9} onChange={e=>setZone(z.id,{size:+e.target.value})} className="!w-auto">{[7,8,9,10,11,12,14].map(n=><option key={n} value={n}>{n}pt</option>)}</Select>
+            <button onClick={()=>delZone(z.id)} className="text-stone-300 hover:text-rose-500 ml-auto"><Trash2 className="w-3.5 h-3.5"/></button>
           </div>))}
           <button onClick={addZone} className="text-xs text-[#0086E0] font-medium flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add zone</button>
         </div>

@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v383";
+const BUILD_TAG="addr-v384";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -789,8 +789,11 @@ async function directPrintPdf(base64,title,ctx){
   try{
     const r=await fetch("/.netlify/functions/printnode",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"print",apiKey:cfg.apiKey,printerId:cfg.printerId,title:title||"Shipping label",pdfBase64:payload})});
     const d=await r.json().catch(()=>null);
-    return !!(d&&d.ok);
-  }catch(e){ return false; }
+    if(d&&d.ok)return true;
+    /* Surface PrintNode's ACTUAL reason so "it just shows a dialog" stops being a mystery. */
+    try{ window.dispatchEvent(new CustomEvent("sc-direct-print-failed",{detail:{reason:"agent-unreachable",error:(d&&d.error)||("PrintNode wouldn't accept the job ("+r.status+")")}})); }catch(e){}
+    return false;
+  }catch(e){ try{ window.dispatchEvent(new CustomEvent("sc-direct-print-failed",{detail:{reason:"agent-unreachable",error:"Couldn't reach the print relay — "+((e&&e.message)||"network error")}})); }catch(_){} return false; }
 }
 /* ── multi-printer document routing (PrintNode) ─────────────────────────────
    Print settings lets each DOCUMENT TYPE pick its own printer:
@@ -932,8 +935,9 @@ function openLabelOrDirectPrint(payload,settings,setLabelPreview){
         if(c.directNoPreview&&!c.skipBookedSummary)setLabelPreview({...payload,autoPrint:false});
         return;
       }
-      /* Couldn't print silently — the PrintNode agent is offline or no printer is set up. Say why. */
-      try{ window.dispatchEvent(new CustomEvent("sc-direct-print-failed",{detail:{reason:(!dp||!dp.apiKey||!dp.printerId)?"not-configured":"agent-unreachable"}})); }catch(e){}
+      /* If nothing is configured, directPrintPdf returned early with no reason — say so here.
+         When it DID reach PrintNode and got rejected, directPrintPdf already surfaced the real error. */
+      if(!dp||!dp.enabled||!dp.apiKey||!dp.printerId){ try{ window.dispatchEvent(new CustomEvent("sc-direct-print-failed",{detail:{reason:"not-configured"}})); }catch(e){} }
       if(c.skipBookedSummary){
         /* Hands-free MUST stay clean: send the label to the browser print dialog through a hidden
            frame instead of ever opening the preview modal, then let the form advance on its own. */
@@ -2315,7 +2319,7 @@ function SaveToast(){
   useEffect(()=>{
     const onSaved=()=>{ const id=Date.now()+Math.random(); setMsgs(m=>[...m,{id,ok:true}]); setTimeout(()=>setMsgs(m=>m.filter(x=>x.id!==id)),2200); };
     const onFailed=(e)=>{ const id=Date.now()+Math.random(); const err=(e&&e.detail&&e.detail.error)||"offline"; setMsgs(m=>[...m,{id,ok:false,err}]); setTimeout(()=>setMsgs(m=>m.filter(x=>x.id!==id)),6000); };
-    const onDirectFail=(e)=>{ const id=Date.now()+Math.random(); const reason=(e&&e.detail&&e.detail.reason)||"agent-unreachable"; setMsgs(m=>[...m,{id,ok:false,err:reason==="not-configured"?"Direct printing isn't set up — add your PrintNode key & printer in Printer settings":"Printer agent not reachable — check PrintNode is running. Showing the dialog instead"}]); setTimeout(()=>setMsgs(m=>m.filter(x=>x.id!==id)),7000); };
+    const onDirectFail=(e)=>{ const id=Date.now()+Math.random(); const reason=(e&&e.detail&&e.detail.reason)||"agent-unreachable"; const real=(e&&e.detail&&e.detail.error)||""; setMsgs(m=>[...m,{id,ok:false,err:reason==="not-configured"?"Direct printing isn't set up — add your PrintNode key & printer in Printer settings":(real||"Printer agent not reachable — check PrintNode is running. Showing the dialog instead")}]); setTimeout(()=>setMsgs(m=>m.filter(x=>x.id!==id)),9000); };
     const onLabelInvalid=(e)=>{ const id=Date.now()+Math.random(); const t=(e&&e.detail&&e.detail.tracking)||""; setMsgs(m=>[...m,{id,ok:false,err:"The carrier returned a blank/invalid label"+(t?" for "+t:"")+" — nothing was sent to the printer. Re-book or check the carrier account."}]); setTimeout(()=>setMsgs(m=>m.filter(x=>x.id!==id)),9000); };
     window.addEventListener("sc-saved",onSaved);
     window.addEventListener("sc-save-failed",onFailed);
@@ -5150,7 +5154,7 @@ function AppInner(){
     /* Direct printing is "on" whenever a printer is actually configured — derived here so it can
        never fall out of sync with a separate toggle. The after-booking mode (hands-free / no-preview
        / preview) decides whether it fires automatically; this just says the printer is reachable. */
-    try{ window.__scDirectPrint={enabled:!!(String(pn.apiKey||"").trim()&&pn.printerId),apiKey:pn.apiKey||"",printerId:+pn.printerId||0,docPrinters:{packSlip:String(dpc.packSlip!=null?dpc.packSlip:(cus.packSlipPrinterId||"")),pickList:String(dpc.pickList||""),docs:String(dpc.docs||"")}}; }catch(e){} },[settings&&settings.printNode,settings&&settings.custom&&settings.custom.packSlipPrinterId]);
+    try{ window.__scDirectPrint={enabled:!!(String(pn.apiKey||"").trim()&&pn.printerId),apiKey:pn.apiKey||"",printerId:pn.printerId||"",docPrinters:{packSlip:String(dpc.packSlip!=null?dpc.packSlip:(cus.packSlipPrinterId||"")),pickList:String(dpc.pickList||""),docs:String(dpc.docs||"")}}; }catch(e){} },[settings&&settings.printNode,settings&&settings.custom&&settings.custom.packSlipPrinterId]);
   useEffect(()=>{ try{
       const size=((settings&&settings.printer)||{}).labelSize||"4x6";
       const dtb=(settings&&settings.docTab)||null;

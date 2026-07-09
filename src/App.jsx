@@ -28,7 +28,7 @@ function FreightwireShipHub({logoH=44,sub=true,subText="Client Portal"}){
     <img src={FW_LOGO} alt="Freightwire" style={{height:logoH}} className="w-auto shrink-0" draggable={false}/>
     <span style={{width:1,height:Math.round(logoH*0.82),background:"#d6d3ce"}} className="shrink-0"/>
     <span className="inline-flex flex-col" style={{gap:1}}>
-      <span style={{fontFamily:"Inter,system-ui,sans-serif",fontWeight:800,fontSize:nameSize,letterSpacing:"0.1em",lineHeight:1,color:"#1F1B18",textTransform:"uppercase"}}>Ship<span style={{color:"#0198FF"}}>Hub</span></span>
+      <span style={{fontFamily:"Inter,system-ui,sans-serif",fontWeight:800,fontSize:nameSize,letterSpacing:"0.1em",lineHeight:1,color:"#1F1B18",textTransform:"uppercase"}}>Ship<span style={{color:"var(--acc,#0198FF)"}}>Hub</span></span>
       {sub&&<span style={{fontFamily:"Inter,system-ui,sans-serif",fontSize:Math.max(9,Math.round(logoH*0.2)),letterSpacing:"0.12em",color:"#78716c",fontWeight:500,textTransform:"uppercase",lineHeight:1}}>{subText}</span>}
     </span>
   </span>);
@@ -40,6 +40,9 @@ const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK
    Custom features built for one client get added here with default:false —
    then enabling them for anyone else is one checkbox, and nothing custom
    ever deploys to every login by accident. */
+/* Customer Settings sections (id,label) — mirrored by the `secs` array inside Settings.
+   The admin portal uses this list for the per-customer hide/lock controls (featureFlags._secPolicy). */
+const SETTINGS_SEC_LIST=[["general","General"],["customize","Customizations"],["carriers","Carrier accounts"],["warehouses","Warehouses"],["catalog","Product catalog"],["boxes","Package sizes"],["boxlogic","Box logic"],["reference","Reference Fields"],["cieditor","Commercial invoice"],["cihistory","CI history"],["otherdocs","Other documents"],["printer","Print settings"],["checkout","Checkout rates"],["manifests","Manifests"],["reports","Reports"],["notifications","Email automation"],["billing","Billing"],["integrations","Integrations"],["subscription","Subscription"]];
 const FEATURE_CATALOG=[
   {id:"orders",label:"Orders",desc:"Order import & fulfillment",default:true},
   {id:"shipments",label:"Shipments",desc:"Shipment history & tracking",default:true},
@@ -53,7 +56,8 @@ const FEATURE_CATALOG=[
   {id:"rules",label:"Autopilot",desc:"Autopilot Mode — automation rules",default:true},
   {id:"scan",label:"Scan",desc:"Barcode scan station",default:true},
   {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:true},
-  {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own UPS / other carrier accounts on the Connections page (England always shows; admins always have this)",default:false},
+  {id:"seeCosts",label:"See costs & spend",desc:"Rates, order totals, batch totals and Reports dollars. Turn OFF to hide all money from this customer's logins",default:true},
+  {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own carrier accounts on the Connections page (England always shows; admins always have this)",default:false},
 ];
 const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All logins"],["labelcert","FedEx labels"],["customizations","Features & access"],["branding","Branding"],["platforms","Carrier accounts"],["domains","Domains"]];
 const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,labelcert:Printer,customizations:Sliders,branding:Sparkles,platforms:Truck,domains:ExternalLink};
@@ -74,7 +78,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v370";
+const BUILD_TAG="addr-v372";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -120,6 +124,9 @@ const BRAND=(()=>{ let k="shippingcloud"; try{ k=(import.meta.env&&import.meta.e
   return (k==="freightwire"||k==="shiphub")
     ?{key:"freightwire",fw:true,name:"ShipHub",short:"ShipHub",product:"ShipHub",accent:"#1e3a5f",accent2:"#2d5a8e"}
     :{key:"shippingcloud",fw:false,name:"ShippingCloud",short:"ShippingCloud",product:"ShippingCloud",accent:"#0086E0",accent2:"#0072BE"}; })();
+/* The site's own origin — integration redirect-URI instructions must show THIS site's domain,
+   not a hardcoded one, so the white-label builds never leak another brand's URL. */
+const APP_ORIGIN=(()=>{ try{ return (typeof window!=="undefined"&&window.location&&window.location.origin)||"https://shippingcloud.net"; }catch(e){ return "https://shippingcloud.net"; } })();
 /* v137: on the Freightwire build, the browser tab shows the FW "F" mark (auto-cropped out of FW_LOGO
    by scanning for the transparent gap before the wordmark) instead of the ShippingCloud cloud, plus
    the FreightwireShip tab title. Crop bounds verified against the shipped asset: mark = 78x78 at x5,y2. */
@@ -936,11 +943,11 @@ const CONNECTORS=[
     instr:["Enable SuiteTalk REST Web Services + Token-Based Auth (Setup → Company → Enable Features).","Create an Integration record → copy Consumer Key + Secret.","Create an Access Token (Setup → Users/Roles → Access Tokens) → copy Token ID + Secret.","Paste all five (plus your Account ID) above and click Save."]},
   // OAuth connectors — Connect button starts the handshake; tokens come back automatically
   {id:"quickbooks",name:"QuickBooks Online",tint:"bg-[#2CA01C]/15 text-[#2CA01C]",auth:"oauth",orders:false,endpoint:"quickbooks",env:["QBO_CLIENT_ID","QBO_CLIENT_SECRET"],
-    instr:["Go to developer.intuit.com → My Apps → create an app with the Accounting scope.","Set the Redirect URI to:  https://shippingcloud.net/.netlify/functions/quickbooks","Copy the Client ID + Client Secret. (Send them to your admin to set as QBO_CLIENT_ID / QBO_CLIENT_SECRET in Netlify, or set them yourself.)","Then click “Connect with QuickBooks” below and approve."]},
+    instr:["Go to developer.intuit.com → My Apps → create an app with the Accounting scope.","Set the Redirect URI to:  "+APP_ORIGIN+"/.netlify/functions/quickbooks","Copy the Client ID + Client Secret. (Send them to your admin to set as QBO_CLIENT_ID / QBO_CLIENT_SECRET in Netlify, or set them yourself.)","Then click “Connect with QuickBooks” below and approve."]},
   {id:"salesforce",name:"Salesforce",tint:"bg-[#00A1E0]/15 text-[#0079A1]",auth:"oauth",orders:false,endpoint:"salesforce",env:["SF_CLIENT_ID","SF_CLIENT_SECRET"],
-    instr:["In Salesforce: Setup → App Manager → New Connected App, enable OAuth.","Set the Callback URL to:  https://shippingcloud.net/.netlify/functions/salesforce","Scopes: api, refresh_token. Copy the Consumer Key + Secret and set them as SF_CLIENT_ID / SF_CLIENT_SECRET in Netlify.","Then click “Connect with Salesforce” below and approve."]},
+    instr:["In Salesforce: Setup → App Manager → New Connected App, enable OAuth.","Set the Callback URL to:  "+APP_ORIGIN+"/.netlify/functions/salesforce","Scopes: api, refresh_token. Copy the Consumer Key + Secret and set them as SF_CLIENT_ID / SF_CLIENT_SECRET in Netlify.","Then click “Connect with Salesforce” below and approve."]},
   {id:"ebay",name:"eBay",tint:"bg-[#E53238]/12 text-[#E53238]",auth:"oauth",orders:true,endpoint:"ebay",env:["EBAY_CLIENT_ID","EBAY_CLIENT_SECRET","EBAY_RUNAME"],
-    instr:["Go to developer.ebay.com → your keyset → User Tokens → create a Redirect URL name (RuName).","Set the RuName’s accepted URL to:  https://shippingcloud.net/.netlify/functions/ebay","Set EBAY_CLIENT_ID, EBAY_CLIENT_SECRET and EBAY_RUNAME in Netlify.","Then click “Connect with eBay” below and approve."]},
+    instr:["Go to developer.ebay.com → your keyset → User Tokens → create a Redirect URL name (RuName).","Set the RuName’s accepted URL to:  "+APP_ORIGIN+"/.netlify/functions/ebay","Set EBAY_CLIENT_ID, EBAY_CLIENT_SECRET and EBAY_RUNAME in Netlify.","Then click “Connect with eBay” below and approve."]},
   // QuickBooks Desktop — Web Connector
   {id:"quickbooks-desktop",name:"QuickBooks Desktop",tint:"bg-[#2CA01C]/15 text-[#2CA01C]",auth:"qwc",orders:false,endpoint:"quickbooks-desktop",env:["QBWC_USER","QBWC_PASS"],
     instr:["Have an admin set QBWC_USER and QBWC_PASS in Netlify (the Web Connector login).","On the PC running QuickBooks, install the QuickBooks Web Connector (free from Intuit).","Click “Download .qwc” below, then in the Web Connector choose File → Add an Application and pick that file; enter the QBWC password.","Open QuickBooks as Admin and approve the app. It will sync every few minutes; queued invoices post automatically."]},
@@ -968,6 +975,13 @@ async function fedexCall(payload,timeout=15000){
   finally{clearTimeout(t);}
 }
 // normalize a service label OR FedEx serviceType to a canonical key for matching
+/* Is this quote/service an INTERNATIONAL product? Matches by label or key/serviceCode so it
+   works on live FedEx rates, skeletons, and the local RATES catalog alike. DHL Express is
+   international-only. Used to keep domestic and international lists strictly separate. */
+function isIntlService(q){
+  const s=String((q&&(q.label||""))+" "+(q&&(q.serviceCode||q.key||""))+" "+(q&&q.carrier||""));
+  return /international|intl|dhl/i.test(s);
+}
 function canonSvc(s){
   /* Canonical toggle/lock/alias key for a service label. Delegates to rateSvcKey so the
      key vocabulary is IDENTICAL to the Customize services list, the admin lock list, and
@@ -985,6 +999,22 @@ function canonSvc(s){
    Keying both to one value lets React reuse the same DOM node across the swap instead of destroying
    and recreating it — so the list updates in place instead of popping/re-flowing. */
 function svcFamilyKey(label){ const k=canonSvc(label); return (k==="ground"||k==="home")?"ground_family":k; }
+/* Shared quote-list cleanup for the Orders surfaces — the SAME rules the Ship tab applies:
+   domestic vs international separation, ground↔home exclusivity once the address is classified
+   (residential true/false; null = not classified yet), and de-dup by service family so the same
+   service never renders twice (keep the priced row). Fixes the Orders tab "services twice" mess. */
+function cleanServiceList(list,{intl=false,residential=null}={}){
+  let out=(list||[]).filter(Boolean);
+  out=out.filter(q=>!!intl===isIntlService(q));
+  if(residential===true)out=out.filter(q=>canonSvc(q.label)!=="ground");
+  else if(residential===false)out=out.filter(q=>canonSvc(q.label)!=="home");
+  const byFam={};
+  for(const q of out){ const fk=svcFamilyKey(q.label); const priced=(q.sell??q.cost)!=null;
+    if(!(fk in byFam)){ byFam[fk]=q; }
+    else { const cur=byFam[fk]; const curPriced=(cur.sell??cur.cost)!=null; if(priced&&!curPriced)byFam[fk]=q; }
+  }
+  return out.filter(q=>byFam[svcFamilyKey(q.label)]===q);
+}
 async function fedexTransit(s){
   const body={fromZip:s.fromZip,toZip:s.toZip,fromCountry:s.fromCountry||"US",toCountry:s.toCountry||"US",residential:!!s.residential,pieces:(s.pieces||[]).map(p=>({weight:Math.ceil(+p.weight||1)}))};
   const res=await fedexCall(body);
@@ -2077,7 +2107,6 @@ const CHECKOUT_DEFAULTS={registered:true,presentation:"named",handling:0,freeThr
 
 /* ════════ PLATFORM CARRIER ACCOUNTS ════════ */
 const PLATFORM_CARRIERS=[
-  {id:"ups",name:"UPS",blurb:BRAND.product+" negotiated UPS rates",tint:"text-amber-700"},
   {id:"usps",name:"USPS",blurb:"Commercial Plus pricing via "+BRAND.product,tint:"text-[#0086E0]"},
   {id:"amazon",name:"Amazon Shipping",blurb:"Amazon's ground & next-day network",tint:"text-stone-700"},
   {id:"uniuni",name:"UniUni",blurb:"Last-mile DSP for lightweight e-comm",tint:"text-violet-600"},
@@ -2628,6 +2657,9 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
   const dedicated=()=>{const id="p"+Date.now();upRules({profiles:[...profiles,{id,name:c.name,services:JSON.parse(JSON.stringify(prof.services||{})),surcharges:JSON.parse(JSON.stringify(prof.surcharges||{}))}],assign:{...assign,[cid]:id}});say("Dedicated profile created.");};
   const companyFeatureState=(fid)=>{if(!lg.length)return "none";const on=lg.filter(u=>featureOn(fid,u,featureFlags[u.id])).length;return on===0?"off":on===lg.length?"on":"mixed";};
   const setCompanyFeature=(fid,val)=>{setFeatureFlags&&setFeatureFlags(ff=>{const next={...ff};lg.forEach(u=>{next[u.id]={...(next[u.id]||{}),[fid]:val};});return next;});say((val?"Enabled":"Disabled")+" for all logins.");};
+  /* Settings-section policy (per customer, applied to every login): on / locked (view-only, greyed) / off (hidden). */
+  const secPolicyState=(sid)=>{ if(!lg.length)return "on"; const vals=lg.map(u=>String(((featureFlags[u.id]||{})._secPolicy||{})[sid]||"on")); return vals.every(v=>v===vals[0])?vals[0]:"mixed"; };
+  const setCompanySecPolicy=(sid,val)=>{ setFeatureFlags&&setFeatureFlags(ff=>{ const next={...ff}; lg.forEach(u=>{ const cur=next[u.id]||{}; next[u.id]={...cur,_secPolicy:{...(cur._secPolicy||{}),[sid]:val}}; }); return next; }); say("Settings pages updated for all logins."); };
   const supplies=pf.supplies||{};
   const TABS=[["profile","Profile"],["address","Address"],["logins","Logins ("+lg.length+")"],["rates","Rates"],["fedex","FedEx tier"],["labels","Label preferences"],["supplies","Supplies"],["features","Features"],["creds","Credentials"],["notes","Notes"]];
   const svcQuick=RATE_SERVICES.fedex.filter(s=>!s.or);
@@ -2922,6 +2954,20 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
             {state==="mixed"&&<span className="text-[10px] text-amber-600">mixed</span>}
             <button onClick={()=>setCompanyFeature(f.id,!(state==="on"))} className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${state==="on"?"bg-[#0086E0] justify-end":state==="mixed"?"bg-amber-400 justify-center":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></button>
           </div>);})}
+        </div>
+        <div className="pt-2">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Settings pages — what their Settings tab shows</div>
+          <p className="text-[11px] text-stone-500 mb-2">Per page: <b>On</b> = normal · <b>View only</b> = they can open it but everything is greyed out and un-editable · <b>Hidden</b> = gone from their Settings sidebar. Applies to every login under {c.name}.</p>
+          <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">{SETTINGS_SEC_LIST.map(([sid,sl])=>{const st=secPolicyState(sid);return (
+            <div key={sid} className="flex items-center gap-3 px-3 py-1.5 text-sm">
+              <div className="flex-1 font-medium text-stone-700">{sl}{st==="mixed"&&<span className="text-[10px] text-amber-600 ml-2">mixed</span>}</div>
+              <div className="flex rounded-lg border border-stone-200 overflow-hidden text-[11px]">
+                {[["on","On"],["locked","View only"],["off","Hidden"]].map(([v,vl])=>(
+                  <button key={v} onClick={()=>setCompanySecPolicy(sid,v)} className={`px-2.5 py-1 font-medium ${st===v?(v==="on"?"bg-emerald-600 text-white":v==="locked"?"bg-amber-500 text-white":"bg-stone-700 text-white"):"bg-white text-stone-500 hover:bg-stone-50"}`}>{vl}</button>
+                ))}
+              </div>
+            </div>);})}
+          </div>
         </div></>}
     </div>}
 
@@ -3732,7 +3778,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
       <div className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Truck className="w-4 h-4 text-emerald-600"/>FedEx account requests<Badge tone="green">{fedexRequests.length}</Badge></div>
       {fedexRequests.map(r=>(<div key={r.id||r.uid} className="flex flex-wrap items-center gap-3 bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm">
         <div className="flex-1 min-w-[180px]"><div className="font-medium">{r.name||r.email}</div><div className="text-[11px] text-stone-400">{r.email}{r.volume?<> · {r.volume}/mo</>:null}{r.carrier?<> · ships {r.carrier}</>:null} · {r.requestedAt?new Date(r.requestedAt).toLocaleDateString():"recently"}</div></div>
-        {r.invoiceKey&&<button onClick={async()=>{const res=await cloudCall({action:"getUpload",token:CLOUD.token,key:r.invoiceKey});if(!res||!res.ok){window.alert((res&&res.error)||"Could not fetch the file.");return;}const bytes=atob(res.data);const arr=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);const url=URL.createObjectURL(new Blob([arr],{type:res.type}));const a=document.createElement("a");a.href=url;a.download=res.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);}} className="text-xs border border-[#0086E0]/40 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>UPS invoice</button>}
+        {r.invoiceKey&&<button onClick={async()=>{const res=await cloudCall({action:"getUpload",token:CLOUD.token,key:r.invoiceKey});if(!res||!res.ok){window.alert((res&&res.error)||"Could not fetch the file.");return;}const bytes=atob(res.data);const arr=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);const url=URL.createObjectURL(new Blob([arr],{type:res.type}));const a=document.createElement("a");a.href=url;a.download=res.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);}} className="text-xs border border-[#0086E0]/40 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>Carrier invoice</button>}
         <button onClick={()=>setFedexRequests&&setFedexRequests(rs=>rs.filter(x=>x!==r))} className="text-xs border border-stone-300 text-stone-600 rounded px-3 py-1.5 hover:bg-stone-50">Done</button>
       </div>))}
       <p className="text-[11px] text-stone-400">These come from the welcome popup after a user’s first sign-in. Provision their England/FedEx account, drop the credentials into their customer card, then hit Done.</p>
@@ -3741,7 +3787,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
       <div className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Users className="w-4 h-4 text-[#0086E0]"/>Access requests<Badge tone="blue">{signupRequests.length}</Badge></div>
       {signupRequests.map(r=>(<div key={r.id||r.email} className="flex flex-wrap items-center gap-3 bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm">
         <div className="flex-1 min-w-[180px]"><div className="font-medium">{r.name}{r.company?<span className="text-stone-400 font-normal"> · {r.company}</span>:null}</div><div className="text-[11px] text-stone-400">{r.email} · requested {r.requestedAt?new Date(r.requestedAt).toLocaleDateString():"recently"}{r.volume?<> · {r.volume}/mo</>:null}{r.carrier?<> · ships {r.carrier}</>:null}</div></div>
-        {r.invoiceKey&&<button onClick={async()=>{const res=await cloudCall({action:"getUpload",token:CLOUD.token,key:r.invoiceKey});if(!res||!res.ok){window.alert((res&&res.error)||"Could not fetch the file.");return;}const bytes=atob(res.data);const arr=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);const url=URL.createObjectURL(new Blob([arr],{type:res.type}));const a=document.createElement("a");a.href=url;a.download=res.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);}} className="text-xs border border-[#0086E0]/40 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>UPS invoice</button>}
+        {r.invoiceKey&&<button onClick={async()=>{const res=await cloudCall({action:"getUpload",token:CLOUD.token,key:r.invoiceKey});if(!res||!res.ok){window.alert((res&&res.error)||"Could not fetch the file.");return;}const bytes=atob(res.data);const arr=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);const url=URL.createObjectURL(new Blob([arr],{type:res.type}));const a=document.createElement("a");a.href=url;a.download=res.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);}} className="text-xs border border-[#0086E0]/40 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>Carrier invoice</button>}
         <select id={"reqclient-"+(r.id||r.email)} defaultValue="" className="text-xs border border-stone-300 rounded px-2 py-1.5 bg-white"><option value="">No customer account yet</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
         <button disabled={busyReq===r.email} onClick={()=>{const sel=document.getElementById("reqclient-"+(r.id||r.email));decide(r.email,true,sel?sel.value:null);}} className="text-xs bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-emerald-700 disabled:opacity-50">{busyReq===r.email?"…":"Approve"}</button>
         <button disabled={busyReq===r.email} onClick={()=>decide(r.email,false)} className="text-xs border border-stone-300 text-stone-600 rounded px-3 py-1.5 hover:bg-stone-50 disabled:opacity-50">Deny</button>
@@ -4144,16 +4190,16 @@ function FedExIntake({onDone,onClose}){
     </div>
     <div className="grid grid-cols-2 gap-2">
       <select value={f.volume} onChange={e=>setF({...f,volume:e.target.value})} className={inp}><option value="">Packages / month</option><option>Under 100</option><option>100–500</option><option>500–2,000</option><option>2,000+</option></select>
-      <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp}><option value="">Ship mostly with…</option><option>UPS</option><option>FedEx</option><option>USPS</option><option>A mix</option></select>
+      <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp}><option value="">Ship mostly with…</option><option>FedEx</option><option>USPS</option><option>Another carrier</option><option>A mix</option></select>
     </div>
     <label className={"flex items-center justify-between gap-2 border border-dashed rounded px-3 py-2 text-sm cursor-pointer "+(inv?"border-emerald-400 bg-emerald-50/50 text-emerald-700":"border-stone-300 text-stone-500 hover:border-[#0086E0]")}>
-      <span className="flex items-center gap-2 truncate">{inv?<CheckCircle2 className="w-4 h-4 shrink-0"/>:<Upload className="w-4 h-4 shrink-0"/>}<span className="truncate">{inv?inv.name:"Upload a recent UPS invoice (optional)"}</span></span>
+      <span className="flex items-center gap-2 truncate">{inv?<CheckCircle2 className="w-4 h-4 shrink-0"/>:<Upload className="w-4 h-4 shrink-0"/>}<span className="truncate">{inv?inv.name:"Upload a recent carrier invoice (optional)"}</span></span>
       {inv&&<button type="button" onClick={(e)=>{e.preventDefault();setInv(null);}} className="text-[11px] underline shrink-0">remove</button>}
       <input type="file" accept=".pdf,.csv,.xls,.xlsx,.png,.jpg,.jpeg,application/pdf,text/csv,image/png,image/jpeg" onChange={pickFile} className="hidden"/>
     </label>
     <div className="bg-stone-50 border border-stone-200 rounded-lg p-3">
       <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Where to find your invoice (30 seconds)</div>
-      <div className="text-xs text-stone-500 leading-relaxed">Open the <a href="https://www.ups.com/us/en/business-solutions/ups-billing" target="_blank" rel="noopener noreferrer" className="text-[#0086E0] underline">UPS Billing Center</a>, then: <span className="text-stone-700">Manage Your Bills → Go to Billing Center → Log in → Download a PDF or CSV invoice</span> — then upload it above. Attach one and your line-by-line rate comparison comes back the same day.</div>
+      <div className="text-xs text-stone-500 leading-relaxed">Log in to your current carrier's billing site and <span className="text-stone-700">download a recent PDF or CSV invoice</span> — then upload it above. Attach one and your line-by-line rate comparison comes back the same day.</div>
     </div>
     {err&&<div className="text-xs text-red-600">{err}</div>}
     <button onClick={()=>onDone({volume:f.volume,carrier:f.carrier,invoice:inv})} className="w-full bg-[#0086E0] text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-[#0a76c2]">Continue</button>
@@ -4230,7 +4276,7 @@ function CloudAuth({onDone,initialMode,intake}){
         <input value={f.company} onChange={e=>setF({...f,company:e.target.value})} placeholder="Company" className={inp}/>
         {!intake&&<div className="grid grid-cols-2 gap-2">
           <select value={f.volume} onChange={e=>setF({...f,volume:e.target.value})} className={inp+" bg-white"}><option value="">Packages / month</option><option>Under 100</option><option>100–500</option><option>500–2,000</option><option>2,000+</option></select>
-          <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp+" bg-white"}><option value="">Ship mostly with…</option><option>UPS</option><option>FedEx</option><option>USPS</option><option>A mix</option></select>
+          <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp+" bg-white"}><option value="">Ship mostly with…</option><option>FedEx</option><option>USPS</option><option>Another carrier</option><option>A mix</option></select>
         </div>}</>}
         <input value={f.email} onChange={e=>setF({...f,email:e.target.value})} placeholder="Email" className={inp} autoFocus/>
         <div className="relative"><input value={f.pw} onChange={e=>setF({...f,pw:e.target.value})} onKeyDown={e=>e.key==="Enter"&&(mode==="signin"?signin():request())} placeholder={mode==="request"?"Choose a password":"Password"} type={showPw?"text":"password"} className={inp+" pr-9"}/><button type="button" onClick={()=>setShowPw(v=>!v)} tabIndex={-1} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">{showPw?<EyeOff className="w-4 h-4"/>:<Eye className="w-4 h-4"/>}</button></div>
@@ -4246,7 +4292,7 @@ function CloudAuth({onDone,initialMode,intake}){
 /* ════════ PUBLIC LANDING PAGE ════════ */
 const CONTACT_PHONE="(801) 555-0123";   // ← REPLACE with your real number (shows on the public landing page)
 const CONTACT_PHONE_TEL="+18015550123"; // ← same number, digits only with +1, used for tap-to-call
-const CONTACT_EMAIL="support@shippingcloud.net"; // ← REPLACE with your real support email (shows on the Contact page)
+const CONTACT_EMAIL=BRAND.fw?"support@freightwireship.com":"support@shippingcloud.net"; // brand-matched support email (shows on the Contact page)
 
 /* Terms & Privacy — quiet footer links opening a self-contained reader. Not legal advice; standard SaaS coverage. */
 function LegalLinks(){
@@ -4385,7 +4431,7 @@ function Landing({onAuth}){
         <div className="absolute -bottom-20 -left-10 w-64 h-64 rounded-full bg-white/10 blur-2xl"/>
         <div className="relative">
           <h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-3xl sm:text-4xl font-bold text-white leading-tight">Save 10–15% switching to our FedEx rates.</h2>
-          <p className="mt-4 text-white/85 max-w-2xl mx-auto text-[15px] leading-relaxed">Send us a recent UPS or FedEx invoice and get a line-by-line comparison back — the same day. No BS, no pressure.</p>
+          <p className="mt-4 text-white/85 max-w-2xl mx-auto text-[15px] leading-relaxed">Send us a recent carrier invoice and get a line-by-line comparison back — the same day. No BS, no pressure.</p>
           <div className="mt-7 flex flex-wrap gap-3 justify-center">
             <button onClick={()=>onAuth("fedex")} className="bg-white text-[#0064B0] font-semibold rounded-lg px-7 py-3.5 text-[15px] hover:bg-stone-100 transition-colors">Get your own FedEx account</button>
             <button onClick={()=>onAuth("request")} className="border border-white/60 text-white font-semibold rounded-lg px-7 py-3.5 text-[15px] hover:bg-white/10 transition-colors">Compare my rates</button>
@@ -4410,7 +4456,7 @@ function Landing({onAuth}){
       <div className="rounded-2xl p-8 sm:p-12 border border-[#0086E0]/25 bg-gradient-to-br from-[#0086E0]/10 via-white/40 to-transparent">
         <div className="flex items-center gap-2 text-[#0086E0] font-semibold text-sm"><Sparkles className="w-4 h-4"/>Built-in assistant · ShipHub AI</div>
         <h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="mt-3 text-3xl sm:text-4xl font-bold text-stone-900 leading-tight max-w-3xl">Let ShipHub AI do the shipping busywork for you.</h2>
-        <p className="mt-4 text-stone-600 max-w-2xl text-[15px] leading-relaxed">ShippingCloud has ShipHub AI built right in — not a canned help bot, but an assistant that actually works your account. Ask in plain English and it sets things up for you to approve.</p>
+        <p className="mt-4 text-stone-600 max-w-2xl text-[15px] leading-relaxed">{BRAND.product} has ShipHub AI built right in — not a canned help bot, but an assistant that actually works your account. Ask in plain English and it sets things up for you to approve.</p>
         <div className="mt-8 grid sm:grid-cols-3 gap-4 max-w-4xl">
           <div className="bg-white border border-stone-200/80 rounded-xl p-5">
             <div className="flex items-center gap-2 text-stone-900 font-semibold"><Layers className="w-4 h-4 text-[#0086E0]"/>Batch by voice</div>
@@ -4441,12 +4487,12 @@ function Landing({onAuth}){
     </div>
     </>}
     {page==="about"&&<div className="max-w-3xl mx-auto px-5 py-14">
-      <h1 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-3xl sm:text-4xl font-bold text-stone-900">About ShippingCloud</h1>
-      <p className="mt-6 text-stone-500 leading-relaxed text-lg">We’re shipping people. We’ve run the shipping desks, eaten the surprise surcharges, argued the reweighs, and waited on hold with carriers who never called back. ShippingCloud exists because we got tired of choosing between good rates and good software — and tired of platforms that make you work their way.</p>
+      <h1 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-3xl sm:text-4xl font-bold text-stone-900">About {BRAND.product}</h1>
+      <p className="mt-6 text-stone-500 leading-relaxed text-lg">We’re shipping people. We’ve run the shipping desks, eaten the surprise surcharges, argued the reweighs, and waited on hold with carriers who never called back. {BRAND.product} exists because we got tired of choosing between good rates and good software — and tired of platforms that make you work their way.</p>
       <p className="mt-4 text-stone-500 leading-relaxed text-lg">So we built both sides of it: enterprise FedEx and DHL pricing from day one, and a platform with real humans behind it who answer the phone and build what you need. When a customer says “I wish it did this,” our answer is usually “give us a week.”</p>
       <p className="mt-4 text-stone-500 leading-relaxed text-lg">We’re not trying to be the biggest shipping platform. We’re trying to be <span className="text-stone-900 font-medium">your</span> shipping platform — the last one you’ll need to switch to.</p>
       <div className="mt-8 flex flex-wrap gap-3">
-        <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0072BE] text-white font-semibold rounded-lg px-6 py-3">Create ShippingCloud account</button>
+        <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0072BE] text-white font-semibold rounded-lg px-6 py-3">Create {BRAND.product} account</button>
         <button onClick={()=>setPage("contact")} className="border border-stone-300 hover:bg-stone-100 text-stone-700 font-medium rounded-lg px-6 py-3">Talk to us</button>
       </div>
     </div>}
@@ -4468,12 +4514,12 @@ function Landing({onAuth}){
         </a>
       </div>
       <p className="mt-6 text-[13px] text-stone-500">Already a customer? Sign in and your account context comes with you — the person you reach will know your shipping.</p>
-      <div className="mt-6"><button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0072BE] text-white font-semibold rounded-lg px-6 py-3">Create ShippingCloud account</button></div>
+      <div className="mt-6"><button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0072BE] text-white font-semibold rounded-lg px-6 py-3">Create {BRAND.product} account</button></div>
     </div>}
     {/* footer */}
     <div className="max-w-6xl mx-auto px-5 py-10 text-center">
       <div className="pt-6 border-t border-stone-200/80 text-xs text-stone-600 flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
-        <span>© {new Date().getFullYear()} ShippingCloud.</span>
+        <span>© {new Date().getFullYear()} {BRAND.product}.</span>
         <LegalLinks/>
         <span>FedEx® and DHL® are trademarks of their respective owners; shipping is provided under partner carrier agreements.</span>
       </div>
@@ -4504,7 +4550,7 @@ function FirstRunFedEx({user,onClose}){
       {state==="done"?(<div className="text-center space-y-3 py-4">
         <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto"/>
         <div className="text-lg font-semibold text-stone-800">You’re on the list</div>
-        <p className="text-sm text-stone-500">A real person will set up your FedEx account and reach out — usually the same day. If you attached a UPS invoice, your rate comparison comes with it.</p>
+        <p className="text-sm text-stone-500">A real person will set up your FedEx account and reach out — usually the same day. If you attached an invoice, your rate comparison comes with it.</p>
         <button onClick={onClose} className="bg-stone-900 text-white rounded-lg px-5 py-2 text-sm font-medium">Start shipping</button>
       </div>):(<>
       <div className="flex items-start justify-between gap-3">
@@ -4516,14 +4562,14 @@ function FirstRunFedEx({user,onClose}){
       </div>
       <div className="grid grid-cols-2 gap-2">
         <select value={f.volume} onChange={e=>setF({...f,volume:e.target.value})} className={inp}><option value="">Packages / month</option><option>Under 100</option><option>100–500</option><option>500–2,000</option><option>2,000+</option></select>
-        <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp}><option value="">Ship mostly with…</option><option>UPS</option><option>FedEx</option><option>USPS</option><option>A mix</option></select>
+        <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp}><option value="">Ship mostly with…</option><option>FedEx</option><option>USPS</option><option>Another carrier</option><option>A mix</option></select>
       </div>
       <label className={"flex items-center justify-between gap-2 border border-dashed rounded px-3 py-2 text-sm cursor-pointer "+(inv?"border-emerald-400 bg-emerald-50/50 text-emerald-700":"border-stone-300 text-stone-500 hover:border-[#0086E0]")}>
-        <span className="flex items-center gap-2 truncate">{inv?<CheckCircle2 className="w-4 h-4 shrink-0"/>:<Upload className="w-4 h-4 shrink-0"/>}<span className="truncate">{inv?inv.name:"Upload a recent UPS invoice (optional)"}</span></span>
+        <span className="flex items-center gap-2 truncate">{inv?<CheckCircle2 className="w-4 h-4 shrink-0"/>:<Upload className="w-4 h-4 shrink-0"/>}<span className="truncate">{inv?inv.name:"Upload a recent carrier invoice (optional)"}</span></span>
         {inv&&<button type="button" onClick={(e)=>{e.preventDefault();setInv(null);}} className="text-[11px] underline shrink-0">remove</button>}
         <input type="file" accept=".pdf,.csv,.xls,.xlsx,.png,.jpg,.jpeg,application/pdf,text/csv,image/png,image/jpeg" onChange={pickFile} className="hidden"/>
       </label>
-      <p className="text-[11px] text-stone-500 -mt-1">Attach one and we’ll send back a line-by-line rate comparison — same day. (Find it in the <a href="https://www.ups.com/us/en/business-solutions/ups-billing" target="_blank" rel="noopener noreferrer" className="text-[#0086E0] underline">UPS Billing Center</a>: Manage Your Bills → Billing Center → Log in → Download PDF or CSV.)</p>
+      <p className="text-[11px] text-stone-500 -mt-1">Attach one and we’ll send back a line-by-line rate comparison — same day. (Download a recent PDF or CSV invoice from your carrier’s billing site.)</p>
       {err&&<div className="text-xs text-red-600">{err}</div>}
       <div className="flex items-center gap-2">
         <button onClick={go} disabled={state==="busy"} className="flex-1 bg-[#0086E0] text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-[#0072BE] disabled:opacity-50">{state==="busy"?"Sending…":"Get my FedEx account"}</button>
@@ -4773,7 +4819,7 @@ function AppInner(){
   const [tab,setTab]=useState(BRAND.admin?"admin":"ship");
   const [pendingOpenOrderId,setPendingOpenOrderId]=useState(null);
   const [pendingOpenShipTracking,setPendingOpenShipTracking]=useState(null);
-  useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};if(d.tab)setTab(d.tab);if(d.openOrderId)setPendingOpenOrderId(d.openOrderId);if(d.openShipTracking)setPendingOpenShipTracking(d.openShipTracking);};window.addEventListener("sc-nav",h);return()=>window.removeEventListener("sc-nav",h);},[]);
+  useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};if(d.tab)setTab(d.tab);if(d.openOrderId)setPendingOpenOrderId(d.openOrderId);if(d.openShipTracking)setPendingOpenShipTracking(d.openShipTracking);if(d.batchCmd)setBatchCmd({...d.batchCmd,ts:Date.now()});};window.addEventListener("sc-nav",h);return()=>window.removeEventListener("sc-nav",h);},[]);
   useEffect(()=>{ try{
     if(localStorage.getItem("scPurge")!=="2"){
       ["orders","shipments","returns","ledger","invoices","emails","drafts","pendingShips","rules","accounts"].forEach(k=>localStorage.removeItem(k));
@@ -4981,7 +5027,7 @@ function AppInner(){
     })();
     return ()=>{cancelled=true;};
   },[client._unresolved,client.id]);
-  const SandboxBanner=()=>isSandbox?(<div className="bg-amber-500/95 text-white text-xs font-medium text-center py-1.5">{IS_STAGING?"STAGING — separate database, FedEx test mode. Nothing here touches production or books a real label.":"SANDBOX login — play freely, but this is still the live site: real database, real FedEx account unless FEDEX_ENV is set to sandbox here too."}</div>):null;
+  const SandboxBanner=()=>isSandbox?(<div className="bg-amber-500/95 text-white text-xs font-medium text-center py-1.5">{IS_STAGING?"SANDBOX — separate database; nothing here touches production data. ⚠ Booking a label still uses the REAL FedEx account — void any test labels you don't ship.":"SANDBOX login — play freely, but this is still the live site: real database, real FedEx account unless FEDEX_ENV is set to sandbox here too."}</div>):null;
   const _origOnShippedAudit=(rec)=>{try{window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Booked label",detail:(rec.reference||"")+" · "+(rec.service||"")+" · "+(rec.tracking||"")}}));}catch(x){}};
   const logEmail=(e)=>{
     const id="e"+Date.now()+Math.random();
@@ -5076,6 +5122,7 @@ function AppInner(){
   const isDemo=!!(currentUser&&currentUser.id==="demo");
   const myFlags=isDemo?{pickups:true,batch:true,invoices:true,rules:true,scan:true,settings:true}:(isAdmin?{}:((featureFlags&&featureFlags[currentUser&&currentUser.id])||(CLOUD.mode==="cloud"?myFeatures:{})));
   useEffect(()=>{ CI_OPTS.logo=settings.companyLogo||(myFlags&&myFlags._logoB64)||""; },[myFlags,settings.companyLogo]);
+  const showMoney=isDemo||isAdmin||featureOn("seeCosts",currentUser,myFlags);   // "See costs & spend" per-customer feature — admins always see money
   const [batchCmd,setBatchCmd]=useState(null);
   const assistantContext=()=>{
     try{
@@ -5239,9 +5286,9 @@ function AppInner(){
           {tab==="dashboard"&&<Dashboard shipments={shipments} orders={orders} returns={returns} goTab={setTab}/>}
           {tab==="ship"&&<Ship client={client} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={ruleset} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders} currentUser={currentUser} setUsers={setUsers} setCurrentUser={setCurrentUser} clients={clients}/>}
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
-          {tab==="orders"&&<Orders orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} setSettings={setSettings} onShipped={onShipped} openOrderId={pendingOpenOrderId} onOpenedOrder={()=>setPendingOpenOrderId(null)}/>}
-          {tab==="batch"&&<Batch orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} setSettings={setSettings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
-          {tab==="shipments"&&<Shipments openShipTracking={pendingOpenShipTracking} onOpenedShip={()=>setPendingOpenShipTracking(null)} isAdmin={isAdmin} labels={labelStore} shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels} settings={settings}/>}
+          {tab==="orders"&&<Orders showMoney={showMoney} orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} setSettings={setSettings} onShipped={onShipped} openOrderId={pendingOpenOrderId} onOpenedOrder={()=>setPendingOpenOrderId(null)}/>}
+          {tab==="batch"&&<Batch showMoney={showMoney} orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} setSettings={setSettings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
+          {tab==="shipments"&&<Shipments showMoney={showMoney} openShipTracking={pendingOpenShipTracking} onOpenedShip={()=>setPendingOpenShipTracking(null)} isAdmin={isAdmin} labels={labelStore} shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels} settings={settings}/>}
           {hkHelp&&<div onClick={()=>setHkHelp(false)} className="fixed bottom-4 right-4 z-50 bg-stone-900 text-white rounded-xl shadow-lg p-4 text-xs space-y-1.5 cursor-pointer">
             <div className="font-semibold text-sm mb-1">Keyboard shortcuts</div>
             <div><span className="font-mono bg-stone-700 rounded px-1">g</span> then <span className="font-mono bg-stone-700 rounded px-1">s</span> Ship · <span className="font-mono bg-stone-700 rounded px-1">o</span> Orders · <span className="font-mono bg-stone-700 rounded px-1">h</span> Shipments</div>
@@ -5256,7 +5303,7 @@ function AppInner(){
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
           {tab==="companyadmin"&&isCompanyAdmin&&<CompanyAdmin currentUser={currentUser} companyUsers={companyUsers} setCompanyUsers={setCompanyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} settings={settings}/>}
           {(tab==="admin"||tab.startsWith("admin:"))&&isAdmin&&<AdminPortal activeSection={tab.startsWith("admin:")?tab.slice(6):null} clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} publicBrand={publicBrand} setPublicBrand={setPublicBrand} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
-          {tab==="settings"&&<Settings isAdmin={isAdmin} uid={currentUser&&currentUser.id} audit={audit} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
+          {tab==="settings"&&<Settings showMoney={showMoney} secPolicy={(myFlags&&myFlags._secPolicy)||{}} isAdmin={isAdmin} uid={currentUser&&currentUser.id} audit={audit} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
           </TabBoundary>
         </main>
       </div>
@@ -5485,8 +5532,13 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
 
   const ready=/^\d{5}/.test(receiver.zip||"")&&totalWeight>0;
   const shipment={fromZip:originZip,toZip:receiver.zip,pieces:pieces.map(p=>({...p,weight:pw(p)})),residential,signature,signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null,intl,packageTypeCode:orBox?orBox.code:""};
-  // Front screen shows FedEx only (until a USPS/UPS/DAP deal is added). Blank-price skeleton before rates load.
-  const FEDEX_SKELETON=[
+  // Front screen shows FedEx only. Blank-price skeleton before rates load — intl destinations get
+  // the INTERNATIONAL skeleton so a domestic list never flashes on an international shipment.
+  const FEDEX_SKELETON=intl?[
+    {key:"fedex_intl_conn",carrier:"FedEx",label:"FedEx International Connect Plus®",cost:null},
+    {key:"fedex_intl_eco",carrier:"FedEx",label:"FedEx International Economy®",cost:null},
+    {key:"fedex_intl_prio",carrier:"FedEx",label:"FedEx International Priority®",cost:null},
+  ]:[
     {key:"fedex_ground",carrier:"FedEx",label:"FedEx Ground®",cost:null},
     {key:"fedex_home",carrier:"FedEx",label:"FedEx Home Delivery®",cost:null},
     {key:"fedex_saver",carrier:"FedEx",label:"FedEx Express Saver®",cost:null},
@@ -5531,6 +5583,9 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     // Every service FedEx returns is offered — hide services per-login in Settings → Customize → Services.
     if(custom.hiddenServices&&custom.hiddenServices.length){const hs=new Set(custom.hiddenServices);list=list.filter(q=>!hs.has(canonSvc(q.label)));}
     if(client&&client.blockedServices&&client.blockedServices.length){const bs=new Set(client.blockedServices);list=list.filter(q=>!bs.has(canonSvc(q.label)));}   // admin-locked — can't be bypassed by the customer's own toggle
+    /* International destination → ONLY international services; domestic destination → no
+       international services. FedEx would reject the mismatch anyway, so never show it. */
+    list=list.filter(q=>intl===isIntlService(q));
     /* Ground and Home Delivery are the same shipment mutually exclusive by address type: FedEx uses
        Home Delivery for residential, Ground for commercial. Once the address is classified, show ONLY
        the one that applies and drop the other, so you never see both. Before classification we don't
@@ -5552,7 +5607,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     }
     return list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,list:q.list,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,client)});})
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
-  },[rateSrc,orRates,client,JSON.stringify(custom.hiddenServices||[]),JSON.stringify(client&&client.blockedServices||[]),rateRules,fxTransit,residential,addrClassified,sigOption,saturday,insurance]);
+  },[rateSrc,orRates,client,JSON.stringify(custom.hiddenServices||[]),JSON.stringify(client&&client.blockedServices||[]),rateRules,fxTransit,residential,addrClassified,sigOption,saturday,insurance,intl]);
   const best=null;
   const matched=useMemo(()=>{
     const resKnown=addrClassified?residential:null;   // ground↔home swap only once FedEx (or the override) has classified the address
@@ -5679,6 +5734,17 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       return true;
     });
   },[ordersToShow,orderQ,storeFilter,dateFrom,dateTo]);
+  /* Autopilot service PREVIEW for every order in the picker: run the rule engine once over the
+     visible list so each order card shows the service Autopilot will choose before you click it.
+     Only active when "apply rules on the Ship screen" is on; map is orderId → service label. */
+  const apPreview=useMemo(()=>{ const m={};
+    if(!custom.autoRulesOnShip)return m;
+    const enabled=(rules||[]).filter(r=>r&&r.enabled); if(!enabled.length)return m;
+    try{ const run=runRuleEngine(enabled,ordersFiltered,originZip);
+      (run.results||[]).forEach(r0=>{ if(r0&&r0.fires&&r0.fires.length&&r0.view&&r0.view.selectedService&&r0.order)m[r0.order.id]=r0.view.selectedService; });
+    }catch(e){}
+    return m;
+  },[custom.autoRulesOnShip,ordersFiltered,rules,originZip]);
   const [naming,setNaming]=useState(false);
   const [draftName,setDraftName]=useState("");
   const commitDraft=(title)=>{const d={id:Date.now(),label:title||reference||receiver.name||receiver.city||"Untitled",when:new Date().toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}),to:`${receiver.city||""}${receiver.state?", "+receiver.state:""}`,snap:{sender,receiver,reference,invoiceNo,poNo,pieces,residential,signature,billTo,thirdAcct,insurance,selectedOrder,customs}};setDrafts(p=>[d,...p]);setNaming(false);setDraftName("");setSaved(true);setTimeout(()=>setSaved(false),1600);};
@@ -5743,6 +5809,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             <div className="text-xs text-stone-600 mt-0.5">{o.customer}</div>
             <div className="text-[11px] text-stone-400 mt-0.5">{o.city}, {o.state} {o.zip}</div>
             <div className="text-[11px] text-stone-400 truncate">{o.items}</div>
+            {apPreview[o.id]&&<div className="flex items-center gap-1 text-[10px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 rounded px-1.5 py-0.5 mt-1 w-fit max-w-full"><Zap className="w-3 h-3 shrink-0"/><span className="truncate">{apPreview[o.id]}</span></div>}
             {o.date&&<div className="flex items-center gap-1 text-[10px] text-stone-400 mt-1 pt-1 border-t border-stone-100"><Calendar className="w-3 h-3"/>{o.date}</div>}
           </button>
         ))}
@@ -6339,7 +6406,7 @@ function LiveEstRate({o,client,settings,rateRules,ruleset}){
   if(v.none)return <span className="text-stone-300">—</span>;
   return <span className="text-stone-600 font-mono whitespace-nowrap" title={v.label+(v.ruled?" — picked by your Autopilot rule":"")}>{money(v.sell)}<span className="text-stone-300 font-sans"> {v.live?"live":"est."}</span>{v.ruled&&<Zap className="w-3 h-3 inline ml-0.5 text-[#0086E0]" />}</span>;
 }
-function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,openOrderId=null,onOpenedOrder}){
+function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,openOrderId=null,onOpenedOrder,showMoney=true}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // Est. Rate shows the SELL estimate — raw carrier cost must never render in a customer-visible table
   const [ruleset]=usePersist("ruleset",SEED_RULESET);              // Autopilot rules drive the service the rate column prices
   useEffect(()=>{ if(!openOrderId)return; const found=orders.find(o=>o.id===openOrderId); if(found)setOpen(found); if(onOpenedOrder)onOpenedOrder(); },[openOrderId,orders]);
@@ -6696,7 +6763,8 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   const orBox=oneRateBoxFor(box.L,box.W,box.H,totalWeight);
   const selectedOrBox=orPkg?FEDEX_ONERATE.find(b=>b.code===orPkg):orBox;
   const dest={...o,customer:rcv.name,company:rcv.company,address1:rcv.address1,address2:rcv.address2,city:rcv.city,state:rcv.state,zip:rcv.zip,country:rcv.country,phone:rcv.phone,email:rcv.email};
-  const localOrderQuotes=()=>quoteRates({fromZip,toZip:rcv.zip,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],residential,intl:false}).filter(qq=>qq.carrier==="FedEx");
+  const _intl=!!(rcv.country&&rcv.country!=="United States"&&rcv.country!=="US");
+  const localOrderQuotes=()=>quoteRates({fromZip,toZip:rcv.zip,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],residential,intl:_intl}).filter(qq=>qq.carrier==="FedEx");
   // FedEx address verification + residential/commercial classification (parity with the Ship page)
   useEffect(()=>{
     const core=rcv.address1&&/^\d{5}/.test(rcv.zip||"")&&rcv.city&&rcv.state;
@@ -6744,10 +6812,24 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   const baseQuotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,fromZip,toZip:rcv.zip,weight:totalWeight})}));},[rateSrc,residential,client,addrClassified,rateRules,settings]);
   const quotes=useMemo(()=>{
     const withTransit=(list)=>list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};});
-    return withTransit([...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday:sat,insurance,fees:surchargeFees(rateRules,client)}))).sort((a,b)=>(a.sell||0)-(b.sell||0));
-  },[baseQuotes,orRates,fxTransit,sigOption,sat,insurance,rateRules]);
+    return cleanServiceList(withTransit([...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday:sat,insurance,fees:surchargeFees(rateRules,client)}))),{intl:_intl,residential:addrClassified?residential:null}).sort((a,b)=>(a.sell||0)-(b.sell||0));
+  },[baseQuotes,orRates,fxTransit,sigOption,sat,insurance,rateRules,_intl,addrClassified,residential]);
   const best=null;
-  const matched=useMemo(()=>matchServiceForOrder(quotes,o,addrClassified?residential:null),[quotes,o&&o.shippingService,o&&o.ruleService,residential,addrClassified]);
+  /* Autopilot preselect — parity with the Ship tab: when "apply rules on the Ship screen" is ON,
+     run the LIVE rule engine on this order and select that service; otherwise fall back to the
+     stored o.ruleService / the store's requested service via matchServiceForOrder. */
+  const [apRules]=usePersist("ruleset",SEED_RULESET);
+  const apLive=useMemo(()=>{ if(!cz(settings).autoRulesOnShip)return null;
+    const enabled=(apRules||[]).filter(r=>r&&r.enabled); if(!enabled.length)return null;
+    try{ const run=runRuleEngine(enabled,[o],fromZip); const r0=run.results&&run.results[0];
+      if(r0&&r0.fires&&r0.fires.length&&r0.view&&r0.view.selectedService)return r0.view.selectedService;
+    }catch(e){}
+    return null;
+  },[apRules,o,settings,fromZip]);
+  const matched=useMemo(()=>{ const res=addrClassified?residential:null;
+    if(apLive){ const rc=canonSvc(groundFamilySwap(apLive,res)); const hit=quotes.find(q=>canonSvc(q.label)===rc&&(q.sell??q.cost)!=null); if(hit)return {key:hit.key,src:"autopilot"}; }
+    return matchServiceForOrder(quotes,o,res);
+  },[quotes,apLive,o&&o.shippingService,o&&o.ruleService,residential,addrClassified]);
   const applyORBox=(code)=>{const b=FEDEX_ONERATE.find(x=>x.code===code);if(!b)return;if(b.dims){setDims({L:b.dims.L,W:b.dims.W,H:b.dims.H});}setBoxIdx(-1);setOrPkg(code);const val="FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,"");const f=settings?.orBoxField||"invoice";const fill=(set)=>set(prev=>prev&&prev.trim()?prev:val);if(f==="invoice")fill(setInvoiceNo);else if(f==="po")fill(setPoNo);else if(f==="reference")fill(setReference);};
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
   const pickBox=(j)=>{ setBoxIdx(j); if(j>=0){const b=boxes[j];setDims({L:b.L,W:b.W,H:b.H});} };
@@ -6933,7 +7015,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   );
 }
 
-function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,settings,labels={},isAdmin=false,openShipTracking=null,onOpenedShip}){
+function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,settings,labels={},isAdmin=false,openShipTracking=null,onOpenedShip,showMoney=true}){
   const [reprintLp,setReprintLp]=useState(null);
   const doReprint=(sh)=>{ const e=labels&&labels[sh.id]; if(e&&e.pdf){ setReprintLp({pdf:e.pdf,tracking:sh.tracking,service:sh.service,carrier:sh.carrier,rec:sh}); } else { window.alert("No stored label for this shipment on this account (labels are kept for the 60 most recent bookings). Use Edit & reship to book a fresh one."); } };
   const custom=cz(settings||{});
@@ -7005,10 +7087,10 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                   <button onClick={(e)=>{e.stopPropagation();setRateOpen(rateOpen===s.id?null:s.id);}} className="flex items-center gap-1.5 text-left group">
                     <ChevronRight className={`w-3.5 h-3.5 text-stone-400 transition-transform ${rateOpen===s.id?"rotate-90":""}`}/>
                     <span className="text-[11px] uppercase tracking-wider text-stone-400">Rate</span>
-                    <span className="text-sm font-semibold text-stone-800">{money(s.sell)}</span>
+                    <span className="text-sm font-semibold text-stone-800">{showMoney?money(s.sell):"—"}</span>
                     <span className="text-[11px] text-stone-400 group-hover:text-stone-600">· view breakdown</span>
                   </button>
-                  {rateOpen===s.id&&(()=>{
+                  {showMoney&&rateOpen===s.id&&(()=>{
                     const ins=parseFloat(s.insurance||0)||0;
                     const surs=(s.rateSurcharges||[]);
                     const accs=(s.rateAccessorials||[]);
@@ -7369,7 +7451,7 @@ function Dashboard({shipments,orders,returns,goTab}){
 const US_STATES=["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
 const SERVICE_OPTIONS={FedEx:["FedEx Ground","FedEx Home Delivery","FedEx 2Day","FedEx Express Saver","FedEx Standard Overnight","FedEx Priority Overnight"]};
 const speedRank=(label)=>{const t=String(label||"").toLowerCase();if(/first overnight/.test(t))return 1;if(/priority overnight/.test(t))return 2;if(/standard overnight|next day/.test(t))return 3;if(/2.?day|2nd day air/.test(t))return 4;if(/express saver|3 day/.test(t))return 5;if(/home|ground/.test(t))return 7;return 6;};
-function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings,setSettings,onShipped,batchCmd,onBatchCmdDone}){
+function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings,setSettings,onShipped,batchCmd,onBatchCmdDone,showMoney=true}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
   const pool=orders.filter(o=>o.status==="unfulfilled");
   const [sel,setSel]=useState(()=>new Set());
@@ -7699,7 +7781,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
           <div className="text-[11px] text-stone-400 truncate">{o.address1?o.address1+", ":""}{o.city}, {o.state} {o.zip} · {packs[o.id]?<span className="text-emerald-700">{packs[o.id].totalWt} lb · {packs[o.id].boxNames}</span>:<>{o.weight} lb</>} · Z{zoneOf(o)}{o.sku?` · ${o.sku}`:""}</div>
         </div>
         <span className="hidden md:block shrink-0"><Badge tone={srcTone(o.source||"Manual")}>{o.source||"Manual"}</Badge></span>
-        <div className="w-16 hidden lg:block text-right font-mono text-xs text-stone-500 shrink-0">{o.total!=null?money(o.total):"—"}</div>
+        <div className="w-16 hidden lg:block text-right font-mono text-xs text-stone-500 shrink-0">{showMoney&&o.total!=null?money(o.total):"—"}</div>
         {held
           ?<span className="w-44 hidden sm:flex items-center gap-1 text-[11px] text-rose-600 shrink-0"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="truncate">Held: {held}</span></span>
           :<div className="w-44 hidden sm:block shrink-0" onClick={e=>e.stopPropagation()}>
@@ -7709,18 +7791,18 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
             </select>
             {ovWhy[o.id]&&svcOv[o.id]&&<div className="text-[9px] text-violet-600 truncate mt-0.5 flex items-center gap-0.5"><Zap className="w-2.5 h-2.5 shrink-0"/>{ovWhy[o.id]}</div>}
           </div>}
-        <div className="w-16 sm:w-20 text-right font-mono text-sm shrink-0">{money(q.sell)}</div>
+        <div className="w-16 sm:w-20 text-right font-mono text-sm shrink-0">{showMoney?money(q.sell):"—"}</div>
       </div>
       {ex&&<div className="px-10 sm:px-12 pb-3 pt-0.5 bg-stone-50/60 grid sm:grid-cols-2 gap-x-8 gap-y-1 text-sm">
         <Info k="Ship to" v={`${o.address1||"—"}, ${o.city||""}, ${o.state||""} ${o.zip||""}`}/>
         <Info k="Contact" v={`${o.phone||"—"}${o.email?" · "+o.email:""}`}/>
         <Info k="Items" v={o.items||"—"}/>
-        <Info k="Order total" v={o.total!=null?money(o.total):"—"}/>
+        {showMoney&&<Info k="Order total" v={o.total!=null?money(o.total):"—"}/>}
         <Info k="Source" v={`${o.source||"Manual"}${o.date?" · "+o.date:""}`}/>
         <Info k="Weight / zone" v={`${(packs[o.id]&&packs[o.id].totalWt)||o.weight||"?"} lb · zone ${zoneOf(o)}`}/>
         <Info k="Packs into" v={packs[o.id]?packs[o.id].boxNames+(packs[o.id].unresolved.length?` · ${packs[o.id].unresolved.length} item${packs[o.id].unresolved.length===1?"":"s"} not in catalog`:""):"Not in catalog — using order weight + default box"}/>
         <Info k="Service for this label" v={held?`HELD — ${held}`:svcOv[o.id]?`${svcOv[o.id]}${ovWhy[o.id]?" (Autopilot: "+ovWhy[o.id]+")":" (your pick)"}`:q.label+" (by rate rule)"}/>
-        <Info k="Rate" v={money(q.sell)}/>
+        {showMoney&&<Info k="Rate" v={money(q.sell)}/>}
         <div className="sm:col-span-2 pt-1">{editRow===o.id
           ? <OrderEditForm order={o} onCancel={()=>setEditRow(null)} onSave={(patch)=>{setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));setEditRow(null);}}/>
           : <button onClick={(e)=>{e.stopPropagation();setEditRow(o.id);}} className="text-xs bg-stone-100 text-stone-600 rounded-lg px-2.5 py-1.5 hover:bg-stone-200 flex items-center gap-1"><Edit3 className="w-3.5 h-3.5"/>Edit order</button>}</div>
@@ -7836,7 +7918,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         <div className="flex-1"/>
         <span className="text-stone-500"><b className="text-stone-800">{rows.length}</b> selected</span>
         <span className="text-stone-500 hidden sm:inline"><b className="text-stone-800">{Math.round(totals.wt*10)/10}</b> lb</span>
-        <span className="text-stone-500">est. <b className="text-stone-800 font-mono">{money(totals.sell)}</b></span>
+        {showMoney&&<span className="text-stone-500">est. <b className="text-stone-800 font-mono">{money(totals.sell)}</b></span>}
         {svcMixSel.length>0&&<span className="hidden lg:flex items-center gap-1.5">{svcMixSel.map(([l,n])=><Badge key={l} tone="stone">{l.replace(/^FedEx /,"")} ×{n}</Badge>)}</span>}
         <button onClick={()=>printPackingSlips(rows.map(r=>slipFromOrder(r.o,settings.sender)))} disabled={rows.length===0} title="Print a packing slip for every selected order" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5"><FileText className="w-4 h-4"/>Packing slips</button>
         <button onClick={()=>printPickList(rows.map(r=>r.o))} disabled={rows.length===0} title="One sheet: every item in this batch aggregated by product, with checkboxes" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5"><ClipboardList className="w-4 h-4"/>Pick list</button>
@@ -7876,7 +7958,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
               <div className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-stone-50 border-y border-stone-100 first:border-t-0">
                 <button onClick={()=>selectGroup(groups[k])} className="text-[11px] font-medium bg-[#E6F4FF] text-[#006FBF] hover:bg-[#CCEAFF] rounded-lg px-2 py-0.5">{groups[k].filter(o=>!holds[o.id]).every(o=>sel.has(o.id))&&groups[k].some(o=>!holds[o.id])?"deselect":"select"} all</button>
                 <span className="text-xs font-semibold text-stone-700">{k}</span>
-                <span className="text-[11px] text-stone-400">{groups[k].length} order{groups[k].length!==1?"s":""} · {Math.round(groups[k].reduce((a,o)=>a+(+o.weight||0),0)*10)/10} lb · {money(groups[k].reduce((a,o)=>a+rateFor(o).sell,0))}</span>
+                <span className="text-[11px] text-stone-400">{groups[k].length} order{groups[k].length!==1?"s":""} · {Math.round(groups[k].reduce((a,o)=>a+(+o.weight||0),0)*10)/10} lb{showMoney&&(" · "+money(groups[k].reduce((a,o)=>a+rateFor(o).sell,0)))}</span>
                 <span className="flex-1"/>
                 {groups[k].some(o=>holds[o.id])&&<Badge tone="rose">{groups[k].filter(o=>holds[o.id]).length} held</Badge>}
               </div>
@@ -7891,7 +7973,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
           {(batches||[]).slice(0,5).map(b=>(<div key={b.id} className="px-4 py-2 flex items-center gap-3 text-[13px]">
             <span className="text-stone-500 w-36 font-mono text-xs">{b.date} · {b.time}</span>
             <span className="flex-1 text-stone-700">{b.count} label{b.count!==1?"s":""}{b.fail?` · ${b.fail} failed`:""}</span>
-            <span className="font-mono text-xs text-stone-500">{money(b.est)}</span>
+            {showMoney&&<span className="font-mono text-xs text-stone-500">{money(b.est)}</span>}
             <Badge tone={b.mode==="live"?"green":"stone"}>{b.mode}</Badge>
           </div>))}
         </div>
@@ -7915,7 +7997,7 @@ function Returns({returns,setReturns,orders,settings,logEmail}){
           <Field label="Customer"><Input value={f.customer} onChange={e=>setF({...f,customer:e.target.value})} placeholder="Name"/></Field>
           <Field label="Original order"><Select value={f.order} onChange={e=>setF({...f,order:e.target.value})}><option value="">—</option>{fulfilled.map(o=><option key={o.id} value={o.name}>{o.name} · {o.customer}</option>)}</Select></Field>
           <Field label="Reason"><Select value={f.reason} onChange={e=>setF({...f,reason:e.target.value})}><option>Wrong size</option><option>Defective</option><option>Not as described</option><option>No longer wanted</option></Select></Field>
-          <Field label="Return carrier"><Select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})}><option>FedEx</option><option>UPS</option><option>USPS</option></Select></Field>
+          <Field label="Return carrier"><Select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})}><option>FedEx</option><option>USPS</option></Select></Field>
         </div>
         <button onClick={create} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Generate return label</button>
       </Panel>}
@@ -7936,10 +8018,40 @@ function Returns({returns,setReturns,orders,settings,logEmail}){
 }
 
 /* ════════ MANIFESTS (end of day) ════════ */
-function Manifests({shipments,setShipments,manifests,setManifests}){
+/* End-of-day manifest scan sheet: header (carrier / date / manifest #), one row per package,
+   and driver signature lines. Opens as a real print preview (new tab, auto print dialog) —
+   routed to the "Receipts & other documents" printer when one is assigned in Print settings. */
+function manifestHTML(m,company){
+  const esc=(x)=>String(x==null?"":x).replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]));
+  const rows=(m.trackings||[]).map((t,i)=>`<tr><td class="n">${i+1}</td><td class="mono">${esc(t.tracking)}</td><td>${esc(t.recipient)}</td><td class="mono">${esc(t.zip)}</td><td>${esc(t.service)}</td><td class="q">${t.weight?esc(t.weight)+" lb":""}</td></tr>`).join("");
+  return `<!doctype html><html><head><title>Manifest ${esc(m.manifest)}</title><style>
+    body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;padding:34px 40px;}
+    h1{font-size:19px;margin:0 0 2px;} .sub{color:#78716c;font-size:12px;margin-bottom:14px;}
+    .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #1c1917;padding-bottom:10px;margin-bottom:8px;}
+    .big{font-size:26px;font-weight:800;} .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#a8a29e;}
+    table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:10px;}
+    th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#a8a29e;border-bottom:1px solid #e7e5e4;padding:5px 4px;}
+    td{padding:6px 4px;border-bottom:1px solid #f5f5f4;} .mono{font-family:ui-monospace,monospace;} .n{width:30px;color:#a8a29e;} .q{text-align:right;width:64px;}
+    .sig{margin-top:34px;display:flex;gap:48px;} .sig div{flex:1;border-top:1px solid #57534e;padding-top:5px;font-size:11px;color:#78716c;}
+    .note{margin-top:14px;font-size:11px;color:#78716c;}
+  </style></head><body>
+    <div class="hd"><div><h1>End-of-day manifest — ${esc(m.carrier)}</h1><div class="sub">${esc(company||"")}${company?" · ":""}${esc(m.date)} · Manifest <span class="mono">${esc(m.manifest)}</span></div></div>
+    <div style="text-align:right"><div class="big">${m.count}</div><div class="lbl">packages</div></div></div>
+    ${rows?`<table><thead><tr><th>#</th><th>Tracking</th><th>Recipient</th><th>ZIP</th><th>Service</th><th style="text-align:right">Weight</th></tr></thead><tbody>${rows}</tbody></table>`
+      :`<div class="note">Package-level list isn\'t stored for manifests closed before this update — the count above is the driver acknowledgment total.</div>`}
+    <div class="note">Carrier acknowledges receipt of ${m.count} package${m.count!==1?"s":""} listed on this manifest.</div>
+    <div class="sig"><div>Driver signature</div><div>Print name</div><div>Date / time</div></div>
+  <script>window.onload=()=>window.print();</`+`script></body></html>`;
+}
+function printManifest(m,settings){
+  const html=manifestHTML(m,(settings&&settings.sender&&(settings.sender.company||settings.sender.name))||"");
+  if(docPrinterAssigned("docs")){ directPrintHtml(html,"Manifest "+(m.manifest||""),"docs").then(sent=>{ if(!sent)printHtmlViaFrame(html); }); return; }
+  const w=window.open("","_blank"); if(!w){ printHtmlViaFrame(html); return; } w.document.write(html); w.document.close();
+}
+function Manifests({shipments,setShipments,manifests,setManifests,settings}){
   const open=shipments.filter(s=>s.status==="Label created");
   const byCarrier={}; open.forEach(s=>byCarrier[s.carrier]=(byCarrier[s.carrier]||0)+1);
-  const closeAll=()=>{const created=Object.entries(byCarrier).map(([c,n])=>({id:Date.now()+Math.random(),carrier:c,count:n,date:new Date().toLocaleString(),manifest:"MAN"+rnd(8)}));if(!created.length)return;setManifests(m=>[...created,...m]);setShipments(ss=>ss.map(s=>s.status==="Label created"?{...s,status:"In transit"}:s));};
+  const closeAll=()=>{const created=Object.entries(byCarrier).map(([c,n])=>({id:Date.now()+Math.random(),carrier:c,count:n,date:new Date().toLocaleString(),manifest:"MAN"+rnd(8),trackings:open.filter(s=>s.carrier===c).map(s=>({tracking:s.tracking||"",recipient:(s.recipient&&(s.recipient.name||s.recipient.company))||"",zip:s.toZip||"",service:s.service||"",weight:s.weight||""}))}));if(!created.length)return;setManifests(m=>[...created,...m]);setShipments(ss=>ss.map(s=>s.status==="Label created"?{...s,status:"In transit"}:s));};
   return (
     <div className="space-y-4 max-w-3xl">
       <div className="border border-stone-200 rounded-lg bg-white p-4">
@@ -7954,7 +8066,7 @@ function Manifests({shipments,setShipments,manifests,setManifests}){
             <div className={`text-xs font-bold ${CARRIER_TINT[m.carrier]}`}>{m.carrier}</div>
             <div className="flex-1"><div className="text-sm">{m.count} packages</div><div className="text-[11px] text-stone-400">{m.date}</div></div>
             <div className="font-mono text-[11px] text-stone-400">{m.manifest}</div>
-            <button className="text-xs bg-stone-200 hover:bg-stone-300 rounded-lg px-2.5 py-1.5 flex items-center gap-1"><Printer className="w-3.5 h-3.5"/>Print</button>
+            <button onClick={()=>printManifest(m,settings)} className="text-xs bg-stone-200 hover:bg-stone-300 rounded-lg px-2.5 py-1.5 flex items-center gap-1"><Printer className="w-3.5 h-3.5"/>Print</button>
           </div>
         ))}
       </div>
@@ -7963,12 +8075,12 @@ function Manifests({shipments,setShipments,manifests,setManifests}){
 }
 
 /* ════════ REPORTS ════════ */
-function Reports({shipments}){
+function Reports({shipments,showMoney=true}){
   const [range,setRange]=useState(30);
   const data=range===0?shipments:shipments.filter(s=>(s.dayAgo??0)<range);
   const a=useMemo(()=>analytics(data),[data,range]);
   const carriers=Object.entries(a.byCarrier).sort((x,y)=>y[1]-x[1]);
-  const exportCSV=()=>{const rows=[["Date","Carrier","Service","Recipient","ZIP","Rate","Status"],...data.map(s=>[s.date,s.carrier,s.service,s.recipient?.name||"",s.toZip,s.sell,s.status])];downloadCSV("shippingcloud-shipments.csv",rows);};
+  const exportCSV=()=>{const rows=[["Date","Carrier","Service","Recipient","ZIP",...(showMoney?["Rate"]:[]),"Status"],...data.map(s=>[s.date,s.carrier,s.service,s.recipient?.name||"",s.toZip,...(showMoney?[s.sell]:[]),s.status])];downloadCSV("shipments.csv",rows);};
   const byService={}; data.forEach(s=>{byService[s.service]=byService[s.service]||{n:0,spend:0};byService[s.service].n++;byService[s.service].spend+=s.sell;});
   const services=Object.entries(byService).sort((x,y)=>y[1].n-x[1].n);
   return (
@@ -7980,11 +8092,11 @@ function Reports({shipments}){
         <button onClick={exportCSV} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-800"><Download className="w-4 h-4"/>Export CSV</button>
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat2 label="Labels" v={a.count}/><Stat2 label="Shipping spend" v={money(a.revenue)}/><Stat2 label="Avg / label" v={money(a.count?a.revenue/a.count:0)}/><Stat2 label="Carriers used" v={carriers.length}/>
+        <Stat2 label="Labels" v={a.count}/>{showMoney&&<Stat2 label="Shipping spend" v={money(a.revenue)}/>}{showMoney&&<Stat2 label="Avg / label" v={money(a.count?a.revenue/a.count:0)}/>}<Stat2 label="Carriers used" v={carriers.length}/>
       </div>
       <div className="grid lg:grid-cols-2 gap-4">
-        <ReportTable title="By carrier" head={["Carrier","Labels","Spend","Share"]} rows={carriers.map(([c,n])=>[<span key={c} className={`font-semibold ${CARRIER_TINT[c]}`}>{c}</span>,n,money(data.filter(s=>s.carrier===c).reduce((x,s)=>x+s.sell,0)),`${Math.round((n/a.count)*100)}%`])}/>
-        <ReportTable title="By service" head={["Service","Labels","Spend"]} rows={services.map(([s,d])=>[s,d.n,money(d.spend)])}/>
+        <ReportTable title="By carrier" head={showMoney?["Carrier","Labels","Spend","Share"]:["Carrier","Labels","Share"]} rows={carriers.map(([c,n])=>{const _r=[<span key={c} className={`font-semibold ${CARRIER_TINT[c]}`}>{c}</span>,n];if(showMoney)_r.push(money(data.filter(s=>s.carrier===c).reduce((x,s)=>x+s.sell,0)));_r.push(`${Math.round((n/a.count)*100)}%`);return _r;})}/>
+        <ReportTable title="By service" head={showMoney?["Service","Labels","Spend"]:["Service","Labels"]} rows={services.map(([s,d])=>showMoney?[s,d.n,money(d.spend)]:[s,d.n])}/>
       </div>
     </div>
   );
@@ -8007,7 +8119,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
       const r=await fetch(SHOPIFY_SYNC,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({shop,token,action,uid})});
       const d=await r.json().catch(()=>null);
       if(!d||!d.ok)setCs({err:(d&&d.error)||"Shopify call failed."});
-      else setCs(action==="installCarrier"?{ok:d.updated?"Carrier service updated — live rates are on at checkout.":"Installed! Your checkout now quotes through "+BRAND.product+".",installed:true}:{installed:d.installed,ok:d.installed?"Installed — your checkout is quoting through ShippingCloud.":"Not installed yet — hit Install below."});
+      else setCs(action==="installCarrier"?{ok:d.updated?"Carrier service updated — live rates are on at checkout.":"Installed! Your checkout now quotes through "+BRAND.product+".",installed:true}:{installed:d.installed,ok:d.installed?"Installed — your checkout is quoting through "+BRAND.product+".":"Not installed yet — hit Install below."});
     }catch(e){setCs({err:"Network error — try again."});}
     setCBusy("");
   };
@@ -8116,18 +8228,26 @@ function CheckoutRates({settings,setSettings,client,uid}){
 }
 
 /* ════════ SETTINGS ════════ */
-function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,audit=[],isAdmin=false}){
+function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,audit=[],isAdmin=false,showMoney=true,secPolicy={}}){
   /* Remember which Settings sub-section you were on, so leaving Settings and coming back returns you to
      the same panel instead of resetting to General. Persisted so it survives a full reload too. */
   const [sec,setSecRaw]=useState(()=>lsGet("settingsSec","general"));
   const setSec=(k)=>{ setSecRaw(k); lsSet("settingsSec",k); };
   const secs=[["general","General",Cog],["customize","Customizations",Sliders],["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["catalog","Product catalog",Boxes],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["reference","Reference Fields",Receipt],["cieditor","Commercial invoice",Receipt],["cihistory","CI history",FileText],["otherdocs","Other documents",FileText],["printer","Print settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["billing","Billing",CreditCard],["integrations","Integrations",Layers],["subscription","Subscription",Star]];
-  /* If a previously-saved section no longer exists for this login, fall back to General. */
-  if(!secs.some(x=>x[0]===sec)) { if(sec!=="general") setSecRaw("general"); }
+  /* Per-customer section policy set in the admin portal (featureFlags._secPolicy):
+     "off" hides the section from the sidebar entirely; "locked" keeps it visible but greys the
+     whole page out read-only. Admins are never restricted. */
+  const polFor=(id)=>isAdmin?"on":(String((secPolicy&&secPolicy[id])||"on"));
+  const visibleSecs=secs.filter(([id])=>polFor(id)!=="off");
+  const secLocked=polFor(sec)==="locked";
+  /* If a previously-saved section no longer exists (or is hidden) for this login, fall back to General. */
+  if(!visibleSecs.some(x=>x[0]===sec)) { if(sec!=="general") setSecRaw("general"); }
   return (
     <div className="flex flex-col md:flex-row gap-6">
-      <aside className="md:w-56 shrink-0 space-y-1">{secs.map(([id,l,Icon])=><button key={id} onClick={()=>setSec(id)} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}</button>)}</aside>
+      <aside className="md:w-56 shrink-0 space-y-1">{visibleSecs.map(([id,l,Icon])=><button key={id} onClick={()=>setSec(id)} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}{polFor(id)==="locked"&&<Ban className="w-3 h-3 text-stone-300 ml-auto"/>}</button>)}</aside>
       <div className="flex-1 min-w-0">
+        {secLocked&&<div className="mb-3 flex items-center gap-2 text-[13px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"><Ban className="w-4 h-4 shrink-0"/>This page is locked by your administrator — you can look, but changes are disabled.</div>}
+        <div className={secLocked?"pointer-events-none opacity-60 select-none":""} aria-disabled={secLocked||undefined}>
         {sec==="carriers"&&<CarrierAccounts accounts={accounts} setAccounts={setAccounts} settings={settings} setSettings={setSettings} clients={clients} byoCarrier={byoCarrier}/>}
         {sec==="warehouses"&&<Warehouses settings={settings} setSettings={setSettings}/>}
         {sec==="catalog"&&<ProductCatalog settings={settings} setSettings={setSettings}/>}
@@ -8136,8 +8256,8 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="reference"&&<div className="space-y-6"><ReferenceFields settings={settings} setSettings={setSettings}/><FieldLists settings={settings} setSettings={setSettings}/></div>}
         {sec==="printer"&&<PrinterSettings settings={settings} setSettings={setSettings}/>}
         {sec==="checkout"&&<CheckoutRates settings={settings} setSettings={setSettings} client={client} uid={uid}/>}
-        {sec==="manifests"&&<Manifests shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests}/>}
-        {sec==="reports"&&<Reports shipments={shipments}/>}
+        {sec==="manifests"&&<Manifests shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} settings={settings}/>}
+        {sec==="reports"&&<Reports shipments={shipments} showMoney={showMoney}/>}
         {sec==="notifications"&&<Notifications settings={settings} setSettings={setSettings} emails={emails}/>}
         {sec==="general"&&<GeneralSettings settings={settings} setSettings={setSettings} goSec={setSec} audit={audit}/>}
         {sec==="cieditor"&&<CIEditor settings={settings} setSettings={setSettings} shipments={shipments}/>}
@@ -8147,6 +8267,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="billing"&&<Billing settings={settings} setSettings={setSettings}/>}
         {sec==="integrations"&&<Integrations settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders}/>}
         {sec==="subscription"&&<Subscription settings={settings} setSettings={setSettings}/>}
+        </div>
       </div>
     </div>
   );
@@ -8618,7 +8739,7 @@ function PrinterSettings({settings,setSettings}){
   };
   const PN_TEST_PDF="JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCAyODggNDMyXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA0IDAgUiA+PiA+PiAvQ29udGVudHMgNSAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhLUJvbGQgPj4KZW5kb2JqCjUgMCBvYmoKPDwgL0xlbmd0aCA5MyA+PgpzdHJlYW0KQlQgL0YxIDI0IFRmIDQwIDM4MCBUZCAoUFJJTlQgVEVTVCkgVGogMCAtMzYgVGQgL0YxIDEyIFRmIChEaXJlY3QgcHJpbnRpbmcgaXMgd29ya2luZy4pIFRqIEVUCmVuZHN0cmVhbQplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAowMDAwMDAwMjQxIDAwMDAwIG4gCjAwMDAwMDAzMTYgMDAwMDAgbiAKdHJhaWxlcgo8PCAvU2l6ZSA2IC9Sb290IDEgMCBSID4+CnN0YXJ0eHJlZgo0NTkKJSVFT0Y=";
   const pnTest=async()=>{ if(!pnc.printerId)return; setPnBusy("test");setPnMsg(null);
-    const d=await pnCall({action:"print",apiKey:pnc.apiKey,printerId:pnc.printerId,title:"ShippingCloud test page",pdfBase64:PN_TEST_PDF});
+    const d=await pnCall({action:"print",apiKey:pnc.apiKey,printerId:pnc.printerId,title:BRAND.product+" test page",pdfBase64:PN_TEST_PDF});
     setPnBusy("");
     setPnMsg(d&&d.ok?{ok:"Test page sent — it should be printing right now."}:{err:(d&&d.error)||"Test failed."});
   };
@@ -8642,7 +8763,7 @@ function PrinterSettings({settings,setSettings}){
   const delSavedPrinter=(id)=>setSettings(prev=>{ const pn0=prev.printNode||{}; const dp0=pn0.docPrinters||{}; const dp1={}; Object.keys(dp0).forEach(k=>{ dp1[k]=String(dp0[k])===String(id)?"":dp0[k]; });
     return {...prev,printNode:{...pn0,savedPrinters:(pn0.savedPrinters||[]).filter(x=>String(x.id)!==String(id)),docPrinters:dp1}}; });
   const pnTestTo=async(pid)=>{ if(!pid)return; setPnBusy("test"+pid); setPnMsg(null);
-    const d=await pnCall({action:"print",apiKey:pnc.apiKey,printerId:pid,title:"ShippingCloud test page",pdfBase64:PN_TEST_PDF});
+    const d=await pnCall({action:"print",apiKey:pnc.apiKey,printerId:pid,title:BRAND.product+" test page",pdfBase64:PN_TEST_PDF});
     setPnBusy(""); setPnMsg(d&&d.ok?{ok:"Test page sent — it should be printing right now."}:{err:(d&&d.error)||"Test failed."});
   };
   const DOC_KINDS=[["packSlip","Packing slips","Auto-printed slips and every Packing slip button"],["pickList","Pick lists","The Pick list buttons in Orders & Batch"],["docs","Receipts & other documents","Shipment receipts and commercial invoices"]];
@@ -9298,6 +9419,27 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
   const originZip=(settings&&settings.sender&&settings.sender.zip)||"";
   const warehouses=(settings&&settings.warehouses)||[];
   const autoRun=!!(settings&&settings.autoRunRules);
+  /* ── Filter & batch: the Batch tab's criteria, right here. Build a selection by state/zone/
+     source/SKU/weight/total/age (same vocabulary as batchCmdMatch), optionally pin a service,
+     and hand the whole thing to the Batch tab pre-selected. ── */
+  const [fbOpen,setFbOpen]=useState(false);
+  const FB_EMPTY={states:new Set(),zones:new Set(),sources:new Set(),skus:new Set(),wMin:"",wMax:"",tMin:"",tMax:"",age:"any",service:""};
+  const [fb,setFb]=useState(FB_EMPTY);
+  const fbPool=ords.filter(o=>o.status!=="fulfilled");
+  const fbZone=(o)=>String(zoneEst((client&&client.origin)||originZip,o.zip));
+  const fbDim=(o,d)=>d==="state"?(o.state||"—").toUpperCase():d==="zone"?fbZone(o):d==="source"?(o.source||"Manual"):(o.sku||"—");
+  const fbVals=(d)=>{const m={};fbPool.forEach(o=>{const v=fbDim(o,d);m[v]=(m[v]||0)+1;});return Object.entries(m).sort((a,b)=>b[1]-a[1]);};
+  const fbToggle=(d,v)=>setFb(f=>{const key={state:"states",zone:"zones",source:"sources",sku:"skus"}[d];const n=new Set(f[key]);if(n.has(v))n.delete(v);else n.add(v);return {...f,[key]:n};});
+  const fbFilters=()=>{const f={};
+    if(fb.states.size)f.states=[...fb.states]; if(fb.zones.size)f.zones=[...fb.zones];
+    if(fb.sources.size)f.sources=[...fb.sources]; if(fb.skus.size)f.skus=[...fb.skus];
+    if(fb.wMin!=="")f.weightMin=+fb.wMin; if(fb.wMax!=="")f.weightMax=+fb.wMax;
+    if(fb.tMin!=="")f.totalMin=+fb.tMin; if(fb.tMax!=="")f.totalMax=+fb.tMax;
+    if(fb.age==="today")f.ageMaxDays=0; else if(fb.age==="2")f.ageMaxDays=2; else if(fb.age==="7")f.ageMaxDays=7; else if(fb.age==="old")f.ageMinDays=8;
+    if(fb.service)f.service=fb.service;
+    return f;};
+  const fbCount=useMemo(()=>{try{const f=fbFilters();return fbPool.filter(o=>batchCmdMatch(o,f,fbZone(o))).length;}catch(e){return 0;}},[fb,ords]);
+  const fbSend=()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"batch",batchCmd:{type:"select",filters:fbFilters()}}}));}catch(e){}};
   const run=useMemo(()=>runRuleEngine(rules||[],ords,originZip),[rules,ords,originZip]);
   const matchCount=(id)=>run.results.filter(r=>r.fires.some(f=>f.ruleId===id)).length;
   const active=rules.filter(r=>r.enabled).length;
@@ -9415,6 +9557,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
         {setSettings&&<button onClick={()=>setSettings(s=>({...s,autoRunRules:!autoRun}))} title="When on, newly imported/synced orders are run through enabled rules automatically" className={`text-sm rounded-lg px-3 py-2 font-medium flex items-center gap-1.5 border ${autoRun?"bg-emerald-50 border-emerald-300 text-emerald-800":"bg-white border-stone-200 text-stone-600 hover:bg-stone-100"}`}><span className={`w-8 h-4 rounded-full relative transition ${autoRun?"bg-emerald-500":"bg-stone-300"}`}><span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${autoRun?"left-4":"left-0.5"}`}/></span>Auto-run on import</button>}
         <button onClick={exportJSON} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-100 flex items-center gap-1.5"><Download className="w-4 h-4"/>Export JSON</button>
         <button onClick={applyToOrders} disabled={run.summary.touched===0} title="Write rule outcomes onto matching orders without creating labels" className="text-sm bg-white border border-stone-200 text-stone-600 rounded-lg px-3 py-2 font-medium hover:bg-stone-100 disabled:opacity-40 flex items-center gap-1.5"><Check className="w-4 h-4"/>Apply only</button>
+        <button onClick={()=>setFbOpen(v=>!v)} title="Batch by criteria — the Batch tab's filters, right here" className={`text-sm rounded-lg px-3 py-2 font-medium border flex items-center gap-1.5 ${fbOpen?"bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF]":"bg-white border-stone-200 text-stone-700 hover:bg-stone-100"}`}><ClipboardList className="w-4 h-4"/>Filter &amp; batch</button>
         <button onClick={newRule} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium flex items-center gap-1.5 hover:bg-stone-100"><Plus className="w-4 h-4"/>New rule</button>
         <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Make a rule: "}}))} title="Describe a rule in plain English — ShipHub AI writes it into the pipeline" className="text-sm rounded-lg px-3 py-2 font-medium border bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF] hover:bg-[#CCEAFF] flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/>Ask ShipHub AI to write a rule</button>
         <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Fallback</span><select value={cz(settings).fallbackService||""} onChange={e=>setSettings&&setSettings(s=>({...s,custom:{...(s.custom||{}),fallbackService:e.target.value}}))} title="Service used for orders that match no rule" className="text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-emerald-500"><option value="">No fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
@@ -9428,6 +9571,31 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
       <span className="flex items-center gap-2"><span className="w-5 h-5 rounded-full bg-[#E6F4FF] text-[#006FBF] text-[11px] font-bold flex items-center justify-center">2</span>The preview below shows exactly what will happen — live, on your real orders</span>
       <span className="flex items-center gap-2"><span className="w-5 h-5 rounded-full bg-[#E6F4FF] text-[#006FBF] text-[11px] font-bold flex items-center justify-center">3</span>Hit <b>Run Autopilot</b> — every open order gets its label; anything held waits for you</span>
     </div>
+    {fbOpen&&<div className="border border-stone-200 rounded-lg bg-white p-4 space-y-2.5">
+      <div className="flex flex-wrap items-center gap-2"><ClipboardList className="w-4 h-4 text-[#0086E0]"/><span className="text-sm font-semibold text-stone-800">Filter &amp; batch</span><span className="text-[11px] text-stone-400">— the same criteria as the Batch tab. Build a selection here, then send it to Batch in one click.</span></div>
+      {[["state","State"],["zone","Zone"],["source","Source"],["sku","SKU"]].map(([d,label])=>{ const vals=fbVals(d); if(!vals.length)return null; const key={state:"states",zone:"zones",source:"sources",sku:"skus"}[d]; return (
+        <div key={d} className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[10px] uppercase tracking-widest text-stone-400 w-14 shrink-0">{label}</span>
+          {vals.slice(0,14).map(([v,n])=><button key={v} onClick={()=>fbToggle(d,v)} className={`text-xs rounded-full px-2.5 py-1 border ${fb[key].has(v)?"bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF] font-semibold":"bg-white border-stone-200 text-stone-600 hover:bg-stone-50"}`}>{d==="zone"?"Z"+v:v} <span className="opacity-60">{n}</span></button>)}
+          {vals.length>14&&<span className="text-[11px] text-stone-400">+{vals.length-14} more</span>}
+        </div>);})}
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        <span className="text-[10px] uppercase tracking-widest text-stone-400 w-14 shrink-0">Ranges</span>
+        <span className="text-xs text-stone-500">Weight</span>
+        <input value={fb.wMin} onChange={e=>setFb(f=>({...f,wMin:e.target.value}))} placeholder="min" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>–<input value={fb.wMax} onChange={e=>setFb(f=>({...f,wMax:e.target.value}))} placeholder="max" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>
+        <span className="text-xs text-stone-500 ml-2">Total $</span>
+        <input value={fb.tMin} onChange={e=>setFb(f=>({...f,tMin:e.target.value}))} placeholder="min" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>–<input value={fb.tMax} onChange={e=>setFb(f=>({...f,tMax:e.target.value}))} placeholder="max" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>
+        <span className="text-xs text-stone-500 ml-2">Age</span>
+        <select value={fb.age} onChange={e=>setFb(f=>({...f,age:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"><option value="any">Any</option><option value="today">Today</option><option value="2">≤ 2 days</option><option value="7">≤ 7 days</option><option value="old">Over 7 days</option></select>
+        <span className="text-xs text-stone-500 ml-2">Ship with</span>
+        <select value={fb.service} onChange={e=>setFb(f=>({...f,service:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF] max-w-[220px]"><option value="">Rule / requested service</option>{RULE_SERVICES.map(x=><option key={x} value={x}>{x}</option>)}</select>
+      </div>
+      <div className="flex flex-wrap items-center gap-3 pt-1">
+        <button onClick={fbSend} disabled={!fbCount} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5"><Layers className="w-4 h-4"/>Send {fbCount} order{fbCount!==1?"s":""} to Batch</button>
+        <span className="text-[11px] text-stone-400">Opens Batch with these orders pre-selected{fb.service?" and the service applied":""} — review, then Create labels.</span>
+        <button onClick={()=>setFb({states:new Set(),zones:new Set(),sources:new Set(),skus:new Set(),wMin:"",wMax:"",tMin:"",tMax:"",age:"any",service:""})} className="text-xs text-stone-400 hover:underline">Clear filters</button>
+      </div>
+    </div>}
     {applied&&<div className="text-xs rounded px-3 py-2 flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200"><CheckCircle2 className="w-3.5 h-3.5"/>{applied.n?`Applied to ${applied.n} order${applied.n!==1?"s":""} — service preference, tags, holds and shipping options written onto those orders.`:"No matching orders to apply right now."}</div>}
     {apProg&&<div className="border border-emerald-200 bg-emerald-50 rounded-lg px-4 py-3 flex items-center gap-3 text-sm text-emerald-800"><Loader2 className="w-4 h-4 animate-spin"/>Autopilot is working… order {apProg.n} of {apProg.total}<div className="flex-1 h-1.5 bg-emerald-100 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 transition-all" style={{width:(apProg.n/apProg.total*100)+"%"}}/></div></div>}
     {apResults&&!apProg&&<div className="border border-stone-200 rounded-lg bg-white p-4 space-y-2">
@@ -9586,7 +9754,7 @@ function AddressBook({settings,setSettings}){
       <div className="border-t border-stone-100 pt-3 mt-1">
         <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Third-party billing account <span className="normal-case tracking-normal text-stone-400">(optional)</span></div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          <Field label="Bill carrier"><Select value={f.acctCarrier} onChange={e=>setF({...f,acctCarrier:e.target.value})}><option value="">—</option><option>FedEx</option><option>UPS</option></Select></Field>
+          <Field label="Bill carrier"><Select value={f.acctCarrier} onChange={e=>setF({...f,acctCarrier:e.target.value})}><option value="">—</option><option>FedEx</option></Select></Field>
           <div className="col-span-1 sm:col-span-2"><Field label="Account number"><Input value={f.acctNum} onChange={e=>setF({...f,acctNum:e.target.value})} placeholder="bill shipments to this account"/></Field></div>
         </div>
         <div className="text-[11px] text-stone-400 mt-1">When this contact is selected on the Ship page, shipments auto-bill to this {f.acctCarrier||"carrier"} account instead of you.</div>
@@ -9774,9 +9942,9 @@ function Billing({settings,setSettings}){
       <Field label="Bill shipments to"><Select value={settings.defaultBillTo} onChange={e=>setSettings({...settings,defaultBillTo:e.target.value})}><option value="sender">Sender (you)</option><option value="receiver">Receiver</option><option value="third">Third-party account</option></Select></Field>
     </Panel>
     <Panel title="Third-party carrier accounts">
-      <p className="text-xs text-stone-400">Bill shipping to someone else's FedEx/UPS account number.</p>
+      <p className="text-xs text-stone-400">Bill shipping to someone else's FedEx account number.</p>
       {settings.thirdPartyAccts.map(t=>(<div key={t.id} className="flex items-center gap-2 text-sm border border-stone-200 rounded px-3 py-2"><span className={`text-xs font-bold ${CARRIER_TINT[t.carrier]}`}>{t.carrier}</span><span className="flex-1 font-mono">{t.account}</span><span className="text-stone-400">{t.label}</span><button onClick={()=>setSettings({...settings,thirdPartyAccts:settings.thirdPartyAccts.filter(x=>x.id!==t.id)})} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button></div>))}
-      <div className="grid grid-cols-3 gap-2"><Select value={n.carrier} onChange={e=>setN({...n,carrier:e.target.value})}><option>FedEx</option><option>UPS</option></Select><Input placeholder="Account #" value={n.account} onChange={e=>setN({...n,account:e.target.value})}/><Input placeholder="Label" value={n.label} onChange={e=>setN({...n,label:e.target.value})}/></div>
+      <div className="grid grid-cols-3 gap-2"><Select value={n.carrier} onChange={e=>setN({...n,carrier:e.target.value})}><option>FedEx</option></Select><Input placeholder="Account #" value={n.account} onChange={e=>setN({...n,account:e.target.value})}/><Input placeholder="Label" value={n.label} onChange={e=>setN({...n,label:e.target.value})}/></div>
       <button onClick={add} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Add account</button>
     </Panel>
   </div>);
@@ -10181,6 +10349,20 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false}){
   const _cd=useDraft(committedCustom,(v)=>setSettings(p=>({...p,custom:v})),CUSTOM_DEFAULTS);
   const c=_cd.draft;   // read from the draft
   const set=(k,v)=>_cd.setDraft(prev=>({...(prev||{}),[k]:v}));   // edits go to the draft; Save commits
+  /* ── LIVE PREVIEW ── theme, accent and text size apply from the DRAFT the moment you touch them,
+     so you SEE the change before saving. Leaving Customizations (or Cancel) re-applies the committed
+     values, so nothing sticks unless you hit Save. The FW/ShipHub wordmark reads var(--acc), so the
+     accent recolors the logo live too. */
+  const _commitRef=React.useRef(committedCustom); _commitRef.current=committedCustom;
+  const _applyLook=(cc)=>{ try{ const el=document.documentElement;
+    el.classList.toggle("dark",cc.theme==="dark");
+    el.classList.toggle("grey",cc.theme==="grey");
+    if(cc.accent){ el.setAttribute("data-accent","1"); el.style.setProperty("--acc",cc.accent); el.style.setProperty("--accD",shadeHex(cc.accent,-0.14)); el.style.setProperty("--accL",shadeHex(cc.accent,0.18)); }
+    else { el.removeAttribute("data-accent"); el.style.removeProperty("--acc"); }
+    el.style.fontSize=(cc.fontScale&&cc.fontScale!==100)?(cc.fontScale/100*16)+"px":"";
+  }catch(e){} };
+  useEffect(()=>{ _applyLook(c||{}); },[c&&c.theme,c&&c.accent,c&&c.fontScale]);
+  useEffect(()=>()=>{ _applyLook(_commitRef.current||{}); },[]);
   const Tog=({k,label,hint,invert})=>(<label className="flex items-start gap-2 text-sm text-stone-700 cursor-pointer">
     <input type="checkbox" checked={invert?c[k]===false:!!c[k]} onChange={e=>set(k,invert?!e.target.checked:e.target.checked)} className="accent-[#0086E0] mt-0.5"/>
     <span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span></label>);
@@ -10334,6 +10516,16 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false}){
         <Tog k="seasonal" label="Seasonal touches" hint="A little 🎅 🎃 ❤️ on the logo around the holidays"/>
         <Sel k="startTab" label="Start page after login" opts={tabChoices.map(x=>[x[0],x[1]])}/>
       </div>
+      <div className="mt-3 rounded-xl border border-stone-200 bg-white p-3">
+        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Live preview — updates as you click & drag; hit Save to keep it</div>
+        <div className="flex items-center gap-3 flex-wrap border border-stone-100 rounded-lg px-3 py-2 bg-stone-50">
+          {BRAND.fw?<FreightwireShipHub logoH={Math.round(30*((c.logoScale||100)/100))} sub={false}/>:<ShipCloudLogo size={Math.round(22*((c.logoScale||100)/100))}/>}
+          {settings.companyLogo&&<img src={settings.companyLogo} alt="Company logo preview" style={{height:Math.round(28*((c.companyLogoScale||100)/100))+"px"}} className="w-auto max-w-[160px] object-contain"/>}
+          <span className="flex-1"/>
+          <button type="button" className="text-xs text-white rounded-lg px-3 py-1.5 font-semibold pointer-events-none" style={{background:c.accent||"#0086E0"}}>Accent button</button>
+          <span className="text-xs font-semibold" style={{color:c.accent||"#0086E0"}}>Accent link</span>
+        </div>
+      </div>
       <div className="border-t border-stone-100 mt-3 pt-3">
         <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Accent color</div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -10444,7 +10636,7 @@ function Company({settings,setSettings}){
 }
 
 /* ════════ CARRIER ACCOUNTS (platform + own) ════════ */
-const PROVIDERS=[{id:"england",name:"England Logistics API"},{id:"fedex",name:"FedEx · direct"},{id:"ups",name:"UPS · direct"}];
+const PROVIDERS=[{id:"england",name:"England Logistics API"},{id:"fedex",name:"FedEx · direct"}];
 function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoCarrier=false}){
   const [adding,setAdding]=useState(false);
   const [d,setD]=useState({label:"",provider:"england",account:"",apiKey:"",secret:"",customerId:""});
@@ -10519,8 +10711,8 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
   };
   return (<div className="max-w-2xl space-y-5">
     <div>
-      <h3 className="text-sm font-semibold text-stone-700 mb-1 flex items-center gap-2"><Wifi className="w-4 h-4 text-emerald-600"/>England Logistics — live FedEx &amp; UPS rates</h3>
-      <p className="text-sm text-stone-500 mb-3">Enter your England API credentials to pull your real negotiated rates on the Ship tab and Quick quote. Until this is on, the app shows estimates.</p>
+      <h3 className="text-sm font-semibold text-stone-700 mb-1 flex items-center gap-2"><Wifi className="w-4 h-4 text-emerald-600"/>{SHOW_ENGLAND?"England Logistics — live rates":"Live FedEx rates"}</h3>
+      <p className="text-sm text-stone-500 mb-3">Turn this on to pull your real negotiated rates on the Ship tab and Quick quote. Until it's on, the app shows estimates.</p>
       <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
         <label className="flex items-center justify-between gap-3">
           <span className="text-sm font-medium flex items-center gap-2">Use live {SHOW_ENGLAND?"England":"FedEx"} rates {eng.enabled&&<Badge tone="green">on</Badge>}</span>
@@ -10549,29 +10741,8 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
     </div>
     {byoCarrier&&<>
     <div>
-      <h3 className="text-sm font-semibold text-stone-700 mb-1 flex items-center gap-2"><Truck className="w-4 h-4 text-[#351C15]"/>UPS — connect your own account</h3>
-      <p className="text-sm text-stone-500 mb-3">Connect a real UPS account for live UPS rates on your own negotiated pricing. Create a UPS developer app at <span className="font-mono">developer.ups.com</span> (add the Rating + OAuth products) to get a Client ID and Client Secret, then paste them with your 6-character UPS account number.</p>
-      <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
-        <label className="flex items-center justify-between gap-3">
-          <span className="text-sm font-medium flex items-center gap-2">Use live UPS rates {ups.enabled&&<Badge tone="green">on</Badge>}</span>
-          <button onClick={()=>setUps({enabled:!ups.enabled})}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${ups.enabled?"bg-[#0086E0] justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full"/></span></button>
-        </label>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <Field label="UPS Client ID"><Input value={ups.clientId} onChange={e=>setUps({clientId:e.target.value})} placeholder="from your UPS app"/></Field>
-          <Field label="UPS Client Secret"><Input type="password" value={ups.clientSecret} onChange={e=>setUps({clientSecret:e.target.value})} placeholder="from your UPS app"/></Field>
-          <Field label="UPS account number"><Input value={ups.account} onChange={e=>setUps({account:e.target.value})} placeholder="6-character account #"/></Field>
-          <Field label="Environment"><Select value={ups.env||"production"} onChange={e=>setUps({env:e.target.value})}><option value="production">Production</option><option value="test">Test (CIE sandbox)</option></Select></Field>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button onClick={runUpsTest} disabled={!ups.clientId||!ups.clientSecret} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{upsTest&&upsTest.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Testing…</>:<><ShieldCheck className="w-4 h-4"/>Test connection</>}</button>
-          {upsTest&&!upsTest.loading&&<span className={`text-xs flex items-center gap-1.5 ${upsTest.ok?"text-emerald-700":"text-[#0086E0]"}`}>{upsTest.ok?<CheckCircle2 className="w-4 h-4"/>:<AlertTriangle className="w-4 h-4"/>}{upsTest.msg}</span>}
-        </div>
-        <p className="text-[11px] text-stone-400">For production, store these as Netlify env vars (<span className="font-mono">UPS_CLIENT_ID</span>, <span className="font-mono">UPS_CLIENT_SECRET</span>, <span className="font-mono">UPS_ACCOUNT</span>) instead of here, so secrets never ship to the browser.</p>
-      </div>
-    </div>
-    <div>
       <div className="flex items-center justify-between mb-2"><h3 className="text-sm font-semibold text-stone-700">Your own carrier accounts</h3><button onClick={()=>setAdding(v=>!v)} className="flex items-center gap-1 text-sm bg-stone-200 hover:bg-stone-300 rounded-lg px-2.5 py-1.5"><Plus className="w-4 h-4"/>Add</button></div>
-      <p className="text-sm text-stone-500 mb-3">Prefer your own negotiated rates? Connect your FedEx, UPS, or England account number.</p>
+      <p className="text-sm text-stone-500 mb-3">Prefer your own negotiated rates? Connect your own carrier account number.</p>
       {adding&&<Panel title="Add carrier account">
         <div className="grid grid-cols-2 gap-3"><Field label="Label"><Input value={d.label} onChange={e=>setD({...d,label:e.target.value})}/></Field><Field label="Provider"><Select value={d.provider} onChange={e=>setD({...d,provider:e.target.value})}>{PROVIDERS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field></div>
         <Field label="Account #"><Input value={d.account} onChange={e=>setD({...d,account:e.target.value})}/></Field>
@@ -10844,7 +11015,7 @@ function CarrierAudit({shipments}){
       try{ const lines=await extractPdfLines(f); const g=parsePdfInvoice(lines);
         if(!Object.keys(g).length){ setErr("Couldn't find tracking numbers in that PDF. If it's a scanned image, download a CSV from your carrier's billing site instead."); setGroups(null); }
         else { setGroups(g); setNote("Read from PDF automatically — please double-check the billed amounts below and correct any that look off."); }
-      }catch(x){ setErr("Couldn't read that PDF. Try the CSV export from FedEx Billing Online or the UPS Billing Center."); setGroups(null); }
+      }catch(x){ setErr("Couldn't read that PDF. Try the CSV export from FedEx Billing Online."); setGroups(null); }
       setBusy(false);
     } else {
       setSource("csv");
@@ -10923,7 +11094,7 @@ function CarrierAudit({shipments}){
       {busy&&<div className="text-[13px] text-stone-500 mt-2">Reading the PDF…</div>}
       {err&&<div className="text-[13px] text-rose-600 mt-2">{err}</div>}
       {note&&!err&&<div className="text-[13px] text-amber-700 mt-2">{note}</div>}
-      <div className="text-xs text-stone-400 mt-2">CSV is the most accurate — FedEx Billing Online and the UPS Billing Center both let you download the invoice as CSV. PDF works too and is read automatically.</div>
+      <div className="text-xs text-stone-400 mt-2">CSV is the most accurate — FedEx Billing Online lets you download the invoice as CSV. PDF works too and is read automatically.</div>
     </div>
     {csv&&(<div className="bg-white border border-stone-200 rounded-lg p-3 flex flex-wrap items-center gap-x-4 gap-y-2">
       <span className="text-[10px] uppercase tracking-widest text-stone-500 font-medium">Columns</span>

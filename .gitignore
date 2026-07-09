@@ -1,0 +1,8 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Lockfile (not tracked in this repo)
+package-lock.json

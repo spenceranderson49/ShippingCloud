@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v376";
+const BUILD_TAG="addr-v377";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9183,18 +9183,6 @@ function PrinterSettings({settings,setSettings}){
       </>}
     </Panel>
     <div className="flex items-center gap-2 text-xs text-stone-400"><Printer className="w-4 h-4"/>Thermal sizes (4×6 / ZPL) print fastest on label printers; choose Letter/PDF if you print on a standard office printer.</div>
-
-<Panel title="After booking">
-      <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
-        <span>Skip the booked summary, go straight to a new shipment<span className="block text-[11px] text-stone-400">The label still prints automatically — this just skips the tracking/copy/pickup card afterward and clears the form for the next order. Off by default so you can grab tracking or schedule a pickup right after booking.</span></span>
-        <button onClick={()=>setCust("skipBookedSummary",!cust.skipBookedSummary)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${cust.skipBookedSummary?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
-      </label>
-      <label className="flex items-center justify-between gap-3 text-sm text-stone-700 mt-3">
-        <span>Start a fresh blank shipment after each print<span className="block text-[11px] text-stone-400">As soon as a label prints, the Ship form clears itself for the next order \u2014 keeps the booked summary, just resets the canvas. Independent of kiosk mode.</span></span>
-        <button onClick={()=>setCust("resetAfterPrint",!cust.resetAfterPrint)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${cust.resetAfterPrint?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
-      </label>
-    </Panel>
-
     <Panel title="Label branding">
       <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
         <span>Print my logo on every label<span className="block text-[11px] text-stone-400">Stamped onto the label when it prints or reprints — FedEx's own file stays untouched. Keep it small and in a corner so barcodes stay clear.</span></span>
@@ -10586,7 +10574,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
       {CTABS.map(([v,l])=><button key={v} onClick={()=>setCs(v)} className={`px-3 py-2 text-sm rounded-t-lg whitespace-nowrap border-b-2 -mb-px ${cs===v?"border-[#0086E0] text-stone-900 font-medium":"border-transparent text-stone-500 hover:bg-stone-50"}`}>{l}</button>)}
     </div>}
 
-    {cs==="ship"&&<Panel title="Ship screen">
+    {cs==="ship"&&<><Panel title="Ship screen">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         <Tog k="hideRateSrcBar" label="Hide the rate-source banner" hint="Removes the ‘Live rates from your FedEx account / Estimated rates’ strip above the service list."/>
         <Tog k="hideAutopilotBox" label="Hide the Autopilot match banner" hint="Removes the ‘Autopilot rule matched…’ box above Select service. Rules still run and still pre-highlight the service."/>
@@ -10612,7 +10600,17 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
         <label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>Fallback service when no rule matches<span className="block text-[11px] text-stone-400">In Batch &amp; Autopilot, orders that don't match any of your rules use this service instead of being left unset. Blank = leave unset (no fallback).</span></span>
           <select value={c.fallbackService||""} onChange={e=>set("fallbackService",e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"><option value="">No fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
       </div>
-    </Panel>}
+    </Panel>
+    <Panel title="After booking">
+      <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
+        <span>Skip the booked summary, go straight to a new shipment<span className="block text-[11px] text-stone-400">The label still prints automatically — this just skips the tracking/copy/pickup card afterward and clears the form for the next order. Off by default so you can grab tracking or schedule a pickup right after booking.</span></span>
+        <button onClick={()=>set("skipBookedSummary",!c.skipBookedSummary)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${c.skipBookedSummary?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
+      </label>
+      <label className="flex items-center justify-between gap-3 text-sm text-stone-700 mt-3">
+        <span>Start a fresh blank shipment after each print<span className="block text-[11px] text-stone-400">As soon as a label prints, the Ship form clears itself for the next order — keeps the booked summary, just resets the canvas. Independent of kiosk mode.</span></span>
+        <button onClick={()=>set("resetAfterPrint",!c.resetAfterPrint)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${c.resetAfterPrint?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
+      </label>
+    </Panel></>}
 
     {cs==="services"&&<Panel title="Rates & services">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">

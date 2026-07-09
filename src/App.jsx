@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v373";
+const BUILD_TAG="addr-v374";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2328,22 +2328,37 @@ function Login({users,onLogin,brand}){
   const [fpPw,setFpPw]=useState("");
   const [fpErr,setFpErr]=useState("");
   useEffect(()=>{try{const t=new URLSearchParams(window.location.search).get("reset");if(t)setFp({reset:t});}catch(e){}},[]);
-  const fpAsk=async()=>{setFpErr("");try{await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"requestReset",email:fpEmail})});setFp("sent");}catch(e){setFpErr("Network error — try again.");}};
+  const fpAsk=async()=>{setFpErr("");try{
+    const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"requestReset",email:fpEmail})});
+    const d=await r.json().catch(()=>null);
+    /* The server tells us when email sending isn't configured — say so instead of a fake "sent". */
+    if(d&&d.configured===false){setFpErr("Reset emails aren't switched on for this site yet — no email was sent. (Admin: add RESEND_API_KEY in Netlify env vars and redeploy.)");return;}
+    setFp("sent");
+  }catch(e){setFpErr("Network error — try again.");}};
   const fpSave=async()=>{setFpErr("");try{const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"resetPassword",rtoken:fp.reset,password:fpPw})});const d=await r.json();if(d&&d.ok){setFp("done");try{window.history.replaceState({},"",window.location.pathname);}catch(e){}}else setFpErr((d&&d.error)||"Could not reset.");}catch(e){setFpErr("Network error — try again.");}};
   const signin=async()=>{
     if(busy)return; setBusy(true); setErr("");
-    /* Cloud-first: server-side scrypt check covers accounts created or reset in cloud mode.
-       The plaintext-array check stays as the fallback for legacy/local logins. */
-    try{
-      const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"login",email:email.trim(),password:pw})});
-      const d=await r.json().catch(()=>null);
-      if(d&&d.ok&&d.user){ try{CLOUD.token=d.token;lsSet("cloud.token",d.token);}catch(e){} setBusy(false); onLogin(d.user); return; }
-    }catch(e){}
+    /* Cloud-first with a RETRY. The old flow had one shot at the server: any cold start,
+       timeout or network blip fell through to the local list — whose cloud accounts have their
+       passwords stripped — so a CORRECT password showed "Incorrect email or password." Now:
+       • a definitive server verdict (wrong password / inactive) is shown as-is
+       • transient trouble retries once, then says the server was unreachable — never "incorrect" */
+    const attempt=async(ms)=>{ const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(),ms);
+      try{ const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"login",email:email.trim(),password:pw}),signal:ctrl.signal});
+        clearTimeout(t); const d=await r.json().catch(()=>null); return d||{_net:true};
+      }catch(e){ clearTimeout(t); return {_net:true}; } };
+    const transient=(d)=>!!(d&&(d._net||(!d.ok&&/database error|unreachable|timed out|network/i.test(String(d.error||"")))));
+    let d=await attempt(14000);
+    if(transient(d)) d=await attempt(14000);   // one automatic retry before giving up
+    if(d&&d.ok&&d.user){ try{CLOUD.token=d.token;lsSet("cloud.token",d.token);}catch(e){} setBusy(false); onLogin(d.user); return; }
+    const serverVerdict=(d&&!d.ok&&d.error&&!transient(d))?String(d.error):null;
+    // local fallback for legacy/local-mode accounts (cloud accounts carry blank local passwords, so this can't pass or fail for them)
     const u=users.find(x=>x.email.toLowerCase()===email.trim().toLowerCase()&&x.password===pw&&x.password!=="");
     setBusy(false);
-    if(!u){setErr("Incorrect email or password.");return;}
-    if(u.status!=="active"){setErr("This account is inactive. Contact your administrator.");return;}
-    onLogin(u);
+    if(u){ if(u.status!=="active"){setErr("This account is inactive. Contact your administrator.");return;} onLogin(u); return; }
+    if(serverVerdict){setErr(serverVerdict);return;}
+    if(transient(d)){setErr("Couldn't reach the sign-in server, so your password was never checked — this is NOT a wrong password. Wait a moment and try again.");return;}
+    setErr("Incorrect email or password.");
   };
   const signup=()=>{
     if(!name||!email||!pw){setErr("Fill in your name, email, and a password.");return;}
@@ -4281,7 +4296,13 @@ function CloudAuth({onDone,initialMode,intake}){
   const [showFpPw,setShowFpPw]=useState(false);
   const [fpErr,setFpErr]=useState("");
   useEffect(()=>{try{const t=new URLSearchParams(window.location.search).get("reset");if(t)setFp({reset:t});}catch(e){}},[]);
-  const fpAsk=async()=>{setFpErr("");try{await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"requestReset",email:fpEmail})});setFp("sent");}catch(e){setFpErr("Network error — try again.");}};
+  const fpAsk=async()=>{setFpErr("");try{
+    const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"requestReset",email:fpEmail})});
+    const d=await r.json().catch(()=>null);
+    /* The server tells us when email sending isn't configured — say so instead of a fake "sent". */
+    if(d&&d.configured===false){setFpErr("Reset emails aren't switched on for this site yet — no email was sent. (Admin: add RESEND_API_KEY in Netlify env vars and redeploy.)");return;}
+    setFp("sent");
+  }catch(e){setFpErr("Network error — try again.");}};
   const fpSave=async()=>{setFpErr("");try{const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"resetPassword",rtoken:fp.reset,password:fpPw})});const d=await r.json();if(d&&d.ok){setFp("done");try{window.history.replaceState({},"",window.location.pathname);}catch(e){}}else setFpErr((d&&d.error)||"Could not reset.");}catch(e){setFpErr("Network error — try again.");}};
   const [mode,setMode]=useState(initialMode||"signin"); // signin | request | requested
   const [f,setF]=useState({name:"",company:"",email:"",pw:"",volume:"",carrier:""});
@@ -4297,8 +4318,9 @@ function CloudAuth({onDone,initialMode,intake}){
   };
   const signin=async()=>{
     if(busy)return; setBusy(true);setErr("");
-    const res=await cloudCall({action:"login",email:f.email,password:f.pw});
-    if(!res||!res.ok){setBusy(false);setErr((res&&res.error)||"Could not reach the server.");return;}
+    let res=await cloudCall({action:"login",email:f.email,password:f.pw});
+    if(res&&res.network) res=await cloudCall({action:"login",email:f.email,password:f.pw});   // retry a network blip before blaming the password
+    if(!res||!res.ok){setBusy(false);setErr(res&&res.network?"Couldn't reach the sign-in server — your password was never checked. Wait a moment and try again.":((res&&res.error)||"Could not reach the server."));return;}
     CLOUD.token=res.token; lsSet("cloud.token",res.token);
     const uid=String(res.user.id||res.user.email); clearScratchFor(uid);
     if(intake&&(intake.volume||intake.carrier||intake.invoice)){

@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v379";
+const BUILD_TAG="addr-v380";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -922,19 +922,26 @@ function openLabelOrDirectPrint(payload,settings,setLabelPreview){
        • skipBookedSummary (kiosk: no modal, auto-advance), or
        • directNoPreview   (you still hit Ship and see the booked summary — just no preview popup).
      If PrintNode rejects, we fall back to opening the modal so no label is lost. */
-  if(dp&&dp.enabled&&(c.skipBookedSummary||c.directNoPreview)&&payload&&payload.pdf){
+  /* Hands-free and No-preview both intend a silent print — decided by the MODE, not by a separate
+     enabled flag. Try the printer first; only fall back to something visible if it didn't take. */
+  if((c.skipBookedSummary||c.directNoPreview)&&payload&&payload.pdf){
     directPrintPdf(payload.pdf,"Shipping label"+(payload.tracking?" "+payload.tracking:""),docCtxFor(payload.rec,payload.tracking)).then(sent=>{
-      if(!sent){
-        /* Silent print was requested (kiosk / no-preview) but the local PrintNode agent didn't accept
-           the job — almost always because it isn't connected. Fall back to the dialog so no label is
-           lost, and tell the user WHY, so "kiosk isn't printing" stops being a mystery. */
-        try{ window.dispatchEvent(new CustomEvent("sc-direct-print-failed",{detail:{reason:(!dp.apiKey||!dp.printerId)?"not-configured":"agent-unreachable"}})); }catch(e){}
+      if(sent){
+        /* Printed silently. Hands-free shows NOTHING; No-preview still wants the booked summary
+           (tracking / Copy / pickup) with autoPrint:false so nothing re-prints. */
+        if(c.directNoPreview&&!c.skipBookedSummary)setLabelPreview({...payload,autoPrint:false});
+        return;
+      }
+      /* Couldn't print silently — the PrintNode agent is offline or no printer is set up. Say why. */
+      try{ window.dispatchEvent(new CustomEvent("sc-direct-print-failed",{detail:{reason:(!dp||!dp.apiKey||!dp.printerId)?"not-configured":"agent-unreachable"}})); }catch(e){}
+      if(c.skipBookedSummary){
+        /* Hands-free MUST stay clean: send the label to the browser print dialog through a hidden
+           frame instead of ever opening the preview modal, then let the form advance on its own. */
+        try{ const u=pdfBlobUrl(payload.pdf); if(!printPdfUrl(u))setLabelPreview(payload); setTimeout(()=>{try{URL.revokeObjectURL(u);}catch(e){}},180000); }
+        catch(e){ setLabelPreview(payload); }
+      } else {
+        /* No-preview: show the booked summary (it also prints via its own dialog fallback). */
         setLabelPreview(payload);
-      } else if(c.directNoPreview&&!c.skipBookedSummary){
-        /* "Print with no preview — but keep the review": the label already went silently to the
-           printer, but the person still wants the booked summary (tracking, Copy, pickup). Open it
-           with autoPrint:false so the modal shows the details without re-sending the label. */
-        setLabelPreview({...payload,autoPrint:false});
       }
     });
     return;
@@ -5140,7 +5147,10 @@ function AppInner(){
   useEffect(()=>{ const pn=(settings&&settings.printNode)||{}; const cus=(settings&&settings.custom)||{}; const dpc=pn.docPrinters||{};
     /* docPrinters routes each document type to its own PrintNode printer. packSlip keeps the
        legacy custom.packSlipPrinterId as a fallback until the new assignment is touched. */
-    try{ window.__scDirectPrint={enabled:!!pn.enabled,apiKey:pn.apiKey||"",printerId:+pn.printerId||0,docPrinters:{packSlip:String(dpc.packSlip!=null?dpc.packSlip:(cus.packSlipPrinterId||"")),pickList:String(dpc.pickList||""),docs:String(dpc.docs||"")}}; }catch(e){} },[settings&&settings.printNode,settings&&settings.custom&&settings.custom.packSlipPrinterId]);
+    /* Direct printing is "on" whenever a printer is actually configured — derived here so it can
+       never fall out of sync with a separate toggle. The after-booking mode (hands-free / no-preview
+       / preview) decides whether it fires automatically; this just says the printer is reachable. */
+    try{ window.__scDirectPrint={enabled:!!(String(pn.apiKey||"").trim()&&pn.printerId),apiKey:pn.apiKey||"",printerId:+pn.printerId||0,docPrinters:{packSlip:String(dpc.packSlip!=null?dpc.packSlip:(cus.packSlipPrinterId||"")),pickList:String(dpc.pickList||""),docs:String(dpc.docs||"")}}; }catch(e){} },[settings&&settings.printNode,settings&&settings.custom&&settings.custom.packSlipPrinterId]);
   useEffect(()=>{ try{
       const size=((settings&&settings.printer)||{}).labelSize||"4x6";
       const dtb=(settings&&settings.docTab)||null;

@@ -74,7 +74,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v369";
+const BUILD_TAG="addr-v370";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -717,6 +717,52 @@ async function directPrintPdf(base64,title,ctx){
     return !!(d&&d.ok);
   }catch(e){ return false; }
 }
+/* ── multi-printer document routing (PrintNode) ─────────────────────────────
+   Print settings lets each DOCUMENT TYPE pick its own printer:
+     settings.printNode.docPrinters = { packSlip, pickList, docs }
+   (synced into window.__scDirectPrint.docPrinters by the App shell).
+   Assigning a printer to a doc type is its own opt-in — it works even when the
+   "auto-print every label" toggle is off, and it never requires a printer for
+   labels. Anything left unassigned keeps the classic browser print window. */
+function docPrinterAssigned(kind){
+  const cfg=(typeof window!=="undefined"&&window.__scDirectPrint)||null;
+  return !!(cfg&&cfg.apiKey&&cfg.docPrinters&&String(cfg.docPrinters[kind]||"").trim());
+}
+/* Send an HTML document (packing slip / pick list / receipt / invoice) to the printer
+   assigned to that doc type. Returns true ONLY when PrintNode accepted the job —
+   callers fall back to a visible print path on false, so no document is ever lost.
+   Caveat: uses PrintNode raw_html; if a printer rejects HTML the fallback fires. */
+async function directPrintHtml(html,title,kind){
+  const cfg=(typeof window!=="undefined"&&window.__scDirectPrint)||null;
+  if(!cfg||!cfg.apiKey||!html)return false;
+  const pid=String((cfg.docPrinters&&cfg.docPrinters[kind])||"").trim();
+  if(!pid)return false;
+  try{
+    const r=await fetch("/.netlify/functions/printnode",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"print",apiKey:cfg.apiKey,printerId:pid,title:title||"Document",contentType:"raw_html",html})});
+    const d=await r.json().catch(()=>null);
+    return !!(d&&d.ok);
+  }catch(e){ return false; }
+}
+/* Print an HTML doc through a hidden same-page iframe. Unlike window.open this needs no
+   popup permission and no user-activation, so it's safe AFTER an await or a print dialog
+   (the deferred packing-slip flush, routed-print failures). Strips the document's own
+   window.onload auto-print so the dialog opens exactly once. */
+function printHtmlViaFrame(html){
+  if(!html)return false;
+  try{
+    const clean=String(html).replace(/<script>window\.onload=\(\)=>window\.print\(\);<\/script>/g,"");
+    const f=document.createElement("iframe");
+    f.style.cssText="position:fixed;right:0;bottom:0;width:2px;height:2px;border:0;opacity:0;pointer-events:none;";
+    f.setAttribute("aria-hidden","true");
+    document.body.appendChild(f);
+    const d=f.contentDocument||(f.contentWindow&&f.contentWindow.document);
+    if(!d)throw new Error("no frame doc");
+    d.open(); d.write(clean); d.close();
+    setTimeout(()=>{ try{ f.contentWindow.focus(); f.contentWindow.print(); }catch(e){} },450);
+    setTimeout(()=>{ try{document.body.removeChild(f);}catch(e){} },180000);
+    return true;
+  }catch(e){ return false; }
+}
 /* Booking handoff: when direct printing is on AND the person has "skip the booked summary"
    enabled, the label goes straight to the printer with NOTHING on screen — the preview modal
    used to flash open for a second just to auto-close itself. It now only appears if PrintNode
@@ -1132,7 +1178,7 @@ function packingSlipHTML(slips){
     @media print{.slip{padding:24px 8px;}}
   </style></head><body>${slips.map(one).join("")}<script>window.onload=()=>window.print();</` + `script></body></html>`;
 }
-function printPackingSlips(slips){
+function printPackingSlipsDialog(slips){
   const list=(slips||[]).filter(Boolean);
   if(!list.length)return;
   const w=window.open("","_blank");
@@ -1140,25 +1186,37 @@ function printPackingSlips(slips){
   w.document.write(packingSlipHTML(list));
   w.document.close();
 }
-/* Auto-print a packing slip after a label. If direct printing is on AND a separate slip printer is
-   chosen (packSlipPrinterId), the slip is sent straight to THAT printer via PrintNode (raw HTML).
-   Otherwise it falls back to the normal browser print window. */
+/* Every "Packing slip" button lands here: if a packing-slip printer is assigned in
+   Print settings the slip routes straight to THAT printer (no dialog, raw HTML via
+   PrintNode); otherwise the classic browser print window opens. */
+async function printPackingSlips(slips){
+  const list=(slips||[]).filter(Boolean);
+  if(!list.length)return;
+  if(docPrinterAssigned("packSlip")){
+    const html=packingSlipHTML(list);
+    if(await directPrintHtml(html,"Packing slip"+(list.length!==1?"s":""),"packSlip"))return;
+    printHtmlViaFrame(html);   // routed print failed — still print, via the no-popup frame
+    return;
+  }
+  printPackingSlipsDialog(list);
+}
+/* Auto-print a packing slip after a label. If a separate slip printer is assigned
+   (Print settings → what prints where, or the legacy packSlipPrinterId), the slip goes
+   straight to THAT printer via PrintNode raw HTML. With no silent route:
+   in "Keep the print preview" mode the slip is PARKED (window.__scPendingSlips) and
+   prints when you click Print label in the preview — the browser's packing-slip dialog
+   must never pop over the label preview; other modes open the browser print window. */
 async function printPackingSlipAuto(slips,settings){
   const list=(slips||[]).filter(Boolean);
   if(!list.length)return;
   const c=cz(settings);
-  const dp=(typeof window!=="undefined"&&window.__scDirectPrint)||null;
-  const slipPrinter=c.packSlipPrinterId&&String(c.packSlipPrinterId).trim();
-  if(dp&&dp.enabled&&dp.apiKey&&slipPrinter){
-    try{
-      const html=packingSlipHTML(list);
-      const r=await fetch("/.netlify/functions/printnode",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"print",apiKey:dp.apiKey,printerId:slipPrinter,title:"Packing slip",contentType:"raw_html",html})});
-      const d=await r.json().catch(()=>null);
-      if(d&&d.ok)return;   // routed to the slip printer
-    }catch(e){}
-    // fall through to browser print if the routed print failed
+  if(docPrinterAssigned("packSlip")){
+    const html=packingSlipHTML(list);
+    if(await directPrintHtml(html,"Packing slip","packSlip"))return;   // routed to the slip printer
+    // routed print failed — fall through so the slip is never lost
   }
-  printPackingSlips(list);
+  if(!c.skipBookedSummary&&!c.directNoPreview){ try{ window.__scPendingSlips=list; }catch(e){} return; }
+  printPackingSlipsDialog(list);
 }
 
 /* Resolve a doc-tab / receipt field binding to a printable string from shipment data.
@@ -1214,9 +1272,12 @@ function receiptHTML(rc,ctx,logoUrl){
 }
 function printReceipt(rc,ctx,logoUrl){
   if(!rc)return;
+  const html=receiptHTML(rc,ctx,logoUrl);
+  /* Routed: "Receipts & other documents" printer from Print settings; else browser window. */
+  if(docPrinterAssigned("docs")){ directPrintHtml(html,"Shipment receipt","docs").then(sent=>{ if(!sent)printHtmlViaFrame(html); }); return; }
   const w=window.open("","_blank");
   if(!w)return;
-  w.document.write(receiptHTML(rc,ctx,logoUrl));
+  w.document.write(html);
   w.document.close();
 }
 /* Map a shipment record (from buildRec / order booking) → flat doc-tab context. */
@@ -1325,6 +1386,8 @@ function printPickList(orderList){
   if(!rows.length)return;
   const esc=(x)=>String(x||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
   const html=`<!doctype html><html><head><title>Pick list</title><style>body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;padding:36px 40px;}h1{font-size:19px;border-bottom:2px solid #1c1917;padding-bottom:10px;}table{width:100%;border-collapse:collapse;margin-top:16px;font-size:14px;max-width:560px;}th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#a8a29e;border-bottom:1px solid #e7e5e4;padding:6px 0;}td{padding:8px 0;border-bottom:1px solid #f5f5f4;}.q{text-align:right;width:64px;font-weight:700;}.c{width:36px;}.box{width:14px;height:14px;border:1.5px solid #a8a29e;border-radius:3px;display:inline-block;}</style></head><body><h1>Pick list · ${orderList.length} order${orderList.length!==1?"s":""} · ${new Date().toLocaleDateString()}</h1><table><thead><tr><th class="c"></th><th>Item</th><th class="q">Qty</th></tr></thead><tbody>${rows.map(r=>`<tr><td class="c"><span class="box"></span></td><td>${esc(r.name)}</td><td class="q">${r.qty}</td></tr>`).join("")}</tbody></table><script>window.onload=()=>window.print();</`+`script></body></html>`;
+  /* Routed: "Pick lists" printer from Print settings; else browser window. */
+  if(docPrinterAssigned("pickList")){ directPrintHtml(html,"Pick list","pickList").then(sent=>{ if(!sent)printHtmlViaFrame(html); }); return; }
   const w=window.open("","_blank"); if(!w)return; w.document.write(html); w.document.close();
 }
 
@@ -1421,6 +1484,8 @@ function printCommercialInvoice(o,catalog,sender,opts={}){
   </div>
   ${(opts.attachImgs&&opts.attachImgs.length)?opts.attachImgs.map(im=>`<div style="page-break-before:always;padding-top:12px;"><div class="boxlbl">Attachment — ${esc(im.name)}</div><img src="${im.data}" style="max-width:100%;max-height:88vh;object-fit:contain;"/></div>`).join(""):""}
   ${opts.preview?"":`<script>window.onload=()=>window.print();</`+`script>`}</body></html>`;
+  /* Routed (print only, never preview): "Receipts & other documents" printer from Print settings. */
+  if(!opts.preview&&docPrinterAssigned("docs")){ directPrintHtml(html,"Commercial invoice","docs").then(sent=>{ if(!sent)printHtmlViaFrame(html); }); return; }
   const w=window.open("","_blank");if(!w)return;w.document.write(html);w.document.close();
 }
 const SEED_PRODUCTS=[
@@ -4869,7 +4934,10 @@ function AppInner(){
       }
     }catch(e){}
   },[]);
-  useEffect(()=>{ const pn=(settings&&settings.printNode)||{}; try{ window.__scDirectPrint={enabled:!!pn.enabled,apiKey:pn.apiKey||"",printerId:+pn.printerId||0}; }catch(e){} },[settings&&settings.printNode]);
+  useEffect(()=>{ const pn=(settings&&settings.printNode)||{}; const cus=(settings&&settings.custom)||{}; const dpc=pn.docPrinters||{};
+    /* docPrinters routes each document type to its own PrintNode printer. packSlip keeps the
+       legacy custom.packSlipPrinterId as a fallback until the new assignment is touched. */
+    try{ window.__scDirectPrint={enabled:!!pn.enabled,apiKey:pn.apiKey||"",printerId:+pn.printerId||0,docPrinters:{packSlip:String(dpc.packSlip!=null?dpc.packSlip:(cus.packSlipPrinterId||"")),pickList:String(dpc.pickList||""),docs:String(dpc.docs||"")}}; }catch(e){} },[settings&&settings.printNode,settings&&settings.custom&&settings.custom.packSlipPrinterId]);
   useEffect(()=>{ try{
       const size=((settings&&settings.printer)||{}).labelSize||"4x6";
       const dtb=(settings&&settings.docTab)||null;
@@ -5561,7 +5629,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       pieces:pieces.map(p=>({weight:Math.ceil(pw(p)||1),length:p.L,width:p.W,height:p.H,declaredValue:intl?(p.value||null):null}))};   // book at the rounded-up billing weight the quote priced
     const res=await shipCall({action:"ship",account:acctOf(eng),order});
     if(!res||!res.ok){setShipStatus({state:"error",key:q.key,msg:(res&&res.error)||"Booking failed"});setBought(null);return;}
-    const done=(st)=>{ justBookedRef.current=selectedOrder; const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec},settings,setLabelPreview); if(cz(settings).autoPackSlip){ const so=selectedOrder&&orders.find(x=>x.id===selectedOrder); setTimeout(()=>{ try{ printPackingSlipAuto([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:st.tracking||"",service:q.label}],settings); }catch(e){} },700); } if(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint){ setTimeout(()=>{ try{newShipment();}catch(e){} },900); };} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
+    const done=(st)=>{ justBookedRef.current=selectedOrder; const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec},settings,setLabelPreview); if(cz(settings).autoPackSlip){ const so=selectedOrder&&orders.find(x=>x.id===selectedOrder); setTimeout(()=>{ try{ printPackingSlipAuto([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:st.tracking||"",service:q.label}],settings); }catch(e){} },(!cz(settings).skipBookedSummary&&!cz(settings).directNoPreview)?0:700); } if(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint){ setTimeout(()=>{ try{newShipment();}catch(e){} },900); };} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
     if(res.booked){done(res);return;}
     setShipStatus({state:"pending",key:q.key,orderId:res.orderId});
     pollLabel(eng,res.orderId,done).then(r=>{ if(r&&r.timedOut){ onPending&&onPending({orderId:res.orderId,rec:buildRec(q,carrier,{}),service:q.label,carrier,orderRef:selectedOrder}); setShipStatus({state:"pending_timeout",key:q.key});setBought(null);} });
@@ -5950,6 +6018,14 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
   const [pgErr,setPgErr]=useState(null);
   const printed=React.useRef(false);
   const st=settings||{};
+  /* "Keep the print preview" mode = a REAL preview: show the label, print NOTHING until the
+     person clicks Print label. Auto-print stays on for the other two modes (this modal is
+     their PrintNode-failed fallback), for explicit reprints (fromExisting), and for the
+     legacy "auto-open the print dialog" checkbox. */
+  const _pc=cz(st);
+  const previewMode=!_pc.skipBookedSummary&&!_pc.directNoPreview;
+  const autoPrintOff=previewMode&&!data.fromExisting&&!((st.printer||{}).autoPrint);
+  const [hasPrinted,setHasPrinted]=useState(false);
   const docCtx=recToDocCtx(data.rec||{...data,recipient:data.recipient,service:data.service,tracking:data.tracking,carrier:data.carrier});
   const rcpLogo=(st.companyLogo)||"";
   const rcCfg=st.receipt, dtCfg=st.docTab;
@@ -5967,8 +6043,8 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
         try{ const cc=cz(st); const lg=cc.labelLogo||st.companyLogo||""; r.imgs=await stampLogo(r.imgs,cc,lg); }catch(e){}
         try{ r=await composeForStock(r.imgs,r.wIn,r.hIn,docCtxFor(data.rec,data.tracking)); }catch(e){}
         setPages(r);
-        if(!printed.current&&data.autoPrint!==false){
-          printed.current=true;
+        if(!printed.current&&data.autoPrint!==false&&!autoPrintOff){
+          printed.current=true; setHasPrinted(true);
           const sent=await directPrintPdf(data.pdf,undefined,docCtxFor(data.rec,data.tracking));
           if(sent){ if(cz(st).skipBookedSummary&&!dead)onClose(); }
           else printImagePages(r.imgs,r.wIn,r.hIn,()=>{ if(cz(st).skipBookedSummary&&!dead)onClose(); });   // fires once the system print dialog closes
@@ -5976,15 +6052,25 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
       }catch(e){
         if(dead)return;
         setPgErr("Preview renderer unavailable — showing the raw PDF below."+((e&&e.message)?"":""));
-        if(!printed.current&&data.autoPrint!==false){ printed.current=true; if(!(await directPrintPdf(data.pdf))){ try{ const u2=pdfBlobUrl(data.pdf); printPdfUrl(u2); setTimeout(()=>URL.revokeObjectURL(u2),180000); }catch(e2){} } }
+        if(!printed.current&&data.autoPrint!==false&&!autoPrintOff){ printed.current=true; setHasPrinted(true); if(!(await directPrintPdf(data.pdf))){ try{ const u2=pdfBlobUrl(data.pdf); printPdfUrl(u2); setTimeout(()=>URL.revokeObjectURL(u2),180000); }catch(e2){} } }
       }
     })();
     return ()=>{dead=true;};
   },[data.pdf]);
   useEffect(()=>()=>{ if(url)try{URL.revokeObjectURL(url);}catch(e){} },[url]);
-  const doPrint=async()=>{ if(await directPrintPdf(data.pdf,undefined,docCtxFor(data.rec,data.tracking)))return; if(pages&&pages.imgs.length){printImagePages(pages.imgs,pages.wIn,pages.hIn);} else { printLabelPdf(data.pdf,st,docCtxFor(data.rec,data.tracking)); } };
+  /* Closing the preview WITHOUT printing also discards the parked auto packing slip —
+     "doesn't print until you click Print" applies to the slip too. */
+  useEffect(()=>()=>{ try{ if(typeof window!=="undefined"&&window.__scPendingSlips)window.__scPendingSlips=null; }catch(e){} },[]);
+  /* An auto packing slip parked by printPackingSlipAuto (preview mode, no slip printer)
+     prints right after the label — through the no-popup frame, because by then the
+     click's popup allowance is spent on the label's own print dialog. */
+  const flushSlips=()=>{ try{ const ps=(typeof window!=="undefined"&&window.__scPendingSlips)||null; if(ps&&ps.length){ window.__scPendingSlips=null; setTimeout(()=>{ try{ printHtmlViaFrame(packingSlipHTML(ps)); }catch(e){} },400); } }catch(e){} };
+  const doPrint=async()=>{ printed.current=true; setHasPrinted(true);
+    if(await directPrintPdf(data.pdf,undefined,docCtxFor(data.rec,data.tracking))){ flushSlips(); return; }
+    if(pages&&pages.imgs.length){ printImagePages(pages.imgs,pages.wIn,pages.hIn,flushSlips); }
+    else { await printLabelPdf(data.pdf,st,docCtxFor(data.rec,data.tracking)); flushSlips(); } };
   const [copied,setCopied]=useState(false);
-  const [showLabel,setShowLabel]=useState(false);
+  const [showLabel,setShowLabel]=useState(autoPrintOff);   // real preview mode: the label is visible immediately
   const copyTracking=async()=>{ const t=String(data.tracking||""); if(!t)return;
     try{ await navigator.clipboard.writeText(t); }
     catch(e){ try{ const ta=document.createElement("textarea");ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove(); }catch(e2){} }
@@ -6016,7 +6102,10 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
           ):(
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm text-stone-600 flex items-center gap-2">
-                {pages?<><Printer className="w-4 h-4 text-emerald-600 shrink-0"/>Label sent to your printer dialog.</>:<><Loader2 className="w-4 h-4 animate-spin shrink-0"/>Preparing label…</>}
+                {pages?(autoPrintOff&&!hasPrinted
+                  ?<><Eye className="w-4 h-4 text-[#0086E0] shrink-0"/><span>Print preview — <b>nothing has printed yet</b>. Check the label, then hit Print label.</span></>
+                  :<><Printer className="w-4 h-4 text-emerald-600 shrink-0"/>{autoPrintOff?"Label sent to your printer.":"Label sent to your printer dialog."}</>
+                ):<><Loader2 className="w-4 h-4 animate-spin shrink-0"/>Preparing label…</>}
               </div>
               {pages&&<button onClick={()=>setShowLabel(v=>!v)} className="text-xs text-[#006FBF] hover:underline shrink-0">{showLabel?"Hide label":"View label"}</button>}
             </div>
@@ -6032,7 +6121,7 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
           <button onClick={download} className="text-sm px-3 py-2 rounded border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"><Download className="w-4 h-4"/>Download</button>
           {dtCfg&&dtCfg.enabled&&<button onClick={()=>printDocTab(dtCfg,docCtx,data.tracking)} className="text-sm px-3 py-2 rounded border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"><Tag className="w-4 h-4"/>Doc tab</button>}
           {rcCfg&&rcCfg.enabled&&<button onClick={()=>printReceipt(rcCfg,docCtx,rcpLogo)} className="text-sm px-3 py-2 rounded border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"><Receipt className="w-4 h-4"/>Receipt</button>}
-          <button onClick={doPrint} className="text-sm px-4 py-2 rounded border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 flex items-center gap-1.5"><Printer className="w-4 h-4"/>Reprint label</button>
+          <button onClick={doPrint} className={autoPrintOff&&!hasPrinted?"text-sm px-4 py-2 rounded bg-[#0086E0] hover:bg-[#0072BE] text-white font-semibold flex items-center gap-1.5":"text-sm px-4 py-2 rounded border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 flex items-center gap-1.5"}><Printer className="w-4 h-4"/>{autoPrintOff?(hasPrinted?"Print again":"Print label"):"Reprint label"}</button>
           <button onClick={()=>setShowDetails(v=>!v)} className="text-sm px-3 py-2 rounded border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"><FileText className="w-4 h-4"/>See details</button>
           {data.tracking&&<button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:data.tracking}}));}catch(e){} onClose();}} className="text-sm px-3 py-2 rounded border border-[#99D6FF] text-[#006FBF] bg-[#E6F4FF] hover:bg-[#CCEAFF] flex items-center gap-1.5"><Truck className="w-4 h-4"/>Go to shipment</button>}
           {onNewShipment&&<button onClick={()=>{onNewShipment();onClose();}} className="text-sm px-4 py-2 rounded bg-stone-900 text-white hover:bg-stone-800 flex items-center gap-1.5"><Plus className="w-4 h-4"/>New shipment</button>}
@@ -8533,6 +8622,30 @@ function PrinterSettings({settings,setSettings}){
     setPnBusy("");
     setPnMsg(d&&d.ok?{ok:"Test page sent — it should be printing right now."}:{err:(d&&d.error)||"Test failed."});
   };
+  /* ── multiple printers ─────────────────────────────────────────────
+     Every printer you pick anywhere is remembered in printNode.savedPrinters, so the
+     dropdowns keep working next session / on another computer without re-finding.
+     printNode.docPrinters routes each document type: {packSlip, pickList, docs}. */
+  const knownPrinters=(()=>{ const m=new Map(); const add=(p)=>{ if(!p||p.id==null||p.id==="")return; const k=String(p.id); if(!m.has(k))m.set(k,{id:k,name:p.name||("Printer "+k),computer:p.computer||""}); };
+    (pnc.savedPrinters||[]).forEach(add); (pnList||[]).forEach(add);
+    if(pnc.printerId)add({id:pnc.printerId,name:pnc.printerName||("Printer "+pnc.printerId)});
+    return [...m.values()]; })();
+  const dpc=pnc.docPrinters||{};
+  const docVal=(k)=>String((dpc[k]!=null?dpc[k]:(k==="packSlip"?(cust.packSlipPrinterId||""):""))||"");
+  const rememberIn=(saved,id)=>{ const p=knownPrinters.find(x=>x.id===String(id)); return (id&&p&&!(saved||[]).some(x=>String(x.id)===String(id)))?[...(saved||[]),p]:(saved||[]); };
+  const setDocPrinter=(kind,id)=>setSettings(prev=>{ const pn0=prev.printNode||{};
+    const next={...prev,printNode:{...pn0,savedPrinters:rememberIn(pn0.savedPrinters,id),docPrinters:{...(pn0.docPrinters||{}),[kind]:String(id||"")}}};
+    if(kind==="packSlip")next.custom={...(next.custom||{}),packSlipPrinterId:""};   // retire the legacy slot — the new assignment is now the single source of truth
+    return next; });
+  const setLabelPrinter=(id)=>setSettings(prev=>{ const pn0=prev.printNode||{}; const p=knownPrinters.find(x=>x.id===String(id));
+    return {...prev,printNode:{...pn0,savedPrinters:rememberIn(pn0.savedPrinters,id),printerId:id,printerName:p?p.name:pn0.printerName}}; });
+  const delSavedPrinter=(id)=>setSettings(prev=>{ const pn0=prev.printNode||{}; const dp0=pn0.docPrinters||{}; const dp1={}; Object.keys(dp0).forEach(k=>{ dp1[k]=String(dp0[k])===String(id)?"":dp0[k]; });
+    return {...prev,printNode:{...pn0,savedPrinters:(pn0.savedPrinters||[]).filter(x=>String(x.id)!==String(id)),docPrinters:dp1}}; });
+  const pnTestTo=async(pid)=>{ if(!pid)return; setPnBusy("test"+pid); setPnMsg(null);
+    const d=await pnCall({action:"print",apiKey:pnc.apiKey,printerId:pid,title:"ShippingCloud test page",pdfBase64:PN_TEST_PDF});
+    setPnBusy(""); setPnMsg(d&&d.ok?{ok:"Test page sent — it should be printing right now."}:{err:(d&&d.error)||"Test failed."});
+  };
+  const DOC_KINDS=[["packSlip","Packing slips","Auto-printed slips and every Packing slip button"],["pickList","Pick lists","The Pick list buttons in Orders & Batch"],["docs","Receipts & other documents","Shipment receipts and commercial invoices"]];
   return (<div className="max-w-2xl space-y-4">
     <p className="text-sm text-stone-500">Controls how labels are generated and printed when you buy a label or run a batch.</p>
     <Panel title="Direct printing — zero clicks, no dialog">
@@ -8552,7 +8665,7 @@ function PrinterSettings({settings,setSettings}){
             <div className="text-[10px] uppercase tracking-widest text-stone-400 flex items-center gap-1"><Zap className={`w-3 h-3 ${armed?"text-emerald-600":"text-stone-400"}`}/>What happens after you book a label</div>
             <Opt v="handsfree" title="Hands free mode" desc="Book a label and it prints itself — no Print button, no dialog, no preview, and the screen jumps straight to the next shipment. Perfect for a counter or shared station."/>
             <Opt v="nopreview" title="Print with no preview — but keep the review" desc="You still see the booked summary (tracking, buttons); the label just goes straight to the printer with no preview popup."/>
-            <Opt v="preview" title="Keep the print preview" desc="After booking, the label preview popup opens so you can look it over and print it yourself. The classic flow."/>
+            <Opt v="preview" title="Keep the print preview" desc="After booking, a real print preview of the LABEL opens — nothing prints anywhere until you click Print label in the preview."/>
             {mode!=="preview"&&!ready&&<p className="text-[11px] text-amber-600 mt-1 font-medium">⚠ This needs the printer connected — otherwise labels still open the print dialog. Finish the one-time PrintNode setup just below (paste the API key → Find my printers → pick your printer).</p>}
             {mode!=="preview"&&ready&&<p className="text-[11px] text-emerald-700 mt-1">Active — labels send straight to <b>{pnc.printerName||("printer "+pnc.printerId)}</b>.</p>}
           </div>);
@@ -8564,15 +8677,32 @@ function PrinterSettings({settings,setSettings}){
           </label>
           <button onClick={pnFind} disabled={!String(pnc.apiKey||"").trim()||pnBusy==="find"} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{pnBusy==="find"?<><Loader2 className="w-4 h-4 animate-spin"/>Finding…</>:<><Search className="w-4 h-4"/>Find my printers</>}</button>
         </div>
-        {(pnList||pnc.printerId)&&<div className="flex flex-wrap items-end gap-2">
+        {(pnList||knownPrinters.length>0)&&<div className="flex flex-wrap items-end gap-2">
           <label className="block text-sm text-stone-700 flex-1 min-w-[220px]">Label printer
-            <select value={String(pnc.printerId||"")} onChange={e=>{const p=(pnList||[]).find(x=>String(x.id)===e.target.value);setPnCfg({printerId:e.target.value,printerName:p?p.name:pnc.printerName});}} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm">
-              {!pnList&&pnc.printerId&&<option value={String(pnc.printerId)}>{pnc.printerName||("Printer "+pnc.printerId)}</option>}
-              {pnList&&<option value="">— pick a printer —</option>}
-              {(pnList||[]).map(p=><option key={p.id} value={String(p.id)}>{p.name}{p.computer?` — ${p.computer}`:""}{p.state&&p.state!=="online"?` (${p.state})`:""}</option>)}
+            <select value={String(pnc.printerId||"")} onChange={e=>setLabelPrinter(e.target.value)} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm">
+              <option value="">— pick a printer —</option>
+              {knownPrinters.map(p=>{const live=(pnList||[]).find(x=>String(x.id)===p.id);return <option key={p.id} value={p.id}>{p.name}{p.computer?` — ${p.computer}`:""}{live&&live.state&&live.state!=="online"?` (${live.state})`:""}</option>;})}
             </select>
           </label>
           <button onClick={pnTest} disabled={!pnc.printerId||pnBusy==="test"} className="text-sm border border-stone-300 text-stone-700 rounded-lg px-3.5 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5">{pnBusy==="test"?<><Loader2 className="w-4 h-4 animate-spin"/>Sending…</>:<><Printer className="w-4 h-4"/>Send test page</>}</button>
+        </div>}
+        {knownPrinters.length>0&&<div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2.5">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400 flex items-center gap-1"><Printer className="w-3 h-3"/>More printers — what prints where</div>
+          <p className="text-[11px] text-stone-500">Labels always go to the <b>Label printer</b> above. Add as many other printers as you like — hit <b>Find my printers</b> and every printer on your PrintNode account shows up here — then pick one per document type: packing slips to the office paper printer, pick lists to the warehouse, and so on. Anything left on "Browser print" opens the normal print window instead. Printers you pick are remembered for every computer you log in from.</p>
+          {DOC_KINDS.map(([k,label,hint])=>(<div key={k} className="flex flex-wrap items-end gap-2">
+            <label className="block text-sm text-stone-700 flex-1 min-w-[220px]">{label}<span className="block text-[11px] text-stone-400">{hint}</span>
+              <select value={docVal(k)} onChange={e=>setDocPrinter(k,e.target.value)} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm">
+                <option value="">Browser print (default)</option>
+                {knownPrinters.map(p=><option key={p.id} value={p.id}>{p.name}{p.computer?` — ${p.computer}`:""}</option>)}
+                {docVal(k)&&!knownPrinters.some(p=>p.id===docVal(k))&&<option value={docVal(k)}>Printer {docVal(k)}</option>}
+              </select>
+            </label>
+            {docVal(k)&&<button onClick={()=>pnTestTo(docVal(k))} disabled={pnBusy===("test"+docVal(k))} className="text-sm border border-stone-300 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5">{pnBusy===("test"+docVal(k))?<><Loader2 className="w-4 h-4 animate-spin"/>Sending…</>:<><Printer className="w-4 h-4"/>Test</>}</button>}
+          </div>))}
+          {(pnc.savedPrinters||[]).length>0&&<div className="flex flex-wrap gap-1.5 pt-0.5">
+            <span className="text-[11px] text-stone-400 w-full">Remembered printers:</span>
+            {(pnc.savedPrinters||[]).map(p=>(<span key={p.id} className="inline-flex items-center gap-1 text-[11px] bg-white border border-stone-200 rounded-full pl-2 pr-1 py-0.5 text-stone-600">{p.name}{p.computer?` · ${p.computer}`:""}<button onClick={()=>delSavedPrinter(p.id)} title="Forget this printer (clears any assignments it had)" className="text-stone-300 hover:text-rose-500"><X className="w-3 h-3"/></button></span>))}
+          </div>}
         </div>}
         <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
           <span>Automatically print every label to this printer<span className="block text-[11px] text-stone-400">Booked labels, reprints, and batch labels go straight to the printer — no dialog, no clicks. If the agent is offline, the normal print dialog opens instead so nothing is ever lost.</span></span>
@@ -8585,12 +8715,12 @@ function PrinterSettings({settings,setSettings}){
             <button onClick={()=>setCust("autoPackSlip",!cust.autoPackSlip)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${cust.autoPackSlip?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
           </label>
           {cust.autoPackSlip&&<label className="block text-sm text-stone-700">Send packing slips to
-            <select value={String(cust.packSlipPrinterId||"")} onChange={e=>setCust("packSlipPrinterId",e.target.value)} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm">
-              <option value="">Same as label printer / browser print</option>
-              {(pnList||[]).map(p=><option key={p.id} value={String(p.id)}>{p.name}{p.computer?` · ${p.computer}`:""}</option>)}
-              {!pnList&&cust.packSlipPrinterId&&<option value={String(cust.packSlipPrinterId)}>Printer {cust.packSlipPrinterId}</option>}
+            <select value={docVal("packSlip")} onChange={e=>setDocPrinter("packSlip",e.target.value)} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm">
+              <option value="">Browser print / print window</option>
+              {knownPrinters.map(p=><option key={p.id} value={p.id}>{p.name}{p.computer?` · ${p.computer}`:""}</option>)}
+              {docVal("packSlip")&&!knownPrinters.some(p=>p.id===docVal("packSlip"))&&<option value={docVal("packSlip")}>Printer {docVal("packSlip")}</option>}
             </select>
-            <span className="block text-[11px] text-stone-400 mt-1">Pick a different printer (e.g. a regular paper printer) to route slips there while labels go to the thermal printer. Needs PrintNode connected and printers found above. Leave on "Same as label printer" to just print slips the normal way.</span>
+            <span className="block text-[11px] text-stone-400 mt-1">Same setting as "Packing slips" under <b>More printers</b> above — pick a different printer (e.g. a regular paper printer) to route slips there while labels go to the thermal printer. On "Browser print", the slip waits in Keep-the-print-preview mode and prints when you click Print label.</span>
           </label>}
         </div>
         <p className="text-[11px] text-stone-400">Setting is per-login but works from any computer — jobs route through PrintNode to whichever machine the printer is on. The Chrome kiosk-printing shortcut below stays as the free, no-agent alternative. Note: the label logo stamp applies to dialog printing only; direct printing sends the carrier's original PDF.</p>

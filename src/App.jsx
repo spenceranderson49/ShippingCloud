@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v374";
+const BUILD_TAG="addr-v375";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -818,6 +818,60 @@ async function directPrintHtml(html,title,kind){
     return !!(d&&d.ok);
   }catch(e){ return false; }
 }
+/* Send a PDF to a SPECIFIC PrintNode printer (not the label printer). */
+async function pnPrintPdf(printerId,base64,title){
+  const cfg=(typeof window!=="undefined"&&window.__scDirectPrint)||null;
+  if(!cfg||!cfg.apiKey||!printerId||!base64)return false;
+  try{
+    const r=await fetch("/.netlify/functions/printnode",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"print",apiKey:cfg.apiKey,printerId:String(printerId),title:title||"Document",pdfBase64:base64})});
+    const d=await r.json().catch(()=>null);
+    return !!(d&&d.ok);
+  }catch(e){ return false; }
+}
+/* Packing slips as a REAL PDF, drawn on canvas (one letter page per slip). PrintNode can only
+   print PDFs — raw_html was never a PrintNode content type, so the old "route slips to another
+   printer" path silently failed on every job and fell back to the browser slip dialog. That
+   constant slip pop-up is exactly what this fixes. */
+async function packingSlipPdfBase64(slips){
+  const list=(slips||[]).filter(Boolean); if(!list.length)return null;
+  try{
+    const W=1275,H=1650,M=90;   // 8.5in x 11in @150dpi
+    const imgs=[];
+    for(const sl of list){
+      const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+      const g=cv.getContext("2d"); if(!g)return null;
+      g.fillStyle="#ffffff"; g.fillRect(0,0,W,H);
+      const right=(t,yy,font,color)=>{ g.font=font; g.fillStyle=color; const w=g.measureText(t).width; g.fillText(t,W-M-w,yy); };
+      let y=118;
+      g.font="700 44px Arial"; g.fillStyle="#111111"; g.fillText(String(sl.company||"").slice(0,48),M,y);
+      right(String(sl.date||""),y,"26px Arial","#444444");
+      y+=40; g.font="600 26px Arial"; g.fillStyle="#777777"; g.fillText("PACKING SLIP",M,y);
+      if(sl.orderName)right("Order "+String(sl.orderName).slice(0,40),y,"600 26px Arial","#111111");
+      y+=34; g.strokeStyle="#111111"; g.lineWidth=3; g.beginPath(); g.moveTo(M,y); g.lineTo(W-M,y); g.stroke();
+      y+=56; g.font="600 22px Arial"; g.fillStyle="#999999"; g.fillText("SHIP TO",M,y); y+=38;
+      const to=sl.to||{};
+      g.font="28px Arial"; g.fillStyle="#111111";
+      for(const ln of [to.name,to.company,to.address1,[[to.city,to.state].filter(Boolean).join(", "),to.zip].filter(Boolean).join(" ")].filter(x=>x&&String(x).trim())){ g.fillText(String(ln).slice(0,60),M,y); y+=38; }
+      y+=44; g.font="600 22px Arial"; g.fillStyle="#999999"; g.fillText("ITEMS",M,y);
+      right("QTY",y,"600 22px Arial","#999999");
+      y+=16; g.strokeStyle="#dddddd"; g.lineWidth=2; g.beginPath(); g.moveTo(M,y); g.lineTo(W-M,y); g.stroke(); y+=42;
+      const items=(sl.items&&sl.items.length)?sl.items:[{name:"—",qty:""}];
+      g.font="28px Arial";
+      for(const it of items.slice(0,26)){
+        g.fillStyle="#111111"; g.fillText(String(it.name||"").slice(0,58),M,y);
+        right(String(it.qty!=null?it.qty:""),y,"28px Arial","#111111");
+        y+=40; g.strokeStyle="#f0f0f0"; g.lineWidth=1; g.beginPath(); g.moveTo(M,y-26); g.lineTo(W-M,y-26); g.stroke();
+        if(y>H-260)break;
+      }
+      y=Math.max(y+30,H-240);
+      if(sl.tracking){ g.font="600 22px Arial"; g.fillStyle="#999999"; g.fillText("TRACKING",M,y); g.font="26px Arial"; g.fillStyle="#111111"; g.fillText(String(sl.tracking),M+150,y); y+=38; }
+      if(sl.service){ g.font="600 22px Arial"; g.fillStyle="#999999"; g.fillText("SERVICE",M,y); g.font="26px Arial"; g.fillStyle="#111111"; g.fillText(String(sl.service),M+150,y); y+=38; }
+      if(sl.note){ g.font="italic 24px Arial"; g.fillStyle="#555555"; g.fillText(String(sl.note).slice(0,80),M,y); }
+      imgs.push(cv.toDataURL("image/png"));
+    }
+    return await imgsToLabelPdf(imgs,8.5,11);
+  }catch(e){ return null; }
+}
 /* Print an HTML doc through a hidden same-page iframe. Unlike window.open this needs no
    popup permission and no user-activation, so it's safe AFTER an await or a print dialog
    (the deferred packing-slip flush, routed-print failures). Strips the document's own
@@ -1291,9 +1345,10 @@ async function printPackingSlips(slips){
   const list=(slips||[]).filter(Boolean);
   if(!list.length)return;
   if(docPrinterAssigned("packSlip")){
-    const html=packingSlipHTML(list);
-    if(await directPrintHtml(html,"Packing slip"+(list.length!==1?"s":""),"packSlip"))return;
-    printHtmlViaFrame(html);   // routed print failed — still print, via the no-popup frame
+    const dp=(typeof window!=="undefined"&&window.__scDirectPrint)||null;
+    const pdf=await packingSlipPdfBase64(list);
+    if(pdf&&dp&&await pnPrintPdf(dp.docPrinters.packSlip,pdf,"Packing slip"+(list.length!==1?"s":"")))return;
+    printHtmlViaFrame(packingSlipHTML(list));   // routed print failed — still print, visibly, via the no-popup frame
     return;
   }
   printPackingSlipsDialog(list);
@@ -1309,8 +1364,9 @@ async function printPackingSlipAuto(slips,settings){
   if(!list.length)return;
   const c=cz(settings);
   if(docPrinterAssigned("packSlip")){
-    const html=packingSlipHTML(list);
-    if(await directPrintHtml(html,"Packing slip","packSlip"))return;   // routed to the slip printer
+    const dp=(typeof window!=="undefined"&&window.__scDirectPrint)||null;
+    const pdf=await packingSlipPdfBase64(list);
+    if(pdf&&dp&&await pnPrintPdf(dp.docPrinters.packSlip,pdf,"Packing slip"))return;   // routed to the slip printer, as a real PDF
     // routed print failed — fall through so the slip is never lost
   }
   if(!c.skipBookedSummary&&!c.directNoPreview){ try{ window.__scPendingSlips=list; }catch(e){} return; }
@@ -5777,7 +5833,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       pieces:pieces.map(p=>({weight:Math.ceil(pw(p)||1),length:p.L,width:p.W,height:p.H,declaredValue:intl?(p.value||null):null}))};   // book at the rounded-up billing weight the quote priced
     const res=await shipCall({action:"ship",account:acctOf(eng),order});
     if(!res||!res.ok){setShipStatus({state:"error",key:q.key,msg:(res&&res.error)||"Booking failed"});setBought(null);return;}
-    const done=(st)=>{ justBookedRef.current=selectedOrder; const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec},settings,setLabelPreview); if(cz(settings).autoPackSlip){ const so=selectedOrder&&orders.find(x=>x.id===selectedOrder); setTimeout(()=>{ try{ printPackingSlipAuto([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:st.tracking||"",service:q.label}],settings); }catch(e){} },(!cz(settings).skipBookedSummary&&!cz(settings).directNoPreview)?0:700); } if(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint){ setTimeout(()=>{ try{newShipment();}catch(e){} },900); };} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
+    const done=(st)=>{ justBookedRef.current=selectedOrder; const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec},settings,setLabelPreview); if(cz(settings).autoPackSlip){ const so=selectedOrder&&orders.find(x=>x.id===selectedOrder); setTimeout(()=>{ try{ printPackingSlipAuto([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:st.tracking||"",service:q.label}],settings); }catch(e){} },(!cz(settings).skipBookedSummary&&!cz(settings).directNoPreview)?0:2500); }   /* label pipeline gets a head start — its dialog must always beat the slip fallback */ if(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint){ setTimeout(()=>{ try{newShipment();}catch(e){} },900); };} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
     if(res.booked){done(res);return;}
     setShipStatus({state:"pending",key:q.key,orderId:res.orderId});
     pollLabel(eng,res.orderId,done).then(r=>{ if(r&&r.timedOut){ onPending&&onPending({orderId:res.orderId,rec:buildRec(q,carrier,{}),service:q.label,carrier,orderRef:selectedOrder}); setShipStatus({state:"pending_timeout",key:q.key});setBought(null);} });
@@ -6224,7 +6280,11 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
   /* An auto packing slip parked by printPackingSlipAuto (preview mode, no slip printer)
      prints right after the label — through the no-popup frame, because by then the
      click's popup allowance is spent on the label's own print dialog. */
-  const flushSlips=()=>{ try{ const ps=(typeof window!=="undefined"&&window.__scPendingSlips)||null; if(ps&&ps.length){ window.__scPendingSlips=null; setTimeout(()=>{ try{ printHtmlViaFrame(packingSlipHTML(ps)); }catch(e){} },400); } }catch(e){} };
+  const flushSlips=()=>{ try{ const ps=(typeof window!=="undefined"&&window.__scPendingSlips)||null; if(ps&&ps.length){ window.__scPendingSlips=null;
+    setTimeout(async()=>{ try{
+      if(docPrinterAssigned("packSlip")){ const dp=window.__scDirectPrint; const pdf=await packingSlipPdfBase64(ps); if(pdf&&dp&&await pnPrintPdf(dp.docPrinters.packSlip,pdf,"Packing slip"))return; }
+      printHtmlViaFrame(packingSlipHTML(ps));
+    }catch(e){} },400); } }catch(e){} };
   const doPrint=async()=>{ printed.current=true; setHasPrinted(true);
     if(await directPrintPdf(data.pdf,undefined,docCtxFor(data.rec,data.tracking))){ flushSlips(); return; }
     if(pages&&pages.imgs.length){ printImagePages(pages.imgs,pages.wIn,pages.hIn,flushSlips); }
@@ -8828,7 +8888,12 @@ function PrinterSettings({settings,setSettings}){
   const pnFind=async()=>{ setPnBusy("find");setPnMsg(null);
     const d=await pnCall({action:"printers",apiKey:pnc.apiKey});
     setPnBusy("");
-    if(d&&d.ok){ setPnList(d.printers||[]); setPnMsg(d.printers&&d.printers.length?{ok:`Found ${d.printers.length} printer${d.printers.length!==1?"s":""} — pick yours below.`}:{err:"Connected, but no printers found — is the PrintNode client running on the label computer with the printer installed?"}); }
+    if(d&&d.ok){ setPnList(d.printers||[]);
+      const ps=d.printers||[];
+      const offline=ps.length&&ps.every(x=>String(x.state||"").toLowerCase()!=="online");
+      setPnMsg(!ps.length?{err:"Connected, but no printers found — is the PrintNode client running on the label computer with the printer installed?"}
+        :offline?{err:"⚠ Your key works and "+ps.length+" printer"+(ps.length!==1?"s were":" was")+" found — but the PrintNode app is OFFLINE on "+[...new Set(ps.map(x=>x.computer).filter(Boolean))].join(", ")+". NOTHING will print until you open PrintNode on that computer and it shows Connected."}
+        :{ok:`Found ${ps.length} printer${ps.length!==1?"s":""} — pick yours below.`}); }
     else setPnMsg({err:(d&&d.error)||"Couldn't reach PrintNode."});
   };
   const PN_TEST_PDF="JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCAyODggNDMyXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA0IDAgUiA+PiA+PiAvQ29udGVudHMgNSAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhLUJvbGQgPj4KZW5kb2JqCjUgMCBvYmoKPDwgL0xlbmd0aCA5MyA+PgpzdHJlYW0KQlQgL0YxIDI0IFRmIDQwIDM4MCBUZCAoUFJJTlQgVEVTVCkgVGogMCAtMzYgVGQgL0YxIDEyIFRmIChEaXJlY3QgcHJpbnRpbmcgaXMgd29ya2luZy4pIFRqIEVUCmVuZHN0cmVhbQplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAowMDAwMDAwMjQxIDAwMDAwIG4gCjAwMDAwMDAzMTYgMDAwMDAgbiAKdHJhaWxlcgo8PCAvU2l6ZSA2IC9Sb290IDEgMCBSID4+CnN0YXJ0eHJlZgo0NTkKJSVFT0Y=";

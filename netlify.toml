@@ -1,3 +1,13 @@
+# Build settings declared HERE so every Netlify site linked to this repo builds identically —
+# no per-site UI configuration needed (this is what left the staging sites publishing the raw
+# repo root, which renders as a black page, and skipping the functions deploy entirely).
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[functions]
+  directory = "netlify/functions"
+
 # SPA fallback — serve index.html for all app routes.
 # (Function paths under /.netlify/functions/ are routed natively by Netlify
 #  before redirects run, so no rule is needed for them.)

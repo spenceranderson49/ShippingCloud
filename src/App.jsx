@@ -70,7 +70,7 @@ const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK
    ever deploys to every login by accident. */
 /* Customer Settings sections (id,label) — mirrored by the `secs` array inside Settings.
    The admin portal uses this list for the per-customer hide/lock controls (featureFlags._secPolicy). */
-const SETTINGS_SEC_LIST=[["general","General"],["customize","Customizations"],["carriers","Carrier accounts"],["warehouses","Warehouses"],["catalog","Product catalog"],["boxes","Package sizes"],["boxlogic","Box logic"],["reference","Reference Fields"],["cieditor","Commercial invoice"],["cihistory","CI history"],["otherdocs","Other documents"],["printer","Print settings"],["checkout","Checkout rates"],["manifests","Manifests"],["reports","Reports"],["notifications","Email automation"],["billing","Billing"],["integrations","Integrations"],["subscription","Subscription"]];
+const SETTINGS_SEC_LIST=[["general","General"],["customize","Customizations"],["reports","Reports"],["shipscreen","Ship screen"],["carriers","Carrier accounts"],["warehouses","Warehouses"],["boxes","Package sizes"],["boxlogic","Box logic"],["catalog","Product catalog"],["reference","Reference Fields"],["printer","Print settings"],["cieditor","Commercial invoice"],["cihistory","CI history"],["otherdocs","Other documents"],["manifests","Manifests"],["integrations","Integrations"],["notifications","Email automation"],["checkout","Checkout rates"],["billing","Billing"],["subscription","Subscription"]];
 const FEATURE_CATALOG=[
   {id:"orders",label:"Orders",desc:"Order import & fulfillment",default:true},
   {id:"shipments",label:"Shipments",desc:"Shipment history & tracking",default:true},
@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v375";
+const BUILD_TAG="addr-v376";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -8387,7 +8387,17 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
      the same panel instead of resetting to General. Persisted so it survives a full reload too. */
   const [sec,setSecRaw]=useState(()=>lsGet("settingsSec","general"));
   const setSec=(k)=>{ setSecRaw(k); lsSet("settingsSec",k); };
-  const secs=[["general","General",Cog],["customize","Customizations",Sliders],["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["catalog","Product catalog",Boxes],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["reference","Reference Fields",Receipt],["cieditor","Commercial invoice",Receipt],["cihistory","CI history",FileText],["otherdocs","Other documents",FileText],["printer","Print settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["billing","Billing",CreditCard],["integrations","Integrations",Layers],["subscription","Subscription",Star]];
+  /* Sidebar sections grouped into categories (v376) — Ship screen promoted out of Customizations
+     into its own top-level section under Shipping. The flat `secs` list below feeds the
+     policy/fallback logic unchanged. */
+  const SEC_GROUPS=[
+    ["Workspace",[["general","General",Cog],["customize","Customizations",Sliders],["reports","Reports",TrendingUp]]],
+    ["Shipping",[["shipscreen","Ship screen",Truck],["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["catalog","Product catalog",Boxes],["reference","Reference Fields",Receipt]]],
+    ["Documents & printing",[["printer","Print settings",Printer],["cieditor","Commercial invoice",Receipt],["cihistory","CI history",FileText],["otherdocs","Other documents",FileText],["manifests","Manifests",FileText]]],
+    ["Automation & integrations",[["integrations","Integrations",Layers],["notifications","Email automation",Mail],["checkout","Checkout rates",ShoppingBag]]],
+    ["Account",[["billing","Billing",CreditCard],["subscription","Subscription",Star]]],
+  ];
+  const secs=SEC_GROUPS.flatMap(g=>g[1]);
   /* Per-customer section policy set in the admin portal (featureFlags._secPolicy):
      "off" hides the section from the sidebar entirely; "locked" keeps it visible but greys the
      whole page out read-only. Admins are never restricted. */
@@ -8398,7 +8408,11 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
   if(!visibleSecs.some(x=>x[0]===sec)) { if(sec!=="general") setSecRaw("general"); }
   return (
     <div className="flex flex-col md:flex-row gap-6">
-      <aside className="md:w-56 shrink-0 space-y-1">{visibleSecs.map(([id,l,Icon])=><button key={id} onClick={()=>setSec(id)} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}{polFor(id)==="locked"&&<Ban className="w-3 h-3 text-stone-300 ml-auto"/>}</button>)}</aside>
+      <aside className="md:w-56 shrink-0 space-y-4">{SEC_GROUPS.map(([gl,gsecs])=>{const vis=gsecs.filter(([id])=>polFor(id)!=="off"); if(!vis.length)return null; return (
+        <div key={gl} className="space-y-1">
+          <div className="px-3 text-[10px] font-semibold uppercase tracking-[.14em] text-stone-400">{gl}</div>
+          {vis.map(([id,l,Icon])=><button key={id} onClick={()=>setSec(id)} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}{polFor(id)==="locked"&&<Ban className="w-3 h-3 text-stone-300 ml-auto"/>}</button>)}
+        </div>);})}</aside>
       <div className="flex-1 min-w-0">
         {secLocked&&<div className="mb-3 flex items-center gap-2 text-[13px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"><Ban className="w-4 h-4 shrink-0"/>This page is locked by your administrator — you can look, but changes are disabled.</div>}
         <div className={secLocked?"pointer-events-none opacity-60 select-none":""} aria-disabled={secLocked||undefined}>
@@ -8418,6 +8432,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="cihistory"&&<CIHistory settings={settings} setSettings={setSettings}/>}
         {sec==="otherdocs"&&<OtherDocs settings={settings} setSettings={setSettings}/>}
         {sec==="customize"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])}/>}
+        {sec==="shipscreen"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="ship"/>}
         {sec==="billing"&&<Billing settings={settings} setSettings={setSettings}/>}
         {sec==="integrations"&&<Integrations settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders}/>}
         {sec==="subscription"&&<Subscription settings={settings} setSettings={setSettings}/>}
@@ -10389,7 +10404,7 @@ function GeneralSettings({settings,setSettings,goSec,audit=[]}){
   const F=({k,label,ph,hint,type})=>(<label className="block text-sm text-stone-700">{label}
     <input type={type||"text"} value={settings[k]||""} onChange={e=>set(k,e.target.value)} placeholder={ph} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
     {hint&&<span className="block text-[11px] text-stone-400 mt-0.5">{hint}</span>}</label>);
-  const links=[["customize","Customizations","Fields, rates, theme, shortcuts"],["reference","Reference Fields","Dropdown values, required & locked fields"],["carriers","Carrier accounts","FedEx & DHL connections"],["boxes","Package sizes","Your box library"],["printer","Print settings","Labels, printing, doc tabs & automation"],["notifications","Email automation","Customer notifications"]];
+  const links=[["shipscreen","Ship screen","Scan mode, hidden fields & Ship-tab options"],["customize","Customizations","Services, appearance, tabs & packing slips"],["reference","Reference Fields","Dropdown values, required & locked fields"],["carriers","Carrier accounts","FedEx & DHL connections"],["boxes","Package sizes","Your box library"],["printer","Print settings","Labels, printing, doc tabs & automation"],["notifications","Email automation","Customer notifications"],["integrations","Integrations","Stores & order sources"]];
   return (<div className="max-w-2xl space-y-4">
     <Panel title="Your company">
       <div className="grid sm:grid-cols-2 gap-3">
@@ -10506,7 +10521,7 @@ function FieldLists({settings,setSettings}){
     <Ed k="po" title="PO # values" ph="e.g. PO-GILLETTE-…" extra={<Opts req="poRequired" lock="poLocked"/>}/>
   </div>);
 }
-function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false}){
+function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,only}){
   const locked=blockedKeys||new Set();
   const committedCustom=cz(settings);
   const _cd=useDraft(committedCustom,(v)=>setSettings(p=>({...p,custom:v})),CUSTOM_DEFAULTS);
@@ -10554,18 +10569,22 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false}){
   const togTab=(k)=>{const nx=new Set(hiddenTabs); nx.has(k)?nx.delete(k):nx.add(k); set("hiddenTabs",[...nx]);};
   const order=(c.tabOrder&&c.tabOrder.length)?c.tabOrder:tabChoices.map(x=>x[0]);
   const move=(k,dir)=>{const a=[...order];const i=a.indexOf(k);const j=i+dir;if(i<0||j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];set("tabOrder",a);};
-  const [cs,setCs]=useState("services");
-  const CTABS=[["services","Services"],["ship","Ship screen"],["orders","Orders & lists"],["appearance","Appearance"],["slips","Packing slips"]];   // Autopilot toggles moved to Settings → Print settings (v355)   // Labels & printing moved to Settings → Printer settings (v281)
+  const [cs,setCs]=useState(only||"services");
+  /* Ship screen is its own top-level Settings section now (v376). It still shows as a tab in
+     deployMode so the admin team-deploy screen keeps every option in one place. `only` renders a
+     single panel with no tab bar — used by Settings → Ship screen. */
+  const CTABS=[["services","Services"],...(deployMode?[["ship","Ship screen"]]:[]),["orders","Orders & lists"],["appearance","Appearance"],["slips","Packing slips"]];   // Autopilot toggles moved to Settings → Print settings (v355)   // Labels & printing moved to Settings → Printer settings (v281)
   const Toggle=({k,label,hint})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700">
     <span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span>
     <button onClick={()=>set(k,!c[k])}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${c[k]?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
   </label>);
   return (<div className="max-w-2xl space-y-4">
     <DraftBar dirty={_cd.dirty} onSave={_cd.save} onUndo={_cd.undo} onReset={()=>{ if(window.confirm("Reset all customizations to their defaults? You'll still need to click Save to keep it.")) _cd.reset(); }} resetLabel="Reset to defaults" savedNote="Customizations saved"/>
-    {!deployMode&&<div className="text-sm text-stone-500">Make {BRAND.product} yours. Every option here changes the app immediately for <b>your login only</b>.</div>}
-    <div className="flex items-center gap-1 border-b border-stone-200 overflow-x-auto">
+    {!deployMode&&!only&&<div className="text-sm text-stone-500">Make {BRAND.product} yours. Every option here changes the app immediately for <b>your login only</b>.</div>}
+    {only==="ship"&&<div className="text-sm text-stone-500">Tune the Ship tab. Every option here changes the app immediately for <b>your login only</b>.</div>}
+    {!only&&<div className="flex items-center gap-1 border-b border-stone-200 overflow-x-auto">
       {CTABS.map(([v,l])=><button key={v} onClick={()=>setCs(v)} className={`px-3 py-2 text-sm rounded-t-lg whitespace-nowrap border-b-2 -mb-px ${cs===v?"border-[#0086E0] text-stone-900 font-medium":"border-transparent text-stone-500 hover:bg-stone-50"}`}>{l}</button>)}
-    </div>
+    </div>}
 
     {cs==="ship"&&<Panel title="Ship screen">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">

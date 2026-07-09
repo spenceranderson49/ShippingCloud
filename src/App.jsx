@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v380";
+const BUILD_TAG="addr-v381";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10621,20 +10621,26 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
       </label>
     </Panel>
     <Panel title="Autopilot — automatic service &amp; printing">
-      <div className="space-y-2.5">
-        <Tog k="autoRulesOnShip" label="Pre-select the service on Ship using my Autopilot rules" hint="When you pull a matching order into Ship, its service is chosen for you automatically. You still press Book yourself."/>
-        <div className={c.autoRulesOnShip?"":"opacity-40 pointer-events-none"}>
-          <Tog k="autoBookOnShip" label="Advanced: also book & print with NO click" hint="A matching order books and prints the instant it loads on Ship — nobody presses Book. Leave this OFF if you want to review each shipment before it ships."/>
-        </div>
-        {c.autoRulesOnShip&&c.autoBookOnShip&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">Heads up: labels print the moment a matching order loads — make sure your rules are exactly right.</div>}
-        <div className="border-t border-stone-100 pt-2.5 space-y-2.5">
-          <Tog k="autoRulesInBatch" label="Auto-apply rules when the Batch screen opens" hint="Fills each order's service from your rules as soon as Batch loads."/>
-          <div className={c.autoRulesInBatch?"":"opacity-40 pointer-events-none"}>
-            <Tog k="autoBookBatch" label="Advanced: also auto-book the whole batch" hint="After rules apply, every ruled order books automatically with no click."/>
-          </div>
-          {c.autoRulesInBatch&&c.autoBookBatch&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">The whole batch books automatically — double-check your rules first.</div>}
-        </div>
-        <p className="text-[11px] text-stone-400">The rules themselves live on the <b>Autopilot</b> tab — these switches only control when they run.</p>
+      <div className="space-y-3">
+        <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
+          <span>When a matching order opens on Ship<span className="block text-[11px] text-stone-400">Your Autopilot rules decide the service — pick how far to take it.</span></span>
+          <select value={c.autoRulesOnShip===false?"off":(c.autoBookOnShip?"auto":"preselect")} onChange={e=>{const v=e.target.value;set("autoRulesOnShip",v!=="off");set("autoBookOnShip",v==="auto");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] shrink-0">
+            <option value="off">Do nothing</option>
+            <option value="preselect">Pre-select the service — I click Book</option>
+            <option value="auto">Book &amp; print automatically — no click</option>
+          </select>
+        </label>
+        {c.autoRulesOnShip!==false&&c.autoBookOnShip&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">Heads up: labels print the moment a matching order loads — make sure your rules are exactly right.</div>}
+        <label className="flex items-center justify-between gap-3 text-sm text-stone-700 border-t border-stone-100 pt-3">
+          <span>When the Batch screen opens<span className="block text-[11px] text-stone-400">Apply your rules across the whole batch at once.</span></span>
+          <select value={!c.autoRulesInBatch?"off":(c.autoBookBatch?"auto":"fill")} onChange={e=>{const v=e.target.value;set("autoRulesInBatch",v!=="off");set("autoBookBatch",v==="auto");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] shrink-0">
+            <option value="off">Do nothing</option>
+            <option value="fill">Fill in services from my rules</option>
+            <option value="auto">Fill in AND auto-book everything</option>
+          </select>
+        </label>
+        {c.autoRulesInBatch&&c.autoBookBatch&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">The whole batch books automatically — double-check your rules first.</div>}
+        <p className="text-[11px] text-stone-400">The rules themselves live on the <b>Autopilot</b> tab — this only controls when they run.</p>
       </div>
     </Panel></>}
 

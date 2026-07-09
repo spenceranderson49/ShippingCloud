@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v377";
+const BUILD_TAG="addr-v378";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -930,6 +930,11 @@ function openLabelOrDirectPrint(payload,settings,setLabelPreview){
            lost, and tell the user WHY, so "kiosk isn't printing" stops being a mystery. */
         try{ window.dispatchEvent(new CustomEvent("sc-direct-print-failed",{detail:{reason:(!dp.apiKey||!dp.printerId)?"not-configured":"agent-unreachable"}})); }catch(e){}
         setLabelPreview(payload);
+      } else if(c.directNoPreview&&!c.skipBookedSummary){
+        /* "Print with no preview — but keep the review": the label already went silently to the
+           printer, but the person still wants the booked summary (tracking, Copy, pickup). Open it
+           with autoPrint:false so the modal shows the details without re-sending the label. */
+        setLabelPreview({...payload,autoPrint:false});
       }
     });
     return;
@@ -5049,6 +5054,12 @@ function AppInner(){
   },[settingsRaw,deployedCustom]);
   const setSettings=(v)=>setSettingsRaw(p=>scrubLegacyDefaults(typeof v==="function"?v(scrubLegacyDefaults(p)):v));
   const custom=cz(settings);
+  /* Live look preview: while the Appearance editor is open it broadcasts its DRAFT surface colors
+     + accent over the sc-look-preview event, so the real header/nav/page (and the brand logo tint)
+     update as you pick — not only after Save. srf falls back to committed settings otherwise. */
+  const [lookPreview,setLookPreview]=useState(null);
+  useEffect(()=>{ const h=(e)=>{ const d=e&&e.detail; setLookPreview(d&&typeof d==="object"?d:null); }; window.addEventListener("sc-look-preview",h); return ()=>window.removeEventListener("sc-look-preview",h); },[]);
+  const srf=lookPreview||custom;
   useEffect(()=>{ try{document.documentElement.style.fontSize=(custom.fontScale&&custom.fontScale!==100)?(custom.fontScale/100*16)+"px":"";}catch(e){} },[custom.fontScale]);
   useEffect(()=>{ SLIP_OPTS.thanks=custom.slipThanks||""; SLIP_OPTS.footer=custom.slipFooter||""; CI_OPTS.taxId=settings.taxId||""; },[custom.slipThanks,custom.slipFooter,settings.taxId]);
   useEffect(()=>{ try{ if(custom.loginBg)lsSet("loginBg",custom.loginBg); }catch(e){} },[custom.loginBg]);
@@ -5373,13 +5384,13 @@ function AppInner(){
       <AssistantChat who={isDemo?"demo":isAdmin?"admin":"customer"} getContext={assistantContext} onAction={onAssistantAction}/>
       <ConfettiHost mode={custom.confetti||"page"}/>
       <SaveToast/>
-      <header style={custom.headerBg?{background:custom.headerBg}:undefined} className={"border-b border-stone-200 sticky z-30 backdrop-blur "+(custom.headerBg?"":"bg-white/90 ")+((adminReturn||isDemo)?"top-9":"top-0")}>
+      <header style={srf.headerBg?{background:srf.headerBg}:undefined} className={"border-b border-stone-200 sticky z-30 backdrop-blur "+(srf.headerBg?"":"bg-white/90 ")+((adminReturn||isDemo)?"top-9":"top-0")}>
         <div className="px-3 sm:px-4 h-14 flex items-center gap-2 sm:gap-3 relative">
           <button onClick={()=>setNavOpen(true)} className="md:hidden p-2 -ml-1 rounded-lg hover:bg-stone-100 text-stone-600" aria-label="Menu"><Layers className="w-5 h-5"/></button>
 
           {BRAND.fw?(<>
             <button onClick={()=>setTab("ship")} title="Back to Ship" className="flex items-center gap-2.5 cursor-pointer select-none shrink-0">
-              <FreightwireShipHub logoH={Math.round(30*((custom.logoScale||100)/100))} sub={false} accent={custom.accent||""}/>
+              <FreightwireShipHub logoH={Math.round(30*((custom.logoScale||100)/100))} sub={false} accent={srf.accent||""}/>
             </button>
           </>):(
           <button onClick={()=>setTab("ship")} title="Back to Ship" className="cursor-pointer flex items-center shrink-0">{(!brand.name1||brand.name1==="Shipping")&&(!brand.name2||brand.name2==="Cloud")?<ShipCloudLogo size={Math.round(22*((custom.logoScale||100)/100))}/>:<span className="font-extrabold tracking-tight text-[20px] sm:text-[26px]" style={{color:(custom.theme==="dark"||custom.theme==="grey")?"#F5F5F4":brand.dark}}>{brand.name1}<span style={{color:custom.accent||brand.primary}}>{brand.name2}</span></span>}</button>)}
@@ -5398,7 +5409,7 @@ function AppInner(){
       {appLabel&&<LabelPreviewModal data={appLabel} settings={settings} onClose={()=>setAppLabel(null)}/>}
       {navOpen&&<div className="md:hidden fixed inset-0 z-40 flex" role="dialog">
         <div className="absolute inset-0 bg-stone-900/40" onClick={()=>setNavOpen(false)}/>
-        <aside style={custom.navBg?{background:custom.navBg}:undefined} className={`relative w-64 ${custom.navBg?"":"bg-white"} h-full shadow-xl overflow-y-auto`}>
+        <aside style={srf.navBg?{background:srf.navBg}:undefined} className={`relative w-64 ${srf.navBg?"":"bg-white"} h-full shadow-xl overflow-y-auto`}>
           <div className="flex items-center justify-between px-4 h-14 border-b border-stone-200"><button onClick={()=>{setTab("ship");setNavOpen(false);}} title="Back to Ship" className="font-extrabold tracking-tight flex items-center gap-2" style={{color:brand.dark}}>{BRAND.fw?<><img src={FW_LOGO} alt="Freightwire" className="h-6 w-7 object-cover object-left" draggable={false}/><span className="w-px h-5 bg-stone-300"/><span className="text-[15px] leading-none text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></span></>:<span>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></span>}</button><button onClick={()=>setNavOpen(false)} className="p-1.5 rounded hover:bg-stone-100"><X className="w-5 h-5 text-stone-500"/></button></div>
           <nav className="p-2 space-y-0.5">
             {TABS.map(([id,l,Icon])=>(
@@ -5414,7 +5425,7 @@ function AppInner(){
         </aside>
       </div>}
       <div className="flex flex-1">
-        <aside style={custom.navBg?{background:custom.navBg}:undefined} className={`hidden md:block w-52 shrink-0 border-r border-stone-200 ${custom.navBg?"":"bg-white"} min-h-screen`}>
+        <aside style={srf.navBg?{background:srf.navBg}:undefined} className={`hidden md:block w-52 shrink-0 border-r border-stone-200 ${srf.navBg?"":"bg-white"} min-h-screen`}>
           <nav className="p-2 space-y-0.5 sticky top-14">
             {TABS.map(([id,l,Icon])=>(
               <React.Fragment key={id}>
@@ -5427,7 +5438,7 @@ function AppInner(){
             {!isAdmin&&!isDemo&&!isCompanyAdmin&&CLOUD.mode==="cloud"&&<CompanyAdminRequestButton currentUser={currentUser}/>}
           </nav>
         </aside>
-        <main className="flex-1 min-w-0 overflow-x-clip px-3 sm:px-6 py-4 sm:py-6" style={(custom.appBg||custom.pageBg)?{...(custom.pageBg?{backgroundColor:custom.pageBg}:{}),...(custom.appBg?{backgroundImage:`url(${custom.appBg})`,backgroundSize:"cover",backgroundPosition:"center",backgroundAttachment:"fixed"}:{})}:undefined}>
+        <main className="flex-1 min-w-0 overflow-x-clip px-3 sm:px-6 py-4 sm:py-6" style={(srf.appBg||srf.pageBg)?{...(srf.pageBg?{backgroundColor:srf.pageBg}:{}),...(srf.appBg?{backgroundImage:`url(${srf.appBg})`,backgroundSize:"cover",backgroundPosition:"center",backgroundAttachment:"fixed"}:{})}:undefined}>
           <TabBoundary key={tab} name={tab}>
           {tab==="dashboard"&&<Dashboard shipments={shipments} orders={orders} returns={returns} goTab={setTab}/>}
           {tab==="ship"&&<Ship client={client} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={ruleset} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders} currentUser={currentUser} setUsers={setUsers} setCurrentUser={setCurrentUser} clients={clients}/>}
@@ -10529,6 +10540,11 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
   }catch(e){} };
   useEffect(()=>{ _applyLook(c||{}); },[c&&c.theme,c&&c.accent,c&&c.fontScale]);
   useEffect(()=>()=>{ _applyLook(_commitRef.current||{}); },[]);
+  /* Broadcast draft surface colors + accent so the live app chrome (header/nav/page + logo tint)
+     previews them before Save. Only the main Customizations editor drives this — not the admin
+     deploy editor or the trimmed Ship-screen section. Cleared on unmount so nothing sticks. */
+  useEffect(()=>{ if(only||deployMode)return; try{ window.dispatchEvent(new CustomEvent("sc-look-preview",{detail:{headerBg:c.headerBg||"",navBg:c.navBg||"",pageBg:c.pageBg||"",appBg:c.appBg||"",accent:c.accent||""}})); }catch(e){} },[only,deployMode,c&&c.headerBg,c&&c.navBg,c&&c.pageBg,c&&c.appBg,c&&c.accent]);
+  useEffect(()=>()=>{ if(only||deployMode)return; try{ window.dispatchEvent(new CustomEvent("sc-look-preview",{detail:null})); }catch(e){} },[]);
   const Tog=({k,label,hint,invert})=>(<label className="flex items-start gap-2 text-sm text-stone-700 cursor-pointer">
     <input type="checkbox" checked={invert?c[k]===false:!!c[k]} onChange={e=>set(k,invert?!e.target.checked:e.target.checked)} className="accent-[#0086E0] mt-0.5"/>
     <span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span></label>);
@@ -10603,8 +10619,8 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
     </Panel>
     <Panel title="After booking">
       <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
-        <span>Skip the booked summary, go straight to a new shipment<span className="block text-[11px] text-stone-400">The label still prints automatically — this just skips the tracking/copy/pickup card afterward and clears the form for the next order. Off by default so you can grab tracking or schedule a pickup right after booking.</span></span>
-        <button onClick={()=>set("skipBookedSummary",!c.skipBookedSummary)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${c.skipBookedSummary?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
+        <span>Show the booked summary after each label<span className="block text-[11px] text-stone-400">After a label prints, a popup shows the tracking number with Copy, Track, Email and Schedule-pickup buttons. Turn this off for hands-free kiosk mode — the label prints and the form clears with nothing left on screen.</span></span>
+        <button onClick={()=>set("skipBookedSummary",!c.skipBookedSummary)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${!c.skipBookedSummary?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
       </label>
       <label className="flex items-center justify-between gap-3 text-sm text-stone-700 mt-3">
         <span>Start a fresh blank shipment after each print<span className="block text-[11px] text-stone-400">As soon as a label prints, the Ship form clears itself for the next order — keeps the booked summary, just resets the canvas. Independent of kiosk mode.</span></span>
@@ -10731,7 +10747,10 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
           <div className="text-[11px] text-stone-400">Drag the rainbow for the hue, the second bar for light/dark — or use a preset above.</div>
         </div>);})()}
       <div className="border-t border-stone-100 mt-3 pt-3">
-        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Surface colors</div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400">Surface colors</div>
+          <button onClick={()=>{set("accent","");set("headerBg","");set("navBg","");set("pageBg","");}} className="text-[11px] text-stone-500 hover:text-rose-600 flex items-center gap-1 border border-stone-200 rounded-lg px-2 py-1"><RotateCcw className="w-3 h-3"/>Reset accent &amp; surfaces</button>
+        </div>
         <div className="grid sm:grid-cols-3 gap-3">
           {[["headerBg","Header fill"],["navBg","Left tabs"],["pageBg","Page background"]].map(([k,l])=>(
             <div key={k} className="flex items-center justify-between gap-2 text-sm text-stone-700 border border-stone-200 rounded-lg px-2.5 py-2">

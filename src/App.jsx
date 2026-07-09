@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v381";
+const BUILD_TAG="addr-v382";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -8964,8 +8964,28 @@ function PrinterSettings({settings,setSettings}){
   const DOC_KINDS=[["packSlip","Packing slips","Auto-printed slips and every Packing slip button"],["pickList","Pick lists","The Pick list buttons in Orders & Batch"],["docs","Receipts & other documents","Shipment receipts and commercial invoices"]];
   return (<div className="max-w-2xl space-y-4">
     <p className="text-sm text-stone-500">Controls how labels are generated and printed when you buy a label or run a batch.</p>
-    <Panel title="Direct printing — zero clicks, no dialog">
+    <Panel title="Ship & print automation">
       <div className="space-y-3">
+        <p className="text-[11px] text-stone-500 -mt-1">Set it once, top to bottom: what the app does when an order comes in, then exactly how the label prints and what pops up.</p>
+        <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2.5">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400">1 · When a matching order comes in</div>
+          <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
+            <span>On the Ship tab<span className="block text-[11px] text-stone-400">Your Autopilot rules choose the service.</span></span>
+            <select value={cust.autoRulesOnShip===false?"off":(cust.autoBookOnShip?"auto":"preselect")} onChange={e=>{const v=e.target.value;setCust("autoRulesOnShip",v!=="off");setCust("autoBookOnShip",v==="auto");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] shrink-0">
+              <option value="off">I choose the service</option>
+              <option value="preselect">Pre-select it — I click Book</option>
+              <option value="auto">Book &amp; print automatically</option>
+            </select>
+          </label>
+          <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
+            <span>On the Batch screen<span className="block text-[11px] text-stone-400">Apply rules across the whole batch.</span></span>
+            <select value={!cust.autoRulesInBatch?"off":(cust.autoBookBatch?"auto":"fill")} onChange={e=>{const v=e.target.value;setCust("autoRulesInBatch",v!=="off");setCust("autoBookBatch",v==="auto");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] shrink-0">
+              <option value="off">Do nothing</option>
+              <option value="fill">Fill in services</option>
+              <option value="auto">Fill in &amp; auto-book</option>
+            </select>
+          </label>
+        </div>
         {(()=>{ const ready=!!String(pnc.apiKey||"").trim()&&!!pnc.printerId;
           const mode=cust.skipBookedSummary?"handsfree":cust.directNoPreview?"nopreview":"preview";
           const armed=ready&&mode!=="preview";
@@ -8985,14 +9005,19 @@ function PrinterSettings({settings,setSettings}){
             <span><span className="text-sm font-semibold text-stone-800">{title}</span><span className="block text-[11px] font-normal text-stone-500 mt-0.5">{desc}</span></span>
           </label>);
           return (<div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2">
-            <div className="text-[10px] uppercase tracking-widest text-stone-400 flex items-center gap-1"><Zap className={`w-3 h-3 ${armed?"text-emerald-600":"text-stone-400"}`}/>What happens after you book a label</div>
-            <Opt v="handsfree" title="Hands-free — print & move on" desc="The label prints itself and the screen jumps to the next shipment. No Print button, no popup. Best for a counter or shared station."/>
-            <Opt v="nopreview" title="Print automatically, keep the summary" desc="The label prints itself, then a summary popup shows the tracking number with Copy, Track and pickup buttons. No label preview."/>
+            <div className="text-[10px] uppercase tracking-widest text-stone-400 flex items-center gap-1"><Zap className={`w-3 h-3 ${armed?"text-emerald-600":"text-stone-400"}`}/>2 · When a label is created — how it prints &amp; what you see</div>
+            <Opt v="handsfree" title="Hands-free — print & move on" desc="The label prints straight to the printer and the screen jumps to the next shipment. No Print button, no popup, no preview."/>
+            <Opt v="nopreview" title="Print automatically, keep the summary" desc="The label prints straight to the printer, then a summary popup shows the tracking number with Copy, Track and pickup buttons. No label preview."/>
             <Opt v="preview" title="Show a preview first" desc="Nothing prints until you check the label and click Print. Best when you want to eyeball each one."/>
+            {cust.autoBookOnShip&&mode==="preview"&&<p className="text-[11px] text-amber-600 mt-1 font-medium">Note: with “Book &amp; print automatically” chosen above, a preview still waits for your Print click — pick Hands-free or Keep-summary for true no-touch.</p>}
             {mode!=="preview"&&!ready&&<p className="text-[11px] text-amber-600 mt-1 font-medium">⚠ Finish the one-time printer setup below (paste the API key → Find my printers → pick your printer). Until then, labels open the normal print window.</p>}
             {mode!=="preview"&&ready&&<p className="text-[11px] text-emerald-700 mt-1">Active — labels print straight to <b>{pnc.printerName||("printer "+pnc.printerId)}</b>.</p>}
           </div>);
         })()}
+        <label className="flex items-center justify-between gap-3 text-sm text-stone-700 rounded-xl border border-stone-200 bg-stone-50 p-3">
+          <span>3 · Clear the form for the next order after each print<span className="block text-[11px] font-normal text-stone-400">Handy in “keep the summary” mode — the Ship form resets once a label prints while the summary popup stays up. Hands-free already does this.</span></span>
+          <button onClick={()=>setCust("resetAfterPrint",!cust.resetAfterPrint)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${cust.resetAfterPrint?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
+        </label>
         <p className="text-xs text-stone-500">Browsers can't skip the print dialog on their own — a tiny agent on the label computer does it. One-time setup: install the free <a href="https://www.printnode.com/en/download" target="_blank" rel="noreferrer" className="text-[#0086E0] hover:underline">PrintNode client</a> on the computer the printer is plugged into, sign in, then paste your API key (PrintNode dashboard → API Keys) here. After that, every label prints itself.</p>
         <div className="flex flex-wrap items-end gap-2">
           <label className="block text-sm text-stone-700 flex-1 min-w-[220px]">PrintNode API key
@@ -10583,7 +10608,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
       {CTABS.map(([v,l])=><button key={v} onClick={()=>setCs(v)} className={`px-3 py-2 text-sm rounded-t-lg whitespace-nowrap border-b-2 -mb-px ${cs===v?"border-[#0086E0] text-stone-900 font-medium":"border-transparent text-stone-500 hover:bg-stone-50"}`}>{l}</button>)}
     </div>}
 
-    {cs==="ship"&&<><Panel title="Ship screen">
+    {cs==="ship"&&<Panel title="Ship screen">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         <Tog k="hideRateSrcBar" label="Hide the rate-source banner" hint="Removes the ‘Live rates from your FedEx account / Estimated rates’ strip above the service list."/>
         <Tog k="hideAutopilotBox" label="Hide the Autopilot match banner" hint="Removes the ‘Autopilot rule matched…’ box above Select service. Rules still run and still pre-highlight the service."/>
@@ -10609,40 +10634,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
         <label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>Fallback service when no rule matches<span className="block text-[11px] text-stone-400">In Batch &amp; Autopilot, orders that don't match any of your rules use this service instead of being left unset. Blank = leave unset (no fallback).</span></span>
           <select value={c.fallbackService||""} onChange={e=>set("fallbackService",e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"><option value="">No fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
       </div>
-    </Panel>
-    <Panel title="After booking">
-      <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
-        <span>Show the booked summary after each label<span className="block text-[11px] text-stone-400">After a label prints, a popup shows the tracking number with Copy, Track, Email and Schedule-pickup buttons. Turn this off for hands-free kiosk mode — the label prints and the form clears with nothing left on screen.</span></span>
-        <button onClick={()=>set("skipBookedSummary",!c.skipBookedSummary)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${!c.skipBookedSummary?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
-      </label>
-      <label className="flex items-center justify-between gap-3 text-sm text-stone-700 mt-3">
-        <span>Start a fresh blank shipment after each print<span className="block text-[11px] text-stone-400">As soon as a label prints, the Ship form clears itself for the next order — keeps the booked summary, just resets the canvas. Independent of kiosk mode.</span></span>
-        <button onClick={()=>set("resetAfterPrint",!c.resetAfterPrint)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${c.resetAfterPrint?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
-      </label>
-    </Panel>
-    <Panel title="Autopilot — automatic service &amp; printing">
-      <div className="space-y-3">
-        <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
-          <span>When a matching order opens on Ship<span className="block text-[11px] text-stone-400">Your Autopilot rules decide the service — pick how far to take it.</span></span>
-          <select value={c.autoRulesOnShip===false?"off":(c.autoBookOnShip?"auto":"preselect")} onChange={e=>{const v=e.target.value;set("autoRulesOnShip",v!=="off");set("autoBookOnShip",v==="auto");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] shrink-0">
-            <option value="off">Do nothing</option>
-            <option value="preselect">Pre-select the service — I click Book</option>
-            <option value="auto">Book &amp; print automatically — no click</option>
-          </select>
-        </label>
-        {c.autoRulesOnShip!==false&&c.autoBookOnShip&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">Heads up: labels print the moment a matching order loads — make sure your rules are exactly right.</div>}
-        <label className="flex items-center justify-between gap-3 text-sm text-stone-700 border-t border-stone-100 pt-3">
-          <span>When the Batch screen opens<span className="block text-[11px] text-stone-400">Apply your rules across the whole batch at once.</span></span>
-          <select value={!c.autoRulesInBatch?"off":(c.autoBookBatch?"auto":"fill")} onChange={e=>{const v=e.target.value;set("autoRulesInBatch",v!=="off");set("autoBookBatch",v==="auto");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] shrink-0">
-            <option value="off">Do nothing</option>
-            <option value="fill">Fill in services from my rules</option>
-            <option value="auto">Fill in AND auto-book everything</option>
-          </select>
-        </label>
-        {c.autoRulesInBatch&&c.autoBookBatch&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">The whole batch books automatically — double-check your rules first.</div>}
-        <p className="text-[11px] text-stone-400">The rules themselves live on the <b>Autopilot</b> tab — this only controls when they run.</p>
-      </div>
-    </Panel></>}
+    </Panel>}
 
     {cs==="services"&&<Panel title="Rates & services">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">

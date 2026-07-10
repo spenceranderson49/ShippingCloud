@@ -52,5 +52,11 @@ ok(rateSellFor(8,"FedEx Ground",{rules:R3})===12,"Min $ floors the list-basis fa
 ok(rateSellFor(50,"FedEx 2Day®",{rules:R3})===50,"above the floor, cost passes through untouched");
 // account Min-$-profit floor must hold against the TRUE cost even when fees are discounted away
 ok(rateSellFor(20,"FedEx Home Delivery®",{rules:R3,client:{id:"cY",markupMin:10},surcharges:[{label:"Fuel Surcharge",amount:2}]})===30,"Min $ profit holds vs TRUE cost when a fee is waived");
+// flat $0 on a fee: FedEx bills $5.55 residential on Home Delivery; customer pays $0 for it
+const R6={profiles:[{id:"default",name:"D",services:{},surcharges:{"RES-HD":{type:"fixed",amount:0}}}],assign:{},baseCosts:{}};
+const p6={};
+ok(rateSellFor(15,"FedEx Home Delivery®",{rules:R6,surcharges:[{label:"Residential Surcharge",amount:5.55}],_parts:p6})===9.45,"flat $0 fee: total = base only (15 - 5.55 billed fee + 0 charged)");
+ok(p6.fees&&p6.fees.length===1&&p6.fees[0].amount===0,"breakdown shows the fee line at exactly $0.00");
+ok(p6.base===9.45,"breakdown base = the unmarked base");
 console.log(p+" passed, "+f+" failed");
 process.exit(f?1:0);

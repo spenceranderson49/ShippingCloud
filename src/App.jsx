@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v409";
+const BUILD_TAG="addr-v410";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -5796,6 +5796,30 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const liveRuleMatch=liveRuleStatus&&liveRuleStatus.state==="fired"?liveRuleStatus.service:null;
 
   const ready=postalOkFor(receiver.zip,receiver.country)&&totalWeight>0;
+  /* Every specific reason a quote can't populate, in plain language — a red banner in the
+     service area instead of silently blank rates. Checks each box individually (weight missing,
+     over FedEx's 150-lb parcel max, over the 108" side / 165" length-plus-girth limits) plus
+     the destination ZIP and the ship-from ZIP. */
+  const quoteProblems=useMemo(()=>{
+    const probs=[];
+    const z=String(receiver.zip||"").trim();
+    const isUS=!receiver.country||_isUSCountry(receiver.country);
+    if(!z)probs.push("Destination ZIP is missing.");
+    else if(!postalOkFor(receiver.zip,receiver.country))probs.push(`“${z}” isn't a valid ${isUS?"US ZIP":"postal code for "+receiver.country}.`);
+    pieces.forEach((p,i)=>{
+      const w=pw(p);
+      const tag=pieces.length>1?`Box #${i+1}`:"The package";
+      if(!(w>0))probs.push(`${tag} has no weight.`);
+      else if(w>150)probs.push(`${tag} is ${w} lb — over FedEx's 150 lb per-package max, so it can't be quoted. Split it into more boxes (or ship it freight).`);
+      const L=+p.L||0,W=+p.W||0,H=+p.H||0;
+      if(L>108||W>108||H>108)probs.push(`${tag}'s longest side is over 108" — FedEx won't accept it as a parcel.`);
+      else if(L&&W&&H){const s=[L,W,H].sort((x,y)=>y-x);const lg=s[0]+2*(s[1]+s[2]);if(lg>165)probs.push(`${tag} is ${lg}" length-plus-girth — over FedEx's 165" limit, so it can't be quoted.`);}
+    });
+    if(!String(originZip||"").trim())probs.push("Your ship-from ZIP is missing — add it under Settings → General → Default sender.");
+    // a brand-new blank form isn't an error state — stay quiet until they've started typing
+    const started=!!(String(receiver.zip||"").trim()||receiver.address1||receiver.name||receiver.city||totalWeight>0);
+    return started?probs:[];
+  },[receiver.zip,receiver.country,receiver.address1,receiver.name,receiver.city,JSON.stringify(pieces),originZip]);
   const shipment={fromZip:originZip,toZip:receiver.zip,toCountry:receiver.country||"United States",pieces:pieces.map(p=>({...p,weight:pw(p)})),residential,signature,signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:(intl?(+insurance||0):((pieces.length>1&&dvEach)?pieces.reduce((a,p)=>a+(+p.dv||0),0):(+insurance||0)*Math.max(1,pieces.length)))||null,intl,packageTypeCode:orBox?orBox.code:""};
   // Front screen shows FedEx only. Blank-price skeleton before rates load — intl destinations get
   // the INTERNATIONAL skeleton so a domestic list never flashes on an international shipment.
@@ -6207,6 +6231,10 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         </div>}
         {ready&&!custom.hideRateSrcBar&&!rateSrc.live&&!rateSrc.loading&&rateSrc.diag&&<div className="text-[11px] text-stone-400 -mt-1 px-1">
           Tried England on your <b>{rateSrc.diag.src==="customer"?"customer's":"main"}</b> account · from ZIP {rateSrc.diag.fromZip} · customer ID {rateSrc.diag.cust} · key {rateSrc.diag.key} · {rateSrc.diag.enabled?"live toggle ON":"live toggle OFF"}{!rateSrc.diag.hasKey?" · no API key found":""}{!rateSrc.diag.hasCust?" · no customer ID found":""}{rateSrc.diag.fromZip==="(none)"?" — no origin ZIP: set your sender ZIP or the customer's origin.":""}{rateSrc.error&&/401|invalid/i.test(rateSrc.error)?" — England rejected this key/ID pair. Re-enter it in Settings → Carrier accounts and Test again.":""}
+        </div>}
+        {quoteProblems.length>0&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-2 text-xs text-rose-700 space-y-1">
+          <div className="font-semibold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>{quoteProblems.length===1?"Rates can't load — fix this:":"Rates can't load — fix these:"}</div>
+          {quoteProblems.map((p2,i2)=><div key={i2} className="flex items-start gap-1.5"><span className="shrink-0">•</span><span>{p2}</span></div>)}
         </div>}
         {liveRuleStatus&&!custom.hideAutopilotBox&&<div className={`text-[11px] rounded px-3 py-2 mb-2 flex items-center gap-1.5 ${liveRuleStatus.state==="fired"?"bg-emerald-50 border border-emerald-200 text-emerald-800":liveRuleStatus.state==="error"?"bg-rose-50 border border-rose-200 text-rose-700":"bg-stone-50 border border-stone-200 text-stone-500"}`}>
           <Zap className="w-3.5 h-3.5 shrink-0"/>

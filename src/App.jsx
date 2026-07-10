@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v388";
+const BUILD_TAG="addr-v389";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -784,16 +784,23 @@ async function stampLogo(imgs,cfg,logoSrc){
 async function directPrintPdf(base64,title,ctx){
   const cfg=(typeof window!=="undefined"&&window.__scDirectPrint)||null;
   if(!cfg||!cfg.enabled||!cfg.apiKey||!cfg.printerId||!base64)return false;
+  /* Optional re-render for doc-tab / stock composition. It must NEVER break the send: only adopt the
+     re-rendered payload if it's a real, non-oversized PDF string. A raw test page prints fine while a
+     booked label didn't — because the re-render produced a payload PrintNode rejected. So we validate
+     it, and if the send with it fails we automatically retry with the carrier's ORIGINAL pdf. */
   let payload=base64;
-  try{ const r0=await pdfToImages(base64,3); if(r0&&r0.imgs.length){ const comp=await composeForStock(r0.imgs,r0.wIn,r0.hIn,ctx); if(r0.cropped||comp.changed){ payload=await imgsToLabelPdf(comp.imgs,comp.wIn,comp.hIn); } } }catch(e){}   // pdf.js down → send the original untouched
-  try{
-    const r=await fetch("/.netlify/functions/printnode",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"print",apiKey:cfg.apiKey,printerId:cfg.printerId,title:title||"Shipping label",pdfBase64:payload})});
+  try{ const r0=await pdfToImages(base64,3); if(r0&&r0.imgs.length){ const comp=await composeForStock(r0.imgs,r0.wIn,r0.hIn,ctx); if(r0.cropped||comp.changed){ const rp=await imgsToLabelPdf(comp.imgs,comp.wIn,comp.hIn); if(rp&&typeof rp==="string"&&rp.length>200&&rp.length<8*1024*1024)payload=rp; } } }catch(e){}
+  const send=async(pdf)=>{ try{
+    const r=await fetch("/.netlify/functions/printnode",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"print",apiKey:cfg.apiKey,printerId:cfg.printerId,title:title||"Shipping label",pdfBase64:pdf})});
     const d=await r.json().catch(()=>null);
-    if(d&&d.ok)return true;
-    /* Surface PrintNode's ACTUAL reason so "it just shows a dialog" stops being a mystery. */
-    try{ window.dispatchEvent(new CustomEvent("sc-direct-print-failed",{detail:{reason:"agent-unreachable",error:(d&&d.error)||("PrintNode wouldn't accept the job ("+r.status+")")}})); }catch(e){}
-    return false;
-  }catch(e){ try{ window.dispatchEvent(new CustomEvent("sc-direct-print-failed",{detail:{reason:"agent-unreachable",error:"Couldn't reach the print relay — "+((e&&e.message)||"network error")}})); }catch(_){} return false; }
+    return {ok:!!(d&&d.ok),err:(d&&d.error)||("PrintNode wouldn't accept the job ("+r.status+")")};
+  }catch(e){ return {ok:false,err:"Couldn't reach the print relay — "+((e&&e.message)||"network error")}; } };
+  let res=await send(payload);
+  if(!res.ok&&payload!==base64)res=await send(base64);   // re-rendered payload rejected → fall back to the carrier's original, which we know prints
+  if(res.ok)return true;
+  /* Surface PrintNode's ACTUAL reason so "it just shows a dialog" stops being a mystery. */
+  try{ window.dispatchEvent(new CustomEvent("sc-direct-print-failed",{detail:{reason:"agent-unreachable",error:res.err}})); }catch(e){}
+  return false;
 }
 /* ── multi-printer document routing (PrintNode) ─────────────────────────────
    Print settings lets each DOCUMENT TYPE pick its own printer:

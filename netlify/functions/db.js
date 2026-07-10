@@ -91,8 +91,50 @@ function verifyToken(token) {
   } catch { return null; }
 }
 
+/* ── two-factor auth (TOTP, RFC 6238) ── opt-in, off by default so no one can be locked out.
+   Standard base32 (RFC 4648) for the shared secret so Google Authenticator / Authy / 1Password
+   can scan the otpauth:// QR and produce matching 6-digit codes. HMAC-SHA1, 30-second step. */
+const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+function b32encode(buf) {
+  let bits = 0, val = 0, out = "";
+  for (let i = 0; i < buf.length; i++) { val = (val << 8) | buf[i]; bits += 8; while (bits >= 5) { out += B32[(val >>> (bits - 5)) & 31]; bits -= 5; } }
+  if (bits > 0) out += B32[(val << (5 - bits)) & 31];
+  return out;
+}
+function b32decode(str) {
+  const s = String(str || "").toUpperCase().replace(/=+$/, "").replace(/\s+/g, "");
+  let bits = 0, val = 0; const out = [];
+  for (let i = 0; i < s.length; i++) { const idx = B32.indexOf(s[i]); if (idx < 0) continue; val = (val << 5) | idx; bits += 5; if (bits >= 8) { out.push((val >>> (bits - 8)) & 255); bits -= 8; } }
+  return Buffer.from(out);
+}
+const newTotpSecret = () => b32encode(crypto.randomBytes(20));   // 160-bit secret
+function totpAt(secretB32, counter) {
+  const key = b32decode(secretB32);
+  const buf = Buffer.alloc(8);
+  // 64-bit counter, big-endian (write the low 32 bits; high bits are 0 until year ~10889)
+  buf.writeUInt32BE(Math.floor(counter / 0x100000000), 0);
+  buf.writeUInt32BE(counter >>> 0, 4);
+  const hmac = crypto.createHmac("sha1", key).update(buf).digest();
+  const off = hmac[hmac.length - 1] & 0xf;
+  const bin = ((hmac[off] & 0x7f) << 24) | ((hmac[off + 1] & 0xff) << 16) | ((hmac[off + 2] & 0xff) << 8) | (hmac[off + 3] & 0xff);
+  return String(bin % 1000000).padStart(6, "0");
+}
+function totpVerify(secretB32, code, step) {
+  const c = String(code || "").replace(/\D/g, "");
+  if (c.length !== 6 || !secretB32) return false;
+  const counter = Math.floor(Date.now() / 1000 / (step || 30));
+  // accept the current step ±1 (clock skew tolerance)
+  for (let w = -1; w <= 1; w++) {
+    try { if (crypto.timingSafeEqual(Buffer.from(totpAt(secretB32, counter + w)), Buffer.from(c))) return true; } catch { /* length mismatch */ }
+  }
+  return false;
+}
+const otpauthUrl = (email, secretB32, issuer) =>
+  "otpauth://totp/" + encodeURIComponent((issuer || "ShippingCloud") + ":" + email) +
+  "?secret=" + secretB32 + "&issuer=" + encodeURIComponent(issuer || "ShippingCloud") + "&algorithm=SHA1&digits=6&period=30";
+
 /* ── users store hygiene: hashes never leave; plaintext never stored ── */
-const stripUsers = (arr) => (Array.isArray(arr) ? arr : []).map((u) => ({ ...u, password: "", passHash: undefined }));
+const stripUsers = (arr) => (Array.isArray(arr) ? arr : []).map((u) => ({ ...u, password: "", passHash: undefined, totp: u && u.totp ? { enabled: !!u.totp.enabled } : undefined }));
 function mergeUsersForWrite(incoming, current) {
   const cur = Array.isArray(current) ? current : [];
   const byEmail = {}; for (const u of cur) if (u && u.email) byEmail[String(u.email).toLowerCase()] = u;
@@ -102,6 +144,9 @@ function mergeUsersForWrite(incoming, current) {
     const out = { ...u, password: "" };
     if (existing && existing.passHash) out.passHash = existing.passHash;      // NEVER change an existing password via a store write
     else if (u.password) out.passHash = hashPw(u.password);                    // brand-new user: hash their initial password
+    // 2FA secret is never sent to the client (stripUsers removes it) — a store write must NOT wipe it.
+    if (existing && existing.totp) out.totp = existing.totp;
+    else delete out.totp;
     return out;
   });
 }
@@ -168,7 +213,13 @@ exports.handler = async (event) => {
       }
       if (!u || !checkPw(password, u.passHash)) return J({ ok: false, error: "Incorrect email or password." });
       if (u.status && u.status !== "active") return J({ ok: false, error: "This account is inactive. Contact your administrator." });
-      return J({ ok: true, token: makeToken(u), user: { ...u, password: "", passHash: undefined } });
+      // Two-factor: only enforced once the user has fully enabled it (opt-in). Password is already verified here.
+      if (u.totp && u.totp.enabled && u.totp.secret) {
+        const code = String(body.code || "").replace(/\D/g, "");
+        if (!code) return J({ ok: false, needsTotp: true, error: "Enter the 6-digit code from your authenticator app." });
+        if (!totpVerify(u.totp.secret, code)) return J({ ok: false, needsTotp: true, error: "That code isn't right or has expired — try the current one." });
+      }
+      return J({ ok: true, token: makeToken(u), user: { ...u, password: "", passHash: undefined, totp: u.totp ? { enabled: !!u.totp.enabled } : undefined } });
     }
 
     /* ── request access (no auth): stores a pending signup for admin approval ── */
@@ -277,6 +328,51 @@ exports.handler = async (event) => {
     /* ── everything below requires a valid session ── */
     const auth = verifyToken(body.token);
     if (!auth) return J({ ok: false, authFailed: true, error: "Session expired — sign in again." });
+
+    /* ── two-factor auth management (self-service, per logged-in user) ── */
+    if (action === "totpBegin" || action === "totpEnable" || action === "totpDisable" || action === "totpStatus") {
+      const curU = await getStore("users");
+      if (!curU.ok) return J({ ok: false, error: "Database error reading accounts." });
+      const allUsers = Array.isArray(curU.value) ? curU.value : [];
+      const me = allUsers.find((x) => x && x.id === auth.uid) || null;
+      if (!me) return J({ ok: false, error: "Account not found." });
+
+      if (action === "totpStatus") return J({ ok: true, enabled: !!(me.totp && me.totp.enabled), pending: !!(me.totp && me.totp.secret && !me.totp.enabled) });
+
+      if (action === "totpBegin") {
+        // generate a fresh secret and stash it as pending (not yet enforced). Overwrites any prior pending.
+        const secret = newTotpSecret();
+        const merged = allUsers.map((x) => x && x.id === auth.uid ? { ...x, totp: { secret, enabled: false } } : x);
+        const w = await putStores({ users: merged });
+        if (!w.ok) return J({ ok: false, error: "Could not start 2FA setup — try again." });
+        return J({ ok: true, secret, otpauth: otpauthUrl(me.email || auth.email || "user", secret, "ShippingCloud") });
+      }
+
+      if (action === "totpEnable") {
+        if (!me.totp || !me.totp.secret) return J({ ok: false, error: "Start 2FA setup first." });
+        const code = String(body.code || "").replace(/\D/g, "");
+        if (!totpVerify(me.totp.secret, code)) return J({ ok: false, error: "That code isn't right or has expired — try the current one." });
+        const merged = allUsers.map((x) => x && x.id === auth.uid ? { ...x, totp: { secret: me.totp.secret, enabled: true } } : x);
+        const w = await putStores({ users: merged });
+        if (!w.ok) return J({ ok: false, error: "Could not turn on 2FA — try again." });
+        return J({ ok: true, enabled: true });
+      }
+
+      if (action === "totpDisable") {
+        // require a current code (or the account password) to switch it off, so a hijacked session can't.
+        if (me.totp && me.totp.enabled && me.totp.secret) {
+          const code = String(body.code || "").replace(/\D/g, "");
+          const pw = String(body.password || "");
+          const okCode = code && totpVerify(me.totp.secret, code);
+          const okPw = pw && checkPw(pw, me.passHash);
+          if (!okCode && !okPw) return J({ ok: false, error: "Enter a current 6-digit code (or your password) to turn off 2FA." });
+        }
+        const merged = allUsers.map((x) => x && x.id === auth.uid ? { ...x, totp: undefined } : x);
+        const w = await putStores({ users: merged });
+        if (!w.ok) return J({ ok: false, error: "Could not turn off 2FA — try again." });
+        return J({ ok: true, enabled: false });
+      }
+    }
 
     if (action === "getAll") {
       const r = await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&select=key,value");

@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v399";
+const BUILD_TAG="addr-v400";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -5665,7 +5665,16 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const intl=!!receiver.country&&receiver.country!=="United States";
   const setPiece=(i,patch)=>setPieces(ps=>ps.map((p,j)=>j===i?{...p,...patch}:p));
   const addPiece=()=>setPieces(ps=>[...ps,{...(ps[ps.length-1]||{weight:"",L:"",W:"",H:""})}]);
-  const delPiece=(i)=>setPieces(ps=>ps.length>1?ps.filter((_,j)=>j!==i):ps);
+  const delPiece=(i)=>{
+    if(pieces.length<=1)return;
+    const next=pieces.filter((_,j)=>j!==i);
+    /* Dropping back to a single box while "per box" declared value is on would strip the
+       per-box Insure $ input (it only shows for multipiece) and fall back to the empty shared
+       field — silently shipping the last box uninsured. Preserve the remaining box's value into
+       the shared field and leave per-box mode so quote and booking agree. */
+    if(next.length===1&&dvEach){ const dv=+next[0].dv||0; if(dv)setInsurance(String(dv)); setDvEach(false); }
+    setPieces(next);
+  };
   // When a One Rate service is chosen, set package #1 to the matching FedEx One Rate box size.
   const applyOneRateBox=(code)=>{ const b=FEDEX_ONERATE.find(x=>x.code===code); if(!b||!b.dims)return; setPieces(ps=>ps.map((p,j)=>j===0?{...p,L:b.dims.L,W:b.dims.W,H:b.dims.H,boxIdx:-1,orBox:b.name.replace(/FedEx\s*One Rate®?\s*/i,"")}:p)); const val="FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,""); const f=settings?.orBoxField||"invoice"; const fill=(set)=>set(prev=>prev&&prev.trim()?prev:val); if(f==="invoice")fill(setInvoiceNo); else if(f==="po")fill(setPoNo); else if(f==="reference")fill(setReference); };
   const pw=(p)=>Math.round(((+p.weight||0)+(+p.oz||0)/16)*1000)/1000;
@@ -7946,7 +7955,12 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         if(!picked){
           if(rule==="ground")picked=qs.filter(q=>/ground|home/i.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
           else if(rule==="fastest")picked=qs.slice().sort((a,b)=>speedRank(a.label)-speedRank(b.label)||a.cost-b.cost)[0];
-          else if(rule==="specific")picked=qs.find(q=>String(q.label).toLowerCase().includes(specSvc.toLowerCase().replace(/^fedex\s*/,"")))||qs[0];
+          /* Book the SAME service the preview priced. This used a loose substring match + qs[0]
+             fallback, so "FedEx 2Day" could book "FedEx One Rate 2Day" (or, on no match, an
+             arbitrary unsorted rate) — a different, possibly pricier label than the row showed.
+             Mirror computeRate exactly: exact key match (cheapest), then carrier fallback, else
+             no pick → the order is skipped with "No rate" rather than silently mis-booked. */
+          else if(rule==="specific")picked=qs.filter(q=>svcPrefHit(specSvc,q.label)).sort((a,b)=>(a.cost||0)-(b.cost||0))[0]||qs.filter(q=>carrierOf(q.label)===specCarrier).sort((a,b)=>(a.cost||0)-(b.cost||0))[0];
           else picked=qs.slice().sort((a,b)=>a.cost-b.cost)[0];
         }
       }catch(e){}

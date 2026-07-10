@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v398";
+const BUILD_TAG="addr-v399";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7769,7 +7769,13 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
        Ground Economy, so the Batch preview showed a different service than run() booked. */
     return qs.filter(q=>svcPrefHit(P,q.label)).sort((a,b)=>(a.cost||0)-(b.cost||0))[0]||null;
   };
-  const rateFor=(o)=>{
+  /* Rate for one order. This is a HOT path — it was being recomputed for every order
+     several times per render (filter chips, rows, groups, subtotals), which made the Batch
+     screen laggy on big order sets. We memoize the whole pool's rates below (ratesById) and
+     have rateFor read from that cache; a cache miss falls back to computing live, so the
+     result is always identical — the memo is a pure speed optimization, never a source of
+     stale prices. Keep computeRate's inputs in sync with the ratesById dependency array. */
+  const computeRate=(o)=>{
     const pk=packs[o.id];
     const hs=new Set(cz(settings).hiddenServices||[]);
     const bs=new Set((client&&client.blockedServices)||[]);
@@ -7787,6 +7793,8 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
     }
     return pick||{label:"—",cost:0,sell:0};
   };
+  const ratesById=useMemo(()=>{const m={};pool.forEach(o=>{m[o.id]=computeRate(o);});return m;},[orders,packs,settings,client,rateRules,svcOv,rule,specSvc,specCarrier]);
+  const rateFor=(o)=>(o&&ratesById[o.id])||computeRate(o);
   const zoneOf=(o)=>String(zoneEst(client.origin,o.zip));
   const prodOf=(o)=>o.product||o.items||"—";
   const ageDays=(o)=>{const t=Date.parse(o.date||"");return isNaN(t)?null:Math.max(0,Math.floor((Date.now()-t)/86400000));};
@@ -7805,7 +7813,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
     return true;
   };
   const SORTS={newest:(a,b)=>(Date.parse(b.date||0)||0)-(Date.parse(a.date||0)||0),oldest:(a,b)=>(Date.parse(a.date||0)||0)-(Date.parse(b.date||0)||0),heaviest:(a,b)=>(+b.weight||0)-(+a.weight||0),lightest:(a,b)=>(+a.weight||0)-(+b.weight||0),value:(a,b)=>(+b.total||0)-(+a.total||0),state:(a,b)=>String(a.state||"").localeCompare(String(b.state||"")),zone:(a,b)=>(+zoneOf(a))-(+zoneOf(b))};
-  const visible=pool.filter(matches).sort(SORTS[sortBy]||(()=>0));
+  const visible=useMemo(()=>pool.filter(matches).sort(SORTS[sortBy]||(()=>0)),[orders,fs,wMin,wMax,tMin,tMax,age,dFrom,dTo,search,sortBy,ratesById,client]);
   const toggleDim=(d,v)=>setFs(f=>{const n={...f,[d]:new Set(f[d])};n[d].has(v)?n[d].delete(v):n[d].add(v);return n;});
   const activeFilters=Object.values(fs).reduce((a,st)=>a+st.size,0)+(wMin!==""?1:0)+(wMax!==""?1:0)+(tMin!==""?1:0)+(tMax!==""?1:0)+(age!=="any"?1:0)+(dFrom?1:0)+(dTo?1:0);
   const clearFilters=()=>{setFs({state:new Set(),zone:new Set(),source:new Set(),sku:new Set(),product:new Set(),service:new Set(),carrier:new Set()});setWMin("");setWMax("");setTMin("");setTMax("");setAge("any");setDFrom("");setDTo("");setSearch("");setProdQ("");};

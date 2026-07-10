@@ -7,7 +7,10 @@ Read-only audit of `src/App.jsx`. The codebase is generally well-optimized (39 `
 - **#5 `EST_CACHE` unbounded** (`App.jsx` ~6612) — the `LiveEstRate` module cache never evicted; now capped at 2000 keys (drops oldest).
 - **Trivial: `SOURCE_TONE`** — hoisted from inside `Orders` render to a module constant (was rebuilt every render).
 
-## Flagged, NOT changed (RISKY — needs supervised review)
+## Now FIXED (addr-v399) — the Batch rate hot path
+- **#1 + #2 done, the SAFE way.** `Batch.rateFor` now reads from a memoized `ratesById` map (`useMemo` over `[orders,packs,settings,client,rateRules,svcOv,rule,specSvc,specCarrier]` — every input `computeRate` reads). `rateFor(o) = ratesById[o.id] || computeRate(o)`: a cache hit returns exactly what a live compute would (same function, all inputs in the dep array), and a **cache miss falls back to computing live** — so the memo is a pure speed optimization that can never produce a stale/wrong price. `visible` is also memoized now. Proven by identical-body + fallback-on-miss reasoning, plus tsc/build/smoke/regression all green. Result: on a 200-order batch, rate computations drop from ~15–20k per render to ~200 (once), so search/checkbox/expand no longer recompute every order's rate.
+
+## Original finding (kept for reference)
 - **#1 `Batch.rateFor()` runs `quoteRates()` for every order, many times per render — the single biggest issue.**
   - Def `App.jsx:7771`; hot call sites: `8063-8064` (`dimValues("carrier")`), `8184`/`8193` (`visible.map(OrderRow)`), `7996` (`groups`), `8189` (group subtotal reduce), `7905` (`rows`).
   - `rateFor(o)` calls `quoteRates()` (iterates all `SERVICES`) with no memoization. The Carrier filter chip row calls it for every order in `pool` on every render; combined with per-row + grouping + subtotals, a batch of N orders triggers ~2–4×N `quoteRates` calls on every keystroke/checkbox/expand. At 200 orders ≈ 15–20k rate computations per render.

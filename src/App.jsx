@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v415";
+const BUILD_TAG="addr-v416";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -712,7 +712,7 @@ async function printImagePagesBatch(base64List,settingsForLogo,onProgress){
       const r=await pdfToImages(items[i].pdf,3);
       if(!r.imgs.length)throw new Error("no pages");
       let imgs=r.imgs;
-      if(settingsForLogo){ try{ const cc=cz(settingsForLogo); const lg=cc.labelLogo||settingsForLogo.companyLogo||""; imgs=await stampLogo(imgs,cc,lg); }catch(e){} }
+      try{ const ex=await applyPrintExtras(imgs,items[i].ctx); imgs=ex.imgs; }catch(e){}
       const comp=await composeForStock(imgs,r.wIn,r.hIn,items[i].ctx);
       allImgs=allImgs.concat(comp.imgs);
       if(i===0){ wIn=comp.wIn; hIn=comp.hIn; }
@@ -780,11 +780,85 @@ async function stampLogo(imgs,cfg,logoSrc){
     if(cfg.labelLogoPos==="bottom_right"){x=page.width-w-pad;}
     else if(cfg.labelLogoPos==="top_right"){x=page.width-w-pad;y=pad;}
     else if(cfg.labelLogoPos==="top_left"){y=pad;}
+    /* fine-tune nudge from the corner anchor (% of page size, set with the live preview) */
+    x=Math.max(0,Math.min(page.width-w,x+Math.round(page.width*((+cfg.labelLogoDX||0)/100))));
+    y=Math.max(0,Math.min(page.height-h,y+Math.round(page.height*((+cfg.labelLogoDY||0)/100))));
     cx.fillStyle="#ffffff";cx.fillRect(x-2,y-2,w+4,h+4);
     cx.drawImage(logo,x,y,w,h);
     out.push(cv.toDataURL("image/png"));
   }
   return out;
+}
+/* Render the customizable receipt as a 4×6 label PAGE (canvas → PNG) so it can ride the same
+   pipeline as the label itself — printed as the second label right after the shipping label,
+   on PrintNode and every fallback alike. Content comes from settings.receipt (same field
+   bindings as the doc-tab designer, resolved via resolveDocField). */
+async function renderReceiptPage(rc,ctx,logoUrl){
+  try{
+    if(!rc||!ctx)return null;
+    const W=1200,H=1800;   // 4×6 @300dpi
+    const cv=document.createElement("canvas");cv.width=W;cv.height=H;
+    const g=cv.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,W,H);
+    const M=90;let y=M;
+    if(logoUrl){ const im=await new Promise(res=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>res(null);i.src=logoUrl;});
+      if(im){ const lw=Math.min(W*0.5,W*0.35),lh=lw*(im.height/im.width); g.drawImage(im,M,y,lw,Math.min(lh,200)); y+=Math.min(lh,200)+40; } }
+    const fs=Math.round(((+rc.fontSize||11)/11)*44);
+    g.fillStyle="#1c1917";g.font="800 "+Math.round(fs*1.35)+"px system-ui, -apple-system, sans-serif";
+    g.fillText(String(rc.title||"Shipment Receipt"),M,y+fs);y+=Math.round(fs*1.8);
+    g.fillRect(M,y,W-2*M,5);y+=50;
+    const lines=(rc.lines||[]).map(l=>({label:l.label,value:resolveDocField(l.field,ctx,l.custom)})).filter(l=>l.value!=="");
+    for(const l of lines){
+      if(y>H-M)break;
+      g.font="400 "+fs+"px system-ui, -apple-system, sans-serif";
+      const lb=l.label?String(l.label)+": ":"";
+      g.fillStyle="#78716c";g.fillText(lb,M,y+fs);
+      g.fillStyle="#1c1917";g.font="600 "+fs+"px system-ui, -apple-system, sans-serif";
+      g.fillText(String(l.value),M+(lb?g.measureText(lb).width+8:0),y+fs);
+      y+=Math.round(fs*1.7);
+    }
+    return cv.toDataURL("image/png");
+  }catch(e){ return null; }
+}
+/* Apply the globally-synced print extras (logo stamp + receipt second page) to a set of label
+   page images. Used by EVERY print path so what you preview is exactly what prints. */
+async function applyPrintExtras(imgs,ctx){
+  let out=imgs,changed=false;
+  const x=(typeof window!=="undefined"&&window.__scPrintExtras)||null;
+  if(!x||!imgs||!imgs.length)return {imgs:out,changed};
+  try{ if(x.logo&&x.logo.on&&x.logo.src){ const s=await stampLogo(out,{labelLogoOn:true,labelLogoPos:x.logo.pos,labelLogoScale:x.logo.scale,labelLogoDX:x.logo.dx,labelLogoDY:x.logo.dy},x.logo.src); if(s!==out){out=s;changed=true;} } }catch(e){}
+  try{ if(x.receipt&&x.receipt.enabled&&x.receipt.cfg&&ctx){ const pg=await renderReceiptPage(x.receipt.cfg,ctx,x.receipt.logo); if(pg){out=[...out,pg];changed=true;} } }catch(e){}
+  return {imgs:out,changed};
+}
+/* Live preview of the receipt page, rendered by the SAME renderReceiptPage that prints — what
+   you see in Settings is pixel-for-pixel what comes off the printer. */
+function ReceiptPreviewImg({rc,logo}){
+  const [src,setSrc]=useState(null);
+  useEffect(()=>{let dead=false;(async()=>{
+    const ctx={reference:"SO-1042",invoiceNo:"INV-88",orderNo:"#1042",shipDate:new Date().toLocaleDateString(),service:"FedEx 2Day",weight:"3 lb",pieces:"1",declaredValue:"$100",recipientName:"Jane Doe",recipientCompany:"Acme Co",recipientZip:"84084",senderName:"A. Shipper",senderCompany:"Your Company",cost:"$9.12",tracking:"794912345678"};
+    const u=await renderReceiptPage(rc,ctx,rc&&rc.showLogo!==false?logo:"");
+    if(!dead)setSrc(u);
+  })();return ()=>{dead=true;};},[JSON.stringify(rc||{}),logo]);
+  return src?<img src={src} alt="receipt preview" className="w-52 border border-stone-300 rounded shadow-sm bg-white"/>:<div className="w-52 h-72 border border-dashed border-stone-300 rounded flex items-center justify-center text-[11px] text-stone-400">rendering…</div>;
+}
+/* Live preview of the logo stamped on a MOCK 4×6 label, using the SAME stampLogo that prints —
+   move/resize it here and the print matches exactly. */
+function LabelLogoPreviewImg({cfg,logo}){
+  const [src,setSrc]=useState(null);
+  useEffect(()=>{let dead=false;(async()=>{
+    try{
+      const W=600,H=900;const cv=document.createElement("canvas");cv.width=W;cv.height=H;const g=cv.getContext("2d");
+      g.fillStyle="#fff";g.fillRect(0,0,W,H);g.strokeStyle="#d6d3d1";g.strokeRect(4,4,W-8,H-8);
+      g.fillStyle="#1c1917";g.font="700 34px system-ui";g.fillText("SAMPLE  LABEL",30,60);
+      g.font="400 20px system-ui";g.fillStyle="#57534e";
+      ["FROM: Your Company","215 S State St","Salt Lake City UT 84101","","TO: JANE DOE","127 MARKET ST","AUSTIN TX 78701-1234"].forEach((t,i)=>g.fillText(t,30,110+i*30));
+      g.fillStyle="#1c1917";for(let i=0;i<46;i++){const bw=(i*7919)%3+1;g.fillRect(40+i*11,H-260,bw*3,120);}
+      g.font="700 26px system-ui";g.fillText("TRK# 7949 1234 5678",40,H-100);
+      const mock=cv.toDataURL("image/png");
+      const out=logo?await stampLogo([mock],{labelLogoOn:true,labelLogoPos:cfg.labelLogoPos,labelLogoScale:cfg.labelLogoScale,labelLogoDX:cfg.labelLogoDX,labelLogoDY:cfg.labelLogoDY},logo):[mock];
+      if(!dead)setSrc(out[0]||mock);
+    }catch(e){}
+  })();return ()=>{dead=true;};},[cfg.labelLogoPos,cfg.labelLogoScale,cfg.labelLogoDX,cfg.labelLogoDY,logo]);
+  return src?<img src={src} alt="label logo preview" className="w-56 border border-stone-300 rounded shadow-sm bg-white"/>:<div className="w-56 h-[336px] border border-dashed border-stone-300 rounded"/>;
 }
 /* Direct (zero-dialog) printing via a PrintNode agent on the workstation. Config synced
    from settings.printNode into window.__scDirectPrint by the App shell. Returns true only
@@ -799,7 +873,7 @@ async function directPrintPdf(base64,title,ctx){
      booked label didn't — because the re-render produced a payload PrintNode rejected. So we validate
      it, and if the send with it fails we automatically retry with the carrier's ORIGINAL pdf. */
   let payload=base64;
-  try{ const r0=await pdfToImages(base64,3); if(r0&&r0.imgs.length){ const comp=await composeForStock(r0.imgs,r0.wIn,r0.hIn,ctx); if(r0.cropped||comp.changed){ const rp=await imgsToLabelPdf(comp.imgs,comp.wIn,comp.hIn); if(rp&&typeof rp==="string"&&rp.length>200&&rp.length<8*1024*1024)payload=rp; } } }catch(e){}
+  try{ const r0=await pdfToImages(base64,3); if(r0&&r0.imgs.length){ const ex=await applyPrintExtras(r0.imgs,ctx); const comp=await composeForStock(ex.imgs,r0.wIn,r0.hIn,ctx); if(r0.cropped||comp.changed||ex.changed){ const rp=await imgsToLabelPdf(comp.imgs,comp.wIn,comp.hIn); if(rp&&typeof rp==="string"&&rp.length>200&&rp.length<8*1024*1024)payload=rp; } } }catch(e){}
   /* PrintNode needs BARE base64 — strip any "data:application/pdf;base64," prefix a re-render
      (canvas toDataURL) or the carrier payload may carry, or PrintNode rejects it and the label falls
      to the browser dialog. The validity check already strips this; the send must too. */
@@ -964,7 +1038,8 @@ function openLabelOrDirectPrint(payload,settings,setLabelPreview){
            half pages). Only if pdf.js is unavailable do we fall back to the sized PDF frame. */
         (async()=>{ try{
           const r0=await pdfToImages(payload.pdf,3);
-          const r=await composeForStock(r0.imgs,r0.wIn,r0.hIn,docCtxFor(payload.rec,payload.tracking));
+          const ex=await applyPrintExtras(r0.imgs,docCtxFor(payload.rec,payload.tracking));
+          const r=await composeForStock(ex.imgs,r0.wIn,r0.hIn,docCtxFor(payload.rec,payload.tracking));
           if(r&&r.imgs&&r.imgs.length){ printImagePages(r.imgs,r.wIn,r.hIn); return; }
           throw new Error("no pages");
         }catch(e){ try{ const u=pdfBlobUrl(payload.pdf); printPdfUrl(u); setTimeout(()=>{try{URL.revokeObjectURL(u);}catch(_){}},180000); }catch(_){ setLabelPreview(payload); } } })();
@@ -980,7 +1055,7 @@ function openLabelOrDirectPrint(payload,settings,setLabelPreview){
 async function printLabelPdf(base64,stForLogo,ctx){
   if(await directPrintPdf(base64,undefined,ctx))return true;   // straight to the printer — no dialog
   try{ const r0=await pdfToImages(base64,4);
-    if(stForLogo){ try{ const cc=cz(stForLogo); r0.imgs=await stampLogo(r0.imgs,cc,cc.labelLogo||stForLogo.companyLogo||""); }catch(e){} }
+    try{ const ex=await applyPrintExtras(r0.imgs,ctx); r0.imgs=ex.imgs; }catch(e){}
     const r=await composeForStock(r0.imgs,r0.wIn,r0.hIn,ctx);
     if(!r.imgs.length)throw new Error("no pages"); printImagePages(r.imgs,r.wIn,r.hIn); return true; }
   catch(e){ try{ const u=pdfBlobUrl(base64); printPdfUrl(u); setTimeout(()=>URL.revokeObjectURL(u),180000); return true; }catch(e2){ return false; } }
@@ -5239,6 +5314,17 @@ function AppInner(){
       const carrierStock=(dtb&&dtb.enabled&&src==="app")?"4x6":size;
       window.__scLabelStock={size,carrierStock,docTab:dtb,source:src};
     }catch(e){} },[settings&&settings.printer,settings&&settings.docTab]);
+  /* Print extras — the company logo stamped on every label and the receipt printed as a second
+     label page — synced globally so EVERY print path (PrintNode direct, hands-free fallback,
+     batch, preview modal) applies the exact same treatment. */
+  useEffect(()=>{ try{
+      const cc=cz(settings);
+      const rc=settings&&settings.receipt;
+      window.__scPrintExtras={
+        logo:{on:!!cc.labelLogoOn,src:cc.labelLogo||settings.companyLogo||"",pos:cc.labelLogoPos||"bottom_left",scale:cc.labelLogoScale,dx:cc.labelLogoDX,dy:cc.labelLogoDY},
+        receipt:{enabled:!!(rc&&rc.enabled&&rc.withLabel!==false),cfg:rc||null,logo:(rc&&rc.showLogo!==false?(settings.companyLogo||""):"")}
+      };
+    }catch(e){} },[settings&&settings.custom,settings&&settings.receipt,settings&&settings.companyLogo]);
   const brand=BRAND.fw
     ?{...DEFAULT_BRAND,name1:"FREIGHT",name2:"WIRE SHIP",dark:"#1c1917",primary:"#1E9BF0",...(settings.brand||{})}
     :{...DEFAULT_BRAND,...(settings.brand||{})};
@@ -6533,7 +6619,7 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
         let r=await pdfToImages(data.pdf,3);
         if(dead)return;
         if(!r.imgs.length)throw new Error("no pages");
-        try{ const cc=cz(st); const lg=cc.labelLogo||st.companyLogo||""; r.imgs=await stampLogo(r.imgs,cc,lg); }catch(e){}
+        try{ const ex=await applyPrintExtras(r.imgs,docCtx); r.imgs=ex.imgs; }catch(e){}   // logo + receipt page — the preview shows exactly what prints
         try{ r=await composeForStock(r.imgs,r.wIn,r.hIn,docCtxFor(data.rec,data.tracking)); }catch(e){}
         setPages(r);
         if(!printed.current&&data.autoPrint!==false&&!autoPrintOff){
@@ -9545,6 +9631,7 @@ function PrinterSettings({settings,setSettings}){
     <Panel title="Receipt">
       <p className="text-xs text-stone-500 leading-relaxed">Print a shipment receipt alongside the label — a quick record for the counter, the driver, or the customer. Choose the size, the fields, and the text size.</p>
       <label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={!!rc.enabled} onChange={e=>setRc({enabled:e.target.checked})}/>Print a receipt with each label</label>
+      {rc.enabled&&<label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={rc.withLabel!==false} onChange={e=>setRc({withLabel:e.target.checked})}/>Print it automatically as a <b>second label</b> right after every shipping label<span className="block text-[11px] font-normal text-stone-400 ml-0">Rides the same print job — PrintNode, hands-free and batch included. Turn off to print receipts only from the shipment popup.</span></label>}
       {rc.enabled&&<>
         <div className="grid grid-cols-2 gap-2">
           <Field label="Receipt size">
@@ -9571,12 +9658,8 @@ function PrinterSettings({settings,setSettings}){
           <button onClick={addLine} className="text-xs text-[#0086E0] font-medium flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add line</button>
         </div>
         <div className="rounded-lg border border-stone-200 bg-white p-3">
-          <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Preview</div>
-          <div className="inline-block border border-stone-300 rounded bg-white px-4 py-3 min-w-[200px] shadow-sm">
-            {rc.showLogo!==false&&<div className="text-[11px] font-semibold text-stone-400 mb-1">[ Company logo ]</div>}
-            <div className="font-bold text-stone-800 mb-2" style={{fontSize:((rc.fontSize||11)+3)+"pt"}}>{rc.title||"Shipment Receipt"}</div>
-            {rcLines.map(l=>(<div key={l.id} style={{fontSize:(rc.fontSize||11)+"pt",lineHeight:1.5}} className="text-stone-700"><span className="text-stone-400">{l.label}: </span>{l.field==="custom"?(l.custom||"—"):("{"+DOCTAB_LABEL[l.field]+"}")}</div>))}
-          </div>
+          <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Preview — exactly as it prints (4×6, sample data)</div>
+          <ReceiptPreviewImg rc={{...rc,lines:rcLines}} logo={settings.companyLogo||""}/>
         </div>
       </>}
     </Panel>
@@ -9592,13 +9675,24 @@ function PrinterSettings({settings,setSettings}){
           <label className="text-[11px] text-[#006FBF] hover:underline cursor-pointer">Upload a label-specific logo<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>setCust("labelLogo",String(rd.result));rd.readAsDataURL(f);}}/></label>
           {cust.labelLogo&&<button onClick={()=>setCust("labelLogo","")} className="text-[11px] text-stone-400 hover:text-rose-500">Remove (use company logo)</button>}
         </div>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <label className="block text-sm text-stone-700">Position
-            <select value={cust.labelLogoPos||"bottom_left"} onChange={e=>setCust("labelLogoPos",e.target.value)} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm">
-              <option value="bottom_left">Bottom left (safest)</option><option value="bottom_right">Bottom right</option><option value="top_left">Top left</option><option value="top_right">Top right</option>
-            </select></label>
-          <label className="block text-sm text-stone-700">Size <span className="text-[11px] text-stone-400">· {cust.labelLogoScale||22}% of label width</span>
-            <input type="range" min="8" max="45" step="1" value={cust.labelLogoScale||22} onChange={e=>setCust("labelLogoScale",+e.target.value)} className="mt-1 w-full"/></label>
+        <div className="flex flex-wrap gap-4 items-start">
+          <div className="flex-1 min-w-[220px] space-y-3">
+            <label className="block text-sm text-stone-700">Position
+              <select value={cust.labelLogoPos||"bottom_left"} onChange={e=>setCust("labelLogoPos",e.target.value)} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm">
+                <option value="bottom_left">Bottom left (safest)</option><option value="bottom_right">Bottom right</option><option value="top_left">Top left</option><option value="top_right">Top right</option>
+              </select></label>
+            <label className="block text-sm text-stone-700">Size <span className="text-[11px] text-stone-400">· {cust.labelLogoScale||22}% of label width</span>
+              <input type="range" min="8" max="45" step="1" value={cust.labelLogoScale||22} onChange={e=>setCust("labelLogoScale",+e.target.value)} className="mt-1 w-full"/></label>
+            <label className="block text-sm text-stone-700">Nudge left / right <span className="text-[11px] text-stone-400">· {cust.labelLogoDX||0}%</span>
+              <input type="range" min="-20" max="20" step="1" value={cust.labelLogoDX||0} onChange={e=>setCust("labelLogoDX",+e.target.value)} className="mt-1 w-full"/></label>
+            <label className="block text-sm text-stone-700">Nudge up / down <span className="text-[11px] text-stone-400">· {cust.labelLogoDY||0}%</span>
+              <input type="range" min="-20" max="20" step="1" value={cust.labelLogoDY||0} onChange={e=>setCust("labelLogoDY",+e.target.value)} className="mt-1 w-full"/></label>
+            {(cust.labelLogoDX||cust.labelLogoDY)?<button onClick={()=>{setCust("labelLogoDX",0);setCust("labelLogoDY",0);}} className="text-[11px] text-stone-400 hover:text-stone-600 underline">Reset nudge</button>:null}
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Live preview — sample label</div>
+            <LabelLogoPreviewImg cfg={cust} logo={cust.labelLogo||settings.companyLogo||""}/>
+          </div>
         </div>
         <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">Print one test label and check the logo isn't near a barcode before running volume — carriers can refuse labels with obscured barcodes.</p>
       </div>}

@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v403";
+const BUILD_TAG="addr-v404";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6472,32 +6472,29 @@ function matchRequestedService(quotes,requested,res=null){
 }
 function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=true,onOneRate,custom=CUSTOM_DEFAULTS,matched=null,matchedSrc=null,collapsible=false,oneRateWarning=null,billing=null,live=false,loading=false,addrClassified=true}){
   const [showAll,setShowAll]=useState(false);
-  /* Once Autopilot has matched a service, stay collapsed on it. When FedEx classifies the address
-     it flips residential, which swaps Ground<->Home Delivery AND kicks off a live reprice — during
-     that window `matched` briefly points at a key that's momentarily absent from the list (or the
-     list is empty while rates reload). Without a hold, `collapse` flips false for a frame and the
-     WHOLE list expands then re-collapses — the "closed → open → closed" bounce. We hold the collapsed
-     state through the entire transition and only expand when the user asks (Show all) or there's a
-     STABLE no-match (rates loaded, no autopilot match at all). */
+  /* "Hide other services" mode shows ONE service box. It must stay a single box at all times —
+     switching orders and the Ground<->Home Delivery swap (FedEx address classification, which also
+     reprices) both briefly leave `matched` pointing at a key that's momentarily absent. Earlier this
+     made the whole list expand then re-collapse (closed→open→closed). The collapse decision no longer
+     depends on `matched`/`loading` at all: in matchedOnly mode we ALWAYS collapse (until the user
+     clicks "Show all"), and only the CONTENTS of the one box change. */
   const lastMatchFamRef=React.useRef(null);
   const matchStillPresent=matched&&quotes.some(q=>q.key===matched);
   if(matchStillPresent){ const mq=quotes.find(q=>q.key===matched); if(mq)lastMatchFamRef.current=svcFamilyKey(mq.label); }
-  const wasCollapsedRef=React.useRef(false);
-  const collapseBase=collapsible&&custom.matchedOnly&&!showAll;   // NOT gated on `matched` — that's what let a transient null expand the list
-  if(collapseBase&&matchStillPresent)wasCollapsedRef.current=true;
-  // Drop the hold only on an explicit expand, or a settled no-match (not loading, rates present, still nothing matched).
-  if(showAll||(!matched&&!loading&&quotes.length>0&&!matchStillPresent))wasCollapsedRef.current=false;
-  const collapse=collapseBase&&(matchStillPresent||wasCollapsedRef.current);
-  /* The single row to show when collapsed: the matched quote — but if the swap/reprice has momentarily
-     dropped the exact key (or emptied the list), fall back to the same service FAMILY (ground<->home),
-     then to the last row we showed, so exactly one stable row stays put through the whole transition. */
+  const collapse=collapsible&&custom.matchedOnly&&!showAll;
+  /* The single row to show when collapsed. In order of preference: the exact matched quote → the same
+     service FAMILY (so a Ground<->Home swap just relabels the one box) → the last row we showed (covers
+     the instant the list is empty mid-reprice) → the cheapest priced service (an order with no match
+     still shows one sensible box instead of expanding). Exactly one stable row, always. */
   const lastRowsRef=React.useRef([]);
   const collapsedRows=()=>{
+    if(!quotes.length)return lastRowsRef.current;   // momentary empty during a reprice — keep the last row visible
     let r=quotes.filter(q=>q.key===matched);
     if(!r.length&&matched){ const mfam=(()=>{const mq=quotes.find(q=>q.key===matched);return mq?svcFamilyKey(mq.label):null;})();
-      const famKey=lastMatchFamRef.current||mfam;
+      const famKey=mfam||lastMatchFamRef.current;
       if(famKey)r=quotes.filter(q=>svcFamilyKey(q.label)===famKey).slice(0,1); }
     if(!r.length&&lastMatchFamRef.current)r=quotes.filter(q=>svcFamilyKey(q.label)===lastMatchFamRef.current).slice(0,1);
+    if(!r.length)r=[...quotes].filter(q=>(q.sell??q.cost)!=null).sort((a,b)=>(((a.sell??a.cost)||1e9))-(((b.sell??b.cost)||1e9))).slice(0,1);
     if(r.length)lastRowsRef.current=r;                       // remember a good row…
     else if(lastRowsRef.current.length)r=lastRowsRef.current; // …and reuse it while the list is momentarily empty
     return r;

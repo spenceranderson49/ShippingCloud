@@ -120,7 +120,7 @@ exports.handler = async (event) => {
   const fromZip = String(body.fromZip || "").trim();
   const toZip = String(body.toZip || "").trim();
   if (!fromZip || !toZip) return respond(200, { live: false, error: "Origin and destination ZIP required", rates: [] });
-  const PKG_MAP = { fedex_envelope: "FEDEX_ENVELOPE", fedex_pak: "FEDEX_PAK", fedex_extra_small_box: "FEDEX_SMALL_BOX", fedex_small_box: "FEDEX_SMALL_BOX", fedex_medium_box: "FEDEX_MEDIUM_BOX", fedex_large_box: "FEDEX_LARGE_BOX", fedex_tube: "FEDEX_TUBE" };
+  const PKG_MAP = { fedex_envelope: "FEDEX_ENVELOPE", fedex_pak: "FEDEX_PAK", fedex_extra_small_box: "FEDEX_EXTRA_SMALL_BOX", fedex_small_box: "FEDEX_SMALL_BOX", fedex_medium_box: "FEDEX_MEDIUM_BOX", fedex_large_box: "FEDEX_LARGE_BOX", fedex_tube: "FEDEX_TUBE" };
   const boxCode = String(body.packageTypeCode || "").trim().toLowerCase();
   const fedexPackaging = PKG_MAP[boxCode] || (/^FEDEX_/i.test(boxCode) ? boxCode.toUpperCase() : null);
   const SMARTPOST_HUB = String(body.smartPostHub || process.env.FEDEX_SMARTPOST_HUB || "").trim();
@@ -196,10 +196,10 @@ exports.handler = async (event) => {
       const jj = await rr.json().catch(() => ({}));
       return { r: rr, j: jj };
     };
-    const [main, orRes] = await Promise.all([rateCall(req), oneRateReq ? rateCall(oneRateReq).catch(() => null) : Promise.resolve(null)]);
+    const [main, orRes] = await Promise.all([rateCall(req), oneRateReq ? rateCall(oneRateReq).catch((e) => ({ _threw: (e && e.message) || "One Rate request failed" })) : Promise.resolve(null)]);
     const r = main.r, j = main.j;
     if (!r.ok) {
-      let msg = (j.errors && j.errors[0] && (j.errors[0].message || j.errors[0].code)) || ("FedEx rate error " + r.status);
+      let msg = (Array.isArray(j.errors) && j.errors.length ? j.errors.map((e) => e.message || e.code).filter(Boolean).join("; ") : "") || ("FedEx rate error " + r.status);
       if (/mismatch|should match the shipper|not\s*authorized|account.*(invalid|not\s*found)/i.test(msg)) {
         msg = "FedEx doesn't recognize account #" + acct + " on your API credentials — add it in the FedEx Developer Portal (Manage Organization \u2192 Shipping accounts, with that account's billing address + EULA), attach it to your project, then retry. FedEx said: " + msg;
       }

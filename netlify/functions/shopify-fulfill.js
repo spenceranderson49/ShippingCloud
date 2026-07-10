@@ -8,7 +8,7 @@
    ════════════════════════════════════════════════════════════════════════ */
 const J = (o) => ({ statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify(o) });
 const S = (v) => (v == null ? "" : String(v));
-const API = "2025-07";
+const API = "2026-01";
 const numId = (gid) => S(gid).split("/").pop();
 
 async function gql(shop, token, query, variables) {
@@ -48,13 +48,18 @@ exports.handler = async (event) => {
     const all = (((fr.data || {}).order || {}).fulfillmentOrders || {}).nodes || [];
     const fos = all.filter((f) => ["OPEN", "IN_PROGRESS", "SCHEDULED"].includes(S(f.status).toUpperCase()));
     if (!fos.length) {
+      /* Held orders must not silently get their old fulfillment's tracking replaced. */
+      if (all.some((f) => S(f.status).toUpperCase() === "ON_HOLD")) return J({ ok: false, error: "This order is ON HOLD in Shopify — release the hold there, then push tracking again." });
       /* Already fulfilled → this is a RE-LABEL: update the existing fulfillment's tracking to
-         the new number (and notify the customer) instead of failing. Newest non-cancelled one. */
+         the new number (and notify the customer) instead of failing. Newest successful one. */
       const xr = await gql(shop, token,
-        `query($id:ID!){order(id:$id){fulfillments(first:10){id status}}}`,
+        `query($id:ID!){order(id:$id){fulfillments(first:50){id status}}}`,
         { id: "gid://shopify/Order/" + orderId });
       if (xr.status === 401) return J({ ok: false, error: "Shopify rejected the token (401) — reconnect the store." });
-      const fulfills = ((((xr.data || {}).order || {}).fulfillments) || []).filter((f) => S(f.status).toUpperCase() !== "CANCELLED");
+      if (!xr.ok) return J({ ok: false, error: "Couldn't read the order's fulfillments: " + JSON.stringify(xr.errors || {}).slice(0, 200) });
+      const allF = ((((xr.data || {}).order || {}).fulfillments) || []);
+      const good = allF.filter((f) => S(f.status).toUpperCase() === "SUCCESS");
+      const fulfills = good.length ? good : allF.filter((f) => S(f.status).toUpperCase() !== "CANCELLED");
       const target = fulfills[fulfills.length - 1];
       if (!target) return J({ ok: false, error: "No open fulfillment orders and no existing fulfillment to update — check the order in Shopify." });
       const ur = await gql(shop, token,

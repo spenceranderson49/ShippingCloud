@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v417";
+const BUILD_TAG="addr-v418";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -711,10 +711,10 @@ async function printImagePagesBatch(base64List,settingsForLogo,onProgress){
     try{
       const r=await pdfToImages(items[i].pdf,3);
       if(!r.imgs.length)throw new Error("no pages");
-      let imgs=r.imgs;
-      try{ const ex=await applyPrintExtras(imgs,items[i].ctx); imgs=ex.imgs; }catch(e){}
+      let imgs=r.imgs,_rcpt=null;
+      try{ const ex=await applyPrintExtras(imgs,items[i].ctx); imgs=ex.imgs; _rcpt=ex.receipt; }catch(e){}
       const comp=await composeForStock(imgs,r.wIn,r.hIn,items[i].ctx);
-      allImgs=allImgs.concat(comp.imgs);
+      allImgs=allImgs.concat(_rcpt?[...comp.imgs,_rcpt]:comp.imgs);
       if(i===0){ wIn=comp.wIn; hIn=comp.hIn; }
     }catch(e){ failed++; }
     if(onProgress)onProgress(i+1,items.length);
@@ -819,15 +819,19 @@ async function renderReceiptPage(rc,ctx,logoUrl){
     return cv.toDataURL("image/png");
   }catch(e){ return null; }
 }
-/* Apply the globally-synced print extras (logo stamp + receipt second page) to a set of label
-   page images. Used by EVERY print path so what you preview is exactly what prints. */
+/* Apply the globally-synced print extras to a set of label page images. Used by EVERY print
+   path so what you preview is exactly what prints.
+   Returns {imgs, receipt, changed}: imgs = LABEL pages (logo stamped); receipt = the receipt
+   page SEPARATELY — callers append it AFTER composeForStock so the doc-tab/stock composition
+   never treats the receipt as a label (which shrank it into the label region and stamped a
+   duplicate doc tab on it). */
 async function applyPrintExtras(imgs,ctx){
-  let out=imgs,changed=false;
+  let out=imgs,changed=false,receipt=null;
   const x=(typeof window!=="undefined"&&window.__scPrintExtras)||null;
-  if(!x||!imgs||!imgs.length)return {imgs:out,changed};
+  if(!x||!imgs||!imgs.length)return {imgs:out,receipt,changed};
   try{ if(x.logo&&x.logo.on&&x.logo.src){ const s=await stampLogo(out,{labelLogoOn:true,labelLogoPos:x.logo.pos,labelLogoScale:x.logo.scale,labelLogoDX:x.logo.dx,labelLogoDY:x.logo.dy},x.logo.src); if(s!==out){out=s;changed=true;} } }catch(e){}
-  try{ if(x.receipt&&x.receipt.enabled&&x.receipt.cfg&&ctx){ const pg=await renderReceiptPage(x.receipt.cfg,ctx,x.receipt.logo); if(pg){out=[...out,pg];changed=true;} } }catch(e){}
-  return {imgs:out,changed};
+  try{ if(x.receipt&&x.receipt.enabled&&x.receipt.cfg&&ctx){ const pg=await renderReceiptPage(x.receipt.cfg,ctx,x.receipt.logo); if(pg){receipt=pg;changed=true;} } }catch(e){}
+  return {imgs:out,receipt,changed};
 }
 /* Live preview of the receipt page, rendered by the SAME renderReceiptPage that prints — what
    you see in Settings is pixel-for-pixel what comes off the printer. */
@@ -839,6 +843,34 @@ function ReceiptPreviewImg({rc,logo}){
     if(!dead)setSrc(u);
   })();return ()=>{dead=true;};},[JSON.stringify(rc||{}),logo]);
   return src?<img src={src} alt="receipt preview" className="w-52 border border-stone-300 rounded shadow-sm bg-white"/>:<div className="w-52 h-72 border border-dashed border-stone-300 rounded flex items-center justify-center text-[11px] text-stone-400">rendering…</div>;
+}
+/* Mock 4×6 label rendered from the REAL shipment data — shown in the "Review before booking"
+   popup so you see what the label will look like before anything books. The real FedEx label
+   (with the live barcode + tracking) replaces this the moment you confirm. */
+function MockLabelImg({to,sender,service,weight,pieceCount}){
+  const [src,setSrc]=useState(null);
+  useEffect(()=>{let dead=false;(async()=>{
+    try{
+      const W=600,H=900;const cv=document.createElement("canvas");cv.width=W;cv.height=H;const g=cv.getContext("2d");
+      g.fillStyle="#fff";g.fillRect(0,0,W,H);g.strokeStyle="#d6d3d1";g.strokeRect(4,4,W-8,H-8);
+      g.fillStyle="#1c1917";g.font="700 30px system-ui";g.fillText(String(service||"FedEx").toUpperCase().slice(0,28),30,56);
+      g.strokeStyle="#1c1917";g.beginPath();g.moveTo(20,76);g.lineTo(W-20,76);g.stroke();
+      g.font="400 17px system-ui";g.fillStyle="#57534e";
+      const s=sender||{};
+      ["FROM: "+(s.company||s.name||""),s.address1||"",[s.city,s.state,s.zip].filter(Boolean).join(" ")].filter(Boolean).forEach((t,i)=>g.fillText(String(t).slice(0,44),30,104+i*24));
+      const r=to||{};
+      g.fillStyle="#1c1917";g.font="700 26px system-ui";
+      const toLines=["TO: "+(r.name||r.company||"").toUpperCase(),(r.company&&r.name?r.company.toUpperCase():""),(r.address1||"").toUpperCase(),[r.city,r.state,r.zip].filter(Boolean).join(" ").toUpperCase()].filter(Boolean);
+      toLines.forEach((t,i)=>g.fillText(String(t).slice(0,34),30,220+i*36));
+      g.font="600 20px system-ui";g.fillStyle="#57534e";g.fillText((pieceCount||1)+" PKG · "+(weight||1)+" LB",30,400);
+      g.fillStyle="#1c1917";for(let i=0;i<46;i++){const bw=(i*7919)%3+1;g.fillRect(40+i*11,H-300,bw*3,140);}
+      g.font="700 22px system-ui";g.fillStyle="#78716c";g.fillText("TRACKING # ASSIGNED AT BOOKING",60,H-120);
+      let out=[cv.toDataURL("image/png")];
+      try{ const x=(typeof window!=="undefined"&&window.__scPrintExtras)||null; if(x&&x.logo&&x.logo.on&&x.logo.src)out=await stampLogo(out,{labelLogoOn:true,labelLogoPos:x.logo.pos,labelLogoScale:x.logo.scale,labelLogoDX:x.logo.dx,labelLogoDY:x.logo.dy},x.logo.src); }catch(e){}
+      if(!dead)setSrc(out[0]);
+    }catch(e){}
+  })();return ()=>{dead=true;};},[JSON.stringify(to||{}),JSON.stringify(sender||{}),service,weight,pieceCount]);
+  return src?<img src={src} alt="label preview" className="w-full max-w-[300px] mx-auto border border-stone-200 rounded shadow-sm bg-white"/>:<div className="w-full max-w-[300px] h-[450px] mx-auto border border-dashed border-stone-300 rounded"/>;
 }
 /* Live preview of the logo stamped on a MOCK 4×6 label, using the SAME stampLogo that prints —
    move/resize it here and the print matches exactly. */
@@ -873,7 +905,7 @@ async function directPrintPdf(base64,title,ctx){
      booked label didn't — because the re-render produced a payload PrintNode rejected. So we validate
      it, and if the send with it fails we automatically retry with the carrier's ORIGINAL pdf. */
   let payload=base64;
-  try{ const r0=await pdfToImages(base64,3); if(r0&&r0.imgs.length){ const ex=await applyPrintExtras(r0.imgs,ctx); const comp=await composeForStock(ex.imgs,r0.wIn,r0.hIn,ctx); if(r0.cropped||comp.changed||ex.changed){ const rp=await imgsToLabelPdf(comp.imgs,comp.wIn,comp.hIn); if(rp&&typeof rp==="string"&&rp.length>200&&rp.length<8*1024*1024)payload=rp; } } }catch(e){}
+  try{ const r0=await pdfToImages(base64,3); if(r0&&r0.imgs.length){ const ex=await applyPrintExtras(r0.imgs,ctx); const comp=await composeForStock(ex.imgs,r0.wIn,r0.hIn,ctx); if(r0.cropped||comp.changed||ex.changed){ const all=ex.receipt?[...comp.imgs,ex.receipt]:comp.imgs; const rp=await imgsToLabelPdf(all,comp.wIn,comp.hIn); if(rp&&typeof rp==="string"&&rp.length>200&&rp.length<8*1024*1024)payload=rp; else if(rp&&rp.length>=8*1024*1024){ try{ window.dispatchEvent(new CustomEvent("sc-direct-print-failed",{detail:{reason:"extras-dropped",error:"Re-rendered label too large — printed the carrier original without logo/receipt/doc-tab."}})); }catch(e2){} } } } }catch(e){}
   /* PrintNode needs BARE base64 — strip any "data:application/pdf;base64," prefix a re-render
      (canvas toDataURL) or the carrier payload may carry, or PrintNode rejects it and the label falls
      to the browser dialog. The validity check already strips this; the send must too. */
@@ -1040,7 +1072,7 @@ function openLabelOrDirectPrint(payload,settings,setLabelPreview){
           const r0=await pdfToImages(payload.pdf,3);
           const ex=await applyPrintExtras(r0.imgs,docCtxFor(payload.rec,payload.tracking));
           const r=await composeForStock(ex.imgs,r0.wIn,r0.hIn,docCtxFor(payload.rec,payload.tracking));
-          if(r&&r.imgs&&r.imgs.length){ printImagePages(r.imgs,r.wIn,r.hIn); return; }
+          if(r&&r.imgs&&r.imgs.length){ printImagePages(ex.receipt?[...r.imgs,ex.receipt]:r.imgs,r.wIn,r.hIn); return; }
           throw new Error("no pages");
         }catch(e){ try{ const u=pdfBlobUrl(payload.pdf); printPdfUrl(u); setTimeout(()=>{try{URL.revokeObjectURL(u);}catch(_){}},180000); }catch(_){ setLabelPreview(payload); } } })();
       } else {
@@ -1055,9 +1087,9 @@ function openLabelOrDirectPrint(payload,settings,setLabelPreview){
 async function printLabelPdf(base64,stForLogo,ctx){
   if(await directPrintPdf(base64,undefined,ctx))return true;   // straight to the printer — no dialog
   try{ const r0=await pdfToImages(base64,4);
-    try{ const ex=await applyPrintExtras(r0.imgs,ctx); r0.imgs=ex.imgs; }catch(e){}
+    let _rcpt=null; try{ const ex=await applyPrintExtras(r0.imgs,ctx); r0.imgs=ex.imgs; _rcpt=ex.receipt; }catch(e){}
     const r=await composeForStock(r0.imgs,r0.wIn,r0.hIn,ctx);
-    if(!r.imgs.length)throw new Error("no pages"); printImagePages(r.imgs,r.wIn,r.hIn); return true; }
+    if(!r.imgs.length)throw new Error("no pages"); printImagePages(_rcpt?[...r.imgs,_rcpt]:r.imgs,r.wIn,r.hIn); return true; }
   catch(e){ try{ const u=pdfBlobUrl(base64); printPdfUrl(u); setTimeout(()=>URL.revokeObjectURL(u),180000); return true; }catch(e2){ return false; } }
 }
 /* ── reliable PDF printing: hidden body-level iframe + print(), because calling
@@ -1489,7 +1521,7 @@ async function printPackingSlips(slips){
    in "Keep the print preview" mode the slip is PARKED (window.__scPendingSlips) and
    prints when you click Print label in the preview — the browser's packing-slip dialog
    must never pop over the label preview; other modes open the browser print window. */
-async function printPackingSlipAuto(slips,settings){
+async function printPackingSlipAuto(slips,settings,forceNow){
   const list=(slips||[]).filter(Boolean);
   if(!list.length)return;
   const c=cz(settings);
@@ -1499,7 +1531,9 @@ async function printPackingSlipAuto(slips,settings){
     if(pdf&&dp&&await pnPrintPdf(dp.docPrinters.packSlip,pdf,"Packing slip"))return;   // routed to the slip printer, as a real PDF
     // routed print failed — fall through so the slip is never lost
   }
-  if(c.previewBeforePrint!=null?!!c.previewBeforePrint:(!c.skipBookedSummary&&!c.directNoPreview)){ try{ window.__scPendingSlips=list; }catch(e){} return; }   // preview flow: modal handles the slip
+  /* forceNow: the label was FORCE-printed (confirmed-preview flow) — there is no preview modal
+     coming to flush a parked slip, so print it now instead of parking it forever. */
+  if(!forceNow&&(c.previewBeforePrint!=null?!!c.previewBeforePrint:(!c.skipBookedSummary&&!c.directNoPreview))){ try{ window.__scPendingSlips=list; }catch(e){} return; }   // preview flow: modal handles the slip
   printPackingSlipsDialog(list);
 }
 
@@ -5770,10 +5804,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       ||(auto?null:orders.find(x=>[x.name,x.sku,x.tracking,x.customer].filter(Boolean).some(v=>String(v).toLowerCase().includes(c))));
     if(!o){ if(!auto){ setScanVal(""); setScanMsg({ok:false,t:`no match for “${code}”`}); setTimeout(()=>setScanMsg(null),4000); } return; }
     setScanVal("");
-    setReceiver({...empty,name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email});
-    if(o.weight)setPieces([{weight:o.weight,L:12,W:9,H:4}]);
-    setReference(o.name||""); setSelectedOrder(o.id);
-    setHfArmed(o.id);   // scanning IS the confirmation — hands-free may book this order with no further click
+    /* Load the order through the SAME path as clicking it in the sidebar — box logic packs it,
+       stale insurance/signature/declared-value from the previous order are reset, the auto-insure
+       and auto-signature rules run, and hands-free is armed (scanning IS the confirmation). The
+       old scan path skipped all of that and could book with the previous order's boxes and fees. */
+    applyOrder(o);
     setScanMsg({ok:true,t:String(o.name||o.id)}); setTimeout(()=>setScanMsg(null),4000);
   };
   useEffect(()=>{ const v=scanVal; if(!String(v||"").trim())return; const t=setTimeout(()=>scanApply(v,true),400); return ()=>clearTimeout(t); },[scanVal]);   // scan guns finish in <100ms/char — 400ms of silence means the code is complete
@@ -5826,7 +5861,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
        per-box Insure $ input (it only shows for multipiece) and fall back to the empty shared
        field — silently shipping the last box uninsured. Preserve the remaining box's value into
        the shared field and leave per-box mode so quote and booking agree. */
-    if(next.length===1&&dvEach){ const dv=+next[0].dv||0; if(dv)setInsurance(String(dv)); setDvEach(false); }
+    if(next.length===1&&dvEach){ const dv=+next[0].dv||0; setInsurance(dv?String(dv):""); setDvEach(false); }   // empty per-box value must CLEAR the shared field too — never resurrect a stale amount
     setPieces(next);
   };
   // When a One Rate service is chosen, set package #1 to the matching FedEx One Rate box size.
@@ -5882,6 +5917,10 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
 
   const [packNote,setPackNote]=useState(null);
   const applyOrder=(o)=>{setHfArmed(o.id);setSelectedOrder(o.id);setReference(o.name);setInvoiceNo("");setPoNo("");setPieces(ps=>ps.map((p,j)=>j===0?{...p,orBox:undefined}:p));setReceiver({...empty,name:o.customer||"",company:o.company||"",zip:o.zip||"",state:o.state||"",city:o.city||"",address1:o.address1||"",phone:o.phone||"",email:o.email||""});
+    /* RESET the per-shipment extras BEFORE the auto rules run — otherwise the previous order's
+       declared value / signature silently carry into this order (and hands-free would book it
+       with the wrong coverage, no click, no warning). */
+    setInsurance("");setDvEach(false);setSigOption(custom.defaultSignature||"none");setSig(!!(custom.defaultSignature&&custom.defaultSignature!=="none"));
     const pk=packOrder(o,settings.products||[],settings.boxes||SEED_BOXES,settings.boxLogic);
     if(pk&&pk.pieces.length){ setPieces(pk.pieces.map(x=>({weight:x.weight,L:x.L,W:x.W,H:x.H}))); setPackNote(pk); }
     else { setPieces([{weight:o.weight||1,L:12,W:9,H:4}]); setPackNote(null); }
@@ -5925,8 +5964,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     const probs=[];
     const z=String(receiver.zip||"").trim();
     const isUS=!receiver.country||_isUSCountry(receiver.country);
-    if(!z)probs.push("Destination ZIP is missing.");
-    else if(!postalOkFor(receiver.zip,receiver.country))probs.push(`“${z}” isn't a valid ${isUS?"US ZIP":"postal code for "+receiver.country}.`);
+    const noPostal=!isUS&&NO_POSTAL_COUNTRIES.has(String(receiver.country||"").trim());   // e.g. Hong Kong, Panama — FedEx rates fine with no postal code
+    if(!noPostal){
+      if(!z)probs.push("Destination ZIP is missing.");
+      else if(!postalOkFor(receiver.zip,receiver.country))probs.push(`“${z}” isn't a valid ${isUS?"US ZIP":"postal code for "+receiver.country}.`);
+    }
     pieces.forEach((p,i)=>{
       const w=pw(p);
       const tag=pieces.length>1?`Box #${i+1}`:"The package";
@@ -5996,7 +6038,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     const mask=(v)=>{v=String(v||"");return v.length>4?"…"+v.slice(-4):(v||"(empty)");};
     const diag={src:(eng&&eng._src)||"main",cust:mask(eng&&eng.customerId),key:mask(eng&&eng.apiKey),base:(eng&&eng.base)||"(no base URL)",enabled:!!(eng&&eng.enabled),hasKey:!!(eng&&eng.apiKey),hasCust:!!(eng&&eng.customerId),fromZip:originZip||"(none)"};
     if(eng&&eng.enabled){
-      setRateSrc(s=>({...s,loading:true,error:null,diag}));
+      setRateSrc({rates:[],live:false,loading:true,error:null,diag});   // CLEAR the old order's prices while fetching — stale rates were bookable against the new address
       getLiveRates(shipment,eng).then(res=>{ if(cancel)return;
         if(res&&res.live&&res.rates&&res.rates.length) setRateSrc({rates:res.rates,live:true,loading:false,error:null,diag,oneRateError:res.oneRateRequested&&!res.oneRateOk?res.oneRateError:null});
         else setRateSrc({rates:localQuotes(),live:false,loading:false,error:(res&&res.error)||null,diag});
@@ -6054,9 +6096,12 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const matched=useMemo(()=>{
     const resKnown=addrClassified?residential:null;   // ground↔home swap only once FedEx (or the override) has classified the address
     if(liveRuleMatch){ const rc=canonSvc(groundFamilySwap(liveRuleMatch,resKnown)); const hit=quotes.find(q=>canonSvc(q.label)===rc&&(q.sell??q.cost)!=null); if(hit)return {key:hit.key,src:"autopilot"}; }
-    /* Fallback service: if an order is loaded, Autopilot ran, and NO rule matched, honor the configured
-       fallback (Settings/Batch/Autopilot → Fallback) here on the Ship screen too. */
-    if(selectedOrder&&!liveRuleMatch&&liveRuleStatus&&liveRuleStatus.state==="no-match"){
+    /* Rule fired but pointed at Ground Economy on a shipment OVER its limits (70 lb / 130") — the
+       service is hidden, so treat it like no-match and let the fallback pick something bookable. */
+    const _geHidden=!!(liveRuleMatch&&canonSvc(groundFamilySwap(liveRuleMatch,resKnown))==="ground_economy"&&!groundEconOk(pieces));
+    /* Fallback service: if an order is loaded, Autopilot ran, and NO rule matched (or the rule's
+       service is unavailable), honor the configured fallback here on the Ship screen too. */
+    if(selectedOrder&&liveRuleStatus&&((!liveRuleMatch&&liveRuleStatus.state==="no-match")||_geHidden)){
       const fb=(cz(settings).fallbackService||"").trim();
       if(fb){
         const priced=quotes.filter(q=>(q.sell??q.cost)!=null);
@@ -6068,7 +6113,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     }
     const so=selectedOrder?orders.find(x=>x.id===selectedOrder):null;
     return matchServiceForOrder(quotes,so,resKnown);
-  },[quotes,selectedOrder,orders,liveRuleMatch,liveRuleStatus,residential,addrClassified,settings]);
+  },[quotes,selectedOrder,orders,liveRuleMatch,liveRuleStatus,residential,addrClassified,settings,JSON.stringify(pieces)]);
 
   /* If Autopilot's matched service is a FedEx One Rate box, auto-fill the One Rate box name into the
      configured field (invoice # by default) WITHOUT waiting for the user to click the rate row — so the
@@ -6076,7 +6121,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
      overwrites something the user typed. */
   useEffect(()=>{
     if(!matched)return;
-    const mq=quotes.find(q=>q.key===matched);
+    const mq=quotes.find(q=>q.key===matched.key);   // matched is {key,src} — comparing to the object made this effect dead code
     if(mq&&mq._oneRate&&mq.packageTypeCode){ try{ applyOneRateBox(mq.packageTypeCode); }catch(e){} }
   },[matched,quotes]);
 
@@ -6116,7 +6161,9 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(_wantPrev&&!q._confirmed){
       setLabelPreview({pendingBook:true,service:q.label,carrier,sell:q.sell??q.cost,fxDate:q.fxDate,
         rec:{recipient:{name:receiver.name,company:receiver.company,city:receiver.city,state:receiver.state,zip:receiver.zip,address1:receiver.address1},service:q.label,carrier},
+        senderInfo:{name:sender.name,company:sender.company,address1:sender.address1,city:sender.city,state:sender.state,zip:sender.zip},
         pieceCount:pieces.length,weight:totalWeight,signature:sigOption!=="none",insurance:(pieces.length>1&&dvEach)?pieces.reduce((a,p)=>a+(+p.dv||0),0):(+insurance||0),
+        onCancel:()=>{autoBookedRef.current=null;},   // hands-free may try this order again after edits; a cancel is not a permanent skip
         onConfirm:()=>{setLabelPreview(null);print({...q,_confirmed:true});}});
       return;
     }
@@ -6135,10 +6182,10 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       billingParty:billTo==="third"?"third_party":(billTo==="receiver"?"receiver":"sender"),billingAccount:billTo==="third"?(thirdAcct||null):null,
       providerAccountId:eng.providerAccountId||null,
       sender:{...sender,country:sender.country||"US"},receiver:{...receiver,country:receiver.country||"US"},
-      pieces:pieces.map(p=>({weight:Math.ceil(pw(p)||1),length:p.L,width:p.W,height:p.H,declaredValue:intl?(p.value||null):((pieces.length>1&&dvEach)?(+p.dv||null):(+insurance||null))}))};   // book at the rounded-up billing weight the quote priced · per-box declared value on multipiece
+      pieces:pieces.map(p=>({weight:Math.ceil(pw(p)||1),length:p.L,width:p.W,height:p.H,declaredValue:(pieces.length>1&&dvEach)?(+p.dv||null):(+insurance||null)}))};   // book at the rounded-up billing weight the quote priced · per-box declared value applies intl too (p.value never existed — intl DV was silently dropped)
     const res=await shipCall({action:"ship",account:acctOf(eng),order});
     if(!res||!res.ok){setShipStatus({state:"error",key:q.key,msg:(res&&res.error)||"Booking failed"});setBought(null);return;}
-    const done=(st)=>{ justBookedRef.current=selectedOrder||"manual"; const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec,forcePrint:!!q._confirmed},settings,setLabelPreview); if(cz(settings).autoPackSlip){ const so=selectedOrder&&orders.find(x=>x.id===selectedOrder); setTimeout(()=>{ try{ printPackingSlipAuto([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:st.tracking||"",service:q.label}],settings); }catch(e){} },(cz(settings).previewBeforePrint!=null?cz(settings).previewBeforePrint:!(cz(settings).skipBookedSummary||cz(settings).directNoPreview))?0:2500); }   /* label pipeline gets a head start — its dialog must always beat the slip fallback */ if(cz(settings).printFlowV2?cz(settings).resetAfterPrint:(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint)){ setTimeout(()=>{ try{newShipment();}catch(e){} },900); };} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
+    const done=(st)=>{ justBookedRef.current=selectedOrder||"manual"; const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec,forcePrint:!!q._confirmed},settings,setLabelPreview); if(cz(settings).autoPackSlip){ const so=selectedOrder&&orders.find(x=>x.id===selectedOrder); setTimeout(()=>{ try{ printPackingSlipAuto([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:st.tracking||"",service:q.label}],settings,!!q._confirmed); }catch(e){} },(!q._confirmed&&(cz(settings).previewBeforePrint!=null?cz(settings).previewBeforePrint:!(cz(settings).skipBookedSummary||cz(settings).directNoPreview)))?0:2500); }   /* label pipeline gets a head start — its dialog must always beat the slip fallback */ if(cz(settings).printFlowV2?cz(settings).resetAfterPrint:(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint)){ setTimeout(()=>{ try{newShipment();}catch(e){} },900); };} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
     if(res.booked){done(res);return;}
     setShipStatus({state:"pending",key:q.key,orderId:res.orderId});
     pollLabel(eng,res.orderId,done).then(r=>{ if(r&&r.timedOut){ onPending&&onPending({orderId:res.orderId,rec:buildRec(q,carrier,{}),service:q.label,carrier,orderRef:selectedOrder}); setShipStatus({state:"pending_timeout",key:q.key});setBought(null);} });
@@ -6176,21 +6223,31 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const hfWait=useMemo(()=>{
     if(!handsFree)return null;                                                   // hands-free off — nothing to say
     if(bought||shipStatus)return null;                                           // booking / just booked — normal flow
-    if(selectedOrder&&autoBookedRef.current===selectedOrder)return null;         // already auto-booked this order
+    if(selectedOrder&&autoBookedRef.current===selectedOrder){
+      // auto-book already fired for this order. If it actually booked, justBookedRef is set —
+      // stay quiet. If it BAILED (validation error, cancelled preview), say so instead of
+      // silently reading "ready" forever.
+      if(justBookedRef.current!=null)return null;
+      return {t:"warn",m:"auto-book already tried this order and stopped (see the error it showed) — fix the issue, then click the service to book it"};
+    }
     if(!custom.autoRulesOnShip)return {t:"warn",m:"the service dropdown is set to “I choose the service” — switch it to a Pre-select option so hands-free can pick one"};
-    if(!selectedOrder)return {t:"info",m:"no order loaded — hands-free only books orders opened from the sidebar (manual shipments always wait for your click)"};
-    if(hfArmed!==selectedOrder)return {t:"info",m:"this order was already on screen when the page loaded — click it in the sidebar (or scan it) and it will book itself"};
+    if(!selectedOrder)return {t:"info",m:custom.hideShipOrders?"no order loaded — scan an order and it books itself (manual shipments always wait for your click)":"no order loaded — hands-free only books orders opened from the sidebar or by scanning (manual shipments always wait for your click)"};
+    if(hfArmed!==selectedOrder)return {t:"info",m:custom.hideShipOrders?"this order was already on screen when the page loaded — scan it and it will book itself":"this order was already on screen when the page loaded — click it in the sidebar (or scan it) and it will book itself"};
     if(!ready)return {t:"info",m:"waiting for a valid destination ZIP and weight"};
     if(rateSrc.loading)return {t:"info",m:"waiting for live rates…"};
     if(!rateSrc.live)return {t:"warn",m:"live rates aren't coming back (these are estimates) — hands-free never books on an estimate. Check the carrier account under Settings → FedEx Account"};
     if(!addrClassified)return {t:"info",m:"waiting for FedEx to classify the address (residential vs commercial)…"};
-    if(!matched||matched.src!=="autopilot")return {t:"warn",m:"no Autopilot rule matched this order, so it's waiting for your click — add a rule that covers it (or set a fallback service) under Batch → Autopilot"};
+    if(!matched||matched.src!=="autopilot"){
+      const _rc=liveRuleMatch?canonSvc(groundFamilySwap(liveRuleMatch,addrClassified?residential:null)):"";
+      if(_rc==="ground_economy"&&!groundEconOk(pieces))return {t:"warn",m:"your rule picked Ground Economy, but this shipment is over its limits (70 lb / 130\" per box) — set a fallback service in Autopilot, or pick a service yourself"};
+      return {t:"warn",m:"no Autopilot rule matched this order, so it's waiting for your click — add a rule that covers it (or set a fallback service) under Batch → Autopilot"};
+    }
     const q=quotes.find(x=>x.key===matched.key);
     if(!q||(q.sell??q.cost)==null)return {t:"info",m:"the matched service hasn't returned a live price yet…"};
     const eng=englandFor(client,settings);
     if(!(eng&&eng.enabled))return {t:"warn",m:"no carrier account is enabled on this login, so live booking is off — hands-free can't book here"};
     return {t:"info",m:"booking now…"};
-  },[handsFree,custom.autoRulesOnShip,selectedOrder,hfArmed,ready,rateSrc.live,rateSrc.loading,addrClassified,matched,quotes,bought,shipStatus,client,settings]);
+  },[handsFree,custom.autoRulesOnShip,custom.hideShipOrders,selectedOrder,hfArmed,ready,rateSrc.live,rateSrc.loading,addrClassified,matched,quotes,bought,shipStatus,client,settings,liveRuleMatch,JSON.stringify(pieces)]);
 
   const sendEmail=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Tracking for your ${settings.company} shipment ☁️`,type:"Shipped",body:emailMsg});setSent("email");setTimeout(()=>setSent(""),1800);};
   const sendLabel=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Your shipping label from ${settings.company}`,type:"Label",body:emailMsg});setSent("label");setTimeout(()=>setSent(""),1800);};
@@ -6233,7 +6290,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const saveDraft=()=>{setDraftName(reference||receiver.name||receiver.city||"");setNaming(true);};
   /* box-logic explanation banner shown while a packed order is loaded */
   const PackNote=()=>packNote?(<div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800 flex items-center gap-2"><Boxes className="w-3.5 h-3.5 shrink-0"/><span className="flex-1">Box logic packed this order: <b>{packNote.boxNames}</b> · {packNote.totalWt} lb billable{packNote.unresolved.length?` · ${packNote.unresolved.length} item${packNote.unresolved.length===1?"":"s"} not in your catalog (weight may be low)`:""} — dims are editable below.</span><button onClick={()=>setPackNote(null)} className="text-emerald-500 hover:text-emerald-700"><X className="w-3.5 h-3.5"/></button></div>):null;
-  const newShipment=()=>{justBookedRef.current=null;setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setRes(true);setResTouched(false);setSig(custom.defaultSignature&&custom.defaultSignature!=="none");setSigOption(custom.defaultSignature||"none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");setShipDate(shipDateDefault(settings));};
+  const newShipment=()=>{justBookedRef.current=null;setHfArmed(null);setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setDvEach(false);setRes(true);setResTouched(false);setSig(custom.defaultSignature&&custom.defaultSignature!=="none");setSigOption(custom.defaultSignature||"none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");setShipDate(shipDateDefault(settings));};
   const addressCheck=(
     <div className="text-xs space-y-2">
       <div className="text-[10px] uppercase tracking-widest text-stone-500 font-semibold flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5"/>Address check</div>
@@ -6351,7 +6408,13 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <PackNote/>
           {isPOBox(receiver.address1)&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-xs text-rose-700 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>This looks like a PO Box — FedEx can’t deliver to PO Boxes. Use a street address (or USPS when available).</div>}
           {(()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);return so&&orderHasHazmat(so,settings.products||[])?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Contains a hazmat / lithium-battery item — ship ground only; air services aren’t allowed.</div>:null;})()}
-          {(()=>{const d=dupShipment(reference,shipments);if(justBookedRef.current!=null)return null;/* our own just-booked label — not a reprint attempt; also kills the yellow flash before auto-reset */return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex flex-wrap items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="flex-1 min-w-[180px]">Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}).</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:d.tracking}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><FileText className="w-3 h-3"/>See details</button><button onClick={()=>setLabelPreview({rec:d,tracking:d.tracking,service:d.service,carrier:d.carrier,pdf:d.labelPdf||d.pdf||null,fromExisting:true})} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><Printer className="w-3 h-3"/>Reprint</button><button onClick={newShipment} className="shrink-0 text-[11px] font-semibold text-white bg-stone-900 hover:bg-stone-800 border border-stone-900 rounded-lg px-2.5 py-1 flex items-center gap-1"><Plus className="w-3 h-3"/>New shipment</button></div>:null;})()}
+          {(()=>{const d=dupShipment(reference,shipments);
+            /* Our own just-booked label: in AUTO-reset mode the banner would only flash for the
+               ~1s before the form clears — suppress it. In "Keep the info" mode it stays, as the
+               visible record that this reference already has a label. */
+            const _autoReset=cz(settings).printFlowV2?cz(settings).resetAfterPrint:(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint);
+            if(justBookedRef.current!=null&&_autoReset)return null;
+            return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex flex-wrap items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="flex-1 min-w-[180px]">Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}).</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:d.tracking}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><FileText className="w-3 h-3"/>See details</button><button onClick={()=>setLabelPreview({rec:d,tracking:d.tracking,service:d.service,carrier:d.carrier,pdf:d.labelPdf||d.pdf||null,fromExisting:true})} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><Printer className="w-3 h-3"/>Reprint</button><button onClick={newShipment} className="shrink-0 text-[11px] font-semibold text-white bg-stone-900 hover:bg-stone-800 border border-stone-900 rounded-lg px-2.5 py-1 flex items-center gap-1"><Plus className="w-3 h-3"/>New shipment</button></div>:null;})()}
           {pieces.map((p,i)=>(
             <div key={i} className="flex flex-wrap items-end gap-2 bg-white border border-stone-200 rounded-lg px-2 py-2">
               <div className="text-[11px] text-stone-400 font-mono w-6">#{i+1}</div>
@@ -6603,7 +6666,9 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
      legacy "auto-open the print dialog" checkbox. */
   const _pc=cz(st);
   const previewMode=_pc.previewBeforePrint!=null?!!_pc.previewBeforePrint:(!_pc.skipBookedSummary&&!_pc.directNoPreview);
-  const autoPrintOff=previewMode&&!data.fromExisting&&!((st.printer||{}).autoPrint);
+  // forcePrint = the person already confirmed "Print label — book it": if this modal opens (PrintNode
+  // fallback), it must PRINT, not sit as a passive preview waiting for a second click.
+  const autoPrintOff=previewMode&&!data.fromExisting&&!data.forcePrint&&!((st.printer||{}).autoPrint);
   const [hasPrinted,setHasPrinted]=useState(false);
   const docCtx=recToDocCtx(data.rec||{...data,recipient:data.recipient,service:data.service,tracking:data.tracking,carrier:data.carrier});
   const rcpLogo=(st.companyLogo)||"";
@@ -6619,8 +6684,10 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
         let r=await pdfToImages(data.pdf,3);
         if(dead)return;
         if(!r.imgs.length)throw new Error("no pages");
-        try{ const ex=await applyPrintExtras(r.imgs,docCtx); r.imgs=ex.imgs; }catch(e){}   // logo + receipt page — the preview shows exactly what prints
+        let _rcpt=null;
+        try{ const ex=await applyPrintExtras(r.imgs,docCtx); r.imgs=ex.imgs; _rcpt=ex.receipt; }catch(e){}   // logo stamped; receipt appended AFTER compose (never doc-tabbed)
         try{ r=await composeForStock(r.imgs,r.wIn,r.hIn,docCtxFor(data.rec,data.tracking)); }catch(e){}
+        if(_rcpt)r={...r,imgs:[...r.imgs,_rcpt]};
         setPages(r);
         if(!printed.current&&data.autoPrint!==false&&!autoPrintOff){
           printed.current=true; setHasPrinted(true);
@@ -6653,7 +6720,7 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
     if(pages&&pages.imgs.length){ printImagePages(pages.imgs,pages.wIn,pages.hIn,flushSlips); }
     else { await printLabelPdf(data.pdf,st,docCtxFor(data.rec,data.tracking)); flushSlips(); } };
   const [copied,setCopied]=useState(false);
-  const [showLabel,setShowLabel]=useState(autoPrintOff);   // real preview mode: the label is visible immediately
+  const [showLabel,setShowLabel]=useState(autoPrintOff&&data.autoPrint!==false);   // real preview mode shows the label immediately; the booked SUMMARY keeps it tucked behind "View label"
   const copyTracking=async()=>{ const t=String(data.tracking||""); if(!t)return;
     try{ await navigator.clipboard.writeText(t); }
     catch(e){ try{ const ta=document.createElement("textarea");ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove(); }catch(e2){} }
@@ -6673,12 +6740,17 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
      "Print label" books it for real and prints straight (no second popup). */
   if(data.pendingBook){
     const r=(data.rec&&data.rec.recipient)||{};
+    const cancel=()=>{ try{data.onCancel&&data.onCancel();}catch(e){} onClose&&onClose(); };
     return (
-      <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-        <div className="bg-white rounded-xl w-full max-w-md flex flex-col overflow-hidden shadow-2xl" onClick={e=>e.stopPropagation()}>
-          <div className="flex items-center justify-between px-4 py-3 border-b border-stone-200">
+      <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={cancel}>
+        <div className="bg-white rounded-xl w-full max-w-md max-h-[92vh] flex flex-col overflow-hidden shadow-2xl" onClick={e=>e.stopPropagation()}>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-stone-200 shrink-0">
             <div><div className="font-semibold text-stone-800 flex items-center gap-2"><Printer className="w-4 h-4 text-[#0086E0]"/>Review before booking</div><div className="text-[11px] text-stone-400">Nothing is booked yet — the label is created when you click Print label.</div></div>
-            <button onClick={onClose} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button>
+            <button onClick={cancel} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button>
+          </div>
+          <div className="px-4 pt-3 overflow-y-auto">
+            <MockLabelImg to={r} sender={data.senderInfo} service={data.service} weight={data.weight} pieceCount={data.pieceCount}/>
+            <div className="text-[10px] text-stone-400 text-center mt-1">Preview — the real label (with live barcode &amp; tracking) is created when you book.</div>
           </div>
           <div className="p-4 space-y-2 text-sm">
             <div className="flex justify-between"><span className="text-stone-500">Service</span><span className="font-medium text-stone-800">{data.service}</span></div>
@@ -6688,9 +6760,9 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
             {data.signature?<div className="flex justify-between"><span className="text-stone-500">Signature</span><span className="text-stone-800">Yes</span></div>:null}
             {data.insurance>0?<div className="flex justify-between"><span className="text-stone-500">Declared value</span><span className="font-mono text-stone-800">{money(data.insurance)}</span></div>:null}
           </div>
-          <div className="px-4 pb-4 flex gap-2">
+          <div className="px-4 pb-4 flex gap-2 shrink-0">
             <button onClick={()=>data.onConfirm&&data.onConfirm()} className="flex-1 bg-stone-900 text-white rounded-lg px-4 py-2.5 font-medium hover:bg-stone-800 flex items-center justify-center gap-2"><Printer className="w-4 h-4"/>Print label — book it</button>
-            <button onClick={onClose} className="px-4 py-2.5 text-sm text-stone-500 hover:text-stone-800 border border-stone-200 rounded-lg">Cancel</button>
+            <button onClick={cancel} className="px-4 py-2.5 text-sm text-stone-500 hover:text-stone-800 border border-stone-200 rounded-lg">Cancel</button>
           </div>
         </div>
       </div>
@@ -6830,7 +6902,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
     comps=[...comps,...acc.map(a=>({label:a.label,amount:a.amount}))];
     const hasPrice=sell!=null;
     return (
-      <div key={svcFamilyKey(q.label)} className={"border rounded-lg bg-white transition-all duration-200 "+(matched===q.key?"border-[#0086E0] ring-1 ring-[#0086E0]":"border-stone-200")}>
+      <div key={q.key||svcFamilyKey(q.label)} className={"border rounded-lg bg-white transition-all duration-200 "+(matched===q.key?"border-[#0086E0] ring-1 ring-[#0086E0]":"border-stone-200")}>
         <div onClick={()=>{setOpen(isOpen?null:q.key); if(q._oneRate&&q.packageTypeCode&&onOneRate)onOneRate(q.packageTypeCode);}} className="px-3 py-2 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
           <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isOpen?"rotate-90":""}`}/>
           {matched===q.key&&<span className="text-[10px] font-semibold uppercase tracking-wide bg-[#E6F4FF] text-[#0086E0] border border-[#99D6FF] rounded px-1.5 py-0.5 shrink-0 inline-flex items-center gap-1">{matchedSrc==="autopilot"&&<Zap className="w-3 h-3"/>}{matchedSrc==="autopilot"?"Autopilot":"Requested"}</span>}
@@ -8294,7 +8366,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         _resKnownB=await classifyOrderAddress(o,originZip);   // ground↔home follows the FedEx classification, same as Autopilot
         _resFlagB=_resKnownB==null?true:_resKnownB;
         const res=await ratesForOrder(o,{residential:_resFlagB,weightLb:_wt0,box:pk0&&pk0.pieces[0]?_box0:undefined,fromZip:originZip,sender:settings.sender,packageTypeCode:_orBox0?_orBox0.code:""},eng);
-        const _hs=new Set(cz(settings).hiddenServices||[]);const _bs=new Set((client&&client.blockedServices)||[]);let qs=((res&&res.rates)||[]).filter(q=>!_hs.has(canonSvc(q.label))&&!_bs.has(canonSvc(q.label))).filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk(pk0&&pk0.pieces&&pk0.pieces.length?pk0.pieces:[{weight:o.weight,L:12,W:9,H:4}])).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:originZip,toZip:o.zip,weight:(pk0&&pk0.totalWt)||o.weight||1})}));
+        const _hs=new Set(cz(settings).hiddenServices||[]);const _bs=new Set((client&&client.blockedServices)||[]);let qs=((res&&res.rates)||[]).filter(q=>!_hs.has(canonSvc(q.label))&&!_bs.has(canonSvc(q.label))).filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk([{weight:_wt0,L:_box0.L,W:_box0.W,H:_box0.H}])).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:originZip,toZip:o.zip,weight:(pk0&&pk0.totalWt)||o.weight||1})}));   // GE filter checks the SAME single piece the rate call priced
         picked=pickByPref(qs,svcOv[o.id],_resKnownB);
         if(!picked){
           if(rule==="ground")picked=qs.filter(q=>/ground|home/i.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
@@ -9314,7 +9386,10 @@ function DocTabDesigner({zones,setZone,onClearLayout,showLabels,tabHIn}){
 }
 function PrinterSettings({settings,setSettings}){
   const pr=settings.printer||{labelSize:"4x6",format:"PDF",printer:"",packingSlip:true,autoPrint:false,slipSize:"letter",rotate:false};
-  const set=(patch)=>setSettings({...settings,printer:{...pr,...patch}});
+  /* FUNCTIONAL update only — a replacement built from the render-scope `settings` silently
+     destroys any update queued in the same click (this is exactly how the printFlowV2 stamp
+     was being wiped: setCust queued it, then set() overwrote it with a stale snapshot). */
+  const set=(patch)=>setSettings(p=>({...p,printer:{...(p.printer||{}),...patch}}));
   // Labels & printing (moved here from Customizations → Labels & printing) writes to settings.custom
   const cust=cz(settings);
   const setCust=(k,v)=>setSettings(p=>({...p,custom:{...(p.custom||{}),[k]:v}}));
@@ -9322,7 +9397,7 @@ function PrinterSettings({settings,setSettings}){
   const ApTog=({k,label,hint})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span><button onClick={()=>setCust(k,!c[k])}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${c[k]?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button></label>);
   // Doc tabs + receipt config (per-login settings)
   const dt=settings.docTab||{enabled:false,stock:"trailing",zones:DEFAULT_DOCTABS,showLabels:true};
-  const setDt=(patch)=>setSettings({...settings,docTab:{...dt,...patch}});
+  const setDt=(patch)=>setSettings(p=>({...p,docTab:{...(p.docTab||{enabled:false,stock:"trailing",zones:DEFAULT_DOCTABS,showLabels:true}),...patch}}));
   const dtZones=dt.zones||DEFAULT_DOCTABS;
   const addZone=()=>setDt({zones:[...dtZones,{id:"dt"+Date.now(),zone:String(dtZones.length+1).padStart(2,"0"),field:"reference",label:"",custom:"",size:9}]});
   const setZone=(id,patch)=>setDt({zones:dtZones.map(z=>z.id===id?{...z,...patch}:z)});
@@ -9425,7 +9500,14 @@ function PrinterSettings({settings,setSettings}){
           const previewOn=cust.previewBeforePrint!=null?!!cust.previewBeforePrint:!(cust.skipBookedSummary||cust.directNoPreview);
           const summaryOn=!cust.skipBookedSummary;
           const resetOn=!!cust.resetAfterPrint;
-          const stamp=()=>{ setCust("printFlowV2",true); set({autoPrint:false}); setPnCfg({enabled:ready}); };
+          const stamp=()=>{
+            /* First click on the new boxes: MATERIALIZE the currently-derived values before
+               flipping printFlowV2, so switching to the new interpretation can never change a
+               legacy account's behavior mid-flight (e.g. old hands-free = skipBookedSummary
+               alone must keep auto-booking until they explicitly pick "You click print"). */
+            if(!cust.printFlowV2){ setCust("autoBookOnShip",handsOn); setCust("previewBeforePrint",previewOn); setCust("resetAfterPrint",resetOn); }
+            setCust("printFlowV2",true); set({autoPrint:false}); setPnCfg({enabled:ready});
+          };
           const Opt=({on,pick,title,desc,group})=>(<label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${on?"border-emerald-300 bg-emerald-50/60":"border-stone-200 bg-white hover:bg-stone-50"}`}>
             <input type="radio" name={group} checked={on} onChange={pick} className="mt-0.5 accent-emerald-600"/>
             <span><span className="text-sm font-semibold text-stone-800">{title}</span><span className="block text-[11px] font-normal text-stone-500 mt-0.5">{desc}</span></span>

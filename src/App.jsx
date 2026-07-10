@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v404";
+const BUILD_TAG="addr-v405";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -5607,6 +5607,27 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     window.addEventListener("keydown",onKey,true);
     return ()=>window.removeEventListener("keydown",onKey,true);
   },[scanMode]);
+  /* Scan mode: the cursor LIVES in the scan box. Clicking around the page (orders in the sidebar,
+     service rows, buttons, whitespace) hands focus right back to the scan box — it only stays away
+     when the click landed on something that genuinely needs typing (a text field, dropdown, or
+     editable area, e.g. editing the shipping information). */
+  useEffect(()=>{ if(!scanMode)return;
+    const needsCursor=(el)=>{ try{
+      if(!el||el===document.body)return false;
+      const n=el.closest?el.closest("input,textarea,select,[contenteditable='true'],[contenteditable='']"):null;
+      if(!n)return false;
+      if(n.tagName==="INPUT"){ const t=(n.type||"text").toLowerCase(); return !["checkbox","radio","button","submit","reset","range","file","color"].includes(t); }
+      return true;
+    }catch(e){ return false; } };
+    const onClick=(e)=>{ const tgt=e.target;
+      // let the click finish (focus lands, modals mount) before deciding — then re-arm unless the
+      // click, or whatever now holds focus, actually needs the cursor
+      setTimeout(()=>{ try{ const a=document.activeElement;
+        if(scanRef.current&&a!==scanRef.current&&!needsCursor(tgt)&&!needsCursor(a))scanRef.current.focus();
+      }catch(err){} },60); };
+    window.addEventListener("mouseup",onClick,true);
+    return ()=>window.removeEventListener("mouseup",onClick,true);
+  },[scanMode]);
   const [scanMsg,setScanMsg]=useState(null);
   /* auto=true: fired by the debounce while typing/scanning — EXACT matches only, silent on
      miss, and never clears the box mid-type. Enter keeps the old behavior: exact first, then
@@ -10826,7 +10847,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
         <Tog k="hideRateSrcBar" label="Hide the rate-source banner" hint="Removes the ‘Live rates from your FedEx account / Estimated rates’ strip above the service list."/>
         <Tog k="hideAutopilotBox" label="Hide the Autopilot match banner" hint="Removes the ‘Autopilot rule matched…’ box above Select service. Rules still run and still pre-highlight the service."/>
         <Tog k="hideNotifyBox" label="Hide the Send label & notify box" hint="Removes the email panel at the bottom of the Ship tab. Automated notifications in Settings → Email automation still send."/>
-        <Tog k="scanAutoFocus" label="Scan mode — keep the scan box ready" hint="The scan box is focused the moment the Ship tab opens and re-arms itself after every scan and booking — scan barcode after barcode without touching the mouse. It never steals focus while you're typing in another field."/>
+        <Tog k="scanAutoFocus" label="Scan mode — keep the scan box ready" hint="The cursor lives in the scan box: it's focused when the Ship tab opens, re-arms after every scan and booking, and returns after you click orders, services or buttons. It only steps aside while you're typing in another field (like editing the shipping information), then comes back on your next click."/>
         <Tog k="hideInvoice" label="Hide Invoice # field"/>
         <Tog k="hidePO" label="Hide PO # field"/>
         <Tog k="hideAddr23" label="Hide Address 2 & 3" hint="On both sender and receiver cards"/>

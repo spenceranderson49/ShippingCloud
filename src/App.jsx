@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v393";
+const BUILD_TAG="addr-v394";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -1059,7 +1059,11 @@ async function shopifyCall(endpoint,payload,timeout=20000){
     return data||{ok:false,error:"Empty response"};
   }catch(e){clearTimeout(t);return {ok:false,error:(e&&e.message)||"Network error"};}
 }
-const shopifyConnected=(s)=>!!(s&&s.shopifyConn&&s.shopifyConn.shop&&s.shopifyConn.token);
+/* Multiple Shopify stores: connections live in settings.shopifyConns (array of {shop,token,...}).
+   Legacy single settings.shopifyConn is still honored so existing connections keep working. */
+const shopifyConns=(s)=>{ if(!s)return []; if(Array.isArray(s.shopifyConns))return s.shopifyConns.filter(c=>c&&c.shop&&c.token); if(s.shopifyConn&&s.shopifyConn.shop&&s.shopifyConn.token)return [s.shopifyConn]; return []; };
+const shopifyConnFor=(s,shop)=>{ const l=shopifyConns(s); return (shop&&l.find(c=>c.shop===shop))||l[0]||null; };
+const shopifyConnected=(s)=>shopifyConns(s).length>0;
 async function shopifySyncOrders(conn){ return shopifyCall(SHOPIFY_SYNC,{shop:conn.shop,token:conn.token}); }
 async function shopifyPushTracking(conn,o){ return shopifyCall(SHOPIFY_FULFILL,{shop:conn.shop,token:conn.token,shopifyId:o.shopifyId,tracking:o.tracking,trackingUrl:o.trackingUrl||(o.tracking?`https://www.fedex.com/fedextrack/?trknbr=${o.tracking}`:""),carrier:o.carrier||"FedEx"}); }
 const fn=(name)=>"/.netlify/functions/"+name;
@@ -5152,7 +5156,7 @@ function AppInner(){
       if(search.indexOf("shopify_connected")>-1||h.indexOf("shop=")>-1){
         const p=new URLSearchParams(h.replace(/^#/,""));
         const shop=p.get("shop"),token=p.get("token");
-        if(shop&&token){ setSettings(s=>({...s,shopifyConn:{shop,token,connectedAt:new Date().toISOString()}})); }
+        if(shop&&token){ setSettings(s=>{ const others=shopifyConns(s).filter(c=>c.shop!==shop); const n={...s,shopifyConns:[...others,{shop,token,connectedAt:new Date().toISOString()}]}; delete n.shopifyConn; return n; }); }
         const clean=window.location.origin+window.location.pathname;
         window.history.replaceState({},document.title,clean);
         return;
@@ -5245,7 +5249,8 @@ function AppInner(){
     if(orderId&&shopifyConnected(settings)){
       const ord=orders.find(x=>x.id===orderId);
       if(ord&&ord.source==="Shopify"&&ord.shopifyId){
-        shopifyPushTracking(settings.shopifyConn,{shopifyId:ord.shopifyId,tracking:rec.tracking,carrier:rec.carrier}).then(res=>{
+        const _conn=shopifyConnFor(settings,ord._shop);   // push back to the SAME store the order came from
+        if(_conn) shopifyPushTracking(_conn,{shopifyId:ord.shopifyId,tracking:rec.tracking,carrier:rec.carrier}).then(res=>{
           if(res&&res.ok){ setOrders(o=>o.map(x=>x.id===orderId?{...x,shopifyFulfilled:true}:x)); }
           else { logEmail&&logEmail({to:"system",subject:"Shopify fulfillment failed: "+((res&&res.error)||"unknown"),type:"System"}); }
         });
@@ -5273,23 +5278,25 @@ function AppInner(){
   // shared Shopify order sync (used by manual refresh buttons + auto-refresh)
   const [syncingOrders,setSyncingOrders]=useState(false);
   const syncOrders=async()=>{
-    if(!shopifyConnected(settings))return {ok:false,error:"Shopify not connected"};
+    const conns=shopifyConns(settings);
+    if(!conns.length)return {ok:false,error:"Shopify not connected"};
     setSyncingOrders(true);
-    const res=await shopifySyncOrders(settings.shopifyConn);
+    let all=[],anyOk=false,firstErr="";
+    for(const c of conns){ const res=await shopifySyncOrders(c); if(res&&res.ok){ anyOk=true; (res.orders||[]).forEach(o=>all.push({...o,_shop:c.shop})); } else if(!firstErr){ firstErr=(res&&res.error)||("Sync failed for "+c.shop); } }
     setSyncingOrders(false);
-    if(res&&res.ok){
+    if(anyOk){
       let added=0;
-      setOrders(p=>{const have=new Set(p.map(o=>o.shopifyId).filter(Boolean));const fresh=(res.orders||[]).filter(o=>!have.has(o.shopifyId));added=fresh.length;return fresh.length?[...fresh,...p]:p;});
+      setOrders(p=>{const have=new Set(p.map(o=>o.shopifyId).filter(Boolean));const fresh=all.filter(o=>!have.has(o.shopifyId));added=fresh.length;return fresh.length?[...fresh,...p]:p;});
       return {ok:true,added};
     }
-    return {ok:false,error:(res&&res.error)||"Sync failed"};
+    return {ok:false,error:firstErr||"Sync failed"};
   };
-  // auto-refresh Shopify orders every 2 minutes while connected
+  // auto-refresh Shopify orders every 2 minutes while any store is connected
   useEffect(()=>{
     if(!shopifyConnected(settings))return;
     const id=setInterval(()=>{syncOrders();},120000);
     return ()=>clearInterval(id);
-  },[settings.shopifyConn&&settings.shopifyConn.shop,settings.shopifyConn&&settings.shopifyConn.token]);
+  },[JSON.stringify(shopifyConns(settings).map(c=>c.shop))]);
   // blank the receiver on a fresh page load / login (stays filled across tab switches within a session)
   /* receiver + package dims are cleared on login (clearScratchFor) so a fresh session always starts blank */
   // re-check England for any staged orders that have since booked; pull label + tracking into Shipments
@@ -6664,7 +6671,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
     const collected=[];const errs=[];
     for(const src of orderSources){
       const res=src.kind==="shopify"
-        ? await shopifySyncOrders(settings.shopifyConn)
+        ? await (async()=>{ let os=[],ok=false,er=""; for(const c of shopifyConns(settings)){ const r=await shopifySyncOrders(c); if(r&&r.ok){ok=true;(r.orders||[]).forEach(o=>os.push({...o,_shop:c.shop}));} else if(!er){er=(r&&r.error)||"";} } return ok?{ok:true,orders:os}:{ok:false,error:er||"Sync failed"}; })()
         : await connectorSyncOrders(src.c,(settings.conn||{})[src.c.id]||{});
       if(res&&res.ok){
         for(const o of (res.orders||[])){
@@ -8442,13 +8449,14 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
      the same panel instead of resetting to General. Persisted so it survives a full reload too. */
   const [sec,setSecRaw]=useState(()=>lsGet("settingsSec","general"));
   const setSec=(k)=>{ setSecRaw(k); lsSet("settingsSec",k); };
+  const [secSearch,setSecSearch]=useState("");
   /* Sidebar sections grouped into categories (v376) — Ship screen promoted out of Customizations
      into its own top-level section under Shipping. The flat `secs` list below feeds the
      policy/fallback logic unchanged. */
   const SEC_GROUPS=[
     ["Workspace",[["general","General",Cog],["customize","Customizations",Sliders]]],
     ["Shipping",[["shipscreen","Ship screen",Truck],["carriers",BRAND.fw?"FedEx Account":"Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["catalog","Product catalog",Boxes],["reference","Reference Fields",Receipt]]],
-    ["Documents & printing",[["printer","Print settings",Printer],["cieditor","Commercial invoice",Receipt],["cihistory","CI history",FileText],["otherdocs","Other documents",FileText],["manifests","Manifests",FileText]]],
+    ["Documents & printing",[["printer","Print settings",Printer],["cieditor","Commercial invoice",Receipt],["otherdocs","Other documents",FileText],["manifests","Manifests",FileText]]],
     ["Automation & integrations",[["integrations","Integrations",Layers],["notifications","Email automation",Mail],["checkout","Checkout rates",ShoppingBag]]],
     ["Account",[["reports","Reports",TrendingUp],["billing","Billing",CreditCard],["subscription","Subscription",Star]]],
   ];
@@ -8463,11 +8471,19 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
   if(!visibleSecs.some(x=>x[0]===sec)) { if(sec!=="general") setSecRaw("general"); }
   return (
     <div className="flex flex-col md:flex-row gap-6">
-      <aside className="md:w-56 shrink-0 space-y-4">{SEC_GROUPS.map(([gl,gsecs])=>{const vis=gsecs.filter(([id])=>polFor(id)!=="off"); if(!vis.length)return null; return (
+      <aside className="md:w-56 shrink-0 space-y-4">
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-2.5 pointer-events-none"/>
+          <input value={secSearch} onChange={e=>setSecSearch(e.target.value)} placeholder="Search settings…" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-400"/>
+        </div>
+        {(()=>{ const q=secSearch.trim().toLowerCase(); let any=false;
+        const groups=SEC_GROUPS.map(([gl,gsecs])=>{const vis=gsecs.filter(([id,l])=>polFor(id)!=="off"&&(!q||String(l).toLowerCase().includes(q)||gl.toLowerCase().includes(q))); if(!vis.length)return null; any=true; return (
         <div key={gl} className="space-y-1">
           <div className="px-3 text-[10px] font-semibold uppercase tracking-[.14em] text-stone-400">{gl}</div>
           {vis.map(([id,l,Icon])=><button key={id} onClick={()=>setSec(id)} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}{polFor(id)==="locked"&&<Ban className="w-3 h-3 text-stone-300 ml-auto"/>}</button>)}
-        </div>);})}</aside>
+        </div>);});
+        return <>{groups}{!any&&<div className="px-3 text-[12px] text-stone-400">No settings match “{secSearch}”.</div>}</>; })()}
+      </aside>
       <div className="flex-1 min-w-0">
         {secLocked&&<div className="mb-3 flex items-center gap-2 text-[13px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"><Ban className="w-4 h-4 shrink-0"/>This page is locked by your administrator — you can look, but changes are disabled.</div>}
         <div className={secLocked?"pointer-events-none opacity-60 select-none":""} aria-disabled={secLocked||undefined}>
@@ -8483,8 +8499,8 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="reports"&&<Reports shipments={shipments} showMoney={showMoney}/>}
         {sec==="notifications"&&<Notifications settings={settings} setSettings={setSettings} emails={emails}/>}
         {sec==="general"&&<GeneralSettings settings={settings} setSettings={setSettings} goSec={setSec} audit={audit}/>}
-        {sec==="cieditor"&&<CIEditor settings={settings} setSettings={setSettings} shipments={shipments}/>}
-        {sec==="cihistory"&&<CIHistory settings={settings} setSettings={setSettings}/>}
+        {sec==="cieditor"&&<div className="space-y-6"><CIEditor settings={settings} setSettings={setSettings} shipments={shipments}/><div className="border-t border-stone-200 pt-6"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-3">Commercial invoice history</div><CIHistory settings={settings} setSettings={setSettings}/></div></div>}
+        {sec==="cihistory"&&<div className="space-y-6"><CIEditor settings={settings} setSettings={setSettings} shipments={shipments}/><div className="border-t border-stone-200 pt-6"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-3">Commercial invoice history</div><CIHistory settings={settings} setSettings={setSettings}/></div></div>}
         {sec==="otherdocs"&&<OtherDocs settings={settings} setSettings={setSettings}/>}
         {sec==="customize"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])}/>}
         {sec==="shipscreen"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="ship"/>}
@@ -8941,6 +8957,7 @@ function PrinterSettings({settings,setSettings}){
   const printers=settings.printers||[];
   const routes=settings.printRoutes||[];
   const [pn,setPn]=useState("");
+  const [showRouting,setShowRouting]=useState(false);
   const addPrinter=()=>{if(!pn.trim())return;setSettings({...settings,printers:[...printers,{id:"pn"+Date.now(),name:pn.trim()}]});setPn("");};
   const delPrinter=(id)=>setSettings({...settings,printers:printers.filter(x=>x.id!==id),printRoutes:routes.filter(r=>r.printerId!==id),defaultPrinterId:settings.defaultPrinterId===id?undefined:settings.defaultPrinterId});
   const ROUTE_FIELDS=[["carrier","Carrier"],["service","Service"],["product","Product / items"],["sku","SKU"],["state","Ship-to state"],["source","Order source"],["weight","Weight (lb)"],["orderAgeDays","Order age (days)"]];
@@ -9122,8 +9139,9 @@ function PrinterSettings({settings,setSettings}){
         <p className="text-[11px] text-stone-400">Setting is per-login but works from any computer — jobs route through PrintNode to whichever machine the printer is on. The Chrome kiosk-printing shortcut below stays as the free, no-agent alternative. Note: the label logo stamp applies to dialog printing only; direct printing sends the carrier's original PDF.</p>
       </div>
     </Panel>
-    <Panel title="Printers & routing">
-      <p className="text-xs text-stone-500">Name your printers (e.g. “Zebra — Station A”, “Office laser”), then route labels to them by rule. Batch splits its printing into one run per printer — each opens as its own job so you pick that device once. Autopilot rules can also route with the “Route to Printer” action (use the printer’s exact name as the value).</p>
+    {!(printers.length>0||routes.length>0||showRouting)&&<button onClick={()=>setShowRouting(true)} className="w-full text-xs text-stone-500 hover:text-[#0086E0] flex items-center justify-center gap-1 border border-dashed border-stone-300 rounded-lg px-3 py-2.5"><Plus className="w-3.5 h-3.5"/>Advanced — name multiple printers &amp; route labels to them by rule</button>}
+    {(printers.length>0||routes.length>0||showRouting)&&<Panel title="Printers & routing">
+      <p className="text-xs text-stone-500">Name your printers (e.g. “Zebra — Station A”, “Office laser”), then route labels to them by rule. Batch splits its printing into one run per printer — each opens as its own job so you pick that device once. Autopilot rules can also route with the “Route to Printer” action (use the printer’s exact name as the value). <span className="text-stone-400">Most shops using PrintNode above don't need this.</span></p>
       <div className="space-y-1.5">
         {printers.map(x=>(<div key={x.id} className="flex items-center gap-2 text-sm">
           <Printer className="w-3.5 h-3.5 text-stone-400"/><span className="flex-1">{x.name}</span>
@@ -9145,7 +9163,7 @@ function PrinterSettings({settings,setSettings}){
         </div>))}
         <button onClick={addRoute} className="text-xs text-[#0086E0] font-medium flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add routing rule</button>
       </div>}
-    </Panel>
+    </Panel>}
     <Panel title="Label">
       <div className="grid grid-cols-2 gap-2">
         <Field label="Label size">
@@ -9179,6 +9197,9 @@ function PrinterSettings({settings,setSettings}){
           <option value="4x6">4×6</option>
         </Select>
       </Field>
+      <label className="block text-sm text-stone-700 mt-1">Thank-you message<textarea value={cust.slipThanks||""} onChange={e=>setCust("slipThanks",e.target.value)} rows={2} placeholder="Thanks for your order! We appreciate you." className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></label>
+      <label className="block text-sm text-stone-700">Footer line<input value={cust.slipFooter||""} onChange={e=>setCust("slipFooter",e.target.value)} placeholder="Returns within 30 days · support@yourstore.com" className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></label>
+      <div className="text-[11px] text-stone-400">The message &amp; footer print on every packing slip — Ship, Batch, and Orders.</div>
     </Panel>
     <Panel title="Doc tabs">
       <p className="text-xs text-stone-500 leading-relaxed">The doc tab is the removable tab on thermal FedEx label stock. Turn it on and choose what prints there — pulled from each shipment, or your own fixed text. <span className="text-stone-400">Requires doc-tab label stock in your thermal printer.</span></p>
@@ -10103,47 +10124,51 @@ function ConnectorModal({c,settings,setSettings,orders,setOrders,onClose}){
   );
 }
 function Integrations({settings,setSettings,orders,setOrders}){
-  const conn=settings.shopifyConn;
-  const connected=shopifyConnected(settings);
+  const conns=shopifyConns(settings);
+  const connected=conns.length>0;
   const [shop,setShop]=useState("");
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState(null);
   const [active,setActive]=useState(null); // connector id whose modal is open
   const normShop=(v)=>{let s=String(v||"").trim().toLowerCase().replace(/^https?:\/\//,"").replace(/\/.*$/,"");if(s&&!s.includes("."))s=s+".myshopify.com";return s;};
-  const connect=()=>{const s=normShop(shop);if(!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(s)){setMsg({err:"Enter your store like mystore.myshopify.com"});return;}window.location.href=`${SHOPIFY_AUTH}?shop=${encodeURIComponent(s)}`;};
-  const disconnect=()=>{ setSettings(p=>{const n={...p};delete n.shopifyConn;return n;}); setMsg(null); };
+  const connect=()=>{const s=normShop(shop);if(!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(s)){setMsg({err:"Enter your store like mystore.myshopify.com"});return;}
+    if(conns.some(c=>c.shop===s)){setMsg({err:s+" is already connected."});return;}
+    window.location.href=`${SHOPIFY_AUTH}?shop=${encodeURIComponent(s)}`;};
+  const disconnect=(shp)=>{ setSettings(p=>{ const rest=shopifyConns(p).filter(c=>c.shop!==shp); const n={...p,shopifyConns:rest}; delete n.shopifyConn; return n; }); setMsg(null); };
   const sync=async()=>{
     if(!connected)return; setBusy(true);setMsg(null);
-    const res=await shopifySyncOrders(conn);
+    let all=[],ok=false,er="";
+    for(const c of conns){ const res=await shopifySyncOrders(c); if(res&&res.ok){ok=true;(res.orders||[]).forEach(o=>all.push({...o,_shop:c.shop}));} else if(!er){er=(res&&res.error)||"";} }
     setBusy(false);
-    if(res&&res.ok){
+    if(ok){
       const existing=new Set((orders||[]).map(o=>o.shopifyId).filter(Boolean));
-      const fresh=(res.orders||[]).filter(o=>!existing.has(o.shopifyId));
+      const fresh=all.filter(o=>!existing.has(o.shopifyId));
       if(setOrders&&fresh.length) setOrders(o=>[...fresh,...o]);
-      setMsg({ok:`Synced ${res.orders.length} open order${res.orders.length===1?"":"s"} · ${fresh.length} new`});
-    } else setMsg({err:(res&&res.error)||"Sync failed"});
+      setMsg({ok:`Synced ${all.length} open order${all.length===1?"":"s"} across ${conns.length} store${conns.length===1?"":"s"} · ${fresh.length} new`});
+    } else setMsg({err:er||"Sync failed"});
   };
   const activeC=active?connectorOf(active):null;
   return (<div className="max-w-3xl space-y-3">
-    <p className="text-sm text-stone-500">Connect a platform so orders flow into Orders automatically, and tracking pushes back when you print a label. Click any tile for exact setup steps.</p>
-    {/* Shopify (live) */}
+    <p className="text-sm text-stone-500">Connect one or more stores so orders flow into Orders automatically, and tracking pushes back to the right store when you print a label. Click any tile for exact setup steps.</p>
+    {/* Shopify (live) — supports multiple stores */}
     <div className="border border-stone-200 rounded-lg bg-white p-4">
       <div className="flex items-center gap-3">
         <div className="w-9 h-9 rounded bg-[#95BF47]/15 flex items-center justify-center"><ShoppingBag className="w-4 h-4 text-[#5E8E3E]"/></div>
-        <div className="flex-1 min-w-0"><div className="font-medium">Shopify</div><div className="text-[11px] text-stone-400 font-mono truncate">{connected?conn.shop:"Not connected"}</div></div>
+        <div className="flex-1 min-w-0"><div className="font-medium">Shopify</div><div className="text-[11px] text-stone-400 truncate">{connected?`${conns.length} store${conns.length===1?"":"s"} connected`:"Not connected"}</div></div>
         {connected?<Badge tone="green">connected</Badge>:null}
       </div>
-      {connected?(
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <button onClick={sync} disabled={busy} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>Sync orders now</>}</button>
-          <button onClick={disconnect} className="text-sm border border-stone-200 text-stone-500 rounded px-3 py-2 hover:bg-stone-50">Disconnect</button>
-        </div>
-      ):(
-        <div className="mt-3 flex flex-wrap items-end gap-2">
-          <div className="flex-1 min-w-[220px]"><div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">Store domain</div><Input value={shop} onChange={e=>setShop(e.target.value)} placeholder="mystore.myshopify.com"/></div>
-          <button onClick={connect} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Plug className="w-4 h-4"/>Connect</button>
-        </div>
-      )}
+      {connected&&<div className="mt-3 space-y-1.5">
+        {conns.map(c=>(<div key={c.shop} className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1.5">
+          <ShoppingBag className="w-3.5 h-3.5 text-[#5E8E3E] shrink-0"/>
+          <span className="font-mono text-[12px] text-stone-600 truncate flex-1">{c.shop}</span>
+          <button onClick={()=>disconnect(c.shop)} className="text-[11px] text-stone-400 hover:text-rose-600 shrink-0">Disconnect</button>
+        </div>))}
+        <button onClick={sync} disabled={busy} className="mt-1 text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>Sync all orders now</>}</button>
+      </div>}
+      <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-stone-100 pt-3">
+        <div className="flex-1 min-w-[220px]"><div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">{connected?"Connect another store":"Store domain"}</div><Input value={shop} onChange={e=>setShop(e.target.value)} placeholder="mystore.myshopify.com"/></div>
+        <button onClick={connect} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Plug className="w-4 h-4"/>{connected?"Add store":"Connect"}</button>
+      </div>
       {msg&&<div className={`mt-2 text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${msg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{msg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{msg.err||msg.ok}</div>}
     </div>
     {/* All other connectors */}
@@ -10647,7 +10672,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
   /* Ship screen is its own top-level Settings section now (v376). It still shows as a tab in
      deployMode so the admin team-deploy screen keeps every option in one place. `only` renders a
      single panel with no tab bar — used by Settings → Ship screen. */
-  const CTABS=[["services","Services"],...(deployMode?[["ship","Ship screen"]]:[]),["orders","Orders & lists"],["appearance","Appearance"],["slips","Packing slips"]];   // Autopilot toggles moved to Settings → Print settings (v355)   // Labels & printing moved to Settings → Printer settings (v281)
+  const CTABS=[["services","Services"],...(deployMode?[["ship","Ship screen"]]:[]),["orders","Orders & lists"],["appearance","Appearance"]];   // Packing-slip message/footer moved to Settings → Print settings → Packing slip (v393). Autopilot toggles → Print settings (v355). Labels & printing → Printer settings (v281).
   const Toggle=({k,label,hint})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700">
     <span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span>
     <button onClick={()=>set(k,!c[k])}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${c[k]?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
@@ -10706,13 +10731,6 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
       </div>
     </Panel>}
 
-    {cs==="slips"&&<Panel title="Packing slips">
-      <div className="space-y-2.5">
-        <label className="block text-sm text-stone-700">Thank-you message<textarea value={c.slipThanks} onChange={e=>set("slipThanks",e.target.value)} rows={2} placeholder="Thanks for your order! We appreciate you." className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></label>
-        <label className="block text-sm text-stone-700">Footer line<input value={c.slipFooter} onChange={e=>set("slipFooter",e.target.value)} placeholder="Returns within 30 days · support@yourstore.com" className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></label>
-        <div className="text-[11px] text-stone-400">Prints on every packing slip — Ship, Batch, and Orders.</div>
-      </div>
-    </Panel>}
 
     {cs==="orders"&&<Panel title="Lists & alerts">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">

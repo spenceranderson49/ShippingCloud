@@ -170,7 +170,12 @@ exports.handler = async (event) => {
     if (i === 0 && refs.length) it.customerReferences = refs;
     const sig = SIG[String(o.signatureOption || "none").toLowerCase()];
     if (sig) it.packageSpecialServices = { signatureOptionType: sig };
-    if (i === 0 && +o.insuranceAmount > 0) it.declaredValue = { amount: Math.round(+o.insuranceAmount * 100) / 100, currency: "USD" };
+    /* Declared value is PER PACKAGE at FedEx. Honor each piece's own declaredValue (the app
+       sends one per box — same-on-each or per-box amounts alike). Legacy fallback: if no piece
+       carries one, put the order-level insuranceAmount on the first box like before. */
+    const pdv = +p.declaredValue || 0;
+    if (pdv > 0) it.declaredValue = { amount: Math.round(pdv * 100) / 100, currency: "USD" };
+    else if (i === 0 && !pieces.some(pp => +pp.declaredValue > 0) && +o.insuranceAmount > 0) it.declaredValue = { amount: Math.round(+o.insuranceAmount * 100) / 100, currency: "USD" };
     return it;
   });
 

@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v424";
+const BUILD_TAG="addr-v425";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2555,7 +2555,7 @@ const PLATFORM_DEFAULTS={ups:true,usps:true,amazon:false,uniuni:false};
 const PLANS=[
   {id:"free",name:"Free",price:0,tagline:"Kick the tires",limits:"25 labels / mo",features:["1 store integration","Single user","Standard rates","Email support"]},
   {id:"starter",name:"Starter",price:29,tagline:"Solo shippers",limits:"500 labels / mo",features:["3 store integrations","Box logic & presets","Branded tracking page","Batch printing"]},
-  {id:"pro",name:"Pro",price:79,tagline:"Growing brands",limits:"2,500 labels / mo",features:["Unlimited integrations","Live checkout rates","Invoice auditing","5 team seats","Custom markup per client"]},
+  {id:"pro",name:"Pro",price:79,tagline:"Growing brands",limits:"2,500 labels / mo",features:["Unlimited integrations","Live checkout rates","Invoice auditing","5 team seats","Custom rate cards"]},
   {id:"scale",name:"Scale",price:199,tagline:"High volume",limits:"Unlimited labels",features:["Everything in Pro","API access","Multi-tenant logins","Dedicated support","SLA & onboarding"]},
 ];
 
@@ -4405,7 +4405,7 @@ function batchCmdMatch(o,f,zone){
    the same deployed bundle as real logins, every platform update shows up in
    the demo automatically. */
 const DEMO_SEED_V="2026-07-06b";
-const DEMO_USER={id:"demo",name:"Demo Explorer",email:"demo@shippingcloud.net",role:"customer",clientId:null,status:"active",lastLogin:"Now",demo:true};
+const DEMO_USER={id:"demo",name:"Demo Explorer",email:"demo@"+(BRAND.fw?"freightwireship.com":"shippingcloud.net"),role:"customer",clientId:null,status:"active",lastLogin:"Now",demo:true};
 const demoDaysAgo=(n)=>new Date(Date.now()-n*86400000).toLocaleDateString();
 function makeDemoData(){
   const SVC=[["FedEx","FedEx Ground"],["FedEx","FedEx Ground"],["FedEx","FedEx Home Delivery"],["FedEx","FedEx Ground"],["FedEx","FedEx 2Day"],["FedEx","FedEx Home Delivery"],["FedEx","FedEx Ground"],["FedEx","FedEx Express Saver"],["FedEx","FedEx Priority Overnight"],["FedEx","FedEx Ground"],["DHL","DHL Express Worldwide"],["FedEx","FedEx 2Day"],["FedEx","FedEx Standard Overnight"],["FedEx","FedEx Home Delivery"]];
@@ -5335,6 +5335,19 @@ function AppInner(){
     if(old&&Array.isArray(old)&&old.length>1) setClients(old);
   }catch(e){} },[currentUser&&currentUser.id]);
   useEffect(()=>{ startCloudPoll(); },[]);
+  /* Every login IS a customer. New signups get their client minted server-side; this self-heal
+     covers logins created before that (or with a dead clientId): mint a client on the spot and
+     assign it, so no one ever runs unassigned (at raw carrier cost) and the old "no customer
+     assigned" banner has nothing to warn about — the admin just opens the customer and sets rates. */
+  useEffect(()=>{ try{
+    if(!currentUser||currentUser.role!=="customer"||currentUser.demo)return;
+    if(currentUser.clientId&&clients.some(c=>c&&c.id===currentUser.clientId))return;
+    const id="c"+Date.now()+Math.floor(Math.random()*1000);
+    const nc={id,name:currentUser.company||currentUser.name||currentUser.email||"New customer",contact:currentUser.name||"",email:currentUser.email||"",phone:"",origin:"",markup:"",status:"active",since:new Date().toISOString().slice(0,7),plan:"Standard",selfSignup:true};
+    setClients(p=>[...p,nc]);
+    setUsers(us=>us.map(u=>u.id===currentUser.id?{...u,clientId:id}:u));
+    setCurrentUser(cu=>cu&&({...cu,clientId:id}));
+  }catch(e){} },[currentUser&&currentUser.id,currentUser&&currentUser.clientId,clients.length]);
   const [clientId,setClientId]=useState("");   // "" = unassigned; never a guessed id — c1 has never existed (SEED_CLIENTS starts at c2)
   const [accounts,setAccounts]=usePersist("accounts",SEED_ACCOUNTS);
   const [orders,setOrders]=usePersist("orders",SEED_ORDERS);
@@ -5646,7 +5659,7 @@ function AppInner(){
 
   const isAdmin=currentUser&&currentUser.role==="admin";
   const isDemo=!!(currentUser&&currentUser.id==="demo");
-  const myFlags=isDemo?{pickups:true,batch:true,invoices:true,rules:true,scan:true,settings:true}:(isAdmin?{}:((featureFlags&&featureFlags[currentUser&&currentUser.id])||(CLOUD.mode==="cloud"?myFeatures:{})));
+  const myFlags=isDemo?{pickups:true,batch:true,invoices:false,rules:true,scan:true,settings:true}:(isAdmin?{}:((featureFlags&&featureFlags[currentUser&&currentUser.id])||(CLOUD.mode==="cloud"?myFeatures:{})));
   useEffect(()=>{ CI_OPTS.logo=settings.companyLogo||(myFlags&&myFlags._logoB64)||""; },[myFlags,settings.companyLogo]);
   const showMoney=isDemo||isAdmin||featureOn("seeCosts",currentUser,myFlags);   // "See costs & spend" per-customer feature — admins always see money
   const [batchCmd,setBatchCmd]=useState(null);
@@ -6628,14 +6641,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         </div>
 
 
-        {(client._unassigned||client._unresolved)&&!(currentUser&&currentUser.demo)&&<div className="flex flex-wrap items-center gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0"/>
-                  <span className="flex-1 min-w-[220px]">{client._unresolved?`This login is set to an unknown customer (id "${client.id}") — no such customer exists, so no account markup can apply.`:"This login has no customer assigned — quotes price at exactly the raw carrier cost, no markup at all."}</span>
-                  {currentUser&&setUsers&&setCurrentUser&&<select onChange={e=>{const cid=e.target.value;if(!cid)return;setCurrentUser(cu=>cu&&({...cu,clientId:cid}));setUsers(us=>us.map(u=>u.id===currentUser.id?{...u,clientId:cid}:u));e.target.value="";}} defaultValue="" className="bg-white border border-amber-300 rounded px-2 py-1 text-xs">
-                    <option value="" disabled>Assign to customer — fixes it instantly…</option>
-                    {clients.map(cc=><option key={cc.id} value={cc.id}>{cc.name}</option>)}
-                  </select>}
-                </div>}
+        {/* "No customer assigned" banner removed: logins self-heal into a customer automatically
+            (see the App-shell effect) — customers must never see markup mechanics or the client list. */}
                 {(handsFree||selectedOrder)&&(()=>{const so=selectedOrder&&orders.find(o=>o.id===selectedOrder);
                   if(!handsFree&&!(so&&(so.shippingService||so.source)))return null;
                   /* hands-free: this box is ALWAYS here (fixed height) — only its text changes */
@@ -9178,7 +9185,9 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
   /* Per-customer section policy set in the admin portal (featureFlags._secPolicy):
      "off" hides the section from the sidebar entirely; "locked" keeps it visible but greys the
      whole page out read-only. Admins are never restricted. */
-  const polFor=(id)=>isAdmin?"on":(String((secPolicy&&secPolicy[id])||"on"));
+  const polFor=(id)=>{ if(isAdmin)return "on";
+    if(currentUser&&currentUser.demo&&(id==="billing"||id==="subscription"))return "off";   // demo: no plans/pricing/card surfaces
+    return String((secPolicy&&secPolicy[id])||"on"); };
   const visibleSecs=secs.filter(([id])=>polFor(id)!=="off");
   const secLocked=polFor(sec)==="locked";
   /* If a previously-saved section no longer exists (or is hidden) for this login, fall back to General. */

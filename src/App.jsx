@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v412";
+const BUILD_TAG="addr-v413";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -941,28 +941,27 @@ function openLabelOrDirectPrint(payload,settings,setLabelPreview){
     setLabelPreview({...payload,invalid:true});
     return;
   }
-  /* Silent-to-printer when direct printing is on AND either:
-       • skipBookedSummary (kiosk: no modal, auto-advance), or
-       • directNoPreview   (you still hit Ship and see the booked summary — just no preview popup).
-     If PrintNode rejects, we fall back to opening the modal so no label is lost. */
-  /* Hands-free and No-preview both intend a silent print — decided by the MODE, not by a separate
-     enabled flag. Try the printer first; only fall back to something visible if it didn't take. */
-  if((c.skipBookedSummary||c.directNoPreview)&&payload&&payload.pdf){
+  /* TWO independent choices decide what happens (set as separate boxes in Print settings):
+       • previewBeforePrint — show the label preview (you click Print there) vs print immediately
+       • skipBookedSummary  — after printing, show the booked-summary popup or nothing
+     Legacy accounts (no previewBeforePrint saved) derive it from the old modes: hands-free and
+     no-preview both meant "print immediately", preview meant "show it first". */
+  const wantPreview=c.previewBeforePrint!=null?!!c.previewBeforePrint:!(c.skipBookedSummary||c.directNoPreview);
+  const wantSummary=!c.skipBookedSummary;
+  if(!wantPreview&&payload&&payload.pdf){
     directPrintPdf(payload.pdf,"Shipping label"+(payload.tracking?" "+payload.tracking:""),docCtxFor(payload.rec,payload.tracking)).then(sent=>{
       if(sent){
-        /* Printed silently. Hands-free shows NOTHING; No-preview still wants the booked summary
-           (tracking / Copy / pickup) with autoPrint:false so nothing re-prints. */
-        if(c.directNoPreview&&!c.skipBookedSummary)setLabelPreview({...payload,autoPrint:false});
+        /* Printed silently. Summary popup only if they asked for one (autoPrint:false — nothing re-prints). */
+        if(wantSummary)setLabelPreview({...payload,autoPrint:false});
         return;
       }
       /* If nothing is configured, directPrintPdf returned early with no reason — say so here.
          When it DID reach PrintNode and got rejected, directPrintPdf already surfaced the real error. */
       if(!dp||!dp.enabled||!dp.apiKey||!dp.printerId){ try{ window.dispatchEvent(new CustomEvent("sc-direct-print-failed",{detail:{reason:"not-configured"}})); }catch(e){} }
-      if(c.skipBookedSummary){
-        /* Hands-free MUST stay clean AND reliable: render the label to images and print them through
-           the page's own print path (printImagePages waits for every image to fully decode and sizes
-           to the label stock — so no blank or half pages, and no preview modal). Only if pdf.js is
-           unavailable do we fall back to the sized PDF frame. */
+      if(!wantSummary){
+        /* No summary wanted — print through the page's own path with NO modal: render the label to
+           images (printImagePages waits for full decode and sizes to the label stock — no blank or
+           half pages). Only if pdf.js is unavailable do we fall back to the sized PDF frame. */
         (async()=>{ try{
           const r0=await pdfToImages(payload.pdf,3);
           const r=await composeForStock(r0.imgs,r0.wIn,r0.hIn,docCtxFor(payload.rec,payload.tracking));
@@ -970,7 +969,7 @@ function openLabelOrDirectPrint(payload,settings,setLabelPreview){
           throw new Error("no pages");
         }catch(e){ try{ const u=pdfBlobUrl(payload.pdf); printPdfUrl(u); setTimeout(()=>{try{URL.revokeObjectURL(u);}catch(_){}},180000); }catch(_){ setLabelPreview(payload); } } })();
       } else {
-        /* No-preview: show the booked summary (it also prints via its own dialog fallback). */
+        /* Summary wanted: show the booked summary (it also prints via its own dialog fallback). */
         setLabelPreview(payload);
       }
     });
@@ -1422,7 +1421,7 @@ async function printPackingSlipAuto(slips,settings){
     if(pdf&&dp&&await pnPrintPdf(dp.docPrinters.packSlip,pdf,"Packing slip"))return;   // routed to the slip printer, as a real PDF
     // routed print failed — fall through so the slip is never lost
   }
-  if(!c.skipBookedSummary&&!c.directNoPreview){ try{ window.__scPendingSlips=list; }catch(e){} return; }
+  if(c.previewBeforePrint!=null?!!c.previewBeforePrint:(!c.skipBookedSummary&&!c.directNoPreview)){ try{ window.__scPendingSlips=list; }catch(e){} return; }   // preview flow: modal handles the slip
   printPackingSlipsDialog(list);
 }
 
@@ -6042,7 +6041,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       pieces:pieces.map(p=>({weight:Math.ceil(pw(p)||1),length:p.L,width:p.W,height:p.H,declaredValue:intl?(p.value||null):((pieces.length>1&&dvEach)?(+p.dv||null):(+insurance||null))}))};   // book at the rounded-up billing weight the quote priced · per-box declared value on multipiece
     const res=await shipCall({action:"ship",account:acctOf(eng),order});
     if(!res||!res.ok){setShipStatus({state:"error",key:q.key,msg:(res&&res.error)||"Booking failed"});setBought(null);return;}
-    const done=(st)=>{ justBookedRef.current=selectedOrder; const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec},settings,setLabelPreview); if(cz(settings).autoPackSlip){ const so=selectedOrder&&orders.find(x=>x.id===selectedOrder); setTimeout(()=>{ try{ printPackingSlipAuto([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:st.tracking||"",service:q.label}],settings); }catch(e){} },(!cz(settings).skipBookedSummary&&!cz(settings).directNoPreview)?0:2500); }   /* label pipeline gets a head start — its dialog must always beat the slip fallback */ if(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint){ setTimeout(()=>{ try{newShipment();}catch(e){} },900); };} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
+    const done=(st)=>{ justBookedRef.current=selectedOrder; const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec},settings,setLabelPreview); if(cz(settings).autoPackSlip){ const so=selectedOrder&&orders.find(x=>x.id===selectedOrder); setTimeout(()=>{ try{ printPackingSlipAuto([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:st.tracking||"",service:q.label}],settings); }catch(e){} },(cz(settings).previewBeforePrint!=null?cz(settings).previewBeforePrint:!(cz(settings).skipBookedSummary||cz(settings).directNoPreview))?0:2500); }   /* label pipeline gets a head start — its dialog must always beat the slip fallback */ if(cz(settings).printFlowV2?cz(settings).resetAfterPrint:(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint)){ setTimeout(()=>{ try{newShipment();}catch(e){} },900); };} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
     if(res.booked){done(res);return;}
     setShipStatus({state:"pending",key:q.key,orderId:res.orderId});
     pollLabel(eng,res.orderId,done).then(r=>{ if(r&&r.timedOut){ onPending&&onPending({orderId:res.orderId,rec:buildRec(q,carrier,{}),service:q.label,carrier,orderRef:selectedOrder}); setShipStatus({state:"pending_timeout",key:q.key});setBought(null);} });
@@ -6053,12 +6052,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
      once per order (ref), never while booking/booked. print() still runs its own required-
      field validation — a missing phone/email surfaces the normal error instead of booking. */
   const autoBookedRef=React.useRef(null);
-  /* Hands-free is derived the SAME way the Print-settings radio displays it: skipBookedSummary
-     alone means hands-free. autoBookOnShip is only written when the radio is CLICKED, so settings
-     saved on an older build can show "Hands-free" selected while the flag is still false — auto-book
-     then silently never fires ("I still have to click print"). Deriving from either flag self-heals
-     every stale account without anyone touching Settings. */
-  const handsFree=!!(custom.autoBookOnShip||custom.skipBookedSummary);
+  /* Hands-free derivation. New print-flow accounts (printFlowV2 — they've touched the new
+     4-box settings) use autoBookOnShip strictly: skipBookedSummary now just means "no summary
+     popup" and must NOT arm auto-booking. Legacy accounts keep the self-heal: skipBookedSummary
+     alone meant hands-free on old builds where autoBookOnShip was never written. */
+  const handsFree=custom.printFlowV2?!!custom.autoBookOnShip:!!(custom.autoBookOnShip||custom.skipBookedSummary);
   useEffect(()=>{
     if(!handsFree||!custom.autoRulesOnShip)return;
     if(!selectedOrder||autoBookedRef.current===selectedOrder)return;
@@ -6400,7 +6398,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             
           </div>
         )}
-        {labelPreview&&<LabelPreviewModal data={labelPreview} settings={settings} onNewShipment={newShipment} onClose={()=>{setLabelPreview(null);if(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint)newShipment();}}/>}
+        {labelPreview&&<LabelPreviewModal data={labelPreview} settings={settings} onNewShipment={newShipment} onClose={()=>{setLabelPreview(null);if(cz(settings).printFlowV2?cz(settings).resetAfterPrint:(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint))newShipment();}}/>}
         {naming&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setNaming(false)}><div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-sm space-y-3" onClick={e=>e.stopPropagation()}><div className="text-sm font-semibold text-stone-800">Name this draft</div><input autoFocus value={draftName} onChange={e=>setDraftName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")commitDraft(draftName.trim());}} placeholder="e.g. Dana Cole – Miami" className="w-full bg-white border border-stone-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><div className="flex justify-end gap-2"><button onClick={()=>setNaming(false)} className="text-sm px-3 py-1.5 rounded text-stone-600 hover:bg-stone-100">Cancel</button><button onClick={()=>commitDraft(draftName.trim())} className="text-sm px-3 py-1.5 rounded bg-stone-900 text-white font-medium hover:bg-stone-800">Save draft</button></div></div></div>}
         {shipStatus&&<div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2.5 ${shipStatus.state==="error"?"bg-rose-50 text-rose-700 border border-rose-200":shipStatus.state==="booked"?"bg-emerald-50 text-emerald-700 border border-emerald-200":shipStatus.state==="pending_timeout"?"bg-amber-50 text-amber-700 border border-amber-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
           {shipStatus.state==="booking"&&<><Loader2 className="w-4 h-4 animate-spin"/>Booking label on your FedEx account…</>}
@@ -6490,7 +6488,7 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
      their PrintNode-failed fallback), for explicit reprints (fromExisting), and for the
      legacy "auto-open the print dialog" checkbox. */
   const _pc=cz(st);
-  const previewMode=!_pc.skipBookedSummary&&!_pc.directNoPreview;
+  const previewMode=_pc.previewBeforePrint!=null?!!_pc.previewBeforePrint:(!_pc.skipBookedSummary&&!_pc.directNoPreview);
   const autoPrintOff=previewMode&&!data.fromExisting&&!((st.printer||{}).autoPrint);
   const [hasPrinted,setHasPrinted]=useState(false);
   const docCtx=recToDocCtx(data.rec||{...data,recipient:data.recipient,service:data.service,tracking:data.tracking,carrier:data.carrier});
@@ -9277,39 +9275,43 @@ function PrinterSettings({settings,setSettings}){
           </label>
         </div>
         {(()=>{ const ready=!!String(pnc.apiKey||"").trim()&&!!pnc.printerId;
-          const mode=cust.skipBookedSummary?"handsfree":cust.directNoPreview?"nopreview":"preview";
-          const armed=ready&&mode!=="preview";
-          /* The mode drives the WHOLE after-service behaviour: whether the Ship button fires itself
-             (auto-book) and what happens once a label exists (popup / preview). Hands-free = fully
-             automatic: a matching order books & prints itself, no click, no popup. The other two
-             leave booking to your click. Also arms direct printing and clears the legacy dialog flag
-             so a label never both prints silently AND pops a dialog. Service selection is separate,
-             in the dropdown above. */
-          const setMode=(m)=>{
-            set({autoPrint:false});
-            if(m==="handsfree"){ setCust("skipBookedSummary",true); setCust("directNoPreview",false); setCust("autoBookOnShip",true); setCust("autoRulesOnShip",true); }
-            else if(m==="nopreview"){ setCust("skipBookedSummary",false); setCust("directNoPreview",true); setCust("autoBookOnShip",false); }
-            else { setCust("skipBookedSummary",false); setCust("directNoPreview",false); setCust("autoBookOnShip",false); }
-            setPnCfg({enabled:ready});
-          };
-          const Opt=({v,title,desc})=>(<label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${mode===v?"border-emerald-300 bg-emerald-50/60":"border-stone-200 bg-white hover:bg-stone-50"}`}>
-            <input type="radio" name="printmode" checked={mode===v} onChange={()=>setMode(v)} className="mt-0.5 accent-emerald-600"/>
+          /* Four INDEPENDENT choices (each its own box, pick one per box):
+             2 · who books  ·  3 · preview or not  ·  4 · summary popup or not  ·  5 · auto new shipment.
+             Every click stamps printFlowV2 so the Ship screen reads the flags in the new, unbundled way
+             (skipBookedSummary then means ONLY "no summary popup" — it no longer implies hands-free). */
+          const handsOn=cust.printFlowV2?!!cust.autoBookOnShip:!!(cust.autoBookOnShip||cust.skipBookedSummary);
+          const previewOn=cust.previewBeforePrint!=null?!!cust.previewBeforePrint:!(cust.skipBookedSummary||cust.directNoPreview);
+          const summaryOn=!cust.skipBookedSummary;
+          const resetOn=!!cust.resetAfterPrint;
+          const stamp=()=>{ setCust("printFlowV2",true); set({autoPrint:false}); setPnCfg({enabled:ready}); };
+          const Opt=({on,pick,title,desc,group})=>(<label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${on?"border-emerald-300 bg-emerald-50/60":"border-stone-200 bg-white hover:bg-stone-50"}`}>
+            <input type="radio" name={group} checked={on} onChange={pick} className="mt-0.5 accent-emerald-600"/>
             <span><span className="text-sm font-semibold text-stone-800">{title}</span><span className="block text-[11px] font-normal text-stone-500 mt-0.5">{desc}</span></span>
           </label>);
-          return (<div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2">
-            <div className="text-[10px] uppercase tracking-widest text-stone-400 flex items-center gap-1"><Zap className={`w-3 h-3 ${armed?"text-emerald-600":"text-stone-400"}`}/>2 · When a label is created — how it prints &amp; what you see</div>
-            <Opt v="handsfree" title="Hands-free — books & prints itself" desc="A matching order books and prints on its own — the Ship button fires with no click, nothing pops up, and the screen jumps to the next order. Needs an Autopilot rule that matches the order."/>
-            <Opt v="nopreview" title="You book — it prints, keeps the summary" desc="You click the service to book; the label then prints straight to the printer and a summary popup shows the tracking number with Copy, Track and pickup buttons. No label preview."/>
-            <Opt v="preview" title="You book — show a preview first" desc="You click the service to book; nothing prints until you check the label and click Print. Best when you want to eyeball each one."/>
-            {mode==="handsfree"&&<p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">A matching order fires the moment its rate is ready — make sure your <b>Autopilot rules</b> are exactly right. Orders with no matching rule still wait for your click.</p>}
-            {mode!=="preview"&&!ready&&<p className="text-[11px] text-amber-600 mt-1 font-medium">⚠ Finish the one-time printer setup below (paste the API key → Find my printers → pick your printer). Until then, labels open the normal print window.</p>}
-            {mode!=="preview"&&ready&&<p className="text-[11px] text-emerald-700 mt-1">Active — labels print straight to <b>{pnc.printerName||("printer "+pnc.printerId)}</b>.</p>}
+          const Box=({n,title,children})=>(<div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2">
+            <div className="text-[10px] uppercase tracking-widest text-stone-400">{n} · {title}</div>{children}
           </div>);
+          return (<>
+            <Box n="2" title="When a label is created — who books">
+              <Opt group="pf-book" on={handsOn} pick={()=>{stamp();setCust("autoBookOnShip",true);setCust("autoRulesOnShip",true);}} title="Hands-free — it books itself" desc="A matching order fires the Ship button on its own the moment its live rate is ready. Needs an Autopilot rule (or fallback service) that covers the order — anything unmatched still waits for you."/>
+              <Opt group="pf-book" on={!handsOn} pick={()=>{stamp();setCust("autoBookOnShip",false);}} title="You click print" desc="Nothing books until you click the service — you stay in control of every label."/>
+              {handsOn&&<p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">Make sure your <b>Autopilot rules</b> are exactly right — a matching order books itself with no confirmation.</p>}
+            </Box>
+            <Box n="3" title="Print preview">
+              <Opt group="pf-prev" on={!previewOn} pick={()=>{stamp();setCust("previewBeforePrint",false);}} title="No preview — print right away" desc={"The label goes straight to the printer"+(ready?" ("+(pnc.printerName||("printer "+pnc.printerId))+")":"")+". Fastest flow."}/>
+              <Opt group="pf-prev" on={previewOn} pick={()=>{stamp();setCust("previewBeforePrint",true);}} title="Show a preview first" desc="The label opens on screen and prints when you click Print — eyeball each one before it hits paper."/>
+              {!previewOn&&!ready&&<p className="text-[11px] text-amber-600 font-medium">⚠ Finish the one-time printer setup below (paste the API key → Find my printers → pick your printer). Until then, labels open the normal print window.</p>}
+            </Box>
+            <Box n="4" title="After it prints">
+              <Opt group="pf-sum" on={summaryOn} pick={()=>{stamp();setCust("skipBookedSummary",false);}} title="Pop-up summary" desc="A booked summary shows the tracking number with Copy, Track and pickup buttons."/>
+              <Opt group="pf-sum" on={!summaryOn} pick={()=>{stamp();setCust("skipBookedSummary",true);}} title="No pop-up" desc="Nothing appears — the screen stays clear for the next order."/>
+            </Box>
+            <Box n="5" title="Next shipment">
+              <Opt group="pf-next" on={resetOn} pick={()=>{stamp();setCust("resetAfterPrint",true);}} title="Automatically start a new shipment" desc="The form clears itself right after each print, ready for the next order or scan."/>
+              <Opt group="pf-next" on={!resetOn} pick={()=>{stamp();setCust("resetAfterPrint",false);}} title="Keep the info — I'll click New shipment" desc="Everything stays on screen until you clear it yourself."/>
+            </Box>
+          </>);
         })()}
-        <label className="flex items-center justify-between gap-3 text-sm text-stone-700 rounded-xl border border-stone-200 bg-stone-50 p-3">
-          <span>3 · Clear the form for the next order after each print<span className="block text-[11px] font-normal text-stone-400">Handy in “keep the summary” mode — the Ship form resets once a label prints while the summary popup stays up. Hands-free already does this.</span></span>
-          <button onClick={()=>setCust("resetAfterPrint",!cust.resetAfterPrint)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${cust.resetAfterPrint?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
-        </label>
         <p className="text-xs text-stone-500">Browsers can't skip the print dialog on their own — a tiny agent on the label computer does it. One-time setup: install the free <a href="https://www.printnode.com/en/download" target="_blank" rel="noreferrer" className="text-[#0086E0] hover:underline">PrintNode client</a> on the computer the printer is plugged into, sign in, then paste your API key (PrintNode dashboard → API Keys) here. After that, every label prints itself.</p>
         <div className="flex flex-wrap items-end gap-2">
           <label className="block text-sm text-stone-700 flex-1 min-w-[220px]">PrintNode API key
@@ -9338,7 +9340,7 @@ function PrinterSettings({settings,setSettings}){
             let full=false; try{ full=await directPrintPdf(PN_TEST_PDF,"Hands-free diagnostic",docCtxFor(null,"")); }catch(e){}
             setPnBusy("");
             const s2=settings||{}; const pr2=s2.printer||{}; const cu=cz(s2);
-            const dump=" · [format="+(pr2.format||"PDF")+", size="+(pr2.labelSize||"4x6")+", mode="+(cu.skipBookedSummary?"handsfree":cu.directNoPreview?"nopreview":"preview")+", legacyAutoPrint="+String(!!pr2.autoPrint)+", routes="+((s2.printRoutes||[]).length)+", pn.on="+String(!!dp.enabled)+", printer="+JSON.stringify(dp.printerId||"")+"]"+keyInfo;
+            const dump=" · [format="+(pr2.format||"PDF")+", size="+(pr2.labelSize||"4x6")+", book="+(cu.printFlowV2?(cu.autoBookOnShip?"auto":"click"):(cu.skipBookedSummary?"auto(legacy)":"click"))+", preview="+String(cu.previewBeforePrint!=null?!!cu.previewBeforePrint:!(cu.skipBookedSummary||cu.directNoPreview))+", summary="+String(!cu.skipBookedSummary)+", legacyAutoPrint="+String(!!pr2.autoPrint)+", routes="+((s2.printRoutes||[]).length)+", pn.on="+String(!!dp.enabled)+", printer="+JSON.stringify(dp.printerId||"")+"]"+keyInfo;
             setPnMsg(full?{ok:"✓ Full auto-print path WORKED — hands-free will print silently."+dump}:{err:"✓ Key valid ("+((kres.printers||[]).length)+" printers) but the REAL print path FAILED — read the red bar for PrintNode's reason."+dump}); }}
             disabled={pnBusy==="diag"} className="text-sm border border-amber-300 text-amber-700 rounded-lg px-3.5 py-2 font-medium hover:bg-amber-50 disabled:opacity-40 flex items-center gap-1.5">{pnBusy==="diag"?<><Loader2 className="w-4 h-4 animate-spin"/>Testing…</>:<>Diagnose hands-free</>}</button>
         </div>}

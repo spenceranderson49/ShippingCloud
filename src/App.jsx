@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v423";
+const BUILD_TAG="addr-v424";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -857,6 +857,30 @@ function ReceiptPreviewImg({rc,logo}){
    editor: header origin/ship-date blocks, bold TO block, REF/INV row, PDF417 field with the FedEx
    wordmark + service letter box, thick rule, right-aligned commit block, TRK row, giant routing
    code, bottom barcode with a PREVIEW knock-out — the same treatment FedEx uses for SAMPLE. */
+/* Hand-built vector FedEx wordmark (mono/black, like the printed label): solid "Fed",
+   outlined "E", solid "x" with the arrow gap. Pure canvas primitives — no fonts, no images,
+   so it renders identically everywhere (previews, drag editor, booking popup). */
+function drawFedexWordmarkMono(g,x,y,h){
+  const s=h/100,X=(v)=>x+v*s,Y=(v)=>y+v*s;
+  const P=(pts)=>{g.beginPath();g.moveTo(X(pts[0][0]),Y(pts[0][1]));for(let i=1;i<pts.length;i++)g.lineTo(X(pts[i][0]),Y(pts[i][1]));g.closePath();};
+  const rr=(rx,ry,w,hh,r)=>{const x0=X(rx),y0=Y(ry),ww=w*s,h2=hh*s,r2=r*s;g.beginPath();g.moveTo(x0+r2,y0);g.arcTo(x0+ww,y0,x0+ww,y0+h2,r2);g.arcTo(x0+ww,y0+h2,x0,y0+h2,r2);g.arcTo(x0,y0+h2,x0,y0,r2);g.arcTo(x0,y0,x0+ww,y0,r2);g.closePath();};
+  g.save();g.fillStyle="#000";g.strokeStyle="#000";
+  P([[0,0],[54,0],[54,24],[26,24],[26,38],[50,38],[50,62],[26,62],[26,100],[0,100]]);g.fill();      // F
+  rr(58,28,66,72,30);g.fill();                                                                       // e slab
+  g.fillStyle="#fff";g.beginPath();g.ellipse(X(91),Y(47),13*s,9*s,0,0,7);g.fill();                   // e counter
+  P([[88,66],[124,66],[124,84],[88,84]]);g.fill();                                                   // e aperture
+  g.fillStyle="#000";
+  rr(128,28,66,72,30);g.fill();                                                                      // d bowl
+  P([[168,0],[194,0],[194,100],[168,100]]);g.fill();                                                 // d stem
+  g.fillStyle="#fff";g.beginPath();g.ellipse(X(150),Y(64),13*s,20*s,0,0,7);g.fill();                 // d counter
+  g.fillStyle="#000";
+  P([[202,0],[262,0],[262,22],[230,22],[230,39],[256,39],[256,61],[230,61],[230,78],[262,78],[262,100],[202,100]]);
+  g.fillStyle="#fff";g.fill();g.lineWidth=Math.max(2,6*s);g.stroke();                                // E outlined
+  g.fillStyle="#000";
+  P([[256,28],[282,28],[336,100],[310,100]]);g.fill();                                               // x \
+  P([[310,28],[336,28],[282,100],[256,100]]);g.fill();                                               // x /
+  g.restore();
+}
 function drawFedexMock(g,W,H,{to,sender,service,weight,pieceCount,refNo,residential}){
       const r=to||{},s=sender||{};
       let seed=0;const sk=String((r.zip||"")+(r.name||"")+(service||""));for(let i=0;i<sk.length;i++)seed=(seed*31+sk.charCodeAt(i))>>>0;
@@ -896,13 +920,7 @@ function drawFedexMock(g,W,H,{to,sender,service,weight,pieceCount,refNo,resident
       g.fillRect(48,pTop,10,300);g.fillRect(62,pTop,4,300);   // start guard
       for(let row=0;row<25;row++){let x=84;while(x<640){const bw=2+Math.floor(rnd()*7);if(rnd()>0.42)g.fillRect(x,pTop+row*12,bw,10);x+=bw+2+Math.floor(rnd()*3);}}
       g.fillRect(652,pTop,4,300);g.fillRect(662,pTop,10,300);   // end guard
-      // FedEx wordmark — black mono version like the real thermal label: solid "Fed", outlined "E", solid "x"
-      g.fillStyle="#000";g.strokeStyle="#000";
-      g.font="700 120px Arial,Helvetica,sans-serif";
-      let wx=754;const wy=pTop+114;
-      g.fillText("Fed",wx,wy);wx+=g.measureText("Fed").width-6;
-      g.lineWidth=6;g.strokeText("E",wx,wy);wx+=g.measureText("E").width-12;
-      g.fillText("x",wx,wy);
+      drawFedexWordmarkMono(g,758,pTop+8,112);
       g.lineWidth=2;
       const svcL=String(service||"").toLowerCase();
       const fam=/overnight|2day|express saver|one rate/.test(svcL)?"Express":/economy|smartpost/.test(svcL)?"Ground Economy":/home/.test(svcL)?"Home Delivery":"Ground";
@@ -916,7 +934,7 @@ function drawFedexMock(g,W,H,{to,sender,service,weight,pieceCount,refNo,resident
       // ── commit block ──
       g.font=MO(56,true);g.textAlign="right";
       g.fillText(D[dt.getDay()]+" - "+String(dt.getDate()).padStart(2,"0")+" "+M[dt.getMonth()],W-36,cTop+78);
-      g.fillText((U(service).replace(/FEDEX\s*/,"").replace(/®/g,"")||"GROUND").slice(0,17),W-36,cTop+148);
+      {const svcTxt=U(service).replace(/FEDEX\s*/,"").replace(/®/g,"")||"GROUND";let fs2=56;g.font=MO(fs2,true);while(g.measureText(svcTxt).width>560&&fs2>30){fs2-=2;g.font=MO(fs2,true);}g.fillText(svcTxt,W-36,cTop+148);g.font=MO(56,true);}
       g.font=MO(44,true);
       if(residential!==false)g.fillText("RES",W-36,cTop+206);
       g.fillText(U(r.zip)||"00000",W-36,cTop+264);
@@ -945,7 +963,7 @@ function MockLabelImg({to,sender,service,weight,pieceCount,refNo,residential}){
       if(!dead)setSrc(out[0]);
     }catch(e){}
   })();return ()=>{dead=true;};},[JSON.stringify(to||{}),JSON.stringify(sender||{}),service,weight,pieceCount,refNo,residential]);
-  return src?<img src={src} alt="label preview" className="w-full max-w-[460px] mx-auto border border-stone-300 rounded shadow bg-white"/>:<div className="w-full max-w-[460px] h-[690px] mx-auto border border-dashed border-stone-300 rounded"/>;
+  return src?<img src={src} alt="label preview" style={{maxHeight:"46vh"}} className="w-auto max-w-full mx-auto border border-stone-300 rounded shadow bg-white"/>:<div style={{height:"46vh"}} className="w-full max-w-[320px] mx-auto border border-dashed border-stone-300 rounded"/>;
 }
 /* DRAG-to-place logo editor on a real FedEx-look label. The logo is a live overlay you drag
    anywhere; on release the position (logo center, % of label) saves and the SAME math places it
@@ -4642,7 +4660,7 @@ function FedExIntake({onDone,onClose}){
     </div>
     <div className="grid grid-cols-2 gap-2">
       <select value={f.volume} onChange={e=>setF({...f,volume:e.target.value})} className={inp}><option value="">Packages / month</option><option>Under 100</option><option>100–500</option><option>500–2,000</option><option>2,000+</option></select>
-      <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp}><option value="">Ship mostly with…</option><option>FedEx</option><option>USPS</option><option>Another carrier</option><option>A mix</option></select>
+      <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp}><option value="">Ship mostly with…</option><option>FedEx</option><option>UPS</option><option>USPS</option><option>Another carrier</option><option>A mix</option></select>
     </div>
     <label className={"flex items-center justify-between gap-2 border border-dashed rounded px-3 py-2 text-sm cursor-pointer "+(inv?"border-emerald-400 bg-emerald-50/50 text-emerald-700":"border-stone-300 text-stone-500 hover:border-[#0086E0]")}>
       <span className="flex items-center gap-2 truncate">{inv?<CheckCircle2 className="w-4 h-4 shrink-0"/>:<Upload className="w-4 h-4 shrink-0"/>}<span className="truncate">{inv?inv.name:"Upload a recent carrier invoice (optional)"}</span></span>
@@ -4735,7 +4753,7 @@ function CloudAuth({onDone,initialMode,intake}){
         <input value={f.company} onChange={e=>setF({...f,company:e.target.value})} placeholder="Company" className={inp}/>
         {!intake&&<div className="grid grid-cols-2 gap-2">
           <select value={f.volume} onChange={e=>setF({...f,volume:e.target.value})} className={inp+" bg-white"}><option value="">Packages / month</option><option>Under 100</option><option>100–500</option><option>500–2,000</option><option>2,000+</option></select>
-          <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp+" bg-white"}><option value="">Ship mostly with…</option><option>FedEx</option><option>USPS</option><option>Another carrier</option><option>A mix</option></select>
+          <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp+" bg-white"}><option value="">Ship mostly with…</option><option>FedEx</option><option>UPS</option><option>USPS</option><option>Another carrier</option><option>A mix</option></select>
         </div>}</>}
         <input value={f.email} onChange={e=>setF({...f,email:e.target.value})} placeholder="Email" className={inp} autoFocus/>
         <div className="relative"><input value={f.pw} onChange={e=>setF({...f,pw:e.target.value})} onKeyDown={e=>e.key==="Enter"&&(mode==="signin"?signin():request())} placeholder={mode==="request"?"Choose a password":"Password"} type={showPw?"text":"password"} className={inp+" pr-9"}/><button type="button" onClick={()=>setShowPw(v=>!v)} tabIndex={-1} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">{showPw?<EyeOff className="w-4 h-4"/>:<Eye className="w-4 h-4"/>}</button></div>
@@ -4743,7 +4761,6 @@ function CloudAuth({onDone,initialMode,intake}){
       {err&&<div className="text-xs text-red-600">{err}</div>}
       <button onClick={mode==="signin"?signin:request} disabled={busy} className="w-full bg-stone-900 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"One moment…":(mode==="signin"?"Sign in":"Create account")}</button>
       {mode==="signin"&&<button onClick={()=>{setFp("ask");setFpEmail("");}} className="w-full text-center text-xs text-stone-400 hover:text-stone-600 underline underline-offset-2">Forgot password?</button>}
-      {mode==="request"&&<p className="text-[11px] text-stone-400 text-center">No approval wait, no credit card — you’re in immediately.</p>}
     </>)}
   </div>);
 }
@@ -5021,7 +5038,7 @@ function FirstRunFedEx({user,onClose}){
       </div>
       <div className="grid grid-cols-2 gap-2">
         <select value={f.volume} onChange={e=>setF({...f,volume:e.target.value})} className={inp}><option value="">Packages / month</option><option>Under 100</option><option>100–500</option><option>500–2,000</option><option>2,000+</option></select>
-        <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp}><option value="">Ship mostly with…</option><option>FedEx</option><option>USPS</option><option>Another carrier</option><option>A mix</option></select>
+        <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp}><option value="">Ship mostly with…</option><option>FedEx</option><option>UPS</option><option>USPS</option><option>Another carrier</option><option>A mix</option></select>
       </div>
       <label className={"flex items-center justify-between gap-2 border border-dashed rounded px-3 py-2 text-sm cursor-pointer "+(inv?"border-emerald-400 bg-emerald-50/50 text-emerald-700":"border-stone-300 text-stone-500 hover:border-[#0086E0]")}>
         <span className="flex items-center gap-2 truncate">{inv?<CheckCircle2 className="w-4 h-4 shrink-0"/>:<Upload className="w-4 h-4 shrink-0"/>}<span className="truncate">{inv?inv.name:"Upload a recent carrier invoice (optional)"}</span></span>
@@ -9560,7 +9577,7 @@ function LabelStockPreview({size,zones,showLabels,tabStock}){
           <div className="font-bold text-stone-900" style={{fontSize:"11px"}}>AUSTIN TX 78701</div>
           <div className="mt-auto">
             <div className="flex items-end justify-between">
-              <div className="font-black tracking-tighter text-stone-900" style={{fontSize:"16px",fontFamily:"Helvetica,Arial,sans-serif",letterSpacing:"-0.5px"}}>FedEx</div>
+              <svg viewBox="0 0 336 100" style={{height:"13px"}} aria-label="FedEx"><path d="M0 0H54V24H26V38H50V62H26V100H0Z"/><rect x="58" y="28" width="66" height="72" rx="30"/><ellipse cx="91" cy="47" rx="13" ry="9" fill="#fff"/><path d="M88 66H124V84H88Z" fill="#fff"/><rect x="128" y="28" width="66" height="72" rx="30"/><path d="M168 0H194V100H168Z"/><ellipse cx="150" cy="64" rx="13" ry="20" fill="#fff"/><path d="M202 0H262V22H230V39H256V61H230V78H262V100H202Z" fill="#fff" stroke="#000" strokeWidth="6"/><path d="M256 28H282L336 100H310Z"/><path d="M310 28H336L282 100H256Z"/></svg>
               <div className="w-6 h-6 border-2 border-stone-800 flex items-center justify-center font-bold" style={{fontSize:"11px"}}>E</div>
             </div>
             <div className="mt-1 flex gap-px h-7 items-stretch">{Array.from({length:60}).map((_,i)=><span key={i} className="bg-stone-900" style={{width:(i%4?1:2)+"px",opacity:i%3?1:0.5}}/>)}</div>
@@ -10850,10 +10867,33 @@ function Integrations({settings,setSettings,orders,setOrders}){
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState(null);
   const [active,setActive]=useState(null); // connector id whose modal is open
+  const [tokMode,setTokMode]=useState(false);
+  const [tok,setTok]=useState("");
+  const [tokBusy,setTokBusy]=useState(false);
   const normShop=(v)=>{let s=String(v||"").trim().toLowerCase().replace(/^https?:\/\//,"").replace(/\/.*$/,"");if(s&&!s.includes("."))s=s+".myshopify.com";return s;};
-  const connect=()=>{const s=normShop(shop);if(!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(s)){setMsg({err:"Enter your store like mystore.myshopify.com"});return;}
+  const validShop=(s)=>/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(s);
+  const connect=async()=>{const s=normShop(shop);if(!validShop(s)){setMsg({err:"Enter your store like mystore.myshopify.com"});return;}
     if(conns.some(c=>c.shop===s)){setMsg({err:s+" is already connected."});return;}
-    window.location.href=`${SHOPIFY_AUTH}?shop=${encodeURIComponent(s)}`;};
+    /* One-click OAuth needs the platform's Shopify app on the server. Ping first — if it's not
+       configured, open the self-service token path instead of dead-ending on an error page. */
+    let configured=false;
+    try{ const r=await fetch(`${SHOPIFY_AUTH}?ping=1`); const d=await r.json(); configured=!!(d&&d.configured); }catch(e){}
+    if(configured){ window.location.href=`${SHOPIFY_AUTH}?shop=${encodeURIComponent(s)}`; return; }
+    setTokMode(true); setMsg(null);};
+  const connectToken=async()=>{
+    const s=normShop(shop);
+    if(!validShop(s)){setMsg({err:"Enter your store like mystore.myshopify.com"});return;}
+    if(conns.some(c=>c.shop===s)){setMsg({err:s+" is already connected."});return;}
+    const t=String(tok||"").trim();
+    if(!t){setMsg({err:"Paste the Admin API access token (starts with shpat_)."});return;}
+    setTokBusy(true);setMsg(null);
+    const res=await shopifySyncOrders({shop:s,token:t});   // real API call = the token is verified before we save anything
+    setTokBusy(false);
+    if(!res||!res.ok){setMsg({err:"Shopify rejected that token: "+((res&&res.error)||"no response")+" — check the token and that the app is installed on "+s+"."});return;}
+    setSettings(p=>{ const others=shopifyConns(p).filter(c=>c.shop!==s); const n={...p,shopifyConns:[...others,{shop:s,token:t,connectedAt:new Date().toISOString()}]}; delete n.shopifyConn; return n; });
+    if(setOrders&&res.orders&&res.orders.length){ const have=new Set((orders||[]).map(o=>o.shopifyId).filter(Boolean)); const fresh=res.orders.filter(o=>!have.has(o.shopifyId)).map(o=>({...o,_shop:s})); if(fresh.length)setOrders(o=>[...fresh,...o]); }
+    setShop("");setTok("");setTokMode(false);
+    setMsg({ok:s+" connected ✓"+(res.orders?` · ${res.orders.length} open order${res.orders.length===1?"":"s"} pulled`:"")});};
   const disconnect=(shp)=>{ setSettings(p=>{ const rest=shopifyConns(p).filter(c=>c.shop!==shp); const n={...p,shopifyConns:rest}; delete n.shopifyConn; return n; }); setMsg(null); };
   const sync=async()=>{
     if(!connected)return; setBusy(true);setMsg(null);
@@ -10888,7 +10928,22 @@ function Integrations({settings,setSettings,orders,setOrders}){
       <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-stone-100 pt-3">
         <div className="flex-1 min-w-[220px]"><div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">{connected?"Connect another store":"Store domain"}</div><Input value={shop} onChange={e=>setShop(e.target.value)} placeholder="mystore.myshopify.com"/></div>
         <button onClick={connect} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Plug className="w-4 h-4"/>{connected?"Add store":"Connect"}</button>
+        <button onClick={()=>{setTokMode(v=>!v);setMsg(null);}} className="text-[11px] text-[#0086E0] hover:underline pb-2.5">{tokMode?"Hide token connect":"Connect with an access token instead"}</button>
       </div>
+      {tokMode&&<div className="mt-3 bg-stone-50 border border-stone-200 rounded-lg p-3 space-y-2">
+        <div className="text-[10px] uppercase tracking-widest text-stone-500">Connect with an access token — no waiting on anyone, ~2 minutes</div>
+        <ol className="text-xs text-stone-600 list-decimal ml-4 space-y-1">
+          <li>In that store's Shopify admin, go to <b>Settings → Apps and sales channels → Develop apps</b> (click "Allow custom app development" if asked) → <b>Create an app</b> — name it anything, e.g. ShippingCloud.</li>
+          <li>Open the app → <b>Configuration → Admin API integration → Edit</b>, and tick these scopes: <b>read_orders, write_orders, read_products, write_shipping, read_fulfillments, write_fulfillments, read_assigned_fulfillment_orders, write_assigned_fulfillment_orders, read_merchant_managed_fulfillment_orders, write_merchant_managed_fulfillment_orders</b>. Save.</li>
+          <li>Go to <b>API credentials → Install app</b>, then <b>Reveal token once</b> and copy the Admin API access token (starts with <span className="font-mono">shpat_</span>).</li>
+          <li>Paste it here with the store domain above and click Verify &amp; connect.</li>
+        </ol>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="flex-1 min-w-[220px]"><div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">Admin API access token</div><Input type="password" value={tok} onChange={e=>setTok(e.target.value)} placeholder="shpat_…"/></div>
+          <button onClick={connectToken} disabled={tokBusy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{tokBusy?<><Loader2 className="w-4 h-4 animate-spin"/>Verifying…</>:<><ShieldCheck className="w-4 h-4"/>Verify &amp; connect</>}</button>
+        </div>
+        <div className="text-[11px] text-stone-400">The token is verified against Shopify before anything saves, and it's stored with this account's settings — never shared.</div>
+      </div>}
       {msg&&<div className={`mt-2 text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${msg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{msg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{msg.err||msg.ok}</div>}
     </div>
     {/* All other connectors */}

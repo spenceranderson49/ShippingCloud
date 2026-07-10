@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v387";
+const BUILD_TAG="addr-v388";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -939,10 +939,16 @@ function openLabelOrDirectPrint(payload,settings,setLabelPreview){
          When it DID reach PrintNode and got rejected, directPrintPdf already surfaced the real error. */
       if(!dp||!dp.enabled||!dp.apiKey||!dp.printerId){ try{ window.dispatchEvent(new CustomEvent("sc-direct-print-failed",{detail:{reason:"not-configured"}})); }catch(e){} }
       if(c.skipBookedSummary){
-        /* Hands-free MUST stay clean: send the label to the browser print dialog through a hidden
-           frame instead of ever opening the preview modal, then let the form advance on its own. */
-        try{ const u=pdfBlobUrl(payload.pdf); if(!printPdfUrl(u))setLabelPreview(payload); setTimeout(()=>{try{URL.revokeObjectURL(u);}catch(e){}},180000); }
-        catch(e){ setLabelPreview(payload); }
+        /* Hands-free MUST stay clean AND reliable: render the label to images and print them through
+           the page's own print path (printImagePages waits for every image to fully decode and sizes
+           to the label stock — so no blank or half pages, and no preview modal). Only if pdf.js is
+           unavailable do we fall back to the sized PDF frame. */
+        (async()=>{ try{
+          const r0=await pdfToImages(payload.pdf,3);
+          const r=await composeForStock(r0.imgs,r0.wIn,r0.hIn,docCtxFor(payload.rec,payload.tracking));
+          if(r&&r.imgs&&r.imgs.length){ printImagePages(r.imgs,r.wIn,r.hIn); return; }
+          throw new Error("no pages");
+        }catch(e){ try{ const u=pdfBlobUrl(payload.pdf); printPdfUrl(u); setTimeout(()=>{try{URL.revokeObjectURL(u);}catch(_){}},180000); }catch(_){ setLabelPreview(payload); } } })();
       } else {
         /* No-preview: show the booked summary (it also prints via its own dialog fallback). */
         setLabelPreview(payload);

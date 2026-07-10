@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v389";
+const BUILD_TAG="addr-v390";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -790,8 +790,11 @@ async function directPrintPdf(base64,title,ctx){
      it, and if the send with it fails we automatically retry with the carrier's ORIGINAL pdf. */
   let payload=base64;
   try{ const r0=await pdfToImages(base64,3); if(r0&&r0.imgs.length){ const comp=await composeForStock(r0.imgs,r0.wIn,r0.hIn,ctx); if(r0.cropped||comp.changed){ const rp=await imgsToLabelPdf(comp.imgs,comp.wIn,comp.hIn); if(rp&&typeof rp==="string"&&rp.length>200&&rp.length<8*1024*1024)payload=rp; } } }catch(e){}
-  const send=async(pdf)=>{ try{
-    const r=await fetch("/.netlify/functions/printnode",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"print",apiKey:cfg.apiKey,printerId:cfg.printerId,title:title||"Shipping label",pdfBase64:pdf})});
+  /* PrintNode needs BARE base64 — strip any "data:application/pdf;base64," prefix a re-render
+     (canvas toDataURL) or the carrier payload may carry, or PrintNode rejects it and the label falls
+     to the browser dialog. The validity check already strips this; the send must too. */
+  const send=async(pdf)=>{ const clean=String(pdf||"").replace(/^data:[^,]*,/,"").trim(); if(!clean)return {ok:false,err:"Empty label payload"}; try{
+    const r=await fetch("/.netlify/functions/printnode",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"print",apiKey:cfg.apiKey,printerId:cfg.printerId,title:title||"Shipping label",pdfBase64:clean})});
     const d=await r.json().catch(()=>null);
     return {ok:!!(d&&d.ok),err:(d&&d.error)||("PrintNode wouldn't accept the job ("+r.status+")")};
   }catch(e){ return {ok:false,err:"Couldn't reach the print relay — "+((e&&e.message)||"network error")}; } };
@@ -9063,11 +9066,14 @@ function PrinterSettings({settings,setSettings}){
             let kres; try{ kres=await pnCall({action:"printers",apiKey:liveKey}); }catch(e){ kres={ok:false,error:String((e&&e.message)||e)}; }
             const keyInfo=" · key in box: "+tail(liveKey)+(liveKey===syncKey?" · saved copy matches":" · ⚠ SAVED COPY DIFFERS ("+tail(syncKey)+")");
             if(!kres||!kres.ok){ setPnBusy(""); setPnMsg({err:"✗ PrintNode rejected the key: "+((kres&&kres.error)||"no response")+keyInfo+". Re-copy the key from printnode.com → API Keys and paste it fresh."}); return; }
-            /* Step 2 — key works. Now the real hands-free path. */
-            let pres; try{ pres=await pnCall({action:"print",apiKey:dp.apiKey||liveKey,printerId:dp.printerId||pnc.printerId,title:"Hands-free diagnostic",pdfBase64:PN_TEST_PDF}); }catch(e){ pres={ok:false,error:String((e&&e.message)||e)}; }
+            /* Step 2 — key works. Run the ACTUAL booking path (directPrintPdf: re-render + retry +
+               prefix-strip) so this matches a real hands-free label exactly, and dump the settings
+               that could route a label to the dialog. */
+            let full=false; try{ full=await directPrintPdf(PN_TEST_PDF,"Hands-free diagnostic",docCtxFor(null,"")); }catch(e){}
             setPnBusy("");
-            const cfg=" · direct-print sees on="+String(!!dp.enabled)+", printer="+JSON.stringify(dp.printerId||"")+keyInfo;
-            setPnMsg(pres&&pres.ok?{ok:"✓ Key is VALID and the test page PRINTED — hands-free is good to go."+cfg}:{err:"✓ Key is valid ("+((kres.printers||[]).length)+" printers) but the print failed: "+((pres&&pres.error)||"no response")+cfg}); }}
+            const s2=settings||{}; const pr2=s2.printer||{}; const cu=cz(s2);
+            const dump=" · [format="+(pr2.format||"PDF")+", size="+(pr2.labelSize||"4x6")+", mode="+(cu.skipBookedSummary?"handsfree":cu.directNoPreview?"nopreview":"preview")+", legacyAutoPrint="+String(!!pr2.autoPrint)+", routes="+((s2.printRoutes||[]).length)+", pn.on="+String(!!dp.enabled)+", printer="+JSON.stringify(dp.printerId||"")+"]"+keyInfo;
+            setPnMsg(full?{ok:"✓ Full auto-print path WORKED — hands-free will print silently."+dump}:{err:"✓ Key valid ("+((kres.printers||[]).length)+" printers) but the REAL print path FAILED — read the red bar for PrintNode's reason."+dump}); }}
             disabled={pnBusy==="diag"} className="text-sm border border-amber-300 text-amber-700 rounded-lg px-3.5 py-2 font-medium hover:bg-amber-50 disabled:opacity-40 flex items-center gap-1.5">{pnBusy==="diag"?<><Loader2 className="w-4 h-4 animate-spin"/>Testing…</>:<>Diagnose hands-free</>}</button>
         </div>}
         {knownPrinters.length>0&&<div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2.5">

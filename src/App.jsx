@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v401";
+const BUILD_TAG="addr-v403";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6472,28 +6472,34 @@ function matchRequestedService(quotes,requested,res=null){
 }
 function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=true,onOneRate,custom=CUSTOM_DEFAULTS,matched=null,matchedSrc=null,collapsible=false,oneRateWarning=null,billing=null,live=false,loading=false,addrClassified=true}){
   const [showAll,setShowAll]=useState(false);
-  /* Once Autopilot has matched a service, stay collapsed on it. The Ground<->Home Delivery swap (fired
-     when FedEx classifies the address) briefly points `matched` at a key that's just been dropped from
-     the list — without this hold, `collapse` flips false for one frame and the whole list expands then
-     re-collapses, so it visibly bounces up and down. We hold the collapsed state through that swap: as
-     long as a match exists (or is about to resolve), we don't expand. */
+  /* Once Autopilot has matched a service, stay collapsed on it. When FedEx classifies the address
+     it flips residential, which swaps Ground<->Home Delivery AND kicks off a live reprice — during
+     that window `matched` briefly points at a key that's momentarily absent from the list (or the
+     list is empty while rates reload). Without a hold, `collapse` flips false for a frame and the
+     WHOLE list expands then re-collapses — the "closed → open → closed" bounce. We hold the collapsed
+     state through the entire transition and only expand when the user asks (Show all) or there's a
+     STABLE no-match (rates loaded, no autopilot match at all). */
   const lastMatchFamRef=React.useRef(null);
   const matchStillPresent=matched&&quotes.some(q=>q.key===matched);
   if(matchStillPresent){ const mq=quotes.find(q=>q.key===matched); if(mq)lastMatchFamRef.current=svcFamilyKey(mq.label); }
   const wasCollapsedRef=React.useRef(false);
-  const collapseBase=collapsible&&custom.matchedOnly&&matched&&!showAll;
+  const collapseBase=collapsible&&custom.matchedOnly&&!showAll;   // NOT gated on `matched` — that's what let a transient null expand the list
   if(collapseBase&&matchStillPresent)wasCollapsedRef.current=true;
-  if(!matched||showAll)wasCollapsedRef.current=false;
-  // collapse if the match is present, OR we were already collapsed and are mid-swap (match momentarily absent)
+  // Drop the hold only on an explicit expand, or a settled no-match (not loading, rates present, still nothing matched).
+  if(showAll||(!matched&&!loading&&quotes.length>0&&!matchStillPresent))wasCollapsedRef.current=false;
   const collapse=collapseBase&&(matchStillPresent||wasCollapsedRef.current);
-  /* The rows to show when collapsed: the matched quote — but if the swap has momentarily dropped the
-     exact matched key, fall back to the same service FAMILY (ground<->home) so the single row never
-     blinks out and back. This keeps exactly one stable row visible through the whole swap. */
+  /* The single row to show when collapsed: the matched quote — but if the swap/reprice has momentarily
+     dropped the exact key (or emptied the list), fall back to the same service FAMILY (ground<->home),
+     then to the last row we showed, so exactly one stable row stays put through the whole transition. */
+  const lastRowsRef=React.useRef([]);
   const collapsedRows=()=>{
     let r=quotes.filter(q=>q.key===matched);
     if(!r.length&&matched){ const mfam=(()=>{const mq=quotes.find(q=>q.key===matched);return mq?svcFamilyKey(mq.label):null;})();
       const famKey=lastMatchFamRef.current||mfam;
       if(famKey)r=quotes.filter(q=>svcFamilyKey(q.label)===famKey).slice(0,1); }
+    if(!r.length&&lastMatchFamRef.current)r=quotes.filter(q=>svcFamilyKey(q.label)===lastMatchFamRef.current).slice(0,1);
+    if(r.length)lastRowsRef.current=r;                       // remember a good row…
+    else if(lastRowsRef.current.length)r=lastRowsRef.current; // …and reuse it while the list is momentarily empty
     return r;
   };
   const [view,setView]=useState(custom.defaultView||"cheapest");
@@ -7241,7 +7247,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
               </div>
             </div>
             {!shipped&&<div className="bg-white border border-stone-200 rounded-lg p-4">
-              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyORBox} custom={cz(settings||{})} billing={weighInfo([{weight:totalWeight,L:box.L,W:box.W,H:box.H}])}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
+              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyORBox} custom={cz(settings||{})} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} billing={weighInfo([{weight:totalWeight,L:box.L,W:box.W,H:box.H}])}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
               {ready&&rateSrc.loading&&<div className="text-xs text-stone-400 flex items-center gap-1.5 mt-2"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Loading rates…</div>}
               {status&&<div className={`mt-2 text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${status.state==="error"?"text-rose-600 bg-rose-50 border border-rose-200":status.state==="booking"?"text-stone-600 bg-stone-50 border border-stone-200":"text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF]"}`}>{status.state==="error"?<AlertTriangle className="w-3.5 h-3.5"/>:status.state==="booking"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{status.msg}</div>}
             </div>}
@@ -8533,7 +8539,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="manifests"&&<Manifests shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} settings={settings}/>}
         {sec==="reports"&&<Reports shipments={shipments} showMoney={showMoney}/>}
         {sec==="notifications"&&<Notifications settings={settings} setSettings={setSettings} emails={emails}/>}
-        {sec==="general"&&<GeneralSettings settings={settings} setSettings={setSettings} goSec={setSec} audit={audit}/>}
+        {sec==="general"&&<GeneralSettings settings={settings} setSettings={setSettings} goSec={setSec} audit={audit} currentUser={currentUser} setCurrentUser={setCurrentUser}/>}
         {sec==="cieditor"&&<div className="space-y-6"><CIEditor settings={settings} setSettings={setSettings} shipments={shipments}/><div className="border-t border-stone-200 pt-6"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-3">Commercial invoice history</div><CIHistory settings={settings} setSettings={setSettings}/></div></div>}
         {sec==="cihistory"&&<div className="space-y-6"><CIEditor settings={settings} setSettings={setSettings} shipments={shipments}/><div className="border-t border-stone-200 pt-6"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-3">Commercial invoice history</div><CIHistory settings={settings} setSettings={setSettings}/></div></div>}
         {sec==="otherdocs"&&<OtherDocs settings={settings} setSettings={setSettings}/>}
@@ -10526,7 +10532,7 @@ function OtherDocs({settings,setSettings}){
   </div>);
 }
 
-function GeneralSettings({settings,setSettings,goSec,audit=[]}){
+function GeneralSettings({settings,setSettings,goSec,audit=[],currentUser,setCurrentUser}){
   const set=(k,v)=>setSettings(p=>({...p,[k]:v}));
   const sn=settings.sender||{};
   const setSn=(k,v)=>setSettings(p=>({...p,sender:{...(p.sender||{}),[k]:v}}));
@@ -10566,6 +10572,7 @@ function GeneralSettings({settings,setSettings,goSec,audit=[]}){
         {audit.map((a,i)=><div key={i} className="px-3 py-2 text-xs flex items-baseline gap-2"><span className="text-stone-400 shrink-0 w-36">{a.ts}</span><span className="font-medium text-stone-700 shrink-0">{a.action}</span><span className="text-stone-500 truncate">{a.detail}</span><span className="ml-auto text-stone-300 shrink-0">{a.user}</span></div>)}
       </div>
     </Panel>
+    <AccountLoginPanel currentUser={currentUser} setCurrentUser={setCurrentUser}/>
     <TwoFactorPanel/>
     <Panel title="Jump to">
       <div className="grid sm:grid-cols-2 gap-2">
@@ -10574,6 +10581,43 @@ function GeneralSettings({settings,setSettings,goSec,audit=[]}){
       </div>
     </Panel>
   </div>);
+}
+/* Self-service login email change. Keeps the same password + 2FA — only the email moves.
+   Cloud logins only (local/demo has no server-side account). */
+function AccountLoginPanel({currentUser,setCurrentUser}){
+  const cloud=CLOUD.mode==="cloud"&&!!CLOUD.token;
+  const [email,setEmail]=useState((currentUser&&currentUser.email)||"");
+  const [pw,setPw]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState(null);            // {t:"ok"|"err",m}
+  useEffect(()=>{ setEmail((currentUser&&currentUser.email)||""); },[currentUser&&currentUser.email]);
+  if(!cloud) return null;
+  const curEmail=(currentUser&&currentUser.email)||"";
+  const changed=email.trim().toLowerCase()!==curEmail.toLowerCase();
+  const save=async()=>{
+    if(!changed){setMsg({t:"err",m:"That's already your login email."});return;}
+    if(!pw){setMsg({t:"err",m:"Enter your current password to confirm."});return;}
+    setBusy(true);setMsg(null);
+    const r=await cloudCall({action:"changeEmail",token:CLOUD.token,newEmail:email.trim(),password:pw});
+    setBusy(false);
+    if(r&&r.ok){
+      try{ if(r.token){CLOUD.token=r.token;lsSet("cloud.token",r.token);} }catch(e){}
+      if(setCurrentUser)setCurrentUser(cu=>cu&&({...cu,email:r.email||email.trim()}));
+      setPw("");setMsg({t:"ok",m:"Login email updated. Use "+(r.email||email.trim())+" next time you sign in — your password and 2FA are unchanged."});
+    } else setMsg({t:"err",m:(r&&r.error)||"Could not update email."});
+  };
+  return (<Panel title="Login email">
+    <p className="text-xs text-stone-500 -mt-1 mb-2">This is the email you sign in with. Changing it keeps your current password and 2FA exactly as they are.</p>
+    <div className="space-y-2 max-w-md">
+      <Field label="Email"><Input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@company.com"/></Field>
+      {changed&&<Field label="Confirm with your current password"><Input type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&save()} placeholder="••••••••"/></Field>}
+      <div className="flex items-center gap-2">
+        <button disabled={busy||!changed} onClick={save} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"Saving…":"Update login email"}</button>
+        {changed&&<button disabled={busy} onClick={()=>{setEmail(curEmail);setPw("");setMsg(null);}} className="text-xs text-stone-400 hover:text-stone-600">Cancel</button>}
+      </div>
+      {msg&&<div className={`text-sm ${msg.t==="ok"?"text-emerald-700":"text-rose-600"}`}>{msg.m}</div>}
+    </div>
+  </Panel>);
 }
 /* Self-service two-factor auth (TOTP). Only shows for cloud logins — local/demo mode has no server to store the secret. */
 function TwoFactorPanel(){

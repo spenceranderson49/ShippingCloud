@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v426";
+const BUILD_TAG="addr-v427";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2069,6 +2069,12 @@ const RATE_SERVICES={
     {k:"intl_priority",l:"FedEx International Priority",g:"International"},
     {k:"intl_priority_express",l:"FedEx International Priority Express",g:"International"},
     {k:"intl_first",l:"FedEx International First",g:"International"},
+    {k:"first_overnight_freight",l:"FedEx First Overnight Freight",g:"Freight"},
+    {k:"1day_freight",l:"FedEx 1Day Freight",g:"Freight"},
+    {k:"2day_freight",l:"FedEx 2Day Freight",g:"Freight"},
+    {k:"3day_freight",l:"FedEx 3Day Freight",g:"Freight"},
+    {k:"intl_priority_freight",l:"FedEx International Priority Freight",g:"Freight"},
+    {k:"intl_economy_freight",l:"FedEx International Economy Freight",g:"Freight"},
   ].concat(OR_RATE_SVCS.reduce((acc,sv)=>acc.concat(OR_RATE_PKGS.map(pk=>({k:"or_"+sv[0]+"_"+pk[0],l:"One Rate "+sv[1]+" "+pk[1],g:"One Rate",or:true}))),[])),
   dhl:[
     {k:"dhl_worldwide",l:"DHL Express Worldwide",g:"International"},
@@ -2167,7 +2173,10 @@ const FEDEX_SURCHARGES=[
   {id:"CEF",desc:"Clearance Entry Fee (intl / Ground to Canada)",seg:"Ground",charge:"fixed",g:"International & clearance"},
   {id:"DISB",desc:"Disbursement / Duty & Tax Advancement Fee (intl)",seg:"Express & Ground",charge:"percent or min",g:"International & clearance"},
   {id:"ANC",desc:"Ancillary Clearance Service Fees (intl)",seg:"Express & Ground",charge:"fixed",g:"International & clearance"},
-  {id:"TPC",desc:"Third Party Consignee (intl)",seg:"Express & Ground",charge:"fixed",g:"International & clearance"}
+  {id:"TPC",desc:"Third Party Consignee (intl)",seg:"Express & Ground",charge:"fixed",g:"International & clearance"},
+  /* Ground Economy */
+  {id:"GE-DR",desc:"Ground Economy Delivery & Return Charge (per package)",seg:"Ground Economy",charge:"fixed",g:"Ground Economy"},
+  {id:"GE-PS",desc:"Ground Economy Pickup Charge",seg:"Ground Economy",charge:"fixed",g:"Ground Economy"}
 ];
 const RATE_ZONES=["2","3","4","5","6","7","8"];
 /* Finer-grained than canonSvc — rate rules need 2Day ≠ 2Day A.M., intl economy ≠ priority, One Rate per packaging. */
@@ -2220,6 +2229,84 @@ function rateSvcKey(label){
   if(/priority/.test(t))return "intl_priority";
   if(/economy/.test(t))return "intl_economy";
   return t.replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
+}
+/* Map a LIVE FedEx surcharge line (the itemized breakdown quote.js returns per rate) to its
+   FEDEX_SURCHARGES row, picking the Express / Ground / Home Delivery / Ground Economy variant
+   from the service being priced. Unmatched lines stay inside the service-level pricing. */
+function fedexSurchargeIdFor(lineLabel,svcLabel){
+  const t=String(lineLabel||"").toLowerCase(); if(!t)return null;
+  const k=rateSvcKey(svcLabel||"");
+  const ge=k==="ground_economy",home=k==="home",grd=ge||home||k==="ground"||k==="intl_ground_ca";
+  const G=(ex,g)=>grd?g:ex;
+  if(/fuel/.test(t))return G("FUEL","FUEL-G");
+  if(/declared value|insured value|insurance/.test(t))return "INS";
+  if(/adult signature/.test(t))return "SIG-A";
+  if(/indirect signature/.test(t))return "SIG-I";
+  if(/signature/.test(t))return "SIG-D";
+  if(/saturday.*pickup/.test(t))return "SATP";
+  if(/saturday/.test(t))return "SAT";
+  if(/peak|demand/.test(t)){
+    if(/additional handling|addl handling/.test(t))return G("PEAK-AH","PEAK-AH-G");
+    if(/oversize/.test(t))return G("PEAK-OS","PEAK-OS-G");
+    if(/unauthorized/.test(t))return "PEAK-UNAUTH";
+    if(ge)return "PEAK-GE";
+    if(/international/.test(t)||k.indexOf("intl")===0)return "PEAK-INTL";
+    return G("PEAK-R","PEAK-R-G");
+  }
+  if(/additional handling|addl handling/.test(t)){
+    if(/weight/.test(t))return G("AH-W","AH-W-G");
+    if(/packag/.test(t))return G("AH-P","AH-P-G");
+    if(/non.?stack/.test(t))return "AH-NS";
+    return G("AH-D","AH-D-G");
+  }
+  if(/oversize/.test(t))return G("OVR","OVR-G");
+  if(/unauthorized/.test(t))return "UNAUTH";
+  if(/delivery (and|&) returns?/.test(t))return "GE-DR";
+  if(/delivery area|\bdas\b/.test(t)){
+    const resi=/residential/.test(t);
+    if(/alaska/.test(t))return resi?(home?"DAS-AK-R-HD":"DAS-AK-R"):G("DAS-AK","DAS-AK-G");
+    if(/hawaii/.test(t))return resi?(home?"DAS-HI-R-HD":"DAS-HI-R"):G("DAS-HI","DAS-HI-G");
+    if(/remote/.test(t))return G("DAS-RM","DAS-RM-G");
+    if(/extended/.test(t))return resi?(home?"DAS-ER-HD":"DAS-ER"):G("DAS-EC","DAS-EC-G");
+    if(resi)return home?"DAS-R-HD":"DAS-R";
+    return G("DAS","DAS-G");
+  }
+  if(/home delivery/.test(t))return "RES-HD";
+  if(/residential/.test(t))return home?"RES-HD":G("RES","RES-G");
+  if(/address correction/.test(t))return "ADDR";
+  if(/third party billing/.test(t))return "3PB";
+  if(/hold at location/.test(t))return "HAL";
+  if(/reroute|redirect/.test(t))return "REROUTE";
+  if(/dry ice/.test(t))return "DRY";
+  if(/dangerous goods.*inaccessible|inaccessible.*dangerous/.test(t))return "DG-I";
+  if(/dangerous goods/.test(t))return "DG-A";
+  if(/hazardous/.test(t))return "HAZ";
+  if(/limited quantity|orm.?d/.test(t))return "LTDQ";
+  if(/broker select/.test(t))return "BSO";
+  if(/duty.*tax.*forward/.test(t))return "DTF";
+  if(/out of pickup/.test(t))return "OPA";
+  if(/out of delivery/.test(t))return "ODA";
+  if(/controlled export/.test(t))return "ICE";
+  if(/clearance entry/.test(t))return "CEF";
+  if(/disbursement|advancement/.test(t))return "DISB";
+  if(/third party consignee/.test(t))return "TPC";
+  if(/on.?call pickup/.test(t))return G("PU-EXP","PU-GRD-OC");
+  return null;
+}
+/* Per-surcharge price adjustments for a live quote's itemized fee lines. For every line whose
+   FEDEX_SURCHARGES row has a saved rule: percent = sell that fee at FedEx's amount ±X%;
+   fixed = sell that fee at exactly $X. Returns the cost carved out and the price added back. */
+function surchargeAdjust(lines,svcLabel,prof){
+  const sc=(prof&&prof.surcharges)||{}; let removed=0,add=0,hit=false;
+  for(const ln of (lines||[])){
+    const amt=+(ln&&ln.amount)||0; if(!amt)continue;
+    const id=fedexSurchargeIdFor(ln.label,svcLabel); if(!id)continue;
+    const r=sc[id]; if(!r||r.amount==null||r.amount==="")continue;
+    const a=+r.amount; if(isNaN(a))continue;
+    hit=true; removed+=amt;
+    add+=r.type==="percent"?amt*(1+a/100):a;
+  }
+  return hit?{removed:Math.round(removed*100)/100,add:Math.round(add*100)/100}:null;
 }
 /* Does a live quote row satisfy a "Set Service" preference string ("FedEx - 2Day",
    "FedEx - 2Day OneRate", "DHL - Express Worldwide")? Exact rateSvcKey equality —
@@ -2296,6 +2383,23 @@ function list2025Lookup(key,weight,zone){
    customer's legacy flat markup whenever no rule answers — nothing changes until a rule is set. */
 function rateSellFor(cost,label,ctx){
   const c=ctx||{};
+  /* Per-surcharge rules on LIVE quotes: carve each adjusted fee line (fuel, peak/demand, DAS,
+     residential, additional handling, declared value…) out of the carrier cost, price the
+     remainder through the normal path (service rule or account markup), then add each fee back
+     at its ruled price. Flat and list bases are exempt — flat is exact by definition, and list
+     prices off the rate book, not off cost. */
+  if(cost!=null&&c.rules&&Array.isArray(c.surcharges)&&c.surcharges.length&&!c._noSurAdj){
+    const prof=c.prof||rateProfileFor(c.rules,c.client&&c.client.id);
+    const rule=prof&&prof.services&&prof.services[rateSvcKey(label)];
+    const basis=(rule&&rule.on!==false)?(rule.basis||"percent"):null;
+    if(basis!=="flat"&&basis!=="list"){
+      const adj=surchargeAdjust(c.surcharges,label,prof);
+      if(adj){
+        const core=rateSellFor(Math.max(0,Math.round((cost-adj.removed)*100)/100),label,{...c,prof,_noSurAdj:true});
+        return core==null?null:Math.round((core+adj.add)*100)/100;
+      }
+    }
+  }
   if(cost==null){
     /* Flat-priced services sell at exactly their flat price even when the carrier cost is
        unknown (e.g. One Rate with no imported table) — the whole point of flat is that the
@@ -3818,7 +3922,7 @@ function RatesAdmin({clients=[],brand}){
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <p className="text-[11px] text-stone-500 flex-1 min-w-[260px]">All {FEDEX_SURCHARGES.length} Service Guide surcharges in their own boxes — Express, Ground, and Home Delivery each carry their own rates. Double-click a row to edit. <Badge tone="blue">app-applied</Badge> fees change quotes immediately; the rest are billed inside England's quote total — your service % marks them up today, and per-surcharge adjustments plug in when England's per-line breakdown is wired.</p>
+          <p className="text-[11px] text-stone-500 flex-1 min-w-[260px]">All {FEDEX_SURCHARGES.length} Service Guide surcharges in their own boxes — Express, Ground, and Home Delivery each carry their own rates. Double-click a row to set your price on that fee: <b>Percent</b> sells it at FedEx's billed amount ±X% (negative = discount), <b>Fixed</b> sells it at exactly $X. Rules apply to live quotes line-by-line — fuel, peak/demand, DAS, residential, additional handling, declared value, all of it. Rows with no rule stay inside your service-level markup.</p>
           <Input value={surQ} onChange={e=>setSurQ(e.target.value)} placeholder="Search surcharges…" className="w-52"/>
         </div>
         {(()=>{
@@ -3850,7 +3954,7 @@ function RatesAdmin({clients=[],brand}){
                       <td className="pr-2 font-mono text-xs text-stone-500">{su.id}</td><td className="pr-2 text-stone-500">{su.charge}</td>
                       <td className="pr-2 text-stone-500">{r.type||(su.app?"fixed":"—")}</td>
                       <td className="pr-2 text-right font-mono">{r.amount!=null&&r.amount!==""?(+r.amount).toFixed(2):(su.def!=null?su.def.toFixed(2):"—")}</td>
-                      <td>{su.app?<Badge tone="blue">app-applied</Badge>:<Badge tone="stone">England-billed</Badge>}</td>
+                      <td>{su.app?<Badge tone="blue">app-applied</Badge>:<Badge tone="green">live-adjustable</Badge>}</td>
                     </tr>);
                   });
                   return out;
@@ -3905,7 +4009,7 @@ function RatesAdmin({clients=[],brand}){
           <div className="text-stone-500 text-right">Amount</div><div><Input type="number" value={surEdit.amount} onChange={e=>setSurEdit(s=>({...s,amount:e.target.value}))} className="w-32"/></div>
         </div>
         {surEdit.app?<p className="text-[11px] text-stone-400 mt-3">Fixed = charge this amount. Percent = adjust the published fee (e.g. 10 charges 110% of the default, −65 charges 35%). Changes hit quotes for every customer on the "{prof.name}" profile immediately.</p>
-          :<p className="text-[11px] text-stone-400 mt-3">Stored on "{prof.name}". This surcharge is billed inside England's quote total today, so this value doesn't change prices yet — it's staged for the per-line surcharge wiring.</p>}
+          :<p className="text-[11px] text-stone-400 mt-3">Applies to live quotes immediately for every customer on "{prof.name}": <b>Percent</b> sells this fee at FedEx's billed amount ±X% (e.g. 25 charges 125% of the fee, −100 waives it), <b>Fixed</b> sells it at exactly this $ per shipment. Clear the amount to fold it back into the service-level markup.</p>}
         <div className="flex justify-end gap-2 mt-4"><button onClick={()=>setSurEdit(null)} className="text-sm bg-stone-100 rounded-lg px-3 py-2 hover:bg-stone-200">Close</button><button onClick={()=>{upSur(surEdit.id,{type:surEdit.type,amount:surEdit.amount});setSurEdit(null);}} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8]">Confirm</button></div>
       </div>
     </div>}
@@ -6283,7 +6387,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
        prices stay plausible. NO fee is ever invented on top of a live FedEx price. */
     const _live=!!rateSrc.live;
     const _dvList=_live?null:pieces.map(p=>(pieces.length>1&&dvEach)?(+p.dv||0):(+insurance||0));
-    return list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,list:q.list,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:_live?"none":sigOption,saturday,insuranceList:_dvList,fees:surchargeFees(rateRules,client)});})
+    return list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,list:q.list,surcharges:q.surcharges,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:_live?"none":sigOption,saturday,insuranceList:_dvList,fees:surchargeFees(rateRules,client)});})
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
   },[rateSrc,orRates,client,JSON.stringify(custom.hiddenServices||[]),JSON.stringify(client&&client.blockedServices||[]),rateRules,fxTransit,residential,addrClassified,sigOption,saturday,insurance,intl,dvEach,JSON.stringify(pieces)]);
   const best=null;
@@ -7261,7 +7365,7 @@ function LiveEstRate({o,client,settings,rateRules,ruleset}){
     let pref=null;
     try{ const enabled=(ruleset||[]).filter(r=>r&&r.enabled); if(enabled.length){ const rr=runRuleEngine(enabled,[o],fromZip); const r0=rr.results&&rr.results[0]; if(r0&&r0.fires&&r0.fires.length&&r0.view&&r0.view.selectedService)pref=r0.view.selectedService; } }catch(e){}
     const wt=+o.weight||1;
-    const sellCtx=(list)=>({rules:rateRules,client,list,fromZip,toZip:o.zip,weight:wt});
+    const sellCtx=(list,sur)=>({rules:rateRules,client,list,surcharges:sur,fromZip,toZip:o.zip,weight:wt});
     const pickFrom=(qs,live)=>{
       if(!qs||!qs.length)return {none:true};
       const hit=pref?qs.filter(q=>svcPrefHit(pref,q.label)).sort((a,b)=>(a.cost||0)-(b.cost||0))[0]:null;
@@ -7279,7 +7383,7 @@ function LiveEstRate({o,client,settings,rateRules,ruleset}){
         try{
           const res=await ratesForOrder(o,{residential:true,weightLb:wt,fromZip,sender:settings&&settings.sender},eng);
           const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);
-          const qs=((res&&res.rates)||[]).filter(q=>!hs.has(canonSvc(q.label))&&!bs.has(canonSvc(q.label))).filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk([{weight:wt}])).map(q=>({...q,sell:rateSellFor(q.cost,q.label,sellCtx(q.list))}));
+          const qs=((res&&res.rates)||[]).filter(q=>!hs.has(canonSvc(q.label))&&!bs.has(canonSvc(q.label))).filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk([{weight:wt}])).map(q=>({...q,sell:rateSellFor(q.cost,q.label,sellCtx(q.list,q.surcharges))}));
           if(qs.length)finish(pickFrom(qs,true)); else finish({none:true});   // live account: no rate = show "—", never an offline guess
         }catch(e){ finish({none:true}); }
         finally{ estDone(); }
@@ -7517,7 +7621,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
     return ()=>{cancel=true;};
   },[rateNonce,o.zip,weight,box.L,box.W,box.H,residential,oneRate,orBox&&orBox.code,eng.enabled,eng.apiKey,eng.customerId,eng.base,eng.fedexAccount]);   /* eng is a fresh object every render (englandFor) — depend on its primitives or this effect loops forever */
   const localOrderQuotes=()=>quoteRates({fromZip,toZip:o.zip,pieces:[{weight:+weight||0,L:box.L,W:box.W,H:box.H}],residential,intl:false}).filter(qq=>qq.carrier==="FedEx");
-  const quotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,fromZip:(settings&&settings.sender&&settings.sender.zip)||"",toZip:o.zip,weight:+weight||o.weight||1})})).sort((a,b)=>(a.sell||1e9)-(b.sell||1e9));},[rateSrc,residential,client,settings,rateRules,weight]);
+  const quotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,surcharges:qq.surcharges,fromZip:(settings&&settings.sender&&settings.sender.zip)||"",toZip:o.zip,weight:+weight||o.weight||1})})).sort((a,b)=>(a.sell||1e9)-(b.sell||1e9));},[rateSrc,residential,client,settings,rateRules,weight]);
   const best=(rateSrc.live&&quotes[0])?quotes[0].key:null;
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
   const printHere=async(qq)=>{
@@ -7718,7 +7822,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   },[rcv.zip,fromZip,residential,totalWeight,box.L,box.W,box.H]);
   // FedEx One Rate 2Day — flat, zone-independent.
   const orRates=useMemo(()=>selectedOrBox?oneRateQuotes(selectedOrBox,{rules:rateRules,client}):[],[selectedOrBox&&selectedOrBox.code,client,rateRules]);
-  const baseQuotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,fromZip,toZip:rcv.zip,weight:totalWeight})}));},[rateSrc,residential,client,addrClassified,rateRules,settings]);
+  const baseQuotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,surcharges:qq.surcharges,fromZip,toZip:rcv.zip,weight:totalWeight})}));},[rateSrc,residential,client,addrClassified,rateRules,settings]);
   const quotes=useMemo(()=>{
     const withTransit=(list)=>list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};});
     return cleanServiceList(withTransit([...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday:sat,insurance,fees:surchargeFees(rateRules,client)}))),{intl:_intl,residential:addrClassified?residential:null}).sort((a,b)=>(a.sell||0)-(b.sell||0));
@@ -8137,7 +8241,7 @@ function QuickQuote({onClose,client,england,senderZip}){
   },[fromZip,toZip,residential,JSON.stringify(pieces),sigOption,saturday,insurance,england]);
   const qqOrBox=oneRateBoxFor(pieces[0]&&pieces[0].L,pieces[0]&&pieces[0].W,pieces[0]&&pieces[0].H,totalWeight);
   const qqOrRates=useMemo(()=>qqOrBox?oneRateQuotes(qqOrBox,{rules:rateRules,client}):[],[qqOrBox&&qqOrBox.code,rateRules,client]);
-  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip,toZip,weight:pieces.reduce((a,p)=>a+(+p.weight||0),0)})})),...qqOrRates].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,client)})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,client,rateRules,fxTransit,qqOrRates,sigOption,saturday,insurance,fromZip,toZip,JSON.stringify(pieces)]);
+  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,surcharges:q.surcharges,fromZip,toZip,weight:pieces.reduce((a,p)=>a+(+p.weight||0),0)})})),...qqOrRates].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,client)})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,client,rateRules,fxTransit,qqOrRates,sigOption,saturday,insurance,fromZip,toZip,JSON.stringify(pieces)]);
   const hasExpress=quotes.some(q=>{const l=String(q.label||"").toLowerCase();return /(overnight|2\s?day|express saver)/.test(l);});
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-8 bg-stone-900/40 backdrop-blur-sm overflow-auto" onClick={onClose}>
@@ -8480,7 +8584,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
       :{fromZip:client.origin,toZip:o.zip,L:12,W:9,H:4,weight:o.weight,residential:true})
       .filter(q=>!hs.has(canonSvc(q.label))&&!bs.has(canonSvc(q.label)))
       .filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk(_gePcs))
-      .map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:client.origin,toZip:o.zip,weight:(pk&&pk.totalWt)||o.weight||1})}));
+      .map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,surcharges:q.surcharges,fromZip:client.origin,toZip:o.zip,weight:(pk&&pk.totalWt)||o.weight||1})}));
     let pick=pickByPref(qs,svcOv[o.id]);
     if(!pick){
       if(rule==="ground") pick=qs.filter(q=>/Ground|Home/.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
@@ -8638,7 +8742,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         _resKnownB=await classifyOrderAddress(o,originZip);   // ground↔home follows the FedEx classification, same as Autopilot
         _resFlagB=_resKnownB==null?true:_resKnownB;
         const res=await ratesForOrder(o,{residential:_resFlagB,weightLb:_wt0,box:pk0&&pk0.pieces[0]?_box0:undefined,fromZip:originZip,sender:settings.sender,packageTypeCode:_orBox0?_orBox0.code:""},eng);
-        const _hs=new Set(cz(settings).hiddenServices||[]);const _bs=new Set((client&&client.blockedServices)||[]);let qs=((res&&res.rates)||[]).filter(q=>!_hs.has(canonSvc(q.label))&&!_bs.has(canonSvc(q.label))).filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk([{weight:_wt0,L:_box0.L,W:_box0.W,H:_box0.H}])).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:originZip,toZip:o.zip,weight:(pk0&&pk0.totalWt)||o.weight||1})}));   // GE filter checks the SAME single piece the rate call priced
+        const _hs=new Set(cz(settings).hiddenServices||[]);const _bs=new Set((client&&client.blockedServices)||[]);let qs=((res&&res.rates)||[]).filter(q=>!_hs.has(canonSvc(q.label))&&!_bs.has(canonSvc(q.label))).filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk([{weight:_wt0,L:_box0.L,W:_box0.W,H:_box0.H}])).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,surcharges:q.surcharges,fromZip:originZip,toZip:o.zip,weight:(pk0&&pk0.totalWt)||o.weight||1})}));   // GE filter checks the SAME single piece the rate call priced
         picked=pickByPref(qs,svcOv[o.id],_resKnownB);
         if(!picked){
           if(rule==="ground")picked=qs.filter(q=>/ground|home/i.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
@@ -10520,7 +10624,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
         _resFlag=_resKnown==null?true:_resKnown;
         const res=await ratesForOrder(o,{residential:_resFlag,weightLb:wt,fromZip:senderZip,sender:settings.sender,box:_box0,packageTypeCode:_orBox0?_orBox0.code:""},eng);
         const _apHs=new Set(cz(settings).hiddenServices||[]);const _apBs=new Set((client&&client.blockedServices)||[]);
-        const qs=((res&&res.rates)||[]).filter(q=>!_apHs.has(canonSvc(q.label))&&!_apBs.has(canonSvc(q.label))).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:senderZip,toZip:o.zip,weight:wt})}));
+        const qs=((res&&res.rates)||[]).filter(q=>!_apHs.has(canonSvc(q.label))&&!_apBs.has(canonSvc(q.label))).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,surcharges:q.surcharges,fromZip:senderZip,toZip:o.zip,weight:wt})}));
         picked=pickRate(qs,pref,_resKnown);
       }catch(e){}
       if(!picked){rows.push({name:o.name,orderId:o.id,ok:false,error:"No rate returned"});setApResults({rows:[...rows],heldN});continue;}

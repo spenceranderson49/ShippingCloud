@@ -539,6 +539,22 @@ exports.handler = async (event) => {
       return J({ ok: true });
     }
 
+    /* ── admin: turn OFF a user's 2FA (lost-phone recovery) ── the only way back in for a
+       user who enabled 2FA and lost their authenticator. Admin-only; can't be self-abused. */
+    if (action === "clearTotp") {
+      if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
+      const email = String(body.email || "").trim().toLowerCase();
+      if (!email) return J({ ok: false, error: "Which user?" });
+      const cur = await getStore("users");
+      const users = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+      const idx = users.findIndex((x) => x && String(x.email || "").toLowerCase() === email);
+      if (idx < 0) return J({ ok: false, error: "No user with that email." });
+      users[idx] = { ...users[idx], totp: undefined };
+      const w = await putStores({ users });
+      if (!w.ok) return J({ ok: false, error: "Save failed." });
+      return J({ ok: true });
+    }
+
     if (action === "getUpload") {
       if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
       const key = String(body.key || "");

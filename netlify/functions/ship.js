@@ -155,7 +155,8 @@ exports.handler = async (event) => {
   const intl = toISO(receiver.country || "US") !== toISO(sender.country || "US");
   const pieces = (Array.isArray(o.pieces) && o.pieces.length ? o.pieces : [{ weight: 1, length: 12, width: 9, height: 4 }]);
   const totalWeight = pieces.reduce((a, p) => a + (+p.weight || 0), 0) || 1;
-  const declaredTotal = pieces.reduce((a, p) => a + (+p.declaredValue || 0), 0) || (+o.insuranceAmount || 0);
+  const money$ = (v) => +String(v == null ? "" : v).replace(/[^0-9.]/g, "") || 0;   // "$1,000" → 1000, junk → 0
+  const declaredTotal = pieces.reduce((a, p) => a + money$(p.declaredValue), 0) || money$(o.insuranceAmount);
 
   const refs = [];
   if (o.reference) refs.push({ customerReferenceType: "CUSTOMER_REFERENCE", value: String(o.reference).slice(0, 40) });
@@ -170,7 +171,12 @@ exports.handler = async (event) => {
     if (i === 0 && refs.length) it.customerReferences = refs;
     const sig = SIG[String(o.signatureOption || "none").toLowerCase()];
     if (sig) it.packageSpecialServices = { signatureOptionType: sig };
-    if (i === 0 && +o.insuranceAmount > 0) it.declaredValue = { amount: Math.round(+o.insuranceAmount * 100) / 100, currency: "USD" };
+    /* Declared value is PER PACKAGE at FedEx. Honor each piece's own declaredValue (the app
+       sends one per box — same-on-each or per-box amounts alike). Legacy fallback: if no piece
+       carries one, put the order-level insuranceAmount on the first box like before. */
+    const pdv = money$(p.declaredValue);
+    if (pdv > 0) it.declaredValue = { amount: Math.round(pdv * 100) / 100, currency: "USD" };
+    else if (i === 0 && !pieces.some(pp => money$(pp.declaredValue) > 0) && money$(o.insuranceAmount) > 0) it.declaredValue = { amount: Math.round(money$(o.insuranceAmount) * 100) / 100, currency: "USD" };
     return it;
   });
 
@@ -209,7 +215,21 @@ exports.handler = async (event) => {
   };
   requestedShipment.recipients[0].address.residential = !!o.residential;
   if (shipmentSpecial.length) requestedShipment.shipmentSpecialServices = { specialServiceTypes: shipmentSpecial };
+  /* Ground Economy (SmartPost) needs the account's hub on the SHIP call too — quote.js gates the
+     rates on it, but booking without it is a guaranteed FedEx rejection. Single-package only. */
+  if (serviceType === "SMART_POST") {
+    const hub = String(o.smartPostHub || process.env.FEDEX_SMARTPOST_HUB || "").trim();
+    if (!hub) return respond(200, { ok: false, error: "Ground Economy needs your FedEx SmartPost hub id — set FEDEX_SMARTPOST_HUB in the site's environment (the hub FedEx assigned to your account), or pick another service." });
+    if (pieces.length > 1) return respond(200, { ok: false, error: "Ground Economy is single-package only — ship the boxes as separate shipments, or pick Ground/Home Delivery for the multipiece." });
+    requestedShipment.smartPostInfoDetail = { indicia: "PARCEL_SELECT", hubId: hub };
+  }
+  /* Receiver-billed shipments MUST carry the receiver's FedEx account — silently falling back to
+     SENDER made the shipper eat the freight with no warning. */
+  if (o.billingParty === "receiver" && !o.billingAccount) {
+    return respond(200, { ok: false, error: "Bill-to-receiver needs the receiver's FedEx account number — add it to the shipment (or bill the sender / a third party)." });
+  }
   if (intl) {
+    if (!(declaredTotal > 0)) return respond(200, { ok: false, error: "International shipments need a customs value — enter the shipment's declared value (Insure $ / per-box values) so the customs declaration is truthful. FedEx rejects (and customs holds) $0 declarations." });
     const customsVal = Math.max(1, Math.round((declaredTotal || 1) * 100) / 100);
     requestedShipment.customsClearanceDetail = {
       dutiesPayment: { paymentType: "SENDER" },
@@ -238,7 +258,7 @@ exports.handler = async (event) => {
     clearTimeout(t);
     const j = await r.json().catch(() => ({}));
     if (!r.ok) {
-      let msg = (j.errors && j.errors[0] && (j.errors[0].message || j.errors[0].code)) || ("FedEx ship error " + r.status);
+      let msg = (Array.isArray(j.errors) && j.errors.length ? j.errors.map((e) => e.message || e.code).filter(Boolean).join("; ") : "") || ("FedEx ship error " + r.status);
       if (/mismatch|not\s*authorized|account.*(invalid|not\s*found)/i.test(msg)) {
         msg = "FedEx doesn't recognize account #" + acct + " on your API credentials — it must be added to your FedEx Developer Portal organization (Manage Organization \u2192 Shipping accounts, using the account's billing address) and attached to your project. FedEx said: " + msg;
       }

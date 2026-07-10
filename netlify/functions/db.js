@@ -91,17 +91,97 @@ function verifyToken(token) {
   } catch { return null; }
 }
 
+/* ── two-factor auth (TOTP, RFC 6238) ── opt-in, off by default so no one can be locked out.
+   Standard base32 (RFC 4648) for the shared secret so Google Authenticator / Authy / 1Password
+   can scan the otpauth:// QR and produce matching 6-digit codes. HMAC-SHA1, 30-second step. */
+const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+function b32encode(buf) {
+  let bits = 0, val = 0, out = "";
+  for (let i = 0; i < buf.length; i++) { val = (val << 8) | buf[i]; bits += 8; while (bits >= 5) { out += B32[(val >>> (bits - 5)) & 31]; bits -= 5; } }
+  if (bits > 0) out += B32[(val << (5 - bits)) & 31];
+  return out;
+}
+function b32decode(str) {
+  const s = String(str || "").toUpperCase().replace(/=+$/, "").replace(/\s+/g, "");
+  let bits = 0, val = 0; const out = [];
+  for (let i = 0; i < s.length; i++) { const idx = B32.indexOf(s[i]); if (idx < 0) continue; val = (val << 5) | idx; bits += 5; if (bits >= 8) { out.push((val >>> (bits - 8)) & 255); bits -= 8; } }
+  return Buffer.from(out);
+}
+const newTotpSecret = () => b32encode(crypto.randomBytes(20));   // 160-bit secret
+function totpAt(secretB32, counter) {
+  const key = b32decode(secretB32);
+  const buf = Buffer.alloc(8);
+  // 64-bit counter, big-endian (write the low 32 bits; high bits are 0 until year ~10889)
+  buf.writeUInt32BE(Math.floor(counter / 0x100000000), 0);
+  buf.writeUInt32BE(counter >>> 0, 4);
+  const hmac = crypto.createHmac("sha1", key).update(buf).digest();
+  const off = hmac[hmac.length - 1] & 0xf;
+  const bin = ((hmac[off] & 0x7f) << 24) | ((hmac[off + 1] & 0xff) << 16) | ((hmac[off + 2] & 0xff) << 8) | (hmac[off + 3] & 0xff);
+  return String(bin % 1000000).padStart(6, "0");
+}
+function totpVerify(secretB32, code, step) {
+  const c = String(code || "").replace(/\D/g, "");
+  if (c.length !== 6 || !secretB32) return false;
+  const counter = Math.floor(Date.now() / 1000 / (step || 30));
+  // accept the current step ±1 (clock skew tolerance)
+  for (let w = -1; w <= 1; w++) {
+    try { if (crypto.timingSafeEqual(Buffer.from(totpAt(secretB32, counter + w)), Buffer.from(c))) return true; } catch { /* length mismatch */ }
+  }
+  return false;
+}
+const otpauthUrl = (email, secretB32, issuer) =>
+  "otpauth://totp/" + encodeURIComponent((issuer || "ShippingCloud") + ":" + email) +
+  "?secret=" + secretB32 + "&issuer=" + encodeURIComponent(issuer || "ShippingCloud") + "&algorithm=SHA1&digits=6&period=30";
+
+/* ── one-time backup codes ── the lost-phone escape hatch that doesn't need an admin.
+   Codes are shown ONCE at setup; only their SHA-256 hashes are stored. High-entropy random,
+   so a single fast hash + timing-safe compare is enough (no need for slow scrypt here). */
+const BC_ALPHA = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";   // no 0/O/1/I — easy to read/type
+const normBackup = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+const hashBackup = (code) => crypto.createHash("sha256").update(normBackup(code)).digest("hex");
+function newBackupCodes(n) {
+  const count = n || 10, plain = [], stored = [];
+  for (let i = 0; i < count; i++) {
+    const bytes = crypto.randomBytes(8);
+    let raw = ""; for (let j = 0; j < 8; j++) raw += BC_ALPHA[bytes[j] % BC_ALPHA.length];
+    const pretty = raw.slice(0, 4) + "-" + raw.slice(4);   // e.g. AB3K-9XQ7
+    plain.push(pretty);
+    stored.push({ h: hashBackup(pretty), used: false });
+  }
+  return { plain, stored };
+}
+/* returns {ok, remaining} — consumes (marks used) a matching unused code, timing-safe */
+function consumeBackup(list, code) {
+  const arr = Array.isArray(list) ? list : [];
+  const want = hashBackup(code);
+  if (!normBackup(code)) return { ok: false, list: arr };
+  for (const e of arr) {
+    if (e && !e.used && e.h && want.length === String(e.h).length) {
+      try { if (crypto.timingSafeEqual(Buffer.from(want, "hex"), Buffer.from(e.h, "hex"))) { e.used = true; return { ok: true, list: arr }; } } catch { /* skip */ }
+    }
+  }
+  return { ok: false, list: arr };
+}
+const backupLeft = (list) => (Array.isArray(list) ? list : []).filter((e) => e && !e.used).length;
+
 /* ── users store hygiene: hashes never leave; plaintext never stored ── */
-const stripUsers = (arr) => (Array.isArray(arr) ? arr : []).map((u) => ({ ...u, password: "", passHash: undefined }));
+const stripUsers = (arr) => (Array.isArray(arr) ? arr : []).map((u) => ({ ...u, password: "", passHash: undefined, totp: u && u.totp ? { enabled: !!u.totp.enabled, backupLeft: backupLeft(u.totp.backup) } : undefined }));
 function mergeUsersForWrite(incoming, current) {
   const cur = Array.isArray(current) ? current : [];
-  const byEmail = {}; for (const u of cur) if (u && u.email) byEmail[String(u.email).toLowerCase()] = u;
+  // Match on the STABLE id first (fall back to email) so renaming a user's email doesn't lose
+  // their password hash or 2FA secret — an email-keyed lookup would miss the renamed record and
+  // wipe both, locking the user out.
+  const byId = {}, byEmail = {};
+  for (const u of cur) { if (u && u.id != null) byId[String(u.id)] = u; if (u && u.email) byEmail[String(u.email).toLowerCase()] = u; }
   return (Array.isArray(incoming) ? incoming : []).map((u) => {
     if (!u) return u;
-    const existing = u.email ? byEmail[String(u.email).toLowerCase()] : null;
+    const existing = (u.id != null && byId[String(u.id)]) || (u.email ? byEmail[String(u.email).toLowerCase()] : null) || null;
     const out = { ...u, password: "" };
     if (existing && existing.passHash) out.passHash = existing.passHash;      // NEVER change an existing password via a store write
     else if (u.password) out.passHash = hashPw(u.password);                    // brand-new user: hash their initial password
+    // 2FA secret is never sent to the client (stripUsers removes it) — a store write must NOT wipe it.
+    if (existing && existing.totp) out.totp = existing.totp;
+    else delete out.totp;
     return out;
   });
 }
@@ -168,7 +248,26 @@ exports.handler = async (event) => {
       }
       if (!u || !checkPw(password, u.passHash)) return J({ ok: false, error: "Incorrect email or password." });
       if (u.status && u.status !== "active") return J({ ok: false, error: "This account is inactive. Contact your administrator." });
-      return J({ ok: true, token: makeToken(u), user: { ...u, password: "", passHash: undefined } });
+      // Two-factor: only enforced once the user has fully enabled it (opt-in). Password is already verified here.
+      if (u.totp && u.totp.enabled) {
+        // Fail CLOSED if the record is enabled but somehow missing its secret (corruption) — an
+        // admin can clear 2FA to recover. Never let a broken record downgrade to password-only.
+        if (!u.totp.secret) return J({ ok: false, needsTotp: true, error: "Two-factor is on but not set up correctly for this account — ask your administrator to reset it." });
+        const raw = String(body.code || "");
+        const code = raw.replace(/\D/g, "");
+        if (!raw.trim()) return J({ ok: false, needsTotp: true, error: "Enter the 6-digit code from your authenticator app." });
+        if (!totpVerify(u.totp.secret, code)) {
+          // fall back to a one-time backup code (lost-phone escape hatch)
+          const bc = consumeBackup(u.totp.backup, raw);
+          if (!bc.ok) return J({ ok: false, needsTotp: true, error: "That code isn't right or has expired — try the current one, or a backup code." });
+          // A backup code is one-time — its "used" state MUST persist before we grant a session,
+          // or a failed write would leave the code replayable. Refuse the login if we can't record it.
+          const merged = users.map((x) => x && x.id === u.id ? { ...x, totp: { ...u.totp, backup: bc.list } } : x);
+          const bw = await putStores({ users: merged });
+          if (!bw.ok) return J({ ok: false, needsTotp: true, error: "Couldn't verify your backup code just now — try again in a moment." });
+        }
+      }
+      return J({ ok: true, token: makeToken(u), user: { ...u, password: "", passHash: undefined, totp: u.totp ? { enabled: !!u.totp.enabled, backupLeft: backupLeft(u.totp.backup) } : undefined } });
     }
 
     /* ── request access (no auth): stores a pending signup for admin approval ── */
@@ -186,12 +285,18 @@ exports.handler = async (event) => {
       const volume = String(body.volume || "").slice(0, 40);
       const carrier = String(body.carrier || "").slice(0, 40);
       if (!name || !/.+@.+\..+/.test(email) || password.length < 4) return J({ ok: false, error: "Enter your name, a valid email, and a password (4+ characters)." });
-      const [curU, curR, curF] = await Promise.all([getStore("users"), getStore("signupRequests"), getStore("fedexRequests")]);
+      const [curU, curR, curF, curC] = await Promise.all([getStore("users"), getStore("signupRequests"), getStore("fedexRequests"), getStore("clients")]);
       const users = (curU.ok && Array.isArray(curU.value)) ? curU.value : [];
       if (users.some((u) => u && String(u.email || "").toLowerCase() === email)) return J({ ok: false, error: "That email already has a login. Try signing in." });
       if (users.length >= 2000) return J({ ok: false, error: "Signups are temporarily paused — give us a call." });
-      const newUser = { id: "u" + Date.now(), name, company, email, role: "customer", clientId: null, status: "active", password: "", passHash: hashPw(password), volume, carrier, createdAt: new Date().toISOString(), lastLogin: new Date().toLocaleDateString() };
-      const writes = { users: [...users, newUser] };
+      /* Every self-serve signup IS a customer: mint the client record right here and assign the
+         login to it, so the admin just opens the customer and sets rates — no manual "create a
+         customer + attach the login" step, and the app never runs unassigned (at raw cost). */
+      const clients = (curC.ok && Array.isArray(curC.value)) ? curC.value : [];
+      const newClientId = "c" + Date.now() + Math.floor(Math.random() * 1000);
+      const newClient = { id: newClientId, name: company || name, contact: name, email, phone: "", origin: "", markup: "", status: "active", since: new Date().toISOString().slice(0, 7), plan: "Standard", selfSignup: true };
+      const newUser = { id: "u" + Date.now() + Math.floor(Math.random() * 1000), name, company, email, role: "customer", clientId: newClientId, status: "active", password: "", passHash: hashPw(password), volume, carrier, createdAt: new Date().toISOString(), lastLogin: new Date().toLocaleDateString() };
+      const writes = { users: [...users, newUser], clients: [...clients, newClient] };
       const reqs = (curR.ok && Array.isArray(curR.value)) ? curR.value : [];
       const remaining = reqs.filter((r) => r && String(r.email || "").toLowerCase() !== email);
       if (remaining.length !== reqs.length) writes.signupRequests = remaining;   // clean any legacy pending request
@@ -278,12 +383,77 @@ exports.handler = async (event) => {
     const auth = verifyToken(body.token);
     if (!auth) return J({ ok: false, authFailed: true, error: "Session expired — sign in again." });
 
+    /* ── two-factor auth management (self-service, per logged-in user) ── */
+    if (action === "totpBegin" || action === "totpEnable" || action === "totpDisable" || action === "totpStatus" || action === "totpBackupRegen") {
+      const curU = await getStore("users");
+      if (!curU.ok) return J({ ok: false, error: "Database error reading accounts." });
+      const allUsers = Array.isArray(curU.value) ? curU.value : [];
+      const me = allUsers.find((x) => x && x.id === auth.uid) || null;
+      if (!me) return J({ ok: false, error: "Account not found." });
+
+      if (action === "totpStatus") return J({ ok: true, enabled: !!(me.totp && me.totp.enabled), pending: !!(me.totp && me.totp.pendingSecret), backupLeft: backupLeft(me.totp && me.totp.backup) });
+
+      if (action === "totpBackupRegen") {
+        // regenerate the one-time backup codes; requires a current code or the password (it's a sensitive op)
+        if (!me.totp || !me.totp.enabled || !me.totp.secret) return J({ ok: false, error: "Turn on 2FA first." });
+        const code = String(body.code || "").replace(/\D/g, "");
+        const pw = String(body.password || "");
+        if (!(code && totpVerify(me.totp.secret, code)) && !(pw && checkPw(pw, me.passHash))) return J({ ok: false, error: "Enter a current 6-digit code (or your password) to make new backup codes." });
+        const bc = newBackupCodes(10);
+        const merged = allUsers.map((x) => x && x.id === auth.uid ? { ...x, totp: { ...me.totp, backup: bc.stored } } : x);
+        const w = await putStores({ users: merged });
+        if (!w.ok) return J({ ok: false, error: "Could not make new backup codes — try again." });
+        return J({ ok: true, backupCodes: bc.plain });
+      }
+
+      if (action === "totpBegin") {
+        // Generate a fresh secret and stash it as a SEPARATE pendingSecret. Never touch an
+        // already-enabled secret or its backup codes here — otherwise a stolen session (no device)
+        // could call totpBegin to silently drop enforcement + destroy backup codes. Enforcement
+        // only flips on the confirmed totpEnable below.
+        const secret = newTotpSecret();
+        const merged = allUsers.map((x) => x && x.id === auth.uid ? { ...x, totp: { ...(x.totp || {}), pendingSecret: secret } } : x);
+        const w = await putStores({ users: merged });
+        if (!w.ok) return J({ ok: false, error: "Could not start 2FA setup — try again." });
+        return J({ ok: true, secret, otpauth: otpauthUrl(me.email || auth.email || "user", secret, "ShippingCloud") });
+      }
+
+      if (action === "totpEnable") {
+        const pending = me.totp && me.totp.pendingSecret;
+        if (!pending) return J({ ok: false, error: "Start 2FA setup first." });
+        const code = String(body.code || "").replace(/\D/g, "");
+        if (!totpVerify(pending, code)) return J({ ok: false, error: "That code isn't right or has expired — try the current one." });
+        const bc = newBackupCodes(10);
+        // promote the pending secret to the live one, issue backup codes, clear the pending field
+        const merged = allUsers.map((x) => x && x.id === auth.uid ? { ...x, totp: { secret: pending, enabled: true, backup: bc.stored } } : x);
+        const w = await putStores({ users: merged });
+        if (!w.ok) return J({ ok: false, error: "Could not turn on 2FA — try again." });
+        return J({ ok: true, enabled: true, backupCodes: bc.plain });
+      }
+
+      if (action === "totpDisable") {
+        // require a current code (or the account password) to switch it off, so a hijacked session can't.
+        if (me.totp && me.totp.enabled && me.totp.secret) {
+          const code = String(body.code || "").replace(/\D/g, "");
+          const pw = String(body.password || "");
+          const okCode = code && totpVerify(me.totp.secret, code);
+          const okPw = pw && checkPw(pw, me.passHash);
+          if (!okCode && !okPw) return J({ ok: false, error: "Enter a current 6-digit code (or your password) to turn off 2FA." });
+        }
+        const merged = allUsers.map((x) => x && x.id === auth.uid ? { ...x, totp: undefined } : x);
+        const w = await putStores({ users: merged });
+        if (!w.ok) return J({ ok: false, error: "Could not turn off 2FA — try again." });
+        return J({ ok: true, enabled: false });
+      }
+    }
+
     if (action === "getAll") {
       const r = await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&select=key,value");
       if (!r.ok) return J({ ok: false, error: "Database error " + r.status });
       const stores = {};
       for (const row of (Array.isArray(r.data) ? r.data : [])) {
         if (!row || row.key == null) continue;
+        if (String(row.key).startsWith("bak:")) continue;   // safety snapshots — server-side only, restored on request
         if (auth.role !== "admin" && !String(row.key).startsWith(userScope(auth))) continue;
         stores[row.key] = (row.key === "users" || row.key === "signupRequests") ? stripUsers(row.value) : row.value;
       }
@@ -423,6 +593,37 @@ exports.handler = async (event) => {
         const cur = await getStore("users");
         toWrite.users = mergeUsersForWrite(toWrite.users, cur.ok ? cur.value : []);
       }
+      /* ── DATA-LOSS GUARDS on the business-critical global stores ──
+         1. A write that would WIPE a non-empty store (empty array / rateRules with zero
+            profiles) is refused — a stale tab or a race can never nuke the admin's rates,
+            customers, or logins.
+         2. Every overwrite of a critical store snapshots the CURRENT value first
+            (bak:<key>:<iso> rows, newest 10 kept) — anything is restorable. */
+      const CRITICAL = ["users", "clients", "rateRules", "featureFlags"];
+      for (const key of CRITICAL) {
+        if (!(key in toWrite)) continue;
+        const cur = await getStore(key);
+        const curVal = cur.ok ? cur.value : undefined;
+        const curSize = Array.isArray(curVal) ? curVal.length : (curVal && typeof curVal === "object" ? Object.keys(curVal).length : 0);
+        const nv = toWrite[key];
+        const nvSize = Array.isArray(nv) ? nv.length : (nv && typeof nv === "object" ? Object.keys(nv).length : 0);
+        const wipes = curSize > 0 && (nv == null || nvSize === 0 || (key === "rateRules" && (!nv.profiles || !nv.profiles.length) && curVal && curVal.profiles && curVal.profiles.length));
+        if (wipes) { delete toWrite[key]; rejected.push(key + " (refused: would erase " + curSize + " existing entries — reload and try again)"); continue; }
+        if (curVal !== undefined) {
+          try {
+            const ts = new Date().toISOString().replace(/[:.]/g, "-");
+            await putStores({ ["bak:" + key + ":" + ts]: curVal });
+            // prune: keep the newest 10 snapshots per key
+            const lr = await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=like." + encodeURIComponent("bak:" + key + ":") + "*&select=key&order=key.desc");
+            const keys = (Array.isArray(lr.data) ? lr.data : []).map((r2) => r2.key);
+            if (keys.length > 10) {
+              const drop = keys.slice(10);
+              await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=in.(" + drop.map((k) => '"' + k.replace(/"/g, "") + '"').join(",") + ")", { method: "DELETE" });
+            }
+          } catch (e) { /* backup must never block the save itself */ }
+        }
+      }
+      if (!Object.keys(toWrite).length) return J({ ok: false, error: "Nothing saved — " + rejected.join("; ") });
       const w = await putStores(toWrite);
       if (!w.ok) return J({ ok: false, error: "Save failed: " + ((w.err && w.err.text) || "").slice(0, 200) });
       return J({ ok: true, saved: Object.keys(toWrite), rejected });
@@ -432,12 +633,52 @@ exports.handler = async (event) => {
       const email = String(body.email || "").trim().toLowerCase();
       const newPassword = String(body.newPassword || "");
       if (!email || newPassword.length < 4) return J({ ok: false, error: "Password must be at least 4 characters." });
-      if (auth.role !== "admin" && String(auth.email || "").toLowerCase() !== email) return J({ ok: false, error: "You can only change your own password." });
       const cur = await getStore("users");
       const users = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
       const idx = users.findIndex((x) => x && String(x.email || "").toLowerCase() === email);
       if (idx < 0) return J({ ok: false, error: "No user with that email." });
+      /* Self-service is authorized by UID, not the token's embedded email — after a changeEmail,
+         an old token still carries the OLD address, and if that address is later re-registered by
+         someone else, an email-keyed check would let the old token reset the NEW user's password. */
+      if (auth.role !== "admin" && String(users[idx].id) !== String(auth.uid)) return J({ ok: false, error: "You can only change your own password." });
       users[idx] = { ...users[idx], password: "", passHash: hashPw(newPassword) };
+      const w = await putStores({ users });
+      if (!w.ok) return J({ ok: false, error: "Save failed." });
+      return J({ ok: true });
+    }
+
+    /* ── self-service: change your own login email, keeping the same password + 2FA ──
+       Requires the current password (confirms it's really you, not a hijacked session). */
+    if (action === "changeEmail") {
+      const newEmail = String(body.newEmail || "").trim().toLowerCase();
+      const password = String(body.password || "");
+      if (!/.+@.+\..+/.test(newEmail)) return J({ ok: false, error: "Enter a valid email address." });
+      const cur = await getStore("users");
+      const users = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+      const me = users.find((x) => x && x.id === auth.uid) || null;
+      if (!me) return J({ ok: false, error: "Account not found." });
+      if (!checkPw(password, me.passHash)) return J({ ok: false, error: "That password isn't right — enter your current password to change your email." });
+      if (users.some((x) => x && x.id !== auth.uid && String(x.email || "").toLowerCase() === newEmail)) return J({ ok: false, error: "Another account already uses that email." });
+      // spread ...x preserves passHash AND totp (secret + backup codes) — only the email changes
+      const merged = users.map((x) => x && x.id === auth.uid ? { ...x, email: newEmail } : x);
+      const w = await putStores({ users: merged });
+      if (!w.ok) return J({ ok: false, error: "Could not save — try again." });
+      // reissue the session token so its embedded email matches the new one
+      const updated = { ...me, email: newEmail };
+      return J({ ok: true, email: newEmail, token: makeToken(updated), user: { ...updated, password: "", passHash: undefined, totp: updated.totp ? { enabled: !!updated.totp.enabled, backupLeft: backupLeft(updated.totp.backup) } : undefined } });
+    }
+
+    /* ── admin: turn OFF a user's 2FA (lost-phone recovery) ── the only way back in for a
+       user who enabled 2FA and lost their authenticator. Admin-only; can't be self-abused. */
+    if (action === "clearTotp") {
+      if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
+      const email = String(body.email || "").trim().toLowerCase();
+      if (!email) return J({ ok: false, error: "Which user?" });
+      const cur = await getStore("users");
+      const users = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+      const idx = users.findIndex((x) => x && String(x.email || "").toLowerCase() === email);
+      if (idx < 0) return J({ ok: false, error: "No user with that email." });
+      users[idx] = { ...users[idx], totp: undefined };
       const w = await putStores({ users });
       if (!w.ok) return J({ ok: false, error: "Save failed." });
       return J({ ok: true });
@@ -495,7 +736,8 @@ exports.handler = async (event) => {
         const w = await putStores({ signupRequests: remaining });
         return w.ok ? J({ ok: true, requests: stripUsers(remaining) }) : J({ ok: false, error: "Save failed." });
       }
-      const newUser = { id: "u" + Date.now(), name: req.name, email: req.email, company: req.company || "", role: String(body.role || "customer") === "admin" ? "admin" : "customer", clientId: body.clientId || null, status: "active", password: "", passHash: req.passHash, lastLogin: "—" };
+      if (users.some((u) => u && String(u.email || "").toLowerCase() === email)) return J({ ok: false, error: "A user with that email already exists — deny this request (or delete the existing user first)." });
+      const newUser = { id: "u" + Date.now() + Math.floor(Math.random() * 1000), name: req.name, email: req.email, company: req.company || "", role: String(body.role || "customer") === "admin" ? "admin" : "customer", clientId: body.clientId || null, status: "active", password: "", passHash: req.passHash, lastLogin: "—" };
       const w = await putStores({ users: [...users, newUser], signupRequests: remaining });
       if (!w.ok) return J({ ok: false, error: "Save failed." });
       return J({ ok: true, users: stripUsers([...users, newUser]), requests: stripUsers(remaining) });

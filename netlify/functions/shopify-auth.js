@@ -41,7 +41,11 @@ exports.handler = async (event) => {
   const key = process.env.SHOPIFY_API_KEY;
   const secret = process.env.SHOPIFY_API_SECRET;
   const appUrl = (process.env.APP_URL || "https://shippingcloud.net").replace(/\/+$/, "");
-  if (!key || !secret) return html("Server isn't configured yet — set <b>SHOPIFY_API_KEY</b> and <b>SHOPIFY_API_SECRET</b> in Netlify.");
+  const q0 = event.queryStringParameters || {};
+  /* The app pings this before redirecting, so an unconfigured server falls back to the
+     self-service access-token connect instead of dead-ending on the message below. */
+  if (q0.ping) return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ configured: !!(key && secret) }) };
+  if (!key || !secret) return html("One-click connect isn't set up on this server. Go back to <b>Settings → Integrations</b> and use <b>Connect with an access token</b> instead — it takes about two minutes and needs nothing from us.");
 
   const q = event.queryStringParameters || {};
   const self = "https://" + event.headers.host + "/.netlify/functions/shopify-auth";

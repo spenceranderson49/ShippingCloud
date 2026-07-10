@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, EyeOff, MessageCircle, Sparkles, ClipboardList, Ban, Tag, Copy, Sliders, Save} from "lucide-react";
+import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, Pause, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, EyeOff, MessageCircle, Sparkles, ClipboardList, Ban, Tag, Copy, Sliders, Save} from "lucide-react";
 const FW_BLUE="#0099FF";
 const FW_DARK="#111418";
 function BrandCloud({className,color,style}){return (
@@ -70,7 +70,7 @@ const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK
    ever deploys to every login by accident. */
 /* Customer Settings sections (id,label) — mirrored by the `secs` array inside Settings.
    The admin portal uses this list for the per-customer hide/lock controls (featureFlags._secPolicy). */
-const SETTINGS_SEC_LIST=[["general","General"],["customize","Customizations"],["carriers","Carrier accounts"],["warehouses","Warehouses"],["catalog","Product catalog"],["boxes","Package sizes"],["boxlogic","Box logic"],["reference","Reference Fields"],["cieditor","Commercial invoice"],["cihistory","CI history"],["otherdocs","Other documents"],["printer","Print settings"],["checkout","Checkout rates"],["manifests","Manifests"],["reports","Reports"],["notifications","Email automation"],["billing","Billing"],["integrations","Integrations"],["subscription","Subscription"]];
+const SETTINGS_SEC_LIST=[["general","General"],["customize","Customizations"],["reports","Reports"],["shipscreen","Ship screen"],["orderspage","Orders"],["carriers","Carrier accounts"],["warehouses","Warehouses"],["boxes","Package sizes"],["boxlogic","Box logic"],["catalog","Product catalog"],["reference","Reference Fields"],["printer","Print settings"],["cieditor","Commercial invoice"],["cihistory","CI history"],["otherdocs","Other documents"],["manifests","Manifests"],["integrations","Integrations"],["notifications","Email automation"],["checkout","Checkout rates"],["billing","Billing"],["subscription","Subscription"]];
 const FEATURE_CATALOG=[
   {id:"orders",label:"Orders",desc:"Order import & fulfillment",default:true},
   {id:"shipments",label:"Shipments",desc:"Shipment history & tracking",default:true},
@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v375";
+const BUILD_TAG="addr-v425";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -193,13 +193,21 @@ if(typeof window!=="undefined"&&BRAND.fw){
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
-const billable=(L,W,H,a)=>Math.max(Math.ceil((L*W*H)/DIM),Math.ceil(a||0),1);
+/* Dim divisors are NEGOTIABLE (Spencer's rates go up to 225). The admin sets them per service
+   family in Admin → Rates; they're stored in the global rateRules store (dimDivisors) and synced
+   into this module-level config wherever rateRules loads, so the offline estimator, box logic and
+   the billed-weight display all use the negotiated divisor instead of the list 139. */
+let DIM_CFG={express:DIM,ground:DIM,ground_economy:DIM};
+const setDimCfg=(d)=>{DIM_CFG={express:+(d&&d.express)||DIM,ground:+(d&&d.ground)||DIM,ground_economy:+(d&&d.ground_economy)||DIM};};
+const dimFor=(svc)=>{const t=String(svc||"").toLowerCase();return /econom|smart\s*post/.test(t)?DIM_CFG.ground_economy:/ground|home/.test(t)?DIM_CFG.ground:DIM_CFG.express;};
+const billable=(L,W,H,a,div)=>Math.max(Math.ceil((L*W*H)/(+div||DIM_CFG.ground||DIM)),Math.ceil(a||0),1);
 /* Human "3 lb 3 oz" from fractional pounds. */
 const fmtLbOz=(lbs)=>{const w=+lbs||0;const l=Math.floor(w);const oz=Math.round((w-l)*16);return oz>0?(l>0?l+" lb "+oz+" oz":oz+" oz"):l+" lb";};
 /* Per-shipment billing-weight facts for the rate breakdown: FedEx rounds every piece up to the
-   next full pound, and bills the HIGHER of that and dimensional weight (L×W×H ÷ 139 per piece). */
+   next full pound, and bills the HIGHER of that and dimensional weight (L×W×H ÷ the divisor per
+   piece — the configured Ground divisor is used for this display). */
 function weighInfo(pieces){
-  const ps=(pieces||[]).map(p=>{const act=+p.weight||0;const actC=Math.max(1,Math.ceil(act));const hasD=(+p.L>0&&+p.W>0&&+p.H>0);const dim=hasD?Math.ceil((+p.L*+p.W*+p.H)/DIM):null;return {act,actC,dim,dims:hasD?`${p.L}×${p.W}×${p.H}`:null};});
+  const ps=(pieces||[]).map(p=>{const act=+p.weight||0;const actC=Math.max(1,Math.ceil(act));const hasD=(+p.L>0&&+p.W>0&&+p.H>0);const dim=hasD?Math.ceil((+p.L*+p.W*+p.H)/(DIM_CFG.ground||DIM)):null;return {act,actC,dim,dims:hasD?`${p.L}×${p.W}×${p.H}`:null};});
   if(!ps.length)return null;
   const act=Math.round(ps.reduce((a,p)=>a+p.act,0)*100)/100;
   const quoted=ps.reduce((a,p)=>a+p.actC,0);
@@ -280,11 +288,13 @@ const SERVICES=Object.keys(RATES);
 function quoteRates(s){
   const zone=zoneEst(s.fromZip,s.toZip);
   const pieces=(s.pieces&&s.pieces.length)?s.pieces:[{weight:s.weight,L:s.L,W:s.W,H:s.H}];
-  const bw=pieces.reduce((a,p)=>a+billable(p.L,p.W,p.H,p.weight),0);
   const n=pieces.length;
   const intl=!!s.intl;
   return SERVICES.filter(k=>!!RATES[k].intl===intl).map(k=>{
     const r=RATES[k];
+    // billable weight per SERVICE FAMILY — each family can carry its own negotiated dim divisor
+    const div=dimFor(r.label);
+    const bw=pieces.reduce((a,p)=>a+billable(p.L,p.W,p.H,p.weight,div),0);
     let c=r.intl?(r.base+r.pl*bw):(r.base+r.pz*(zone-2)+r.pl*Math.max(0,bw-1));
     c+=c*r.fuel;
     if(s.residential&&r.res)c+=r.res;
@@ -308,7 +318,7 @@ const newTracking=carrier=>carrier==="UPS"?"1Z"+Math.random().toString(36).slice
 const RATES_ENDPOINT="/.netlify/functions/quote";
 async function getLiveRates(s,england){
   if(!england||!england.enabled) return null;
-  const body={carriers:s.carriers||"fedex",fromZip:s.fromZip,toZip:s.toZip,fromCountry:s.fromCountry||"US",toCountry:s.toCountry||"US",residential:!!s.residential,signature:!!s.signature,signatureOption:s.signatureOption||(s.signature?"direct":"none"),saturdayDelivery:!!s.saturdayDelivery,insuranceAmount:s.insuranceAmount||null,packageTypeCode:s.packageTypeCode||"",fedexAccount:(england.fedexAccount||null),pieces:(s.pieces||[]).map(p=>({weight:Math.ceil(+p.weight||1),length:+p.L||12,width:+p.W||9,height:+p.H||4})),account:{base:england.base,apiKey:england.apiKey,customerId:england.customerId}};   /* FedEx bills every fractional pound as the next full pound (3 lb 3 oz rates as 4 lb) — round up here so the quote is the invoice price */
+  const body={carriers:s.carriers||"fedex",fromZip:s.fromZip,toZip:s.toZip,fromCountry:s.fromCountry||"US",toCountry:s.toCountry||"US",residential:!!s.residential,signature:!!s.signature,signatureOption:s.signatureOption||(s.signature?"direct":"none"),saturdayDelivery:!!s.saturdayDelivery,insuranceAmount:s.insuranceAmount||null,packageTypeCode:s.packageTypeCode||"",fedexAccount:(england.fedexAccount||null),pieces:(s.pieces||[]).map(p=>({weight:Math.ceil(+p.weight||1),length:+p.L||12,width:+p.W||9,height:+p.H||4,declaredValue:(+p.declaredValue||0)||undefined})),account:{base:england.base,apiKey:england.apiKey,customerId:england.customerId}};   /* FedEx bills every fractional pound as the next full pound (3 lb 3 oz rates as 4 lb) — round up here so the quote is the invoice price */
   const attempt=async(ms)=>{
     const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),ms);
     try{
@@ -701,10 +711,10 @@ async function printImagePagesBatch(base64List,settingsForLogo,onProgress){
     try{
       const r=await pdfToImages(items[i].pdf,3);
       if(!r.imgs.length)throw new Error("no pages");
-      let imgs=r.imgs;
-      if(settingsForLogo){ try{ const cc=cz(settingsForLogo); const lg=cc.labelLogo||settingsForLogo.companyLogo||""; imgs=await stampLogo(imgs,cc,lg); }catch(e){} }
+      let imgs=r.imgs,_rcpt=null;
+      try{ const ex=await applyPrintExtras(imgs,items[i].ctx); imgs=ex.imgs; _rcpt=ex.receipt; }catch(e){}
       const comp=await composeForStock(imgs,r.wIn,r.hIn,items[i].ctx);
-      allImgs=allImgs.concat(comp.imgs);
+      allImgs=allImgs.concat(_rcpt?[...comp.imgs,_rcpt]:comp.imgs);
       if(i===0){ wIn=comp.wIn; hIn=comp.hIn; }
     }catch(e){ failed++; }
     if(onProgress)onProgress(i+1,items.length);
@@ -770,11 +780,226 @@ async function stampLogo(imgs,cfg,logoSrc){
     if(cfg.labelLogoPos==="bottom_right"){x=page.width-w-pad;}
     else if(cfg.labelLogoPos==="top_right"){x=page.width-w-pad;y=pad;}
     else if(cfg.labelLogoPos==="top_left"){y=pad;}
+    /* fine-tune nudge from the corner anchor (% of page size, set with the live preview) */
+    x=Math.max(0,Math.min(page.width-w,x+Math.round(page.width*((+cfg.labelLogoDX||0)/100))));
+    y=Math.max(0,Math.min(page.height-h,y+Math.round(page.height*((+cfg.labelLogoDY||0)/100))));
+    /* FREE placement (drag on the preview): labelLogoX/Y are the logo CENTER in % of the label —
+       overrides the corner anchor entirely so drag-anywhere works. */
+    if(cfg.labelLogoX!=null&&cfg.labelLogoY!=null){
+      x=Math.max(0,Math.min(page.width-w,Math.round(page.width*(+cfg.labelLogoX/100)-w/2)));
+      y=Math.max(0,Math.min(page.height-h,Math.round(page.height*(+cfg.labelLogoY/100)-h/2)));
+    }
     cx.fillStyle="#ffffff";cx.fillRect(x-2,y-2,w+4,h+4);
     cx.drawImage(logo,x,y,w,h);
     out.push(cv.toDataURL("image/png"));
   }
   return out;
+}
+/* Render the customizable receipt as a 4×6 label PAGE (canvas → PNG) so it can ride the same
+   pipeline as the label itself — printed as the second label right after the shipping label,
+   on PrintNode and every fallback alike. Content comes from settings.receipt (same field
+   bindings as the doc-tab designer, resolved via resolveDocField). */
+async function renderReceiptPage(rc,ctx,logoUrl){
+  try{
+    if(!rc||!ctx)return null;
+    const W=1200,H=1800;   // 4×6 @300dpi
+    const cv=document.createElement("canvas");cv.width=W;cv.height=H;
+    const g=cv.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,W,H);
+    const M=90;let y=M;
+    if(logoUrl){ const im=await new Promise(res=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>res(null);i.src=logoUrl;});
+      if(im){ const lw=Math.min(W*0.5,W*0.35),lh=lw*(im.height/im.width); g.drawImage(im,M,y,lw,Math.min(lh,200)); y+=Math.min(lh,200)+40; } }
+    const fs=Math.round(((+rc.fontSize||11)/11)*44);
+    g.fillStyle="#1c1917";g.font="800 "+Math.round(fs*1.35)+"px system-ui, -apple-system, sans-serif";
+    g.fillText(String(rc.title||"Shipment Receipt"),M,y+fs);y+=Math.round(fs*1.8);
+    g.fillRect(M,y,W-2*M,5);y+=50;
+    const lines=(rc.lines||[]).map(l=>({label:l.label,value:resolveDocField(l.field,ctx,l.custom)})).filter(l=>l.value!=="");
+    for(const l of lines){
+      if(y>H-M)break;
+      g.font="400 "+fs+"px system-ui, -apple-system, sans-serif";
+      const lb=l.label?String(l.label)+": ":"";
+      g.fillStyle="#78716c";g.fillText(lb,M,y+fs);
+      g.fillStyle="#1c1917";g.font="600 "+fs+"px system-ui, -apple-system, sans-serif";
+      g.fillText(String(l.value),M+(lb?g.measureText(lb).width+8:0),y+fs);
+      y+=Math.round(fs*1.7);
+    }
+    return cv.toDataURL("image/png");
+  }catch(e){ return null; }
+}
+/* Apply the globally-synced print extras to a set of label page images. Used by EVERY print
+   path so what you preview is exactly what prints.
+   Returns {imgs, receipt, changed}: imgs = LABEL pages (logo stamped); receipt = the receipt
+   page SEPARATELY — callers append it AFTER composeForStock so the doc-tab/stock composition
+   never treats the receipt as a label (which shrank it into the label region and stamped a
+   duplicate doc tab on it). */
+async function applyPrintExtras(imgs,ctx){
+  let out=imgs,changed=false,receipt=null;
+  const x=(typeof window!=="undefined"&&window.__scPrintExtras)||null;
+  if(!x||!imgs||!imgs.length)return {imgs:out,receipt,changed};
+  try{ if(x.logo&&x.logo.on&&x.logo.src){ const s=await stampLogo(out,{labelLogoOn:true,labelLogoPos:x.logo.pos,labelLogoScale:x.logo.scale,labelLogoDX:x.logo.dx,labelLogoDY:x.logo.dy,labelLogoX:x.logo.x,labelLogoY:x.logo.y},x.logo.src); if(s!==out){out=s;changed=true;} } }catch(e){}
+  try{ if(x.receipt&&x.receipt.enabled&&x.receipt.cfg&&ctx){ const pg=await renderReceiptPage(x.receipt.cfg,ctx,x.receipt.logo); if(pg){receipt=pg;changed=true;} } }catch(e){}
+  return {imgs:out,receipt,changed};
+}
+/* Live preview of the receipt page, rendered by the SAME renderReceiptPage that prints — what
+   you see in Settings is pixel-for-pixel what comes off the printer. */
+function ReceiptPreviewImg({rc,logo}){
+  const [src,setSrc]=useState(null);
+  useEffect(()=>{let dead=false;(async()=>{
+    const ctx={reference:"SO-1042",invoiceNo:"INV-88",orderNo:"#1042",shipDate:new Date().toLocaleDateString(),service:"FedEx 2Day",weight:"3 lb",pieces:"1",declaredValue:"$100",recipientName:"Jane Doe",recipientCompany:"Acme Co",recipientZip:"84084",senderName:"A. Shipper",senderCompany:"Your Company",cost:"$9.12",tracking:"794912345678"};
+    const u=await renderReceiptPage(rc,ctx,rc&&rc.showLogo!==false?logo:"");
+    if(!dead)setSrc(u);
+  })();return ()=>{dead=true;};},[JSON.stringify(rc||{}),logo]);
+  return src?<img src={src} alt="receipt preview" className="w-52 border border-stone-300 rounded shadow-sm bg-white"/>:<div className="w-52 h-72 border border-dashed border-stone-300 rounded flex items-center justify-center text-[11px] text-stone-400">rendering…</div>;
+}
+/* Mock 4×6 label rendered from the REAL shipment data — shown in the "Review before booking"
+   popup so you see what the label will look like before anything books. The real FedEx label
+   (with the live barcode + tracking) replaces this the moment you confirm. */
+/* 4×6 FedEx-look label rendering at 300dpi, shared by the booking preview AND the logo-placement
+   editor: header origin/ship-date blocks, bold TO block, REF/INV row, PDF417 field with the FedEx
+   wordmark + service letter box, thick rule, right-aligned commit block, TRK row, giant routing
+   code, bottom barcode with a PREVIEW knock-out — the same treatment FedEx uses for SAMPLE. */
+/* Hand-built vector FedEx wordmark (mono/black, like the printed label): solid "Fed",
+   outlined "E", solid "x" with the arrow gap. Pure canvas primitives — no fonts, no images,
+   so it renders identically everywhere (previews, drag editor, booking popup). */
+function drawFedexWordmarkMono(g,x,y,h){
+  const s=h/100,X=(v)=>x+v*s,Y=(v)=>y+v*s;
+  const P=(pts)=>{g.beginPath();g.moveTo(X(pts[0][0]),Y(pts[0][1]));for(let i=1;i<pts.length;i++)g.lineTo(X(pts[i][0]),Y(pts[i][1]));g.closePath();};
+  const rr=(rx,ry,w,hh,r)=>{const x0=X(rx),y0=Y(ry),ww=w*s,h2=hh*s,r2=r*s;g.beginPath();g.moveTo(x0+r2,y0);g.arcTo(x0+ww,y0,x0+ww,y0+h2,r2);g.arcTo(x0+ww,y0+h2,x0,y0+h2,r2);g.arcTo(x0,y0+h2,x0,y0,r2);g.arcTo(x0,y0,x0+ww,y0,r2);g.closePath();};
+  g.save();g.fillStyle="#000";g.strokeStyle="#000";
+  P([[0,0],[54,0],[54,24],[26,24],[26,38],[50,38],[50,62],[26,62],[26,100],[0,100]]);g.fill();      // F
+  rr(58,28,66,72,30);g.fill();                                                                       // e slab
+  g.fillStyle="#fff";g.beginPath();g.ellipse(X(91),Y(47),13*s,9*s,0,0,7);g.fill();                   // e counter
+  P([[88,66],[124,66],[124,84],[88,84]]);g.fill();                                                   // e aperture
+  g.fillStyle="#000";
+  rr(128,28,66,72,30);g.fill();                                                                      // d bowl
+  P([[168,0],[194,0],[194,100],[168,100]]);g.fill();                                                 // d stem
+  g.fillStyle="#fff";g.beginPath();g.ellipse(X(150),Y(64),13*s,20*s,0,0,7);g.fill();                 // d counter
+  g.fillStyle="#000";
+  P([[202,0],[262,0],[262,22],[230,22],[230,39],[256,39],[256,61],[230,61],[230,78],[262,78],[262,100],[202,100]]);
+  g.fillStyle="#fff";g.fill();g.lineWidth=Math.max(2,6*s);g.stroke();                                // E outlined
+  g.fillStyle="#000";
+  P([[256,28],[282,28],[336,100],[310,100]]);g.fill();                                               // x \
+  P([[310,28],[336,28],[282,100],[256,100]]);g.fill();                                               // x /
+  g.restore();
+}
+function drawFedexMock(g,W,H,{to,sender,service,weight,pieceCount,refNo,residential}){
+      const r=to||{},s=sender||{};
+      let seed=0;const sk=String((r.zip||"")+(r.name||"")+(service||""));for(let i=0;i<sk.length;i++)seed=(seed*31+sk.charCodeAt(i))>>>0;
+      const rnd=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
+      const AR=(px,w)=>`${w||700} ${px}px Arial,Helvetica,sans-serif`;
+      const MO=(px,b)=>`${b?"700":"400"} ${px}px 'Courier New',ui-monospace,monospace`;
+      const fone=(v)=>{const d=String(v||"").replace(/\D/g,"");return d.length>=10?`(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6,10)}`:"(000) 000-0000";};
+      const U=(v)=>String(v||"").toUpperCase();
+      g.fillStyle="#fff";g.fillRect(0,0,W,H);g.fillStyle="#000";g.textBaseline="alphabetic";
+      const dt=new Date();const M=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];const D=["SUN","MON","TUE","WED","THU","FRI","SAT"];
+      // ── header ──
+      g.font=AR(25,700);
+      g.fillText("ORIGIN ID:"+(U(s.zip).slice(0,3)||"SHP")+"A",40,64);
+      g.font=AR(25,400);g.fillText(fone(s.phone),300,64);
+      const hl=[U(s.name||s.company||"SHIPPER"),(s.company&&s.name?U(s.company):""),U(s.address1),(U([s.city,s.state,s.zip].filter(Boolean).join(", "))),"UNITED STATES US"].filter(x=>x);
+      hl.forEach((t,i)=>g.fillText(t.slice(0,34),40,96+i*32));
+      g.font=AR(25,400);
+      g.fillText("SHIP DATE: "+String(dt.getDate()).padStart(2,"0")+M[dt.getMonth()]+String(dt.getFullYear()).slice(2),840,64);
+      g.fillText("ACTWGT: "+(+weight||1).toFixed(2)+" LB",840,94);
+      g.fillText("CAD: 0000000/WSXI3700",840,124);
+      g.font=AR(26,700);g.fillText("BILL SENDER",840,186);
+      // ── TO block ──
+      g.font=AR(24,400);g.fillText("TO",40,266);
+      let ty=270;
+      g.font=AR(52,700);g.fillText(U(r.name||r.company||"RECIPIENT").slice(0,22),110,ty);ty+=56;
+      if(r.company&&r.name){g.font=AR(44,700);g.fillText(U(r.company).slice(0,26),110,ty);ty+=52;}
+      g.font=AR(44,700);g.fillText(U(r.address1).slice(0,26),110,ty);ty+=56;
+      if(residential===false){g.font=AR(34,700);g.fillText("**COMMERCIAL ADDRESS**",110,ty);ty+=46;}
+      g.font=AR(52,700);g.fillText((U(r.city)+" "+U(r.state)+" "+U(r.zip)).trim().slice(0,22),110,ty);ty+=50;
+      g.font=AR(24,400);
+      g.fillText(fone(r.phone),40,ty);g.fillText("REF: "+String(refNo||"").slice(0,18),420,ty);ty+=38;
+      g.fillText("INV: "+String(refNo||"").slice(0,14),40,ty);g.fillText("PO:",470,ty);g.fillText("DEPT:",820,ty);
+      const zTop=ty+22;
+      g.lineWidth=2;g.beginPath();g.moveTo(30,zTop);g.lineTo(W-30,zTop);g.stroke();
+      // ── PDF417 field (guard columns + dense codewords) ──
+      const pTop=zTop+26;
+      g.fillRect(48,pTop,10,300);g.fillRect(62,pTop,4,300);   // start guard
+      for(let row=0;row<25;row++){let x=84;while(x<640){const bw=2+Math.floor(rnd()*7);if(rnd()>0.42)g.fillRect(x,pTop+row*12,bw,10);x+=bw+2+Math.floor(rnd()*3);}}
+      g.fillRect(652,pTop,4,300);g.fillRect(662,pTop,10,300);   // end guard
+      drawFedexWordmarkMono(g,758,pTop+8,112);
+      g.lineWidth=2;
+      const svcL=String(service||"").toLowerCase();
+      const fam=/overnight|2day|express saver|one rate/.test(svcL)?"Express":/economy|smartpost/.test(svcL)?"Ground Economy":/home/.test(svcL)?"Home Delivery":"Ground";
+      g.font=AR(38,400);g.textAlign="right";g.fillText(fam,1108,pTop+160);g.textAlign="left";
+      const letter=fam==="Express"?"E":fam==="Home Delivery"?"H":"G";
+      g.lineWidth=7;g.strokeRect(984,pTop+186,116,116);
+      g.font=AR(88,700);g.fillText(letter,1012,pTop+276);
+      g.save();g.translate(W-18,pTop+240);g.rotate(-Math.PI/2);g.font=AR(20,400);g.fillText("581039A3F/E2D",0,0);g.restore();
+      const cTop=pTop+330;
+      g.lineWidth=8;g.beginPath();g.moveTo(0,cTop);g.lineTo(W,cTop);g.stroke();
+      // ── commit block ──
+      g.font=MO(56,true);g.textAlign="right";
+      g.fillText(D[dt.getDay()]+" - "+String(dt.getDate()).padStart(2,"0")+" "+M[dt.getMonth()],W-36,cTop+78);
+      {const svcTxt=U(service).replace(/FEDEX\s*/,"").replace(/®/g,"")||"GROUND";let fs2=56;g.font=MO(fs2,true);while(g.measureText(svcTxt).width>560&&fs2>30){fs2-=2;g.font=MO(fs2,true);}g.fillText(svcTxt,W-36,cTop+148);g.font=MO(56,true);}
+      g.font=MO(44,true);
+      if(residential!==false)g.fillText("RES",W-36,cTop+206);
+      g.fillText(U(r.zip)||"00000",W-36,cTop+264);
+      g.font=MO(38,true);g.fillText((U(r.state)||"US")+"-US",W-36,cTop+318);
+      g.textAlign="left";
+      g.font=AR(24,400);g.fillText("TRK#",40,cTop+64);
+      g.lineWidth=2;g.strokeRect(40,cTop+76,74,40);g.font=AR(24,400);g.fillText("0201",52,cTop+104);
+      g.font=MO(48,true);g.fillText("0000 0000 0000",136,cTop+112);
+      g.font=AR(120,700);g.fillText("X"+(pieceCount||1)+" "+(U(r.state)||"US")+"A",40,cTop+300);
+      // ── bottom barcode with PREVIEW knock-out ──
+      const bTop=H-360,bH=270;
+      let x=70;while(x<W-90){const bw=2+Math.floor(rnd()*7);if(rnd()>0.30)g.fillRect(x,bTop,bw,bH);x+=bw+2+Math.floor(rnd()*4);}
+      g.font=AR(104,700);g.textAlign="center";
+      g.lineWidth=22;g.strokeStyle="#fff";g.strokeText("PREVIEW",W/2,bTop+bH/2+38);
+      g.fillStyle="#000";g.fillText("PREVIEW",W/2,bTop+bH/2+38);
+      g.textAlign="left";
+}
+function MockLabelImg({to,sender,service,weight,pieceCount,refNo,residential}){
+  const [src,setSrc]=useState(null);
+  useEffect(()=>{let dead=false;(async()=>{
+    try{
+      const W=1200,H=1800;const cv=document.createElement("canvas");cv.width=W;cv.height=H;const g=cv.getContext("2d");
+      drawFedexMock(g,W,H,{to,sender,service,weight,pieceCount,refNo,residential});
+      let out=[cv.toDataURL("image/png")];
+      try{ const xx=(typeof window!=="undefined"&&window.__scPrintExtras)||null; if(xx&&xx.logo&&xx.logo.on&&xx.logo.src)out=await stampLogo(out,{labelLogoOn:true,labelLogoPos:xx.logo.pos,labelLogoScale:xx.logo.scale,labelLogoDX:xx.logo.dx,labelLogoDY:xx.logo.dy,labelLogoX:xx.logo.x,labelLogoY:xx.logo.y},xx.logo.src); }catch(e){}
+      if(!dead)setSrc(out[0]);
+    }catch(e){}
+  })();return ()=>{dead=true;};},[JSON.stringify(to||{}),JSON.stringify(sender||{}),service,weight,pieceCount,refNo,residential]);
+  return src?<img src={src} alt="label preview" style={{maxHeight:"46vh"}} className="w-auto max-w-full mx-auto border border-stone-300 rounded shadow bg-white"/>:<div style={{height:"46vh"}} className="w-full max-w-[320px] mx-auto border border-dashed border-stone-300 rounded"/>;
+}
+/* DRAG-to-place logo editor on a real FedEx-look label. The logo is a live overlay you drag
+   anywhere; on release the position (logo center, % of label) saves and the SAME math places it
+   in stampLogo at print time — what you drag is what prints. */
+function LabelLogoPreviewImg({cfg,logo,setCust}){
+  const [base,setBase]=useState(null);
+  const [dragPos,setDragPos]=useState(null);   // {x,y} % while dragging (uncommitted)
+  const boxRef=React.useRef(null);
+  useEffect(()=>{let dead=false;(async()=>{try{
+    const W=1200,H=1800;const cv=document.createElement("canvas");cv.width=W;cv.height=H;const g=cv.getContext("2d");
+    drawFedexMock(g,W,H,{to:{name:"Jane Doe",company:"Acme Co",address1:"127 Market St",city:"Austin",state:"TX",zip:"78701",phone:"5125550142"},sender:{name:"A. Shipper",company:"Your Company",address1:"215 S State St",city:"Salt Lake City",state:"UT",zip:"84101",phone:"8015550100"},service:"FedEx Ground",weight:3,pieceCount:1,refNo:"SO-1042",residential:true});
+    if(!dead)setBase(cv.toDataURL("image/png"));
+  }catch(e){}})();return()=>{dead=true;};},[]);
+  const scale=Math.min(45,Math.max(8,+cfg.labelLogoScale||22));
+  const anchor=(()=>{ // logo CENTER in % — free position wins, else derive from the corner preset
+    if(dragPos)return dragPos;
+    if(cfg.labelLogoX!=null&&cfg.labelLogoY!=null)return {x:+cfg.labelLogoX,y:+cfg.labelLogoY};
+    const pad=2.5,half=scale/2;
+    return ({bottom_left:{x:pad+half,y:94},bottom_right:{x:100-pad-half,y:94},top_left:{x:pad+half,y:5},top_right:{x:100-pad-half,y:5}})[cfg.labelLogoPos||"bottom_left"]||{x:pad+half,y:94};
+  })();
+  const clamp=(v)=>Math.max(1,Math.min(99,Math.round(v*10)/10));
+  const move=(e)=>{ const b=boxRef.current&&boxRef.current.getBoundingClientRect(); if(!b)return;
+    setDragPos({x:clamp(((e.clientX-b.left)/b.width)*100),y:clamp(((e.clientY-b.top)/b.height)*100)}); };
+  const down=(e)=>{ e.preventDefault(); const el=e.currentTarget; try{el.setPointerCapture(e.pointerId);}catch(e2){}
+    move(e);
+    const up=(ev)=>{ const b=boxRef.current&&boxRef.current.getBoundingClientRect();
+      if(b&&setCust){ const fx=clamp(((ev.clientX-b.left)/b.width)*100), fy=clamp(((ev.clientY-b.top)/b.height)*100); setCust("labelLogoX",fx); setCust("labelLogoY",fy); }
+      setDragPos(null); el.removeEventListener("pointermove",move); el.removeEventListener("pointerup",up); };
+    el.addEventListener("pointermove",move); el.addEventListener("pointerup",up); };
+  return (<div>
+    <div ref={boxRef} onPointerDown={logo?down:undefined} className="relative w-80 select-none touch-none border border-stone-300 rounded shadow bg-white overflow-hidden" style={{cursor:logo?"grab":"default"}}>
+      {base?<img src={base} alt="sample label" className="w-full block pointer-events-none" draggable={false}/>:<div className="w-full h-[480px]"/>}
+      {logo&&<img src={logo} alt="logo" draggable={false} className="absolute pointer-events-none bg-white/95 p-0.5 rounded-sm shadow ring-1 ring-[#0086E0]/60" style={{width:scale+"%",left:anchor.x+"%",top:anchor.y+"%",transform:"translate(-50%,-50%)"}}/>}
+    </div>
+    <div className="text-[10px] text-stone-400 mt-1 w-80 text-center">{logo?"Drag the logo anywhere on the label — it prints exactly there.":"Upload a logo to place it."}</div>
+  </div>);
 }
 /* Direct (zero-dialog) printing via a PrintNode agent on the workstation. Config synced
    from settings.printNode into window.__scDirectPrint by the App shell. Returns true only
@@ -784,13 +1009,26 @@ async function stampLogo(imgs,cfg,logoSrc){
 async function directPrintPdf(base64,title,ctx){
   const cfg=(typeof window!=="undefined"&&window.__scDirectPrint)||null;
   if(!cfg||!cfg.enabled||!cfg.apiKey||!cfg.printerId||!base64)return false;
+  /* Optional re-render for doc-tab / stock composition. It must NEVER break the send: only adopt the
+     re-rendered payload if it's a real, non-oversized PDF string. A raw test page prints fine while a
+     booked label didn't — because the re-render produced a payload PrintNode rejected. So we validate
+     it, and if the send with it fails we automatically retry with the carrier's ORIGINAL pdf. */
   let payload=base64;
-  try{ const r0=await pdfToImages(base64,3); if(r0&&r0.imgs.length){ const comp=await composeForStock(r0.imgs,r0.wIn,r0.hIn,ctx); if(r0.cropped||comp.changed){ payload=await imgsToLabelPdf(comp.imgs,comp.wIn,comp.hIn); } } }catch(e){}   // pdf.js down → send the original untouched
-  try{
-    const r=await fetch("/.netlify/functions/printnode",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"print",apiKey:cfg.apiKey,printerId:cfg.printerId,title:title||"Shipping label",pdfBase64:payload})});
+  try{ const r0=await pdfToImages(base64,3); if(r0&&r0.imgs.length){ const ex=await applyPrintExtras(r0.imgs,ctx); const comp=await composeForStock(ex.imgs,r0.wIn,r0.hIn,ctx); if(r0.cropped||comp.changed||ex.changed){ const all=ex.receipt?[...comp.imgs,ex.receipt]:comp.imgs; const rp=await imgsToLabelPdf(all,comp.wIn,comp.hIn); if(rp&&typeof rp==="string"&&rp.length>200&&rp.length<8*1024*1024)payload=rp; else if(rp&&rp.length>=8*1024*1024){ try{ window.dispatchEvent(new CustomEvent("sc-direct-print-failed",{detail:{reason:"extras-dropped",error:"Re-rendered label too large — printed the carrier original without logo/receipt/doc-tab."}})); }catch(e2){} } } } }catch(e){}
+  /* PrintNode needs BARE base64 — strip any "data:application/pdf;base64," prefix a re-render
+     (canvas toDataURL) or the carrier payload may carry, or PrintNode rejects it and the label falls
+     to the browser dialog. The validity check already strips this; the send must too. */
+  const send=async(pdf)=>{ const clean=String(pdf||"").replace(/^data:[^,]*,/,"").trim(); if(!clean)return {ok:false,err:"Empty label payload"}; try{
+    const r=await fetch("/.netlify/functions/printnode",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"print",apiKey:cfg.apiKey,printerId:cfg.printerId,title:title||"Shipping label",pdfBase64:clean})});
     const d=await r.json().catch(()=>null);
-    return !!(d&&d.ok);
-  }catch(e){ return false; }
+    return {ok:!!(d&&d.ok),err:(d&&d.error)||("PrintNode wouldn't accept the job ("+r.status+")")};
+  }catch(e){ return {ok:false,err:"Couldn't reach the print relay — "+((e&&e.message)||"network error")}; } };
+  let res=await send(payload);
+  if(!res.ok&&payload!==base64)res=await send(base64);   // re-rendered payload rejected → fall back to the carrier's original, which we know prints
+  if(res.ok)return true;
+  /* Surface PrintNode's ACTUAL reason so "it just shows a dialog" stops being a mystery. */
+  try{ window.dispatchEvent(new CustomEvent("sc-direct-print-failed",{detail:{reason:"agent-unreachable",error:res.err}})); }catch(e){}
+  return false;
 }
 /* ── multi-printer document routing (PrintNode) ─────────────────────────────
    Print settings lets each DOCUMENT TYPE pick its own printer:
@@ -918,17 +1156,60 @@ function openLabelOrDirectPrint(payload,settings,setLabelPreview){
     setLabelPreview({...payload,invalid:true});
     return;
   }
-  /* Silent-to-printer when direct printing is on AND either:
-       • skipBookedSummary (kiosk: no modal, auto-advance), or
-       • directNoPreview   (you still hit Ship and see the booked summary — just no preview popup).
-     If PrintNode rejects, we fall back to opening the modal so no label is lost. */
-  if(dp&&dp.enabled&&(c.skipBookedSummary||c.directNoPreview)&&payload&&payload.pdf){
+  /* TWO independent choices decide what happens (set as separate boxes in Print settings):
+       • previewBeforePrint — show the label preview (you click Print there) vs print immediately
+       • skipBookedSummary  — after printing, show the booked-summary popup or nothing
+     Legacy accounts (no previewBeforePrint saved) derive it from the old modes: hands-free and
+     no-preview both meant "print immediately", preview meant "show it first". */
+  const wantPreview=(payload&&payload.forcePrint)?false:(c.previewBeforePrint!=null?!!c.previewBeforePrint:!(c.skipBookedSummary||c.directNoPreview));
+  const wantSummary=!c.skipBookedSummary;
+  /* MULTIPIECE: FedEx returns one label PER BOX. Print every one — direct-print each label in
+     order; if any fails, fall back to rendering ALL pages into one browser print job. */
+  const pdfList=(payload&&payload.pdfAll&&payload.pdfAll.length>1)?payload.pdfAll:null;
+  if(!wantPreview&&pdfList){
+    (async()=>{
+      let allOk=true;
+      for(let i=0;i<pdfList.length;i++){
+        const okk=await directPrintPdf(pdfList[i],"Shipping label"+(payload.tracking?" "+payload.tracking:"")+" ("+(i+1)+" of "+pdfList.length+")",docCtxFor(payload.rec,payload.tracking));
+        if(!okk)allOk=false;
+      }
+      if(allOk){ if(wantSummary)setLabelPreview({...payload,autoPrint:false}); return; }
+      try{
+        let imgsAll=[],w=4,h=6;
+        for(const b of pdfList){ const r0=await pdfToImages(b,3); if(r0&&r0.imgs.length){ imgsAll=imgsAll.concat(r0.imgs); w=r0.wIn;h=r0.hIn; } }
+        if(!imgsAll.length)throw new Error("no pages");
+        const ex=await applyPrintExtras(imgsAll,docCtxFor(payload.rec,payload.tracking));
+        const r=await composeForStock(ex.imgs,w,h,docCtxFor(payload.rec,payload.tracking));
+        const final=ex.receipt?[...r.imgs,ex.receipt]:r.imgs;
+        if(!wantSummary)printImagePages(final,r.wIn,r.hIn);
+        else setLabelPreview(payload);   // summary modal renders + prints every page
+      }catch(e){ setLabelPreview(payload); }
+    })();
+    return;
+  }
+  if(!wantPreview&&payload&&payload.pdf){
     directPrintPdf(payload.pdf,"Shipping label"+(payload.tracking?" "+payload.tracking:""),docCtxFor(payload.rec,payload.tracking)).then(sent=>{
-      if(!sent){
-        /* Silent print was requested (kiosk / no-preview) but the local PrintNode agent didn't accept
-           the job — almost always because it isn't connected. Fall back to the dialog so no label is
-           lost, and tell the user WHY, so "kiosk isn't printing" stops being a mystery. */
-        try{ window.dispatchEvent(new CustomEvent("sc-direct-print-failed",{detail:{reason:(!dp.apiKey||!dp.printerId)?"not-configured":"agent-unreachable"}})); }catch(e){}
+      if(sent){
+        /* Printed silently. Summary popup only if they asked for one (autoPrint:false — nothing re-prints). */
+        if(wantSummary)setLabelPreview({...payload,autoPrint:false});
+        return;
+      }
+      /* If nothing is configured, directPrintPdf returned early with no reason — say so here.
+         When it DID reach PrintNode and got rejected, directPrintPdf already surfaced the real error. */
+      if(!dp||!dp.enabled||!dp.apiKey||!dp.printerId){ try{ window.dispatchEvent(new CustomEvent("sc-direct-print-failed",{detail:{reason:"not-configured"}})); }catch(e){} }
+      if(!wantSummary){
+        /* No summary wanted — print through the page's own path with NO modal: render the label to
+           images (printImagePages waits for full decode and sizes to the label stock — no blank or
+           half pages). Only if pdf.js is unavailable do we fall back to the sized PDF frame. */
+        (async()=>{ try{
+          const r0=await pdfToImages(payload.pdf,3);
+          const ex=await applyPrintExtras(r0.imgs,docCtxFor(payload.rec,payload.tracking));
+          const r=await composeForStock(ex.imgs,r0.wIn,r0.hIn,docCtxFor(payload.rec,payload.tracking));
+          if(r&&r.imgs&&r.imgs.length){ printImagePages(ex.receipt?[...r.imgs,ex.receipt]:r.imgs,r.wIn,r.hIn); return; }
+          throw new Error("no pages");
+        }catch(e){ try{ const u=pdfBlobUrl(payload.pdf); printPdfUrl(u); setTimeout(()=>{try{URL.revokeObjectURL(u);}catch(_){}},180000); }catch(_){ setLabelPreview(payload); } } })();
+      } else {
+        /* Summary wanted: show the booked summary (it also prints via its own dialog fallback). */
         setLabelPreview(payload);
       }
     });
@@ -939,9 +1220,9 @@ function openLabelOrDirectPrint(payload,settings,setLabelPreview){
 async function printLabelPdf(base64,stForLogo,ctx){
   if(await directPrintPdf(base64,undefined,ctx))return true;   // straight to the printer — no dialog
   try{ const r0=await pdfToImages(base64,4);
-    if(stForLogo){ try{ const cc=cz(stForLogo); r0.imgs=await stampLogo(r0.imgs,cc,cc.labelLogo||stForLogo.companyLogo||""); }catch(e){} }
+    let _rcpt=null; try{ const ex=await applyPrintExtras(r0.imgs,ctx); r0.imgs=ex.imgs; _rcpt=ex.receipt; }catch(e){}
     const r=await composeForStock(r0.imgs,r0.wIn,r0.hIn,ctx);
-    if(!r.imgs.length)throw new Error("no pages"); printImagePages(r.imgs,r.wIn,r.hIn); return true; }
+    if(!r.imgs.length)throw new Error("no pages"); printImagePages(_rcpt?[...r.imgs,_rcpt]:r.imgs,r.wIn,r.hIn); return true; }
   catch(e){ try{ const u=pdfBlobUrl(base64); printPdfUrl(u); setTimeout(()=>URL.revokeObjectURL(u),180000); return true; }catch(e2){ return false; } }
 }
 /* ── reliable PDF printing: hidden body-level iframe + print(), because calling
@@ -972,17 +1253,24 @@ function printPdf4x6(url){
 }
 function printPdfUrl(url){
   if(!url)return false;
+  /* A raw PDF loaded straight into an iframe prints at the PDF's own size on whatever paper the
+     printer defaults to — a 4×6 label lands tiny in the corner of a letter page. So we ALWAYS wrap
+     it in an @page-pinned frame sized to the label stock; the label then fills the page every time. */
   try{
+    const [pw,ph]=stockDims(((typeof window!=="undefined"&&window.__scLabelStock)||{}).size||"4x6");
     const f=document.createElement("iframe");
     f.style.cssText="position:fixed;right:0;bottom:0;width:2px;height:2px;border:0;opacity:0;pointer-events:none;";
     f.setAttribute("aria-hidden","true");
+    document.body.appendChild(f);
+    const d=f.contentDocument||(f.contentWindow&&f.contentWindow.document);
+    if(!d)throw new Error("no frame doc");
+    d.open();
+    d.write('<!doctype html><html><head><title>Label</title><style>@page{size:'+pw+'in '+ph+'in;margin:0}html,body{margin:0;padding:0}embed{display:block;width:'+pw+'in;height:'+ph+'in}</style></head><body><embed src="'+url+'#toolbar=0&view=Fit" type="application/pdf"/></body></html>');
+    d.close();
     let fired=false;
     const go=()=>{ if(fired)return; try{ if(f.contentWindow){ f.contentWindow.focus(); f.contentWindow.print(); fired=true; } }catch(e){} };
-    f.onload=()=>setTimeout(go,250);
-    f.src=url;
-    document.body.appendChild(f);
-    setTimeout(go,1200);                                   // PDFs don't reliably fire onload
-    setTimeout(()=>{ if(!fired){ printPdf4x6(url); } },2600);   // never a raw tab — that printed 4×6 labels at letter size with browser chrome
+    setTimeout(go,900);                                    // give the embedded PDF a beat to attach
+    setTimeout(go,1900);                                   // retry — PDF embeds don't reliably fire onload
     setTimeout(()=>{ try{document.body.removeChild(f);}catch(e){} },180000);
     return true;
   }catch(e){ return printPdf4x6(url); }
@@ -1020,9 +1308,13 @@ async function shopifyCall(endpoint,payload,timeout=20000){
     return data||{ok:false,error:"Empty response"};
   }catch(e){clearTimeout(t);return {ok:false,error:(e&&e.message)||"Network error"};}
 }
-const shopifyConnected=(s)=>!!(s&&s.shopifyConn&&s.shopifyConn.shop&&s.shopifyConn.token);
+/* Multiple Shopify stores: connections live in settings.shopifyConns (array of {shop,token,...}).
+   Legacy single settings.shopifyConn is still honored so existing connections keep working. */
+const shopifyConns=(s)=>{ if(!s)return []; if(Array.isArray(s.shopifyConns))return s.shopifyConns.filter(c=>c&&c.shop&&c.token); if(s.shopifyConn&&s.shopifyConn.shop&&s.shopifyConn.token)return [s.shopifyConn]; return []; };
+const shopifyConnFor=(s,shop)=>{ const l=shopifyConns(s); return (shop&&l.find(c=>c.shop===shop))||l[0]||null; };
+const shopifyConnected=(s)=>shopifyConns(s).length>0;
 async function shopifySyncOrders(conn){ return shopifyCall(SHOPIFY_SYNC,{shop:conn.shop,token:conn.token}); }
-async function shopifyPushTracking(conn,o){ return shopifyCall(SHOPIFY_FULFILL,{shop:conn.shop,token:conn.token,shopifyId:o.shopifyId,tracking:o.tracking,trackingUrl:o.trackingUrl||(o.tracking?`https://www.fedex.com/fedextrack/?trknbr=${o.tracking}`:""),carrier:o.carrier||"FedEx"}); }
+async function shopifyPushTracking(conn,o){ return shopifyCall(SHOPIFY_FULFILL,{shop:conn.shop,token:conn.token,shopifyId:o.shopifyId,tracking:o.tracking,trackingUrl:o.trackingUrl||(o.tracking?`https://www.fedex.com/fedextrack/?trknbr=${o.tracking}`:""),carrier:o.carrier||"FedEx",notifyCustomer:o.notifyCustomer}); }
 const fn=(name)=>"/.netlify/functions/"+name;
 async function connectorCall(endpoint,payload){ return shopifyCall(endpoint,payload); }
 // OAuth returns handed back in the URL fragment by the *-auth functions
@@ -1165,9 +1457,12 @@ async function fedexSchedulePickup(p){
 const SEED_CLIENTS=[
     {id:"c2",name:"House accounts",markup:"",origin:"84057",contact:"—",email:"",phone:"",status:"active",since:"2025-06",plan:"Standard"},
 ];
+/* Seed admin rows carry NO password: the blank never matches the local sign-in fallback
+   (it requires a non-empty stored password), so there is no default credential in the build —
+   real sign-in always goes through the cloud database. Owner emails live in BUILT_IN_ADMINS. */
 const SEED_USERS=[
-  {id:"u1",name:"Spencer Anderson",email:"spencer@shippingcloud.net",role:"admin",clientId:null,status:"active",password:"admin",lastLogin:"Today"},
-  {id:"u1fw",name:"Spencer Anderson",email:"spencer@freightwire.com",role:"admin",clientId:null,status:"active",password:"admin",lastLogin:"Today"},
+  {id:"u1",name:"Admin",email:"spencer@shippingcloud.net",role:"admin",clientId:null,status:"active",password:"",lastLogin:"Today"},
+  {id:"u1fw",name:"Admin",email:"spencer@freightwire.com",role:"admin",clientId:null,status:"active",password:"",lastLogin:"Today"},
   ];
 /* Built-in administrators: these emails are ALWAYS full admins on every brand —
    the role is forced at session time, so a stray edit to the stored user record
@@ -1359,7 +1654,7 @@ async function printPackingSlips(slips){
    in "Keep the print preview" mode the slip is PARKED (window.__scPendingSlips) and
    prints when you click Print label in the preview — the browser's packing-slip dialog
    must never pop over the label preview; other modes open the browser print window. */
-async function printPackingSlipAuto(slips,settings){
+async function printPackingSlipAuto(slips,settings,forceNow){
   const list=(slips||[]).filter(Boolean);
   if(!list.length)return;
   const c=cz(settings);
@@ -1369,7 +1664,9 @@ async function printPackingSlipAuto(slips,settings){
     if(pdf&&dp&&await pnPrintPdf(dp.docPrinters.packSlip,pdf,"Packing slip"))return;   // routed to the slip printer, as a real PDF
     // routed print failed — fall through so the slip is never lost
   }
-  if(!c.skipBookedSummary&&!c.directNoPreview){ try{ window.__scPendingSlips=list; }catch(e){} return; }
+  /* forceNow: the label was FORCE-printed (confirmed-preview flow) — there is no preview modal
+     coming to flush a parked slip, so print it now instead of parking it forever. */
+  if(!forceNow&&(c.previewBeforePrint!=null?!!c.previewBeforePrint:(!c.skipBookedSummary&&!c.directNoPreview))){ try{ window.__scPendingSlips=list; }catch(e){} return; }   // preview flow: modal handles the slip
   printPackingSlipsDialog(list);
 }
 
@@ -1707,6 +2004,18 @@ function oneRateQuotes(box,ctx){
 const SIG_FEE={direct:6.55,indirect:6.55,adult:8.05};
 const SAT_FEE=16.00;
 function insuranceFee(declared,unit,minFee){ const d=+declared||0; if(d<=100)return 0; const units=Math.ceil((d-100)/100); const u=unit!=null?+unit:1.15; const m=minFee!=null?+minFee:3.45; return Math.round(Math.max(m,units*u)*100)/100; }
+/* FedEx Ground Economy (SmartPost) packaging limits per the Service Guide: max 70 lb and max
+   130" length-plus-girth per package. Anything bigger must ship Ground/Express — quoting it
+   Ground Economy would just bounce at the hub, so the service is hidden when a box exceeds these. */
+function groundEconOk(pieces){
+  return (pieces||[]).every(p=>{
+    const w=(+p.weight||0)+((+p.oz||0)/16);
+    if(w>70)return false;
+    const L=+p.L||0,W=+p.W||0,H=+p.H||0;
+    if(L&&W&&H){const s=[L,W,H].sort((a,b)=>b-a);if(s[0]+2*(s[1]+s[2])>130)return false;}
+    return true;
+  });
+}
 function applyAccessorials(q, opts){
   if(!opts||q==null) return q;
   if(q.sell==null&&q.cost==null) return q;   // no base price (e.g. blank One Rate placeholder) → nothing to add to
@@ -1716,7 +2025,12 @@ function applyAccessorials(q, opts){
   if(so&&so!=="none") add.push({label:(so.charAt(0).toUpperCase()+so.slice(1))+" signature",amount:(fees.sig&&fees.sig[so])||SIG_FEE[so]||6.55});
   const express=/(overnight|2\s?day|express saver|one rate)/i.test(q.label||"");
   if(opts.saturday&&express) add.push({label:"Saturday delivery",amount:fees.sat!=null?fees.sat:SAT_FEE});
-  const ins=insuranceFee(opts.insurance,fees.insUnit,fees.insMin);
+  /* Declared value is PER PACKAGE at FedEx (first $100 free per box, min fee per box) — a
+     multipiece shipment passes insuranceList (one declared value per box) and the fee is the
+     sum of each box's fee. Single-box callers keep passing `insurance`. */
+  const ins=Array.isArray(opts.insuranceList)
+    ?Math.round(opts.insuranceList.reduce((a,d)=>a+insuranceFee(d,fees.insUnit,fees.insMin),0)*100)/100
+    :insuranceFee(opts.insurance,fees.insUnit,fees.insMin);
   if(ins>0) add.push({label:"Declared value coverage",amount:ins});
   if(!add.length) return q;
   const addTotal=Math.round(add.reduce((a,e)=>a+e.amount,0)*100)/100;
@@ -2241,7 +2555,7 @@ const PLATFORM_DEFAULTS={ups:true,usps:true,amazon:false,uniuni:false};
 const PLANS=[
   {id:"free",name:"Free",price:0,tagline:"Kick the tires",limits:"25 labels / mo",features:["1 store integration","Single user","Standard rates","Email support"]},
   {id:"starter",name:"Starter",price:29,tagline:"Solo shippers",limits:"500 labels / mo",features:["3 store integrations","Box logic & presets","Branded tracking page","Batch printing"]},
-  {id:"pro",name:"Pro",price:79,tagline:"Growing brands",limits:"2,500 labels / mo",features:["Unlimited integrations","Live checkout rates","Invoice auditing","5 team seats","Custom markup per client"]},
+  {id:"pro",name:"Pro",price:79,tagline:"Growing brands",limits:"2,500 labels / mo",features:["Unlimited integrations","Live checkout rates","Invoice auditing","5 team seats","Custom rate cards"]},
   {id:"scale",name:"Scale",price:199,tagline:"High volume",limits:"Unlimited labels",features:["Everything in Pro","API access","Multi-tenant logins","Dedicated support","SLA & onboarding"]},
 ];
 
@@ -2287,7 +2601,7 @@ const CUSTOM_DEFAULTS={
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
   logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,skipBookedSummary:false,autoRulesOnShip:true,autoRulesInBatch:false,autoBookBatch:false,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],theme:"light",accent:"",
   refRequired:false,invRequired:false,poRequired:false,refLocked:false,invLocked:false,poLocked:false,
-  confetti:"page",seasonal:true,loginBg:"",appBg:"",headerBg:"",pageBg:"",navBg:"",
+  confetti:"page",seasonal:false,loginBg:"",appBg:"",headerBg:"",pageBg:"",navBg:"",
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
 const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
@@ -2303,7 +2617,7 @@ function SaveToast(){
   useEffect(()=>{
     const onSaved=()=>{ const id=Date.now()+Math.random(); setMsgs(m=>[...m,{id,ok:true}]); setTimeout(()=>setMsgs(m=>m.filter(x=>x.id!==id)),2200); };
     const onFailed=(e)=>{ const id=Date.now()+Math.random(); const err=(e&&e.detail&&e.detail.error)||"offline"; setMsgs(m=>[...m,{id,ok:false,err}]); setTimeout(()=>setMsgs(m=>m.filter(x=>x.id!==id)),6000); };
-    const onDirectFail=(e)=>{ const id=Date.now()+Math.random(); const reason=(e&&e.detail&&e.detail.reason)||"agent-unreachable"; setMsgs(m=>[...m,{id,ok:false,err:reason==="not-configured"?"Direct printing isn't set up — add your PrintNode key & printer in Printer settings":"Printer agent not reachable — check PrintNode is running. Showing the dialog instead"}]); setTimeout(()=>setMsgs(m=>m.filter(x=>x.id!==id)),7000); };
+    const onDirectFail=(e)=>{ const id=Date.now()+Math.random(); const reason=(e&&e.detail&&e.detail.reason)||"agent-unreachable"; const real=(e&&e.detail&&e.detail.error)||""; setMsgs(m=>[...m,{id,ok:false,err:reason==="not-configured"?"Direct printing isn't set up — add your PrintNode key & printer in Printer settings":(real||"Printer agent not reachable — check PrintNode is running. Showing the dialog instead")}]); setTimeout(()=>setMsgs(m=>m.filter(x=>x.id!==id)),9000); };
     const onLabelInvalid=(e)=>{ const id=Date.now()+Math.random(); const t=(e&&e.detail&&e.detail.tracking)||""; setMsgs(m=>[...m,{id,ok:false,err:"The carrier returned a blank/invalid label"+(t?" for "+t:"")+" — nothing was sent to the printer. Re-book or check the carrier account."}]); setTimeout(()=>setMsgs(m=>m.filter(x=>x.id!==id)),9000); };
     window.addEventListener("sc-saved",onSaved);
     window.addEventListener("sc-save-failed",onFailed);
@@ -2377,6 +2691,8 @@ function Login({users,onLogin,brand}){
   const [err,setErr]=useState("");
   const [note,setNote]=useState("");
   const [busy,setBusy]=useState(false);
+  const [code,setCode]=useState("");        // 2FA one-time code
+  const [needTotp,setNeedTotp]=useState(false);
   /* Forgot-password flow — same server actions CloudAuth uses (db.js requestReset /
      resetPassword), so it works identically on ShippingCloud, ShipHub, and the admin HQ. */
   const [fp,setFp]=useState(null);          // null | "ask" | "sent" | {reset:token} | "done"
@@ -2400,13 +2716,15 @@ function Login({users,onLogin,brand}){
        • a definitive server verdict (wrong password / inactive) is shown as-is
        • transient trouble retries once, then says the server was unreachable — never "incorrect" */
     const attempt=async(ms)=>{ const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(),ms);
-      try{ const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"login",email:email.trim(),password:pw}),signal:ctrl.signal});
+      try{ const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"login",email:email.trim(),password:pw,code:code.trim()}),signal:ctrl.signal});
         clearTimeout(t); const d=await r.json().catch(()=>null); return d||{_net:true};
       }catch(e){ clearTimeout(t); return {_net:true}; } };
     const transient=(d)=>!!(d&&(d._net||(!d.ok&&/database error|unreachable|timed out|network/i.test(String(d.error||"")))));
     let d=await attempt(14000);
     if(transient(d)) d=await attempt(14000);   // one automatic retry before giving up
     if(d&&d.ok&&d.user){ try{CLOUD.token=d.token;lsSet("cloud.token",d.token);}catch(e){} setBusy(false); onLogin(d.user); return; }
+    // 2FA: password was right, now ask for the authenticator code (or re-ask if it was wrong).
+    if(d&&d.needsTotp){ setBusy(false); setNeedTotp(true); setErr(code?String(d.error||"That code isn't right."):""); return; }
     const serverVerdict=(d&&!d.ok&&d.error&&!transient(d))?String(d.error):null;
     // local fallback for legacy/local-mode accounts (cloud accounts carry blank local passwords, so this can't pass or fail for them)
     const u=users.find(x=>x.email.toLowerCase()===email.trim().toLowerCase()&&x.password===pw&&x.password!=="");
@@ -2437,6 +2755,7 @@ function Login({users,onLogin,brand}){
           {mode==="signup"&&<><Field label="Your name"><Input value={name} onChange={e=>setName(e.target.value)}/></Field><Field label="Company"><Input value={company} onChange={e=>setCompany(e.target.value)}/></Field></>}
           <Field label="Email"><Input value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&mode==="signin")signin();}} placeholder="you@company.com"/></Field>
           <Field label="Password"><div className="relative"><Input type={showPw?"text":"password"} value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")mode==="signin"?signin():signup();}} placeholder="••••••••" className="pr-9"/><button type="button" onClick={()=>setShowPw(v=>!v)} tabIndex={-1} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">{showPw?<EyeOff className="w-4 h-4"/>:<Eye className="w-4 h-4"/>}</button></div></Field>
+          {mode==="signin"&&needTotp&&<Field label="Authenticator code"><Input value={code} onChange={e=>setCode(e.target.value.replace(/[^0-9A-Za-z-]/g,"").toUpperCase().slice(0,9))} onKeyDown={e=>{if(e.key==="Enter")signin();}} placeholder="123456" inputMode="text" autoFocus className="tracking-[0.2em] text-center"/><div className="text-[11px] text-stone-400 mt-1">Enter the current 6-digit code from your authenticator app — or one of your backup codes if you don’t have your phone.</div></Field>}
           {err&&<div className="text-sm text-rose-600 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4"/>{err}</div>}
           {note&&<div className="text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2">{note}</div>}
           <button onClick={mode==="signin"?signin:signup} className="w-full bg-stone-900 text-white rounded-lg px-4 py-2.5 font-medium hover:bg-stone-800 disabled:opacity-50" disabled={busy}>{busy?"One moment…":(mode==="signin"?"Sign in":"Request account")}</button>
@@ -2451,11 +2770,7 @@ function Login({users,onLogin,brand}){
             </div>
           </div>}
         </div>
-        <div className="mt-4 bg-white/60 border border-stone-200 rounded-lg p-3 text-xs text-stone-500 space-y-1">
-          <div className="font-medium text-stone-600">Demo logins</div>
-          <button onClick={()=>{setEmail("spencer@shippingcloud.net");setPw("admin");setMode("signin");}} className="block hover:text-[#0086E0]">Admin · spencer@shippingcloud.net / admin</button>
-                  </div>
-        <p className="text-[11px] text-stone-400 text-center mt-3">Prototype sign-in. For live customer logins, connect a real auth provider + database.</p>
+        <p className="text-[11px] text-stone-400 text-center mt-3">Local sign-in (no cloud database connected).</p>
       </div>
     </div>
   );
@@ -2583,7 +2898,7 @@ function FedexCertLab({settings}){
   const [st,setSt]=useState({loading:true});
   const [log,setLog]=usePersist("fedexCertLog",[]);
   const snd=settings&&settings.sender||{};
-  const [from,setFrom]=useState({name:snd.name||"Spencer Anderson",company:snd.company||"Freightwire",address1:snd.address1||"123 Main St",city:snd.city||"American Fork",state:snd.state||"UT",zip:snd.zip||"84003",phone:snd.phone||"8015550100",country:"US"});
+  const [from,setFrom]=useState({name:snd.name||"Test Shipper",company:snd.company||"Test Company",address1:snd.address1||"123 Main St",city:snd.city||"Salt Lake City",state:snd.state||"UT",zip:snd.zip||"84101",phone:snd.phone||"8015550100",country:"US"});
   const [to,setTo]=useState({name:"Test Recipient",company:"",address1:"7900 Legacy Dr",city:"Plano",state:"TX",zip:"75024",phone:"9725550123",country:"US"});
   const [f,setF]=useState({service:"ground",packaging:"YOUR_PACKAGING",weight:5,L:12,W:9,H:4,residential:false,signature:"none",reference:"CERT TEST",labelFormat:"PDF",labelStock:"PAPER_4X6"});
   const [busy,setBusy]=useState(false);
@@ -3490,6 +3805,18 @@ function RatesAdmin({clients=[],brand}){
       </table></div>}
 
       {tab==="surcharges"&&<div className="space-y-4">
+        <div className="border border-stone-200 rounded-xl bg-white p-3 space-y-2">
+          <div className="text-sm font-semibold text-stone-800">Dim divisors</div>
+          <p className="text-[11px] text-stone-500">Your negotiated dimensional-weight divisor per service family (list is 139; negotiated can run up to 225). Dim weight = L×W×H ÷ divisor, and FedEx bills the higher of that and actual weight. These drive the app's estimates, box logic and the billed-weight note.</p>
+          <div className="flex flex-wrap gap-4">
+            {[["express","Express"],["ground","Ground & Home Delivery"],["ground_economy","Ground Economy"]].map(([k,l])=>(
+              <label key={k} className="text-xs text-stone-600">{l}
+                <input type="number" min="50" max="300" value={(rules.dimDivisors&&rules.dimDivisors[k])||139}
+                  onChange={e=>{const v=Math.max(50,Math.min(300,+e.target.value||139));setRules(r=>({...DEFAULT_RATE_RULES,...r,dimDivisors:{express:139,ground:139,ground_economy:139,...(r.dimDivisors||{}),[k]:v}}));}}
+                  className="mt-1 block w-28 bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
+              </label>))}
+          </div>
+        </div>
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-[11px] text-stone-500 flex-1 min-w-[260px]">All {FEDEX_SURCHARGES.length} Service Guide surcharges in their own boxes — Express, Ground, and Home Delivery each carry their own rates. Double-click a row to edit. <Badge tone="blue">app-applied</Badge> fees change quotes immediately; the rest are billed inside England's quote total — your service % marks them up today, and per-surcharge adjustments plug in when England's per-line breakdown is wired.</p>
           <Input value={surQ} onChange={e=>setSurQ(e.target.value)} placeholder="Search surcharges…" className="w-52"/>
@@ -3967,6 +4294,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
             {u.role!=="admin"&&<button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))} title={u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins"} className={`text-[11px] rounded px-2 py-1 ${u.companyAdmin?"bg-violet-600 text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>{u.companyAdmin?"Company admin ✓":"Company admin"}</button>}
             {u.role!=="admin"&&<button onClick={()=>setFeatOpen(featOpen===u.id?null:u.id)} title="Features for this login" className={`text-[11px] rounded px-2 py-1 ${featOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>Tabs &amp; logo</button>}
             {CLOUD.mode==="cloud"&&(u.role!=="admin"||fullAdmin)&&<button onClick={async()=>{const np=window.prompt("New password for "+u.email+" (min 4 characters):");if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});window.alert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}} title="Reset password" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Password</button>}
+            {CLOUD.mode==="cloud"&&u.totp&&u.totp.enabled&&<button onClick={async()=>{if(!window.confirm("Turn OFF two-factor for "+u.email+"? Use this only if they lost their authenticator — they'll sign in with just their password afterward."))return;const r=await cloudCall({action:"clearTotp",token:CLOUD.token,email:u.email});window.alert(r&&r.ok?"2FA turned off for "+u.email+".":((r&&r.error)||"Could not reset 2FA."));}} title="Lost-phone recovery: turn off this user's 2FA" className="text-[11px] rounded px-2 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100">Reset 2FA</button>}
             <button onClick={()=>toggle(u.id)} title={u.status==="active"?"Deactivate":"Activate"} className={`text-[11px] rounded px-2 py-1 ${u.status==="active"?"bg-emerald-50 text-emerald-700":"bg-stone-100 text-stone-500"}`}>{u.status==="active"?"Active":"Deactivated"}</button>
             {u.id!==currentUser.id&&!isBuiltInAdmin(u.email)&&(u.role!=="admin"||(fullAdmin&&u.id!=="u1"))&&<button onClick={()=>del(u.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
           </div>
@@ -4077,7 +4405,7 @@ function batchCmdMatch(o,f,zone){
    the same deployed bundle as real logins, every platform update shows up in
    the demo automatically. */
 const DEMO_SEED_V="2026-07-06b";
-const DEMO_USER={id:"demo",name:"Demo Explorer",email:"demo@shippingcloud.net",role:"customer",clientId:null,status:"active",lastLogin:"Now",demo:true};
+const DEMO_USER={id:"demo",name:"Demo Explorer",email:"demo@"+(BRAND.fw?"freightwireship.com":"shippingcloud.net"),role:"customer",clientId:null,status:"active",lastLogin:"Now",demo:true};
 const demoDaysAgo=(n)=>new Date(Date.now()-n*86400000).toLocaleDateString();
 function makeDemoData(){
   const SVC=[["FedEx","FedEx Ground"],["FedEx","FedEx Ground"],["FedEx","FedEx Home Delivery"],["FedEx","FedEx Ground"],["FedEx","FedEx 2Day"],["FedEx","FedEx Home Delivery"],["FedEx","FedEx Ground"],["FedEx","FedEx Express Saver"],["FedEx","FedEx Priority Overnight"],["FedEx","FedEx Ground"],["DHL","DHL Express Worldwide"],["FedEx","FedEx 2Day"],["FedEx","FedEx Standard Overnight"],["FedEx","FedEx Home Delivery"]];
@@ -4190,6 +4518,9 @@ function usePersist(key,initial){
     }
     return initial;
   });
+  // negotiated dim divisors ride the global rateRules store — keep the module config in sync
+  // from EVERY consumer so quoting/box-logic math always uses the admin's numbers
+  if(key==="rateRules"){ try{ setDimCfg(val&&val.dimDivisors); }catch(e){} }
   useEffect(()=>{
     const bus=(PERSIST_BUS[nsKey]=PERSIST_BUS[nsKey]||new Set());
     bus.add(setVal);
@@ -4329,7 +4660,7 @@ function FedExIntake({onDone,onClose}){
     </div>
     <div className="grid grid-cols-2 gap-2">
       <select value={f.volume} onChange={e=>setF({...f,volume:e.target.value})} className={inp}><option value="">Packages / month</option><option>Under 100</option><option>100–500</option><option>500–2,000</option><option>2,000+</option></select>
-      <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp}><option value="">Ship mostly with…</option><option>FedEx</option><option>USPS</option><option>Another carrier</option><option>A mix</option></select>
+      <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp}><option value="">Ship mostly with…</option><option>FedEx</option><option>UPS</option><option>USPS</option><option>Another carrier</option><option>A mix</option></select>
     </div>
     <label className={"flex items-center justify-between gap-2 border border-dashed rounded px-3 py-2 text-sm cursor-pointer "+(inv?"border-emerald-400 bg-emerald-50/50 text-emerald-700":"border-stone-300 text-stone-500 hover:border-[#0086E0]")}>
       <span className="flex items-center gap-2 truncate">{inv?<CheckCircle2 className="w-4 h-4 shrink-0"/>:<Upload className="w-4 h-4 shrink-0"/>}<span className="truncate">{inv?inv.name:"Upload a recent carrier invoice (optional)"}</span></span>
@@ -4422,7 +4753,7 @@ function CloudAuth({onDone,initialMode,intake}){
         <input value={f.company} onChange={e=>setF({...f,company:e.target.value})} placeholder="Company" className={inp}/>
         {!intake&&<div className="grid grid-cols-2 gap-2">
           <select value={f.volume} onChange={e=>setF({...f,volume:e.target.value})} className={inp+" bg-white"}><option value="">Packages / month</option><option>Under 100</option><option>100–500</option><option>500–2,000</option><option>2,000+</option></select>
-          <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp+" bg-white"}><option value="">Ship mostly with…</option><option>FedEx</option><option>USPS</option><option>Another carrier</option><option>A mix</option></select>
+          <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp+" bg-white"}><option value="">Ship mostly with…</option><option>FedEx</option><option>UPS</option><option>USPS</option><option>Another carrier</option><option>A mix</option></select>
         </div>}</>}
         <input value={f.email} onChange={e=>setF({...f,email:e.target.value})} placeholder="Email" className={inp} autoFocus/>
         <div className="relative"><input value={f.pw} onChange={e=>setF({...f,pw:e.target.value})} onKeyDown={e=>e.key==="Enter"&&(mode==="signin"?signin():request())} placeholder={mode==="request"?"Choose a password":"Password"} type={showPw?"text":"password"} className={inp+" pr-9"}/><button type="button" onClick={()=>setShowPw(v=>!v)} tabIndex={-1} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">{showPw?<EyeOff className="w-4 h-4"/>:<Eye className="w-4 h-4"/>}</button></div>
@@ -4430,7 +4761,6 @@ function CloudAuth({onDone,initialMode,intake}){
       {err&&<div className="text-xs text-red-600">{err}</div>}
       <button onClick={mode==="signin"?signin:request} disabled={busy} className="w-full bg-stone-900 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"One moment…":(mode==="signin"?"Sign in":"Create account")}</button>
       {mode==="signin"&&<button onClick={()=>{setFp("ask");setFpEmail("");}} className="w-full text-center text-xs text-stone-400 hover:text-stone-600 underline underline-offset-2">Forgot password?</button>}
-      {mode==="request"&&<p className="text-[11px] text-stone-400 text-center">No approval wait, no credit card — you’re in immediately.</p>}
     </>)}
   </div>);
 }
@@ -4708,7 +5038,7 @@ function FirstRunFedEx({user,onClose}){
       </div>
       <div className="grid grid-cols-2 gap-2">
         <select value={f.volume} onChange={e=>setF({...f,volume:e.target.value})} className={inp}><option value="">Packages / month</option><option>Under 100</option><option>100–500</option><option>500–2,000</option><option>2,000+</option></select>
-        <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp}><option value="">Ship mostly with…</option><option>FedEx</option><option>USPS</option><option>Another carrier</option><option>A mix</option></select>
+        <select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})} className={inp}><option value="">Ship mostly with…</option><option>FedEx</option><option>UPS</option><option>USPS</option><option>Another carrier</option><option>A mix</option></select>
       </div>
       <label className={"flex items-center justify-between gap-2 border border-dashed rounded px-3 py-2 text-sm cursor-pointer "+(inv?"border-emerald-400 bg-emerald-50/50 text-emerald-700":"border-stone-300 text-stone-500 hover:border-[#0086E0]")}>
         <span className="flex items-center gap-2 truncate">{inv?<CheckCircle2 className="w-4 h-4 shrink-0"/>:<Upload className="w-4 h-4 shrink-0"/>}<span className="truncate">{inv?inv.name:"Upload a recent carrier invoice (optional)"}</span></span>
@@ -4966,6 +5296,21 @@ function AppInner(){
   const [pendingOpenOrderId,setPendingOpenOrderId]=useState(null);
   const [pendingOpenShipTracking,setPendingOpenShipTracking]=useState(null);
   useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};if(d.tab)setTab(d.tab);if(d.openOrderId)setPendingOpenOrderId(d.openOrderId);if(d.openShipTracking)setPendingOpenShipTracking(d.openShipTracking);if(d.batchCmd)setBatchCmd({...d.batchCmd,ts:Date.now()});};window.addEventListener("sc-nav",h);return()=>window.removeEventListener("sc-nav",h);},[]);
+  /* Shopify push toast: success (created / replaced tracking) and FAILURE (with the real reason)
+     both surface on screen — a failed push must never die silently in a system log. */
+  const [shopPush,setShopPush]=useState(null);
+  useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};setShopPush(d);if(!d.askNotify)setTimeout(()=>setShopPush(p=>p===d?null:p),d.ok?6000:15000);};window.addEventListener("sc-shopify-push",h);return()=>window.removeEventListener("sc-shopify-push",h);},[]);
+  // Re-label: user clicked "Email customer" on the toast — re-send the same tracking with notifyCustomer:true (that's what triggers Shopify's shipping-update email)
+  const notifyShopifyCustomer=async()=>{
+    const d=shopPush; if(!d||!d.shopifyId)return;
+    const _conns=shopifyConns(settings);
+    const conn=_conns.find(c=>c.shop===d.shop)||(_conns.length===1?_conns[0]:null);
+    if(!conn){setShopPush({ok:false,orderName:d.orderName,error:"Couldn't find that store's connection — email not sent."});return;}
+    setShopPush({...d,askNotify:false,sendingEmail:true});
+    const res=await shopifyPushTracking(conn,{shopifyId:d.shopifyId,tracking:d.tracking,carrier:d.carrier,notifyCustomer:true});
+    const nd={ok:!!(res&&res.ok),updated:true,emailed:!!(res&&res.ok),error:(res&&res.error)||"",orderName:d.orderName,tracking:d.tracking};
+    setShopPush(nd); setTimeout(()=>setShopPush(p=>p===nd?null:p),nd.ok?6000:15000);
+  };
   useEffect(()=>{ try{
     if(localStorage.getItem("scPurge")!=="2"){
       ["orders","shipments","returns","ledger","invoices","emails","drafts","pendingShips","rules","accounts"].forEach(k=>localStorage.removeItem(k));
@@ -4990,6 +5335,19 @@ function AppInner(){
     if(old&&Array.isArray(old)&&old.length>1) setClients(old);
   }catch(e){} },[currentUser&&currentUser.id]);
   useEffect(()=>{ startCloudPoll(); },[]);
+  /* Every login IS a customer. New signups get their client minted server-side; this self-heal
+     covers logins created before that (or with a dead clientId): mint a client on the spot and
+     assign it, so no one ever runs unassigned (at raw carrier cost) and the old "no customer
+     assigned" banner has nothing to warn about — the admin just opens the customer and sets rates. */
+  useEffect(()=>{ try{
+    if(!currentUser||currentUser.role!=="customer"||currentUser.demo)return;
+    if(currentUser.clientId&&clients.some(c=>c&&c.id===currentUser.clientId))return;
+    const id="c"+Date.now()+Math.floor(Math.random()*1000);
+    const nc={id,name:currentUser.company||currentUser.name||currentUser.email||"New customer",contact:currentUser.name||"",email:currentUser.email||"",phone:"",origin:"",markup:"",status:"active",since:new Date().toISOString().slice(0,7),plan:"Standard",selfSignup:true};
+    setClients(p=>[...p,nc]);
+    setUsers(us=>us.map(u=>u.id===currentUser.id?{...u,clientId:id}:u));
+    setCurrentUser(cu=>cu&&({...cu,clientId:id}));
+  }catch(e){} },[currentUser&&currentUser.id,currentUser&&currentUser.clientId,clients.length]);
   const [clientId,setClientId]=useState("");   // "" = unassigned; never a guessed id — c1 has never existed (SEED_CLIENTS starts at c2)
   const [accounts,setAccounts]=usePersist("accounts",SEED_ACCOUNTS);
   const [orders,setOrders]=usePersist("orders",SEED_ORDERS);
@@ -5049,6 +5407,12 @@ function AppInner(){
   },[settingsRaw,deployedCustom]);
   const setSettings=(v)=>setSettingsRaw(p=>scrubLegacyDefaults(typeof v==="function"?v(scrubLegacyDefaults(p)):v));
   const custom=cz(settings);
+  /* Live look preview: while the Appearance editor is open it broadcasts its DRAFT surface colors
+     + accent over the sc-look-preview event, so the real header/nav/page (and the brand logo tint)
+     update as you pick — not only after Save. srf falls back to committed settings otherwise. */
+  const [lookPreview,setLookPreview]=useState(null);
+  useEffect(()=>{ const h=(e)=>{ const d=e&&e.detail; setLookPreview(d&&typeof d==="object"?d:null); }; window.addEventListener("sc-look-preview",h); return ()=>window.removeEventListener("sc-look-preview",h); },[]);
+  const srf=lookPreview||custom;
   useEffect(()=>{ try{document.documentElement.style.fontSize=(custom.fontScale&&custom.fontScale!==100)?(custom.fontScale/100*16)+"px":"";}catch(e){} },[custom.fontScale]);
   useEffect(()=>{ SLIP_OPTS.thanks=custom.slipThanks||""; SLIP_OPTS.footer=custom.slipFooter||""; CI_OPTS.taxId=settings.taxId||""; },[custom.slipThanks,custom.slipFooter,settings.taxId]);
   useEffect(()=>{ try{ if(custom.loginBg)lsSet("loginBg",custom.loginBg); }catch(e){} },[custom.loginBg]);
@@ -5107,7 +5471,7 @@ function AppInner(){
       if(search.indexOf("shopify_connected")>-1||h.indexOf("shop=")>-1){
         const p=new URLSearchParams(h.replace(/^#/,""));
         const shop=p.get("shop"),token=p.get("token");
-        if(shop&&token){ setSettings(s=>({...s,shopifyConn:{shop,token,connectedAt:new Date().toISOString()}})); }
+        if(shop&&token){ setSettings(s=>{ const others=shopifyConns(s).filter(c=>c.shop!==shop); const n={...s,shopifyConns:[...others,{shop,token,connectedAt:new Date().toISOString()}]}; delete n.shopifyConn; return n; }); }
         const clean=window.location.origin+window.location.pathname;
         window.history.replaceState({},document.title,clean);
         return;
@@ -5129,7 +5493,10 @@ function AppInner(){
   useEffect(()=>{ const pn=(settings&&settings.printNode)||{}; const cus=(settings&&settings.custom)||{}; const dpc=pn.docPrinters||{};
     /* docPrinters routes each document type to its own PrintNode printer. packSlip keeps the
        legacy custom.packSlipPrinterId as a fallback until the new assignment is touched. */
-    try{ window.__scDirectPrint={enabled:!!pn.enabled,apiKey:pn.apiKey||"",printerId:+pn.printerId||0,docPrinters:{packSlip:String(dpc.packSlip!=null?dpc.packSlip:(cus.packSlipPrinterId||"")),pickList:String(dpc.pickList||""),docs:String(dpc.docs||"")}}; }catch(e){} },[settings&&settings.printNode,settings&&settings.custom&&settings.custom.packSlipPrinterId]);
+    /* Direct printing is "on" whenever a printer is actually configured — derived here so it can
+       never fall out of sync with a separate toggle. The after-booking mode (hands-free / no-preview
+       / preview) decides whether it fires automatically; this just says the printer is reachable. */
+    try{ window.__scDirectPrint={enabled:!!(String(pn.apiKey||"").trim()&&pn.printerId),apiKey:pn.apiKey||"",printerId:pn.printerId||"",docPrinters:{packSlip:String(dpc.packSlip!=null?dpc.packSlip:(cus.packSlipPrinterId||"")),pickList:String(dpc.pickList||""),docs:String(dpc.docs||"")}}; }catch(e){} },[settings&&settings.printNode,settings&&settings.custom&&settings.custom.packSlipPrinterId]);
   useEffect(()=>{ try{
       const size=((settings&&settings.printer)||{}).labelSize||"4x6";
       const dtb=(settings&&settings.docTab)||null;
@@ -5141,6 +5508,17 @@ function AppInner(){
       const carrierStock=(dtb&&dtb.enabled&&src==="app")?"4x6":size;
       window.__scLabelStock={size,carrierStock,docTab:dtb,source:src};
     }catch(e){} },[settings&&settings.printer,settings&&settings.docTab]);
+  /* Print extras — the company logo stamped on every label and the receipt printed as a second
+     label page — synced globally so EVERY print path (PrintNode direct, hands-free fallback,
+     batch, preview modal) applies the exact same treatment. */
+  useEffect(()=>{ try{
+      const cc=cz(settings);
+      const rc=settings&&settings.receipt;
+      window.__scPrintExtras={
+        logo:{on:!!cc.labelLogoOn,src:cc.labelLogo||settings.companyLogo||"",pos:cc.labelLogoPos||"bottom_left",scale:cc.labelLogoScale,dx:cc.labelLogoDX,dy:cc.labelLogoDY,x:cc.labelLogoX,y:cc.labelLogoY},
+        receipt:{enabled:!!(rc&&rc.enabled&&rc.withLabel!==false),cfg:rc||null,logo:(rc&&rc.showLogo!==false?(settings.companyLogo||""):"")}
+      };
+    }catch(e){} },[settings&&settings.custom,settings&&settings.receipt,settings&&settings.companyLogo]);
   const brand=BRAND.fw
     ?{...DEFAULT_BRAND,name1:"FREIGHT",name2:"WIRE SHIP",dark:"#1c1917",primary:"#1E9BF0",...(settings.brand||{})}
     :{...DEFAULT_BRAND,...(settings.brand||{})};
@@ -5197,10 +5575,23 @@ function AppInner(){
     if(orderId&&shopifyConnected(settings)){
       const ord=orders.find(x=>x.id===orderId);
       if(ord&&ord.source==="Shopify"&&ord.shopifyId){
-        shopifyPushTracking(settings.shopifyConn,{shopifyId:ord.shopifyId,tracking:rec.tracking,carrier:rec.carrier}).then(res=>{
-          if(res&&res.ok){ setOrders(o=>o.map(x=>x.id===orderId?{...x,shopifyFulfilled:true}:x)); }
+        /* Push back to the SAME store the order came from. If the order predates the _shop tag and
+           more than one store is connected, we can't know which — skip rather than fulfill the wrong
+           store, and log it. With a single store, the one connection is always correct. */
+        const _conns=shopifyConns(settings);
+        const _conn=ord._shop?_conns.find(c=>c.shop===ord._shop):(_conns.length===1?_conns[0]:null);
+        if(!_conn){ if(_conns.length>1)logEmail&&logEmail({to:"system",subject:"Shopify: couldn't tell which store order "+(ord.name||ord.shopifyId)+" came from — tracking not pushed. Re-sync to tag it.",type:"System"}); }
+        else {
+          /* Re-label (order already shipped): replace the tracking WITHOUT emailing the customer,
+             then ask in the toast whether to send the email — never auto-notify on a redo. */
+          const _relabel=ord.status==="fulfilled"||!!ord.shopifyFulfilled;
+          shopifyPushTracking(_conn,{shopifyId:ord.shopifyId,tracking:rec.tracking,carrier:rec.carrier,notifyCustomer:_relabel?false:undefined}).then(res=>{
+          if(res&&res.ok){ setOrders(o=>o.map(x=>x.id===orderId?{...x,shopifyFulfilled:true,tracking:rec.tracking}:x)); }
           else { logEmail&&logEmail({to:"system",subject:"Shopify fulfillment failed: "+((res&&res.error)||"unknown"),type:"System"}); }
-        });
+          /* SURFACE the result — a failed (or successful re-label) push must never die silently in a log */
+          try{ window.dispatchEvent(new CustomEvent("sc-shopify-push",{detail:{ok:!!(res&&res.ok),updated:!!(res&&res.updated),error:(res&&res.error)||"",orderName:ord.name||("#"+ord.shopifyId),tracking:rec.tracking,askNotify:!!(_relabel&&res&&res.ok),shop:_conn.shop,shopifyId:ord.shopifyId,carrier:rec.carrier||"FedEx"}})); }catch(e){}
+          });
+        }
       }
     }
     // push tracking back to any other connected platform this order came from
@@ -5217,7 +5608,7 @@ function AppInner(){
         }
       }
     }
-    if(settings.notify.shipped&&rec.recipient?.name) logEmail({to:(rec.recipient?.email)||"customer@example.com",subject:`Your ${settings.company} order has shipped ☁️`,type:"Shipped"});
+    if(settings.notify?.shipped&&rec.recipient?.name) logEmail({to:(rec.recipient?.email)||"customer@example.com",subject:`Your ${settings.company} order has shipped ☁️`,type:"Shipped"});
     addLedger({type:"Shipping charge",ref:rec.reference||rec.tracking,amount:-(rec.sell||0)});
   };
   // record an order that pushed to England but hasn't booked yet, so we can pull its label later
@@ -5225,23 +5616,25 @@ function AppInner(){
   // shared Shopify order sync (used by manual refresh buttons + auto-refresh)
   const [syncingOrders,setSyncingOrders]=useState(false);
   const syncOrders=async()=>{
-    if(!shopifyConnected(settings))return {ok:false,error:"Shopify not connected"};
+    const conns=shopifyConns(settings);
+    if(!conns.length)return {ok:false,error:"Shopify not connected"};
     setSyncingOrders(true);
-    const res=await shopifySyncOrders(settings.shopifyConn);
+    let all=[],anyOk=false,firstErr="";
+    for(const c of conns){ const res=await shopifySyncOrders(c); if(res&&res.ok){ anyOk=true; (res.orders||[]).forEach(o=>all.push({...o,_shop:c.shop})); } else if(!firstErr){ firstErr=(res&&res.error)||("Sync failed for "+c.shop); } }
     setSyncingOrders(false);
-    if(res&&res.ok){
+    if(anyOk){
       let added=0;
-      setOrders(p=>{const have=new Set(p.map(o=>o.shopifyId).filter(Boolean));const fresh=(res.orders||[]).filter(o=>!have.has(o.shopifyId));added=fresh.length;return fresh.length?[...fresh,...p]:p;});
+      setOrders(p=>{const have=new Set(p.map(o=>o.shopifyId).filter(Boolean));const fresh=all.filter(o=>!have.has(o.shopifyId));added=fresh.length;return fresh.length?[...fresh,...p]:p;});
       return {ok:true,added};
     }
-    return {ok:false,error:(res&&res.error)||"Sync failed"};
+    return {ok:false,error:firstErr||"Sync failed"};
   };
-  // auto-refresh Shopify orders every 2 minutes while connected
+  // auto-refresh Shopify orders every 2 minutes while any store is connected
   useEffect(()=>{
     if(!shopifyConnected(settings))return;
     const id=setInterval(()=>{syncOrders();},120000);
     return ()=>clearInterval(id);
-  },[settings.shopifyConn&&settings.shopifyConn.shop,settings.shopifyConn&&settings.shopifyConn.token]);
+  },[JSON.stringify(shopifyConns(settings).map(c=>[c.shop,c.token]))]);
   // blank the receiver on a fresh page load / login (stays filled across tab switches within a session)
   /* receiver + package dims are cleared on login (clearScratchFor) so a fresh session always starts blank */
   // re-check England for any staged orders that have since booked; pull label + tracking into Shipments
@@ -5266,7 +5659,7 @@ function AppInner(){
 
   const isAdmin=currentUser&&currentUser.role==="admin";
   const isDemo=!!(currentUser&&currentUser.id==="demo");
-  const myFlags=isDemo?{pickups:true,batch:true,invoices:true,rules:true,scan:true,settings:true}:(isAdmin?{}:((featureFlags&&featureFlags[currentUser&&currentUser.id])||(CLOUD.mode==="cloud"?myFeatures:{})));
+  const myFlags=isDemo?{pickups:true,batch:true,invoices:false,rules:true,scan:true,settings:true}:(isAdmin?{}:((featureFlags&&featureFlags[currentUser&&currentUser.id])||(CLOUD.mode==="cloud"?myFeatures:{})));
   useEffect(()=>{ CI_OPTS.logo=settings.companyLogo||(myFlags&&myFlags._logoB64)||""; },[myFlags,settings.companyLogo]);
   const showMoney=isDemo||isAdmin||featureOn("seeCosts",currentUser,myFlags);   // "See costs & spend" per-customer feature — admins always see money
   const [batchCmd,setBatchCmd]=useState(null);
@@ -5371,15 +5764,27 @@ function AppInner(){
       </div>}
       {!isDemo&&!isAdmin&&!adminReturn&&CLOUD.mode==="cloud"&&!fedexPrompt.seen&&<FirstRunFedEx user={currentUser} onClose={()=>setFedexPrompt({seen:true})}/>}
       <AssistantChat who={isDemo?"demo":isAdmin?"admin":"customer"} getContext={assistantContext} onAction={onAssistantAction}/>
+      {shopPush&&<div className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] max-w-lg w-[92vw] sm:w-auto rounded-xl shadow-2xl border px-4 py-3 text-sm flex items-start gap-2.5 ${shopPush.ok?"bg-emerald-50 border-emerald-300 text-emerald-800":"bg-rose-50 border-rose-300 text-rose-800"}`}>
+        {shopPush.ok?<CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5"/>:<AlertTriangle className="w-5 h-5 shrink-0 mt-0.5"/>}
+        <div className="min-w-0">
+          <div className="font-semibold">{shopPush.ok?(shopPush.updated?"Shopify tracking REPLACED on "+shopPush.orderName:"Tracking sent to Shopify — "+shopPush.orderName):"Shopify push FAILED — "+shopPush.orderName}</div>
+          <div className="text-xs mt-0.5 break-words">{shopPush.ok?(shopPush.sendingEmail?"Sending the email to the customer…":shopPush.emailed?("Email sent to the customer · "+(shopPush.tracking||"")):("Tracking "+(shopPush.tracking||""))):String(shopPush.error||"Unknown error").slice(0,220)}</div>
+          {shopPush.askNotify&&<div className="flex items-center gap-2 mt-2">
+            <button onClick={notifyShopifyCustomer} className="text-xs font-semibold bg-emerald-600 text-white rounded-lg px-2.5 py-1.5 hover:bg-emerald-700">Notify customer</button>
+            <button onClick={()=>setShopPush(null)} className="text-xs font-medium bg-white border border-emerald-300 text-emerald-700 rounded-lg px-2.5 py-1.5 hover:bg-emerald-100">Don't notify</button>
+          </div>}
+        </div>
+        <button onClick={()=>setShopPush(null)} className="shrink-0 opacity-60 hover:opacity-100"><X className="w-4 h-4"/></button>
+      </div>}
       <ConfettiHost mode={custom.confetti||"page"}/>
       <SaveToast/>
-      <header style={custom.headerBg?{background:custom.headerBg}:undefined} className={"border-b border-stone-200 sticky z-30 backdrop-blur "+(custom.headerBg?"":"bg-white/90 ")+((adminReturn||isDemo)?"top-9":"top-0")}>
+      <header style={srf.headerBg?{background:srf.headerBg}:undefined} className={"border-b border-stone-200 sticky z-30 backdrop-blur "+(srf.headerBg?"":"bg-white/90 ")+((adminReturn||isDemo)?"top-9":"top-0")}>
         <div className="px-3 sm:px-4 h-14 flex items-center gap-2 sm:gap-3 relative">
           <button onClick={()=>setNavOpen(true)} className="md:hidden p-2 -ml-1 rounded-lg hover:bg-stone-100 text-stone-600" aria-label="Menu"><Layers className="w-5 h-5"/></button>
 
           {BRAND.fw?(<>
             <button onClick={()=>setTab("ship")} title="Back to Ship" className="flex items-center gap-2.5 cursor-pointer select-none shrink-0">
-              <FreightwireShipHub logoH={Math.round(30*((custom.logoScale||100)/100))} sub={false} accent={custom.accent||""}/>
+              <FreightwireShipHub logoH={Math.round(30*((custom.logoScale||100)/100))} sub={false} accent={srf.accent||""}/>
             </button>
           </>):(
           <button onClick={()=>setTab("ship")} title="Back to Ship" className="cursor-pointer flex items-center shrink-0">{(!brand.name1||brand.name1==="Shipping")&&(!brand.name2||brand.name2==="Cloud")?<ShipCloudLogo size={Math.round(22*((custom.logoScale||100)/100))}/>:<span className="font-extrabold tracking-tight text-[20px] sm:text-[26px]" style={{color:(custom.theme==="dark"||custom.theme==="grey")?"#F5F5F4":brand.dark}}>{brand.name1}<span style={{color:custom.accent||brand.primary}}>{brand.name2}</span></span>}</button>)}
@@ -5398,7 +5803,7 @@ function AppInner(){
       {appLabel&&<LabelPreviewModal data={appLabel} settings={settings} onClose={()=>setAppLabel(null)}/>}
       {navOpen&&<div className="md:hidden fixed inset-0 z-40 flex" role="dialog">
         <div className="absolute inset-0 bg-stone-900/40" onClick={()=>setNavOpen(false)}/>
-        <aside style={custom.navBg?{background:custom.navBg}:undefined} className={`relative w-64 ${custom.navBg?"":"bg-white"} h-full shadow-xl overflow-y-auto`}>
+        <aside style={srf.navBg?{background:srf.navBg}:undefined} className={`relative w-64 ${srf.navBg?"":"bg-white"} h-full shadow-xl overflow-y-auto`}>
           <div className="flex items-center justify-between px-4 h-14 border-b border-stone-200"><button onClick={()=>{setTab("ship");setNavOpen(false);}} title="Back to Ship" className="font-extrabold tracking-tight flex items-center gap-2" style={{color:brand.dark}}>{BRAND.fw?<><img src={FW_LOGO} alt="Freightwire" className="h-6 w-7 object-cover object-left" draggable={false}/><span className="w-px h-5 bg-stone-300"/><span className="text-[15px] leading-none text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></span></>:<span>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></span>}</button><button onClick={()=>setNavOpen(false)} className="p-1.5 rounded hover:bg-stone-100"><X className="w-5 h-5 text-stone-500"/></button></div>
           <nav className="p-2 space-y-0.5">
             {TABS.map(([id,l,Icon])=>(
@@ -5414,7 +5819,7 @@ function AppInner(){
         </aside>
       </div>}
       <div className="flex flex-1">
-        <aside style={custom.navBg?{background:custom.navBg}:undefined} className={`hidden md:block w-52 shrink-0 border-r border-stone-200 ${custom.navBg?"":"bg-white"} min-h-screen`}>
+        <aside style={srf.navBg?{background:srf.navBg}:undefined} className={`hidden md:block w-52 shrink-0 border-r border-stone-200 ${srf.navBg?"":"bg-white"} min-h-screen`}>
           <nav className="p-2 space-y-0.5 sticky top-14">
             {TABS.map(([id,l,Icon])=>(
               <React.Fragment key={id}>
@@ -5427,7 +5832,7 @@ function AppInner(){
             {!isAdmin&&!isDemo&&!isCompanyAdmin&&CLOUD.mode==="cloud"&&<CompanyAdminRequestButton currentUser={currentUser}/>}
           </nav>
         </aside>
-        <main className="flex-1 min-w-0 overflow-x-clip px-3 sm:px-6 py-4 sm:py-6" style={(custom.appBg||custom.pageBg)?{...(custom.pageBg?{backgroundColor:custom.pageBg}:{}),...(custom.appBg?{backgroundImage:`url(${custom.appBg})`,backgroundSize:"cover",backgroundPosition:"center",backgroundAttachment:"fixed"}:{})}:undefined}>
+        <main className="flex-1 min-w-0 overflow-x-clip px-3 sm:px-6 py-4 sm:py-6" style={(srf.appBg||srf.pageBg)?{...(srf.pageBg?{backgroundColor:srf.pageBg}:{}),...(srf.appBg?{backgroundImage:`url(${srf.appBg})`,backgroundSize:"cover",backgroundPosition:"center",backgroundAttachment:"fixed"}:{})}:undefined}>
           <TabBoundary key={tab} name={tab}>
           {tab==="dashboard"&&<Dashboard shipments={shipments} orders={orders} returns={returns} goTab={setTab}/>}
           {tab==="ship"&&<Ship client={client} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={ruleset} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders} currentUser={currentUser} setUsers={setUsers} setCurrentUser={setCurrentUser} clients={clients}/>}
@@ -5449,7 +5854,7 @@ function AppInner(){
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
           {tab==="companyadmin"&&isCompanyAdmin&&<CompanyAdmin currentUser={currentUser} companyUsers={companyUsers} setCompanyUsers={setCompanyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} settings={settings}/>}
           {(tab==="admin"||tab.startsWith("admin:"))&&isAdmin&&<AdminPortal activeSection={tab.startsWith("admin:")?tab.slice(6):null} clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} publicBrand={publicBrand} setPublicBrand={setPublicBrand} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
-          {tab==="settings"&&<Settings showMoney={showMoney} secPolicy={(myFlags&&myFlags._secPolicy)||{}} isAdmin={isAdmin} uid={currentUser&&currentUser.id} audit={audit} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
+          {tab==="settings"&&<Settings showMoney={showMoney} secPolicy={(myFlags&&myFlags._secPolicy)||{}} isAdmin={isAdmin} uid={currentUser&&currentUser.id} currentUser={currentUser} setCurrentUser={setCurrentUser} audit={audit} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
           </TabBoundary>
         </main>
       </div>
@@ -5495,6 +5900,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const [poNo,setPoNo]=usePersist("ship.poNo","");
   const [pieces,setPieces]=usePersist("ship.pieces",[{weight:"",L:"",W:"",H:""}]);
   const [insurance,setInsurance]=usePersist("ship.insurance","");
+  const [dvEach,setDvEach]=useState(false);   // multipiece declared value: false = same $ on every box, true = per-box amount (piece.dv)
   const [residential,setRes]=usePersist("ship.residential",true);
   const [resTouched,setResTouched]=useState(false);
   const [signature,setSig]=usePersist("ship.signature",false);
@@ -5520,32 +5926,68 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const [selectedOrder,setSelectedOrder]=usePersist("ship.selectedOrder",null);
   const [scanVal,setScanVal]=useState("");
   const scanRef=React.useRef(null);
+  /* Hands-free safety: auto-book only fires for an order the person ACTIVELY selected this
+     session — clicked in the sidebar, scanned, or opened via an order's Ship button. An order
+     restored from a previous session (page refresh) is NOT armed, so refreshing the page can
+     never book & print a label by itself. State (not a ref) so arming re-runs the auto-book
+     effect even when the clicked order is the one already on screen. */
+  const [hfArmed,setHfArmed]=useState(null);
   /* Scan mode: the scan box is always ready — focused on load and re-armed whenever focus
      falls back to the page (after booking, closing a modal, clicking whitespace). It never
      steals focus from another input/textarea/select, so editing weights etc. still works;
      it only catches keystrokes that would otherwise land on the page body. */
   const scanMode=!!cz(settings).scanAutoFocus;
-  useEffect(()=>{ if(scanMode&&scanRef.current)try{scanRef.current.focus();}catch(e){} },[scanMode]);
+  /* Put the cursor IN the scan box when the tab opens. A single focus() on mount often loses to the
+     page still settling (address cards, autocomplete), so retry a few times — but only while nothing
+     else is focused, so it never yanks the cursor out of a field you're typing in. */
+  useEffect(()=>{ if(!scanMode)return;
+    const tryFocus=()=>{ try{ const a=document.activeElement; if(scanRef.current&&a!==scanRef.current&&(!a||a===document.body||a.tagName==="BUTTON"))scanRef.current.focus({preventScroll:true}); }catch(e){} };
+    const timers=[0,120,350,700,1200].map(d=>setTimeout(tryFocus,d));
+    return ()=>timers.forEach(clearTimeout);
+  },[scanMode]);
   useEffect(()=>{ if(!scanMode)return;
     const armed=()=>{ const a=document.activeElement; return !a||a===document.body||a.tagName==="BUTTON"; };
     const onKey=(e)=>{ if(e.ctrlKey||e.metaKey||e.altKey)return; if(e.key.length!==1&&e.key!=="Enter")return;
-      if(armed()&&scanRef.current){ try{scanRef.current.focus();}catch(err){} } };
+      if(armed()&&scanRef.current){ try{scanRef.current.focus({preventScroll:true});}catch(err){} } };
     window.addEventListener("keydown",onKey,true);
     return ()=>window.removeEventListener("keydown",onKey,true);
+  },[scanMode]);
+  /* Scan mode: the cursor LIVES in the scan box. Clicking around the page (orders in the sidebar,
+     service rows, buttons, whitespace) hands focus right back to the scan box — it only stays away
+     when the click landed on something that genuinely needs typing (a text field, dropdown, or
+     editable area, e.g. editing the shipping information). */
+  useEffect(()=>{ if(!scanMode)return;
+    const needsCursor=(el)=>{ try{
+      if(!el||el===document.body)return false;
+      const n=el.closest?el.closest("input,textarea,select,[contenteditable='true'],[contenteditable='']"):null;
+      if(!n)return false;
+      if(n.tagName==="INPUT"){ const t=(n.type||"text").toLowerCase(); return !["checkbox","radio","button","submit","reset","range","file","color"].includes(t); }
+      return true;
+    }catch(e){ return false; } };
+    const onClick=(e)=>{ const tgt=e.target;
+      // let the click finish (focus lands, modals mount) before deciding — then re-arm unless the
+      // click, or whatever now holds focus, actually needs the cursor
+      setTimeout(()=>{ try{ const a=document.activeElement;
+        if(scanRef.current&&a!==scanRef.current&&!needsCursor(tgt)&&!needsCursor(a))scanRef.current.focus({preventScroll:true});
+      }catch(err){} },60); };
+    window.addEventListener("mouseup",onClick,true);
+    return ()=>window.removeEventListener("mouseup",onClick,true);
   },[scanMode]);
   const [scanMsg,setScanMsg]=useState(null);
   /* auto=true: fired by the debounce while typing/scanning — EXACT matches only, silent on
      miss, and never clears the box mid-type. Enter keeps the old behavior: exact first, then
      fuzzy contains-match, with the red "no match" flash. */
   const scanApply=(code,auto)=>{ const c=String(code||"").trim().toLowerCase(); if(!c){setScanVal("");return;}
-    if(cz(settings).scanAutoFocus)setTimeout(()=>{try{scanRef.current&&scanRef.current.focus();}catch(e){}},50);   // scan mode: re-arm for the next barcode
+    if(cz(settings).scanAutoFocus)setTimeout(()=>{try{scanRef.current&&scanRef.current.focus({preventScroll:true});}catch(e){}},50);   // scan mode: re-arm for the next barcode
     const o=orders.find(x=>[x.name,x.id,x.sku,x.tracking,x.customer,x.zip,x.barcode].filter(Boolean).some(v=>String(v).toLowerCase()===c))
       ||(auto?null:orders.find(x=>[x.name,x.sku,x.tracking,x.customer].filter(Boolean).some(v=>String(v).toLowerCase().includes(c))));
     if(!o){ if(!auto){ setScanVal(""); setScanMsg({ok:false,t:`no match for “${code}”`}); setTimeout(()=>setScanMsg(null),4000); } return; }
     setScanVal("");
-    setReceiver({...empty,name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email});
-    if(o.weight)setPieces([{weight:o.weight,L:12,W:9,H:4}]);
-    setReference(o.name||""); setSelectedOrder(o.id);
+    /* Load the order through the SAME path as clicking it in the sidebar — box logic packs it,
+       stale insurance/signature/declared-value from the previous order are reset, the auto-insure
+       and auto-signature rules run, and hands-free is armed (scanning IS the confirmation). The
+       old scan path skipped all of that and could book with the previous order's boxes and fees. */
+    applyOrder(o);
     setScanMsg({ok:true,t:String(o.name||o.id)}); setTimeout(()=>setScanMsg(null),4000);
   };
   useEffect(()=>{ const v=scanVal; if(!String(v||"").trim())return; const t=setTimeout(()=>scanApply(v,true),400); return ()=>clearTimeout(t); },[scanVal]);   // scan guns finish in <100ms/char — 400ms of silence means the code is complete
@@ -5591,7 +6033,16 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const intl=!!receiver.country&&receiver.country!=="United States";
   const setPiece=(i,patch)=>setPieces(ps=>ps.map((p,j)=>j===i?{...p,...patch}:p));
   const addPiece=()=>setPieces(ps=>[...ps,{...(ps[ps.length-1]||{weight:"",L:"",W:"",H:""})}]);
-  const delPiece=(i)=>setPieces(ps=>ps.length>1?ps.filter((_,j)=>j!==i):ps);
+  const delPiece=(i)=>{
+    if(pieces.length<=1)return;
+    const next=pieces.filter((_,j)=>j!==i);
+    /* Dropping back to a single box while "per box" declared value is on would strip the
+       per-box Insure $ input (it only shows for multipiece) and fall back to the empty shared
+       field — silently shipping the last box uninsured. Preserve the remaining box's value into
+       the shared field and leave per-box mode so quote and booking agree. */
+    if(next.length===1&&dvEach){ const dv=+next[0].dv||0; setInsurance(dv?String(dv):""); setDvEach(false); }   // empty per-box value must CLEAR the shared field too — never resurrect a stale amount
+    setPieces(next);
+  };
   // When a One Rate service is chosen, set package #1 to the matching FedEx One Rate box size.
   const applyOneRateBox=(code)=>{ const b=FEDEX_ONERATE.find(x=>x.code===code); if(!b||!b.dims)return; setPieces(ps=>ps.map((p,j)=>j===0?{...p,L:b.dims.L,W:b.dims.W,H:b.dims.H,boxIdx:-1,orBox:b.name.replace(/FedEx\s*One Rate®?\s*/i,"")}:p)); const val="FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,""); const f=settings?.orBoxField||"invoice"; const fill=(set)=>set(prev=>prev&&prev.trim()?prev:val); if(f==="invoice")fill(setInvoiceNo); else if(f==="po")fill(setPoNo); else if(f==="reference")fill(setReference); };
   const pw=(p)=>Math.round(((+p.weight||0)+(+p.oz||0)/16)*1000)/1000;
@@ -5644,7 +6095,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const setOverride=(on)=>{ setResTouched(on); if(!on) setVerifyNonce(x=>x+1); };  // turning override off re-asks FedEx
 
   const [packNote,setPackNote]=useState(null);
-  const applyOrder=(o)=>{setSelectedOrder(o.id);setReference(o.name);setInvoiceNo("");setPoNo("");setPieces(ps=>ps.map((p,j)=>j===0?{...p,orBox:undefined}:p));setReceiver({...empty,name:o.customer||"",company:o.company||"",zip:o.zip||"",state:o.state||"",city:o.city||"",address1:o.address1||"",phone:o.phone||"",email:o.email||""});
+  const applyOrder=(o)=>{setHfArmed(o.id);setSelectedOrder(o.id);setReference(o.name);setInvoiceNo("");setPoNo("");setPieces(ps=>ps.map((p,j)=>j===0?{...p,orBox:undefined}:p));setReceiver({...empty,name:o.customer||"",company:o.company||"",zip:o.zip||"",state:o.state||"",city:o.city||"",address1:o.address1||"",phone:o.phone||"",email:o.email||""});
+    /* RESET the per-shipment extras BEFORE the auto rules run — otherwise the previous order's
+       declared value / signature silently carry into this order (and hands-free would book it
+       with the wrong coverage, no click, no warning). */
+    setInsurance("");setDvEach(false);setSigOption(custom.defaultSignature||"none");setSig(!!(custom.defaultSignature&&custom.defaultSignature!=="none"));
     const pk=packOrder(o,settings.products||[],settings.boxes||SEED_BOXES,settings.boxLogic);
     if(pk&&pk.pieces.length){ setPieces(pk.pieces.map(x=>({weight:x.weight,L:x.L,W:x.W,H:x.H}))); setPackNote(pk); }
     else { setPieces([{weight:o.weight||1,L:12,W:9,H:4}]); setPackNote(null); }
@@ -5656,7 +6111,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   };
   useEffect(()=>{ if(!prefill)return;
     if(prefill.draft){const s=prefill.draft;setSender(s.sender);setReceiver(s.receiver);setReference(s.reference||"");setInvoiceNo(s.invoiceNo||"");setPoNo(s.poNo||"");setPieces(s.pieces||[{weight:3,L:12,W:9,H:4}]);setRes(s.residential);setSig(s.signature);setBillTo(s.billTo);setThirdAcct(s.thirdAcct||"");setInsurance(s.insurance||"");setSelectedOrder(s.selectedOrder||null);if(s.customs)setCustoms(s.customs);clearPrefill();return;}
-    if(prefill.receiver)setReceiver({...empty,...prefill.receiver}); if(prefill.weight)setPieces([{weight:prefill.weight,L:12,W:9,H:4}]); if(prefill.reference)setReference(prefill.reference); setSelectedOrder(prefill.fromOrderId||null); clearPrefill();
+    if(prefill.receiver)setReceiver({...empty,...prefill.receiver}); if(prefill.weight)setPieces([{weight:prefill.weight,L:12,W:9,H:4}]); if(prefill.reference)setReference(prefill.reference); setSelectedOrder(prefill.fromOrderId||null); if(prefill.fromOrderId&&!prefill.refulfill)setHfArmed(prefill.fromOrderId); /* a RE-label opens un-armed so hands-free can't book it before you've made your changes */ clearPrefill();
   },[prefill]);
 
   const swap=()=>{const s=sender;setSender(receiver);setReceiver(s);};
@@ -5673,14 +6128,80 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     try{
       const run=runRuleEngine(enabled,[so],originZip);
       const r0=run.results&&run.results[0];
-      if(r0&&r0.fires&&r0.fires.length&&r0.view&&r0.view.selectedService)return {state:"fired",rule:r0.fires[0].ruleName,service:r0.view.selectedService};
+      if(r0&&r0.fires&&r0.fires.length&&r0.view&&r0.view.selectedService)return {state:"fired",rule:r0.fires[0].ruleName,service:r0.view.selectedService,view:r0.view};
       return {state:"no-match"};
     }catch(e){ return {state:"error",msg:(e&&e.message)||"rule engine error"}; }
   },[custom.autoRulesOnShip,selectedOrder,orders,rules,originZip]);
   const liveRuleMatch=liveRuleStatus&&liveRuleStatus.state==="fired"?liveRuleStatus.service:null;
+  /* Apply the FULL fired-rule view to the Ship form — not just the service. Saturday delivery,
+     signature, insurance and the per-rule FedEx account override all take effect exactly as the
+     rule says, once per loaded order (so a manual change afterwards isn't fought). */
+  const [ruleAcct,setRuleAcct]=useState(null);
+  const ruleAppliedRef=React.useRef(null);
+  useEffect(()=>{
+    if(!liveRuleStatus||liveRuleStatus.state!=="fired"||!selectedOrder)return;
+    if(ruleAppliedRef.current===selectedOrder)return;
+    ruleAppliedRef.current=selectedOrder;
+    const v=liveRuleStatus.view||{};
+    try{
+      if(v.saturday)setSat(true);
+      if(v.signature){const t=(v.sig||"direct");setSigOption(t);setSig(true);}
+      if(v.insurance>0)setInsurance(String(v.insurance));
+      setRuleAcct(v.fedexAccount?String(v.fedexAccount).replace(/\D/g,""):null);
+    }catch(e){}
+  },[liveRuleStatus,selectedOrder]);
+  useEffect(()=>{ if(!selectedOrder){setRuleAcct(null);ruleAppliedRef.current=null;} },[selectedOrder]);
 
   const ready=postalOkFor(receiver.zip,receiver.country)&&totalWeight>0;
-  const shipment={fromZip:originZip,toZip:receiver.zip,toCountry:receiver.country||"United States",pieces:pieces.map(p=>({...p,weight:pw(p)})),residential,signature,signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null,intl,packageTypeCode:orBox?orBox.code:""};
+  /* Every specific reason a quote can't populate, in plain language — a red banner in the
+     service area instead of silently blank rates. Checks each box individually (weight missing,
+     over FedEx's 150-lb parcel max, over the 108" side / 165" length-plus-girth limits) plus
+     the destination ZIP and the ship-from ZIP. */
+  const quoteProblems=useMemo(()=>{
+    const probs=[];
+    const z=String(receiver.zip||"").trim();
+    const isUS=!receiver.country||_isUSCountry(receiver.country);
+    const noPostal=!isUS&&NO_POSTAL_COUNTRIES.has(String(receiver.country||"").trim());   // e.g. Hong Kong, Panama — FedEx rates fine with no postal code
+    if(!noPostal){
+      if(!z)probs.push("Destination ZIP is missing.");
+      else if(!postalOkFor(receiver.zip,receiver.country))probs.push(`“${z}” isn't a valid ${isUS?"US ZIP":"postal code for "+receiver.country}.`);
+    }
+    pieces.forEach((p,i)=>{
+      const w=pw(p);
+      const tag=pieces.length>1?`Box #${i+1}`:"The package";
+      if(!(w>0))probs.push(`${tag} has no weight.`);
+      else if(w>150)probs.push(`${tag} is ${w} lb — over FedEx's 150 lb per-package max, so it can't be quoted. Split it into more boxes (or ship it freight).`);
+      const L=+p.L||0,W=+p.W||0,H=+p.H||0;
+      if(L>119||W>119||H>119)probs.push(`${tag}'s longest side is over 119" — FedEx won't accept it as a parcel (Express max is 119", Ground 108").`);
+      else if(L&&W&&H){const s=[L,W,H].sort((x,y)=>y-x);const lg=s[0]+2*(s[1]+s[2]);if(lg>165)probs.push(`${tag} is ${lg}" length-plus-girth — over FedEx's 165" limit, so it can't be quoted.`);}
+    });
+    if(!String(originZip||"").trim())probs.push("Your ship-from ZIP is missing — add it under Settings → General → Default sender.");
+    // a brand-new blank form isn't an error state — stay quiet until they've started typing
+    const started=!!(String(receiver.zip||"").trim()||receiver.address1||receiver.name||receiver.city||totalWeight>0);
+    return started?probs:[];
+  },[receiver.zip,receiver.country,receiver.address1,receiver.name,receiver.city,JSON.stringify(pieces),originZip]);
+  /* Service Guide heads-ups that DON'T block the quote but change price or service availability:
+     Ground Oversize (>130" L+G bills at a 90-lb minimum), Unauthorized Package (over Ground's
+     108" side limit — Express only or a hefty unauthorized charge), Ground Economy caps
+     (70 lb / 130" — the service is hidden), and FedEx's $50,000 per-package declared value
+     ceiling. (Additional Handling intentionally NOT flagged — too common to banner.) */
+  const quoteAdvisories=useMemo(()=>{
+    const notes=[];
+    pieces.forEach((p,i)=>{
+      const w=pw(p);
+      const tag=pieces.length>1?`Box #${i+1}`:"This package";
+      const L=+p.L||0,W=+p.W||0,H=+p.H||0;
+      const s=(L&&W&&H)?[L,W,H].sort((x,y)=>y-x):null;
+      const lg=s?s[0]+2*(s[1]+s[2]):0;
+      if(s&&s[0]>108&&s[0]<=119)notes.push(`${tag}'s longest side is over 108" — on Ground it's an Unauthorized Package charge; ship it Express only.`);
+      if(w>70||(lg&&lg>130))notes.push(`${tag} is over Ground Economy's limits (70 lb / 130" length+girth) — Ground Economy is hidden for this shipment.`);
+      if(lg>130&&lg<=165)notes.push(`${tag} is over 130" length+girth — FedEx's Oversize charge applies and it bills at a 90 lb minimum.`);
+      const dv=(pieces.length>1&&dvEach)?(+p.dv||0):(+insurance||0);
+      if(dv>50000)notes.push(`${tag}'s declared value is over FedEx's $50,000 per-package maximum — the booking will be rejected.`);
+    });
+    return notes;
+  },[JSON.stringify(pieces),dvEach,insurance]);
+  const shipment={fromZip:originZip,toZip:receiver.zip,toCountry:receiver.country||"United States",pieces:pieces.map(p=>({...p,weight:pw(p),declaredValue:(pieces.length>1&&dvEach)?(+p.dv||0):(+insurance||0)})),residential,signature,signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:(intl?(+insurance||0):((pieces.length>1&&dvEach)?pieces.reduce((a,p)=>a+(+p.dv||0),0):(+insurance||0)*Math.max(1,pieces.length)))||null,intl,packageTypeCode:orBox?orBox.code:""};   // per-box declaredValue rides the QUOTE too — FedEx prices coverage + signature for real
   // Front screen shows FedEx only. Blank-price skeleton before rates load — intl destinations get
   // the INTERNATIONAL skeleton so a domestic list never flashes on an international shipment.
   const FEDEX_SKELETON=intl?[
@@ -5714,14 +6235,14 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     const mask=(v)=>{v=String(v||"");return v.length>4?"…"+v.slice(-4):(v||"(empty)");};
     const diag={src:(eng&&eng._src)||"main",cust:mask(eng&&eng.customerId),key:mask(eng&&eng.apiKey),base:(eng&&eng.base)||"(no base URL)",enabled:!!(eng&&eng.enabled),hasKey:!!(eng&&eng.apiKey),hasCust:!!(eng&&eng.customerId),fromZip:originZip||"(none)"};
     if(eng&&eng.enabled){
-      setRateSrc(s=>({...s,loading:true,error:null,diag}));
+      setRateSrc({rates:[],live:false,loading:true,error:null,diag});   // CLEAR the old order's prices while fetching — stale rates were bookable against the new address
       getLiveRates(shipment,eng).then(res=>{ if(cancel)return;
-        if(res&&res.live&&res.rates&&res.rates.length) setRateSrc({rates:res.rates,live:true,loading:false,error:null,diag,oneRateError:res.oneRateRequested&&!res.oneRateOk?res.oneRateError:null});
-        else setRateSrc({rates:localQuotes(),live:false,loading:false,error:(res&&res.error)||null,diag});
+        if(res&&res.live&&res.rates&&res.rates.length) setRateSrc({rates:res.rates,live:true,loading:false,error:null,diag,dvPriced:res.dvPriced,oneRateError:res.oneRateRequested&&!res.oneRateOk?res.oneRateError:null});
+        else setRateSrc({rates:[],live:false,loading:false,error:(res&&res.error)||"FedEx returned no rates",diag});   // NO estimate fallback with a live account — an error shows instead of a guessed price
       });
     } else setRateSrc({rates:localQuotes(),live:false,loading:false,error:null,diag});
     return ()=>{cancel=true;};
-  },[JSON.stringify(pieces),receiver.zip,receiver.country,sender.zip,residential,signature,sigOption,saturday,insurance,intl,settings.england,client&&client.england]);
+  },[JSON.stringify(pieces),receiver.zip,receiver.country,sender.zip,residential,signature,sigOption,saturday,insurance,dvEach,intl,settings.england,client&&client.england]);
   // address classified yet? only then do we hide the non-matching ground product
   const addrClassified=!!(resTouched||(verify&&verify.type));
   const quotes=useMemo(()=>{
@@ -5735,6 +6256,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     /* International destination → ONLY international services; domestic destination → no
        international services. FedEx would reject the mismatch anyway, so never show it. */
     list=list.filter(q=>intl===isIntlService(q));
+    // Ground Economy caps at 70 lb / 130" length+girth per package — hide it when a box exceeds them
+    if(!groundEconOk(pieces))list=list.filter(q=>canonSvc(q.label)!=="ground_economy");
     /* Ground and Home Delivery are the same shipment mutually exclusive by address type: FedEx uses
        Home Delivery for residential, Ground for commercial. Once the address is classified, show ONLY
        the one that applies and drop the other, so you never see both. Before classification we don't
@@ -5754,16 +6277,30 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       }
       list=list.filter(q=>byFam[svcFamilyKey(q.label)]===q);
     }
-    return list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,list:q.list,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,client)});})
+    /* LIVE rates: FedEx priced declared value + signature INSIDE the returned amount (they ride
+       the rate request per package) — so locally we add ONLY the Saturday flat fee (a published
+       tariff amount, admin-tunable). Estimate mode (no live account) keeps the local fees so demo
+       prices stay plausible. NO fee is ever invented on top of a live FedEx price. */
+    const _live=!!rateSrc.live;
+    const _dvList=_live?null:pieces.map(p=>(pieces.length>1&&dvEach)?(+p.dv||0):(+insurance||0));
+    return list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,list:q.list,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:_live?"none":sigOption,saturday,insuranceList:_dvList,fees:surchargeFees(rateRules,client)});})
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
-  },[rateSrc,orRates,client,JSON.stringify(custom.hiddenServices||[]),JSON.stringify(client&&client.blockedServices||[]),rateRules,fxTransit,residential,addrClassified,sigOption,saturday,insurance,intl]);
+  },[rateSrc,orRates,client,JSON.stringify(custom.hiddenServices||[]),JSON.stringify(client&&client.blockedServices||[]),rateRules,fxTransit,residential,addrClassified,sigOption,saturday,insurance,intl,dvEach,JSON.stringify(pieces)]);
   const best=null;
+  /* Per-box facts for the "Per box" breakdown toggle: each box's declared value and its exact
+     per-package coverage fee (FedEx prices declared value per box — first $100 free per box). */
+  const perBox=useMemo(()=>{ if(pieces.length<2)return null; const _f=surchargeFees(rateRules,client);
+    return pieces.map((p,i)=>{const dv=(pieces.length>1&&dvEach)?(+p.dv||0):(+insurance||0);return {n:i+1,weight:pw(p),L:p.L,W:p.W,H:p.H,dv,ins:insuranceFee(dv,_f.insUnit,_f.insMin)};});
+  },[JSON.stringify(pieces),dvEach,insurance,rateRules,client]);
   const matched=useMemo(()=>{
     const resKnown=addrClassified?residential:null;   // ground↔home swap only once FedEx (or the override) has classified the address
     if(liveRuleMatch){ const rc=canonSvc(groundFamilySwap(liveRuleMatch,resKnown)); const hit=quotes.find(q=>canonSvc(q.label)===rc&&(q.sell??q.cost)!=null); if(hit)return {key:hit.key,src:"autopilot"}; }
-    /* Fallback service: if an order is loaded, Autopilot ran, and NO rule matched, honor the configured
-       fallback (Settings/Batch/Autopilot → Fallback) here on the Ship screen too. */
-    if(selectedOrder&&!liveRuleMatch&&liveRuleStatus&&liveRuleStatus.state==="no-match"){
+    /* Rule fired but pointed at Ground Economy on a shipment OVER its limits (70 lb / 130") — the
+       service is hidden, so treat it like no-match and let the fallback pick something bookable. */
+    const _geHidden=!!(liveRuleMatch&&canonSvc(groundFamilySwap(liveRuleMatch,resKnown))==="ground_economy"&&!groundEconOk(pieces));
+    /* Fallback service: if an order is loaded, Autopilot ran, and NO rule matched (or the rule's
+       service is unavailable), honor the configured fallback here on the Ship screen too. */
+    if(selectedOrder&&liveRuleStatus&&((!liveRuleMatch&&liveRuleStatus.state==="no-match")||_geHidden)){
       const fb=(cz(settings).fallbackService||"").trim();
       if(fb){
         const priced=quotes.filter(q=>(q.sell??q.cost)!=null);
@@ -5775,7 +6312,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     }
     const so=selectedOrder?orders.find(x=>x.id===selectedOrder):null;
     return matchServiceForOrder(quotes,so,resKnown);
-  },[quotes,selectedOrder,orders,liveRuleMatch,liveRuleStatus,residential,addrClassified,settings]);
+  },[quotes,selectedOrder,orders,liveRuleMatch,liveRuleStatus,residential,addrClassified,settings,JSON.stringify(pieces)]);
 
   /* If Autopilot's matched service is a FedEx One Rate box, auto-fill the One Rate box name into the
      configured field (invoice # by default) WITHOUT waiting for the user to click the rate row — so the
@@ -5783,14 +6320,23 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
      overwrites something the user typed. */
   useEffect(()=>{
     if(!matched)return;
-    const mq=quotes.find(q=>q.key===matched);
+    const mq=quotes.find(q=>q.key===matched.key);   // matched is {key,src} — comparing to the object made this effect dead code
     if(mq&&mq._oneRate&&mq.packageTypeCode){ try{ applyOneRateBox(mq.packageTypeCode); }catch(e){} }
   },[matched,quotes]);
 
   const buildRec=(q,carrier,extra)=>({id:Date.now(),date:new Date().toLocaleDateString(),tracking:(extra&&extra.tracking)||newTracking(carrier),carrier,service:q.label,recipient:{...receiver},sender:{...sender},fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,pieces:pieces.map(p=>({...p})),dims:pieces[0],insurance,cost:q.cost,sell:q.sell,rateBase:q.base,rateSurcharges:q.surcharges||[],rateAccessorials:q.accessorials||[],oneRate:!!q._oneRate,billTo,thirdAcct,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference,invoiceNo,poNo,residential,intl,bookNumber:extra&&extra.bookNumber,customs:intl?{...customs,total:customsTotal,ci:"CI-"+rnd(5)}:null});
   const print=async(q,force)=>{
-    /* No reprint-confirmation modal — printing an already-processed order just proceeds. The yellow
-       "already has a label" banner on the Ship screen is the non-blocking heads-up instead. */
+    /* Re-label guard: an order that already has a label must be explicitly confirmed before a new
+       one books — the new tracking OVERRIDES what's on Shopify/the store. Preview re-entry
+       (_confirmed) skips it so the question is asked once, at the first click. */
+    if(!q._confirmed&&!force){
+      const _so=selectedOrder&&orders.find(x=>x.id===selectedOrder);
+      const _dup=dupShipment(reference,shipments);
+      if((_so&&_so.status==="fulfilled")||_dup){
+        const _old=(_so&&_so.tracking)||(_dup&&_dup.tracking)||"";
+        if(!window.confirm("This order already has a label"+(_old?" — tracking "+_old:"")+".\n\nBooking a new label will OVERRIDE the current tracking and shipping info"+((_so&&_so.source==="Shopify")?" on Shopify":"")+".\n\nAre you sure you want to proceed?"))return;
+      }
+    }
     const carrier=carrierOf(q.label);
     const eng=englandFor(client,settings);
     const canBook=eng&&eng.enabled;
@@ -5815,6 +6361,20 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     }
     setRecErrors([]);
     if(custom.spendCap>0&&(q.sell??q.cost)>custom.spendCap){setShipStatus({state:"error",key:q.key,msg:`This rate is over your $${custom.spendCap} spending cap (Settings → Customizations).`});setTimeout(()=>setShipStatus(null),5000);return;}
+    /* Preview-first flow: the click does NOT book anything. A pre-booking preview shows exactly
+       what will be booked; clicking "Print label" there re-enters with _confirmed, which books
+       and prints straight (no second popup). Validations above run first so a broken shipment
+       shows its error instead of a preview. */
+    const _wantPrev=custom.previewBeforePrint!=null?!!custom.previewBeforePrint:!(custom.skipBookedSummary||custom.directNoPreview);
+    if(_wantPrev&&!q._confirmed){
+      setLabelPreview({pendingBook:true,service:q.label,carrier,sell:q.sell??q.cost,fxDate:q.fxDate,refNo:reference||invoiceNo||"",residential,
+        rec:{recipient:{name:receiver.name,company:receiver.company,city:receiver.city,state:receiver.state,zip:receiver.zip,address1:receiver.address1,phone:receiver.phone},service:q.label,carrier},
+        senderInfo:{name:sender.name,company:sender.company,address1:sender.address1,city:sender.city,state:sender.state,zip:sender.zip,phone:sender.phone},
+        pieceCount:pieces.length,weight:totalWeight,signature:sigOption!=="none",insurance:(pieces.length>1&&dvEach)?pieces.reduce((a,p)=>a+(+p.dv||0),0):(+insurance||0),
+        onCancel:()=>{autoBookedRef.current=null;},   // hands-free may try this order again after edits; a cancel is not a permanent skip
+        onConfirm:()=>{setLabelPreview(null);print({...q,_confirmed:true});}});
+      return;
+    }
     if(!canBook){
       onShipped(buildRec(q,carrier),selectedOrder);
       setBought(q.key);fireConfetti();setTimeout(()=>setBought(null),1800);
@@ -5828,12 +6388,13 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       shippingService:q.label,shippingTotal:String(q.sell??q.cost??"0.00"),contentDescription:"Merchandise",
       signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null,residential,
       billingParty:billTo==="third"?"third_party":(billTo==="receiver"?"receiver":"sender"),billingAccount:billTo==="third"?(thirdAcct||null):null,
+      fedexAccount:ruleAcct||undefined,   // Autopilot "Book on FedEx Account" rule override
       providerAccountId:eng.providerAccountId||null,
       sender:{...sender,country:sender.country||"US"},receiver:{...receiver,country:receiver.country||"US"},
-      pieces:pieces.map(p=>({weight:Math.ceil(pw(p)||1),length:p.L,width:p.W,height:p.H,declaredValue:intl?(p.value||null):null}))};   // book at the rounded-up billing weight the quote priced
+      pieces:pieces.map(p=>({weight:Math.ceil(pw(p)||1),length:p.L,width:p.W,height:p.H,declaredValue:(pieces.length>1&&dvEach)?(+p.dv||null):(+insurance||null)}))};   // book at the rounded-up billing weight the quote priced · per-box declared value applies intl too (p.value never existed — intl DV was silently dropped)
     const res=await shipCall({action:"ship",account:acctOf(eng),order});
     if(!res||!res.ok){setShipStatus({state:"error",key:q.key,msg:(res&&res.error)||"Booking failed"});setBought(null);return;}
-    const done=(st)=>{ justBookedRef.current=selectedOrder; const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec},settings,setLabelPreview); if(cz(settings).autoPackSlip){ const so=selectedOrder&&orders.find(x=>x.id===selectedOrder); setTimeout(()=>{ try{ printPackingSlipAuto([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:st.tracking||"",service:q.label}],settings); }catch(e){} },(!cz(settings).skipBookedSummary&&!cz(settings).directNoPreview)?0:2500); }   /* label pipeline gets a head start — its dialog must always beat the slip fallback */ if(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint){ setTimeout(()=>{ try{newShipment();}catch(e){} },900); };} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
+    const done=(st)=>{ justBookedRef.current=selectedOrder||"manual"; const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,pdfAll:(st.labels&&st.labels.length>1)?st.labels:undefined,tracking:st.tracking,service:q.label,carrier,rec:_rec,forcePrint:!!q._confirmed},settings,setLabelPreview); if(cz(settings).autoPackSlip){ const so=selectedOrder&&orders.find(x=>x.id===selectedOrder); setTimeout(()=>{ try{ printPackingSlipAuto([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:st.tracking||"",service:q.label}],settings,!!q._confirmed); }catch(e){} },(!q._confirmed&&(cz(settings).previewBeforePrint!=null?cz(settings).previewBeforePrint:!(cz(settings).skipBookedSummary||cz(settings).directNoPreview)))?0:2500); }   /* label pipeline gets a head start — its dialog must always beat the slip fallback */ if(cz(settings).printFlowV2?cz(settings).resetAfterPrint:(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint)){ setTimeout(()=>{ try{newShipment();}catch(e){} },900); };} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
     if(res.booked){done(res);return;}
     setShipStatus({state:"pending",key:q.key,orderId:res.orderId});
     pollLabel(eng,res.orderId,done).then(r=>{ if(r&&r.timedOut){ onPending&&onPending({orderId:res.orderId,rec:buildRec(q,carrier,{}),service:q.label,carrier,orderRef:selectedOrder}); setShipStatus({state:"pending_timeout",key:q.key});setBought(null);} });
@@ -5844,9 +6405,15 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
      once per order (ref), never while booking/booked. print() still runs its own required-
      field validation — a missing phone/email surfaces the normal error instead of booking. */
   const autoBookedRef=React.useRef(null);
+  /* Hands-free derivation. New print-flow accounts (printFlowV2 — they've touched the new
+     4-box settings) use autoBookOnShip strictly: skipBookedSummary now just means "no summary
+     popup" and must NOT arm auto-booking. Legacy accounts keep the self-heal: skipBookedSummary
+     alone meant hands-free on old builds where autoBookOnShip was never written. */
+  const handsFree=custom.printFlowV2?!!custom.autoBookOnShip:!!(custom.autoBookOnShip||custom.skipBookedSummary);
   useEffect(()=>{
-    if(!custom.autoBookOnShip||!custom.autoRulesOnShip)return;
+    if(!handsFree||!custom.autoRulesOnShip)return;
     if(!selectedOrder||autoBookedRef.current===selectedOrder)return;
+    if(hfArmed!==selectedOrder)return;   // not actively selected this session (e.g. restored on refresh) — wait for a click or scan
     if(!ready||rateSrc.loading||!rateSrc.live)return;
     if(!addrClassified)return;
     if(bought||shipStatus)return;
@@ -5857,7 +6424,39 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(!(eng&&eng.enabled))return;
     autoBookedRef.current=selectedOrder;
     print(q);
-  },[selectedOrder,matched,quotes,ready,rateSrc.live,rateSrc.loading,addrClassified,bought,shipStatus,custom.autoBookOnShip,custom.autoRulesOnShip]);
+  },[selectedOrder,hfArmed,matched,quotes,ready,rateSrc.live,rateSrc.loading,addrClassified,bought,shipStatus,handsFree,custom.autoRulesOnShip]);
+  /* Hands-free visibility: the auto-book above has eight silent guards, and when any one of
+     them blocks, the screen used to just… sit there, looking like a bug ("I still have to click
+     print"). This mirrors the guards IN ORDER and names the first blocker in plain language, so
+     the person (and a screenshot) can see exactly what hands-free is waiting on. */
+  const hfWait=useMemo(()=>{
+    if(!handsFree)return null;                                                   // hands-free off — nothing to say
+    if(bought||shipStatus)return null;                                           // booking / just booked — normal flow
+    if(selectedOrder&&autoBookedRef.current===selectedOrder){
+      // auto-book already fired for this order. If it actually booked, justBookedRef is set —
+      // stay quiet. If it BAILED (validation error, cancelled preview), say so instead of
+      // silently reading "ready" forever.
+      if(justBookedRef.current!=null)return null;
+      return {t:"warn",m:"auto-book already tried this order and stopped (see the error it showed) — fix the issue, then click the service to book it"};
+    }
+    if(!custom.autoRulesOnShip)return {t:"warn",m:"the service dropdown is set to “I choose the service” — switch it to a Pre-select option so hands-free can pick one"};
+    if(!selectedOrder)return {t:"info",m:custom.hideShipOrders?"no order loaded — scan an order and it books itself (manual shipments always wait for your click)":"no order loaded — hands-free only books orders opened from the sidebar or by scanning (manual shipments always wait for your click)"};
+    if(hfArmed!==selectedOrder)return {t:"info",m:custom.hideShipOrders?"this order was already on screen when the page loaded — scan it and it will book itself":"this order was already on screen when the page loaded — click it in the sidebar (or scan it) and it will book itself"};
+    if(!ready)return {t:"info",m:"waiting for a valid destination ZIP and weight"};
+    if(rateSrc.loading)return {t:"info",m:"waiting for live rates…"};
+    if(!rateSrc.live)return {t:"warn",m:"live rates aren't coming back (these are estimates) — hands-free never books on an estimate. Check the carrier account under Settings → FedEx Account"};
+    if(!addrClassified)return {t:"info",m:"waiting for FedEx to classify the address (residential vs commercial)…"};
+    if(!matched||matched.src!=="autopilot"){
+      const _rc=liveRuleMatch?canonSvc(groundFamilySwap(liveRuleMatch,addrClassified?residential:null)):"";
+      if(_rc==="ground_economy"&&!groundEconOk(pieces))return {t:"warn",m:"your rule picked Ground Economy, but this shipment is over its limits (70 lb / 130\" per box) — set a fallback service in Autopilot, or pick a service yourself"};
+      return {t:"warn",m:"no Autopilot rule matched this order, so it's waiting for your click — add a rule that covers it (or set a fallback service) under Batch → Autopilot"};
+    }
+    const q=quotes.find(x=>x.key===matched.key);
+    if(!q||(q.sell??q.cost)==null)return {t:"info",m:"the matched service hasn't returned a live price yet…"};
+    const eng=englandFor(client,settings);
+    if(!(eng&&eng.enabled))return {t:"warn",m:"no carrier account is enabled on this login, so live booking is off — hands-free can't book here"};
+    return {t:"info",m:"booking now…"};
+  },[handsFree,custom.autoRulesOnShip,custom.hideShipOrders,selectedOrder,hfArmed,ready,rateSrc.live,rateSrc.loading,addrClassified,matched,quotes,bought,shipStatus,client,settings,liveRuleMatch,JSON.stringify(pieces)]);
 
   const sendEmail=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Tracking for your ${settings.company} shipment ☁️`,type:"Shipped",body:emailMsg});setSent("email");setTimeout(()=>setSent(""),1800);};
   const sendLabel=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Your shipping label from ${settings.company}`,type:"Label",body:emailMsg});setSent("label");setTimeout(()=>setSent(""),1800);};
@@ -5900,7 +6499,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const saveDraft=()=>{setDraftName(reference||receiver.name||receiver.city||"");setNaming(true);};
   /* box-logic explanation banner shown while a packed order is loaded */
   const PackNote=()=>packNote?(<div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800 flex items-center gap-2"><Boxes className="w-3.5 h-3.5 shrink-0"/><span className="flex-1">Box logic packed this order: <b>{packNote.boxNames}</b> · {packNote.totalWt} lb billable{packNote.unresolved.length?` · ${packNote.unresolved.length} item${packNote.unresolved.length===1?"":"s"} not in your catalog (weight may be low)`:""} — dims are editable below.</span><button onClick={()=>setPackNote(null)} className="text-emerald-500 hover:text-emerald-700"><X className="w-3.5 h-3.5"/></button></div>):null;
-  const newShipment=()=>{justBookedRef.current=null;setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setRes(true);setResTouched(false);setSig(custom.defaultSignature&&custom.defaultSignature!=="none");setSigOption(custom.defaultSignature||"none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");setShipDate(shipDateDefault(settings));};
+  const newShipment=()=>{justBookedRef.current=null;setHfArmed(null);setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setDvEach(false);setRes(true);setResTouched(false);setSig(custom.defaultSignature&&custom.defaultSignature!=="none");setSigOption(custom.defaultSignature||"none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");setShipDate(shipDateDefault(settings));};
   const addressCheck=(
     <div className="text-xs space-y-2">
       <div className="text-[10px] uppercase tracking-widest text-stone-500 font-semibold flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5"/>Address check</div>
@@ -5931,7 +6530,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   );
   return (
     <div className="relative flex flex-row gap-4 items-start">
-      {ordersOpen?(
+      {!custom.hideShipOrders&&(ordersOpen?(
       <aside className="w-60 shrink-0 space-y-2">
         <div className="flex items-center justify-between gap-2">
           <button onClick={()=>setOrdersOpen(false)} className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-stone-500 hover:text-stone-700"><ChevronDown className="w-4 h-4"/><ShoppingBag className="w-4 h-4"/>Orders{ordersToShow.length?<span className="text-stone-400 normal-case font-normal">· {ordersToShow.length}</span>:""}</button>
@@ -5966,7 +6565,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       </aside>
       ):(
         <button onClick={()=>setOrdersOpen(true)} title="Show orders" className="shrink-0 self-start flex flex-col items-center gap-1 text-stone-500 hover:text-stone-700 hover:border-stone-300 border border-stone-200 bg-white rounded-lg px-1.5 py-2 w-9"><ChevronRight className="w-4 h-4"/><ShoppingBag className="w-4 h-4"/>{ordersToShow.length?<span className="text-[10px] font-bold text-[#0086E0] leading-none">{ordersToShow.length}</span>:null}</button>
-      )}
+      ))}
       <div className="flex-1 min-w-0 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-base font-semibold text-stone-800 flex items-center gap-2 whitespace-nowrap"><Package className="w-4 h-4 text-[#0086E0]"/>Create shipment</h1>
@@ -6010,7 +6609,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             </div>
             <div className="flex flex-wrap items-center gap-4">
               <span className="text-[11px] text-stone-400 font-mono">total {totalWeight} lb</span>
-              {!custom.hideInsure&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Insure $</span><input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0" className="w-16 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>}
+              {!custom.hideInsure&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">{pieces.length>1?"Insure $/box":"Insure $"}</span><input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} disabled={pieces.length>1&&dvEach} placeholder="0" title={pieces.length>1&&!dvEach?"Declared value applied to every box":undefined} className="w-16 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300 disabled:opacity-40"/>{pieces.length>1&&<label className="flex items-center gap-1 text-[11px] text-stone-500 cursor-pointer ml-0.5" title="Enter a different declared value on each box below"><input type="checkbox" checked={dvEach} onChange={e=>setDvEach(e.target.checked)} className="accent-[#0086E0]"/>per box</label>}</div>}
               <div className="flex items-center gap-1.5"><span className="text-[10px] uppercase tracking-widest text-stone-500">Signature</span><select value={sigOption} onChange={e=>{setSigOption(e.target.value);setSig(e.target.value!=="none");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="none">None</option><option value="direct">Direct signature</option><option value="indirect">Indirect signature</option><option value="adult">Adult signature</option></select></div>
               {quotes.some(q=>{const l=String(q.label||"").toLowerCase();return l.includes("fedex")&&/(overnight|2\s?day|express saver)/.test(l);})&&<label className="flex items-center gap-1.5 text-[11px] text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSat(e.target.checked)} className="accent-[#0086E0]"/><span className="uppercase tracking-widest text-stone-500">Saturday delivery <span className="normal-case text-stone-400">(Express only)</span></span></label>}
             </div>
@@ -6018,7 +6617,13 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <PackNote/>
           {isPOBox(receiver.address1)&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-xs text-rose-700 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>This looks like a PO Box — FedEx can’t deliver to PO Boxes. Use a street address (or USPS when available).</div>}
           {(()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);return so&&orderHasHazmat(so,settings.products||[])?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Contains a hazmat / lithium-battery item — ship ground only; air services aren’t allowed.</div>:null;})()}
-          {(()=>{const d=dupShipment(reference,shipments);return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex flex-wrap items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="flex-1 min-w-[180px]">Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}).</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:d.tracking}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><FileText className="w-3 h-3"/>See details</button><button onClick={()=>setLabelPreview({rec:d,tracking:d.tracking,service:d.service,carrier:d.carrier,pdf:d.labelPdf||d.pdf||null,fromExisting:true})} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><Printer className="w-3 h-3"/>Reprint</button><button onClick={newShipment} className="shrink-0 text-[11px] font-semibold text-white bg-stone-900 hover:bg-stone-800 border border-stone-900 rounded-lg px-2.5 py-1 flex items-center gap-1"><Plus className="w-3 h-3"/>New shipment</button></div>:null;})()}
+          {(()=>{const d=dupShipment(reference,shipments);
+            /* Our own just-booked label: in AUTO-reset mode the banner would only flash for the
+               ~1s before the form clears — suppress it. In "Keep the info" mode it stays, as the
+               visible record that this reference already has a label. */
+            const _autoReset=cz(settings).printFlowV2?cz(settings).resetAfterPrint:(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint);
+            if(justBookedRef.current!=null&&_autoReset)return null;
+            return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex flex-wrap items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="flex-1 min-w-[180px]">Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}).</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:d.tracking}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><FileText className="w-3 h-3"/>See details</button><button onClick={()=>setLabelPreview({rec:d,tracking:d.tracking,service:d.service,carrier:d.carrier,pdf:d.labelPdf||d.pdf||null,fromExisting:true})} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><Printer className="w-3 h-3"/>Reprint</button><button onClick={newShipment} className="shrink-0 text-[11px] font-semibold text-white bg-stone-900 hover:bg-stone-800 border border-stone-900 rounded-lg px-2.5 py-1 flex items-center gap-1"><Plus className="w-3 h-3"/>New shipment</button></div>:null;})()}
           {pieces.map((p,i)=>(
             <div key={i} className="flex flex-wrap items-end gap-2 bg-white border border-stone-200 rounded-lg px-2 py-2">
               <div className="text-[11px] text-stone-400 font-mono w-6">#{i+1}</div>
@@ -6028,6 +6633,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <PkgInput label="H" req value={p.H} onChange={e=>setPiece(i,{H:e.target.value})}/>
               <PkgInput label="Weight (lb)" req value={p.weight} onChange={e=>setPiece(i,{weight:e.target.value})} w="w-20"/>
               {!custom.hideOz&&<PkgInput label="oz" value={p.oz} onChange={e=>setPiece(i,{oz:e.target.value})}/>}
+              {!custom.hideInsure&&pieces.length>1&&dvEach&&<PkgInput label="Insure $" value={p.dv} onChange={e=>setPiece(i,{dv:e.target.value})} w="w-20"/>}
               {pieces.length>1&&<button onClick={()=>delPiece(i)} className="text-stone-300 hover:text-rose-500 mb-1"><Trash2 className="w-4 h-4"/></button>}
               {i===pieces.length-1&&<button onClick={addPiece} className="flex items-center gap-1 text-xs bg-stone-200 hover:bg-stone-300 rounded-lg px-2.5 py-1.5 font-medium text-stone-700 ml-1"><Plus className="w-3.5 h-3.5"/>Add package</button>}
             </div>
@@ -6035,15 +6641,12 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         </div>
 
 
-        {(client._unassigned||client._unresolved)&&<div className="flex flex-wrap items-center gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0"/>
-                  <span className="flex-1 min-w-[220px]">{client._unresolved?`This login is set to an unknown customer (id "${client.id}") — no such customer exists, so no account markup can apply.`:"This login has no customer assigned — quotes price at exactly the raw carrier cost, no markup at all."}</span>
-                  {currentUser&&setUsers&&setCurrentUser&&<select onChange={e=>{const cid=e.target.value;if(!cid)return;setCurrentUser(cu=>cu&&({...cu,clientId:cid}));setUsers(us=>us.map(u=>u.id===currentUser.id?{...u,clientId:cid}:u));e.target.value="";}} defaultValue="" className="bg-white border border-amber-300 rounded px-2 py-1 text-xs">
-                    <option value="" disabled>Assign to customer — fixes it instantly…</option>
-                    {clients.map(cc=><option key={cc.id} value={cc.id}>{cc.name}</option>)}
-                  </select>}
-                </div>}
-                {selectedOrder&&(()=>{const so=orders.find(o=>o.id===selectedOrder);return so&&(so.shippingService||so.source)?<div className="flex items-center gap-2 text-xs text-stone-600 bg-stone-100 border border-stone-200 rounded-lg px-3 py-2"><Truck className="w-3.5 h-3.5 text-stone-400"/>From order <b>{so.name}</b>{so.source?` (${so.source})`:""} — buyer requested <b>{so.shippingService||"Standard"}</b>.</div>:null;})()}
+        {/* "No customer assigned" banner removed: logins self-heal into a customer automatically
+            (see the App-shell effect) — customers must never see markup mechanics or the client list. */}
+                {(handsFree||selectedOrder)&&(()=>{const so=selectedOrder&&orders.find(o=>o.id===selectedOrder);
+                  if(!handsFree&&!(so&&(so.shippingService||so.source)))return null;
+                  /* hands-free: this box is ALWAYS here (fixed height) — only its text changes */
+                  return <div className="flex items-center gap-2 text-xs text-stone-600 bg-stone-100 border border-stone-200 rounded-lg px-3 py-2 min-h-[38px]"><Truck className="w-3.5 h-3.5 text-stone-400 shrink-0"/><span className="truncate">{so?<>From order <b>{so.name}</b>{so.source?` (${so.source})`:""} — buyer requested <b>{so.shippingService||"Standard"}</b>.</>:<span className="text-stone-400">No order loaded — scan an order (or pick one) and it fills in here.</span>}</span></div>;})()}
         {/* Rate-source banner — hideable via Settings → Customizations → Ship screen */}
         {ready&&!custom.hideRateSrcBar&&<div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
           {rateSrc.loading?<><Loader2 className="w-3.5 h-3.5 animate-spin"/>Fetching live rates…</>
@@ -6053,7 +6656,40 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {ready&&!custom.hideRateSrcBar&&!rateSrc.live&&!rateSrc.loading&&rateSrc.diag&&<div className="text-[11px] text-stone-400 -mt-1 px-1">
           Tried England on your <b>{rateSrc.diag.src==="customer"?"customer's":"main"}</b> account · from ZIP {rateSrc.diag.fromZip} · customer ID {rateSrc.diag.cust} · key {rateSrc.diag.key} · {rateSrc.diag.enabled?"live toggle ON":"live toggle OFF"}{!rateSrc.diag.hasKey?" · no API key found":""}{!rateSrc.diag.hasCust?" · no customer ID found":""}{rateSrc.diag.fromZip==="(none)"?" — no origin ZIP: set your sender ZIP or the customer's origin.":""}{rateSrc.error&&/401|invalid/i.test(rateSrc.error)?" — England rejected this key/ID pair. Re-enter it in Settings → Carrier accounts and Test again.":""}
         </div>}
-        {liveRuleStatus&&!custom.hideAutopilotBox&&<div className={`text-[11px] rounded px-3 py-2 mb-2 flex items-center gap-1.5 ${liveRuleStatus.state==="fired"?"bg-emerald-50 border border-emerald-200 text-emerald-800":liveRuleStatus.state==="error"?"bg-rose-50 border border-rose-200 text-rose-700":"bg-stone-50 border border-stone-200 text-stone-500"}`}>
+        {ready&&rateSrc.live&&rateSrc.dvPriced===false&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-2 text-xs text-rose-700 flex items-start gap-2">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span><b>Declared value fee missing:</b> you asked for coverage over $100, but FedEx's rates came back with <b>no itemized declared-value fee</b>. The totals below may not include coverage — verify before booking, and tell support if this persists.</span>
+        </div>}
+        {ready&&!rateSrc.loading&&!rateSrc.live&&rateSrc.error&&rateSrc.diag&&rateSrc.diag.enabled&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-2 text-xs text-rose-700">
+          <div className="font-semibold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Live FedEx rates didn't come back — no prices are shown (we never guess).</div>
+          <div className="mt-1">{String(rateSrc.error).slice(0,300)}</div>
+          <div className="mt-1 text-rose-500">Fix the issue (or adjust the shipment) and rates re-quote automatically.</div>
+        </div>}
+        {quoteProblems.length>0&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-2 text-xs text-rose-700 space-y-1">
+          <div className="font-semibold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>{quoteProblems.length===1?"Rates can't load — fix this:":"Rates can't load — fix these:"}</div>
+          {quoteProblems.map((p2,i2)=><div key={i2} className="flex items-start gap-1.5"><span className="shrink-0">•</span><span>{p2}</span></div>)}
+        </div>}
+        {quoteAdvisories.length>0&&<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2 text-xs text-amber-800 space-y-1">
+          <div className="font-semibold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Heads up — FedEx rules that affect this shipment:</div>
+          {quoteAdvisories.map((n2,i2)=><div key={i2} className="flex items-start gap-1.5"><span className="shrink-0">•</span><span>{n2}</span></div>)}
+        </div>}
+        {handsFree&&(()=>{ /* Hands-free: FIXED slim status strip, always rendered — only the text
+                   changes, so the screen never jumps when Autopilot/hands-free state updates. */
+          const fired=liveRuleStatus&&liveRuleStatus.state==="fired";
+          const _sw=fired?groundFamilySwap(liveRuleStatus.service,addrClassified?residential:null):null;
+          const ap=!liveRuleStatus?"waiting for an order…"
+            :fired?<>rule <b>“{liveRuleStatus.rule}”</b> → <b>{_sw}</b></>
+            :liveRuleStatus.state==="no-order"?"waiting for an order (open one from the sidebar or scan)"
+            :liveRuleStatus.state==="no-rules"?"on — but no rules are enabled"
+            :liveRuleStatus.state==="no-match"?"no rule matched this order — pick the service yourself"
+            :liveRuleStatus.state==="error"?("error: "+liveRuleStatus.msg)
+            :"—";
+          const hf=hfWait?hfWait.m:(shipStatus&&shipStatus.state==="booking"?"booking…":(shipStatus&&shipStatus.state==="booked"?"booked ✓":(bought?"printing…":"ready")));
+          return <div className="rounded-lg border border-stone-200 bg-stone-100 px-3 py-2 mb-2 text-xs leading-tight space-y-1 min-h-[38px]">
+            {!custom.hideAutopilotBox&&<div className="flex items-center gap-2 min-h-[18px]"><Zap className={`w-3.5 h-3.5 shrink-0 ${fired?"text-emerald-600":"text-stone-400"}`}/><span className={`truncate ${liveRuleStatus&&liveRuleStatus.state==="error"?"text-rose-600":fired?"text-emerald-700":"text-stone-600"}`}>Autopilot: {ap}</span></div>}
+            <div className="flex items-center gap-2 min-h-[18px]"><Printer className={`w-3.5 h-3.5 shrink-0 ${hfWait&&hfWait.t==="warn"?"text-amber-600":"text-stone-400"}`}/><span className={`truncate ${hfWait&&hfWait.t==="warn"?"text-amber-700":"text-stone-600"}`}>Hands-free: {hf}</span></div>
+          </div>;
+        })()}
+        {!handsFree&&liveRuleStatus&&!custom.hideAutopilotBox&&<div className={`text-[11px] rounded px-3 py-2 mb-2 flex items-center gap-1.5 ${liveRuleStatus.state==="fired"?"bg-emerald-50 border border-emerald-200 text-emerald-800":liveRuleStatus.state==="error"?"bg-rose-50 border border-rose-200 text-rose-700":"bg-stone-50 border border-stone-200 text-stone-500"}`}>
           <Zap className="w-3.5 h-3.5 shrink-0"/>
           {liveRuleStatus.state==="fired"&&(()=>{const _sw=groundFamilySwap(liveRuleStatus.service,addrClassified?residential:null);return <span>Autopilot rule <b>"{liveRuleStatus.rule}"</b> matched this order — highlighted <b>{_sw}</b> below{_sw!==liveRuleStatus.service&&<span> (rule says {liveRuleStatus.service}, but FedEx classified this address {residential?"residential, so Home Delivery applies":"commercial, so Ground applies"})</span>}.</span>;})()}
           {liveRuleStatus.state==="no-order"&&<span>Autopilot is on, but no order is loaded on this screen — it only checks orders pulled in from the sidebar, not manually-typed shipments.</span>}
@@ -6061,7 +6697,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           {liveRuleStatus.state==="no-match"&&<span>Autopilot is on — none of your rules matched this order, so nothing was auto-selected.</span>}
           {liveRuleStatus.state==="error"&&<span>Autopilot hit an error checking this order: {liveRuleStatus.msg}</span>}
         </div>}
-        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
+        {!handsFree&&hfWait&&<div className={`text-[11px] rounded px-3 py-2 mb-2 flex items-center gap-1.5 ${hfWait.t==="warn"?"bg-amber-50 border border-amber-200 text-amber-800":"bg-[#E6F4FF]/60 border border-[#99D6FF] text-[#006FBF]"}`}>
+          <Printer className="w-3.5 h-3.5 shrink-0"/>
+          <span><b>Hands-free:</b> {hfWait.m}</span>
+        </div>}
+        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
         {intl&&(
           <div className="border border-[#99D6FF] bg-[#E6F4FF]/40 rounded-lg p-3 space-y-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-[#006FBF]"><FileText className="w-4 h-4"/>Customs · Commercial invoice</div>
@@ -6149,9 +6789,9 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             
           </div>
         )}
-        {labelPreview&&<LabelPreviewModal data={labelPreview} settings={settings} onNewShipment={newShipment} onClose={()=>{setLabelPreview(null);if(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint)newShipment();}}/>}
+        {labelPreview&&<LabelPreviewModal data={labelPreview} settings={settings} onNewShipment={newShipment} onClose={()=>{const pend=labelPreview&&labelPreview.pendingBook;setLabelPreview(null);if(!pend&&(cz(settings).printFlowV2?cz(settings).resetAfterPrint:(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint)))newShipment();}}/>}
         {naming&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setNaming(false)}><div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-sm space-y-3" onClick={e=>e.stopPropagation()}><div className="text-sm font-semibold text-stone-800">Name this draft</div><input autoFocus value={draftName} onChange={e=>setDraftName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")commitDraft(draftName.trim());}} placeholder="e.g. Dana Cole – Miami" className="w-full bg-white border border-stone-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><div className="flex justify-end gap-2"><button onClick={()=>setNaming(false)} className="text-sm px-3 py-1.5 rounded text-stone-600 hover:bg-stone-100">Cancel</button><button onClick={()=>commitDraft(draftName.trim())} className="text-sm px-3 py-1.5 rounded bg-stone-900 text-white font-medium hover:bg-stone-800">Save draft</button></div></div></div>}
-        {shipStatus&&<div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2.5 ${shipStatus.state==="error"?"bg-rose-50 text-rose-700 border border-rose-200":shipStatus.state==="booked"?"bg-emerald-50 text-emerald-700 border border-emerald-200":shipStatus.state==="pending_timeout"?"bg-amber-50 text-amber-700 border border-amber-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
+        {shipStatus&&(!handsFree||shipStatus.state==="error"||shipStatus.state==="pending_timeout")&&<div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2.5 ${shipStatus.state==="error"?"bg-rose-50 text-rose-700 border border-rose-200":shipStatus.state==="booked"?"bg-emerald-50 text-emerald-700 border border-emerald-200":shipStatus.state==="pending_timeout"?"bg-amber-50 text-amber-700 border border-amber-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
           {shipStatus.state==="booking"&&<><Loader2 className="w-4 h-4 animate-spin"/>Booking label on your FedEx account…</>}
           {shipStatus.state==="pending"&&<><Loader2 className="w-4 h-4 animate-spin"/>Order pushed to England — waiting for it to book and return the label…</>}
           {shipStatus.state==="booked"&&<><CheckCircle2 className="w-4 h-4"/>Label printed{shipStatus.tracking?<> · tracking <span className="font-mono">{shipStatus.tracking}</span></>:""} — moved to Shipments.</>}
@@ -6239,8 +6879,10 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
      their PrintNode-failed fallback), for explicit reprints (fromExisting), and for the
      legacy "auto-open the print dialog" checkbox. */
   const _pc=cz(st);
-  const previewMode=!_pc.skipBookedSummary&&!_pc.directNoPreview;
-  const autoPrintOff=previewMode&&!data.fromExisting&&!((st.printer||{}).autoPrint);
+  const previewMode=_pc.previewBeforePrint!=null?!!_pc.previewBeforePrint:(!_pc.skipBookedSummary&&!_pc.directNoPreview);
+  // forcePrint = the person already confirmed "Print label — book it": if this modal opens (PrintNode
+  // fallback), it must PRINT, not sit as a passive preview waiting for a second click.
+  const autoPrintOff=previewMode&&!data.fromExisting&&!data.forcePrint&&!((st.printer||{}).autoPrint);
   const [hasPrinted,setHasPrinted]=useState(false);
   const docCtx=recToDocCtx(data.rec||{...data,recipient:data.recipient,service:data.service,tracking:data.tracking,carrier:data.carrier});
   const rcpLogo=(st.companyLogo)||"";
@@ -6253,15 +6895,20 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
     try{ const u=pdfBlobUrl(data.pdf); setUrl(u); setTimeout(()=>{},0); }catch(e){ setPgErr("This label PDF couldn't be decoded."); }
     (async()=>{
       try{
-        let r=await pdfToImages(data.pdf,3);
+        /* Multipiece: render EVERY per-box label PDF into the page list (one label per box). */
+        const srcPdfs=(data.pdfAll&&data.pdfAll.length>1)?data.pdfAll:[data.pdf];
+        let r={imgs:[],wIn:4,hIn:6};
+        for(const b of srcPdfs){ const r0=await pdfToImages(b,3); if(r0&&r0.imgs.length){ r.imgs=r.imgs.concat(r0.imgs); r.wIn=r0.wIn; r.hIn=r0.hIn; } }
         if(dead)return;
         if(!r.imgs.length)throw new Error("no pages");
-        try{ const cc=cz(st); const lg=cc.labelLogo||st.companyLogo||""; r.imgs=await stampLogo(r.imgs,cc,lg); }catch(e){}
+        let _rcpt=null;
+        try{ const ex=await applyPrintExtras(r.imgs,docCtx); r.imgs=ex.imgs; _rcpt=ex.receipt; }catch(e){}   // logo stamped; receipt appended AFTER compose (never doc-tabbed)
         try{ r=await composeForStock(r.imgs,r.wIn,r.hIn,docCtxFor(data.rec,data.tracking)); }catch(e){}
+        if(_rcpt)r={...r,imgs:[...r.imgs,_rcpt]};
         setPages(r);
         if(!printed.current&&data.autoPrint!==false&&!autoPrintOff){
           printed.current=true; setHasPrinted(true);
-          const sent=await directPrintPdf(data.pdf,undefined,docCtxFor(data.rec,data.tracking));
+          let sent=true; for(const b of srcPdfs){ if(!(await directPrintPdf(b,undefined,docCtxFor(data.rec,data.tracking))))sent=false; }
           if(sent){ if(cz(st).skipBookedSummary&&!dead)onClose(); }
           else printImagePages(r.imgs,r.wIn,r.hIn,()=>{ if(cz(st).skipBookedSummary&&!dead)onClose(); });   // fires once the system print dialog closes
         }
@@ -6290,7 +6937,7 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
     if(pages&&pages.imgs.length){ printImagePages(pages.imgs,pages.wIn,pages.hIn,flushSlips); }
     else { await printLabelPdf(data.pdf,st,docCtxFor(data.rec,data.tracking)); flushSlips(); } };
   const [copied,setCopied]=useState(false);
-  const [showLabel,setShowLabel]=useState(autoPrintOff);   // real preview mode: the label is visible immediately
+  const [showLabel,setShowLabel]=useState(autoPrintOff&&data.autoPrint!==false);   // real preview mode shows the label immediately; the booked SUMMARY keeps it tucked behind "View label"
   const copyTracking=async()=>{ const t=String(data.tracking||""); if(!t)return;
     try{ await navigator.clipboard.writeText(t); }
     catch(e){ try{ const ta=document.createElement("textarea");ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove(); }catch(e2){} }
@@ -6306,6 +6953,38 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
     window.location.href="mailto:"+encodeURIComponent(to)+"?subject="+encodeURIComponent(subject)+"&body="+encodeURIComponent(body);
   };
   const download=()=>{ if(!url)return; const a=document.createElement("a");a.href=url;a.download=`label-${data.tracking||"shipment"}.pdf`;a.click(); };
+  /* Pre-booking preview: NOTHING has been booked yet. Shows exactly what will be booked;
+     "Print label" books it for real and prints straight (no second popup). */
+  if(data.pendingBook){
+    const r=(data.rec&&data.rec.recipient)||{};
+    const cancel=()=>{ try{data.onCancel&&data.onCancel();}catch(e){} onClose&&onClose(); };
+    return (
+      <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={cancel}>
+        <div className="bg-white rounded-xl w-full max-w-md max-h-[92vh] flex flex-col overflow-hidden shadow-2xl" onClick={e=>e.stopPropagation()}>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-stone-200 shrink-0">
+            <div><div className="font-semibold text-stone-800 flex items-center gap-2"><Printer className="w-4 h-4 text-[#0086E0]"/>Review before booking</div><div className="text-[11px] text-stone-400">Nothing is booked yet — the label is created when you click Print label.</div></div>
+            <button onClick={cancel} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button>
+          </div>
+          <div className="px-4 pt-3 overflow-y-auto">
+            <MockLabelImg to={r} sender={data.senderInfo} service={data.service} weight={data.weight} pieceCount={data.pieceCount} refNo={data.refNo} residential={data.residential}/>
+            <div className="text-[10px] text-stone-400 text-center mt-1">Preview — the real label (with live barcode &amp; tracking) is created when you book.</div>
+          </div>
+          <div className="p-4 space-y-2 text-sm">
+            <div className="flex justify-between"><span className="text-stone-500">Service</span><span className="font-medium text-stone-800">{data.service}</span></div>
+            <div className="flex justify-between"><span className="text-stone-500">Price</span><span className="font-mono font-semibold text-stone-900">{data.sell!=null?money(data.sell):"—"}</span></div>
+            <div className="flex justify-between"><span className="text-stone-500">To</span><span className="text-right text-stone-800">{r.name||r.company||"—"}{r.company&&r.name?<span className="block text-[11px] text-stone-500">{r.company}</span>:null}<span className="block text-[11px] text-stone-500">{[r.address1,r.city,r.state,r.zip].filter(Boolean).join(", ")}</span></span></div>
+            <div className="flex justify-between"><span className="text-stone-500">Packages</span><span className="text-stone-800">{data.pieceCount||1} · {data.weight} lb total</span></div>
+            {data.signature?<div className="flex justify-between"><span className="text-stone-500">Signature</span><span className="text-stone-800">Yes</span></div>:null}
+            {data.insurance>0?<div className="flex justify-between"><span className="text-stone-500">Declared value</span><span className="font-mono text-stone-800">{money(data.insurance)}</span></div>:null}
+          </div>
+          <div className="px-4 pb-4 flex gap-2 shrink-0">
+            <button onClick={()=>data.onConfirm&&data.onConfirm()} className="flex-1 bg-stone-900 text-white rounded-lg px-4 py-2.5 font-medium hover:bg-stone-800 flex items-center justify-center gap-2"><Printer className="w-4 h-4"/>Print label — book it</button>
+            <button onClick={cancel} className="px-4 py-2.5 text-sm text-stone-500 hover:text-stone-800 border border-stone-200 rounded-lg">Cancel</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl" onClick={e=>e.stopPropagation()}>
@@ -6386,34 +7065,54 @@ function matchRequestedService(quotes,requested,res=null){
   const hit=quotes.find(q=>canonSvc(q.label)===c&&(q.sell??q.cost)!=null);
   return hit?hit.key:null;
 }
-function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=true,onOneRate,custom=CUSTOM_DEFAULTS,matched=null,matchedSrc=null,collapsible=false,oneRateWarning=null,billing=null,live=false,loading=false,addrClassified=true}){
+function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=true,onOneRate,custom=CUSTOM_DEFAULTS,matched=null,matchedSrc=null,collapsible=false,oneRateWarning=null,billing=null,live=false,loading=false,addrClassified=true,perBox=null}){
   const [showAll,setShowAll]=useState(false);
-  /* Once Autopilot has matched a service, stay collapsed on it. The Ground<->Home Delivery swap (fired
-     when FedEx classifies the address) briefly points `matched` at a key that's just been dropped from
-     the list — without this hold, `collapse` flips false for one frame and the whole list expands then
-     re-collapses, so it visibly bounces up and down. We hold the collapsed state through that swap: as
-     long as a match exists (or is about to resolve), we don't expand. */
+  /* "Hide other services" mode shows ONE service box. It must stay a single box at all times —
+     switching orders and the Ground<->Home Delivery swap (FedEx address classification, which also
+     reprices) both briefly leave `matched` pointing at a key that's momentarily absent. Earlier this
+     made the whole list expand then re-collapse (closed→open→closed). The collapse decision no longer
+     depends on `matched`/`loading` at all: in matchedOnly mode we ALWAYS collapse (until the user
+     clicks "Show all"), and only the CONTENTS of the one box change. */
   const lastMatchFamRef=React.useRef(null);
   const matchStillPresent=matched&&quotes.some(q=>q.key===matched);
   if(matchStillPresent){ const mq=quotes.find(q=>q.key===matched); if(mq)lastMatchFamRef.current=svcFamilyKey(mq.label); }
-  const wasCollapsedRef=React.useRef(false);
-  const collapseBase=collapsible&&custom.matchedOnly&&matched&&!showAll;
-  if(collapseBase&&matchStillPresent)wasCollapsedRef.current=true;
-  if(!matched||showAll)wasCollapsedRef.current=false;
-  // collapse if the match is present, OR we were already collapsed and are mid-swap (match momentarily absent)
-  const collapse=collapseBase&&(matchStillPresent||wasCollapsedRef.current);
-  /* The rows to show when collapsed: the matched quote — but if the swap has momentarily dropped the
-     exact matched key, fall back to the same service FAMILY (ground<->home) so the single row never
-     blinks out and back. This keeps exactly one stable row visible through the whole swap. */
+  const collapse=collapsible&&custom.matchedOnly&&!showAll;
+  /* The single row to show when collapsed. In order of preference: the exact matched quote → the same
+     service FAMILY (so a Ground<->Home swap just relabels the one box) → the last row we showed (covers
+     the instant the list is empty mid-reprice) → the cheapest priced service (an order with no match
+     still shows one sensible box instead of expanding). Exactly one stable row, always. */
+  const lastRowsRef=React.useRef([]);
   const collapsedRows=()=>{
+    if(!quotes.length)return lastRowsRef.current;   // momentary empty during a reprice — keep the last row visible
     let r=quotes.filter(q=>q.key===matched);
     if(!r.length&&matched){ const mfam=(()=>{const mq=quotes.find(q=>q.key===matched);return mq?svcFamilyKey(mq.label):null;})();
-      const famKey=lastMatchFamRef.current||mfam;
+      const famKey=mfam||lastMatchFamRef.current;
       if(famKey)r=quotes.filter(q=>svcFamilyKey(q.label)===famKey).slice(0,1); }
+    if(!r.length&&lastMatchFamRef.current)r=quotes.filter(q=>svcFamilyKey(q.label)===lastMatchFamRef.current).slice(0,1);
+    if(!r.length)r=[...quotes].filter(q=>(q.sell??q.cost)!=null).sort((a,b)=>(((a.sell??a.cost)||1e9))-(((b.sell??b.cost)||1e9))).slice(0,1);
+    if(r.length)lastRowsRef.current=r;                       // remember a good row…
+    else if(lastRowsRef.current.length)r=lastRowsRef.current; // …and reuse it while the list is momentarily empty
     return r;
   };
   const [view,setView]=useState(custom.defaultView||"cheapest");
   const [open,setOpen]=useState(null);
+  const [breakView,setBreakView]=useState("all");   // "all" = whole-shipment breakdown · "box" = per-box breakdown (multipiece)
+  /* STATIC service boxes: rows sit in a FIXED service-ladder order (never price-sorted mid-load,
+     never reordering as prices stream in) — only the text inside each box updates. A service that
+     was on screen and becomes unavailable for this shipment keeps its box with a red
+     "Unavailable" button instead of vanishing (tombstone per family, cleared when the list
+     empties for a new shipment). */
+  const LADDER=["ground_economy","ground_family","express_saver","2day","2day_am","standard_overnight","priority_overnight","first_overnight"];
+  const famRank=(l)=>{const k=svcFamilyKey(l);const base=k.replace(/^or_/,"");let i=LADDER.indexOf(base);if(i<0)i=LADDER.indexOf(k);const or=/one\s*rate/i.test(String(l))?100:0;return (i<0?50:i)+or;};
+  const ladderSort=(a,b)=>famRank(a.label)-famRank(b.label)||String(a.label).localeCompare(String(b.label));
+  const tombRef=React.useRef({});
+  const rowsForView=(list)=>{
+    if(!list.length){tombRef.current={};return list;}
+    const seen=new Set(list.map(q=>svcFamilyKey(q.label)));
+    for(const q of list)tombRef.current[svcFamilyKey(q.label)]=q;
+    const tombs=Object.keys(tombRef.current).filter(k=>!seen.has(k)).map(k=>({...tombRef.current[k],sell:null,cost:null,_unavailable:true}));
+    return [...list,...tombs].sort(ladderSort);
+  };
   const Row=(q)=>{
     const isOpen=open===q.key;
     const fxDate=q.fxDate?new Date(q.fxDate+"T00:00:00"):null;
@@ -6436,7 +7135,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
     comps=[...comps,...acc.map(a=>({label:a.label,amount:a.amount}))];
     const hasPrice=sell!=null;
     return (
-      <div key={svcFamilyKey(q.label)} className={"border rounded-lg bg-white transition-all duration-200 "+(matched===q.key?"border-[#0086E0] ring-1 ring-[#0086E0]":"border-stone-200")}>
+      <div key={q.key||svcFamilyKey(q.label)} className={"border rounded-lg bg-white transition-all duration-200 "+(matched===q.key?"border-[#0086E0] ring-1 ring-[#0086E0]":"border-stone-200")}>
         <div onClick={()=>{setOpen(isOpen?null:q.key); if(q._oneRate&&q.packageTypeCode&&onOneRate)onOneRate(q.packageTypeCode);}} className="px-3 py-2 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
           <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isOpen?"rotate-90":""}`}/>
           {matched===q.key&&<span className="text-[10px] font-semibold uppercase tracking-wide bg-[#E6F4FF] text-[#0086E0] border border-[#99D6FF] rounded px-1.5 py-0.5 shrink-0 inline-flex items-center gap-1">{matchedSrc==="autopilot"&&<Zap className="w-3 h-3"/>}{matchedSrc==="autopilot"?"Autopilot":"Requested"}</span>}
@@ -6445,20 +7144,52 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
             <div className="text-[11px] text-stone-500 flex items-center gap-1"><Calendar className="w-3 h-3"/>Transit Time: {days?(custom.transitStyle==="days"?<>{days} business day{days>1?"s":""}</>:<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}</div>
           </div>
           <div className="text-right font-mono">{!!(custom.priceWarn>0&&ready&&hasPrice&&sell>custom.priceWarn)&&<div className="text-[10px] text-amber-600 flex items-center justify-end gap-0.5" title={"Above your $"+custom.priceWarn+" price alert"}><AlertTriangle className="w-3 h-3"/>over limit</div>}<div className="text-base font-semibold text-stone-900">{!ready?<span className="text-stone-300">—</span>:(live||fxLive)?(hasPrice?money(sell):<span className="text-stone-300">—</span>):loading?<span className="text-[11px] font-normal text-stone-400">pricing…</span>:(hasPrice?money(sell):<span className="text-stone-300">—</span>)}</div></div>
-          {action&&<button onClick={(e)=>{e.stopPropagation();action(q);}} disabled={!ready||!hasPrice} title={!hasPrice&&q._oneRate?"England’s rate API doesn’t return One Rate flat pricing — pick a priced service, or book One Rate in Webship.":undefined} className={`shrink-0 w-32 text-sm rounded px-3 py-2 font-medium flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed ${bought===q.key?"bg-[#0086E0] text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{bought===q.key?<><Check className="w-4 h-4"/>{doneLabel}</>:!hasPrice&&q._oneRate?<>No quote</>:<><Printer className="w-4 h-4"/>{label}</>}</button>}
+          {action&&(()=>{const unavailable=q._unavailable||(!hasPrice&&!loading&&live);
+            return <button onClick={(e)=>{e.stopPropagation();if(!unavailable)action(q);}} disabled={!ready||!hasPrice||unavailable} title={unavailable?"FedEx isn't offering this service for this shipment (size/weight/destination).":!hasPrice&&q._oneRate?"No One Rate flat price came back — pick a priced service.":undefined} className={`shrink-0 w-32 text-sm rounded px-3 py-2 font-medium flex items-center justify-center gap-1.5 disabled:cursor-not-allowed ${unavailable?"bg-rose-50 text-rose-600 border border-rose-200":bought===q.key?"bg-[#0086E0] text-white":"bg-stone-900 text-white hover:bg-stone-800 disabled:opacity-40"}`}>{unavailable?<>Unavailable</>:bought===q.key?<><Check className="w-4 h-4"/>{doneLabel}</>:!hasPrice&&q._oneRate?<>No quote</>:<><Printer className="w-4 h-4"/>{label}</>}</button>;})()}
         </div>
         {isOpen&&ready&&hasPrice&&<div className="px-4 pb-3 pt-1 border-t border-stone-100">
-          <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Rate breakdown</div>
-          <div className="space-y-1">
-            {comps.map((c,i)=><div key={i} className="flex justify-between text-[13px]"><span className="text-stone-600">{c.label}</span><span className="font-mono text-stone-700">{money(c.amount)}</span></div>)}
-            <div className="flex justify-between text-[13px] border-t border-stone-200 pt-1 mt-1 font-semibold"><span>Total</span><span className="font-mono">{money(sell)}</span></div>
-          </div>
-          {/* Weight note shows ONLY when dimensional weight governs — no box on ordinary actual-weight quotes */}
-          {billing&&!q._oneRate&&(q.dimWeight||billing.dimApplies)&&<div className="text-[11px] text-stone-500 bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 mt-2 space-y-0.5">
-              <div>Quoted at <b>{q.quotedWeight||billing.billed} lb</b>.</div>
-              <div className="text-amber-700 flex items-center gap-1"><AlertTriangle className="w-3 h-3 shrink-0"/>Dimensional weight applies: {billing.dims?billing.dims+" ÷ 139 = ":""}<b>{q.quotedWeight||billing.dim} lb</b>, more than the {billing.quoted} lb actual — FedEx bills the higher.</div>
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="text-[10px] uppercase tracking-widest text-stone-400">Rate breakdown</div>
+            {perBox&&perBox.length>1&&<div className="flex bg-stone-100 rounded-lg p-0.5 text-[11px]">
+              {[["all","Whole shipment"],["box","Per box"]].map(([v,l])=><button key={v} onClick={e=>{e.stopPropagation();setBreakView(v);}} className={`px-2 py-0.5 rounded-md ${breakView===v?"bg-white shadow-sm text-stone-800 font-medium":"text-stone-500"}`}>{l}</button>)}
             </div>}
-          {!billing&&q.dimWeight&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 mt-2 flex items-center gap-1.5"><AlertTriangle className="w-3 h-3 shrink-0"/>Billed at <b>{q.quotedWeight?`${q.quotedWeight} lb `:""}dimensional weight</b>.</div>}
+          </div>
+          {(!perBox||perBox.length<2||breakView==="all")
+            ?<div className="space-y-1">
+              {comps.map((c,i)=><div key={i} className="flex justify-between text-[13px]"><span className="text-stone-600">{c.label}</span><span className="font-mono text-stone-700">{money(c.amount)}</span></div>)}
+              <div className="flex justify-between text-[13px] border-t border-stone-200 pt-1 mt-1 font-semibold"><span>Total</span><span className="font-mono">{money(sell)}</span></div>
+            </div>
+            :(()=>{ /* per-box view: EVERY charge line lands on a box. Freight and % charges (fuel)
+                       follow each box's freight/weight share; per-package surcharges (DAS,
+                       residential, additional handling, peak…) split evenly across boxes;
+                       declared value is exact per box. The last box absorbs rounding pennies so
+                       every column reconciles to the exact shipment total. Signature/Saturday are
+                       one-per-delivery, so they stay listed once at shipment level. */
+              const totW=perBox.reduce((a,b)=>a+(+b.weight||0),0)||1;
+              const insTotal=Math.round(perBox.reduce((a,b)=>a+(b.ins||0),0)*100)/100;
+              const shared=acc.filter(a2=>!/declared value/i.test(a2.label||""));
+              const sharedTotal=Math.round(shared.reduce((a2,e2)=>a2+(e2.amount||0),0)*100)/100;
+              const N=perBox.length;
+              const split=(amount,byWeight)=>{ const out=perBox.map(b=>byWeight?Math.round(amount*((+b.weight||0)/totW)*100)/100:Math.round(amount/N*100)/100);
+                const drift=Math.round((amount-out.reduce((a2,x2)=>a2+x2,0))*100)/100; out[N-1]=Math.round((out[N-1]+drift)*100)/100; return out; };
+              const carrier=comps.slice(0,comps.length-acc.length);   // Base rate + every carrier surcharge (fuel, DAS, residential…), already sell-scaled
+              const lines=carrier.length
+                ?carrier.map(c=>({label:c.label,shares:split(c.amount,/base|rate|fuel|freight/i.test(c.label||""))}))
+                :[{label:"Freight",shares:split(Math.max(0,Math.round((sell-insTotal-sharedTotal)*100)/100),true)}];
+              return <div className="space-y-1.5">
+                {perBox.map((b,bi)=>{const bt=Math.round((lines.reduce((a2,l2)=>a2+(l2.shares[bi]||0),0)+(b.ins||0))*100)/100;
+                  return <div key={bi} className="border border-stone-100 rounded-lg px-2.5 py-1.5 bg-stone-50/50">
+                    <div className="flex justify-between text-[12px] font-medium text-stone-700 mb-0.5"><span>Box #{b.n} · {b.weight} lb{b.L&&b.W&&b.H?` · ${b.L}×${b.W}×${b.H}"`:""}</span><span className="font-mono">{money(bt)}</span></div>
+                    {lines.map((l2,li)=>l2.shares[bi]?<div key={li} className="flex justify-between text-[11px] text-stone-500"><span>{l2.label}</span><span className="font-mono">{money(l2.shares[bi])}</span></div>:null)}
+                    {b.dv>0&&<div className="flex justify-between text-[11px] text-stone-500"><span>Declared value ${b.dv}{!b.ins?" — first $100 is free":""}</span><span className="font-mono">{money(b.ins||0)}</span></div>}
+                  </div>;})}
+                {shared.map((s,i2)=><div key={"sh"+i2} className="flex justify-between text-[11px] text-stone-500 px-2.5"><span>{s.label} (whole shipment)</span><span className="font-mono">{money(s.amount)}</span></div>)}
+                <div className="flex justify-between text-[13px] border-t border-stone-200 pt-1 mt-1 font-semibold"><span>Total</span><span className="font-mono">{money(sell)}</span></div>
+                <div className="text-[10px] text-stone-400">Fuel follows each box's freight share; per-package surcharges split across boxes; declared value is exact per box — adds up to exactly what you're charged.</div>
+              </div>;
+            })()}
+          {/* One quiet line when dimensional weight governs — no calculator, no math lesson */}
+          {((billing&&!q._oneRate&&(q.dimWeight||billing.dimApplies))||(!billing&&q.dimWeight))&&(()=>{const _bw=q.quotedWeight||(billing&&billing.billed)||null;return <div className="text-[11px] text-stone-500 mt-2">Billed at {_bw?<b>{_bw} lb</b>:null} dim weight.</div>;})()}
         </div>}
       </div>
     );
@@ -6476,8 +7207,8 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
         </div>}
       </div>
       {view==="cheapest"
-        ? <div className="space-y-1">{[...(collapse?collapsedRows():quotes)].sort((a,b)=>(((a.sell??a.cost)||1e9))-(((b.sell??b.cost)||1e9))).map(Row)}{collapse&&<button onClick={()=>setShowAll(true)} className="w-full text-xs text-stone-500 hover:text-stone-700 border border-dashed border-stone-300 rounded-lg py-1.5 flex items-center justify-center gap-1">Show all services <ChevronRight className="w-3.5 h-3.5 rotate-90"/></button>}</div>
-        : CARRIER_ORDER.map(c=>{const list=(collapse?collapsedRows():quotes).filter(q=>q.carrier===c);if(!list.length)return null;return (<div key={c} className="mb-4"><div className="mb-2 pb-1.5 border-b border-stone-200"><CarrierMark carrier={c}/></div><div className="space-y-1.5">{list.map(Row)}</div></div>);})}
+        ? <div className="space-y-1">{(collapse?collapsedRows():rowsForView(quotes)).map(Row)}{collapse&&<button onClick={()=>setShowAll(true)} className="w-full text-xs text-stone-500 hover:text-stone-700 border border-dashed border-stone-300 rounded-lg py-1.5 flex items-center justify-center gap-1">Show all services <ChevronRight className="w-3.5 h-3.5 rotate-90"/></button>}</div>
+        : CARRIER_ORDER.map(c=>{const list=(collapse?collapsedRows():rowsForView(quotes)).filter(q=>q.carrier===c);if(!list.length)return null;return (<div key={c} className="mb-4"><div className="mb-2 pb-1.5 border-b border-stone-200"><CarrierMark carrier={c}/></div><div className="space-y-1.5">{list.map(Row)}</div></div>);})}
     </div>
   );
 }
@@ -6489,6 +7220,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
    service pick honored per order. Live fetches are cached per order+inputs and limited
    to 3 in flight so a 200-row table doesn't stampede the England API. */
 const EST_CACHE={};
+const SOURCE_TONE={Shopify:"green",Amazon:"amber",eBay:"blue",Etsy:"amber",Walmart:"blue",Magento:"amber",Square:"stone",Wix:"blue",Squarespace:"stone",BigCommerce:"stone",WooCommerce:"rose",ShipStation:"blue",ShipBob:"blue",Ordoro:"green",Manual:"stone"};
 let EST_INFLIGHT=0;const EST_QUEUE=[];
 const estSlot=(fn)=>{ if(EST_INFLIGHT<3){EST_INFLIGHT++;fn();} else EST_QUEUE.push(fn); };
 const estDone=()=>{ EST_INFLIGHT=Math.max(0,EST_INFLIGHT-1); const nx=EST_QUEUE.shift(); if(nx){EST_INFLIGHT++;nx();} };
@@ -6534,7 +7266,7 @@ function LiveEstRate({o,client,settings,rateRules,ruleset}){
       const pick=hit||qs.slice().sort((a,b)=>((a.sell!=null?a.sell:1e9))-((b.sell!=null?b.sell:1e9)))[0];
       return pick?{sell:pick.sell!=null?pick.sell:pick.cost,label:pick.label,live,ruled:!!hit}:{none:true};
     };
-    const finish=(val)=>{ EST_CACHE[key]=val; if(!cancel)setV(val); };
+    const finish=(val)=>{ const ks=Object.keys(EST_CACHE); if(ks.length>2000)delete EST_CACHE[ks[0]]; EST_CACHE[key]=val; if(!cancel)setV(val); };
     const offline=()=>{ try{
       const qs=quoteRates({fromZip,toZip:o.zip,pieces:[{weight:wt,L:12,W:9,H:4}],residential:true}).filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:rateSellFor(q.cost,q.label,sellCtx(undefined))}));
       finish(pickFrom(qs,false));
@@ -6545,12 +7277,12 @@ function LiveEstRate({o,client,settings,rateRules,ruleset}){
         try{
           const res=await ratesForOrder(o,{residential:true,weightLb:wt,fromZip,sender:settings&&settings.sender},eng);
           const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);
-          const qs=((res&&res.rates)||[]).filter(q=>!hs.has(canonSvc(q.label))&&!bs.has(canonSvc(q.label))).map(q=>({...q,sell:rateSellFor(q.cost,q.label,sellCtx(q.list))}));
-          if(qs.length)finish(pickFrom(qs,true)); else offline();
-        }catch(e){ offline(); }
+          const qs=((res&&res.rates)||[]).filter(q=>!hs.has(canonSvc(q.label))&&!bs.has(canonSvc(q.label))).filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk([{weight:wt}])).map(q=>({...q,sell:rateSellFor(q.cost,q.label,sellCtx(q.list))}));
+          if(qs.length)finish(pickFrom(qs,true)); else finish({none:true});   // live account: no rate = show "—", never an offline guess
+        }catch(e){ finish({none:true}); }
         finally{ estDone(); }
       });
-    } else offline();
+    } else offline();   // estimates only exist in demo mode (no live account connected)
     return ()=>{cancel=true;};
   },[key]);
   if(!o.zip)return <span className="text-stone-300" title="This order has no destination ZIP">—</span>;
@@ -6579,21 +7311,20 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
   const [sort,setSort]=useState("date");
   const [adding,setAdding]=useState(false);
   const [storeFilter,setStoreFilter]=useState("all");
-  const SOURCE_TONE={Shopify:"green",Amazon:"amber",eBay:"blue",Etsy:"amber",Walmart:"blue",Magento:"amber",Square:"stone",Wix:"blue",Squarespace:"stone",BigCommerce:"stone",WooCommerce:"rose",ShipStation:"blue",ShipBob:"blue",Ordoro:"green",Manual:"stone"};
   const stores=Array.from(new Set(orders.map(o=>o.source||"Manual")));
   const storeCount=(s)=>orders.filter(o=>(o.source||"Manual")===s).length;
   const statusCount=(st)=>st==="all"?orders.length:orders.filter(o=>o.status===st).length;
   const orderAge=(o)=>{ const d=Date.parse(o.date||""); if(isNaN(d))return "—"; const mins=Math.max(0,Math.floor((Date.now()-d)/60000)); if(mins<60)return mins+" min"; const hrs=Math.floor(mins/60); if(hrs<24)return hrs+" hr"; return Math.floor(hrs/24)+" d"; };
-  const filtered=orders.filter(o=>(filter==="all"||o.status===filter)&&(storeFilter==="all"||(o.source||"Manual")===storeFilter)&&(o.name+o.customer+o.city+(o.source||"")+(o.items||"")).toLowerCase().includes(q.toLowerCase()));
-  const sorted=[...filtered].sort((a,b)=>{
+  const filtered=useMemo(()=>orders.filter(o=>(filter==="all"||o.status===filter)&&(storeFilter==="all"||(o.source||"Manual")===storeFilter)&&(o.name+o.customer+o.city+(o.source||"")+(o.items||"")).toLowerCase().includes(q.toLowerCase())),[orders,filter,storeFilter,q]);
+  const sorted=useMemo(()=>[...filtered].sort((a,b)=>{
     if(sort==="total")return parseFloat(b.total||0)-parseFloat(a.total||0);
     if(sort==="customer")return (a.customer||"").localeCompare(b.customer||"");
     if(sort==="state")return (a.state||"").localeCompare(b.state||"");
     if(sort==="weight")return (b.weight||0)-(a.weight||0);
     if(sort==="source")return (a.source||"").localeCompare(b.source||"");
     return String(b.id).localeCompare(String(a.id)); // date / newest
-  });
-  const ship=(o)=>goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},weight:o.weight,reference:o.name,fromOrderId:o.id});
+  }),[filtered,sort]);
+  const ship=(o)=>goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},weight:o.weight,reference:o.name,fromOrderId:o.id,refulfill:o.status==="fulfilled"});
   const [syncing,setSyncing]=useState(false);
   const [syncMsg,setSyncMsg]=useState(null);
   // Every connected platform that can supply orders (Shopify + token/OAuth connectors flagged orders:true)
@@ -6609,7 +7340,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
     const collected=[];const errs=[];
     for(const src of orderSources){
       const res=src.kind==="shopify"
-        ? await shopifySyncOrders(settings.shopifyConn)
+        ? await (async()=>{ let os=[],ok=false,er=""; for(const c of shopifyConns(settings)){ const r=await shopifySyncOrders(c); if(r&&r.ok){ok=true;(r.orders||[]).forEach(o=>os.push({...o,_shop:c.shop}));} else if(!er){er=(r&&r.error)||"";} } return ok?{ok:true,orders:os}:{ok:false,error:er||"Sync failed"}; })()
         : await connectorSyncOrders(src.c,(settings.conn||{})[src.c.id]||{});
       if(res&&res.ok){
         for(const o of (res.orders||[])){
@@ -6679,8 +7410,8 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
                     {!hideCol.has("items")&&<th className="text-left font-medium px-3 py-2">Items</th>}
                     {!hideCol.has("recipient")&&<th className="text-left font-medium px-3 py-2">Recipient</th>}
                     {!hideCol.has("requested")&&<th className="text-left font-medium px-3 py-2 whitespace-nowrap">Requested</th>}
-                    {custom.autopilotPreview&&!hideCol.has("autopilot")&&<th className="text-left font-medium px-3 py-2 whitespace-nowrap"><span className="inline-flex items-center gap-1"><Zap className="w-3 h-3 text-violet-500"/>Autopilot</span></th>}
-                    {!hideCol.has("estRate")&&<th className="text-right font-medium px-3 py-2 whitespace-nowrap">Est. Rate</th>}
+                    {filter!=="fulfilled"&&custom.autopilotPreview&&!hideCol.has("autopilot")&&<th className="text-left font-medium px-3 py-2 whitespace-nowrap"><span className="inline-flex items-center gap-1"><Zap className="w-3 h-3 text-violet-500"/>Autopilot</span></th>}
+                    {filter!=="fulfilled"&&!hideCol.has("estRate")&&<th className="text-right font-medium px-3 py-2 whitespace-nowrap">Est. Rate</th>}
                     {!hideCol.has("qty")&&<th className="text-right font-medium px-3 py-2">Qty</th>}
                     {!hideCol.has("total")&&<th className="text-right font-medium px-3 py-2 whitespace-nowrap">Order total</th>}
                     {!hideCol.has("status")&&<th className="text-left font-medium px-3 py-2">Status</th>}
@@ -6697,8 +7428,8 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
                       {!hideCol.has("items")&&<td className={ordPad}><div className="text-stone-700 truncate max-w-[220px]">{o.items||"—"}</div>{o.lineItems&&o.lineItems[0]&&o.lineItems[0].sku?<div className="text-[11px] text-stone-400 truncate max-w-[220px]">SKU {o.lineItems[0].sku}</div>:null}</td>}
                       {!hideCol.has("recipient")&&<td className={ordPad}><div className="text-stone-800 truncate max-w-[160px]">{o.customer||"—"}</div><div className="text-[11px] text-stone-400 truncate max-w-[160px]">{o.city}{o.state?`, ${o.state}`:""}</div></td>}
                       {!hideCol.has("requested")&&<td className="px-3 py-2.5 text-stone-500 whitespace-nowrap">{o.shippingService||"—"}</td>}
-                      {custom.autopilotPreview&&!hideCol.has("autopilot")&&<td className="px-3 py-2.5 whitespace-nowrap"><AutopilotCell o={o} ruleset={ruleset} fromZip={(client&&client.origin)||(settings&&settings.sender&&settings.sender.zip)||""}/></td>}
-                      {!hideCol.has("estRate")&&<td className="px-3 py-2.5 text-right whitespace-nowrap"><LiveEstRate o={o} client={client} settings={settings} rateRules={rateRules} ruleset={ruleset}/></td>}
+                      {filter!=="fulfilled"&&custom.autopilotPreview&&!hideCol.has("autopilot")&&<td className="px-3 py-2.5 whitespace-nowrap">{o.status==="fulfilled"?<span className="text-stone-300">—</span>:<AutopilotCell o={o} ruleset={ruleset} fromZip={(client&&client.origin)||(settings&&settings.sender&&settings.sender.zip)||""}/>}</td>}
+                      {filter!=="fulfilled"&&!hideCol.has("estRate")&&<td className="px-3 py-2.5 text-right whitespace-nowrap">{o.status==="fulfilled"?<span className="text-stone-300">—</span>:<LiveEstRate o={o} client={client} settings={settings} rateRules={rateRules} ruleset={ruleset}/>}</td>}
                       {!hideCol.has("qty")&&<td className="px-3 py-2.5 text-right text-stone-600">{o.itemCount||"—"}</td>}
                       {!hideCol.has("total")&&<td className="px-3 py-2.5 text-right font-mono text-stone-800 whitespace-nowrap">${o.total}</td>}
                       {!hideCol.has("status")&&<td className={ordPad}><div className="flex items-center gap-1 flex-wrap"><Badge tone={o.status==="fulfilled"?"green":"amber"}>{o.status==="fulfilled"?"Shipped":"Awaiting"}</Badge>{o.hold&&<span title={o.hold}><Badge tone="rose">Held</Badge></span>}{o.gift&&<span title={o.giftMessage||"Gift"}><Badge tone="blue">Gift</Badge></span>}{o.assignee&&<span title={"Assigned to "+o.assignee}><Badge tone="stone">{o.assignee}</Badge></span>}</div></td>}
@@ -6861,6 +7592,24 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
 }
 
 /* ════════ ORDER · ShipStation-style detail + ship page (modal overlay) ════════ */
+/* Push edited receiver info back to the Shopify order (address / phone / email), so the store
+   record matches what actually ships. Updates the local order too. */
+function ShopifyAddrPush({conn,o,rcv,setOrders}){
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState(null);
+  const push=async()=>{
+    setBusy(true);setMsg(null);
+    const res=await shopifyCall(SHOPIFY_FULFILL,{action:"updateOrder",shop:conn.shop,token:conn.token,shopifyId:o.shopifyId,email:rcv.email||undefined,
+      shippingAddress:{name:rcv.name,company:rcv.company,address1:rcv.address1,address2:rcv.address2,city:rcv.city,state:rcv.state,zip:rcv.zip,phone:rcv.phone,country:rcv.country||"US"}});
+    setBusy(false);
+    if(res&&res.ok){ setMsg({ok:true,t:"Shopify order updated ✓"}); setOrders&&setOrders(os=>os.map(x=>x.id===o.id?{...x,customer:rcv.name,company:rcv.company,address1:rcv.address1,city:rcv.city,state:rcv.state,zip:rcv.zip,phone:rcv.phone,email:rcv.email}:x)); }
+    else setMsg({ok:false,t:(res&&res.error)||"Update failed"});
+  };
+  return (<div className="flex items-center gap-2 mt-1.5">
+    <button onClick={push} disabled={busy} className="text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg px-2.5 py-1.5 hover:bg-emerald-100 disabled:opacity-50 flex items-center gap-1.5">{busy?<Loader2 className="w-3 h-3 animate-spin"/>:<RotateCcw className="w-3 h-3"/>}Save these changes back to Shopify</button>
+    {msg&&<span className={`text-[11px] ${msg.ok?"text-emerald-700":"text-rose-600"}`}>{String(msg.t).slice(0,120)}</span>}
+  </div>);
+}
 function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,goShip,onClose}){
   const navList=Array.isArray(orderList)?orderList:[];
   const navIdx=navList.findIndex(x=>x&&x.id===o.id);
@@ -6886,6 +7635,9 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
     setRcv(prev=>{ const next={...prev}; for(const k of keys) next[k]=parsed[k]; return next; });
   };
   const [reference,setReference]=useState(o.name||"");
+  const [oNote,setONote]=useState(o.note||"");
+  const [oTags,setOTags]=useState(Array.isArray(o.tags)?o.tags.join(", "):(o.tags||""));
+  const [savedInfo,setSavedInfo]=useState(false);
   const [poNo,setPoNo]=useState("");
   const [invoiceNo,setInvoiceNo]=useState("");
   const [weight,setWeight]=useState(o.weight||1);
@@ -6920,6 +7672,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   const localOrderQuotes=()=>quoteRates({fromZip,toZip:rcv.zip,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],residential,intl:_intl}).filter(qq=>qq.carrier==="FedEx");
   // FedEx address verification + residential/commercial classification (parity with the Ship page)
   useEffect(()=>{
+    if(o.status==="fulfilled"){setVerify(null);return;}   // already shipped — nothing left to verify
     if(rcv.country&&!_isUSCountry(rcv.country)){setVerify(null);return;}   // FedEx classification is US-only
     const core=rcv.address1&&/^\d{5}/.test(rcv.zip||"")&&rcv.city&&rcv.state;
     if(!core){setVerify(null);return;}
@@ -6944,7 +7697,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   const addrClassified=!!(resTouched||(verify&&verify.type));
   useEffect(()=>{
     let cancel=false;
-    if(!ready){setRateSrc({rates:[],live:false,loading:false});return;}
+    if(!ready||o.status==="fulfilled"){setRateSrc({rates:[],live:false,loading:false});return;}   /* shipped orders don't quote */
     if(canBook){
       setRateSrc(s=>({...s,loading:true}));
       ratesForOrder(dest,{residential,box,weightLb:totalWeight,fromZip,sender:settings.sender,packageTypeCode:selectedOrBox?selectedOrBox.code:"",signatureOption:sigOption,saturdayDelivery:sat,insuranceAmount:insurance||null},eng).then(res=>{ if(cancel)return;
@@ -6957,7 +7710,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   // FedEx transit times via the FedEx API
   useEffect(()=>{
     let cancel=false;
-    if(!ready){setFxTransit({});return;}
+    if(!ready||o.status==="fulfilled"){setFxTransit({});return;}
     fedexTransit({fromZip,toZip:rcv.zip,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],residential}).then(m=>{if(!cancel)setFxTransit(m||{});});
     return ()=>{cancel=true;};
   },[rcv.zip,fromZip,residential,totalWeight,box.L,box.W,box.H]);
@@ -6986,6 +7739,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   },[quotes,apLive,o&&o.shippingService,o&&o.ruleService,residential,addrClassified]);
   const applyORBox=(code)=>{const b=FEDEX_ONERATE.find(x=>x.code===code);if(!b)return;if(b.dims){setDims({L:b.dims.L,W:b.dims.W,H:b.dims.H});}setBoxIdx(-1);setOrPkg(code);const val="FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,"");const f=settings?.orBoxField||"invoice";const fill=(set)=>set(prev=>prev&&prev.trim()?prev:val);if(f==="invoice")fill(setInvoiceNo);else if(f==="po")fill(setPoNo);else if(f==="reference")fill(setReference);};
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
+  const saveOrderInfo=()=>{ upd({name:reference||o.name,customer:rcv.name,company:rcv.company,address1:rcv.address1,address2:rcv.address2,city:rcv.city,state:rcv.state,zip:rcv.zip,country:rcv.country,phone:rcv.phone,email:rcv.email,note:oNote,tags:oTags.split(",").map(s=>s.trim()).filter(Boolean)}); setSavedInfo(true); setTimeout(()=>setSavedInfo(false),2500); };
   const pickBox=(j)=>{ setBoxIdx(j); if(j>=0){const b=boxes[j];setDims({L:b.L,W:b.W,H:b.H});} };
   const printHere=async(qq)=>{
     if(!qq)return;
@@ -7035,10 +7789,11 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
               <button onClick={goNext} disabled={!navNext} className="p-1.5 rounded hover:bg-stone-100 disabled:opacity-30"><ChevronRight className="w-4 h-4"/></button>
             </div>}
             {o.country&&o.country!=="United States"&&o.country!=="US"&&<button onClick={()=>printCommercialInvoice(o,(settings&&settings.products)||[],settings&&settings.sender,{...ciOpts,signature:ciOpts.signature||defaultSig(settings),senderTax:ciOpts.senderTax??((settings&&settings.taxId)||""),eei:ciOpts.eei??"NOEEI 30.37(a)",attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(ciOpts.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data}))})} className="text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Commercial invoice</button>}
-            <button onClick={()=>{goShip&&goShip(o);onClose&&onClose();}} className="text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/>Open in Ship tab</button>
+            <button onClick={()=>{goShip&&goShip(o);onClose&&onClose();}} className="text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/>{shipped?"New label (Ship tab)":"Open in Ship tab"}</button>
             <button onClick={onClose} className="text-stone-400 hover:text-stone-700 p-1"><X className="w-5 h-5"/></button>
           </div>
         </div>
+        {shipped&&o.source==="Shopify"&&o.shopifyId&&<div className="bg-[#E6F4FF]/70 border-b border-[#99D6FF] px-4 py-2 text-xs text-[#006FBF] flex items-center gap-2 shrink-0"><RotateCcw className="w-3.5 h-3.5 shrink-0"/><span>Already shipped{o.tracking?<> — tracking <b className="font-mono">{o.tracking}</b></>:null}. Need to redo it? Book a new label and the <b>new tracking number replaces the old one on Shopify</b> — you'll choose whether to email the customer.</span></div>}
         {o.country&&o.country!=="United States"&&o.country!=="US"&&<div className="border border-stone-200 rounded-lg p-3 mt-3 space-y-2 bg-stone-50/60">
           <div className="text-[10px] uppercase tracking-widest text-stone-400">Commercial invoice options</div>
           <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -7079,8 +7834,9 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
                         <input value={rcv.address1} onChange={e=>rset("address1",e.target.value)} onPaste={rcvSmartPaste} placeholder="Address" className={inC+" w-full"}/>
                         <div className="grid grid-cols-3 gap-1.5"><input value={rcv.city} onChange={e=>rset("city",e.target.value)} onPaste={rcvSmartPaste} placeholder="City" className={inC}/><input value={rcv.state} onChange={e=>rset("state",e.target.value)} onPaste={rcvSmartPaste} placeholder="State" className={inC}/><input value={rcv.zip} onChange={e=>rset("zip",e.target.value)} onPaste={rcvSmartPaste} placeholder="ZIP" className={inC}/></div>
                         <div className="grid grid-cols-2 gap-1.5"><input value={rcv.phone} onChange={e=>rset("phone",e.target.value)} onPaste={rcvSmartPaste} placeholder="Phone" className={inC}/><input value={rcv.email} onChange={e=>rset("email",e.target.value)} onPaste={rcvSmartPaste} placeholder="Email" className={inC}/></div>
+                        {o.source==="Shopify"&&o.shopifyId&&(()=>{const conn=shopifyConnFor(settings,o._shop);return conn?<ShopifyAddrPush conn={conn} o={o} rcv={rcv} setOrders={setOrders}/>:null;})()}
                       </div>
-                      <div className="flex flex-wrap items-center gap-1.5 text-[11px] mt-2">
+                      {!shipped&&<div className="flex flex-wrap items-center gap-1.5 text-[11px] mt-2">
                         {verify&&verify.loading&&<span className="text-stone-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin"/>Checking with FedEx…</span>}
                         {verify&&!verify.loading&&<>
                           {(resTouched||verify.type)&&<span className={`flex items-center gap-1 rounded-full px-2 py-0.5 font-medium border ${residential?"text-[#006FBF] bg-[#E6F4FF] border-[#99D6FF]":"text-stone-700 bg-stone-100 border-stone-200"}`}>{residential?<Home className="w-3 h-3"/>:<Building2 className="w-3 h-3"/>}{residential?"Residential":"Commercial"}{resTouched?" · manual":""}</span>}
@@ -7092,7 +7848,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
                         <label className="flex items-center gap-1 text-stone-500 cursor-pointer"><input type="checkbox" checked={resTouched} onChange={e=>setOverride(e.target.checked)} className="accent-[#0086E0]"/>Override</label>
                         {resTouched&&<div className="flex rounded-full border border-stone-200 overflow-hidden"><button onClick={()=>setRes(true)} className={`px-2 py-0.5 ${residential?"bg-[#E6F4FF] text-[#006FBF] font-medium":"bg-white text-stone-500"}`}>Res</button><button onClick={()=>setRes(false)} className={`px-2 py-0.5 border-l border-stone-200 ${!residential?"bg-stone-100 text-stone-800 font-medium":"bg-white text-stone-500"}`}>Com</button></div>}
                         {rcv.address1&&/^\d{5}/.test(rcv.zip||"")&&<button onClick={()=>setVerifyNonce(n=>n+1)} className="flex items-center gap-1 text-stone-400 hover:text-[#0086E0] underline"><ShieldCheck className="w-3 h-3"/>Re-check</button>}
-                      </div>
+                      </div>}
                     </div>
                     <div>
                       {lbl("Cost summary")}
@@ -7128,10 +7884,22 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
               </div>
               <div className="space-y-4">
                 <div className="bg-white border border-stone-200 rounded-lg p-4 space-y-3">
-                  <div className="text-sm font-semibold text-stone-800">Configure shipment</div>
-                  {shipped?(
+                  <div className="text-sm font-semibold text-stone-800">{shipped?"Order info":"Configure shipment"}</div>
+                  {shipped?(<>
                     <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2"><CheckCircle2 className="w-4 h-4"/>Shipped{o.tracking?<> · <span className="font-mono">{o.tracking}</span></>:""}</div>
-                  ):(<>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>{lbl("Order #")}<input value={reference} onChange={e=>setReference(e.target.value)} className={inC+" w-full"}/></div>
+                      <div>{lbl("Order date")}<div className="text-[13px] text-stone-600 py-1.5">{o.date||"—"}</div></div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>{lbl("Requested service")}<div className="text-[13px] text-stone-600 py-1.5">{o.shippingService||"Standard"}</div></div>
+                      <div>{lbl("Shipped with")}<div className="text-[13px] text-stone-600 py-1.5">{o.service||o.carrier||"—"}</div></div>
+                    </div>
+                    <div>{lbl("Tags")}<input value={oTags} onChange={e=>setOTags(e.target.value)} placeholder="comma, separated" className={inC+" w-full"}/></div>
+                    <div>{lbl("Order notes")}<textarea value={oNote} onChange={e=>setONote(e.target.value)} rows={3} placeholder="Notes on this order…" className={inC+" w-full"}/></div>
+                    <button onClick={saveOrderInfo} className="w-full text-sm bg-stone-800 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-900 flex items-center justify-center gap-1.5">{savedInfo?<><CheckCircle2 className="w-4 h-4"/>Saved</>:<>Save changes to this order</>}</button>
+                    <div className="text-[11px] text-stone-400">Saves the ship-to details on the left plus the info above. For Shopify orders, "Save these changes back to Shopify" under the address pushes the address &amp; email to Shopify too.</div>
+                  </>):(<>
                     <div>{lbl("Ship from")}{(settings?.sender?.zip||settings?.sender?.company||settings?.sender?.name)?<div className="text-[13px] text-stone-600">{settings?.sender?.company||settings?.sender?.name||"Your address"} · {settings?.sender?.city} {settings?.sender?.state} {settings?.sender?.zip}</div>:<div className="text-[13px] text-amber-700">No sender set — set your default sender in Settings → Company.</div>}</div>
                     <div className="grid grid-cols-3 gap-2">
                       <div>{lbl("Reference")}<input value={reference} onChange={e=>setReference(e.target.value)} placeholder="order / ref" className={inC+" w-full"}/></div>
@@ -7157,7 +7925,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
               </div>
             </div>
             {!shipped&&<div className="bg-white border border-stone-200 rounded-lg p-4">
-              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyORBox} custom={cz(settings||{})} billing={weighInfo([{weight:totalWeight,L:box.L,W:box.W,H:box.H}])}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
+              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyORBox} custom={cz(settings||{})} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} billing={weighInfo([{weight:totalWeight,L:box.L,W:box.W,H:box.H}])}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
               {ready&&rateSrc.loading&&<div className="text-xs text-stone-400 flex items-center gap-1.5 mt-2"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Loading rates…</div>}
               {status&&<div className={`mt-2 text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${status.state==="error"?"text-rose-600 bg-rose-50 border border-rose-200":status.state==="booking"?"text-stone-600 bg-stone-50 border border-stone-200":"text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF]"}`}>{status.state==="error"?<AlertTriangle className="w-3.5 h-3.5"/>:status.state==="booking"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{status.msg}</div>}
             </div>}
@@ -7603,7 +8371,7 @@ function Dashboard({shipments,orders,returns,goTab}){
 
 /* ════════ BATCH ════════ */
 const US_STATES=["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
-const SERVICE_OPTIONS={FedEx:["FedEx Ground","FedEx Home Delivery","FedEx 2Day","FedEx Express Saver","FedEx Standard Overnight","FedEx Priority Overnight"]};
+const SERVICE_OPTIONS={FedEx:["FedEx Ground","FedEx Home Delivery","FedEx Ground Economy","FedEx 2Day","FedEx Express Saver","FedEx Standard Overnight","FedEx Priority Overnight"]};
 const speedRank=(label)=>{const t=String(label||"").toLowerCase();if(/first overnight/.test(t))return 1;if(/priority overnight/.test(t))return 2;if(/standard overnight|next day/.test(t))return 3;if(/2.?day|2nd day air/.test(t))return 4;if(/express saver|3 day/.test(t))return 5;if(/home|ground/.test(t))return 7;return 6;};
 function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings,setSettings,onShipped,batchCmd,onBatchCmdDone,showMoney=true}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
@@ -7694,14 +8462,22 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
        Ground Economy, so the Batch preview showed a different service than run() booked. */
     return qs.filter(q=>svcPrefHit(P,q.label)).sort((a,b)=>(a.cost||0)-(b.cost||0))[0]||null;
   };
-  const rateFor=(o)=>{
+  /* Rate for one order. This is a HOT path — it was being recomputed for every order
+     several times per render (filter chips, rows, groups, subtotals), which made the Batch
+     screen laggy on big order sets. We memoize the whole pool's rates below (ratesById) and
+     have rateFor read from that cache; a cache miss falls back to computing live, so the
+     result is always identical — the memo is a pure speed optimization, never a source of
+     stale prices. Keep computeRate's inputs in sync with the ratesById dependency array. */
+  const computeRate=(o)=>{
     const pk=packs[o.id];
     const hs=new Set(cz(settings).hiddenServices||[]);
     const bs=new Set((client&&client.blockedServices)||[]);
+    const _gePcs=pk&&pk.pieces&&pk.pieces.length?pk.pieces:[{weight:o.weight,L:12,W:9,H:4}];
     const qs=quoteRates(pk&&pk.pieces&&pk.pieces.length
       ?{fromZip:client.origin,toZip:o.zip,pieces:pk.pieces,residential:true}
       :{fromZip:client.origin,toZip:o.zip,L:12,W:9,H:4,weight:o.weight,residential:true})
       .filter(q=>!hs.has(canonSvc(q.label))&&!bs.has(canonSvc(q.label)))
+      .filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk(_gePcs))
       .map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:client.origin,toZip:o.zip,weight:(pk&&pk.totalWt)||o.weight||1})}));
     let pick=pickByPref(qs,svcOv[o.id]);
     if(!pick){
@@ -7712,6 +8488,8 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
     }
     return pick||{label:"—",cost:0,sell:0};
   };
+  const ratesById=useMemo(()=>{const m={};pool.forEach(o=>{m[o.id]=computeRate(o);});return m;},[orders,packs,settings,client,rateRules,svcOv,rule,specSvc,specCarrier]);
+  const rateFor=(o)=>(o&&ratesById[o.id])||computeRate(o);
   const zoneOf=(o)=>String(zoneEst(client.origin,o.zip));
   const prodOf=(o)=>o.product||o.items||"—";
   const ageDays=(o)=>{const t=Date.parse(o.date||"");return isNaN(t)?null:Math.max(0,Math.floor((Date.now()-t)/86400000));};
@@ -7730,7 +8508,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
     return true;
   };
   const SORTS={newest:(a,b)=>(Date.parse(b.date||0)||0)-(Date.parse(a.date||0)||0),oldest:(a,b)=>(Date.parse(a.date||0)||0)-(Date.parse(b.date||0)||0),heaviest:(a,b)=>(+b.weight||0)-(+a.weight||0),lightest:(a,b)=>(+a.weight||0)-(+b.weight||0),value:(a,b)=>(+b.total||0)-(+a.total||0),state:(a,b)=>String(a.state||"").localeCompare(String(b.state||"")),zone:(a,b)=>(+zoneOf(a))-(+zoneOf(b))};
-  const visible=pool.filter(matches).sort(SORTS[sortBy]||(()=>0));
+  const visible=useMemo(()=>pool.filter(matches).sort(SORTS[sortBy]||(()=>0)),[orders,fs,wMin,wMax,tMin,tMax,age,dFrom,dTo,search,sortBy,ratesById,client]);
   const toggleDim=(d,v)=>setFs(f=>{const n={...f,[d]:new Set(f[d])};n[d].has(v)?n[d].delete(v):n[d].add(v);return n;});
   const activeFilters=Object.values(fs).reduce((a,st)=>a+st.size,0)+(wMin!==""?1:0)+(wMax!==""?1:0)+(tMin!==""?1:0)+(tMax!==""?1:0)+(age!=="any"?1:0)+(dFrom?1:0)+(dTo?1:0);
   const clearFilters=()=>{setFs({state:new Set(),zone:new Set(),source:new Set(),sku:new Set(),product:new Set(),service:new Set(),carrier:new Set()});setWMin("");setWMax("");setTMin("");setTMax("");setAge("any");setDFrom("");setDTo("");setSearch("");setProdQ("");};
@@ -7858,12 +8636,17 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         _resKnownB=await classifyOrderAddress(o,originZip);   // ground↔home follows the FedEx classification, same as Autopilot
         _resFlagB=_resKnownB==null?true:_resKnownB;
         const res=await ratesForOrder(o,{residential:_resFlagB,weightLb:_wt0,box:pk0&&pk0.pieces[0]?_box0:undefined,fromZip:originZip,sender:settings.sender,packageTypeCode:_orBox0?_orBox0.code:""},eng);
-        const _hs=new Set(cz(settings).hiddenServices||[]);const _bs=new Set((client&&client.blockedServices)||[]);let qs=((res&&res.rates)||[]).filter(q=>!_hs.has(canonSvc(q.label))&&!_bs.has(canonSvc(q.label))).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:originZip,toZip:o.zip,weight:(pk0&&pk0.totalWt)||o.weight||1})}));
+        const _hs=new Set(cz(settings).hiddenServices||[]);const _bs=new Set((client&&client.blockedServices)||[]);let qs=((res&&res.rates)||[]).filter(q=>!_hs.has(canonSvc(q.label))&&!_bs.has(canonSvc(q.label))).filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk([{weight:_wt0,L:_box0.L,W:_box0.W,H:_box0.H}])).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:originZip,toZip:o.zip,weight:(pk0&&pk0.totalWt)||o.weight||1})}));   // GE filter checks the SAME single piece the rate call priced
         picked=pickByPref(qs,svcOv[o.id],_resKnownB);
         if(!picked){
           if(rule==="ground")picked=qs.filter(q=>/ground|home/i.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
           else if(rule==="fastest")picked=qs.slice().sort((a,b)=>speedRank(a.label)-speedRank(b.label)||a.cost-b.cost)[0];
-          else if(rule==="specific")picked=qs.find(q=>String(q.label).toLowerCase().includes(specSvc.toLowerCase().replace(/^fedex\s*/,"")))||qs[0];
+          /* Book the SAME service the preview priced. This used a loose substring match + qs[0]
+             fallback, so "FedEx 2Day" could book "FedEx One Rate 2Day" (or, on no match, an
+             arbitrary unsorted rate) — a different, possibly pricier label than the row showed.
+             Mirror computeRate exactly: exact key match (cheapest), then carrier fallback, else
+             no pick → the order is skipped with "No rate" rather than silently mis-booked. */
+          else if(rule==="specific")picked=qs.filter(q=>svcPrefHit(specSvc,q.label)).sort((a,b)=>(a.cost||0)-(b.cost||0))[0]||qs.filter(q=>carrierOf(q.label)===specCarrier).sort((a,b)=>(a.cost||0)-(b.cost||0))[0];
           else picked=qs.slice().sort((a,b)=>a.cost-b.cost)[0];
         }
       }catch(e){}
@@ -8076,7 +8859,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         {svcMixSel.length>0&&<span className="hidden lg:flex items-center gap-1.5">{svcMixSel.map(([l,n])=><Badge key={l} tone="stone">{l.replace(/^FedEx /,"")} ×{n}</Badge>)}</span>}
         <button onClick={()=>printPackingSlips(rows.map(r=>slipFromOrder(r.o,settings.sender)))} disabled={rows.length===0} title="Print a packing slip for every selected order" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5"><FileText className="w-4 h-4"/>Packing slips</button>
         <button onClick={()=>printPickList(rows.map(r=>r.o))} disabled={rows.length===0} title="One sheet: every item in this batch aggregated by product, with checkboxes" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5"><ClipboardList className="w-4 h-4"/>Pick list</button>
-        <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Fallback</span><select value={cz(settings).fallbackService||""} onChange={e=>setSettings&&setSettings(s=>({...s,custom:{...(s.custom||{}),fallbackService:e.target.value}}))} title="Service used for orders that match no rule" className="text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-[#0086E0]"><option value="">No fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
+        <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Fallback</span><select value={cz(settings).fallbackService||""} onChange={e=>setSettings&&setSettings(s=>({...s,custom:{...(s.custom||{}),fallbackService:e.target.value}}))} title="Service used for orders that match no rule" className="text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-[#0086E0]"><option value="">No fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx Ground Economy">FedEx Ground Economy</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
         <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Ship date</span><input type="date" value={batchShipDate} onChange={e=>setBatchShipDate(e.target.value)} className="text-sm font-mono text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-[#0086E0]"/></label>
         <button onClick={run} disabled={running||rows.length===0} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-semibold hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{running?<Loader2 className="w-4 h-4 animate-spin"/>:<Printer className="w-4 h-4"/>}{running?`Booking ${progress.n}/${progress.total}…`:`Create & print ${rows.length} label${rows.length!==1?"s":""}`}</button>
       </div>
@@ -8382,23 +9165,48 @@ function CheckoutRates({settings,setSettings,client,uid}){
 }
 
 /* ════════ SETTINGS ════════ */
-function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,audit=[],isAdmin=false,showMoney=true,secPolicy={}}){
+function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,audit=[],isAdmin=false,showMoney=true,secPolicy={},currentUser=null,setCurrentUser=null}){
   /* Remember which Settings sub-section you were on, so leaving Settings and coming back returns you to
      the same panel instead of resetting to General. Persisted so it survives a full reload too. */
   const [sec,setSecRaw]=useState(()=>lsGet("settingsSec","general"));
   const setSec=(k)=>{ setSecRaw(k); lsSet("settingsSec",k); };
-  const secs=[["general","General",Cog],["customize","Customizations",Sliders],["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["catalog","Product catalog",Boxes],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["reference","Reference Fields",Receipt],["cieditor","Commercial invoice",Receipt],["cihistory","CI history",FileText],["otherdocs","Other documents",FileText],["printer","Print settings",Printer],["checkout","Checkout rates",ShoppingBag],["manifests","Manifests",FileText],["reports","Reports",TrendingUp],["notifications","Email automation",Mail],["billing","Billing",CreditCard],["integrations","Integrations",Layers],["subscription","Subscription",Star]];
+  const [secSearch,setSecSearch]=useState("");
+  /* Sidebar sections grouped into categories (v376) — Ship screen promoted out of Customizations
+     into its own top-level section under Shipping. The flat `secs` list below feeds the
+     policy/fallback logic unchanged. */
+  const SEC_GROUPS=[
+    ["Workspace",[["general","General",Cog],["customize","Customizations",Sliders]]],
+    ["Shipping",[["shipscreen","Ship screen",Truck],["orderspage","Orders",ShoppingBag],["carriers",BRAND.fw?"FedEx Account":"Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["catalog","Product catalog",Boxes],["reference","Reference Fields",Receipt]]],
+    ["Documents & printing",[["printer","Print settings",Printer],["cieditor","Commercial invoice",Receipt],["otherdocs","Other documents",FileText],["manifests","Manifests",FileText]]],
+    ["Automation & integrations",[["integrations","Integrations",Layers],["notifications","Email automation",Mail],["checkout","Checkout rates",ShoppingBag]]],
+    ["Account",[["reports","Reports",TrendingUp],["billing","Billing",CreditCard],["subscription","Subscription",Star]]],
+  ];
+  const secs=SEC_GROUPS.flatMap(g=>g[1]);
   /* Per-customer section policy set in the admin portal (featureFlags._secPolicy):
      "off" hides the section from the sidebar entirely; "locked" keeps it visible but greys the
      whole page out read-only. Admins are never restricted. */
-  const polFor=(id)=>isAdmin?"on":(String((secPolicy&&secPolicy[id])||"on"));
+  const polFor=(id)=>{ if(isAdmin)return "on";
+    if(currentUser&&currentUser.demo&&(id==="billing"||id==="subscription"))return "off";   // demo: no plans/pricing/card surfaces
+    return String((secPolicy&&secPolicy[id])||"on"); };
   const visibleSecs=secs.filter(([id])=>polFor(id)!=="off");
   const secLocked=polFor(sec)==="locked";
   /* If a previously-saved section no longer exists (or is hidden) for this login, fall back to General. */
   if(!visibleSecs.some(x=>x[0]===sec)) { if(sec!=="general") setSecRaw("general"); }
   return (
     <div className="flex flex-col md:flex-row gap-6">
-      <aside className="md:w-56 shrink-0 space-y-1">{visibleSecs.map(([id,l,Icon])=><button key={id} onClick={()=>setSec(id)} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}{polFor(id)==="locked"&&<Ban className="w-3 h-3 text-stone-300 ml-auto"/>}</button>)}</aside>
+      <aside className="md:w-56 shrink-0 space-y-4">
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-2.5 pointer-events-none"/>
+          <input value={secSearch} onChange={e=>setSecSearch(e.target.value)} placeholder="Search settings…" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-400"/>
+        </div>
+        {(()=>{ const q=secSearch.trim().toLowerCase(); let any=false;
+        const groups=SEC_GROUPS.map(([gl,gsecs])=>{const vis=gsecs.filter(([id,l])=>polFor(id)!=="off"&&(!q||String(l).toLowerCase().includes(q)||gl.toLowerCase().includes(q))); if(!vis.length)return null; any=true; return (
+        <div key={gl} className="space-y-1">
+          <div className="px-3 text-[10px] font-semibold uppercase tracking-[.14em] text-stone-400">{gl}</div>
+          {vis.map(([id,l,Icon])=><button key={id} onClick={()=>setSec(id)} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}{polFor(id)==="locked"&&<Ban className="w-3 h-3 text-stone-300 ml-auto"/>}</button>)}
+        </div>);});
+        return <>{groups}{!any&&<div className="px-3 text-[12px] text-stone-400">No settings match “{secSearch}”.</div>}</>; })()}
+      </aside>
       <div className="flex-1 min-w-0">
         {secLocked&&<div className="mb-3 flex items-center gap-2 text-[13px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"><Ban className="w-4 h-4 shrink-0"/>This page is locked by your administrator — you can look, but changes are disabled.</div>}
         <div className={secLocked?"pointer-events-none opacity-60 select-none":""} aria-disabled={secLocked||undefined}>
@@ -8413,11 +9221,13 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="manifests"&&<Manifests shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} settings={settings}/>}
         {sec==="reports"&&<Reports shipments={shipments} showMoney={showMoney}/>}
         {sec==="notifications"&&<Notifications settings={settings} setSettings={setSettings} emails={emails}/>}
-        {sec==="general"&&<GeneralSettings settings={settings} setSettings={setSettings} goSec={setSec} audit={audit}/>}
-        {sec==="cieditor"&&<CIEditor settings={settings} setSettings={setSettings} shipments={shipments}/>}
-        {sec==="cihistory"&&<CIHistory settings={settings} setSettings={setSettings}/>}
+        {sec==="general"&&<GeneralSettings settings={settings} setSettings={setSettings} goSec={setSec} audit={audit} currentUser={currentUser} setCurrentUser={setCurrentUser}/>}
+        {sec==="cieditor"&&<div className="space-y-6"><CIEditor settings={settings} setSettings={setSettings} shipments={shipments}/><div className="border-t border-stone-200 pt-6"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-3">Commercial invoice history</div><CIHistory settings={settings} setSettings={setSettings}/></div></div>}
+        {sec==="cihistory"&&<div className="space-y-6"><CIEditor settings={settings} setSettings={setSettings} shipments={shipments}/><div className="border-t border-stone-200 pt-6"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-3">Commercial invoice history</div><CIHistory settings={settings} setSettings={setSettings}/></div></div>}
         {sec==="otherdocs"&&<OtherDocs settings={settings} setSettings={setSettings}/>}
         {sec==="customize"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])}/>}
+        {sec==="shipscreen"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="ship"/>}
+        {sec==="orderspage"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="orders"/>}
         {sec==="billing"&&<Billing settings={settings} setSettings={setSettings}/>}
         {sec==="integrations"&&<Integrations settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders}/>}
         {sec==="subscription"&&<Subscription settings={settings} setSettings={setSettings}/>}
@@ -8749,7 +9559,7 @@ const DEFAULT_RECEIPT_LINES=[{id:"rl1",field:"recipientName",label:"To",custom:"
    live as label size or tab layout changes, so it's a true before-you-print preview. */
 function LabelStockPreview({size,zones,showLabels,tabStock}){
   const [SW,SH]=stockDims(size);
-  const PXIN=44;                                  // on-screen inches → px (small, fits the panel)
+  const PXIN=54;                                  // on-screen inches → px (small, fits the panel)
   const W=Math.round(SW*PXIN),H=Math.round(SH*PXIN);
   const labelRegionIn=(SW>4.5)?SH:6;
   const tabIn=Math.max(0,Math.round((SH-labelRegionIn)*100)/100);
@@ -8759,7 +9569,7 @@ function LabelStockPreview({size,zones,showLabels,tabStock}){
   const hasTab=tabIn>0.05&&zones&&zones.length;
   // lay the tab fields out with the print engine at this preview scale
   const meas=React.useMemo(()=>{const c=document.createElement("canvas");const g=c.getContext("2d");return (txt,fs)=>{g.font=fs+"px system-ui,Arial";return g.measureText(txt).width;};},[]);
-  const SAMPLE={reference:"SIM-1042",invoiceNo:"INV-88",orderNo:"#1042",shipDate:"7/8/26",service:"FedEx 2Day",weight:"3 lb",pieces:"1",declaredValue:"$100",recipientName:"Jane Doe",recipientCompany:"Acme Co",recipientZip:"84084",senderName:"S. Anderson",senderCompany:"ShipHub",cost:"$9.12",tracking:"794912345678"};
+  const SAMPLE={reference:"SIM-1042",invoiceNo:"INV-88",orderNo:"#1042",shipDate:"7/8/26",service:"FedEx 2Day",weight:"3 lb",pieces:"1",declaredValue:"$100",recipientName:"Jane Doe",recipientCompany:"Acme Co",recipientZip:"84084",senderName:"A. Shipper",senderCompany:"Your Company",cost:"$9.12",tracking:"794912345678"};
   const txtOf=(z)=>(showLabels&&z.label?z.label+": ":"")+(z.field==="custom"?(z.custom||"TEXT"):(SAMPLE[z.field]||z.field));
   const pad=Math.round(Math.min(0.14,Math.max(0.03,(tabIn||0.75)*0.18))*PXIN);
   const items=(zones||[]).map(z=>({txt:txtOf(z),fs:Math.max(6,Math.round((z.size||9)*PXIN/72)),x:z.x,y:z.y}));
@@ -8768,19 +9578,19 @@ function LabelStockPreview({size,zones,showLabels,tabStock}){
     <div className="relative bg-white border border-stone-300 shadow-sm rounded-sm overflow-hidden shrink-0" style={{width:W+"px",height:H+"px"}}>
       {/* label region: a simplified FedEx-style 4×6 */}
       <div className="absolute left-0 right-0 overflow-hidden" style={{top:geo.labelY+"px",height:regionPx+"px"}}>
-        <div className="absolute inset-0 p-1.5 flex flex-col" style={{fontSize:"6px",lineHeight:1.25}}>
+        <div className="absolute inset-0 p-2 flex flex-col" style={{fontSize:"7px",lineHeight:1.35}}>
           <div className="flex justify-between text-stone-500"><span>ORIGIN ID:JDYA</span><span>SHIP DATE: 08JUL26</span></div>
           <div className="text-stone-700 font-semibold mt-0.5">LAGENCE · BELL, CA 90201</div>
-          <div className="mt-1 border-t border-stone-300 pt-1"><span className="text-stone-400">TO </span><span className="font-bold text-stone-900" style={{fontSize:"9px"}}>JANE DOE</span></div>
-          <div className="font-bold text-stone-900" style={{fontSize:"8px"}}>123 MAIN ST</div>
-          <div className="font-bold text-stone-900" style={{fontSize:"9px"}}>AUSTIN TX 78701</div>
+          <div className="mt-1.5 border-t border-stone-300 pt-1.5"><span className="text-stone-400">TO </span><span className="font-bold text-stone-900" style={{fontSize:"11px"}}>JANE DOE</span></div>
+          <div className="font-bold text-stone-900" style={{fontSize:"10px"}}>123 MAIN ST</div>
+          <div className="font-bold text-stone-900" style={{fontSize:"11px"}}>AUSTIN TX 78701</div>
           <div className="mt-auto">
             <div className="flex items-end justify-between">
-              <div className="font-black tracking-tighter" style={{fontSize:"13px",fontFamily:"Helvetica,Arial,sans-serif",letterSpacing:"-0.5px"}}><span style={{color:"#4D148C"}}>Fed</span><span style={{color:"#FF6600"}}>Ex</span></div>
-              <div className="w-5 h-5 border-2 border-stone-800 flex items-center justify-center font-bold" style={{fontSize:"9px"}}>E</div>
+              <svg viewBox="0 0 336 100" style={{height:"13px"}} aria-label="FedEx"><path d="M0 0H54V24H26V38H50V62H26V100H0Z"/><rect x="58" y="28" width="66" height="72" rx="30"/><ellipse cx="91" cy="47" rx="13" ry="9" fill="#fff"/><path d="M88 66H124V84H88Z" fill="#fff"/><rect x="128" y="28" width="66" height="72" rx="30"/><path d="M168 0H194V100H168Z"/><ellipse cx="150" cy="64" rx="13" ry="20" fill="#fff"/><path d="M202 0H262V22H230V39H256V61H230V78H262V100H202Z" fill="#fff" stroke="#000" strokeWidth="6"/><path d="M256 28H282L336 100H310Z"/><path d="M310 28H336L282 100H256Z"/></svg>
+              <div className="w-6 h-6 border-2 border-stone-800 flex items-center justify-center font-bold" style={{fontSize:"11px"}}>E</div>
             </div>
-            <div className="mt-0.5 flex gap-px h-6 items-stretch">{Array.from({length:60}).map((_,i)=><span key={i} className="bg-stone-900" style={{width:(i%4?1:2)+"px",opacity:i%3?1:0.5}}/>)}</div>
-            <div className="flex justify-between text-stone-700 mt-0.5" style={{fontSize:"7px"}}><span>7941 2345 6789</span><span>2DAY</span></div>
+            <div className="mt-1 flex gap-px h-7 items-stretch">{Array.from({length:60}).map((_,i)=><span key={i} className="bg-stone-900" style={{width:(i%4?1:2)+"px",opacity:i%3?1:0.5}}/>)}</div>
+            <div className="flex justify-between text-stone-700 mt-0.5" style={{fontSize:"8px"}}><span>7941 2345 6789</span><span>2DAY</span></div>
           </div>
         </div>
       </div>
@@ -8803,7 +9613,7 @@ function DocTabDesigner({zones,setZone,onClearLayout,showLabels,tabHIn}){
   const ref=React.useRef(null);
   const [drag,setDrag]=React.useState(null);
   const DPI=96;const W=4*DPI;const H=Math.max(26,Math.round(tabHIn*DPI));
-  const SAMPLE={reference:"SIM-1042",invoiceNo:"INV-88",orderNo:"#1042",shipDate:"7/8/26",service:"FedEx 2Day",weight:"3 lb",pieces:"1",declaredValue:"$100",recipientName:"Jane Doe",recipientCompany:"Acme Co",recipientZip:"84084",senderName:"S. Anderson",senderCompany:"ShipHub",cost:"$9.12",tracking:"794912345678"};
+  const SAMPLE={reference:"SIM-1042",invoiceNo:"INV-88",orderNo:"#1042",shipDate:"7/8/26",service:"FedEx 2Day",weight:"3 lb",pieces:"1",declaredValue:"$100",recipientName:"Jane Doe",recipientCompany:"Acme Co",recipientZip:"84084",senderName:"A. Shipper",senderCompany:"Your Company",cost:"$9.12",tracking:"794912345678"};
   if(tabHIn<=0.01)return <div className="text-[11px] text-stone-400">Pick a doc-tab label size above (4×6.25 and up) to design the tab layout.</div>;
   const txtOf=(z)=>(showLabels&&z.label?z.label+": ":"")+(z.field==="custom"?(z.custom||"TEXT"):(SAMPLE[z.field]||z.field));
   /* Preview uses the EXACT same layoutDocTab engine the printer uses, so what you see is what
@@ -8849,7 +9659,10 @@ function DocTabDesigner({zones,setZone,onClearLayout,showLabels,tabHIn}){
 }
 function PrinterSettings({settings,setSettings}){
   const pr=settings.printer||{labelSize:"4x6",format:"PDF",printer:"",packingSlip:true,autoPrint:false,slipSize:"letter",rotate:false};
-  const set=(patch)=>setSettings({...settings,printer:{...pr,...patch}});
+  /* FUNCTIONAL update only — a replacement built from the render-scope `settings` silently
+     destroys any update queued in the same click (this is exactly how the printFlowV2 stamp
+     was being wiped: setCust queued it, then set() overwrote it with a stale snapshot). */
+  const set=(patch)=>setSettings(p=>({...p,printer:{...(p.printer||{}),...patch}}));
   // Labels & printing (moved here from Customizations → Labels & printing) writes to settings.custom
   const cust=cz(settings);
   const setCust=(k,v)=>setSettings(p=>({...p,custom:{...(p.custom||{}),[k]:v}}));
@@ -8857,7 +9670,7 @@ function PrinterSettings({settings,setSettings}){
   const ApTog=({k,label,hint})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span><button onClick={()=>setCust(k,!c[k])}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${c[k]?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button></label>);
   // Doc tabs + receipt config (per-login settings)
   const dt=settings.docTab||{enabled:false,stock:"trailing",zones:DEFAULT_DOCTABS,showLabels:true};
-  const setDt=(patch)=>setSettings({...settings,docTab:{...dt,...patch}});
+  const setDt=(patch)=>setSettings(p=>({...p,docTab:{...(p.docTab||{enabled:false,stock:"trailing",zones:DEFAULT_DOCTABS,showLabels:true}),...patch}}));
   const dtZones=dt.zones||DEFAULT_DOCTABS;
   const addZone=()=>setDt({zones:[...dtZones,{id:"dt"+Date.now(),zone:String(dtZones.length+1).padStart(2,"0"),field:"reference",label:"",custom:"",size:9}]});
   const setZone=(id,patch)=>setDt({zones:dtZones.map(z=>z.id===id?{...z,...patch}:z)});
@@ -8871,6 +9684,7 @@ function PrinterSettings({settings,setSettings}){
   const printers=settings.printers||[];
   const routes=settings.printRoutes||[];
   const [pn,setPn]=useState("");
+  const [showRouting,setShowRouting]=useState(false);
   const addPrinter=()=>{if(!pn.trim())return;setSettings({...settings,printers:[...printers,{id:"pn"+Date.now(),name:pn.trim()}]});setPn("");};
   const delPrinter=(id)=>setSettings({...settings,printers:printers.filter(x=>x.id!==id),printRoutes:routes.filter(r=>r.printerId!==id),defaultPrinterId:settings.defaultPrinterId===id?undefined:settings.defaultPrinterId});
   const ROUTE_FIELDS=[["carrier","Carrier"],["service","Service"],["product","Product / items"],["sku","SKU"],["state","Ship-to state"],["source","Order source"],["weight","Weight (lb)"],["orderAgeDays","Order age (days)"]];
@@ -8928,27 +9742,72 @@ function PrinterSettings({settings,setSettings}){
   const DOC_KINDS=[["packSlip","Packing slips","Auto-printed slips and every Packing slip button"],["pickList","Pick lists","The Pick list buttons in Orders & Batch"],["docs","Receipts & other documents","Shipment receipts and commercial invoices"]];
   return (<div className="max-w-2xl space-y-4">
     <p className="text-sm text-stone-500">Controls how labels are generated and printed when you buy a label or run a batch.</p>
-    <Panel title="Direct printing — zero clicks, no dialog">
+    <Panel title="Ship & print automation">
       <div className="space-y-3">
-        {(()=>{ const armed=!!pnc.enabled&&!!cust.skipBookedSummary; const ready=!!String(pnc.apiKey||"").trim()&&!!pnc.printerId;
-          const mode=cust.skipBookedSummary?"handsfree":cust.directNoPreview?"nopreview":"preview";
-          const setMode=(m)=>{
-            if(m==="handsfree"){ setCust("skipBookedSummary",true); setCust("directNoPreview",false); setPnCfg({enabled:true}); }
-            else if(m==="nopreview"){ setCust("skipBookedSummary",false); setCust("directNoPreview",true); setPnCfg({enabled:true}); }
-            else { setCust("skipBookedSummary",false); setCust("directNoPreview",false); }
+        <p className="text-[11px] text-stone-500 -mt-1">Set it once, top to bottom: what the app does when an order comes in, then exactly how the label prints and what pops up.</p>
+        <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2.5">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400">1 · When a matching order comes in</div>
+          <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
+            <span>On the Ship tab<span className="block text-[11px] text-stone-400">Your Autopilot rules pick the service on a matching order — choose whether the other services stay visible. Whether it <b>books itself</b> is set by the mode below.</span></span>
+            <select value={cust.autoRulesOnShip===false?"off":(cust.matchedOnly?"hidden":"shown")} onChange={e=>{const v=e.target.value;setCust("autoRulesOnShip",v!=="off");setCust("matchedOnly",v==="hidden");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] shrink-0">
+              <option value="off">I choose the service</option>
+              <option value="shown">Pre-select it — other services still show</option>
+              <option value="hidden">Pre-select it — hide the other services</option>
+            </select>
+          </label>
+          <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
+            <span>On the Batch screen<span className="block text-[11px] text-stone-400">Apply rules across the whole batch.</span></span>
+            <select value={!cust.autoRulesInBatch?"off":(cust.autoBookBatch?"auto":"fill")} onChange={e=>{const v=e.target.value;setCust("autoRulesInBatch",v!=="off");setCust("autoBookBatch",v==="auto");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] shrink-0">
+              <option value="off">Do nothing</option>
+              <option value="fill">Fill in services</option>
+              <option value="auto">Fill in &amp; auto-book</option>
+            </select>
+          </label>
+        </div>
+        {(()=>{ const ready=!!String(pnc.apiKey||"").trim()&&!!pnc.printerId;
+          /* Four INDEPENDENT choices (each its own box, pick one per box):
+             2 · who books  ·  3 · preview or not  ·  4 · summary popup or not  ·  5 · auto new shipment.
+             Every click stamps printFlowV2 so the Ship screen reads the flags in the new, unbundled way
+             (skipBookedSummary then means ONLY "no summary popup" — it no longer implies hands-free). */
+          const handsOn=cust.printFlowV2?!!cust.autoBookOnShip:!!(cust.autoBookOnShip||cust.skipBookedSummary);
+          const previewOn=cust.previewBeforePrint!=null?!!cust.previewBeforePrint:!(cust.skipBookedSummary||cust.directNoPreview);
+          const summaryOn=!cust.skipBookedSummary;
+          const resetOn=!!cust.resetAfterPrint;
+          const stamp=()=>{
+            /* First click on the new boxes: MATERIALIZE the currently-derived values before
+               flipping printFlowV2, so switching to the new interpretation can never change a
+               legacy account's behavior mid-flight (e.g. old hands-free = skipBookedSummary
+               alone must keep auto-booking until they explicitly pick "You click print"). */
+            if(!cust.printFlowV2){ setCust("autoBookOnShip",handsOn); setCust("previewBeforePrint",previewOn); setCust("resetAfterPrint",resetOn); }
+            setCust("printFlowV2",true); set({autoPrint:false}); setPnCfg({enabled:ready});
           };
-          const Opt=({v,title,desc})=>(<label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${mode===v?"border-emerald-300 bg-emerald-50/60":"border-stone-200 bg-white hover:bg-stone-50"}`}>
-            <input type="radio" name="printmode" checked={mode===v} onChange={()=>setMode(v)} className="mt-0.5 accent-emerald-600"/>
+          const Opt=({on,pick,title,desc,group})=>(<label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${on?"border-emerald-300 bg-emerald-50/60":"border-stone-200 bg-white hover:bg-stone-50"}`}>
+            <input type="radio" name={group} checked={on} onChange={pick} className="mt-0.5 accent-emerald-600"/>
             <span><span className="text-sm font-semibold text-stone-800">{title}</span><span className="block text-[11px] font-normal text-stone-500 mt-0.5">{desc}</span></span>
           </label>);
-          return (<div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2">
-            <div className="text-[10px] uppercase tracking-widest text-stone-400 flex items-center gap-1"><Zap className={`w-3 h-3 ${armed?"text-emerald-600":"text-stone-400"}`}/>What happens after you book a label</div>
-            <Opt v="handsfree" title="Hands free mode" desc="Book a label and it prints itself — no Print button, no dialog, no preview, and the screen jumps straight to the next shipment. Perfect for a counter or shared station."/>
-            <Opt v="nopreview" title="Print with no preview — but keep the review" desc="You still see the booked summary (tracking, buttons); the label just goes straight to the printer with no preview popup."/>
-            <Opt v="preview" title="Keep the print preview" desc="After booking, a real print preview of the LABEL opens — nothing prints anywhere until you click Print label in the preview."/>
-            {mode!=="preview"&&!ready&&<p className="text-[11px] text-amber-600 mt-1 font-medium">⚠ This needs the printer connected — otherwise labels still open the print dialog. Finish the one-time PrintNode setup just below (paste the API key → Find my printers → pick your printer).</p>}
-            {mode!=="preview"&&ready&&<p className="text-[11px] text-emerald-700 mt-1">Active — labels send straight to <b>{pnc.printerName||("printer "+pnc.printerId)}</b>.</p>}
+          const Box=({n,title,children})=>(<div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2">
+            <div className="text-[10px] uppercase tracking-widest text-stone-400">{n} · {title}</div>{children}
           </div>);
+          return (<>
+            <Box n="2" title="When a label is created — who books">
+              <Opt group="pf-book" on={handsOn} pick={()=>{stamp();setCust("autoBookOnShip",true);setCust("autoRulesOnShip",true);}} title="Hands-free — it books itself" desc="A matching order fires the Ship button on its own the moment its live rate is ready. Needs an Autopilot rule (or fallback service) that covers the order — anything unmatched still waits for you."/>
+              <Opt group="pf-book" on={!handsOn} pick={()=>{stamp();setCust("autoBookOnShip",false);}} title="You click print" desc="Nothing books until you click the service — you stay in control of every label."/>
+              {handsOn&&<p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">Make sure your <b>Autopilot rules</b> are exactly right — a matching order books itself with no confirmation.</p>}
+            </Box>
+            <Box n="3" title="Print preview">
+              <Opt group="pf-prev" on={!previewOn} pick={()=>{stamp();setCust("previewBeforePrint",false);}} title="No preview — print right away" desc="The label goes straight to your printer. Fastest flow."/>
+              <Opt group="pf-prev" on={previewOn} pick={()=>{stamp();setCust("previewBeforePrint",true);}} title="Show a preview first" desc="The label opens on screen and prints when you click Print — eyeball each one before it hits paper."/>
+              {!previewOn&&!ready&&<p className="text-[11px] text-amber-600 font-medium">⚠ Finish the one-time printer setup below (paste the API key → Find my printers → pick your printer). Until then, labels open the normal print window.</p>}
+            </Box>
+            <Box n="4" title="After it prints">
+              <Opt group="pf-sum" on={!summaryOn} pick={()=>{stamp();setCust("skipBookedSummary",true);}} title="No pop-up" desc="Nothing appears — the screen stays clear for the next order."/>
+              <Opt group="pf-sum" on={summaryOn} pick={()=>{stamp();setCust("skipBookedSummary",false);}} title="Pop-up summary" desc="A booked summary shows the tracking number with Copy, Track and pickup buttons."/>
+            </Box>
+            <Box n="5" title="Next shipment">
+              <Opt group="pf-next" on={resetOn} pick={()=>{stamp();setCust("resetAfterPrint",true);}} title="Automatically start a new shipment" desc="The form clears itself right after each print, ready for the next order or scan."/>
+              <Opt group="pf-next" on={!resetOn} pick={()=>{stamp();setCust("resetAfterPrint",false);}} title="Keep the info — I'll click New shipment" desc="Everything stays on screen until you clear it yourself."/>
+            </Box>
+          </>);
         })()}
         <p className="text-xs text-stone-500">Browsers can't skip the print dialog on their own — a tiny agent on the label computer does it. One-time setup: install the free <a href="https://www.printnode.com/en/download" target="_blank" rel="noreferrer" className="text-[#0086E0] hover:underline">PrintNode client</a> on the computer the printer is plugged into, sign in, then paste your API key (PrintNode dashboard → API Keys) here. After that, every label prints itself.</p>
         <div className="flex flex-wrap items-end gap-2">
@@ -8965,6 +9824,22 @@ function PrinterSettings({settings,setSettings}){
             </select>
           </label>
           <button onClick={pnTest} disabled={!pnc.printerId||pnBusy==="test"} className="text-sm border border-stone-300 text-stone-700 rounded-lg px-3.5 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5">{pnBusy==="test"?<><Loader2 className="w-4 h-4 animate-spin"/>Sending…</>:<><Printer className="w-4 h-4"/>Send test page</>}</button>
+          <button onClick={async()=>{ const dp=(typeof window!=="undefined"&&window.__scDirectPrint)||{}; setPnBusy("diag"); setPnMsg(null);
+            const liveKey=String(pnc.apiKey||"").trim(); const syncKey=String(dp.apiKey||"").trim();
+            const tail=(k)=>k?("ends …"+k.slice(-5)+", "+k.length+" chars"):"(empty)";
+            /* Step 1 — is the key in the box VALID? Ask PrintNode to list printers with it. */
+            let kres; try{ kres=await pnCall({action:"printers",apiKey:liveKey}); }catch(e){ kres={ok:false,error:String((e&&e.message)||e)}; }
+            const keyInfo=" · key in box: "+tail(liveKey)+(liveKey===syncKey?" · saved copy matches":" · ⚠ SAVED COPY DIFFERS ("+tail(syncKey)+")");
+            if(!kres||!kres.ok){ setPnBusy(""); setPnMsg({err:"✗ PrintNode rejected the key: "+((kres&&kres.error)||"no response")+keyInfo+". Re-copy the key from printnode.com → API Keys and paste it fresh."}); return; }
+            /* Step 2 — key works. Run the ACTUAL booking path (directPrintPdf: re-render + retry +
+               prefix-strip) so this matches a real hands-free label exactly, and dump the settings
+               that could route a label to the dialog. */
+            let full=false; try{ full=await directPrintPdf(PN_TEST_PDF,"Hands-free diagnostic",docCtxFor(null,"")); }catch(e){}
+            setPnBusy("");
+            const s2=settings||{}; const pr2=s2.printer||{}; const cu=cz(s2);
+            const dump=" · [format="+(pr2.format||"PDF")+", size="+(pr2.labelSize||"4x6")+", book="+(cu.printFlowV2?(cu.autoBookOnShip?"auto":"click"):(cu.skipBookedSummary?"auto(legacy)":"click"))+", preview="+String(cu.previewBeforePrint!=null?!!cu.previewBeforePrint:!(cu.skipBookedSummary||cu.directNoPreview))+", summary="+String(!cu.skipBookedSummary)+", legacyAutoPrint="+String(!!pr2.autoPrint)+", routes="+((s2.printRoutes||[]).length)+", pn.on="+String(!!dp.enabled)+", printer="+JSON.stringify(dp.printerId||"")+"]"+keyInfo;
+            setPnMsg(full?{ok:"✓ Full auto-print path WORKED — hands-free will print silently."+dump}:{err:"✓ Key valid ("+((kres.printers||[]).length)+" printers) but the REAL print path FAILED — read the red bar for PrintNode's reason."+dump}); }}
+            disabled={pnBusy==="diag"} className="text-sm border border-amber-300 text-amber-700 rounded-lg px-3.5 py-2 font-medium hover:bg-amber-50 disabled:opacity-40 flex items-center gap-1.5">{pnBusy==="diag"?<><Loader2 className="w-4 h-4 animate-spin"/>Testing…</>:<>Diagnose hands-free</>}</button>
         </div>}
         {knownPrinters.length>0&&<div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2.5">
           <div className="text-[10px] uppercase tracking-widest text-stone-400 flex items-center gap-1"><Printer className="w-3 h-3"/>More printers — what prints where</div>
@@ -8984,10 +9859,6 @@ function PrinterSettings({settings,setSettings}){
             {(pnc.savedPrinters||[]).map(p=>(<span key={p.id} className="inline-flex items-center gap-1 text-[11px] bg-white border border-stone-200 rounded-full pl-2 pr-1 py-0.5 text-stone-600">{p.name}{p.computer?` · ${p.computer}`:""}<button onClick={()=>delSavedPrinter(p.id)} title="Forget this printer (clears any assignments it had)" className="text-stone-300 hover:text-rose-500"><X className="w-3 h-3"/></button></span>))}
           </div>}
         </div>}
-        <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
-          <span>Automatically print every label to this printer<span className="block text-[11px] text-stone-400">Booked labels, reprints, and batch labels go straight to the printer — no dialog, no clicks. If the agent is offline, the normal print dialog opens instead so nothing is ever lost.</span></span>
-          <button onClick={()=>setPnCfg({enabled:!pnc.enabled})} disabled={!pnc.apiKey||!pnc.printerId}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${pnc.enabled?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"} ${(!pnc.apiKey||!pnc.printerId)?"opacity-40":""}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
-        </label>
         {pnMsg&&<div className={`text-xs rounded px-2.5 py-1.5 ${pnMsg.ok?"bg-emerald-50 border border-emerald-200 text-emerald-700":"bg-rose-50 border border-rose-200 text-rose-700"}`}>{pnMsg.ok||pnMsg.err}</div>}
         <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2.5">
           <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
@@ -9006,27 +9877,9 @@ function PrinterSettings({settings,setSettings}){
         <p className="text-[11px] text-stone-400">Setting is per-login but works from any computer — jobs route through PrintNode to whichever machine the printer is on. The Chrome kiosk-printing shortcut below stays as the free, no-agent alternative. Note: the label logo stamp applies to dialog printing only; direct printing sends the carrier's original PDF.</p>
       </div>
     </Panel>
-    <Panel title="Autopilot — auto-print on the Ship screen">
-      <div className="space-y-3">
-        <ApTog k="autoRulesOnShip" label="Run my Autopilot rules on the Ship tab" hint="When an order you pull into Ship matches a rule, pre-select that service automatically."/>
-        <div className={c.autoRulesOnShip?"":"opacity-40 pointer-events-none"}>
-          <ApTog k="autoBookOnShip" label="Also print the label automatically (no click)" hint="When a rule matches an order you pull into Ship, book & print the label with no click."/>
-        </div>
-        {c.autoRulesOnShip&&c.autoBookOnShip&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">Labels will print the moment a matching order is loaded — make sure your rules are exactly how you want them.</div>}
-      </div>
-    </Panel>
-    <Panel title="Autopilot — auto-print in Batch">
-      <div className="space-y-3">
-        <ApTog k="autoRulesInBatch" label="Auto-apply rules when Batch loads" hint="Fills in each order's service from your rules automatically when the Batch screen opens."/>
-        <div className={c.autoRulesInBatch?"":"opacity-40 pointer-events-none"}>
-          <ApTog k="autoBookBatch" label="Also auto-book the batch (no click)" hint="After rules apply, select every ruled order and create labels automatically."/>
-        </div>
-        {c.autoRulesInBatch&&c.autoBookBatch&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">The whole batch will book automatically — double-check your rules first.</div>}
-      </div>
-      <p className="text-[11px] text-stone-400 mt-2">The rules themselves live on the <b>Autopilot</b> tab. These toggles just control when they run and whether labels print automatically.</p>
-    </Panel>
-    <Panel title="Printers & routing">
-      <p className="text-xs text-stone-500">Name your printers (e.g. “Zebra — Station A”, “Office laser”), then route labels to them by rule. Batch splits its printing into one run per printer — each opens as its own job so you pick that device once. Autopilot rules can also route with the “Route to Printer” action (use the printer’s exact name as the value).</p>
+    {!(printers.length>0||routes.length>0||showRouting)&&<button onClick={()=>setShowRouting(true)} className="w-full text-xs text-stone-500 hover:text-[#0086E0] flex items-center justify-center gap-1 border border-dashed border-stone-300 rounded-lg px-3 py-2.5"><Plus className="w-3.5 h-3.5"/>Advanced — name multiple printers &amp; route labels to them by rule</button>}
+    {(printers.length>0||routes.length>0||showRouting)&&<Panel title="Printers & routing">
+      <p className="text-xs text-stone-500">Name your printers (e.g. “Zebra — Station A”, “Office laser”), then route labels to them by rule. Batch splits its printing into one run per printer — each opens as its own job so you pick that device once. Autopilot rules can also route with the “Route to Printer” action (use the printer’s exact name as the value). <span className="text-stone-400">Most shops using PrintNode above don't need this.</span></p>
       <div className="space-y-1.5">
         {printers.map(x=>(<div key={x.id} className="flex items-center gap-2 text-sm">
           <Printer className="w-3.5 h-3.5 text-stone-400"/><span className="flex-1">{x.name}</span>
@@ -9048,7 +9901,7 @@ function PrinterSettings({settings,setSettings}){
         </div>))}
         <button onClick={addRoute} className="text-xs text-[#0086E0] font-medium flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add routing rule</button>
       </div>}
-    </Panel>
+    </Panel>}
     <Panel title="Label">
       <div className="grid grid-cols-2 gap-2">
         <Field label="Label size">
@@ -9073,7 +9926,6 @@ function PrinterSettings({settings,setSettings}){
       </div>
       <Field label="Default printer (optional)"><Input value={pr.printer} onChange={e=>set({printer:e.target.value})} placeholder="e.g. Zebra ZP 450"/></Field>
       <label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={pr.rotate} onChange={e=>set({rotate:e.target.checked})} className="accent-[#0086E0]"/>Rotate label 180° (for some thermal printers)</label>
-      <label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={pr.autoPrint} onChange={e=>set({autoPrint:e.target.checked})} className="accent-[#0086E0]"/>Auto-open the print dialog after a label is bought</label>
     </Panel>
     <Panel title="Packing slip">
       <label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={pr.packingSlip} onChange={e=>set({packingSlip:e.target.checked})} className="accent-[#0086E0]"/>Generate a packing slip with each label</label>
@@ -9083,6 +9935,9 @@ function PrinterSettings({settings,setSettings}){
           <option value="4x6">4×6</option>
         </Select>
       </Field>
+      <label className="block text-sm text-stone-700 mt-1">Thank-you message<textarea value={cust.slipThanks||""} onChange={e=>setCust("slipThanks",e.target.value)} rows={2} placeholder="Thanks for your order! We appreciate you." className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></label>
+      <label className="block text-sm text-stone-700">Footer line<input value={cust.slipFooter||""} onChange={e=>setCust("slipFooter",e.target.value)} placeholder="Returns within 30 days · support@yourstore.com" className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></label>
+      <div className="text-[11px] text-stone-400">The message &amp; footer print on every packing slip — Ship, Batch, and Orders.</div>
     </Panel>
     <Panel title="Doc tabs">
       <p className="text-xs text-stone-500 leading-relaxed">The doc tab is the removable tab on thermal FedEx label stock. Turn it on and choose what prints there — pulled from each shipment, or your own fixed text. <span className="text-stone-400">Requires doc-tab label stock in your thermal printer.</span></p>
@@ -9132,6 +9987,7 @@ function PrinterSettings({settings,setSettings}){
     <Panel title="Receipt">
       <p className="text-xs text-stone-500 leading-relaxed">Print a shipment receipt alongside the label — a quick record for the counter, the driver, or the customer. Choose the size, the fields, and the text size.</p>
       <label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={!!rc.enabled} onChange={e=>setRc({enabled:e.target.checked})}/>Print a receipt with each label</label>
+      {rc.enabled&&<label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={rc.withLabel!==false} onChange={e=>setRc({withLabel:e.target.checked})}/>Print it automatically as a <b>second label</b> right after every shipping label<span className="block text-[11px] font-normal text-stone-400 ml-0">Rides the same print job — PrintNode, hands-free and batch included. Turn off to print receipts only from the shipment popup.</span></label>}
       {rc.enabled&&<>
         <div className="grid grid-cols-2 gap-2">
           <Field label="Receipt size">
@@ -9158,28 +10014,12 @@ function PrinterSettings({settings,setSettings}){
           <button onClick={addLine} className="text-xs text-[#0086E0] font-medium flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add line</button>
         </div>
         <div className="rounded-lg border border-stone-200 bg-white p-3">
-          <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Preview</div>
-          <div className="inline-block border border-stone-300 rounded bg-white px-4 py-3 min-w-[200px] shadow-sm">
-            {rc.showLogo!==false&&<div className="text-[11px] font-semibold text-stone-400 mb-1">[ Company logo ]</div>}
-            <div className="font-bold text-stone-800 mb-2" style={{fontSize:((rc.fontSize||11)+3)+"pt"}}>{rc.title||"Shipment Receipt"}</div>
-            {rcLines.map(l=>(<div key={l.id} style={{fontSize:(rc.fontSize||11)+"pt",lineHeight:1.5}} className="text-stone-700"><span className="text-stone-400">{l.label}: </span>{l.field==="custom"?(l.custom||"—"):("{"+DOCTAB_LABEL[l.field]+"}")}</div>))}
-          </div>
+          <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Preview — exactly as it prints (4×6, sample data)</div>
+          <ReceiptPreviewImg rc={{...rc,lines:rcLines}} logo={settings.companyLogo||""}/>
         </div>
       </>}
     </Panel>
     <div className="flex items-center gap-2 text-xs text-stone-400"><Printer className="w-4 h-4"/>Thermal sizes (4×6 / ZPL) print fastest on label printers; choose Letter/PDF if you print on a standard office printer.</div>
-
-<Panel title="After booking">
-      <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
-        <span>Skip the booked summary, go straight to a new shipment<span className="block text-[11px] text-stone-400">The label still prints automatically — this just skips the tracking/copy/pickup card afterward and clears the form for the next order. Off by default so you can grab tracking or schedule a pickup right after booking.</span></span>
-        <button onClick={()=>setCust("skipBookedSummary",!cust.skipBookedSummary)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${cust.skipBookedSummary?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
-      </label>
-      <label className="flex items-center justify-between gap-3 text-sm text-stone-700 mt-3">
-        <span>Start a fresh blank shipment after each print<span className="block text-[11px] text-stone-400">As soon as a label prints, the Ship form clears itself for the next order \u2014 keeps the booked summary, just resets the canvas. Independent of kiosk mode.</span></span>
-        <button onClick={()=>setCust("resetAfterPrint",!cust.resetAfterPrint)}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${cust.resetAfterPrint?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
-      </label>
-    </Panel>
-
     <Panel title="Label branding">
       <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
         <span>Print my logo on every label<span className="block text-[11px] text-stone-400">Stamped onto the label when it prints or reprints — FedEx's own file stays untouched. Keep it small and in a corner so barcodes stay clear.</span></span>
@@ -9191,13 +10031,20 @@ function PrinterSettings({settings,setSettings}){
           <label className="text-[11px] text-[#006FBF] hover:underline cursor-pointer">Upload a label-specific logo<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>setCust("labelLogo",String(rd.result));rd.readAsDataURL(f);}}/></label>
           {cust.labelLogo&&<button onClick={()=>setCust("labelLogo","")} className="text-[11px] text-stone-400 hover:text-rose-500">Remove (use company logo)</button>}
         </div>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <label className="block text-sm text-stone-700">Position
-            <select value={cust.labelLogoPos||"bottom_left"} onChange={e=>setCust("labelLogoPos",e.target.value)} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm">
-              <option value="bottom_left">Bottom left (safest)</option><option value="bottom_right">Bottom right</option><option value="top_left">Top left</option><option value="top_right">Top right</option>
-            </select></label>
-          <label className="block text-sm text-stone-700">Size <span className="text-[11px] text-stone-400">· {cust.labelLogoScale||22}% of label width</span>
-            <input type="range" min="8" max="45" step="1" value={cust.labelLogoScale||22} onChange={e=>setCust("labelLogoScale",+e.target.value)} className="mt-1 w-full"/></label>
+        <div className="flex flex-wrap gap-4 items-start">
+          <div className="flex-1 min-w-[220px] space-y-3">
+            <label className="block text-sm text-stone-700">Snap to corner <span className="text-[11px] text-stone-400">(or just drag it on the label →)</span>
+              <select value={cust.labelLogoX!=null?"custom":(cust.labelLogoPos||"bottom_left")} onChange={e=>{const v=e.target.value;if(v==="custom")return;setCust("labelLogoPos",v);setCust("labelLogoX",null);setCust("labelLogoY",null);}} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm">
+                {cust.labelLogoX!=null&&<option value="custom">Custom (dragged) — pick a corner to snap</option>}
+                <option value="bottom_left">Bottom left (safest)</option><option value="bottom_right">Bottom right</option><option value="top_left">Top left</option><option value="top_right">Top right</option>
+              </select></label>
+            <label className="block text-sm text-stone-700">Size <span className="text-[11px] text-stone-400">· {cust.labelLogoScale||22}% of label width</span>
+              <input type="range" min="8" max="45" step="1" value={cust.labelLogoScale||22} onChange={e=>setCust("labelLogoScale",+e.target.value)} className="mt-1 w-full"/></label>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Drag your logo where you want it</div>
+            <LabelLogoPreviewImg cfg={cust} logo={cust.labelLogo||settings.companyLogo||""} setCust={setCust}/>
+          </div>
         </div>
         <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">Print one test label and check the logo isn't near a barcode before running volume — carriers can refuse labels with obscured barcodes.</p>
       </div>}
@@ -9270,6 +10117,7 @@ const RULE_PROPERTIES={
   "Package Weight":{key:"weight",type:"number"},
   "Cubic Volume":{key:"cubicVolume",type:"number"},
   "Requested Service":{key:"shippingService",type:"text"},
+  "Ship Day (today)":{key:"_shipDow",type:"text"},
   "Store / Source":{key:"source",type:"text"},
   "Tag Names":{key:"_tags",type:"list"},
   "Is Gift":{key:"_gift",type:"text"},
@@ -9282,7 +10130,7 @@ const RULE_PROPERTIES={
 };
 const RULE_PROP_NAMES=Object.keys(RULE_PROPERTIES);
 const RULE_OPERATORS={text:["CONTAINS","NOT CONTAINS","IN","NOT IN","=","!="],list:["IN","NOT IN","=","!="],number:["=","!=",">","<",">=","<="],date:["=","!=",">","<"]};
-const RULE_ACTION_TYPES=["Set Service","Set Package","Set One Rate Box","Request Signature","Set Insurance","Saturday Delivery","Add Order Tag","Add Note","Assign To","Set Weight","Set Custom Field","Mark as Gift","Split Packages","Assign Hold","Set From Address","Route to Printer"];
+const RULE_ACTION_TYPES=["Set Service","Set Package","Set One Rate Box","Request Signature","Set Insurance","Saturday Delivery","Book on FedEx Account","Add Order Tag","Add Note","Assign To","Set Weight","Set Custom Field","Mark as Gift","Split Packages","Assign Hold","Set From Address","Route to Printer"];
 const RULE_SERVICES=["ANY - Cheapest","ANY - Cheapest Ground","ANY - Cheapest 2 Day","ANY - Fastest","FedEx - Ground Economy","FedEx - Ground","FedEx - Home Delivery","FedEx - Express Saver","FedEx - 2Day","FedEx - 2Day A.M.","FedEx - Standard Overnight","FedEx - Priority Overnight","FedEx - First Overnight","FedEx - Express Saver OneRate","FedEx - 2Day OneRate","FedEx - 2Day A.M. OneRate","FedEx - Standard Overnight OneRate","FedEx - Priority Overnight OneRate","FedEx - First Overnight OneRate","FedEx - International Ground (Canada)","FedEx - International Connect Plus","FedEx - International Economy","FedEx - International Priority","FedEx - International Priority Express","FedEx - International First","DHL - Express Worldwide"];   /* every entry verified against svcPrefHit/rateSvcKey — see v286 */
 const RULE_PACKAGES=["Custom","FedEx Envelope","FedEx Small Box","FedEx Medium Box","FedEx Large Box","FedEx Extra Large Box"];
 const RULE_SIG=["direct","indirect","adult"];
@@ -9324,6 +10172,7 @@ function ruleOrderView(o,originZip){
   const itemWeightOz=grams>0?Math.round(grams/28.3495*10)/10:null;
   return {
     _id:o.id, _name:o.name, _customer:o.customer||"",
+    _shipDow:["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][new Date().getDay()],   // TODAY's day — e.g. "Ship Day = Thursday → Saturday delivery on 2Day"
     zip:o.zip||"", state:o.state||"", country:o.country||"US", city:o.city||"",
     zone:estimateZone(originZip,o.zip),
     itemCount:o.itemCount!=null?o.itemCount:(li.length?li.reduce((a,x)=>a+(+x.quantity||1),0):0),
@@ -9382,6 +10231,7 @@ function ruleApply(act,ov,changed){
     case "Request Signature": ov.signature=true;ov.sig=act.sig||"direct";mark("signature"); return `${(act.sig||"direct")} signature`;
     case "Set Insurance": ov.insurance=Number(act.amount)||0;mark("insurance"); return `insure $${act.amount||0}`;
     case "Saturday Delivery": ov.saturday=true;mark("saturday"); return `Saturday delivery`;
+    case "Book on FedEx Account": ov.fedexAccount=String(act.value||"").replace(/\D/g,"");mark("fedexAccount"); return `book on FedEx acct ${act.value||"—"}`;
     case "Add Order Tag": if(act.tag&&!ov._tags.includes(act.tag)){ov._tags.push(act.tag);ov._newTags.push(act.tag);mark("tags");} return `tag "${act.tag||""}"`;
     case "Set Weight": ov.weight=Number(act.weight)||ov.weight;mark("weight"); return `weight → ${act.weight||""} lb`;
     case "Set Custom Field":{ const n=String(act.field||"1"); ov["custom"+n]=act.value||""; mark("custom"+n); return `custom field ${n} → "${act.value||""}"`; }
@@ -9490,6 +10340,7 @@ function RuleEditorModal({rule,onSave,onClose,onDelete,warehouses}){
       case "Assign To": return <input value={a.assignee||""} onChange={e=>setAct(i,{assignee:e.target.value})} placeholder="teammate / warehouse" className={inC+" flex-1 min-w-0"}/>;
       case "Request Signature": return <select value={a.sig||"direct"} onChange={e=>setAct(i,{sig:e.target.value})} className={inC+" flex-1 min-w-0"}>{RULE_SIG.map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)} signature</option>)}</select>;
       case "Set Insurance": return <input value={a.amount||""} onChange={e=>setAct(i,{amount:e.target.value})} placeholder="Declared value $" className={inC+" flex-1 min-w-0 font-mono"}/>;
+      case "Book on FedEx Account": return <input value={a.value||""} onChange={e=>setAct(i,{value:e.target.value})} placeholder="FedEx account # to book on" className={inC+" flex-1 min-w-0 font-mono"}/>;
       case "Add Order Tag": return <input value={a.tag||""} onChange={e=>setAct(i,{tag:e.target.value})} placeholder="tag name" className={inC+" flex-1 min-w-0"}/>;
       case "Set Weight": return <input value={a.weight||""} onChange={e=>setAct(i,{weight:e.target.value})} placeholder="lb" className={inC+" flex-1 min-w-0 font-mono"}/>;
       case "Set Custom Field": return <div className="flex-1 flex gap-1.5 min-w-0"><select value={a.field||"1"} onChange={e=>setAct(i,{field:e.target.value})} className={inC+" shrink-0"}>{["1","2","3"].map(n=><option key={n} value={n}>Field {n}</option>)}</select><input value={a.value||""} onChange={e=>setAct(i,{value:e.target.value})} placeholder="value" className={inC+" flex-1 min-w-0"}/></div>;
@@ -9723,7 +10574,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
         <button onClick={()=>setFbOpen(v=>!v)} title="Batch by criteria — the Batch tab's filters, right here" className={`text-sm rounded-lg px-3 py-2 font-medium border flex items-center gap-1.5 ${fbOpen?"bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF]":"bg-white border-stone-200 text-stone-700 hover:bg-stone-100"}`}><ClipboardList className="w-4 h-4"/>Filter &amp; batch</button>
         <button onClick={newRule} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium flex items-center gap-1.5 hover:bg-stone-100"><Plus className="w-4 h-4"/>New rule</button>
         <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Make a rule: "}}))} title="Describe a rule in plain English — ShipHub AI writes it into the pipeline" className="text-sm rounded-lg px-3 py-2 font-medium border bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF] hover:bg-[#CCEAFF] flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/>Ask ShipHub AI to write a rule</button>
-        <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Fallback</span><select value={cz(settings).fallbackService||""} onChange={e=>setSettings&&setSettings(s=>({...s,custom:{...(s.custom||{}),fallbackService:e.target.value}}))} title="Service used for orders that match no rule" className="text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-emerald-500"><option value="">No fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
+        <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Fallback</span><select value={cz(settings).fallbackService||""} onChange={e=>setSettings&&setSettings(s=>({...s,custom:{...(s.custom||{}),fallbackService:e.target.value}}))} title="Service used for orders that match no rule" className="text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-emerald-500"><option value="">No fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx Ground Economy">FedEx Ground Economy</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
         <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Ship date</span><input type="date" value={apShipDate} onChange={e=>setApShipDate(e.target.value)} className="text-sm font-mono text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-emerald-500"/></label>
         <button onClick={runAutopilot} disabled={apRunning||ords.filter(o=>o.status!=="fulfilled").length===0} title="Apply your rules and create labels for every unfulfilled order (held orders are skipped)" className="text-sm bg-emerald-600 text-white rounded-lg px-4 py-2.5 font-semibold hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-2 shadow-sm">{apRunning?<Loader2 className="w-4 h-4 animate-spin"/>:<Zap className="w-4 h-4"/>}Run Autopilot{!apRunning&&run?` — label ${run.results.filter(r=>r.order.status!=="fulfilled"&&!r.view.hold).length} orders`:""}</button>
       </div>
@@ -10019,47 +10870,89 @@ function ConnectorModal({c,settings,setSettings,orders,setOrders,onClose}){
   );
 }
 function Integrations({settings,setSettings,orders,setOrders}){
-  const conn=settings.shopifyConn;
-  const connected=shopifyConnected(settings);
+  const conns=shopifyConns(settings);
+  const connected=conns.length>0;
   const [shop,setShop]=useState("");
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState(null);
   const [active,setActive]=useState(null); // connector id whose modal is open
+  const [tokMode,setTokMode]=useState(false);
+  const [tok,setTok]=useState("");
+  const [tokBusy,setTokBusy]=useState(false);
   const normShop=(v)=>{let s=String(v||"").trim().toLowerCase().replace(/^https?:\/\//,"").replace(/\/.*$/,"");if(s&&!s.includes("."))s=s+".myshopify.com";return s;};
-  const connect=()=>{const s=normShop(shop);if(!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(s)){setMsg({err:"Enter your store like mystore.myshopify.com"});return;}window.location.href=`${SHOPIFY_AUTH}?shop=${encodeURIComponent(s)}`;};
-  const disconnect=()=>{ setSettings(p=>{const n={...p};delete n.shopifyConn;return n;}); setMsg(null); };
+  const validShop=(s)=>/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(s);
+  const connect=async()=>{const s=normShop(shop);if(!validShop(s)){setMsg({err:"Enter your store like mystore.myshopify.com"});return;}
+    if(conns.some(c=>c.shop===s)){setMsg({err:s+" is already connected."});return;}
+    /* One-click OAuth needs the platform's Shopify app on the server. Ping first — if it's not
+       configured, open the self-service token path instead of dead-ending on an error page. */
+    let configured=false;
+    try{ const r=await fetch(`${SHOPIFY_AUTH}?ping=1`); const d=await r.json(); configured=!!(d&&d.configured); }catch(e){}
+    if(configured){ window.location.href=`${SHOPIFY_AUTH}?shop=${encodeURIComponent(s)}`; return; }
+    setTokMode(true); setMsg(null);};
+  const connectToken=async()=>{
+    const s=normShop(shop);
+    if(!validShop(s)){setMsg({err:"Enter your store like mystore.myshopify.com"});return;}
+    if(conns.some(c=>c.shop===s)){setMsg({err:s+" is already connected."});return;}
+    const t=String(tok||"").trim();
+    if(!t){setMsg({err:"Paste the Admin API access token (starts with shpat_)."});return;}
+    setTokBusy(true);setMsg(null);
+    const res=await shopifySyncOrders({shop:s,token:t});   // real API call = the token is verified before we save anything
+    setTokBusy(false);
+    if(!res||!res.ok){setMsg({err:"Shopify rejected that token: "+((res&&res.error)||"no response")+" — check the token and that the app is installed on "+s+"."});return;}
+    setSettings(p=>{ const others=shopifyConns(p).filter(c=>c.shop!==s); const n={...p,shopifyConns:[...others,{shop:s,token:t,connectedAt:new Date().toISOString()}]}; delete n.shopifyConn; return n; });
+    if(setOrders&&res.orders&&res.orders.length){ const have=new Set((orders||[]).map(o=>o.shopifyId).filter(Boolean)); const fresh=res.orders.filter(o=>!have.has(o.shopifyId)).map(o=>({...o,_shop:s})); if(fresh.length)setOrders(o=>[...fresh,...o]); }
+    setShop("");setTok("");setTokMode(false);
+    setMsg({ok:s+" connected ✓"+(res.orders?` · ${res.orders.length} open order${res.orders.length===1?"":"s"} pulled`:"")});};
+  const disconnect=(shp)=>{ setSettings(p=>{ const rest=shopifyConns(p).filter(c=>c.shop!==shp); const n={...p,shopifyConns:rest}; delete n.shopifyConn; return n; }); setMsg(null); };
   const sync=async()=>{
     if(!connected)return; setBusy(true);setMsg(null);
-    const res=await shopifySyncOrders(conn);
+    let all=[],ok=false,er="";
+    for(const c of conns){ const res=await shopifySyncOrders(c); if(res&&res.ok){ok=true;(res.orders||[]).forEach(o=>all.push({...o,_shop:c.shop}));} else if(!er){er=(res&&res.error)||"";} }
     setBusy(false);
-    if(res&&res.ok){
+    if(ok){
       const existing=new Set((orders||[]).map(o=>o.shopifyId).filter(Boolean));
-      const fresh=(res.orders||[]).filter(o=>!existing.has(o.shopifyId));
+      const fresh=all.filter(o=>!existing.has(o.shopifyId));
       if(setOrders&&fresh.length) setOrders(o=>[...fresh,...o]);
-      setMsg({ok:`Synced ${res.orders.length} open order${res.orders.length===1?"":"s"} · ${fresh.length} new`});
-    } else setMsg({err:(res&&res.error)||"Sync failed"});
+      setMsg({ok:`Synced ${all.length} open order${all.length===1?"":"s"} across ${conns.length} store${conns.length===1?"":"s"} · ${fresh.length} new`});
+    } else setMsg({err:er||"Sync failed"});
   };
   const activeC=active?connectorOf(active):null;
   return (<div className="max-w-3xl space-y-3">
-    <p className="text-sm text-stone-500">Connect a platform so orders flow into Orders automatically, and tracking pushes back when you print a label. Click any tile for exact setup steps.</p>
-    {/* Shopify (live) */}
+    <p className="text-sm text-stone-500">Connect one or more stores so orders flow into Orders automatically, and tracking pushes back to the right store when you print a label. Click any tile for exact setup steps.</p>
+    {/* Shopify (live) — supports multiple stores */}
     <div className="border border-stone-200 rounded-lg bg-white p-4">
       <div className="flex items-center gap-3">
         <div className="w-9 h-9 rounded bg-[#95BF47]/15 flex items-center justify-center"><ShoppingBag className="w-4 h-4 text-[#5E8E3E]"/></div>
-        <div className="flex-1 min-w-0"><div className="font-medium">Shopify</div><div className="text-[11px] text-stone-400 font-mono truncate">{connected?conn.shop:"Not connected"}</div></div>
+        <div className="flex-1 min-w-0"><div className="font-medium">Shopify</div><div className="text-[11px] text-stone-400 truncate">{connected?`${conns.length} store${conns.length===1?"":"s"} connected`:"Not connected"}</div></div>
         {connected?<Badge tone="green">connected</Badge>:null}
       </div>
-      {connected?(
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <button onClick={sync} disabled={busy} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>Sync orders now</>}</button>
-          <button onClick={disconnect} className="text-sm border border-stone-200 text-stone-500 rounded px-3 py-2 hover:bg-stone-50">Disconnect</button>
+      {connected&&<div className="mt-3 space-y-1.5">
+        {conns.map(c=>(<div key={c.shop} className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1.5">
+          <ShoppingBag className="w-3.5 h-3.5 text-[#5E8E3E] shrink-0"/>
+          <span className="font-mono text-[12px] text-stone-600 truncate flex-1">{c.shop}</span>
+          <button onClick={()=>disconnect(c.shop)} className="text-[11px] text-stone-400 hover:text-rose-600 shrink-0">Disconnect</button>
+        </div>))}
+        <button onClick={sync} disabled={busy} className="mt-1 text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>Sync all orders now</>}</button>
+      </div>}
+      <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-stone-100 pt-3">
+        <div className="flex-1 min-w-[220px]"><div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">{connected?"Connect another store":"Store domain"}</div><Input value={shop} onChange={e=>setShop(e.target.value)} placeholder="mystore.myshopify.com"/></div>
+        <button onClick={connect} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Plug className="w-4 h-4"/>{connected?"Add store":"Connect"}</button>
+        <button onClick={()=>{setTokMode(v=>!v);setMsg(null);}} className="text-[11px] text-[#0086E0] hover:underline pb-2.5">{tokMode?"Hide token connect":"Connect with an access token instead"}</button>
+      </div>
+      {tokMode&&<div className="mt-3 bg-stone-50 border border-stone-200 rounded-lg p-3 space-y-2">
+        <div className="text-[10px] uppercase tracking-widest text-stone-500">Connect with an access token — no waiting on anyone, ~2 minutes</div>
+        <ol className="text-xs text-stone-600 list-decimal ml-4 space-y-1">
+          <li>In that store's Shopify admin, go to <b>Settings → Apps and sales channels → Develop apps</b> (click "Allow custom app development" if asked) → <b>Create an app</b> — name it anything, e.g. ShippingCloud.</li>
+          <li>Open the app → <b>Configuration → Admin API integration → Edit</b>, and tick these scopes: <b>read_orders, write_orders, read_products, write_shipping, read_fulfillments, write_fulfillments, read_assigned_fulfillment_orders, write_assigned_fulfillment_orders, read_merchant_managed_fulfillment_orders, write_merchant_managed_fulfillment_orders</b>. Save.</li>
+          <li>Go to <b>API credentials → Install app</b>, then <b>Reveal token once</b> and copy the Admin API access token (starts with <span className="font-mono">shpat_</span>).</li>
+          <li>Paste it here with the store domain above and click Verify &amp; connect.</li>
+        </ol>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="flex-1 min-w-[220px]"><div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">Admin API access token</div><Input type="password" value={tok} onChange={e=>setTok(e.target.value)} placeholder="shpat_…"/></div>
+          <button onClick={connectToken} disabled={tokBusy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{tokBusy?<><Loader2 className="w-4 h-4 animate-spin"/>Verifying…</>:<><ShieldCheck className="w-4 h-4"/>Verify &amp; connect</>}</button>
         </div>
-      ):(
-        <div className="mt-3 flex flex-wrap items-end gap-2">
-          <div className="flex-1 min-w-[220px]"><div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">Store domain</div><Input value={shop} onChange={e=>setShop(e.target.value)} placeholder="mystore.myshopify.com"/></div>
-          <button onClick={connect} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Plug className="w-4 h-4"/>Connect</button>
-        </div>
-      )}
+        <div className="text-[11px] text-stone-400">The token is verified against Shopify before anything saves, and it's stored with this account's settings — never shared.</div>
+      </div>}
       {msg&&<div className={`mt-2 text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${msg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{msg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{msg.err||msg.ok}</div>}
     </div>
     {/* All other connectors */}
@@ -10382,14 +11275,14 @@ function OtherDocs({settings,setSettings}){
   </div>);
 }
 
-function GeneralSettings({settings,setSettings,goSec,audit=[]}){
+function GeneralSettings({settings,setSettings,goSec,audit=[],currentUser,setCurrentUser}){
   const set=(k,v)=>setSettings(p=>({...p,[k]:v}));
   const sn=settings.sender||{};
   const setSn=(k,v)=>setSettings(p=>({...p,sender:{...(p.sender||{}),[k]:v}}));
   const F=({k,label,ph,hint,type})=>(<label className="block text-sm text-stone-700">{label}
     <input type={type||"text"} value={settings[k]||""} onChange={e=>set(k,e.target.value)} placeholder={ph} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
     {hint&&<span className="block text-[11px] text-stone-400 mt-0.5">{hint}</span>}</label>);
-  const links=[["customize","Customizations","Fields, rates, theme, shortcuts"],["reference","Reference Fields","Dropdown values, required & locked fields"],["carriers","Carrier accounts","FedEx & DHL connections"],["boxes","Package sizes","Your box library"],["printer","Print settings","Labels, printing, doc tabs & automation"],["notifications","Email automation","Customer notifications"]];
+  const links=[["shipscreen","Ship screen","Scan mode, hidden fields & Ship-tab options"],["customize","Customizations","Services, appearance, tabs & packing slips"],["reference","Reference Fields","Dropdown values, required & locked fields"],["carriers",BRAND.fw?"FedEx Account":"Carrier accounts",BRAND.fw?"Your FedEx connection":"FedEx & DHL connections"],["boxes","Package sizes","Your box library"],["printer","Print settings","Labels, printing, doc tabs & automation"],["notifications","Email automation","Customer notifications"],["integrations","Integrations","Stores & order sources"]];
   return (<div className="max-w-2xl space-y-4">
     <Panel title="Your company">
       <div className="grid sm:grid-cols-2 gap-3">
@@ -10422,6 +11315,8 @@ function GeneralSettings({settings,setSettings,goSec,audit=[]}){
         {audit.map((a,i)=><div key={i} className="px-3 py-2 text-xs flex items-baseline gap-2"><span className="text-stone-400 shrink-0 w-36">{a.ts}</span><span className="font-medium text-stone-700 shrink-0">{a.action}</span><span className="text-stone-500 truncate">{a.detail}</span><span className="ml-auto text-stone-300 shrink-0">{a.user}</span></div>)}
       </div>
     </Panel>
+    <AccountLoginPanel currentUser={currentUser} setCurrentUser={setCurrentUser}/>
+    <TwoFactorPanel/>
     <Panel title="Jump to">
       <div className="grid sm:grid-cols-2 gap-2">
         {links.map(([k,l,d])=>(<button key={k} onClick={()=>goSec(k)} className="text-left border border-stone-200 rounded-lg px-3 py-2 hover:border-[#99D6FF] hover:bg-[#E6F4FF]/40">
@@ -10429,6 +11324,102 @@ function GeneralSettings({settings,setSettings,goSec,audit=[]}){
       </div>
     </Panel>
   </div>);
+}
+/* Self-service login email change. Keeps the same password + 2FA — only the email moves.
+   Cloud logins only (local/demo has no server-side account). */
+function AccountLoginPanel({currentUser,setCurrentUser}){
+  const cloud=CLOUD.mode==="cloud"&&!!CLOUD.token;
+  const [email,setEmail]=useState((currentUser&&currentUser.email)||"");
+  const [pw,setPw]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState(null);            // {t:"ok"|"err",m}
+  useEffect(()=>{ setEmail((currentUser&&currentUser.email)||""); },[currentUser&&currentUser.email]);
+  if(!cloud) return null;
+  const curEmail=(currentUser&&currentUser.email)||"";
+  const changed=email.trim().toLowerCase()!==curEmail.toLowerCase();
+  const save=async()=>{
+    if(!changed){setMsg({t:"err",m:"That's already your login email."});return;}
+    if(!pw){setMsg({t:"err",m:"Enter your current password to confirm."});return;}
+    setBusy(true);setMsg(null);
+    const r=await cloudCall({action:"changeEmail",token:CLOUD.token,newEmail:email.trim(),password:pw});
+    setBusy(false);
+    if(r&&r.ok){
+      try{ if(r.token){CLOUD.token=r.token;lsSet("cloud.token",r.token);} }catch(e){}
+      if(setCurrentUser)setCurrentUser(cu=>cu&&({...cu,email:r.email||email.trim()}));
+      setPw("");setMsg({t:"ok",m:"Login email updated. Use "+(r.email||email.trim())+" next time you sign in — your password and 2FA are unchanged."});
+    } else setMsg({t:"err",m:(r&&r.error)||"Could not update email."});
+  };
+  return (<Panel title="Login email">
+    <p className="text-xs text-stone-500 -mt-1 mb-2">This is the email you sign in with. Changing it keeps your current password and 2FA exactly as they are.</p>
+    <div className="space-y-2 max-w-md">
+      <Field label="Email"><Input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@company.com"/></Field>
+      {changed&&<Field label="Confirm with your current password"><Input type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&save()} placeholder="••••••••"/></Field>}
+      <div className="flex items-center gap-2">
+        <button disabled={busy||!changed} onClick={save} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"Saving…":"Update login email"}</button>
+        {changed&&<button disabled={busy} onClick={()=>{setEmail(curEmail);setPw("");setMsg(null);}} className="text-xs text-stone-400 hover:text-stone-600">Cancel</button>}
+      </div>
+      {msg&&<div className={`text-sm ${msg.t==="ok"?"text-emerald-700":"text-rose-600"}`}>{msg.m}</div>}
+    </div>
+  </Panel>);
+}
+/* Self-service two-factor auth (TOTP). Only shows for cloud logins — local/demo mode has no server to store the secret. */
+function TwoFactorPanel(){
+  const [status,setStatus]=useState(null);        // {enabled,pending,backupLeft} | null (loading)
+  const [setup,setSetup]=useState(null);          // {secret,otpauth} while enrolling
+  const [code,setCode]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState(null);              // {t:"ok"|"err",m}
+  const [codes,setCodes]=useState(null);          // freshly-issued backup codes to show ONCE
+  const cloud=CLOUD.mode==="cloud"&&!!CLOUD.token;
+  const load=async()=>{ if(!cloud){setStatus({enabled:false,pending:false,backupLeft:0});return;} const r=await cloudCall({action:"totpStatus",token:CLOUD.token}); setStatus(r&&r.ok?{enabled:!!r.enabled,pending:!!r.pending,backupLeft:r.backupLeft||0}:{enabled:false,pending:false,backupLeft:0}); };
+  useEffect(()=>{load();},[]);
+  const begin=async()=>{ setBusy(true); setMsg(null); const r=await cloudCall({action:"totpBegin",token:CLOUD.token}); setBusy(false); if(r&&r.ok){setSetup({secret:r.secret,otpauth:r.otpauth});setCode("");}else setMsg({t:"err",m:(r&&r.error)||"Could not start setup."}); };
+  const enable=async()=>{ setBusy(true); setMsg(null); const r=await cloudCall({action:"totpEnable",token:CLOUD.token,code:code.trim()}); setBusy(false); if(r&&r.ok){setSetup(null);setCode("");setMsg({t:"ok",m:"Two-factor authentication is now ON."});if(r.backupCodes)setCodes(r.backupCodes);load();}else setMsg({t:"err",m:(r&&r.error)||"Could not turn on 2FA."}); };
+  const disable=async()=>{ const c=window.prompt("Turn OFF two-factor. Enter a current 6-digit code from your authenticator app (or leave blank and use your password on the next prompt):",""); if(c===null)return; let pw=""; if(!String(c).trim()){ pw=window.prompt("Enter your account password to turn off 2FA:","")||""; if(!pw)return; } setBusy(true); setMsg(null); const r=await cloudCall({action:"totpDisable",token:CLOUD.token,code:String(c).trim(),password:pw}); setBusy(false); if(r&&r.ok){setMsg({t:"ok",m:"Two-factor authentication is off."});setCodes(null);load();}else setMsg({t:"err",m:(r&&r.error)||"Could not turn off 2FA."}); };
+  const regen=async()=>{ const c=window.prompt("Make a new set of backup codes? This invalidates any old ones. Enter a current 6-digit code (or leave blank to use your password):",""); if(c===null)return; let pw=""; if(!String(c).trim()){ pw=window.prompt("Enter your account password:","")||""; if(!pw)return; } setBusy(true); setMsg(null); const r=await cloudCall({action:"totpBackupRegen",token:CLOUD.token,code:String(c).trim(),password:pw}); setBusy(false); if(r&&r.ok){setCodes(r.backupCodes||[]);setMsg({t:"ok",m:"New backup codes generated — save them now."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not make new codes."}); };
+  if(!cloud) return null;
+  const codesText=(codes||[]).join("\n");
+  return (<Panel title="Two-factor authentication (2FA)">
+    <p className="text-xs text-stone-500 -mt-1 mb-2">Add a second step at sign-in: your password plus a 6-digit code from a free authenticator app (Google Authenticator, Authy, 1Password). Strongly recommended for admin logins.</p>
+    {status===null&&<div className="text-sm text-stone-400">Checking…</div>}
+    {status&&status.enabled&&!setup&&<div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm text-emerald-700"><Check className="w-4 h-4"/>2FA is <b>on</b> for your login.</div>
+        <button disabled={busy} onClick={disable} className="text-xs rounded px-2.5 py-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200 disabled:opacity-50">Turn off</button>
+      </div>
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className={status.backupLeft<=2?"text-amber-600":"text-stone-500"}>Backup codes remaining: <b>{status.backupLeft}</b>{status.backupLeft<=2&&" — running low, make new ones"}</span>
+        <button disabled={busy} onClick={regen} className="rounded px-2.5 py-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200 disabled:opacity-50">New backup codes</button>
+      </div>
+    </div>}
+    {status&&!status.enabled&&!setup&&<button disabled={busy} onClick={begin} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"One moment…":"Set up 2FA"}</button>}
+    {setup&&<div className="space-y-3">
+      <div className="text-sm text-stone-700">1. In your authenticator app, add an account and enter this key (or paste the setup link):</div>
+      <div className="bg-stone-50 border border-stone-200 rounded-lg p-3 space-y-2">
+        <div className="flex items-center gap-2"><code className="font-mono text-sm tracking-wider break-all flex-1">{setup.secret}</code>
+          <button onClick={()=>{try{navigator.clipboard.writeText(setup.secret);setMsg({t:"ok",m:"Key copied."});}catch(e){}}} className="text-[11px] rounded px-2 py-1 bg-white border border-stone-300 hover:bg-stone-100 shrink-0">Copy key</button></div>
+        <button onClick={()=>{try{navigator.clipboard.writeText(setup.otpauth);setMsg({t:"ok",m:"Setup link copied."});}catch(e){}}} className="text-[11px] text-[#0086E0] underline underline-offset-2">Copy setup link (otpauth://)</button>
+      </div>
+      <div className="text-sm text-stone-700">2. Enter the 6-digit code your app shows now:</div>
+      <div className="flex items-center gap-2">
+        <input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,"").slice(0,6))} onKeyDown={e=>e.key==="Enter"&&enable()} placeholder="123456" inputMode="numeric" className="w-32 border border-stone-300 rounded-lg px-3 py-2 text-sm tracking-[0.3em] text-center outline-none focus:border-[#0099FF]"/>
+        <button disabled={busy||code.length!==6} onClick={enable} className="text-sm bg-emerald-600 text-white rounded-lg px-3 py-2 font-medium hover:bg-emerald-700 disabled:opacity-50">Turn on 2FA</button>
+        <button disabled={busy} onClick={()=>{setSetup(null);setCode("");setMsg(null);}} className="text-xs text-stone-400 hover:text-stone-600">Cancel</button>
+      </div>
+    </div>}
+    {codes&&<div className="mt-3 border border-amber-200 bg-amber-50 rounded-lg p-3 space-y-2">
+      <div className="text-sm font-semibold text-amber-800">Save your backup codes now</div>
+      <p className="text-[12px] text-amber-700">Each code works <b>once</b> if you don’t have your phone. Store them somewhere safe — you won’t see them again.</p>
+      <div className="grid grid-cols-2 gap-1.5 font-mono text-sm text-stone-800 bg-white border border-amber-200 rounded p-2">
+        {codes.map((c,i)=><div key={i} className="tracking-wider">{c}</div>)}
+      </div>
+      <div className="flex gap-2">
+        <button onClick={()=>{try{navigator.clipboard.writeText(codesText);setMsg({t:"ok",m:"Backup codes copied."});}catch(e){}}} className="text-[11px] rounded px-2 py-1 bg-white border border-stone-300 hover:bg-stone-100">Copy all</button>
+        <button onClick={()=>setCodes(null)} className="text-[11px] rounded px-2 py-1 bg-stone-800 text-white hover:bg-stone-700">I’ve saved them</button>
+      </div>
+    </div>}
+    {msg&&<div className={`text-sm mt-2 ${msg.t==="ok"?"text-emerald-700":"text-rose-600"}`}>{msg.m}</div>}
+  </Panel>);
 }
 function CompanyCustomDeploy({companyUsers,companyFlags,setCompanyFlags,adminSettings}){
   const [inclProducts,setInclProducts]=useState(false);
@@ -10506,7 +11497,7 @@ function FieldLists({settings,setSettings}){
     <Ed k="po" title="PO # values" ph="e.g. PO-GILLETTE-…" extra={<Opts req="poRequired" lock="poLocked"/>}/>
   </div>);
 }
-function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false}){
+function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,only}){
   const locked=blockedKeys||new Set();
   const committedCustom=cz(settings);
   const _cd=useDraft(committedCustom,(v)=>setSettings(p=>({...p,custom:v})),CUSTOM_DEFAULTS);
@@ -10526,6 +11517,11 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false}){
   }catch(e){} };
   useEffect(()=>{ _applyLook(c||{}); },[c&&c.theme,c&&c.accent,c&&c.fontScale]);
   useEffect(()=>()=>{ _applyLook(_commitRef.current||{}); },[]);
+  /* Broadcast draft surface colors + accent so the live app chrome (header/nav/page + logo tint)
+     previews them before Save. Only the main Customizations editor drives this — not the admin
+     deploy editor or the trimmed Ship-screen section. Cleared on unmount so nothing sticks. */
+  useEffect(()=>{ if(only||deployMode)return; try{ window.dispatchEvent(new CustomEvent("sc-look-preview",{detail:{headerBg:c.headerBg||"",navBg:c.navBg||"",pageBg:c.pageBg||"",appBg:c.appBg||"",accent:c.accent||""}})); }catch(e){} },[only,deployMode,c&&c.headerBg,c&&c.navBg,c&&c.pageBg,c&&c.appBg,c&&c.accent]);
+  useEffect(()=>()=>{ if(only||deployMode)return; try{ window.dispatchEvent(new CustomEvent("sc-look-preview",{detail:null})); }catch(e){} },[]);
   const Tog=({k,label,hint,invert})=>(<label className="flex items-start gap-2 text-sm text-stone-700 cursor-pointer">
     <input type="checkbox" checked={invert?c[k]===false:!!c[k]} onChange={e=>set(k,invert?!e.target.checked:e.target.checked)} className="accent-[#0086E0] mt-0.5"/>
     <span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span></label>);
@@ -10554,28 +11550,33 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false}){
   const togTab=(k)=>{const nx=new Set(hiddenTabs); nx.has(k)?nx.delete(k):nx.add(k); set("hiddenTabs",[...nx]);};
   const order=(c.tabOrder&&c.tabOrder.length)?c.tabOrder:tabChoices.map(x=>x[0]);
   const move=(k,dir)=>{const a=[...order];const i=a.indexOf(k);const j=i+dir;if(i<0||j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];set("tabOrder",a);};
-  const [cs,setCs]=useState("services");
-  const CTABS=[["services","Services"],["ship","Ship screen"],["orders","Orders & lists"],["appearance","Appearance"],["slips","Packing slips"]];   // Autopilot toggles moved to Settings → Print settings (v355)   // Labels & printing moved to Settings → Printer settings (v281)
+  const [cs,setCs]=useState(only||"services");
+  /* Ship screen is its own top-level Settings section now (v376). It still shows as a tab in
+     deployMode so the admin team-deploy screen keeps every option in one place. `only` renders a
+     single panel with no tab bar — used by Settings → Ship screen. */
+  const CTABS=[["services","Services"],...(deployMode?[["ship","Ship screen"],["orders","Orders & lists"]]:[]),["appearance","Appearance"]];   // Ship screen + Orders are their own top-level Settings sections now (still tabs in deployMode so team-deploy keeps every option in one place). Packing-slip message/footer moved to Settings → Print settings → Packing slip (v393). Autopilot toggles → Print settings (v355). Labels & printing → Printer settings (v281).
   const Toggle=({k,label,hint})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700">
     <span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span>
     <button onClick={()=>set(k,!c[k])}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${c[k]?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
   </label>);
   return (<div className="max-w-2xl space-y-4">
     <DraftBar dirty={_cd.dirty} onSave={_cd.save} onUndo={_cd.undo} onReset={()=>{ if(window.confirm("Reset all customizations to their defaults? You'll still need to click Save to keep it.")) _cd.reset(); }} resetLabel="Reset to defaults" savedNote="Customizations saved"/>
-    {!deployMode&&<div className="text-sm text-stone-500">Make {BRAND.product} yours. Every option here changes the app immediately for <b>your login only</b>.</div>}
-    <div className="flex items-center gap-1 border-b border-stone-200 overflow-x-auto">
+    {!deployMode&&!only&&<div className="text-sm text-stone-500">Make {BRAND.product} yours. Every option here changes the app immediately for <b>your login only</b>.</div>}
+    {only==="ship"&&<div className="text-sm text-stone-500">Tune the Ship tab. Every option here changes the app immediately for <b>your login only</b>.</div>}
+    {only==="orders"&&<div className="text-sm text-stone-500">Tune the Orders page — pick which columns show and how lists behave. Changes apply immediately for <b>your login only</b>.</div>}
+    {!only&&<div className="flex items-center gap-1 border-b border-stone-200 overflow-x-auto">
       {CTABS.map(([v,l])=><button key={v} onClick={()=>setCs(v)} className={`px-3 py-2 text-sm rounded-t-lg whitespace-nowrap border-b-2 -mb-px ${cs===v?"border-[#0086E0] text-stone-900 font-medium":"border-transparent text-stone-500 hover:bg-stone-50"}`}>{l}</button>)}
-    </div>
+    </div>}
 
     {cs==="ship"&&<Panel title="Ship screen">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         <Tog k="hideRateSrcBar" label="Hide the rate-source banner" hint="Removes the ‘Live rates from your FedEx account / Estimated rates’ strip above the service list."/>
         <Tog k="hideAutopilotBox" label="Hide the Autopilot match banner" hint="Removes the ‘Autopilot rule matched…’ box above Select service. Rules still run and still pre-highlight the service."/>
         <Tog k="hideNotifyBox" label="Hide the Send label & notify box" hint="Removes the email panel at the bottom of the Ship tab. Automated notifications in Settings → Email automation still send."/>
-        <Tog k="scanAutoFocus" label="Scan mode — keep the scan box ready" hint="The scan box is focused the moment the Ship tab opens and re-arms itself after every scan and booking — scan barcode after barcode without touching the mouse. It never steals focus while you're typing in another field."/>
+        <Tog k="hideShipOrders" label="Hide the orders list on the Ship screen" hint="Removes the orders sidebar (and its collapsed tab) from the Ship screen completely — ship by scanning or typing shipments in manually. Orders still live on the Orders tab."/>
+        <Tog k="scanAutoFocus" label="Scan mode — keep the scan box ready" hint="The cursor lives in the scan box: it's focused when the Ship tab opens, re-arms after every scan and booking, and returns after you click orders, services or buttons. It only steps aside while you're typing in another field (like editing the shipping information), then comes back on your next click."/>
         <Tog k="hideInvoice" label="Hide Invoice # field"/>
         <Tog k="hidePO" label="Hide PO # field"/>
-        <Tog k="matchedOnly" label="Only show the requested service" hint="When a store order names the service the buyer paid for, show just that one — pre-highlighted, ready to print. Other services sit behind ‘Show all services’."/>
         <Tog k="hideAddr23" label="Hide Address 2 & 3" hint="On both sender and receiver cards"/>
         <Tog k="hideOz" label="Hide the oz box" hint="Whole pounds are enough for most shops"/>
         <Tog k="hideInsure" label="Hide the Insure $ field"/>
@@ -10591,7 +11592,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false}){
         <label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>Ship-date cutoff time<span className="block text-[11px] text-stone-400">After this local time, new shipments default to the NEXT day's ship date. Leave blank to always use today.</span></span>
           <span className="flex items-center gap-1"><input type="time" value={c.shipDateCutoff||""} onChange={e=>set("shipDateCutoff",e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"/>{c.shipDateCutoff&&<button onClick={()=>set("shipDateCutoff","")} className="text-[11px] text-stone-400 hover:text-rose-500">clear</button>}</span></label>
         <label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>Fallback service when no rule matches<span className="block text-[11px] text-stone-400">In Batch &amp; Autopilot, orders that don't match any of your rules use this service instead of being left unset. Blank = leave unset (no fallback).</span></span>
-          <select value={c.fallbackService||""} onChange={e=>set("fallbackService",e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"><option value="">No fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
+          <select value={c.fallbackService||""} onChange={e=>set("fallbackService",e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"><option value="">No fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx Ground Economy">FedEx Ground Economy</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
       </div>
     </Panel>}
 
@@ -10603,9 +11604,9 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false}){
         <Num k="priceWarn" label="Price alert" hint="Flag any rate above this amount. 0 = off" step="1" suffix="$"/>
       </div>
       <div className="border-t border-stone-100 mt-3 pt-3">
-        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Services — hide ones you never use, rename the rest{locked.size>0&&<span className="normal-case tracking-normal text-stone-400"> · greyed-out ones are turned off by your admin</span>}</div>
+        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Services — hide ones you never use, rename the rest{(isAdmin||deployMode)&&locked.size>0&&<span className="normal-case tracking-normal text-stone-400"> · greyed-out ones you've turned off for this customer</span>}</div>
         <div className="space-y-1.5">
-          {SVC.map(([k,l])=>{const lk=locked.has(k);const off=svcHidden.has(k)||lk;return (<div key={k} className="flex items-center gap-3">
+          {SVC.filter(([k])=>isAdmin||deployMode||!locked.has(k)).map(([k,l])=>{const lk=locked.has(k);const off=svcHidden.has(k)||lk;return (<div key={k} className="flex items-center gap-3">
             <label className={`flex items-center gap-1.5 text-sm w-56 shrink-0 ${lk?"text-stone-300 cursor-not-allowed":"text-stone-700 cursor-pointer"}`}><input type="checkbox" checked={!off} disabled={lk} onChange={()=>togSvc(k)} className="accent-[#0086E0]"/><span className={off?"line-through text-stone-300":""}>{l}</span>{lk&&<span className="text-[10px] text-stone-400 normal-case">locked</span>}</label>
             <input value={(c.aliases||{})[k]||""} onChange={e=>setAlias(k,e.target.value)} placeholder={"rename — e.g. "+(k==="ground"?"Standard":k==="2day"?"Fast":"…")} disabled={off} className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 disabled:opacity-40"/>
           </div>);})}
@@ -10614,30 +11615,21 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false}){
       </div>
     </Panel>}
 
-    {cs==="slips"&&<Panel title="Packing slips">
-      <div className="space-y-2.5">
-        <label className="block text-sm text-stone-700">Thank-you message<textarea value={c.slipThanks} onChange={e=>set("slipThanks",e.target.value)} rows={2} placeholder="Thanks for your order! We appreciate you." className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></label>
-        <label className="block text-sm text-stone-700">Footer line<input value={c.slipFooter} onChange={e=>set("slipFooter",e.target.value)} placeholder="Returns within 30 days · support@yourstore.com" className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></label>
-        <div className="text-[11px] text-stone-400">Prints on every packing slip — Ship, Batch, and Orders.</div>
-      </div>
-    </Panel>}
 
-    {cs==="orders"&&<Panel title="Lists & alerts">
-      <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
+    {cs==="orders"&&<Panel title="Orders page">
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Columns — untick to hide completely</div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+        {[["age","Age"],["date","Order date"],["items","Items"],["recipient","Recipient"],["requested","Requested"],["estRate","Est. Rate"],["qty","Qty"],["total","Order total"],["status","Status"],...(c.autopilotPreview?[["autopilot","Autopilot"]]:[])].map(([k,l])=>{
+          const hidden=(c.orderCols||[]).includes(k);
+          return <label key={k} className="flex items-center gap-1.5 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!hidden} onChange={()=>{const nx=new Set(c.orderCols||[]);hidden?nx.delete(k):nx.add(k);set("orderCols",[...nx]);}} className="accent-[#0086E0]"/><span className={hidden?"text-stone-300":""}>{l}</span></label>;
+        })}
+      </div>
+      <div className="text-[11px] text-stone-400 mt-1.5">Order # and actions always show. Shipped orders never show Autopilot or Est. Rate — those only mean something before the label is booked.</div>
+      <div className="border-t border-stone-100 mt-3 pt-3 grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
+        <Tog k="autopilotPreview" label="Show an Autopilot preview column" hint="Adds a column showing what your Autopilot rules would pick for each order — the service, a hold, or 'no rule matches' — before you ship. Runs your real rules, updates live."/>
         <Sel k="density" label="List density" opts={[["comfortable","Comfortable"],["compact","Compact — more rows per screen"]]}/>
         <Num k="spendCap" label="Spending cap" hint="Hard-blocks booking any label above this. 0 = off" suffix="$"/>
         <Tog k="hotkeys" label="Keyboard shortcuts" hint="Press ? anywhere for the list — g then o jumps to Orders, etc."/>
-      </div>
-      <div className="border-t border-stone-100 mt-3 pt-3">
-        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Orders table columns</div>
-        <Tog k="autopilotPreview" label="Show an Autopilot preview column" hint="Adds a column to the Orders table showing what your Autopilot rules would pick for each order — the service, a hold, or 'no rule matches' — before you ship. Runs your real rules, updates live."/>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mt-2">
-          {[["age","Age"],["date","Order date"],["items","Items"],["recipient","Recipient"],["requested","Requested"],["qty","Qty"],["total","Order total"],["status","Status"],...(c.autopilotPreview?[["autopilot","Autopilot"]]:[])].map(([k,l])=>{
-            const hidden=(c.orderCols||[]).includes(k);
-            return <label key={k} className="flex items-center gap-1.5 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!hidden} onChange={()=>{const nx=new Set(c.orderCols||[]);hidden?nx.delete(k):nx.add(k);set("orderCols",[...nx]);}} className="accent-[#0086E0]"/><span className={hidden?"text-stone-300":""}>{l}</span></label>;
-          })}
-        </div>
-        <div className="text-[11px] text-stone-400 mt-1.5">Order # and actions always show.</div>
         <Num k="stuckDays" label="Stuck-shipment flag" hint="Highlight in-transit shipments older than this many days. 0 = off" suffix="days"/>
       </div>
     </Panel>}
@@ -10676,7 +11668,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false}){
         <Sel k="fontScale" label="Text size" opts={[[94,"Small"],[100,"Normal"],[107,"Large"]]}/>
         <Sel k="theme" label="Theme" opts={[["light","Light"],["grey","Grey"],["dark","Dark"]]}/>
         <Sel k="confetti" label="Booking confetti 🎉" opts={[["page","Everywhere — full-page drop"],["button","Just around the button"],["off","Off"]]}/>
-        <Tog k="seasonal" label="Seasonal touches" hint="A little 🎅 🎃 ❤️ on the logo around the holidays"/>
+        {(isAdmin||deployMode)&&<Tog k="seasonal" label="Seasonal touches (admin)" hint="A little 🎅 🎃 ❤️ on the logo around the holidays. Off unless you, the admin, turn it on."/>}
         <Sel k="startTab" label="Start page after login" opts={tabChoices.map(x=>[x[0],x[1]])}/>
       </div>
       <div className="mt-3 rounded-xl border border-stone-200 bg-white p-3">
@@ -10714,7 +11706,10 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false}){
           <div className="text-[11px] text-stone-400">Drag the rainbow for the hue, the second bar for light/dark — or use a preset above.</div>
         </div>);})()}
       <div className="border-t border-stone-100 mt-3 pt-3">
-        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Surface colors</div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400">Surface colors</div>
+          <button onClick={()=>{set("accent","");set("headerBg","");set("navBg","");set("pageBg","");}} className="text-[11px] text-stone-500 hover:text-rose-600 flex items-center gap-1 border border-stone-200 rounded-lg px-2 py-1"><RotateCcw className="w-3 h-3"/>Reset accent &amp; surfaces</button>
+        </div>
         <div className="grid sm:grid-cols-3 gap-3">
           {[["headerBg","Header fill"],["navBg","Left tabs"],["pageBg","Page background"]].map(([k,l])=>(
             <div key={k} className="flex items-center justify-between gap-2 text-sm text-stone-700 border border-stone-200 rounded-lg px-2.5 py-2">
@@ -10772,9 +11767,6 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false}){
       </div>
     </Panel>
 
-    <div className="border border-dashed border-stone-300 rounded-lg p-3 text-[12px] text-stone-400">
-      Coming soon: custom email wording, company-wide customization deployment, manager approvals, branded tracking pages.
-    </div>
     </>}
   </div>);
 }

@@ -8,7 +8,7 @@
    ════════════════════════════════════════════════════════════════════════ */
 const J = (o) => ({ statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify(o) });
 const S = (v) => (v == null ? "" : String(v));
-const API = "2025-07";
+const API = "2026-01";
 const numId = (gid) => S(gid).split("/").pop();
 
 async function gql(shop, token, query, variables) {
@@ -39,6 +39,36 @@ exports.handler = async (event) => {
     if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop) || !token) return J({ ok: false, error: "Missing shop/token." });
     if (!orderId) return J({ ok: false, error: "Missing Shopify order id." });
 
+    /* ── updateOrder: push edited order info (shipping address / email / note) BACK to Shopify ── */
+    if (body.action === "updateOrder") {
+      const a = body.shippingAddress || null;
+      const input = { id: "gid://shopify/Order/" + orderId };
+      if (a) {
+        const name = String(a.name || "").trim();
+        input.shippingAddress = {
+          firstName: name.split(/\s+/)[0] || name || undefined,
+          lastName: name.split(/\s+/).slice(1).join(" ") || undefined,
+          company: S(a.company) || undefined,
+          address1: S(a.address1) || undefined,
+          address2: S(a.address2) || undefined,
+          city: S(a.city) || undefined,
+          provinceCode: S(a.state) || undefined,
+          zip: S(a.zip) || undefined,
+          phone: S(a.phone) || undefined,
+          countryCode: (S(a.country) || "US").slice(0, 2).toUpperCase()
+        };
+      }
+      if (body.email) input.email = S(body.email);
+      if (body.note != null) input.note = S(body.note).slice(0, 5000);
+      const ur = await gql(shop, token,
+        `mutation($input:OrderInput!){orderUpdate(input:$input){order{id} userErrors{field message}}}`,
+        { input });
+      if (ur.status === 401) return J({ ok: false, error: "Shopify rejected the token (401) — reconnect the store." });
+      const upay = ((ur.data || {}).orderUpdate) || {};
+      if (!ur.ok || (upay.userErrors || []).length) return J({ ok: false, error: "Order update failed: " + JSON.stringify((upay.userErrors && upay.userErrors.length ? upay.userErrors : ur.errors) || {}).slice(0, 250) });
+      return J({ ok: true, updated: true });
+    }
+
     // 1) open fulfillment orders for this order
     const fr = await gql(shop, token,
       `query($id:ID!){order(id:$id){fulfillmentOrders(first:20){nodes{id status}}}}`,
@@ -47,7 +77,41 @@ exports.handler = async (event) => {
     if (!fr.ok) return J({ ok: false, error: "Fulfillment-orders lookup failed: " + JSON.stringify(fr.errors || {}).slice(0, 200) });
     const all = (((fr.data || {}).order || {}).fulfillmentOrders || {}).nodes || [];
     const fos = all.filter((f) => ["OPEN", "IN_PROGRESS", "SCHEDULED"].includes(S(f.status).toUpperCase()));
-    if (!fos.length) return J({ ok: false, error: "No open fulfillment orders (order may already be fulfilled)." });
+    if (!fos.length) {
+      /* Held orders must not silently get their old fulfillment's tracking replaced. */
+      if (all.some((f) => S(f.status).toUpperCase() === "ON_HOLD")) return J({ ok: false, error: "This order is ON HOLD in Shopify — release the hold there, then push tracking again." });
+      /* Already fulfilled → this is a RE-LABEL: update the existing fulfillment's tracking to
+         the new number (and notify the customer) instead of failing. Newest successful one. */
+      const xr = await gql(shop, token,
+        `query($id:ID!){order(id:$id){fulfillments(first:50){id status}}}`,
+        { id: "gid://shopify/Order/" + orderId });
+      if (xr.status === 401) return J({ ok: false, error: "Shopify rejected the token (401) — reconnect the store." });
+      if (!xr.ok) return J({ ok: false, error: "Couldn't read the order's fulfillments: " + JSON.stringify(xr.errors || {}).slice(0, 200) });
+      const allF = ((((xr.data || {}).order || {}).fulfillments) || []);
+      const good = allF.filter((f) => S(f.status).toUpperCase() === "SUCCESS");
+      const fulfills = good.length ? good : allF.filter((f) => S(f.status).toUpperCase() !== "CANCELLED");
+      if (!fulfills.length) return J({ ok: false, error: "No open fulfillment orders and no existing fulfillment to update — check the order in Shopify." });
+      /* Replace tracking on EVERY active fulfillment, with the plural numbers/urls form.
+         Plural REPLACES the fulfillment's whole tracking list (the singular `number` field left
+         old numbers[] entries behind — that's why Shopify's "Tracking added" popover kept showing
+         the stale number while the order page showed the new one). Updating every fulfillment
+         guarantees no stale number survives on orders that grew a second fulfillment. */
+      let lastId = null;
+      for (const target of fulfills) {
+        const ur = await gql(shop, token,
+          `mutation($fulfillmentId:ID!,$trackingInfoInput:FulfillmentTrackingInput!,$notifyCustomer:Boolean){
+             fulfillmentTrackingInfoUpdate(fulfillmentId:$fulfillmentId,trackingInfoInput:$trackingInfoInput,notifyCustomer:$notifyCustomer){
+               fulfillment{id} userErrors{field message}}}`,
+          { fulfillmentId: target.id,
+            trackingInfoInput: { numbers: tracking ? [tracking] : [], urls: S(body.trackingUrl) ? [S(body.trackingUrl)] : [], company: S(body.carrier) || "FedEx" },
+            notifyCustomer: body.notifyCustomer !== false && target === fulfills[fulfills.length - 1] });
+        if (ur.status === 401) return J({ ok: false, error: "Shopify rejected the token (401) — reconnect the store." });
+        const upay = ((ur.data || {}).fulfillmentTrackingInfoUpdate) || {};
+        if (!ur.ok || (upay.userErrors || []).length) return J({ ok: false, error: "Tracking update failed: " + JSON.stringify((upay.userErrors && upay.userErrors.length ? upay.userErrors : ur.errors) || {}).slice(0, 250) });
+        lastId = target.id;
+      }
+      return J({ ok: true, fulfillmentId: numId(lastId), status: "tracking_updated", updated: true });
+    }
 
     // 2) create the fulfillment with tracking (all line items on each open FO)
     const cr = await gql(shop, token,

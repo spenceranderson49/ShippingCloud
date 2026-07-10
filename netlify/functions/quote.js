@@ -120,18 +120,30 @@ exports.handler = async (event) => {
   const fromZip = String(body.fromZip || "").trim();
   const toZip = String(body.toZip || "").trim();
   if (!fromZip || !toZip) return respond(200, { live: false, error: "Origin and destination ZIP required", rates: [] });
-  const PKG_MAP = { fedex_envelope: "FEDEX_ENVELOPE", fedex_pak: "FEDEX_PAK", fedex_extra_small_box: "FEDEX_SMALL_BOX", fedex_small_box: "FEDEX_SMALL_BOX", fedex_medium_box: "FEDEX_MEDIUM_BOX", fedex_large_box: "FEDEX_LARGE_BOX", fedex_tube: "FEDEX_TUBE" };
+  const PKG_MAP = { fedex_envelope: "FEDEX_ENVELOPE", fedex_pak: "FEDEX_PAK", fedex_extra_small_box: "FEDEX_EXTRA_SMALL_BOX", fedex_small_box: "FEDEX_SMALL_BOX", fedex_medium_box: "FEDEX_MEDIUM_BOX", fedex_large_box: "FEDEX_LARGE_BOX", fedex_tube: "FEDEX_TUBE" };
   const boxCode = String(body.packageTypeCode || "").trim().toLowerCase();
   const fedexPackaging = PKG_MAP[boxCode] || (/^FEDEX_/i.test(boxCode) ? boxCode.toUpperCase() : null);
   const SMARTPOST_HUB = String(body.smartPostHub || process.env.FEDEX_SMARTPOST_HUB || "").trim();
   const fromCountry = toISO(body.fromCountry || "US");
   const toCountry = toISO(body.toCountry || "US");
   const acct = String(body.fedexAccount || (body.account && body.account.fedexAccount) || ACCOUNT).replace(/\D/g, "") || ACCOUNT;
-  const pieces = (Array.isArray(body.pieces) && body.pieces.length ? body.pieces : [{ weight: 1, length: 12, width: 9, height: 4 }])
-    .map(p => ({
-      weight: { units: "LB", value: Math.max(0.1, +p.weight || 1) },
-      dimensions: { length: Math.max(1, Math.round(+p.length || 12)), width: Math.max(1, Math.round(+p.width || 9)), height: Math.max(1, Math.round(+p.height || 4)), units: "IN" }
-    }));
+  /* Declared value + signature ride the RATE request so FedEx prices them in the returned
+     amount — the quote is the REAL charge (raw FedEx + the app's markup), never a locally
+     estimated fee. Per package, exactly like the booking. */
+  const SIGQ = { direct: "DIRECT", indirect: "INDIRECT", adult: "ADULT" };
+  const sigType = SIGQ[String(body.signatureOption || "none").toLowerCase()] || null;
+  const money$ = (v) => +String(v == null ? "" : v).replace(/[^0-9.]/g, "") || 0;
+  const rawPieces = (Array.isArray(body.pieces) && body.pieces.length ? body.pieces : [{ weight: 1, length: 12, width: 9, height: 4 }]);
+  const pieces = rawPieces.map(p => {
+      const it = {
+        weight: { units: "LB", value: Math.max(0.1, +p.weight || 1) },
+        dimensions: { length: Math.max(1, Math.round(+p.length || 12)), width: Math.max(1, Math.round(+p.width || 9)), height: Math.max(1, Math.round(+p.height || 4)), units: "IN" }
+      };
+      const dv = money$(p.declaredValue);
+      if (dv > 0) it.declaredValue = { amount: Math.round(dv * 100) / 100, currency: "USD" };
+      if (sigType) it.packageSpecialServices = { signatureOptionType: sigType };
+      return it;
+    });
 
   const req = {
     accountNumber: { value: acct },
@@ -196,10 +208,10 @@ exports.handler = async (event) => {
       const jj = await rr.json().catch(() => ({}));
       return { r: rr, j: jj };
     };
-    const [main, orRes] = await Promise.all([rateCall(req), oneRateReq ? rateCall(oneRateReq).catch(() => null) : Promise.resolve(null)]);
+    const [main, orRes] = await Promise.all([rateCall(req), oneRateReq ? rateCall(oneRateReq).catch((e) => ({ _threw: (e && e.message) || "One Rate request failed" })) : Promise.resolve(null)]);
     const r = main.r, j = main.j;
     if (!r.ok) {
-      let msg = (j.errors && j.errors[0] && (j.errors[0].message || j.errors[0].code)) || ("FedEx rate error " + r.status);
+      let msg = (Array.isArray(j.errors) && j.errors.length ? j.errors.map((e) => e.message || e.code).filter(Boolean).join("; ") : "") || ("FedEx rate error " + r.status);
       if (/mismatch|should match the shipper|not\s*authorized|account.*(invalid|not\s*found)/i.test(msg)) {
         msg = "FedEx doesn't recognize account #" + acct + " on your API credentials — add it in the FedEx Developer Portal (Manage Organization \u2192 Shipping accounts, with that account's billing address + EULA), attach it to your project, then retry. FedEx said: " + msg;
       }
@@ -267,7 +279,12 @@ exports.handler = async (event) => {
       const alert = j.output && j.output.alerts && j.output.alerts[0] && j.output.alerts[0].message;
       return respond(200, { live: false, error: alert || "FedEx returned no rates for this shipment.", rates: [] });
     }
-    return respond(200, { live: true, provider: "fedex-direct", account: acct.replace(/^(\d{3})\d+(\d{2})$/, "$1****$2"), rates, oneRateRequested: !!oneRateReq, oneRateOk, oneRateError });
+    /* Declared value verification: coverage over $100/package carries a FedEx fee. If we asked
+       for it and NO returned rate itemizes a declared-value/insurance surcharge, say so — the
+       app surfaces it instead of silently quoting without the fee. */
+    const dvAsked = rawPieces.some(p => money$(p.declaredValue) > 100);
+    const dvSeen = rates.some(q => (q.surcharges || []).some(x => /declared|insur/i.test(String(x.label || ""))));
+    return respond(200, { live: true, provider: "fedex-direct", account: acct.replace(/^(\d{3})\d+(\d{2})$/, "$1****$2"), rates, dvRequested: dvAsked, dvPriced: dvAsked ? dvSeen : null, oneRateRequested: !!oneRateReq, oneRateOk, oneRateError });
   } catch (e) {
     const msg = e && e.name === "AbortError" ? "FedEx took too long to respond" : ((e && e.message) || "FedEx request failed");
     return respond(200, { live: false, error: msg, rates: [] });

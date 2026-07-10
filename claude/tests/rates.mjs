@@ -18,10 +18,11 @@ ok(fedexSurchargeIdFor("Residential Delivery Surcharge","FedEx Priority Overnigh
 ok(fedexSurchargeIdFor("Declared Value","FedEx 2Day®")==="INS","declared value");
 ok(fedexSurchargeIdFor("Additional Handling Surcharge - Weight","FedEx Ground")==="AH-W-G","AH weight ground");
 ok(fedexSurchargeIdFor("Totally Unknown Fee","FedEx Ground")===null,"unknown line → null (stays in service markup)");
-const R={profiles:[{id:"default",name:"D",services:{},surcharges:{FUEL:{type:"percent",amount:50},"PEAK-R-G":{type:"fixed",amount:2},"FUEL-G":{type:"percent",amount:-100}}}],assign:{},baseCosts:{}};
+const R={profiles:[{id:"default",name:"D",services:{},surcharges:{FUEL:{type:"percent",amount:50},"PEAK-R-G":{type:"fixed",amount:2},"FUEL-G":{type:"percent",amount:-100},"RES-HD":{type:"add",amount:1.5}}}],assign:{},baseCosts:{}};
 const lines=[{label:"Fuel Surcharge",amount:2},{label:"Peak - Residential Delivery Charge",amount:1.5}];
 ok(rateSellFor(20,"FedEx 2Day®",{rules:R,surcharges:lines})===21,"fuel +50% on express (peak line untouched)");
 ok(rateSellFor(20,"FedEx Home Delivery®",{rules:R,surcharges:lines})===18.5,"fuel waived (-100%) + peak flat $2 on ground");
+ok(rateSellFor(20,"FedEx Home Delivery®",{rules:R,surcharges:[...lines,{label:"Residential Delivery Surcharge",amount:4}]})===20,"$-over-cost adds exactly $1.50 on the $4 residential fee");
 ok(rateSellFor(20,"FedEx Home Delivery®",{rules:R,client:{id:"cX",markup:10},surcharges:lines})===20.15,"adjusted fees ride OUTSIDE the account markup");
 const R2=JSON.parse(JSON.stringify(R));R2.profiles[0].services["2day"]={basis:"flat",pct:25,on:true};
 ok(rateSellFor(20,"FedEx 2Day®",{rules:R2,surcharges:lines})===25,"flat service rule wins - adjustments skipped");

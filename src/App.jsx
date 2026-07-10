@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v430";
+const BUILD_TAG="addr-v431";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2304,7 +2304,7 @@ function surchargeAdjust(lines,svcLabel,prof){
     const r=sc[id]; if(!r||r.amount==null||r.amount==="")continue;
     const a=+r.amount; if(isNaN(a))continue;
     hit=true; removed+=amt;
-    add+=r.type==="percent"?amt*(1+a/100):a;
+    add+=r.type==="percent"?amt*(1+a/100):r.type==="add"?amt+a:a;
   }
   return hit?{removed:Math.round(removed*100)/100,add:Math.round(add*100)/100}:null;
 }
@@ -2490,7 +2490,7 @@ function surchargeFees(rules,client){
   const sc=(prof&&prof.surcharges)||{};
   const aPct=(client&&client.markup!=null&&client.markup!==""&&!isNaN(+client.markup)&&+client.markup!==0)?+client.markup:null;
   const gUp=(d)=>aPct!=null?Math.round(d*(1+aPct/100)*100)/100:d;
-  const val=(id,def)=>{const r=sc[id];if(!r||r.amount==null||r.amount==="")return gUp(def);const a=+r.amount;return r.type==="percent"?Math.round(def*(1+a/100)*100)/100:Math.round(a*100)/100;};
+  const val=(id,def)=>{const r=sc[id];if(!r||r.amount==null||r.amount==="")return gUp(def);const a=+r.amount;return r.type==="percent"?Math.round(def*(1+a/100)*100)/100:r.type==="add"?Math.round((def+a)*100)/100:Math.round(a*100)/100;};
   return {sig:{direct:val("SIG-D",SIG_FEE.direct),indirect:val("SIG-I",SIG_FEE.indirect),adult:val("SIG-A",SIG_FEE.adult)},sat:val("SAT",SAT_FEE),insUnit:val("INS",1.15),insMin:gUp(3.45)};
 }
 /* Paste-import: Excel/CSV/TSV, first column weight, one column per zone header. */
@@ -3862,7 +3862,7 @@ function RatesAdmin({clients=[],brand}){
       <div className="flex flex-wrap items-center gap-1 border-b border-stone-200 pb-2 mb-3">
         {[["fedex","FedEx"],["dhl","DHL"]].map(([v,l])=><button key={v} onClick={()=>setCarrier(v)} className={`text-sm px-3 py-1.5 rounded-lg ${carrier===v?"bg-stone-900 text-white font-medium":"text-[#0086E0] hover:bg-stone-100"}`}>{l}</button>)}
         <span className="flex-1"/>
-        {[["services","Services"],["surcharges","Surcharges"],["base","Base costs"]].map(([v,l])=><button key={v} onClick={()=>setTab(v)} className={`text-sm px-3 py-1.5 rounded-lg ${tab===v?"bg-stone-100 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-50"}`}>{l}</button>)}
+        {[["services","Services"],["surcharges","Surcharges"],["dims","Dim divisors"],["base","Base costs"]].map(([v,l])=><button key={v} onClick={()=>setTab(v)} className={`text-sm px-3 py-1.5 rounded-lg ${tab===v?"bg-stone-100 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-50"}`}>{l}</button>)}
       </div>
 
       {tab==="services"&&<div className="overflow-x-auto">
@@ -3908,21 +3908,25 @@ function RatesAdmin({clients=[],brand}){
         </tbody>
       </table></div>}
 
-      {tab==="surcharges"&&<div className="space-y-4">
-        <div className="border border-stone-200 rounded-xl bg-white p-3 space-y-2">
-          <div className="text-sm font-semibold text-stone-800">Dim divisors</div>
-          <p className="text-[11px] text-stone-500">Your negotiated dimensional-weight divisor per service family (list is 139; negotiated can run up to 225). Dim weight = L×W×H ÷ divisor, and FedEx bills the higher of that and actual weight. These drive the app's estimates, box logic and the billed-weight note.</p>
-          <div className="flex flex-wrap gap-4">
+      {tab==="dims"&&<div className="space-y-3">
+        <div className="border border-stone-200 rounded-xl bg-white p-4 space-y-2">
+          <div className="text-sm font-semibold text-stone-800">Dimensional-weight divisors</div>
+          <p className="text-[12px] text-stone-500 max-w-2xl">Your negotiated dim divisor per service family — the FedEx list book uses <b>139</b>; negotiated contracts can run up to <b>225</b>. Dim weight = L × W × H ÷ divisor, and FedEx bills the higher of dim weight and actual weight. These drive the app's estimates, box logic, and the "Billed at X lb dim weight" note on quotes.</p>
+          <div className="flex flex-wrap gap-6">
             {[["express","Express"],["ground","Ground & Home Delivery"],["ground_economy","Ground Economy"]].map(([k,l])=>(
-              <label key={k} className="text-xs text-stone-600">{l}
+              <label key={k} className="text-sm text-stone-700 font-medium">{l}
                 <input type="number" min="50" max="300" value={(rules.dimDivisors&&rules.dimDivisors[k])||139}
                   onChange={e=>{const v=Math.max(50,Math.min(300,+e.target.value||139));setRules(r=>({...DEFAULT_RATE_RULES,...r,dimDivisors:{express:139,ground:139,ground_economy:139,...(r.dimDivisors||{}),[k]:v}}));}}
-                  className="mt-1 block w-28 bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
+                  className="mt-1.5 block w-32 bg-white border border-stone-300 rounded-lg px-3 py-2 text-base font-mono outline-none focus:border-[#0099FF]"/>
               </label>))}
           </div>
+          <p className="text-[11px] text-stone-400">Applies platform-wide the moment you Save. A higher divisor lowers dim weight — 1728 cu in at 139 bills 12.4 lb; at 225 it bills 7.7 lb.</p>
         </div>
+      </div>}
+
+      {tab==="surcharges"&&<div className="space-y-4">
         <div className="flex flex-wrap items-center gap-3">
-          <p className="text-[11px] text-stone-500 flex-1 min-w-[260px]">All {FEDEX_SURCHARGES.length} Service Guide surcharges in their own boxes — Express, Ground, and Home Delivery each carry their own rates. Double-click a row to set your price on that fee: <b>Percent</b> sells it at FedEx's billed amount ±X% (negative = discount), <b>Fixed</b> sells it at exactly $X. Rules apply to live quotes line-by-line — fuel, peak/demand, DAS, residential, additional handling, declared value, all of it. Rows with no rule stay inside your service-level markup.</p>
+          <p className="text-[11px] text-stone-500 flex-1 min-w-[260px]">All {FEDEX_SURCHARGES.length} Service Guide surcharges in their own boxes — Express, Ground, and Home Delivery each carry their own rates. Double-click a row to set your price on that fee: <b>Percent</b> sells it at the billed amount ±X% (negative = discount), <b>$ over cost</b> adds $X on top of the England/FedEx fee, <b>Flat $</b> sells it at exactly $X. Rules apply to live quotes line-by-line — fuel, peak/demand, DAS, residential, additional handling, declared value, all of it. Rows with no rule stay inside your service-level markup.</p>
           <Input value={surQ} onChange={e=>setSurQ(e.target.value)} placeholder="Search surcharges…" className="w-52"/>
         </div>
         {(()=>{
@@ -3952,7 +3956,7 @@ function RatesAdmin({clients=[],brand}){
                     out.push(<tr key={su.id} onDoubleClick={()=>setSurEdit({...su,type:r.type||(su.app?"fixed":"percent"),amount:r.amount!=null?r.amount:(su.def!=null?su.def:"")})} className="border-t border-stone-100 hover:bg-stone-50 cursor-pointer">
                       <td className="py-2 pr-2">{su.desc}{su.seg==="Ground & Home Delivery"&&<span className="text-[10px] text-stone-400 ml-1.5">(one rate covers Ground &amp; HD)</span>}{su.seg==="Express Freight"&&<span className="text-[10px] text-stone-400 ml-1.5">(Express Freight)</span>}{su.seg==="Ground Economy"&&<span className="text-[10px] text-stone-400 ml-1.5">(Ground Economy)</span>}</td>
                       <td className="pr-2 font-mono text-xs text-stone-500">{su.id}</td><td className="pr-2 text-stone-500">{su.charge}</td>
-                      <td className="pr-2 text-stone-500">{r.type||(su.app?"fixed":"—")}</td>
+                      <td className="pr-2 text-stone-500">{({percent:"±%",add:"$ over cost",fixed:"flat $"})[r.type]||(su.app?"flat $":"—")}</td>
                       <td className="pr-2 text-right font-mono">{r.amount!=null&&r.amount!==""?(+r.amount).toFixed(2):(su.def!=null?su.def.toFixed(2):"—")}</td>
                       <td>{su.app?<Badge tone="blue">app-applied</Badge>:<Badge tone="green">live-adjustable</Badge>}</td>
                     </tr>);
@@ -4005,11 +4009,11 @@ function RatesAdmin({clients=[],brand}){
           <div className="text-stone-500 text-right">ID</div><div className="font-mono text-xs">{surEdit.id}</div>
           <div className="text-stone-500 text-right">Description</div><div>{surEdit.desc}{surEdit.seg?" — "+surEdit.seg:""}</div>
           <div className="text-stone-500 text-right">Charge type</div><div>{surEdit.charge}</div>
-          <div className="text-stone-500 text-right">Markup type</div><div><Select value={surEdit.type} onChange={e=>setSurEdit(s=>({...s,type:e.target.value}))}><option value="fixed">Fixed</option><option value="percent">Percent</option></Select></div>
+          <div className="text-stone-500 text-right">Pricing</div><div><Select value={surEdit.type} onChange={e=>setSurEdit(s=>({...s,type:e.target.value}))}><option value="percent">Percent — fee ±X% (negative = discount)</option><option value="add">$ over cost — fee + $X</option><option value="fixed">Flat $ — exactly $X</option></Select></div>
           <div className="text-stone-500 text-right">Amount</div><div><Input type="number" value={surEdit.amount} onChange={e=>setSurEdit(s=>({...s,amount:e.target.value}))} className="w-32"/></div>
         </div>
         {surEdit.app?<p className="text-[11px] text-stone-400 mt-3">Fixed = charge this amount. Percent = adjust the published fee (e.g. 10 charges 110% of the default, −65 charges 35%). Changes hit quotes for every customer on the "{prof.name}" profile immediately.</p>
-          :<p className="text-[11px] text-stone-400 mt-3">Applies to live quotes immediately for every customer on "{prof.name}": <b>Percent</b> sells this fee at FedEx's billed amount ±X% (e.g. 25 charges 125% of the fee, −100 waives it), <b>Fixed</b> sells it at exactly this $ per shipment. Clear the amount to fold it back into the service-level markup.</p>}
+          :<p className="text-[11px] text-stone-400 mt-3">Applies to live quotes immediately for every customer on "{prof.name}": <b>Percent</b> sells this fee at the England/FedEx billed amount ±X% (25 charges 125% of the fee, −100 waives it) · <b>$ over cost</b> adds exactly $X on top of the billed fee (negative = $ discount) · <b>Flat $</b> sells the fee at exactly $X no matter what FedEx billed. Clear the amount to fold it back into the service-level markup.</p>}
         <div className="flex justify-end gap-2 mt-4"><button onClick={()=>setSurEdit(null)} className="text-sm bg-stone-100 rounded-lg px-3 py-2 hover:bg-stone-200">Close</button><button onClick={()=>{upSur(surEdit.id,{type:surEdit.type,amount:surEdit.amount});setSurEdit(null);}} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8]">Confirm</button></div>
       </div>
     </div>}

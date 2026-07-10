@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v431";
+const BUILD_TAG="addr-v432";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2396,7 +2396,16 @@ function rateSellFor(cost,label,ctx){
       const adj=surchargeAdjust(c.surcharges,label,prof);
       if(adj){
         const core=rateSellFor(Math.max(0,Math.round((cost-adj.removed)*100)/100),label,{...c,prof,_noSurAdj:true});
-        return core==null?null:Math.round((core+adj.add)*100)/100;
+        if(core==null)return null;
+        let out=Math.round((core+adj.add)*100)/100;
+        /* floors were applied to the carved-down core — re-assert them against the FULL price:
+           the service Min $ floors the final sell, and the account Min-$-profit floors against
+           the TRUE carrier cost (discounted fees must never eat the configured profit floor). */
+        const rmin=(rule&&rule.on!==false)?((rule.min==null||rule.min==="")?null:+rule.min):null;
+        if(rmin!=null&&out<rmin)out=rmin;
+        const aMin2=(c.client&&c.client.markupMin!=null&&c.client.markupMin!==""&&!isNaN(+c.client.markupMin)&&+c.client.markupMin>0)?+c.client.markupMin:null;
+        if(aMin2!=null&&out<cost+aMin2)out=Math.round((cost+aMin2)*100)/100;
+        return out;
       }
     }
   }
@@ -2416,16 +2425,24 @@ function rateSellFor(cost,label,ctx){
      to an account that hasn’t been explicitly priced. */
   const aPct=(c.client&&c.client.markup!=null&&c.client.markup!==""&&!isNaN(+c.client.markup)&&+c.client.markup!==0)?+c.client.markup:null;
   const aMin=(c.client&&c.client.markupMin!=null&&c.client.markupMin!==""&&!isNaN(+c.client.markupMin)&&+c.client.markupMin>0)?+c.client.markupMin:null;
-  const fallback=()=>{
-    if(aPct!=null||aMin!=null){let s=cost*(1+((aPct||0))/100);if(aMin!=null&&s<cost+aMin)s=cost+aMin;return Math.round(s*100)/100;}
-    return Math.round(cost*100)/100;
-  };
-  const rules=c.rules; if(!rules)return fallback();
-  const prof=c.prof||rateProfileFor(rules,c.client&&c.client.id);
+  const num=(v)=>(v==null||v==="")?null:+v;
+  const rules=c.rules;
+  const prof=rules?(c.prof||rateProfileFor(rules,c.client&&c.client.id)):null;
   const key=rateSvcKey(label);
   const rule=prof&&prof.services&&prof.services[key];
+  /* The rule's Min $ floor applies to EVERY path out of this function — including the fallbacks
+     (blank %, missing list table, no zone). It used to vanish on fallback, so "Min $ 15 and no
+     percent" priced with no floor at all: the exact "minimums not honored" bug. */
+  const ruleMin=(rule&&rule.on!==false)?num(rule.min):null;
+  const fallback=()=>{
+    let s;
+    if(aPct!=null||aMin!=null){s=cost*(1+((aPct||0))/100);if(aMin!=null&&s<cost+aMin)s=cost+aMin;}
+    else s=cost;
+    if(ruleMin!=null&&s<ruleMin)s=ruleMin;
+    return Math.round(s*100)/100;
+  };
+  if(!rules)return fallback();
   if(!rule||rule.on===false)return fallback();
-  const num=(v)=>(v==null||v==="")?null:+v;
   let sell=null;
   if(rule.basis==="list"){
     const dom=c.fromZip&&c.toZip&&/^\d/.test(String(c.toZip));
@@ -3310,6 +3327,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         <b>Live check</b> — a $10.00 raw cost sells right now for:&nbsp;
         {["FedEx Ground","FedEx Home Delivery","FedEx 2Day","FedEx Priority Overnight"].map((l,i)=><span key={l}>{i>0&&" · "}{l.replace("FedEx ","")} <b className="font-mono">{money(rateSellFor(10,l,{rules,client:c}))}</b></span>)}
         &nbsp;— same engine that prices every quote for {c.name}; type a markup above or below and watch these move instantly.
+        <div className="mt-1 text-stone-500">Order of operations on every quote: per-fee accessorial rules → weight-break / zone % → the service rule (%, Fixed $, Flat $, or List −%) → this account-wide markup → <b>Min $ floors last</b> (service Min $ on the sell price; Min $ profit against the raw cost). Min $ now holds on every path — including when a % is blank or a list table is missing.</div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-stone-600">{c.name} prices from</span>

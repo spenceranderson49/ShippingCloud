@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v436";
+const BUILD_TAG="addr-v438";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2412,7 +2412,10 @@ function rateSellFor(cost,label,ctx){
         ?(aPctF!=null?amt*(1+aPctF/100):amt)
         :(r.type==="percent"?amt*(1+a/100):r.type==="add"?amt+a:r.type==="listpct"?((+ln.list||amt)*(1-a/100)):a);
       feeSell+=priced;
-      feeParts.push({label:ln.label,amount:Math.round(priced*100)/100});
+      /* display the ADMIN ROW's exact name for matched fees so the portal breakdown and the
+         Rates tab always show the identical string — no two wordings for one fee */
+      const row=(id&&typeof FEDEX_SURCHARGES!=="undefined")?FEDEX_SURCHARGES.find(x=>x&&x.id===id):null;
+      feeParts.push({label:row?(row.aka||row.desc):ln.label,amount:Math.round(priced*100)/100});
     }
     const baseCost=Math.max(0,Math.round((cost-feeCost)*100)/100);
     /* the base prices off the LIST BASE when the quote provides it — never list-total */
@@ -4755,25 +4758,35 @@ if(typeof window!=="undefined"){window.addEventListener("pagehide",()=>{try{
    reaches an open shippingcloud.net tab within seconds — no reload. Baseline is updated
    first so the receiving hooks don't echo the same value back to the server. */
 let CLOUD_POLL=null;
+let CLOUD_POLL_BUSY=false;
+async function cloudPollTick(force){
+  if(CLOUD_POLL_BUSY)return;
+  try{
+    if(!CLOUD.token||CLOUD.offline||(!force&&document.hidden))return;
+    CLOUD_POLL_BUSY=true;
+    const res=await cloudCall({action:"getAll",token:CLOUD.token});
+    if(!(res&&res.ok&&res.stores))return;
+    for(const k in res.stores){
+      if(!GLOBAL_KEYS[k]||k==="session")continue;          // sessions stay device-local decisions
+      if(k in CLOUD.queue)continue;                         // never clobber an edit awaiting flush
+      const j=JSON.stringify(res.stores[k]);
+      if(CLOUD.baseline[k]===j)continue;
+      CLOUD.baseline[k]=j;
+      lsSet(k,res.stores[k]);
+      const bus=PERSIST_BUS[k];
+      if(bus&&bus.size)bus.forEach(fn=>{try{fn(res.stores[k]);}catch(_){ }});
+    }
+  }catch(_){ }
+  finally{CLOUD_POLL_BUSY=false;}
+}
 function startCloudPoll(){
   if(CLOUD_POLL||typeof window==="undefined")return;
-  CLOUD_POLL=setInterval(async()=>{
-    try{
-      if(!CLOUD.token||CLOUD.offline||document.hidden)return;
-      const res=await cloudCall({action:"getAll",token:CLOUD.token});
-      if(!(res&&res.ok&&res.stores))return;
-      for(const k in res.stores){
-        if(!GLOBAL_KEYS[k]||k==="session")continue;          // sessions stay device-local decisions
-        if(k in CLOUD.queue)continue;                         // never clobber an edit awaiting flush
-        const j=JSON.stringify(res.stores[k]);
-        if(CLOUD.baseline[k]===j)continue;
-        CLOUD.baseline[k]=j;
-        lsSet(k,res.stores[k]);
-        const bus=PERSIST_BUS[k];
-        if(bus&&bus.size)bus.forEach(fn=>{try{fn(res.stores[k]);}catch(_){ }});
-      }
-    }catch(_){ }
-  },20000);
+  CLOUD_POLL=setInterval(()=>{cloudPollTick(false);},20000);
+  /* The moment you come back to this tab, pull the shared stores immediately — an admin edit
+     saved on the other site (rates, surcharges, customers) lands here in ~a second instead of
+     waiting out the 20s poll, which also used to SKIP entirely while the tab was hidden. */
+  window.addEventListener("visibilitychange",()=>{ if(!document.hidden)cloudPollTick(true); });
+  window.addEventListener("focus",()=>cloudPollTick(true));
 }
 async function cloudLoadAll(){
   const res=await cloudCall({action:"getAll",token:CLOUD.token});
@@ -7324,7 +7337,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
       const surTotal=q.surcharges.reduce((a,s)=>a+(s.amount||0),0);
       const baseRaw=q.base!=null?q.base:Math.max(0,(q.cost||0)-surTotal);
       const factor=(q.cost&&baseSell)?baseSell/q.cost:1;
-      comps=[{label:"Base rate",amount:baseRaw*factor},...q.surcharges.map(s=>({label:s.label,amount:(s.amount||0)*factor}))];
+      comps=[{label:"Base rate",amount:baseRaw*factor},...q.surcharges.map(s=>{const _id=fedexSurchargeIdFor(s.label,q.label);const _row=_id?FEDEX_SURCHARGES.find(x=>x&&x.id===_id):null;return {label:_row?(_row.aka||_row.desc):s.label,amount:(s.amount||0)*factor};})];
     } else {
       comps=[{label:q._oneRate?"One Rate":"Rate",amount:baseSell}];
     }
@@ -8300,9 +8313,9 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
   const setPriceAs=(v)=>{setPriceAsShared&&setPriceAsShared(v);};
   const effClient=client;
   const [fromZip,setFromZip]=useState(senderZip||client?.origin||"");
-  const [toZip,setToZip]=useState("90210");
+  const [toZip,setToZip]=useState("");   // starts EMPTY — no canned destination/package on a fresh quote
   const [residential,setResidential]=useState(true);
-  const [pieces,setPieces]=useState([{weight:3,L:12,W:9,H:4,oz:""}]);
+  const [pieces,setPieces]=useState([{weight:"",L:"",W:"",H:"",oz:""}]);
   const [sigOption,setSigOption]=useState("none");
   const [saturday,setSaturday]=useState(false);
   const [insurance,setInsurance]=useState("");
@@ -8375,10 +8388,14 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
             <Field label="Signature"><Select value={sigOption} onChange={e=>setSigOption(e.target.value)}><option value="none">None</option><option value="direct">Direct signature</option><option value="indirect">Indirect signature</option><option value="adult">Adult signature</option></Select></Field>
             <Field label="Insurance $"><Input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0"/></Field>
             {hasExpress&&<label className="flex items-center gap-1.5 text-sm text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSaturday(e.target.checked)} className="accent-[#0086E0]"/>Saturday delivery <span className="text-stone-400 text-xs">(Express only)</span></label>}
-            <div className="grid grid-cols-2 gap-px bg-stone-200 border border-stone-200 rounded overflow-hidden font-mono text-center"><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">zone</div><div className="font-semibold">{zoneEst(fromZip,toZip)}</div></div><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">billable</div><div className="font-semibold">{billable(pieces[0].L,pieces[0].W,pieces[0].H,totalWeight)} lb</div></div></div>
+            <div className="grid grid-cols-2 gap-px bg-stone-200 border border-stone-200 rounded overflow-hidden font-mono text-center"><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">zone</div><div className="font-semibold">{ready?zoneEst(fromZip,toZip):"—"}</div></div><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">billable</div><div className="font-semibold">{ready?billable(pieces[0].L,pieces[0].W,pieces[0].H,totalWeight)+" lb":"—"}</div></div></div>
             {ready&&<div className={`text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700":"bg-[#E6F4FF] text-[#006FBF]"}`}>{rateSrc.loading?<><Loader2 className="w-3 h-3 animate-spin"/>Fetching…</>:rateSrc.live?<><Wifi className="w-3 h-3"/>Live rates</>:<><Calculator className="w-3 h-3"/>Estimated</>}</div>}
           </Panel></div>
-          <div className="flex-1 min-w-0"><ServiceList quotes={quotes} ready={ready}/></div>
+          <div className="flex-1 min-w-0">
+            {!ready?<div className="border border-dashed border-stone-300 rounded-lg py-14 text-center text-sm text-stone-400">Enter both ZIPs and the package size &amp; weight — every service prices at once.</div>
+            :rateSrc.loading?<div className="border border-stone-200 rounded-lg py-14 text-center text-sm text-stone-500 flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>Pricing every service…</div>
+            :<ServiceList quotes={quotes} ready={ready} live={rateSrc.live}/>}
+          </div>
         </div>
       </div>
     </div>

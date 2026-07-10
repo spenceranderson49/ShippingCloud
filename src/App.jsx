@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v391";
+const BUILD_TAG="addr-v392";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -8997,15 +8997,13 @@ function PrinterSettings({settings,setSettings}){
         <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2.5">
           <div className="text-[10px] uppercase tracking-widest text-stone-400">1 · When a matching order comes in</div>
           <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
-            <span>On the Ship tab<span className="block text-[11px] text-stone-400">Your Autopilot rules pick the service on a matching order — choose how far to take it, right up to booking &amp; printing with no click.</span></span>
-            <select value={cust.autoBookOnShip?"auto":(cust.autoRulesOnShip===false?"off":(cust.matchedOnly?"hidden":"shown"))} onChange={e=>{const v=e.target.value;setCust("autoRulesOnShip",v!=="off");setCust("autoBookOnShip",v==="auto");setCust("matchedOnly",v==="hidden"||v==="auto");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] shrink-0">
+            <span>On the Ship tab<span className="block text-[11px] text-stone-400">Your Autopilot rules pick the service on a matching order — choose whether the other services stay visible. Whether it <b>books itself</b> is set by the mode below.</span></span>
+            <select value={cust.autoRulesOnShip===false?"off":(cust.matchedOnly?"hidden":"shown")} onChange={e=>{const v=e.target.value;setCust("autoRulesOnShip",v!=="off");setCust("matchedOnly",v==="hidden");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] shrink-0">
               <option value="off">I choose the service</option>
               <option value="shown">Pre-select it — other services still show</option>
               <option value="hidden">Pre-select it — hide the other services</option>
-              <option value="auto">Book &amp; print it automatically — no click</option>
             </select>
           </label>
-          {cust.autoBookOnShip&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">A matching order books &amp; prints itself the moment its rate is ready — the Ship button flips to “printing… / shipped” on its own. Needs an <b>Autopilot rule</b> that matches the order (set rules on the Autopilot tab); orders with no matching rule still wait for your click.</div>}
           <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
             <span>On the Batch screen<span className="block text-[11px] text-stone-400">Apply rules across the whole batch.</span></span>
             <select value={!cust.autoRulesInBatch?"off":(cust.autoBookBatch?"auto":"fill")} onChange={e=>{const v=e.target.value;setCust("autoRulesInBatch",v!=="off");setCust("autoBookBatch",v==="auto");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] shrink-0">
@@ -9018,15 +9016,17 @@ function PrinterSettings({settings,setSettings}){
         {(()=>{ const ready=!!String(pnc.apiKey||"").trim()&&!!pnc.printerId;
           const mode=cust.skipBookedSummary?"handsfree":cust.directNoPreview?"nopreview":"preview";
           const armed=ready&&mode!=="preview";
-          /* One control drives everything. Picking a mode sets the after-booking behaviour AND arms
-             direct printing to the configured printer — no separate "print automatically" switch.
-             It also clears the legacy "auto-open the print dialog" checkbox so a label can never
-             both print silently AND pop a dialog/preview. */
+          /* The mode drives the WHOLE after-service behaviour: whether the Ship button fires itself
+             (auto-book) and what happens once a label exists (popup / preview). Hands-free = fully
+             automatic: a matching order books & prints itself, no click, no popup. The other two
+             leave booking to your click. Also arms direct printing and clears the legacy dialog flag
+             so a label never both prints silently AND pops a dialog. Service selection is separate,
+             in the dropdown above. */
           const setMode=(m)=>{
             set({autoPrint:false});
-            if(m==="handsfree"){ setCust("skipBookedSummary",true); setCust("directNoPreview",false); }
-            else if(m==="nopreview"){ setCust("skipBookedSummary",false); setCust("directNoPreview",true); }
-            else { setCust("skipBookedSummary",false); setCust("directNoPreview",false); }
+            if(m==="handsfree"){ setCust("skipBookedSummary",true); setCust("directNoPreview",false); setCust("autoBookOnShip",true); setCust("autoRulesOnShip",true); }
+            else if(m==="nopreview"){ setCust("skipBookedSummary",false); setCust("directNoPreview",true); setCust("autoBookOnShip",false); }
+            else { setCust("skipBookedSummary",false); setCust("directNoPreview",false); setCust("autoBookOnShip",false); }
             setPnCfg({enabled:ready});
           };
           const Opt=({v,title,desc})=>(<label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${mode===v?"border-emerald-300 bg-emerald-50/60":"border-stone-200 bg-white hover:bg-stone-50"}`}>
@@ -9035,9 +9035,10 @@ function PrinterSettings({settings,setSettings}){
           </label>);
           return (<div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2">
             <div className="text-[10px] uppercase tracking-widest text-stone-400 flex items-center gap-1"><Zap className={`w-3 h-3 ${armed?"text-emerald-600":"text-stone-400"}`}/>2 · When a label is created — how it prints &amp; what you see</div>
-            <Opt v="handsfree" title="Hands-free — print & move on" desc="The label prints straight to the printer and the screen jumps to the next shipment. No Print button, no popup, no preview."/>
-            <Opt v="nopreview" title="Print automatically, keep the summary" desc="The label prints straight to the printer, then a summary popup shows the tracking number with Copy, Track and pickup buttons. No label preview."/>
-            <Opt v="preview" title="Show a preview first" desc="Nothing prints until you check the label and click Print. Best when you want to eyeball each one."/>
+            <Opt v="handsfree" title="Hands-free — books & prints itself" desc="A matching order books and prints on its own — the Ship button fires with no click, nothing pops up, and the screen jumps to the next order. Needs an Autopilot rule that matches the order."/>
+            <Opt v="nopreview" title="You book — it prints, keeps the summary" desc="You click the service to book; the label then prints straight to the printer and a summary popup shows the tracking number with Copy, Track and pickup buttons. No label preview."/>
+            <Opt v="preview" title="You book — show a preview first" desc="You click the service to book; nothing prints until you check the label and click Print. Best when you want to eyeball each one."/>
+            {mode==="handsfree"&&<p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">A matching order fires the moment its rate is ready — make sure your <b>Autopilot rules</b> are exactly right. Orders with no matching rule still wait for your click.</p>}
             {mode!=="preview"&&!ready&&<p className="text-[11px] text-amber-600 mt-1 font-medium">⚠ Finish the one-time printer setup below (paste the API key → Find my printers → pick your printer). Until then, labels open the normal print window.</p>}
             {mode!=="preview"&&ready&&<p className="text-[11px] text-emerald-700 mt-1">Active — labels print straight to <b>{pnc.printerName||("printer "+pnc.printerId)}</b>.</p>}
           </div>);

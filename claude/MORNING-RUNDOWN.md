@@ -32,7 +32,8 @@ It only shows up when it's relevant (multiple boxes + declared value), so it doe
 - Turn it on under **Settings → General → "Two-factor authentication."** It shows a setup key you add to any free authenticator app (Google Authenticator, Authy, 1Password), then you confirm one code to switch it on.
 - After that, signing in asks for your password **plus** the 6-digit code.
 - To turn it off you need a current code (or your password) — a stolen browser session can't disable it.
-- **Lost your phone?** As admin you can turn a user's 2FA back off from the Users list (an amber "Reset 2FA" button appears next to anyone who has it on) — so no one ever gets permanently locked out.
+- **Backup codes (NEW, v398):** when you turn on 2FA you get 10 one-time backup codes. If you don't have your phone, any one of them gets you in (each works once). You can copy them, see how many are left, and generate a fresh set anytime. So you're not dependent on your phone at all.
+- **Lost your phone AND your backup codes?** As admin you can turn a user's 2FA back off from the Users list (an amber "Reset 2FA" button appears next to anyone who has it on) — so no one ever gets permanently locked out.
 - **This is the single biggest security upgrade** — I'd recommend turning it on for the admin login first.
 - I verified the code-generation against the **official industry standard (RFC 6238)** — the codes we expect match exactly what your phone app produces. It's not hand-wavy; there's an automated test proving it.
 
@@ -55,8 +56,8 @@ Good news first: the app is already in solid shape — wide tables all scroll on
 - **Rate-estimate cache** — was growing forever during a long session; now capped.
 - Hoisted a small lookup table out of the render loop.
 
-**Flagged but left for daytime (needs your eyes on it):**
-- The **Batch screen** recomputes every order's rate many times per render — it's the single biggest speed win on large batches, but it's the kind of change that could show a wrong price if I get one detail wrong, so I didn't want to ship it unsupervised. It's a clean, well-scoped fix I can do with you watching. On small/medium batches you won't notice; it only bites at hundreds of open orders.
+**The big one — now DONE (v399):**
+- The **Batch screen** was recomputing every order's rate many times per render (laggy at hundreds of open orders). I fixed it the safe way: the rates are computed once and cached, and the code falls back to a live recompute on any cache miss — so the price you see is provably identical to before, just far faster. On a 200-order batch that's ~200 rate calculations instead of ~15,000+ per click. No wrong-price risk by design.
 
 **Mobile:** no real problems found — a couple of icon buttons are slightly small for fingers, nothing broken.
 

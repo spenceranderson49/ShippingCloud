@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v397";
+const BUILD_TAG="addr-v398";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2484,7 +2484,7 @@ function Login({users,onLogin,brand}){
           {mode==="signup"&&<><Field label="Your name"><Input value={name} onChange={e=>setName(e.target.value)}/></Field><Field label="Company"><Input value={company} onChange={e=>setCompany(e.target.value)}/></Field></>}
           <Field label="Email"><Input value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&mode==="signin")signin();}} placeholder="you@company.com"/></Field>
           <Field label="Password"><div className="relative"><Input type={showPw?"text":"password"} value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")mode==="signin"?signin():signup();}} placeholder="••••••••" className="pr-9"/><button type="button" onClick={()=>setShowPw(v=>!v)} tabIndex={-1} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">{showPw?<EyeOff className="w-4 h-4"/>:<Eye className="w-4 h-4"/>}</button></div></Field>
-          {mode==="signin"&&needTotp&&<Field label="Authenticator code"><Input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,"").slice(0,6))} onKeyDown={e=>{if(e.key==="Enter")signin();}} placeholder="123456" inputMode="numeric" autoFocus className="tracking-[0.3em] text-center"/><div className="text-[11px] text-stone-400 mt-1">Open your authenticator app (Google Authenticator, Authy, 1Password…) and enter the current 6-digit code.</div></Field>}
+          {mode==="signin"&&needTotp&&<Field label="Authenticator code"><Input value={code} onChange={e=>setCode(e.target.value.replace(/[^0-9A-Za-z-]/g,"").toUpperCase().slice(0,9))} onKeyDown={e=>{if(e.key==="Enter")signin();}} placeholder="123456" inputMode="text" autoFocus className="tracking-[0.2em] text-center"/><div className="text-[11px] text-stone-400 mt-1">Enter the current 6-digit code from your authenticator app — or one of your backup codes if you don’t have your phone.</div></Field>}
           {err&&<div className="text-sm text-rose-600 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4"/>{err}</div>}
           {note&&<div className="text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2">{note}</div>}
           <button onClick={mode==="signin"?signin:signup} className="w-full bg-stone-900 text-white rounded-lg px-4 py-2.5 font-medium hover:bg-stone-800 disabled:opacity-50" disabled={busy}>{busy?"One moment…":(mode==="signin"?"Sign in":"Request account")}</button>
@@ -10555,24 +10555,33 @@ function GeneralSettings({settings,setSettings,goSec,audit=[]}){
 }
 /* Self-service two-factor auth (TOTP). Only shows for cloud logins — local/demo mode has no server to store the secret. */
 function TwoFactorPanel(){
-  const [status,setStatus]=useState(null);        // {enabled,pending} | null (loading)
+  const [status,setStatus]=useState(null);        // {enabled,pending,backupLeft} | null (loading)
   const [setup,setSetup]=useState(null);          // {secret,otpauth} while enrolling
   const [code,setCode]=useState("");
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState(null);              // {t:"ok"|"err",m}
+  const [codes,setCodes]=useState(null);          // freshly-issued backup codes to show ONCE
   const cloud=CLOUD.mode==="cloud"&&!!CLOUD.token;
-  const load=async()=>{ if(!cloud){setStatus({enabled:false,pending:false});return;} const r=await cloudCall({action:"totpStatus",token:CLOUD.token}); setStatus(r&&r.ok?{enabled:!!r.enabled,pending:!!r.pending}:{enabled:false,pending:false}); };
+  const load=async()=>{ if(!cloud){setStatus({enabled:false,pending:false,backupLeft:0});return;} const r=await cloudCall({action:"totpStatus",token:CLOUD.token}); setStatus(r&&r.ok?{enabled:!!r.enabled,pending:!!r.pending,backupLeft:r.backupLeft||0}:{enabled:false,pending:false,backupLeft:0}); };
   useEffect(()=>{load();},[]);
   const begin=async()=>{ setBusy(true); setMsg(null); const r=await cloudCall({action:"totpBegin",token:CLOUD.token}); setBusy(false); if(r&&r.ok){setSetup({secret:r.secret,otpauth:r.otpauth});setCode("");}else setMsg({t:"err",m:(r&&r.error)||"Could not start setup."}); };
-  const enable=async()=>{ setBusy(true); setMsg(null); const r=await cloudCall({action:"totpEnable",token:CLOUD.token,code:code.trim()}); setBusy(false); if(r&&r.ok){setSetup(null);setCode("");setMsg({t:"ok",m:"Two-factor authentication is now ON. You'll enter a code from your app each time you sign in."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not turn on 2FA."}); };
-  const disable=async()=>{ const c=window.prompt("Turn OFF two-factor. Enter a current 6-digit code from your authenticator app (or leave blank and use your password on the next prompt):",""); if(c===null)return; let pw=""; if(!String(c).trim()){ pw=window.prompt("Enter your account password to turn off 2FA:","")||""; if(!pw)return; } setBusy(true); setMsg(null); const r=await cloudCall({action:"totpDisable",token:CLOUD.token,code:String(c).trim(),password:pw}); setBusy(false); if(r&&r.ok){setMsg({t:"ok",m:"Two-factor authentication is off."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not turn off 2FA."}); };
+  const enable=async()=>{ setBusy(true); setMsg(null); const r=await cloudCall({action:"totpEnable",token:CLOUD.token,code:code.trim()}); setBusy(false); if(r&&r.ok){setSetup(null);setCode("");setMsg({t:"ok",m:"Two-factor authentication is now ON."});if(r.backupCodes)setCodes(r.backupCodes);load();}else setMsg({t:"err",m:(r&&r.error)||"Could not turn on 2FA."}); };
+  const disable=async()=>{ const c=window.prompt("Turn OFF two-factor. Enter a current 6-digit code from your authenticator app (or leave blank and use your password on the next prompt):",""); if(c===null)return; let pw=""; if(!String(c).trim()){ pw=window.prompt("Enter your account password to turn off 2FA:","")||""; if(!pw)return; } setBusy(true); setMsg(null); const r=await cloudCall({action:"totpDisable",token:CLOUD.token,code:String(c).trim(),password:pw}); setBusy(false); if(r&&r.ok){setMsg({t:"ok",m:"Two-factor authentication is off."});setCodes(null);load();}else setMsg({t:"err",m:(r&&r.error)||"Could not turn off 2FA."}); };
+  const regen=async()=>{ const c=window.prompt("Make a new set of backup codes? This invalidates any old ones. Enter a current 6-digit code (or leave blank to use your password):",""); if(c===null)return; let pw=""; if(!String(c).trim()){ pw=window.prompt("Enter your account password:","")||""; if(!pw)return; } setBusy(true); setMsg(null); const r=await cloudCall({action:"totpBackupRegen",token:CLOUD.token,code:String(c).trim(),password:pw}); setBusy(false); if(r&&r.ok){setCodes(r.backupCodes||[]);setMsg({t:"ok",m:"New backup codes generated — save them now."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not make new codes."}); };
   if(!cloud) return null;
+  const codesText=(codes||[]).join("\n");
   return (<Panel title="Two-factor authentication (2FA)">
     <p className="text-xs text-stone-500 -mt-1 mb-2">Add a second step at sign-in: your password plus a 6-digit code from a free authenticator app (Google Authenticator, Authy, 1Password). Strongly recommended for admin logins.</p>
     {status===null&&<div className="text-sm text-stone-400">Checking…</div>}
-    {status&&status.enabled&&!setup&&<div className="flex items-center justify-between gap-3">
-      <div className="flex items-center gap-2 text-sm text-emerald-700"><Check className="w-4 h-4"/>2FA is <b>on</b> for your login.</div>
-      <button disabled={busy} onClick={disable} className="text-xs rounded px-2.5 py-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200 disabled:opacity-50">Turn off</button>
+    {status&&status.enabled&&!setup&&<div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm text-emerald-700"><Check className="w-4 h-4"/>2FA is <b>on</b> for your login.</div>
+        <button disabled={busy} onClick={disable} className="text-xs rounded px-2.5 py-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200 disabled:opacity-50">Turn off</button>
+      </div>
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className={status.backupLeft<=2?"text-amber-600":"text-stone-500"}>Backup codes remaining: <b>{status.backupLeft}</b>{status.backupLeft<=2&&" — running low, make new ones"}</span>
+        <button disabled={busy} onClick={regen} className="rounded px-2.5 py-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200 disabled:opacity-50">New backup codes</button>
+      </div>
     </div>}
     {status&&!status.enabled&&!setup&&<button disabled={busy} onClick={begin} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"One moment…":"Set up 2FA"}</button>}
     {setup&&<div className="space-y-3">
@@ -10587,6 +10596,17 @@ function TwoFactorPanel(){
         <input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,"").slice(0,6))} onKeyDown={e=>e.key==="Enter"&&enable()} placeholder="123456" inputMode="numeric" className="w-32 border border-stone-300 rounded-lg px-3 py-2 text-sm tracking-[0.3em] text-center outline-none focus:border-[#0099FF]"/>
         <button disabled={busy||code.length!==6} onClick={enable} className="text-sm bg-emerald-600 text-white rounded-lg px-3 py-2 font-medium hover:bg-emerald-700 disabled:opacity-50">Turn on 2FA</button>
         <button disabled={busy} onClick={()=>{setSetup(null);setCode("");setMsg(null);}} className="text-xs text-stone-400 hover:text-stone-600">Cancel</button>
+      </div>
+    </div>}
+    {codes&&<div className="mt-3 border border-amber-200 bg-amber-50 rounded-lg p-3 space-y-2">
+      <div className="text-sm font-semibold text-amber-800">Save your backup codes now</div>
+      <p className="text-[12px] text-amber-700">Each code works <b>once</b> if you don’t have your phone. Store them somewhere safe — you won’t see them again.</p>
+      <div className="grid grid-cols-2 gap-1.5 font-mono text-sm text-stone-800 bg-white border border-amber-200 rounded p-2">
+        {codes.map((c,i)=><div key={i} className="tracking-wider">{c}</div>)}
+      </div>
+      <div className="flex gap-2">
+        <button onClick={()=>{try{navigator.clipboard.writeText(codesText);setMsg({t:"ok",m:"Backup codes copied."});}catch(e){}}} className="text-[11px] rounded px-2 py-1 bg-white border border-stone-300 hover:bg-stone-100">Copy all</button>
+        <button onClick={()=>setCodes(null)} className="text-[11px] rounded px-2 py-1 bg-stone-800 text-white hover:bg-stone-700">I’ve saved them</button>
       </div>
     </div>}
     {msg&&<div className={`text-sm mt-2 ${msg.t==="ok"?"text-emerald-700":"text-rose-600"}`}>{msg.m}</div>}

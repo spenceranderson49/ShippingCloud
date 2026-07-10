@@ -25,8 +25,19 @@ ok(rateSellFor(20,"FedEx Home Delivery®",{rules:R,surcharges:lines})===18.5,"fu
 ok(rateSellFor(20,"FedEx Home Delivery®",{rules:R,surcharges:[...lines,{label:"Residential Delivery Surcharge",amount:4}]})===20,"$-over-cost adds exactly $1.50 on the $4 residential fee");
 ok(rateSellFor(20,"FedEx Home Delivery®",{rules:R,client:{id:"cX",markup:10},surcharges:lines})===20.15,"adjusted fees ride OUTSIDE the account markup");
 const R2=JSON.parse(JSON.stringify(R));R2.profiles[0].services["2day"]={basis:"flat",pct:25,on:true};
-ok(rateSellFor(20,"FedEx 2Day®",{rules:R2,surcharges:lines})===25,"flat service rule wins - adjustments skipped");
+ok(rateSellFor(20,"FedEx 2Day®",{rules:R2,surcharges:lines})===29.5,"flat prices the BASE; fees add on top (25 + fuel 3 + peak 1.5)");
 ok(rateSellFor(20,"FedEx 2Day®",{rules:R})===20,"no surcharge lines → unchanged pricing");
+// ── BASE-ONLY spec: service rules + Min $ price the base freight; fees priced separately ──
+const R5={profiles:[{id:"default",name:"D",services:{
+  "home":{basis:"percent",pct:"",min:8.92,on:true},
+  "or_2day_small_box":{basis:"flat",pct:15.30,on:true},
+  "ground":{basis:"list",pct:52,min:8.92,on:true},
+},surcharges:{}}],assign:{},baseCosts:{}};
+const hdLines=[{label:"Fuel Surcharge",amount:1.33},{label:"Residential Surcharge",amount:1.78}];
+ok(rateSellFor(8.92,"FedEx Home Delivery®",{rules:R5,surcharges:hdLines})===12.03,"Min $ floors the BASE (5.81→8.92), fees pass through on top");
+ok(rateSellFor(14.30,"FedEx 2Day® OneRate - Small Box",{rules:R5})===15.30,"OneRate flat $15.30 displays as exactly $15.30");
+ok(rateSellFor(8.92,"FedEx Ground",{rules:R5,listBase:12.50,surcharges:hdLines})===12.03,"52% off LIST BASE (12.50→6.00) floored to Min $8.92 + fees 3.11");
+ok(rateSellFor(8.92,"FedEx Ground",{rules:R5,listBase:25,surcharges:hdLines})===15.11,"above the floor: 48% of list base 25 = 12.00 + fees 3.11");
 // % off LIST: fee billed $8 at account, $10 at list; 10% off list → sells $9 (removed 8, add 9 → +1 net)
 const RL={profiles:[{id:"default",name:"D",services:{},surcharges:{"FUEL-G":{type:"listpct",amount:10}}}],assign:{},baseCosts:{}};
 ok(rateSellFor(20,"FedEx Home Delivery®",{rules:RL,surcharges:[{label:"Fuel Surcharge",amount:8,list:10}]})===21,"% off LIST prices the fee from its list amount");

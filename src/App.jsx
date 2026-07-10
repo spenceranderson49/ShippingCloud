@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v413";
+const BUILD_TAG="addr-v414";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -1217,9 +1217,12 @@ async function fedexSchedulePickup(p){
 const SEED_CLIENTS=[
     {id:"c2",name:"House accounts",markup:"",origin:"84057",contact:"—",email:"",phone:"",status:"active",since:"2025-06",plan:"Standard"},
 ];
+/* Seed admin rows carry NO password: the blank never matches the local sign-in fallback
+   (it requires a non-empty stored password), so there is no default credential in the build —
+   real sign-in always goes through the cloud database. Owner emails live in BUILT_IN_ADMINS. */
 const SEED_USERS=[
-  {id:"u1",name:"Spencer Anderson",email:"spencer@shippingcloud.net",role:"admin",clientId:null,status:"active",password:"admin",lastLogin:"Today"},
-  {id:"u1fw",name:"Spencer Anderson",email:"spencer@freightwire.com",role:"admin",clientId:null,status:"active",password:"admin",lastLogin:"Today"},
+  {id:"u1",name:"Admin",email:"spencer@shippingcloud.net",role:"admin",clientId:null,status:"active",password:"",lastLogin:"Today"},
+  {id:"u1fw",name:"Admin",email:"spencer@freightwire.com",role:"admin",clientId:null,status:"active",password:"",lastLogin:"Today"},
   ];
 /* Built-in administrators: these emails are ALWAYS full admins on every brand —
    the role is forced at session time, so a stray edit to the stored user record
@@ -2525,11 +2528,7 @@ function Login({users,onLogin,brand}){
             </div>
           </div>}
         </div>
-        <div className="mt-4 bg-white/60 border border-stone-200 rounded-lg p-3 text-xs text-stone-500 space-y-1">
-          <div className="font-medium text-stone-600">Demo logins</div>
-          <button onClick={()=>{setEmail("spencer@shippingcloud.net");setPw("admin");setMode("signin");}} className="block hover:text-[#0086E0]">Admin · spencer@shippingcloud.net / admin</button>
-                  </div>
-        <p className="text-[11px] text-stone-400 text-center mt-3">Prototype sign-in. For live customer logins, connect a real auth provider + database.</p>
+        <p className="text-[11px] text-stone-400 text-center mt-3">Local sign-in (no cloud database connected).</p>
       </div>
     </div>
   );
@@ -2657,7 +2656,7 @@ function FedexCertLab({settings}){
   const [st,setSt]=useState({loading:true});
   const [log,setLog]=usePersist("fedexCertLog",[]);
   const snd=settings&&settings.sender||{};
-  const [from,setFrom]=useState({name:snd.name||"Spencer Anderson",company:snd.company||"Freightwire",address1:snd.address1||"123 Main St",city:snd.city||"American Fork",state:snd.state||"UT",zip:snd.zip||"84003",phone:snd.phone||"8015550100",country:"US"});
+  const [from,setFrom]=useState({name:snd.name||"Test Shipper",company:snd.company||"Test Company",address1:snd.address1||"123 Main St",city:snd.city||"Salt Lake City",state:snd.state||"UT",zip:snd.zip||"84101",phone:snd.phone||"8015550100",country:"US"});
   const [to,setTo]=useState({name:"Test Recipient",company:"",address1:"7900 Legacy Dr",city:"Plano",state:"TX",zip:"75024",phone:"9725550123",country:"US"});
   const [f,setF]=useState({service:"ground",packaging:"YOUR_PACKAGING",weight:5,L:12,W:9,H:4,residential:false,signature:"none",reference:"CERT TEST",labelFormat:"PDF",labelStock:"PAPER_4X6"});
   const [busy,setBusy]=useState(false);
@@ -9082,7 +9081,7 @@ function LabelStockPreview({size,zones,showLabels,tabStock}){
   const hasTab=tabIn>0.05&&zones&&zones.length;
   // lay the tab fields out with the print engine at this preview scale
   const meas=React.useMemo(()=>{const c=document.createElement("canvas");const g=c.getContext("2d");return (txt,fs)=>{g.font=fs+"px system-ui,Arial";return g.measureText(txt).width;};},[]);
-  const SAMPLE={reference:"SIM-1042",invoiceNo:"INV-88",orderNo:"#1042",shipDate:"7/8/26",service:"FedEx 2Day",weight:"3 lb",pieces:"1",declaredValue:"$100",recipientName:"Jane Doe",recipientCompany:"Acme Co",recipientZip:"84084",senderName:"S. Anderson",senderCompany:"ShipHub",cost:"$9.12",tracking:"794912345678"};
+  const SAMPLE={reference:"SIM-1042",invoiceNo:"INV-88",orderNo:"#1042",shipDate:"7/8/26",service:"FedEx 2Day",weight:"3 lb",pieces:"1",declaredValue:"$100",recipientName:"Jane Doe",recipientCompany:"Acme Co",recipientZip:"84084",senderName:"A. Shipper",senderCompany:"Your Company",cost:"$9.12",tracking:"794912345678"};
   const txtOf=(z)=>(showLabels&&z.label?z.label+": ":"")+(z.field==="custom"?(z.custom||"TEXT"):(SAMPLE[z.field]||z.field));
   const pad=Math.round(Math.min(0.14,Math.max(0.03,(tabIn||0.75)*0.18))*PXIN);
   const items=(zones||[]).map(z=>({txt:txtOf(z),fs:Math.max(6,Math.round((z.size||9)*PXIN/72)),x:z.x,y:z.y}));
@@ -9126,7 +9125,7 @@ function DocTabDesigner({zones,setZone,onClearLayout,showLabels,tabHIn}){
   const ref=React.useRef(null);
   const [drag,setDrag]=React.useState(null);
   const DPI=96;const W=4*DPI;const H=Math.max(26,Math.round(tabHIn*DPI));
-  const SAMPLE={reference:"SIM-1042",invoiceNo:"INV-88",orderNo:"#1042",shipDate:"7/8/26",service:"FedEx 2Day",weight:"3 lb",pieces:"1",declaredValue:"$100",recipientName:"Jane Doe",recipientCompany:"Acme Co",recipientZip:"84084",senderName:"S. Anderson",senderCompany:"ShipHub",cost:"$9.12",tracking:"794912345678"};
+  const SAMPLE={reference:"SIM-1042",invoiceNo:"INV-88",orderNo:"#1042",shipDate:"7/8/26",service:"FedEx 2Day",weight:"3 lb",pieces:"1",declaredValue:"$100",recipientName:"Jane Doe",recipientCompany:"Acme Co",recipientZip:"84084",senderName:"A. Shipper",senderCompany:"Your Company",cost:"$9.12",tracking:"794912345678"};
   if(tabHIn<=0.01)return <div className="text-[11px] text-stone-400">Pick a doc-tab label size above (4×6.25 and up) to design the tab layout.</div>;
   const txtOf=(z)=>(showLabels&&z.label?z.label+": ":"")+(z.field==="custom"?(z.custom||"TEXT"):(SAMPLE[z.field]||z.field));
   /* Preview uses the EXACT same layoutDocTab engine the printer uses, so what you see is what
@@ -9298,13 +9297,13 @@ function PrinterSettings({settings,setSettings}){
               {handsOn&&<p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">Make sure your <b>Autopilot rules</b> are exactly right — a matching order books itself with no confirmation.</p>}
             </Box>
             <Box n="3" title="Print preview">
-              <Opt group="pf-prev" on={!previewOn} pick={()=>{stamp();setCust("previewBeforePrint",false);}} title="No preview — print right away" desc={"The label goes straight to the printer"+(ready?" ("+(pnc.printerName||("printer "+pnc.printerId))+")":"")+". Fastest flow."}/>
+              <Opt group="pf-prev" on={!previewOn} pick={()=>{stamp();setCust("previewBeforePrint",false);}} title="No preview — print right away" desc="The label goes straight to your printer. Fastest flow."/>
               <Opt group="pf-prev" on={previewOn} pick={()=>{stamp();setCust("previewBeforePrint",true);}} title="Show a preview first" desc="The label opens on screen and prints when you click Print — eyeball each one before it hits paper."/>
               {!previewOn&&!ready&&<p className="text-[11px] text-amber-600 font-medium">⚠ Finish the one-time printer setup below (paste the API key → Find my printers → pick your printer). Until then, labels open the normal print window.</p>}
             </Box>
             <Box n="4" title="After it prints">
-              <Opt group="pf-sum" on={summaryOn} pick={()=>{stamp();setCust("skipBookedSummary",false);}} title="Pop-up summary" desc="A booked summary shows the tracking number with Copy, Track and pickup buttons."/>
               <Opt group="pf-sum" on={!summaryOn} pick={()=>{stamp();setCust("skipBookedSummary",true);}} title="No pop-up" desc="Nothing appears — the screen stays clear for the next order."/>
+              <Opt group="pf-sum" on={summaryOn} pick={()=>{stamp();setCust("skipBookedSummary",false);}} title="Pop-up summary" desc="A booked summary shows the tracking number with Copy, Track and pickup buttons."/>
             </Box>
             <Box n="5" title="Next shipment">
               <Opt group="pf-next" on={resetOn} pick={()=>{stamp();setCust("resetAfterPrint",true);}} title="Automatically start a new shipment" desc="The form clears itself right after each print, ready for the next order or scan."/>

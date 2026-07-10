@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v411";
+const BUILD_TAG="addr-v412";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -193,13 +193,21 @@ if(typeof window!=="undefined"&&BRAND.fw){
 
 /* ════════ RATE ENGINE (demo) ════════ */
 const DIM=139;
-const billable=(L,W,H,a)=>Math.max(Math.ceil((L*W*H)/DIM),Math.ceil(a||0),1);
+/* Dim divisors are NEGOTIABLE (Spencer's rates go up to 225). The admin sets them per service
+   family in Admin → Rates; they're stored in the global rateRules store (dimDivisors) and synced
+   into this module-level config wherever rateRules loads, so the offline estimator, box logic and
+   the billed-weight display all use the negotiated divisor instead of the list 139. */
+let DIM_CFG={express:DIM,ground:DIM,ground_economy:DIM};
+const setDimCfg=(d)=>{DIM_CFG={express:+(d&&d.express)||DIM,ground:+(d&&d.ground)||DIM,ground_economy:+(d&&d.ground_economy)||DIM};};
+const dimFor=(svc)=>{const t=String(svc||"").toLowerCase();return /econom|smart\s*post/.test(t)?DIM_CFG.ground_economy:/ground|home/.test(t)?DIM_CFG.ground:DIM_CFG.express;};
+const billable=(L,W,H,a,div)=>Math.max(Math.ceil((L*W*H)/(+div||DIM_CFG.ground||DIM)),Math.ceil(a||0),1);
 /* Human "3 lb 3 oz" from fractional pounds. */
 const fmtLbOz=(lbs)=>{const w=+lbs||0;const l=Math.floor(w);const oz=Math.round((w-l)*16);return oz>0?(l>0?l+" lb "+oz+" oz":oz+" oz"):l+" lb";};
 /* Per-shipment billing-weight facts for the rate breakdown: FedEx rounds every piece up to the
-   next full pound, and bills the HIGHER of that and dimensional weight (L×W×H ÷ 139 per piece). */
+   next full pound, and bills the HIGHER of that and dimensional weight (L×W×H ÷ the divisor per
+   piece — the configured Ground divisor is used for this display). */
 function weighInfo(pieces){
-  const ps=(pieces||[]).map(p=>{const act=+p.weight||0;const actC=Math.max(1,Math.ceil(act));const hasD=(+p.L>0&&+p.W>0&&+p.H>0);const dim=hasD?Math.ceil((+p.L*+p.W*+p.H)/DIM):null;return {act,actC,dim,dims:hasD?`${p.L}×${p.W}×${p.H}`:null};});
+  const ps=(pieces||[]).map(p=>{const act=+p.weight||0;const actC=Math.max(1,Math.ceil(act));const hasD=(+p.L>0&&+p.W>0&&+p.H>0);const dim=hasD?Math.ceil((+p.L*+p.W*+p.H)/(DIM_CFG.ground||DIM)):null;return {act,actC,dim,dims:hasD?`${p.L}×${p.W}×${p.H}`:null};});
   if(!ps.length)return null;
   const act=Math.round(ps.reduce((a,p)=>a+p.act,0)*100)/100;
   const quoted=ps.reduce((a,p)=>a+p.actC,0);
@@ -280,11 +288,13 @@ const SERVICES=Object.keys(RATES);
 function quoteRates(s){
   const zone=zoneEst(s.fromZip,s.toZip);
   const pieces=(s.pieces&&s.pieces.length)?s.pieces:[{weight:s.weight,L:s.L,W:s.W,H:s.H}];
-  const bw=pieces.reduce((a,p)=>a+billable(p.L,p.W,p.H,p.weight),0);
   const n=pieces.length;
   const intl=!!s.intl;
   return SERVICES.filter(k=>!!RATES[k].intl===intl).map(k=>{
     const r=RATES[k];
+    // billable weight per SERVICE FAMILY — each family can carry its own negotiated dim divisor
+    const div=dimFor(r.label);
+    const bw=pieces.reduce((a,p)=>a+billable(p.L,p.W,p.H,p.weight,div),0);
     let c=r.intl?(r.base+r.pl*bw):(r.base+r.pz*(zone-2)+r.pl*Math.max(0,bw-1));
     c+=c*r.fuel;
     if(s.residential&&r.res)c+=r.res;
@@ -3555,6 +3565,18 @@ function RatesAdmin({clients=[],brand}){
       </table></div>}
 
       {tab==="surcharges"&&<div className="space-y-4">
+        <div className="border border-stone-200 rounded-xl bg-white p-3 space-y-2">
+          <div className="text-sm font-semibold text-stone-800">Dim divisors</div>
+          <p className="text-[11px] text-stone-500">Your negotiated dimensional-weight divisor per service family (list is 139; negotiated can run up to 225). Dim weight = L×W×H ÷ divisor, and FedEx bills the higher of that and actual weight. These drive the app's estimates, box logic and the billed-weight note.</p>
+          <div className="flex flex-wrap gap-4">
+            {[["express","Express"],["ground","Ground & Home Delivery"],["ground_economy","Ground Economy"]].map(([k,l])=>(
+              <label key={k} className="text-xs text-stone-600">{l}
+                <input type="number" min="50" max="300" value={(rules.dimDivisors&&rules.dimDivisors[k])||139}
+                  onChange={e=>{const v=Math.max(50,Math.min(300,+e.target.value||139));setRules(r=>({...DEFAULT_RATE_RULES,...r,dimDivisors:{express:139,ground:139,ground_economy:139,...(r.dimDivisors||{}),[k]:v}}));}}
+                  className="mt-1 block w-28 bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
+              </label>))}
+          </div>
+        </div>
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-[11px] text-stone-500 flex-1 min-w-[260px]">All {FEDEX_SURCHARGES.length} Service Guide surcharges in their own boxes — Express, Ground, and Home Delivery each carry their own rates. Double-click a row to edit. <Badge tone="blue">app-applied</Badge> fees change quotes immediately; the rest are billed inside England's quote total — your service % marks them up today, and per-surcharge adjustments plug in when England's per-line breakdown is wired.</p>
           <Input value={surQ} onChange={e=>setSurQ(e.target.value)} placeholder="Search surcharges…" className="w-52"/>
@@ -4256,6 +4278,9 @@ function usePersist(key,initial){
     }
     return initial;
   });
+  // negotiated dim divisors ride the global rateRules store — keep the module config in sync
+  // from EVERY consumer so quoting/box-logic math always uses the admin's numbers
+  if(key==="rateRules"){ try{ setDimCfg(val&&val.dimDivisors); }catch(e){} }
   useEffect(()=>{
     const bus=(PERSIST_BUS[nsKey]=PERSIST_BUS[nsKey]||new Set());
     bus.add(setVal);
@@ -5833,10 +5858,10 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     return started?probs:[];
   },[receiver.zip,receiver.country,receiver.address1,receiver.name,receiver.city,JSON.stringify(pieces),originZip]);
   /* Service Guide heads-ups that DON'T block the quote but change price or service availability:
-     Additional Handling triggers (>50 lb, >48" side, >30" second side, >105" length+girth),
-     Ground Oversize (>130" L+G bills at a 90-lb minimum), Ground-only length (108–119" = Express
-     only), Ground Economy caps (70 lb / 130" — the service is hidden), and FedEx's $50,000
-     per-package declared value ceiling. */
+     Ground Oversize (>130" L+G bills at a 90-lb minimum), Unauthorized Package (over Ground's
+     108" side limit — Express only or a hefty unauthorized charge), Ground Economy caps
+     (70 lb / 130" — the service is hidden), and FedEx's $50,000 per-package declared value
+     ceiling. (Additional Handling intentionally NOT flagged — too common to banner.) */
   const quoteAdvisories=useMemo(()=>{
     const notes=[];
     pieces.forEach((p,i)=>{
@@ -5845,12 +5870,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       const L=+p.L||0,W=+p.W||0,H=+p.H||0;
       const s=(L&&W&&H)?[L,W,H].sort((x,y)=>y-x):null;
       const lg=s?s[0]+2*(s[1]+s[2]):0;
-      if(s&&s[0]>108&&s[0]<=119)notes.push(`${tag}'s longest side is over 108" — Ground and Home Delivery can't take it; Express services only.`);
+      if(s&&s[0]>108&&s[0]<=119)notes.push(`${tag}'s longest side is over 108" — on Ground it's an Unauthorized Package charge; ship it Express only.`);
       if(w>70||(lg&&lg>130))notes.push(`${tag} is over Ground Economy's limits (70 lb / 130" length+girth) — Ground Economy is hidden for this shipment.`);
-      if(w>50)notes.push(`${tag} is over 50 lb — FedEx adds an Additional Handling (weight) surcharge.`);
-      else if(s&&s[0]>48)notes.push(`${tag}'s longest side is over 48" — FedEx adds an Additional Handling (dimensions) surcharge.`);
-      else if(s&&s[1]>30)notes.push(`${tag}'s second-longest side is over 30" — FedEx adds an Additional Handling (dimensions) surcharge.`);
-      else if(lg>105&&lg<=130)notes.push(`${tag} is over 105" length+girth — FedEx adds an Additional Handling surcharge.`);
       if(lg>130&&lg<=165)notes.push(`${tag} is over 130" length+girth — FedEx's Oversize charge applies and it bills at a 90 lb minimum.`);
       const dv=(pieces.length>1&&dvEach)?(+p.dv||0):(+insurance||0);
       if(dv>50000)notes.push(`${tag}'s declared value is over FedEx's $50,000 per-package maximum — the booking will be rejected.`);

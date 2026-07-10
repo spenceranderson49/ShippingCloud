@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v386";
+const BUILD_TAG="addr-v387";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -988,17 +988,24 @@ function printPdf4x6(url){
 }
 function printPdfUrl(url){
   if(!url)return false;
+  /* A raw PDF loaded straight into an iframe prints at the PDF's own size on whatever paper the
+     printer defaults to — a 4×6 label lands tiny in the corner of a letter page. So we ALWAYS wrap
+     it in an @page-pinned frame sized to the label stock; the label then fills the page every time. */
   try{
+    const [pw,ph]=stockDims(((typeof window!=="undefined"&&window.__scLabelStock)||{}).size||"4x6");
     const f=document.createElement("iframe");
     f.style.cssText="position:fixed;right:0;bottom:0;width:2px;height:2px;border:0;opacity:0;pointer-events:none;";
     f.setAttribute("aria-hidden","true");
+    document.body.appendChild(f);
+    const d=f.contentDocument||(f.contentWindow&&f.contentWindow.document);
+    if(!d)throw new Error("no frame doc");
+    d.open();
+    d.write('<!doctype html><html><head><title>Label</title><style>@page{size:'+pw+'in '+ph+'in;margin:0}html,body{margin:0;padding:0}embed{display:block;width:'+pw+'in;height:'+ph+'in}</style></head><body><embed src="'+url+'#toolbar=0&view=Fit" type="application/pdf"/></body></html>');
+    d.close();
     let fired=false;
     const go=()=>{ if(fired)return; try{ if(f.contentWindow){ f.contentWindow.focus(); f.contentWindow.print(); fired=true; } }catch(e){} };
-    f.onload=()=>setTimeout(go,250);
-    f.src=url;
-    document.body.appendChild(f);
-    setTimeout(go,1200);                                   // PDFs don't reliably fire onload
-    setTimeout(()=>{ if(!fired){ printPdf4x6(url); } },2600);   // never a raw tab — that printed 4×6 labels at letter size with browser chrome
+    setTimeout(go,900);                                    // give the embedded PDF a beat to attach
+    setTimeout(go,1900);                                   // retry — PDF embeds don't reliably fire onload
     setTimeout(()=>{ try{document.body.removeChild(f);}catch(e){} },180000);
     return true;
   }catch(e){ return printPdf4x6(url); }

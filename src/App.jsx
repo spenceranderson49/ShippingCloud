@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v392";
+const BUILD_TAG="addr-v393";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2326,7 +2326,7 @@ const CUSTOM_DEFAULTS={
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
   logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,skipBookedSummary:false,autoRulesOnShip:true,autoRulesInBatch:false,autoBookBatch:false,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],theme:"light",accent:"",
   refRequired:false,invRequired:false,poRequired:false,refLocked:false,invLocked:false,poLocked:false,
-  confetti:"page",seasonal:true,loginBg:"",appBg:"",headerBg:"",pageBg:"",navBg:"",
+  confetti:"page",seasonal:false,loginBg:"",appBg:"",headerBg:"",pageBg:"",navBg:"",
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
 const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
@@ -5573,7 +5573,14 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
      steals focus from another input/textarea/select, so editing weights etc. still works;
      it only catches keystrokes that would otherwise land on the page body. */
   const scanMode=!!cz(settings).scanAutoFocus;
-  useEffect(()=>{ if(scanMode&&scanRef.current)try{scanRef.current.focus();}catch(e){} },[scanMode]);
+  /* Put the cursor IN the scan box when the tab opens. A single focus() on mount often loses to the
+     page still settling (address cards, autocomplete), so retry a few times — but only while nothing
+     else is focused, so it never yanks the cursor out of a field you're typing in. */
+  useEffect(()=>{ if(!scanMode)return;
+    const tryFocus=()=>{ try{ const a=document.activeElement; if(scanRef.current&&a!==scanRef.current&&(!a||a===document.body||a.tagName==="BUTTON"))scanRef.current.focus(); }catch(e){} };
+    const timers=[0,120,350,700,1200].map(d=>setTimeout(tryFocus,d));
+    return ()=>timers.forEach(clearTimeout);
+  },[scanMode]);
   useEffect(()=>{ if(!scanMode)return;
     const armed=()=>{ const a=document.activeElement; return !a||a===document.body||a.tagName==="BUTTON"; };
     const onKey=(e)=>{ if(e.ctrlKey||e.metaKey||e.altKey)return; if(e.key.length!==1&&e.key!=="Enter")return;
@@ -8439,11 +8446,11 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
      into its own top-level section under Shipping. The flat `secs` list below feeds the
      policy/fallback logic unchanged. */
   const SEC_GROUPS=[
-    ["Workspace",[["general","General",Cog],["customize","Customizations",Sliders],["reports","Reports",TrendingUp]]],
-    ["Shipping",[["shipscreen","Ship screen",Truck],["carriers","Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["catalog","Product catalog",Boxes],["reference","Reference Fields",Receipt]]],
+    ["Workspace",[["general","General",Cog],["customize","Customizations",Sliders]]],
+    ["Shipping",[["shipscreen","Ship screen",Truck],["carriers",BRAND.fw?"FedEx Account":"Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["catalog","Product catalog",Boxes],["reference","Reference Fields",Receipt]]],
     ["Documents & printing",[["printer","Print settings",Printer],["cieditor","Commercial invoice",Receipt],["cihistory","CI history",FileText],["otherdocs","Other documents",FileText],["manifests","Manifests",FileText]]],
     ["Automation & integrations",[["integrations","Integrations",Layers],["notifications","Email automation",Mail],["checkout","Checkout rates",ShoppingBag]]],
-    ["Account",[["billing","Billing",CreditCard],["subscription","Subscription",Star]]],
+    ["Account",[["reports","Reports",TrendingUp],["billing","Billing",CreditCard],["subscription","Subscription",Star]]],
   ];
   const secs=SEC_GROUPS.flatMap(g=>g[1]);
   /* Per-customer section policy set in the admin portal (featureFlags._secPolicy):
@@ -10466,7 +10473,7 @@ function GeneralSettings({settings,setSettings,goSec,audit=[]}){
   const F=({k,label,ph,hint,type})=>(<label className="block text-sm text-stone-700">{label}
     <input type={type||"text"} value={settings[k]||""} onChange={e=>set(k,e.target.value)} placeholder={ph} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
     {hint&&<span className="block text-[11px] text-stone-400 mt-0.5">{hint}</span>}</label>);
-  const links=[["shipscreen","Ship screen","Scan mode, hidden fields & Ship-tab options"],["customize","Customizations","Services, appearance, tabs & packing slips"],["reference","Reference Fields","Dropdown values, required & locked fields"],["carriers","Carrier accounts","FedEx & DHL connections"],["boxes","Package sizes","Your box library"],["printer","Print settings","Labels, printing, doc tabs & automation"],["notifications","Email automation","Customer notifications"],["integrations","Integrations","Stores & order sources"]];
+  const links=[["shipscreen","Ship screen","Scan mode, hidden fields & Ship-tab options"],["customize","Customizations","Services, appearance, tabs & packing slips"],["reference","Reference Fields","Dropdown values, required & locked fields"],["carriers",BRAND.fw?"FedEx Account":"Carrier accounts",BRAND.fw?"Your FedEx connection":"FedEx & DHL connections"],["boxes","Package sizes","Your box library"],["printer","Print settings","Labels, printing, doc tabs & automation"],["notifications","Email automation","Customer notifications"],["integrations","Integrations","Stores & order sources"]];
   return (<div className="max-w-2xl space-y-4">
     <Panel title="Your company">
       <div className="grid sm:grid-cols-2 gap-3">
@@ -10688,9 +10695,9 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
         <Num k="priceWarn" label="Price alert" hint="Flag any rate above this amount. 0 = off" step="1" suffix="$"/>
       </div>
       <div className="border-t border-stone-100 mt-3 pt-3">
-        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Services — hide ones you never use, rename the rest{locked.size>0&&<span className="normal-case tracking-normal text-stone-400"> · greyed-out ones are turned off by your admin</span>}</div>
+        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Services — hide ones you never use, rename the rest{(isAdmin||deployMode)&&locked.size>0&&<span className="normal-case tracking-normal text-stone-400"> · greyed-out ones you've turned off for this customer</span>}</div>
         <div className="space-y-1.5">
-          {SVC.map(([k,l])=>{const lk=locked.has(k);const off=svcHidden.has(k)||lk;return (<div key={k} className="flex items-center gap-3">
+          {SVC.filter(([k])=>isAdmin||deployMode||!locked.has(k)).map(([k,l])=>{const lk=locked.has(k);const off=svcHidden.has(k)||lk;return (<div key={k} className="flex items-center gap-3">
             <label className={`flex items-center gap-1.5 text-sm w-56 shrink-0 ${lk?"text-stone-300 cursor-not-allowed":"text-stone-700 cursor-pointer"}`}><input type="checkbox" checked={!off} disabled={lk} onChange={()=>togSvc(k)} className="accent-[#0086E0]"/><span className={off?"line-through text-stone-300":""}>{l}</span>{lk&&<span className="text-[10px] text-stone-400 normal-case">locked</span>}</label>
             <input value={(c.aliases||{})[k]||""} onChange={e=>setAlias(k,e.target.value)} placeholder={"rename — e.g. "+(k==="ground"?"Standard":k==="2day"?"Fast":"…")} disabled={off} className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 disabled:opacity-40"/>
           </div>);})}
@@ -10761,7 +10768,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
         <Sel k="fontScale" label="Text size" opts={[[94,"Small"],[100,"Normal"],[107,"Large"]]}/>
         <Sel k="theme" label="Theme" opts={[["light","Light"],["grey","Grey"],["dark","Dark"]]}/>
         <Sel k="confetti" label="Booking confetti 🎉" opts={[["page","Everywhere — full-page drop"],["button","Just around the button"],["off","Off"]]}/>
-        <Tog k="seasonal" label="Seasonal touches" hint="A little 🎅 🎃 ❤️ on the logo around the holidays"/>
+        {(isAdmin||deployMode)&&<Tog k="seasonal" label="Seasonal touches (admin)" hint="A little 🎅 🎃 ❤️ on the logo around the holidays. Off unless you, the admin, turn it on."/>}
         <Sel k="startTab" label="Start page after login" opts={tabChoices.map(x=>[x[0],x[1]])}/>
       </div>
       <div className="mt-3 rounded-xl border border-stone-200 bg-white p-3">
@@ -10860,9 +10867,6 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
       </div>
     </Panel>
 
-    <div className="border border-dashed border-stone-300 rounded-lg p-3 text-[12px] text-stone-400">
-      Coming soon: custom email wording, company-wide customization deployment, manager approvals, branded tracking pages.
-    </div>
     </>}
   </div>);
 }

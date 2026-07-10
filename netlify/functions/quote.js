@@ -274,6 +274,9 @@ exports.handler = async (event) => {
         if (amt) listSur[label] = Math.round(((listSur[label] || 0) + amt) * 100) / 100;
       });
       let surch = Object.keys(merged).map(label => ({ label, amount: merged[label], ...(listSur[label] != null ? { list: listSur[label] } : {}) }));
+      /* LIST base = list total minus list fees — service-level "% off list" prices the BASE only */
+      const listSurTotal = Object.values(listSur).reduce((a, v) => a + v, 0);
+      const listBase = list != null ? Math.round((list - listSurTotal) * 100) / 100 : null;
       if (!surch.length && acctD && acctD.shipmentRateDetail && +acctD.shipmentRateDetail.totalSurcharges > 0) {
         surch = [{ label: "Carrier surcharges", amount: Math.round(+acctD.shipmentRateDetail.totalSurcharges * 100) / 100 }];
       }
@@ -286,6 +289,7 @@ exports.handler = async (event) => {
         label: batch.oneRate ? (svc.label + " OneRate" + (boxName ? " - " + boxName : "")) : svc.label,
         cost: cost != null ? cost : list,
         list: list,
+        listBase: listBase,
         packageTypeCode: batch.oneRate ? boxCode : "",
         _oneRate: batch.oneRate || undefined,
         minDays, maxDays,

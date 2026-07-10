@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v435";
+const BUILD_TAG="addr-v436";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2391,31 +2391,38 @@ function list2025Lookup(key,weight,zone){
    customer's legacy flat markup whenever no rule answers — nothing changes until a rule is set. */
 function rateSellFor(cost,label,ctx){
   const c=ctx||{};
-  /* Per-surcharge rules on LIVE quotes: carve each adjusted fee line (fuel, peak/demand, DAS,
-     residential, additional handling, declared value…) out of the carrier cost, price the
-     remainder through the normal path (service rule or account markup), then add each fee back
-     at its ruled price. Flat and list bases are exempt — flat is exact by definition, and list
-     prices off the rate book, not off cost. */
+  /* LIVE quotes split BASE from FEES (the spec): the service rule — % / Fixed / Flat / List−% —
+     and its Min $ price the BASE freight ONLY. Every itemized fee line (fuel, residential, DAS,
+     additional handling, peak, declared value…) is priced by its own accessorial rule; a fee
+     with no rule takes the account-wide markup if one is set, else passes through at the billed
+     amount. Total = priced base + priced fees. Min $ = a floor on the BASE. The account
+     "Min $ profit / label" still floors profit against the TRUE total carrier cost. */
   if(cost!=null&&c.rules&&Array.isArray(c.surcharges)&&c.surcharges.length&&!c._noSurAdj){
     const prof=c.prof||rateProfileFor(c.rules,c.client&&c.client.id);
-    const rule=prof&&prof.services&&prof.services[rateSvcKey(label)];
-    const basis=(rule&&rule.on!==false)?(rule.basis||"percent"):null;
-    if(basis!=="flat"&&basis!=="list"){
-      const adj=surchargeAdjust(c.surcharges,label,prof);
-      if(adj){
-        const core=rateSellFor(Math.max(0,Math.round((cost-adj.removed)*100)/100),label,{...c,prof,_noSurAdj:true});
-        if(core==null)return null;
-        let out=Math.round((core+adj.add)*100)/100;
-        /* floors were applied to the carved-down core — re-assert them against the FULL price:
-           the service Min $ floors the final sell, and the account Min-$-profit floors against
-           the TRUE carrier cost (discounted fees must never eat the configured profit floor). */
-        const rmin=(rule&&rule.on!==false)?((rule.min==null||rule.min==="")?null:+rule.min):null;
-        if(rmin!=null&&out<rmin)out=rmin;
-        const aMin2=(c.client&&c.client.markupMin!=null&&c.client.markupMin!==""&&!isNaN(+c.client.markupMin)&&+c.client.markupMin>0)?+c.client.markupMin:null;
-        if(aMin2!=null&&out<cost+aMin2)out=Math.round((cost+aMin2)*100)/100;
-        return out;
-      }
+    const sc=(prof&&prof.surcharges)||{};
+    const aPctF=(c.client&&c.client.markup!=null&&c.client.markup!==""&&!isNaN(+c.client.markup)&&+c.client.markup!==0)?+c.client.markup:null;
+    let feeCost=0,feeSell=0;const feeParts=[];
+    for(const ln of c.surcharges){
+      const amt=+(ln&&ln.amount)||0; if(!amt)continue;
+      feeCost+=amt;
+      const id=fedexSurchargeIdFor(ln.label,label);
+      const r=id?sc[id]:null;
+      const a=(r&&r.amount!=null&&r.amount!==""&&!isNaN(+r.amount))?+r.amount:null;
+      const priced=a==null
+        ?(aPctF!=null?amt*(1+aPctF/100):amt)
+        :(r.type==="percent"?amt*(1+a/100):r.type==="add"?amt+a:r.type==="listpct"?((+ln.list||amt)*(1-a/100)):a);
+      feeSell+=priced;
+      feeParts.push({label:ln.label,amount:Math.round(priced*100)/100});
     }
+    const baseCost=Math.max(0,Math.round((cost-feeCost)*100)/100);
+    /* the base prices off the LIST BASE when the quote provides it — never list-total */
+    const baseSell=rateSellFor(baseCost,label,{...c,prof,list:(c.listBase!=null?c.listBase:null),_noSurAdj:true});
+    if(baseSell==null)return null;
+    let out=Math.round((baseSell+feeSell)*100)/100;
+    const aMin2=(c.client&&c.client.markupMin!=null&&c.client.markupMin!==""&&!isNaN(+c.client.markupMin)&&+c.client.markupMin>0)?+c.client.markupMin:null;
+    if(aMin2!=null&&out<cost+aMin2)out=Math.round((cost+aMin2)*100)/100;
+    if(c._parts){c._parts.base=Math.round(baseSell*100)/100;c._parts.fees=feeParts;}
+    return out;
   }
   if(cost==null){
     /* Flat-priced services sell at exactly their flat price even when the carrier cost is
@@ -3348,7 +3355,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         <b>Live check</b> — a $10.00 raw cost sells right now for:&nbsp;
         {["FedEx Ground","FedEx Home Delivery","FedEx 2Day","FedEx Priority Overnight"].map((l,i)=><span key={l}>{i>0&&" · "}{l.replace("FedEx ","")} <b className="font-mono">{money(rateSellFor(10,l,{rules,client:cDraft}))}</b></span>)}
         &nbsp;— same engine that prices every quote for {c.name}; type a markup above or below and watch these move instantly.
-        <div className="mt-1 text-stone-500">Order of operations on every quote: per-fee accessorial rules → weight-break / zone % → the service rule (%, Fixed $, Flat $, or List −%) → this account-wide markup → <b>Min $ floors last</b> (service Min $ on the sell price; Min $ profit against the raw cost). Min $ now holds on every path — including when a % is blank or a list table is missing.</div>
+        <div className="mt-1 text-stone-500">How every live quote prices: the fee lines FedEx itemizes (fuel, residential, DAS, peak…) are split off and priced by their <b>accessorial rules</b> (no rule = account markup, else billed as-is). The <b>BASE freight</b> alone goes through the service rule — weight-break / zone % → %, Fixed $, Flat $, or List−% — then this account-wide markup, with the service <b>Min $ as a floor on the BASE</b>. Total = priced base + priced fees; Min $ profit still floors against total raw cost.</div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-stone-600">{c.name} prices from</span>
@@ -3453,7 +3460,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
               if(su.g!==lastG){lastG=su.g;out.push(<tr key={"g:"+su.g}><td colSpan={4} className="pt-3 pb-1 pl-3 text-[10px] uppercase tracking-widest text-stone-400 font-semibold">{su.g}</td></tr>);}
               const r=sr[su.id]||{};
               out.push(<tr key={su.id} className="border-t border-stone-100 hover:bg-stone-50">
-                <td className="py-1.5 pl-3 pr-2"><span className="text-stone-800">{su.desc}</span> <span className="text-[10px] text-stone-400">{su.seg}</span>{su.aka&&su.aka.toLowerCase()!==su.desc.toLowerCase()&&<span className="block text-[10px] text-stone-400">on quotes: “{su.aka}”</span>}</td>
+                <td className="py-1.5 pl-3 pr-2"><span className="text-stone-800">{su.aka||su.desc}</span> <span className="text-[10px] text-stone-400">{su.seg}</span>{su.aka&&su.aka.toLowerCase()!==su.desc.toLowerCase()&&<span className="block text-[10px] text-stone-400">{su.desc}</span>}</td>
                 <td className="py-1.5 pr-2"><Select value={r.type||(su.app?"fixed":"percent")} onChange={e=>upProfSur(prof.id,su.id,{type:e.target.value})}><option value="listpct">% off LIST</option><option value="percent">% over cost</option><option value="add">$ over cost</option><option value="fixed">Flat $</option></Select></td>
                 <td className="py-1.5 pr-3 whitespace-nowrap text-right"><Input type="number" value={r.amount==null?"":r.amount} onChange={e=>upProfSur(prof.id,su.id,{amount:e.target.value})} placeholder={su.def!=null?String(su.def):"default"} className="w-24 text-right"/></td>
                 <td className="py-1.5 pr-3 text-[11px] text-stone-400 whitespace-nowrap">{su.charge}</td>
@@ -3899,7 +3906,7 @@ function RatesAdmin({clients=[],brand}){
           {!clients.length&&<div className="text-sm text-stone-400">No customers yet.</div>}
         </div>
       </div>}
-      <p className="text-[11px] text-stone-500">Rules price on top of your carrier cost the moment a live quote returns — zone % → service % → the global cost-plus markup → the customer's legacy flat markup, with Min $ as a floor on the sell price. Cost sheets under Base costs unlock printable rate sheets and margin analysis; a FedEx list table unlocks the "FedEx list − %" basis.</p>
+      <p className="text-[11px] text-stone-500">Service rules price the <b>BASE freight only</b> — zone % → service % (or Fixed / Flat / List−%) → account markup, with <b>Min $ as a floor on the base</b>. The fee lines FedEx itemizes are priced separately by the Surcharges tab rules (no rule = account markup, else billed as-is). Cost sheets under Base costs unlock printable rate sheets and margin analysis; a FedEx list table unlocks the "FedEx list − %" basis.</p>
     </div>
 
     {/* carrier + inner tabs */}
@@ -3999,7 +4006,7 @@ function RatesAdmin({clients=[],brand}){
                     if(su.g!==lastG){lastG=su.g;out.push(<tr key={"g:"+su.g}><td colSpan={6} className="pt-3 pb-1 text-[10px] uppercase tracking-widest text-stone-400 font-semibold">{su.g}</td></tr>);}
                     const r=surRow[su.id]||{};
                     out.push(<tr key={su.id} onDoubleClick={()=>setSurEdit({...su,type:r.type||(su.app?"fixed":"percent"),amount:r.amount!=null?r.amount:(su.def!=null?su.def:"")})} className="border-t border-stone-100 hover:bg-stone-50 cursor-pointer">
-                      <td className="py-2 pr-2">{su.desc}{su.aka&&su.aka.toLowerCase()!==su.desc.toLowerCase()&&<span className="block text-[10px] text-stone-400">on quotes: “{su.aka}”</span>}{su.seg==="Ground & Home Delivery"&&<span className="text-[10px] text-stone-400 ml-1.5">(one rate covers Ground &amp; HD)</span>}{su.seg==="Express Freight"&&<span className="text-[10px] text-stone-400 ml-1.5">(Express Freight)</span>}{su.seg==="Ground Economy"&&<span className="text-[10px] text-stone-400 ml-1.5">(Ground Economy)</span>}</td>
+                      <td className="py-2 pr-2">{su.aka||su.desc}{su.aka&&su.aka.toLowerCase()!==su.desc.toLowerCase()&&<span className="block text-[10px] text-stone-400">{su.desc}</span>}{su.seg==="Ground & Home Delivery"&&<span className="text-[10px] text-stone-400 ml-1.5">(one rate covers Ground &amp; HD)</span>}{su.seg==="Express Freight"&&<span className="text-[10px] text-stone-400 ml-1.5">(Express Freight)</span>}{su.seg==="Ground Economy"&&<span className="text-[10px] text-stone-400 ml-1.5">(Ground Economy)</span>}</td>
                       <td className="pr-2 font-mono text-xs text-stone-500">{su.id}</td><td className="pr-2 text-stone-500">{su.charge}</td>
                       <td className="pr-2 text-stone-500">{({listpct:"% off list",percent:"±% over cost",add:"$ over cost",fixed:"flat $"})[r.type]||(su.app?"flat $":"—")}</td>
                       <td className="pr-2 text-right font-mono">{r.amount!=null&&r.amount!==""?(+r.amount).toFixed(2):(su.def!=null?su.def.toFixed(2):"—")}</td>
@@ -4052,7 +4059,7 @@ function RatesAdmin({clients=[],brand}){
         <div className="flex items-center justify-between mb-4"><div className="font-semibold text-stone-800">Edit surcharge</div><button onClick={()=>setSurEdit(null)} className="text-stone-400 hover:text-stone-600"><X className="w-4 h-4"/></button></div>
         <div className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-2.5 text-sm items-center">
           <div className="text-stone-500 text-right">ID</div><div className="font-mono text-xs">{surEdit.id}</div>
-          <div className="text-stone-500 text-right">Description</div><div>{surEdit.desc}{surEdit.seg?" — "+surEdit.seg:""}</div>
+          <div className="text-stone-500 text-right">Description</div><div>{surEdit.aka||surEdit.desc}{surEdit.seg?" — "+surEdit.seg:""}{surEdit.aka&&surEdit.aka.toLowerCase()!==surEdit.desc.toLowerCase()&&<span className="block text-[11px] text-stone-400">{surEdit.desc}</span>}</div>
           <div className="text-stone-500 text-right">Charge type</div><div>{surEdit.charge}</div>
           <div className="text-stone-500 text-right">Pricing</div><div><Select value={surEdit.type} onChange={e=>setSurEdit(s=>({...s,type:e.target.value}))}><option value="listpct">% off LIST — list fee −X%</option><option value="percent">% over cost — England fee ±X%</option><option value="add">$ over cost — England fee + $X</option><option value="fixed">Flat $ — exactly $X</option></Select></div>
           <div className="text-stone-500 text-right">Amount</div><div><Input type="number" value={surEdit.amount} onChange={e=>setSurEdit(s=>({...s,amount:e.target.value}))} className="w-32"/></div>
@@ -5688,7 +5695,13 @@ function AppInner(){
      customer's markup/account settings for a login that isn't actually assigned to them.
      Unassigned logins get a clean empty placeholder so pricing falls through to the platform
      default only (or raw cost if nothing is set) — never someone else's number by accident. */
-  const client=clients.find(c=>c.id===clientId)||(clientId?{id:clientId,name:"(unknown customer — "+clientId+")",_unresolved:true}:{id:"",name:"",_unassigned:true});
+  /* Admin "Price as": admins have no customer of their own, so quoting anywhere (Ship, Quick
+     quote, Batch, Orders) priced at raw cost on the Default profile — which reads as "my rules
+     are ignored". This persisted per-login choice makes the WHOLE session price as the chosen
+     customer, exactly like their login. */
+  const [adminPriceAs,setAdminPriceAs]=usePersist("adminPriceAs","");
+  const _apClient=(currentUser&&currentUser.role==="admin"&&adminPriceAs)?clients.find(c=>c&&c.id===adminPriceAs):null;
+  const client=_apClient||clients.find(c=>c.id===clientId)||(clientId?{id:clientId,name:"(unknown customer — "+clientId+")",_unresolved:true}:{id:"",name:"",_unassigned:true});
   /* An unresolved customer is often just staleness — a customer created seconds ago on a different tab/domain,
      and this session hasn't caught up yet. The normal poll is every 20s AND skips entirely while the tab is
      backgrounded, so switching between the admin tab and this one can leave it stale far longer than 20s.
@@ -5961,7 +5974,7 @@ function AppInner(){
           </div>
         </div>
       </header>
-      {qq&&<QuickQuote onClose={()=>setQQ(false)} client={client} clients={clients} isAdmin={isAdmin} england={englandFor(client,settings)} senderZip={settings?.sender?.zip||""}/>}
+      {qq&&<QuickQuote onClose={()=>setQQ(false)} client={client} clients={clients} isAdmin={isAdmin} priceAsShared={adminPriceAs} setPriceAsShared={setAdminPriceAs} england={englandFor(client,settings)} senderZip={settings?.sender?.zip||""}/>}
       {appLabel&&<LabelPreviewModal data={appLabel} settings={settings} onClose={()=>setAppLabel(null)}/>}
       {navOpen&&<div className="md:hidden fixed inset-0 z-40 flex" role="dialog">
         <div className="absolute inset-0 bg-stone-900/40" onClick={()=>setNavOpen(false)}/>
@@ -5997,7 +6010,7 @@ function AppInner(){
         <main className="flex-1 min-w-0 overflow-x-clip px-3 sm:px-6 py-4 sm:py-6" style={(srf.appBg||srf.pageBg)?{...(srf.pageBg?{backgroundColor:srf.pageBg}:{}),...(srf.appBg?{backgroundImage:`url(${srf.appBg})`,backgroundSize:"cover",backgroundPosition:"center",backgroundAttachment:"fixed"}:{})}:undefined}>
           <TabBoundary key={tab} name={tab}>
           {tab==="dashboard"&&<Dashboard shipments={shipments} orders={orders} returns={returns} goTab={setTab}/>}
-          {tab==="ship"&&<Ship client={client} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={ruleset} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders} currentUser={currentUser} setUsers={setUsers} setCurrentUser={setCurrentUser} clients={clients}/>}
+          {tab==="ship"&&<Ship client={client} priceAs={adminPriceAs} setPriceAs={setAdminPriceAs} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={ruleset} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders} currentUser={currentUser} setUsers={setUsers} setCurrentUser={setCurrentUser} clients={clients}/>}
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
           {tab==="orders"&&<Orders showMoney={showMoney} orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} setSettings={setSettings} onShipped={onShipped} openOrderId={pendingOpenOrderId} onOpenedOrder={()=>setPendingOpenOrderId(null)}/>}
           {tab==="batch"&&<Batch showMoney={showMoney} orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} setSettings={setSettings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
@@ -6050,7 +6063,7 @@ function shipDateDefault(settings){
   const off=d.getTimezoneOffset();
   return new Date(d.getTime()-off*60000).toISOString().slice(0,10);
 }
-function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,drafts,setDrafts,prefill,clearPrefill,onShipped,onPending,logEmail,onQuickQuote,onRefresh,syncing,currentUser,setUsers,setCurrentUser,clients=[]}){
+function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,drafts,setDrafts,prefill,clearPrefill,onShipped,onPending,logEmail,onQuickQuote,onRefresh,syncing,currentUser,setUsers,setCurrentUser,clients=[],priceAs="",setPriceAs=null}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 rate database — global, follows the customer's profile
   const empty={country:"United States",name:"",company:"",zip:"",state:"",city:"",address1:"",address2:"",address3:"",phone:"",email:""};
   const [sender,setSender]=useState({country:"United States",...settings.sender,address2:"",address3:""});
@@ -6445,7 +6458,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
        prices stay plausible. NO fee is ever invented on top of a live FedEx price. */
     const _live=!!rateSrc.live;
     const _dvList=_live?null:pieces.map(p=>(pieces.length>1&&dvEach)?(+p.dv||0):(+insurance||0));
-    return list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,list:q.list,surcharges:q.surcharges,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:_live?"none":sigOption,saturday,insuranceList:_dvList,fees:surchargeFees(rateRules,client)});})
+    return list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;const _p={};const _sell=q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,list:q.list,listBase:q.listBase,surcharges:q.surcharges,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,_parts:_p});return applyAccessorials({...q,sell:_sell,_sellParts:_p.fees?_p:undefined,fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:_live?"none":sigOption,saturday,insuranceList:_dvList,fees:surchargeFees(rateRules,client)});})
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
   },[rateSrc,orRates,client,JSON.stringify(custom.hiddenServices||[]),JSON.stringify(client&&client.blockedServices||[]),rateRules,fxTransit,residential,addrClassified,sigOption,saturday,insurance,intl,dvEach,JSON.stringify(pieces)]);
   const best=null;
@@ -6809,6 +6822,14 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                   if(!handsFree&&!(so&&(so.shippingService||so.source)))return null;
                   /* hands-free: this box is ALWAYS here (fixed height) — only its text changes */
                   return <div className="flex items-center gap-2 text-xs text-stone-600 bg-stone-100 border border-stone-200 rounded-lg px-3 py-2 min-h-[38px]"><Truck className="w-3.5 h-3.5 text-stone-400 shrink-0"/><span className="truncate">{so?<>From order <b>{so.name}</b>{so.source?` (${so.source})`:""} — buyer requested <b>{so.shippingService||"Standard"}</b>.</>:<span className="text-stone-400">No order loaded — scan an order (or pick one) and it fills in here.</span>}</span></div>;})()}
+        {currentUser&&currentUser.role==="admin"&&setPriceAs&&clients.length>0&&<div className="flex flex-wrap items-center gap-2 text-xs bg-violet-50 border border-violet-200 rounded-lg px-3 py-2">
+          <span className="uppercase tracking-widest text-[10px] text-violet-500 font-semibold shrink-0">Price as</span>
+          <select value={priceAs} onChange={e=>setPriceAs(e.target.value)} className="bg-white border border-violet-200 rounded px-2 py-1 text-xs outline-none">
+            <option value="">— nobody: your raw carrier cost, no rules —</option>
+            {clients.map(cc=><option key={cc.id} value={cc.id}>{cc.name}</option>)}
+          </select>
+          <span className="text-violet-500 min-w-0 truncate">{priceAs?"Quoting with this customer's rules, markups and mins — exactly what their login sees.":"Pick a customer to see their prices; admins have no rules of their own."}</span>
+        </div>}
         {/* Rate-source banner — hideable via Settings → Customizations → Ship screen */}
         {ready&&!custom.hideRateSrcBar&&<div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
           {rateSrc.loading?<><Loader2 className="w-3.5 h-3.5 animate-spin"/>Fetching live rates…</>
@@ -7295,7 +7316,11 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
     const accTotal=Math.round(acc.reduce((a,e)=>a+(e.amount||0),0)*100)/100;
     const baseSell=Math.round((sell-accTotal)*100)/100;
     let comps;
-    if(q.surcharges&&q.surcharges.length){
+    if(q._sellParts&&q._sellParts.fees){
+      /* REAL priced parts from the rate engine: base = the service rule's price (with its Min $),
+         each fee = its accessorial rule's price. What's shown IS what was charged, line by line. */
+      comps=[{label:"Base rate",amount:q._sellParts.base},...q._sellParts.fees];
+    } else if(q.surcharges&&q.surcharges.length){
       const surTotal=q.surcharges.reduce((a,s)=>a+(s.amount||0),0);
       const baseRaw=q.base!=null?q.base:Math.max(0,(q.cost||0)-surTotal);
       const factor=(q.cost&&baseSell)?baseSell/q.cost:1;
@@ -7430,7 +7455,7 @@ function LiveEstRate({o,client,settings,rateRules,ruleset}){
     let pref=null;
     try{ const enabled=(ruleset||[]).filter(r=>r&&r.enabled); if(enabled.length){ const rr=runRuleEngine(enabled,[o],fromZip); const r0=rr.results&&rr.results[0]; if(r0&&r0.fires&&r0.fires.length&&r0.view&&r0.view.selectedService)pref=r0.view.selectedService; } }catch(e){}
     const wt=+o.weight||1;
-    const sellCtx=(list,sur)=>({rules:rateRules,client,list,surcharges:sur,fromZip,toZip:o.zip,weight:wt});
+    const sellCtx=(list,sur,lb)=>({rules:rateRules,client,list,listBase:lb,surcharges:sur,fromZip,toZip:o.zip,weight:wt});
     const pickFrom=(qs,live)=>{
       if(!qs||!qs.length)return {none:true};
       const hit=pref?qs.filter(q=>svcPrefHit(pref,q.label)).sort((a,b)=>(a.cost||0)-(b.cost||0))[0]:null;
@@ -7448,7 +7473,7 @@ function LiveEstRate({o,client,settings,rateRules,ruleset}){
         try{
           const res=await ratesForOrder(o,{residential:true,weightLb:wt,fromZip,sender:settings&&settings.sender},eng);
           const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);
-          const qs=((res&&res.rates)||[]).filter(q=>!hs.has(canonSvc(q.label))&&!bs.has(canonSvc(q.label))).filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk([{weight:wt}])).map(q=>({...q,sell:rateSellFor(q.cost,q.label,sellCtx(q.list,q.surcharges))}));
+          const qs=((res&&res.rates)||[]).filter(q=>!hs.has(canonSvc(q.label))&&!bs.has(canonSvc(q.label))).filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk([{weight:wt}])).map(q=>({...q,sell:rateSellFor(q.cost,q.label,sellCtx(q.list,q.surcharges,q.listBase))}));
           if(qs.length)finish(pickFrom(qs,true)); else finish({none:true});   // live account: no rate = show "—", never an offline guess
         }catch(e){ finish({none:true}); }
         finally{ estDone(); }
@@ -7686,7 +7711,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
     return ()=>{cancel=true;};
   },[rateNonce,o.zip,weight,box.L,box.W,box.H,residential,oneRate,orBox&&orBox.code,eng.enabled,eng.apiKey,eng.customerId,eng.base,eng.fedexAccount]);   /* eng is a fresh object every render (englandFor) — depend on its primitives or this effect loops forever */
   const localOrderQuotes=()=>quoteRates({fromZip,toZip:o.zip,pieces:[{weight:+weight||0,L:box.L,W:box.W,H:box.H}],residential,intl:false}).filter(qq=>qq.carrier==="FedEx");
-  const quotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,surcharges:qq.surcharges,fromZip:(settings&&settings.sender&&settings.sender.zip)||"",toZip:o.zip,weight:+weight||o.weight||1})})).sort((a,b)=>(a.sell||1e9)-(b.sell||1e9));},[rateSrc,residential,client,settings,rateRules,weight]);
+  const quotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,listBase:qq.listBase,surcharges:qq.surcharges,fromZip:(settings&&settings.sender&&settings.sender.zip)||"",toZip:o.zip,weight:+weight||o.weight||1})})).sort((a,b)=>(a.sell||1e9)-(b.sell||1e9));},[rateSrc,residential,client,settings,rateRules,weight]);
   const best=(rateSrc.live&&quotes[0])?quotes[0].key:null;
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
   const printHere=async(qq)=>{
@@ -7887,7 +7912,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   },[rcv.zip,fromZip,residential,totalWeight,box.L,box.W,box.H]);
   // FedEx One Rate 2Day — flat, zone-independent.
   const orRates=useMemo(()=>selectedOrBox?oneRateQuotes(selectedOrBox,{rules:rateRules,client}):[],[selectedOrBox&&selectedOrBox.code,client,rateRules]);
-  const baseQuotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,surcharges:qq.surcharges,fromZip,toZip:rcv.zip,weight:totalWeight})}));},[rateSrc,residential,client,addrClassified,rateRules,settings]);
+  const baseQuotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>{const _p={};const _sell=rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,listBase:qq.listBase,surcharges:qq.surcharges,fromZip,toZip:rcv.zip,weight:totalWeight,_parts:_p});return {...qq,sell:_sell,_sellParts:_p.fees?_p:undefined};});},[rateSrc,residential,client,addrClassified,rateRules,settings]);
   const quotes=useMemo(()=>{
     const withTransit=(list)=>list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};});
     return cleanServiceList(withTransit([...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday:sat,insurance,fees:surchargeFees(rateRules,client)}))),{intl:_intl,residential:addrClassified?residential:null}).sort((a,b)=>(a.sell||0)-(b.sell||0));
@@ -8267,14 +8292,13 @@ function Pickups({pickups,setPickups,settings}){
 }
 
 /* ════════ QUICK QUOTE ════════ */
-function QuickQuote({onClose,client,clients=[],isAdmin=false,england,senderZip}){
+function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",setPriceAsShared=null,england,senderZip}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 rate database
-  /* Admin logins have no customer, so quotes priced as "yourself" use the Default profile at raw
-     cost — which looks like "my rules are ignored". Admins pick WHO to price as; the selected
-     customer's profile, markups, mins, and accessorial rules all apply exactly as they would for
-     that customer's own login. */
-  const [priceAs,setPriceAs]=useState("");
-  const effClient=isAdmin&&priceAs?(clients.find(c=>c&&c.id===priceAs)||client):client;
+  /* "Price as" is the SESSION-WIDE admin choice (shared with the Ship tab) — the client prop
+     already arrives resolved to that customer, so pricing here just uses it. */
+  const priceAs=priceAsShared;
+  const setPriceAs=(v)=>{setPriceAsShared&&setPriceAsShared(v);};
+  const effClient=client;
   const [fromZip,setFromZip]=useState(senderZip||client?.origin||"");
   const [toZip,setToZip]=useState("90210");
   const [residential,setResidential]=useState(true);
@@ -8312,7 +8336,7 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,england,senderZip})
   },[fromZip,toZip,residential,JSON.stringify(pieces),sigOption,saturday,insurance,england]);
   const qqOrBox=oneRateBoxFor(pieces[0]&&pieces[0].L,pieces[0]&&pieces[0].W,pieces[0]&&pieces[0].H,totalWeight);
   const qqOrRates=useMemo(()=>qqOrBox?oneRateQuotes(qqOrBox,{rules:rateRules,client:effClient}):[],[qqOrBox&&qqOrBox.code,rateRules,effClient]);
-  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client:effClient,list:q.list,surcharges:q.surcharges,fromZip,toZip,weight:pieces.reduce((a,p)=>a+(+p.weight||0),0)})})),...qqOrRates].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,effClient)})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,effClient,rateRules,fxTransit,qqOrRates,sigOption,saturday,insurance,fromZip,toZip,JSON.stringify(pieces)]);
+  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>{const _p={};const _sell=rateSellFor(q.cost,q.label,{rules:rateRules,client:effClient,list:q.list,listBase:q.listBase,surcharges:q.surcharges,fromZip,toZip,weight:pieces.reduce((a,p)=>a+(+p.weight||0),0),_parts:_p});return {...q,sell:_sell,_sellParts:_p.fees?_p:undefined};}),...qqOrRates].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,effClient)})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,effClient,rateRules,fxTransit,qqOrRates,sigOption,saturday,insurance,fromZip,toZip,JSON.stringify(pieces)]);
   const hasExpress=quotes.some(q=>{const l=String(q.label||"").toLowerCase();return /(overnight|2\s?day|express saver)/.test(l);});
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-8 bg-stone-900/40 backdrop-blur-sm overflow-auto" onClick={onClose}>
@@ -8663,7 +8687,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
       :{fromZip:client.origin,toZip:o.zip,L:12,W:9,H:4,weight:o.weight,residential:true})
       .filter(q=>!hs.has(canonSvc(q.label))&&!bs.has(canonSvc(q.label)))
       .filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk(_gePcs))
-      .map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,surcharges:q.surcharges,fromZip:client.origin,toZip:o.zip,weight:(pk&&pk.totalWt)||o.weight||1})}));
+      .map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,listBase:q.listBase,surcharges:q.surcharges,fromZip:client.origin,toZip:o.zip,weight:(pk&&pk.totalWt)||o.weight||1})}));
     let pick=pickByPref(qs,svcOv[o.id]);
     if(!pick){
       if(rule==="ground") pick=qs.filter(q=>/Ground|Home/.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
@@ -8821,7 +8845,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         _resKnownB=await classifyOrderAddress(o,originZip);   // ground↔home follows the FedEx classification, same as Autopilot
         _resFlagB=_resKnownB==null?true:_resKnownB;
         const res=await ratesForOrder(o,{residential:_resFlagB,weightLb:_wt0,box:pk0&&pk0.pieces[0]?_box0:undefined,fromZip:originZip,sender:settings.sender,packageTypeCode:_orBox0?_orBox0.code:""},eng);
-        const _hs=new Set(cz(settings).hiddenServices||[]);const _bs=new Set((client&&client.blockedServices)||[]);let qs=((res&&res.rates)||[]).filter(q=>!_hs.has(canonSvc(q.label))&&!_bs.has(canonSvc(q.label))).filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk([{weight:_wt0,L:_box0.L,W:_box0.W,H:_box0.H}])).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,surcharges:q.surcharges,fromZip:originZip,toZip:o.zip,weight:(pk0&&pk0.totalWt)||o.weight||1})}));   // GE filter checks the SAME single piece the rate call priced
+        const _hs=new Set(cz(settings).hiddenServices||[]);const _bs=new Set((client&&client.blockedServices)||[]);let qs=((res&&res.rates)||[]).filter(q=>!_hs.has(canonSvc(q.label))&&!_bs.has(canonSvc(q.label))).filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk([{weight:_wt0,L:_box0.L,W:_box0.W,H:_box0.H}])).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,listBase:q.listBase,surcharges:q.surcharges,fromZip:originZip,toZip:o.zip,weight:(pk0&&pk0.totalWt)||o.weight||1})}));   // GE filter checks the SAME single piece the rate call priced
         picked=pickByPref(qs,svcOv[o.id],_resKnownB);
         if(!picked){
           if(rule==="ground")picked=qs.filter(q=>/ground|home/i.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
@@ -10703,7 +10727,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
         _resFlag=_resKnown==null?true:_resKnown;
         const res=await ratesForOrder(o,{residential:_resFlag,weightLb:wt,fromZip:senderZip,sender:settings.sender,box:_box0,packageTypeCode:_orBox0?_orBox0.code:""},eng);
         const _apHs=new Set(cz(settings).hiddenServices||[]);const _apBs=new Set((client&&client.blockedServices)||[]);
-        const qs=((res&&res.rates)||[]).filter(q=>!_apHs.has(canonSvc(q.label))&&!_apBs.has(canonSvc(q.label))).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,surcharges:q.surcharges,fromZip:senderZip,toZip:o.zip,weight:wt})}));
+        const qs=((res&&res.rates)||[]).filter(q=>!_apHs.has(canonSvc(q.label))&&!_apBs.has(canonSvc(q.label))).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,listBase:q.listBase,surcharges:q.surcharges,fromZip:senderZip,toZip:o.zip,weight:wt})}));
         picked=pickRate(qs,pref,_resKnown);
       }catch(e){}
       if(!picked){rows.push({name:o.name,orderId:o.id,ok:false,error:"No rate returned"});setApResults({rows:[...rows],heldN});continue;}

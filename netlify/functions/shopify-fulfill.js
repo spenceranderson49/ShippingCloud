@@ -90,22 +90,27 @@ exports.handler = async (event) => {
       const allF = ((((xr.data || {}).order || {}).fulfillments) || []);
       const good = allF.filter((f) => S(f.status).toUpperCase() === "SUCCESS");
       const fulfills = good.length ? good : allF.filter((f) => S(f.status).toUpperCase() !== "CANCELLED");
-      const target = fulfills[fulfills.length - 1];
-      if (!target) return J({ ok: false, error: "No open fulfillment orders and no existing fulfillment to update — check the order in Shopify." });
-      const ur = await gql(shop, token,
-        `mutation($fulfillmentId:ID!,$trackingInfoInput:FulfillmentTrackingInput!,$notifyCustomer:Boolean){
-           fulfillmentTrackingInfoUpdate(fulfillmentId:$fulfillmentId,trackingInfoInput:$trackingInfoInput,notifyCustomer:$notifyCustomer){
-             fulfillment{id} userErrors{field message}}}`,
-        { fulfillmentId: target.id,
-          /* plural numbers/urls REPLACE the fulfillment's whole tracking list — the singular
-             `number` field left an old numbers[] entry behind, so Shopify's "Tracking added"
-             popover kept showing the stale number while the order page showed the new one */
-          trackingInfoInput: { numbers: tracking ? [tracking] : [], urls: S(body.trackingUrl) ? [S(body.trackingUrl)] : [], company: S(body.carrier) || "FedEx" },
-          notifyCustomer: body.notifyCustomer !== false });
-      if (ur.status === 401) return J({ ok: false, error: "Shopify rejected the token (401) — reconnect the store." });
-      const upay = ((ur.data || {}).fulfillmentTrackingInfoUpdate) || {};
-      if (!ur.ok || (upay.userErrors || []).length) return J({ ok: false, error: "Tracking update failed: " + JSON.stringify((upay.userErrors && upay.userErrors.length ? upay.userErrors : ur.errors) || {}).slice(0, 250) });
-      return J({ ok: true, fulfillmentId: numId(target.id), status: "tracking_updated", updated: true });
+      if (!fulfills.length) return J({ ok: false, error: "No open fulfillment orders and no existing fulfillment to update — check the order in Shopify." });
+      /* Replace tracking on EVERY active fulfillment, with the plural numbers/urls form.
+         Plural REPLACES the fulfillment's whole tracking list (the singular `number` field left
+         old numbers[] entries behind — that's why Shopify's "Tracking added" popover kept showing
+         the stale number while the order page showed the new one). Updating every fulfillment
+         guarantees no stale number survives on orders that grew a second fulfillment. */
+      let lastId = null;
+      for (const target of fulfills) {
+        const ur = await gql(shop, token,
+          `mutation($fulfillmentId:ID!,$trackingInfoInput:FulfillmentTrackingInput!,$notifyCustomer:Boolean){
+             fulfillmentTrackingInfoUpdate(fulfillmentId:$fulfillmentId,trackingInfoInput:$trackingInfoInput,notifyCustomer:$notifyCustomer){
+               fulfillment{id} userErrors{field message}}}`,
+          { fulfillmentId: target.id,
+            trackingInfoInput: { numbers: tracking ? [tracking] : [], urls: S(body.trackingUrl) ? [S(body.trackingUrl)] : [], company: S(body.carrier) || "FedEx" },
+            notifyCustomer: body.notifyCustomer !== false && target === fulfills[fulfills.length - 1] });
+        if (ur.status === 401) return J({ ok: false, error: "Shopify rejected the token (401) — reconnect the store." });
+        const upay = ((ur.data || {}).fulfillmentTrackingInfoUpdate) || {};
+        if (!ur.ok || (upay.userErrors || []).length) return J({ ok: false, error: "Tracking update failed: " + JSON.stringify((upay.userErrors && upay.userErrors.length ? upay.userErrors : ur.errors) || {}).slice(0, 250) });
+        lastId = target.id;
+      }
+      return J({ ok: true, fulfillmentId: numId(lastId), status: "tracking_updated", updated: true });
     }
 
     // 2) create the fulfillment with tracking (all line items on each open FO)

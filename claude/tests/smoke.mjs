@@ -28,7 +28,7 @@ const btnByText = (label) => [...window.document.querySelectorAll("button")].fin
 try { window.eval(code); } catch (e) { errs.push("EVAL THREW: " + (e.stack || e)); }
 
 const MAIN_TABS = ["ship", "orders", "shipments", "batch", "returns", "pickups", "invoices", "rules", "drafts", "scan", "settings"];
-const SETTINGS_SECTIONS = ["General", "Customizations", "Ship screen", "Carrier accounts", "Warehouses", "Package sizes", "Box logic", "Product catalog", "Reference Fields", "Print settings", "Commercial invoice", "Other documents", "Manifests", "Integrations", "Email automation", "Checkout rates", "Reports", "Billing", "Subscription"];
+const SETTINGS_SECTIONS = ["General", "Customizations", "Ship screen", "Orders", "Carrier accounts", "Warehouses", "Package sizes", "Box logic", "Product catalog", "Reference Fields", "Print settings", "Commercial invoice", "Other documents", "Manifests", "Integrations", "Email automation", "Checkout rates", "Reports", "Billing", "Subscription"];
 
 (async () => {
   await sleep(1200);
@@ -47,7 +47,11 @@ const SETTINGS_SECTIONS = ["General", "Customizations", "Ship screen", "Carrier 
   const missing = [];
   for (const label of SETTINGS_SECTIONS) {
     where.now = "settings:" + label;
-    const b = btnByText(label);
+    // scope to the SETTINGS sidebar (the aside with the "Search settings…" box) — the main nav is
+    // also an <aside> and has its own "Orders" button that would navigate away from Settings
+    const settingsAside = [...window.document.querySelectorAll("aside")].find(a => a.querySelector('input[placeholder="Search settings…"]'));
+    const scoped = settingsAside && [...settingsAside.querySelectorAll("button")].find(x => (x.textContent || "").trim() === label);
+    const b = scoped || btnByText(label);
     if (!b) { missing.push(label); continue; }
     click(b);
     await sleep(200);

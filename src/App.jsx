@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v407";
+const BUILD_TAG="addr-v408";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6641,12 +6641,8 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
                 <div className="text-[10px] text-stone-400">Declared-value fees are exact per box; freight is split by weight as an estimate — the shipment total is exactly what you're charged.</div>
               </div>;
             })()}
-          {/* Weight note shows ONLY when dimensional weight governs — no box on ordinary actual-weight quotes */}
-          {billing&&!q._oneRate&&(q.dimWeight||billing.dimApplies)&&<div className="text-[11px] text-stone-500 bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 mt-2 space-y-0.5">
-              <div>Quoted at <b>{q.quotedWeight||billing.billed} lb</b>.</div>
-              <div className="text-amber-700 flex items-center gap-1"><AlertTriangle className="w-3 h-3 shrink-0"/>Dimensional weight applies: {billing.dims?billing.dims+" ÷ 139 = ":""}<b>{q.quotedWeight||billing.dim} lb</b>, more than the {billing.quoted} lb actual — FedEx bills the higher.</div>
-            </div>}
-          {!billing&&q.dimWeight&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 mt-2 flex items-center gap-1.5"><AlertTriangle className="w-3 h-3 shrink-0"/>Billed at <b>{q.quotedWeight?`${q.quotedWeight} lb `:""}dimensional weight</b>.</div>}
+          {/* One quiet line when dimensional weight governs — no calculator, no math lesson */}
+          {((billing&&!q._oneRate&&(q.dimWeight||billing.dimApplies))||(!billing&&q.dimWeight))&&(()=>{const _bw=q.quotedWeight||(billing&&billing.billed)||null;return <div className="text-[11px] text-stone-500 mt-2">Billed at {_bw?<b>{_bw} lb</b>:null} dim weight.</div>;})()}
         </div>}
       </div>
     );

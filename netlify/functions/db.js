@@ -447,6 +447,7 @@ exports.handler = async (event) => {
       const stores = {};
       for (const row of (Array.isArray(r.data) ? r.data : [])) {
         if (!row || row.key == null) continue;
+        if (String(row.key).startsWith("bak:")) continue;   // safety snapshots — server-side only, restored on request
         if (auth.role !== "admin" && !String(row.key).startsWith(userScope(auth))) continue;
         stores[row.key] = (row.key === "users" || row.key === "signupRequests") ? stripUsers(row.value) : row.value;
       }
@@ -586,6 +587,37 @@ exports.handler = async (event) => {
         const cur = await getStore("users");
         toWrite.users = mergeUsersForWrite(toWrite.users, cur.ok ? cur.value : []);
       }
+      /* ── DATA-LOSS GUARDS on the business-critical global stores ──
+         1. A write that would WIPE a non-empty store (empty array / rateRules with zero
+            profiles) is refused — a stale tab or a race can never nuke the admin's rates,
+            customers, or logins.
+         2. Every overwrite of a critical store snapshots the CURRENT value first
+            (bak:<key>:<iso> rows, newest 10 kept) — anything is restorable. */
+      const CRITICAL = ["users", "clients", "rateRules", "featureFlags"];
+      for (const key of CRITICAL) {
+        if (!(key in toWrite)) continue;
+        const cur = await getStore(key);
+        const curVal = cur.ok ? cur.value : undefined;
+        const curSize = Array.isArray(curVal) ? curVal.length : (curVal && typeof curVal === "object" ? Object.keys(curVal).length : 0);
+        const nv = toWrite[key];
+        const nvSize = Array.isArray(nv) ? nv.length : (nv && typeof nv === "object" ? Object.keys(nv).length : 0);
+        const wipes = curSize > 0 && (nv == null || nvSize === 0 || (key === "rateRules" && (!nv.profiles || !nv.profiles.length) && curVal && curVal.profiles && curVal.profiles.length));
+        if (wipes) { delete toWrite[key]; rejected.push(key + " (refused: would erase " + curSize + " existing entries — reload and try again)"); continue; }
+        if (curVal !== undefined) {
+          try {
+            const ts = new Date().toISOString().replace(/[:.]/g, "-");
+            await putStores({ ["bak:" + key + ":" + ts]: curVal });
+            // prune: keep the newest 10 snapshots per key
+            const lr = await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=like." + encodeURIComponent("bak:" + key + ":") + "*&select=key&order=key.desc");
+            const keys = (Array.isArray(lr.data) ? lr.data : []).map((r2) => r2.key);
+            if (keys.length > 10) {
+              const drop = keys.slice(10);
+              await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=in.(" + drop.map((k) => '"' + k.replace(/"/g, "") + '"').join(",") + ")", { method: "DELETE" });
+            }
+          } catch (e) { /* backup must never block the save itself */ }
+        }
+      }
+      if (!Object.keys(toWrite).length) return J({ ok: false, error: "Nothing saved — " + rejected.join("; ") });
       const w = await putStores(toWrite);
       if (!w.ok) return J({ ok: false, error: "Save failed: " + ((w.err && w.err.text) || "").slice(0, 200) });
       return J({ ok: true, saved: Object.keys(toWrite), rejected });

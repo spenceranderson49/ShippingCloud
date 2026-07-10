@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v429";
+const BUILD_TAG="addr-v430";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3653,7 +3653,7 @@ function DraftBar({dirty,onSave,onUndo,onReset,resetLabel,savedNote,saveLabel}){
     <div className="flex-1"/>
     {onReset&&<button onClick={onReset} className="text-[13px] text-stone-500 hover:text-stone-700 px-2.5 py-1.5 rounded-lg hover:bg-stone-100">{resetLabel||"Restore defaults"}</button>}
     <button onClick={onUndo} disabled={!dirty} className="text-[13px] text-stone-600 disabled:opacity-40 px-3 py-1.5 rounded-lg border border-stone-200 hover:bg-stone-50">Undo changes</button>
-    <button onClick={doSave} className="text-[14px] font-bold text-white bg-emerald-600 px-5 py-2 rounded-lg hover:bg-emerald-700 flex items-center gap-1.5 shadow-sm"><Check className="w-4 h-4"/>{saveLabel||"Save"}</button>
+    <button onClick={doSave} className="text-[15px] font-bold text-white bg-emerald-600 px-8 py-2.5 rounded-lg hover:bg-emerald-700 flex items-center gap-2 shadow-md"><Check className="w-5 h-5"/>{saveLabel||"Save"}</button>
   </div>);
 }
 /* ════════ ADMIN → RATES (v196) — the rate markup database ════════ */
@@ -4037,7 +4037,7 @@ function RatesAdmin({clients=[],brand}){
     <div className="flex items-center justify-end gap-3 pt-2 border-t border-stone-200">
       {_d.dirty?<span className="text-[12px] text-amber-700 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>You have unsaved rate changes</span>:<span className="text-[12px] text-stone-400">All rate changes saved</span>}
       <div className="flex-1"/>
-      <button onClick={_d.save} className="text-[14px] font-bold text-white bg-emerald-600 px-6 py-2.5 rounded-lg hover:bg-emerald-700 flex items-center gap-1.5 shadow-sm"><Check className="w-4 h-4"/>Save rates</button>
+      <button onClick={_d.save} className="text-[15px] font-bold text-white bg-emerald-600 px-10 py-3 rounded-lg hover:bg-emerald-700 flex items-center gap-2 shadow-md"><Check className="w-5 h-5"/>Save rates</button>
     </div>
   </div>);
 }
@@ -4686,6 +4686,14 @@ async function cloudFlush(){
   try{ window.dispatchEvent(new CustomEvent("sc-save-failed",{detail:{keys,error:(res&&res.error)||"offline"}})); }catch(e){}
   if(!CLOUD.timer)CLOUD.timer=setTimeout(cloudFlush,10000);
 }
+/* Closing/refreshing the tab inside the ~800ms flush debounce must not lose a just-saved edit:
+   sendBeacon delivers the queued putMany even as the page unloads (fire-and-forget by design). */
+if(typeof window!=="undefined"){window.addEventListener("pagehide",()=>{try{
+  const stores=CLOUD.queue;
+  if(!CLOUD.token||!Object.keys(stores).length||!navigator.sendBeacon)return;
+  const sent=navigator.sendBeacon(DB_ENDPOINT,new Blob([JSON.stringify({action:"putMany",token:CLOUD.token,stores})],{type:"application/json"}));
+  if(sent)CLOUD.queue={};
+}catch(e){}});}
 /* Cross-site freshness: shared stores (clients, rateRules, users…) are pulled from the
    cloud every 20s and pushed through PERSIST_BUS, so an edit made on admin.shippingcloud.net
    reaches an open shippingcloud.net tab within seconds — no reload. Baseline is updated

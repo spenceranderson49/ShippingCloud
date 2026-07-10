@@ -247,21 +247,33 @@ exports.handler = async (event) => {
       if (tt && TRANSIT_DAYS[tt]) { minDays = TRANSIT_DAYS[tt]; maxDays = TRANSIT_DAYS[tt]; }
       /* Fee breakdown, England-style: FedEx puts surcharges either on the shipment
          rate detail or per-package — harvest both, merge duplicates, clean labels. */
-      const rawSur = [];
-      if (acctD && acctD.shipmentRateDetail && Array.isArray(acctD.shipmentRateDetail.surCharges)) rawSur.push(...acctD.shipmentRateDetail.surCharges);
-      if (!rawSur.length && acctD && Array.isArray(acctD.ratedPackages)) {
-        acctD.ratedPackages.forEach(p => {
-          const prd = p.packageRateDetail || {};
-          (prd.surcharges || prd.surCharges || []).forEach(x => rawSur.push(x));
-        });
-      }
+      const harvest = (det) => {
+        const out = [];
+        if (det && det.shipmentRateDetail && Array.isArray(det.shipmentRateDetail.surCharges)) out.push(...det.shipmentRateDetail.surCharges);
+        if (!out.length && det && Array.isArray(det.ratedPackages)) {
+          det.ratedPackages.forEach(p => {
+            const prd = p.packageRateDetail || {};
+            (prd.surcharges || prd.surCharges || []).forEach(x => out.push(x));
+          });
+        }
+        return out;
+      };
+      const normLabel = (x) => String(x.description || x.type || "Surcharge").replace(/_/g, " ").toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase()).replace(/\bFedex\b/g, "FedEx");
       const merged = {};
-      rawSur.forEach(x => {
-        const label = String(x.description || x.type || "Surcharge").replace(/_/g, " ").toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase()).replace(/\bFedex\b/g, "FedEx");
+      harvest(acctD).forEach(x => {
+        const label = normLabel(x);
         const amt = +((x.amount && x.amount.amount != null) ? x.amount.amount : x.amount) || 0;
         if (amt) merged[label] = Math.round(((merged[label] || 0) + amt) * 100) / 100;
       });
-      let surch = Object.keys(merged).map(label => ({ label, amount: merged[label] }));
+      /* LIST amounts per fee line (same label normalization) — powers "% off LIST" surcharge
+         pricing in Admin → Rates. Only attached where the account line also exists. */
+      const listSur = {};
+      harvest(listD).forEach(x => {
+        const label = normLabel(x);
+        const amt = +((x.amount && x.amount.amount != null) ? x.amount.amount : x.amount) || 0;
+        if (amt) listSur[label] = Math.round(((listSur[label] || 0) + amt) * 100) / 100;
+      });
+      let surch = Object.keys(merged).map(label => ({ label, amount: merged[label], ...(listSur[label] != null ? { list: listSur[label] } : {}) }));
       if (!surch.length && acctD && acctD.shipmentRateDetail && +acctD.shipmentRateDetail.totalSurcharges > 0) {
         surch = [{ label: "Carrier surcharges", amount: Math.round(+acctD.shipmentRateDetail.totalSurcharges * 100) / 100 }];
       }

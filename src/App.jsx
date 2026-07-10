@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v401";
+const BUILD_TAG="addr-v402";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -8533,7 +8533,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="manifests"&&<Manifests shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} settings={settings}/>}
         {sec==="reports"&&<Reports shipments={shipments} showMoney={showMoney}/>}
         {sec==="notifications"&&<Notifications settings={settings} setSettings={setSettings} emails={emails}/>}
-        {sec==="general"&&<GeneralSettings settings={settings} setSettings={setSettings} goSec={setSec} audit={audit}/>}
+        {sec==="general"&&<GeneralSettings settings={settings} setSettings={setSettings} goSec={setSec} audit={audit} currentUser={currentUser} setCurrentUser={setCurrentUser}/>}
         {sec==="cieditor"&&<div className="space-y-6"><CIEditor settings={settings} setSettings={setSettings} shipments={shipments}/><div className="border-t border-stone-200 pt-6"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-3">Commercial invoice history</div><CIHistory settings={settings} setSettings={setSettings}/></div></div>}
         {sec==="cihistory"&&<div className="space-y-6"><CIEditor settings={settings} setSettings={setSettings} shipments={shipments}/><div className="border-t border-stone-200 pt-6"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-3">Commercial invoice history</div><CIHistory settings={settings} setSettings={setSettings}/></div></div>}
         {sec==="otherdocs"&&<OtherDocs settings={settings} setSettings={setSettings}/>}
@@ -10526,7 +10526,7 @@ function OtherDocs({settings,setSettings}){
   </div>);
 }
 
-function GeneralSettings({settings,setSettings,goSec,audit=[]}){
+function GeneralSettings({settings,setSettings,goSec,audit=[],currentUser,setCurrentUser}){
   const set=(k,v)=>setSettings(p=>({...p,[k]:v}));
   const sn=settings.sender||{};
   const setSn=(k,v)=>setSettings(p=>({...p,sender:{...(p.sender||{}),[k]:v}}));
@@ -10566,6 +10566,7 @@ function GeneralSettings({settings,setSettings,goSec,audit=[]}){
         {audit.map((a,i)=><div key={i} className="px-3 py-2 text-xs flex items-baseline gap-2"><span className="text-stone-400 shrink-0 w-36">{a.ts}</span><span className="font-medium text-stone-700 shrink-0">{a.action}</span><span className="text-stone-500 truncate">{a.detail}</span><span className="ml-auto text-stone-300 shrink-0">{a.user}</span></div>)}
       </div>
     </Panel>
+    <AccountLoginPanel currentUser={currentUser} setCurrentUser={setCurrentUser}/>
     <TwoFactorPanel/>
     <Panel title="Jump to">
       <div className="grid sm:grid-cols-2 gap-2">
@@ -10574,6 +10575,43 @@ function GeneralSettings({settings,setSettings,goSec,audit=[]}){
       </div>
     </Panel>
   </div>);
+}
+/* Self-service login email change. Keeps the same password + 2FA — only the email moves.
+   Cloud logins only (local/demo has no server-side account). */
+function AccountLoginPanel({currentUser,setCurrentUser}){
+  const cloud=CLOUD.mode==="cloud"&&!!CLOUD.token;
+  const [email,setEmail]=useState((currentUser&&currentUser.email)||"");
+  const [pw,setPw]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState(null);            // {t:"ok"|"err",m}
+  useEffect(()=>{ setEmail((currentUser&&currentUser.email)||""); },[currentUser&&currentUser.email]);
+  if(!cloud) return null;
+  const curEmail=(currentUser&&currentUser.email)||"";
+  const changed=email.trim().toLowerCase()!==curEmail.toLowerCase();
+  const save=async()=>{
+    if(!changed){setMsg({t:"err",m:"That's already your login email."});return;}
+    if(!pw){setMsg({t:"err",m:"Enter your current password to confirm."});return;}
+    setBusy(true);setMsg(null);
+    const r=await cloudCall({action:"changeEmail",token:CLOUD.token,newEmail:email.trim(),password:pw});
+    setBusy(false);
+    if(r&&r.ok){
+      try{ if(r.token){CLOUD.token=r.token;lsSet("cloud.token",r.token);} }catch(e){}
+      if(setCurrentUser)setCurrentUser(cu=>cu&&({...cu,email:r.email||email.trim()}));
+      setPw("");setMsg({t:"ok",m:"Login email updated. Use "+(r.email||email.trim())+" next time you sign in — your password and 2FA are unchanged."});
+    } else setMsg({t:"err",m:(r&&r.error)||"Could not update email."});
+  };
+  return (<Panel title="Login email">
+    <p className="text-xs text-stone-500 -mt-1 mb-2">This is the email you sign in with. Changing it keeps your current password and 2FA exactly as they are.</p>
+    <div className="space-y-2 max-w-md">
+      <Field label="Email"><Input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@company.com"/></Field>
+      {changed&&<Field label="Confirm with your current password"><Input type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&save()} placeholder="••••••••"/></Field>}
+      <div className="flex items-center gap-2">
+        <button disabled={busy||!changed} onClick={save} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"Saving…":"Update login email"}</button>
+        {changed&&<button disabled={busy} onClick={()=>{setEmail(curEmail);setPw("");setMsg(null);}} className="text-xs text-stone-400 hover:text-stone-600">Cancel</button>}
+      </div>
+      {msg&&<div className={`text-sm ${msg.t==="ok"?"text-emerald-700":"text-rose-600"}`}>{msg.m}</div>}
+    </div>
+  </Panel>);
 }
 /* Self-service two-factor auth (TOTP). Only shows for cloud logins — local/demo mode has no server to store the secret. */
 function TwoFactorPanel(){

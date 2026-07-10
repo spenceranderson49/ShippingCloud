@@ -606,6 +606,27 @@ exports.handler = async (event) => {
       return J({ ok: true });
     }
 
+    /* ── self-service: change your own login email, keeping the same password + 2FA ──
+       Requires the current password (confirms it's really you, not a hijacked session). */
+    if (action === "changeEmail") {
+      const newEmail = String(body.newEmail || "").trim().toLowerCase();
+      const password = String(body.password || "");
+      if (!/.+@.+\..+/.test(newEmail)) return J({ ok: false, error: "Enter a valid email address." });
+      const cur = await getStore("users");
+      const users = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+      const me = users.find((x) => x && x.id === auth.uid) || null;
+      if (!me) return J({ ok: false, error: "Account not found." });
+      if (!checkPw(password, me.passHash)) return J({ ok: false, error: "That password isn't right — enter your current password to change your email." });
+      if (users.some((x) => x && x.id !== auth.uid && String(x.email || "").toLowerCase() === newEmail)) return J({ ok: false, error: "Another account already uses that email." });
+      // spread ...x preserves passHash AND totp (secret + backup codes) — only the email changes
+      const merged = users.map((x) => x && x.id === auth.uid ? { ...x, email: newEmail } : x);
+      const w = await putStores({ users: merged });
+      if (!w.ok) return J({ ok: false, error: "Could not save — try again." });
+      // reissue the session token so its embedded email matches the new one
+      const updated = { ...me, email: newEmail };
+      return J({ ok: true, email: newEmail, token: makeToken(updated), user: { ...updated, password: "", passHash: undefined, totp: updated.totp ? { enabled: !!updated.totp.enabled, backupLeft: backupLeft(updated.totp.backup) } : undefined } });
+    }
+
     /* ── admin: turn OFF a user's 2FA (lost-phone recovery) ── the only way back in for a
        user who enabled 2FA and lost their authenticator. Admin-only; can't be self-abused. */
     if (action === "clearTotp") {

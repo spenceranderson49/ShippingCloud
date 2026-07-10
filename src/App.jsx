@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v396";
+const BUILD_TAG="addr-v397";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -4015,6 +4015,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
             {u.role!=="admin"&&<button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))} title={u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins"} className={`text-[11px] rounded px-2 py-1 ${u.companyAdmin?"bg-violet-600 text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>{u.companyAdmin?"Company admin ✓":"Company admin"}</button>}
             {u.role!=="admin"&&<button onClick={()=>setFeatOpen(featOpen===u.id?null:u.id)} title="Features for this login" className={`text-[11px] rounded px-2 py-1 ${featOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>Tabs &amp; logo</button>}
             {CLOUD.mode==="cloud"&&(u.role!=="admin"||fullAdmin)&&<button onClick={async()=>{const np=window.prompt("New password for "+u.email+" (min 4 characters):");if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});window.alert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}} title="Reset password" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Password</button>}
+            {CLOUD.mode==="cloud"&&u.totp&&u.totp.enabled&&<button onClick={async()=>{if(!window.confirm("Turn OFF two-factor for "+u.email+"? Use this only if they lost their authenticator — they'll sign in with just their password afterward."))return;const r=await cloudCall({action:"clearTotp",token:CLOUD.token,email:u.email});window.alert(r&&r.ok?"2FA turned off for "+u.email+".":((r&&r.error)||"Could not reset 2FA."));}} title="Lost-phone recovery: turn off this user's 2FA" className="text-[11px] rounded px-2 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100">Reset 2FA</button>}
             <button onClick={()=>toggle(u.id)} title={u.status==="active"?"Deactivate":"Activate"} className={`text-[11px] rounded px-2 py-1 ${u.status==="active"?"bg-emerald-50 text-emerald-700":"bg-stone-100 text-stone-500"}`}>{u.status==="active"?"Active":"Deactivated"}</button>
             {u.id!==currentUser.id&&!isBuiltInAdmin(u.email)&&(u.role!=="admin"||(fullAdmin&&u.id!=="u1"))&&<button onClick={()=>del(u.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
           </div>
@@ -6563,6 +6564,7 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
    service pick honored per order. Live fetches are cached per order+inputs and limited
    to 3 in flight so a 200-row table doesn't stampede the England API. */
 const EST_CACHE={};
+const SOURCE_TONE={Shopify:"green",Amazon:"amber",eBay:"blue",Etsy:"amber",Walmart:"blue",Magento:"amber",Square:"stone",Wix:"blue",Squarespace:"stone",BigCommerce:"stone",WooCommerce:"rose",ShipStation:"blue",ShipBob:"blue",Ordoro:"green",Manual:"stone"};
 let EST_INFLIGHT=0;const EST_QUEUE=[];
 const estSlot=(fn)=>{ if(EST_INFLIGHT<3){EST_INFLIGHT++;fn();} else EST_QUEUE.push(fn); };
 const estDone=()=>{ EST_INFLIGHT=Math.max(0,EST_INFLIGHT-1); const nx=EST_QUEUE.shift(); if(nx){EST_INFLIGHT++;nx();} };
@@ -6608,7 +6610,7 @@ function LiveEstRate({o,client,settings,rateRules,ruleset}){
       const pick=hit||qs.slice().sort((a,b)=>((a.sell!=null?a.sell:1e9))-((b.sell!=null?b.sell:1e9)))[0];
       return pick?{sell:pick.sell!=null?pick.sell:pick.cost,label:pick.label,live,ruled:!!hit}:{none:true};
     };
-    const finish=(val)=>{ EST_CACHE[key]=val; if(!cancel)setV(val); };
+    const finish=(val)=>{ const ks=Object.keys(EST_CACHE); if(ks.length>2000)delete EST_CACHE[ks[0]]; EST_CACHE[key]=val; if(!cancel)setV(val); };
     const offline=()=>{ try{
       const qs=quoteRates({fromZip,toZip:o.zip,pieces:[{weight:wt,L:12,W:9,H:4}],residential:true}).filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:rateSellFor(q.cost,q.label,sellCtx(undefined))}));
       finish(pickFrom(qs,false));
@@ -6653,20 +6655,19 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
   const [sort,setSort]=useState("date");
   const [adding,setAdding]=useState(false);
   const [storeFilter,setStoreFilter]=useState("all");
-  const SOURCE_TONE={Shopify:"green",Amazon:"amber",eBay:"blue",Etsy:"amber",Walmart:"blue",Magento:"amber",Square:"stone",Wix:"blue",Squarespace:"stone",BigCommerce:"stone",WooCommerce:"rose",ShipStation:"blue",ShipBob:"blue",Ordoro:"green",Manual:"stone"};
   const stores=Array.from(new Set(orders.map(o=>o.source||"Manual")));
   const storeCount=(s)=>orders.filter(o=>(o.source||"Manual")===s).length;
   const statusCount=(st)=>st==="all"?orders.length:orders.filter(o=>o.status===st).length;
   const orderAge=(o)=>{ const d=Date.parse(o.date||""); if(isNaN(d))return "—"; const mins=Math.max(0,Math.floor((Date.now()-d)/60000)); if(mins<60)return mins+" min"; const hrs=Math.floor(mins/60); if(hrs<24)return hrs+" hr"; return Math.floor(hrs/24)+" d"; };
-  const filtered=orders.filter(o=>(filter==="all"||o.status===filter)&&(storeFilter==="all"||(o.source||"Manual")===storeFilter)&&(o.name+o.customer+o.city+(o.source||"")+(o.items||"")).toLowerCase().includes(q.toLowerCase()));
-  const sorted=[...filtered].sort((a,b)=>{
+  const filtered=useMemo(()=>orders.filter(o=>(filter==="all"||o.status===filter)&&(storeFilter==="all"||(o.source||"Manual")===storeFilter)&&(o.name+o.customer+o.city+(o.source||"")+(o.items||"")).toLowerCase().includes(q.toLowerCase())),[orders,filter,storeFilter,q]);
+  const sorted=useMemo(()=>[...filtered].sort((a,b)=>{
     if(sort==="total")return parseFloat(b.total||0)-parseFloat(a.total||0);
     if(sort==="customer")return (a.customer||"").localeCompare(b.customer||"");
     if(sort==="state")return (a.state||"").localeCompare(b.state||"");
     if(sort==="weight")return (b.weight||0)-(a.weight||0);
     if(sort==="source")return (a.source||"").localeCompare(b.source||"");
     return String(b.id).localeCompare(String(a.id)); // date / newest
-  });
+  }),[filtered,sort]);
   const ship=(o)=>goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},weight:o.weight,reference:o.name,fromOrderId:o.id});
   const [syncing,setSyncing]=useState(false);
   const [syncMsg,setSyncMsg]=useState(null);

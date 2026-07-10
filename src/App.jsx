@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v408";
+const BUILD_TAG="addr-v409";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6622,23 +6622,33 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
               {comps.map((c,i)=><div key={i} className="flex justify-between text-[13px]"><span className="text-stone-600">{c.label}</span><span className="font-mono text-stone-700">{money(c.amount)}</span></div>)}
               <div className="flex justify-between text-[13px] border-t border-stone-200 pt-1 mt-1 font-semibold"><span>Total</span><span className="font-mono">{money(sell)}</span></div>
             </div>
-            :(()=>{ /* per-box view: declared-value fees are exact per box (FedEx prices them per package);
-                       freight is split across boxes by weight so each box shows a sensible share. */
+            :(()=>{ /* per-box view: EVERY charge line lands on a box. Freight and % charges (fuel)
+                       follow each box's freight/weight share; per-package surcharges (DAS,
+                       residential, additional handling, peak…) split evenly across boxes;
+                       declared value is exact per box. The last box absorbs rounding pennies so
+                       every column reconciles to the exact shipment total. Signature/Saturday are
+                       one-per-delivery, so they stay listed once at shipment level. */
               const totW=perBox.reduce((a,b)=>a+(+b.weight||0),0)||1;
               const insTotal=Math.round(perBox.reduce((a,b)=>a+(b.ins||0),0)*100)/100;
               const shared=acc.filter(a2=>!/declared value/i.test(a2.label||""));
               const sharedTotal=Math.round(shared.reduce((a2,e2)=>a2+(e2.amount||0),0)*100)/100;
-              const freight=Math.max(0,Math.round((sell-insTotal-sharedTotal)*100)/100);
+              const N=perBox.length;
+              const split=(amount,byWeight)=>{ const out=perBox.map(b=>byWeight?Math.round(amount*((+b.weight||0)/totW)*100)/100:Math.round(amount/N*100)/100);
+                const drift=Math.round((amount-out.reduce((a2,x2)=>a2+x2,0))*100)/100; out[N-1]=Math.round((out[N-1]+drift)*100)/100; return out; };
+              const carrier=comps.slice(0,comps.length-acc.length);   // Base rate + every carrier surcharge (fuel, DAS, residential…), already sell-scaled
+              const lines=carrier.length
+                ?carrier.map(c=>({label:c.label,shares:split(c.amount,/base|rate|fuel|freight/i.test(c.label||""))}))
+                :[{label:"Freight",shares:split(Math.max(0,Math.round((sell-insTotal-sharedTotal)*100)/100),true)}];
               return <div className="space-y-1.5">
-                {perBox.map((b,bi)=>{const share=Math.round(freight*((+b.weight||0)/totW)*100)/100;const bt=Math.round((share+(b.ins||0))*100)/100;
+                {perBox.map((b,bi)=>{const bt=Math.round((lines.reduce((a2,l2)=>a2+(l2.shares[bi]||0),0)+(b.ins||0))*100)/100;
                   return <div key={bi} className="border border-stone-100 rounded-lg px-2.5 py-1.5 bg-stone-50/50">
-                    <div className="flex justify-between text-[12px] font-medium text-stone-700"><span>Box #{b.n} · {b.weight} lb{b.L&&b.W&&b.H?` · ${b.L}×${b.W}×${b.H}"`:""}</span><span className="font-mono">{money(bt)}</span></div>
-                    <div className="flex justify-between text-[11px] text-stone-500"><span>Freight (weight share)</span><span className="font-mono">{money(share)}</span></div>
+                    <div className="flex justify-between text-[12px] font-medium text-stone-700 mb-0.5"><span>Box #{b.n} · {b.weight} lb{b.L&&b.W&&b.H?` · ${b.L}×${b.W}×${b.H}"`:""}</span><span className="font-mono">{money(bt)}</span></div>
+                    {lines.map((l2,li)=>l2.shares[bi]?<div key={li} className="flex justify-between text-[11px] text-stone-500"><span>{l2.label}</span><span className="font-mono">{money(l2.shares[bi])}</span></div>:null)}
                     {b.dv>0&&<div className="flex justify-between text-[11px] text-stone-500"><span>Declared value ${b.dv}{!b.ins?" — first $100 is free":""}</span><span className="font-mono">{money(b.ins||0)}</span></div>}
                   </div>;})}
                 {shared.map((s,i2)=><div key={"sh"+i2} className="flex justify-between text-[11px] text-stone-500 px-2.5"><span>{s.label} (whole shipment)</span><span className="font-mono">{money(s.amount)}</span></div>)}
                 <div className="flex justify-between text-[13px] border-t border-stone-200 pt-1 mt-1 font-semibold"><span>Total</span><span className="font-mono">{money(sell)}</span></div>
-                <div className="text-[10px] text-stone-400">Declared-value fees are exact per box; freight is split by weight as an estimate — the shipment total is exactly what you're charged.</div>
+                <div className="text-[10px] text-stone-400">Fuel follows each box's freight share; per-package surcharges split across boxes; declared value is exact per box — adds up to exactly what you're charged.</div>
               </div>;
             })()}
           {/* One quiet line when dimensional weight governs — no calculator, no math lesson */}

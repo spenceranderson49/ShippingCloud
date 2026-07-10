@@ -230,7 +230,7 @@ exports.handler = async (event) => {
       if (!u || (u.role || "customer") !== "customer" || u.demo) return null;
       if (u.clientId && clients.some((c) => c && c.id === u.clientId)) return null;
       const id = "c" + Date.now() + Math.floor(Math.random() * 1000);
-      const nc = { id, name: u.company || u.name || u.email || "New customer", contact: u.name || "", email: u.email || "", phone: "", origin: "", markup: "", status: "active", since: new Date().toISOString().slice(0, 7), plan: "Standard", selfSignup: true };
+      const nc = { id, name: u.company || u.name || u.email || "New customer", contact: u.name || "", email: u.email || "", phone: "", origin: "", markup: "", status: "active", since: new Date().toISOString().slice(0, 7), plan: "Standard", selfSignup: true, createdAt: new Date().toISOString() };
       const w = await putStores({ clients: [...clients, nc], users: users.map((x) => x && x.id === u.id ? { ...x, clientId: id } : x) });
       if (!w || !w.ok) return null;
       return { clientId: id, client: nc };
@@ -315,7 +315,7 @@ exports.handler = async (event) => {
          customer + attach the login" step, and the app never runs unassigned (at raw cost). */
       const clients = (curC.ok && Array.isArray(curC.value)) ? curC.value : [];
       const newClientId = "c" + Date.now() + Math.floor(Math.random() * 1000);
-      const newClient = { id: newClientId, name: company || name, contact: name, email, phone: "", origin: "", markup: "", status: "active", since: new Date().toISOString().slice(0, 7), plan: "Standard", selfSignup: true };
+      const newClient = { id: newClientId, name: company || name, contact: name, email, phone: "", origin: "", markup: "", status: "active", since: new Date().toISOString().slice(0, 7), plan: "Standard", selfSignup: true, createdAt: new Date().toISOString() };
       const newUser = { id: "u" + Date.now() + Math.floor(Math.random() * 1000), name, company, email, role: "customer", clientId: newClientId, status: "active", password: "", passHash: hashPw(password), volume, carrier, createdAt: new Date().toISOString(), lastLogin: new Date().toLocaleDateString() };
       const writes = { users: [...users, newUser], clients: [...clients, newClient] };
       const reqs = (curR.ok && Array.isArray(curR.value)) ? curR.value : [];
@@ -639,6 +639,24 @@ exports.handler = async (event) => {
       if ("users" in toWrite) {
         const cur = await getStore("users");
         toWrite.users = mergeUsersForWrite(toWrite.users, cur.ok ? cur.value : []);
+        /* STALE-TAB GUARD: an admin tab opened before a signup holds an old copy of this array;
+           its next save (whole-array) would silently DELETE the fresh login. Re-add any current
+           row the incoming write is missing that was created in the last 15 minutes — a tab that
+           old can't have legitimately deleted it. Older rows stay deletable as normal. */
+        const _cutU = Date.now() - 15 * 60 * 1000;
+        const _haveU = new Set((toWrite.users || []).map((u) => u && u.id));
+        for (const u of (cur.ok && Array.isArray(cur.value) ? cur.value : [])) {
+          if (u && !_haveU.has(u.id) && u.createdAt && Date.parse(u.createdAt) > _cutU) toWrite.users.push(u);
+        }
+      }
+      if ("clients" in toWrite && Array.isArray(toWrite.clients)) {
+        /* same stale-tab guard for freshly-minted customer records */
+        const curC = await getStore("clients");
+        const _cutC = Date.now() - 15 * 60 * 1000;
+        const _haveC = new Set(toWrite.clients.map((c) => c && c.id));
+        for (const c of (curC.ok && Array.isArray(curC.value) ? curC.value : [])) {
+          if (c && !_haveC.has(c.id) && c.createdAt && Date.parse(c.createdAt) > _cutC) toWrite.clients.push(c);
+        }
       }
       /* ── DATA-LOSS GUARDS on the business-critical global stores ──
          1. A write that would WIPE a non-empty store (empty array / rateRules with zero

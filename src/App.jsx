@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v428";
+const BUILD_TAG="addr-v429";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -4387,8 +4387,8 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
       <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="flex-1">Login</div><div className="w-24">Role</div><div className="w-32 hidden sm:block">Company</div><div className="w-24 hidden sm:block">Last login</div><div className="text-right flex-1 hidden lg:block">Actions</div></div>
       {users.map(u=>(
         <div key={u.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
-          <div className="flex-1 min-w-0"><div className="font-medium truncate">{u.name}</div><div className="text-[11px] text-stone-400 truncate">{u.email}</div></div>
-          <div className="w-24"><Badge tone={u.role==="admin"?"blue":"stone"}>{u.role}</Badge></div>
+          <div className="flex-1 min-w-0"><div className="font-medium truncate">{u.name}{u.company?<span className="text-stone-400 font-normal"> · {u.company}</span>:null}</div><div className="text-[11px] text-stone-400 truncate">{u.email}{u.volume?` · ${u.volume}/mo`:""}{u.carrier?` · ships ${u.carrier}`:""}{u.createdAt?` · joined ${new Date(u.createdAt).toLocaleDateString()}`:""}</div></div>
+          <div className="w-24 flex items-center gap-1"><Badge tone={u.role==="admin"?"blue":"stone"}>{u.role}</Badge>{u.totp&&u.totp.enabled&&<Badge tone="green">2FA</Badge>}</div>
           <div className="w-32 hidden sm:block text-xs text-stone-500 truncate">{u.role==="admin"?"— all —":(clients.find(c=>c.id===u.clientId)||{}).name||"—"}</div>
           <div className="w-24 hidden sm:block text-xs text-stone-400">{u.lastLogin||"—"}</div>
           <div className="flex flex-wrap items-center justify-end gap-1.5">

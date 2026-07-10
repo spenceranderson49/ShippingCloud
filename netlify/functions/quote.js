@@ -279,7 +279,12 @@ exports.handler = async (event) => {
       const alert = j.output && j.output.alerts && j.output.alerts[0] && j.output.alerts[0].message;
       return respond(200, { live: false, error: alert || "FedEx returned no rates for this shipment.", rates: [] });
     }
-    return respond(200, { live: true, provider: "fedex-direct", account: acct.replace(/^(\d{3})\d+(\d{2})$/, "$1****$2"), rates, oneRateRequested: !!oneRateReq, oneRateOk, oneRateError });
+    /* Declared value verification: coverage over $100/package carries a FedEx fee. If we asked
+       for it and NO returned rate itemizes a declared-value/insurance surcharge, say so — the
+       app surfaces it instead of silently quoting without the fee. */
+    const dvAsked = rawPieces.some(p => money$(p.declaredValue) > 100);
+    const dvSeen = rates.some(q => (q.surcharges || []).some(x => /declared|insur/i.test(String(x.label || ""))));
+    return respond(200, { live: true, provider: "fedex-direct", account: acct.replace(/^(\d{3})\d+(\d{2})$/, "$1****$2"), rates, dvRequested: dvAsked, dvPriced: dvAsked ? dvSeen : null, oneRateRequested: !!oneRateReq, oneRateOk, oneRateError });
   } catch (e) {
     const msg = e && e.name === "AbortError" ? "FedEx took too long to respond" : ((e && e.message) || "FedEx request failed");
     return respond(200, { live: false, error: msg, rates: [] });

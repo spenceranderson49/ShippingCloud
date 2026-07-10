@@ -285,12 +285,18 @@ exports.handler = async (event) => {
       const volume = String(body.volume || "").slice(0, 40);
       const carrier = String(body.carrier || "").slice(0, 40);
       if (!name || !/.+@.+\..+/.test(email) || password.length < 4) return J({ ok: false, error: "Enter your name, a valid email, and a password (4+ characters)." });
-      const [curU, curR, curF] = await Promise.all([getStore("users"), getStore("signupRequests"), getStore("fedexRequests")]);
+      const [curU, curR, curF, curC] = await Promise.all([getStore("users"), getStore("signupRequests"), getStore("fedexRequests"), getStore("clients")]);
       const users = (curU.ok && Array.isArray(curU.value)) ? curU.value : [];
       if (users.some((u) => u && String(u.email || "").toLowerCase() === email)) return J({ ok: false, error: "That email already has a login. Try signing in." });
       if (users.length >= 2000) return J({ ok: false, error: "Signups are temporarily paused — give us a call." });
-      const newUser = { id: "u" + Date.now() + Math.floor(Math.random() * 1000), name, company, email, role: "customer", clientId: null, status: "active", password: "", passHash: hashPw(password), volume, carrier, createdAt: new Date().toISOString(), lastLogin: new Date().toLocaleDateString() };
-      const writes = { users: [...users, newUser] };
+      /* Every self-serve signup IS a customer: mint the client record right here and assign the
+         login to it, so the admin just opens the customer and sets rates — no manual "create a
+         customer + attach the login" step, and the app never runs unassigned (at raw cost). */
+      const clients = (curC.ok && Array.isArray(curC.value)) ? curC.value : [];
+      const newClientId = "c" + Date.now() + Math.floor(Math.random() * 1000);
+      const newClient = { id: newClientId, name: company || name, contact: name, email, phone: "", origin: "", markup: "", status: "active", since: new Date().toISOString().slice(0, 7), plan: "Standard", selfSignup: true };
+      const newUser = { id: "u" + Date.now() + Math.floor(Math.random() * 1000), name, company, email, role: "customer", clientId: newClientId, status: "active", password: "", passHash: hashPw(password), volume, carrier, createdAt: new Date().toISOString(), lastLogin: new Date().toLocaleDateString() };
+      const writes = { users: [...users, newUser], clients: [...clients, newClient] };
       const reqs = (curR.ok && Array.isArray(curR.value)) ? curR.value : [];
       const remaining = reqs.filter((r) => r && String(r.email || "").toLowerCase() !== email);
       if (remaining.length !== reqs.length) writes.signupRequests = remaining;   // clean any legacy pending request

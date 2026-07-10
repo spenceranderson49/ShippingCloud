@@ -127,11 +127,23 @@ exports.handler = async (event) => {
   const fromCountry = toISO(body.fromCountry || "US");
   const toCountry = toISO(body.toCountry || "US");
   const acct = String(body.fedexAccount || (body.account && body.account.fedexAccount) || ACCOUNT).replace(/\D/g, "") || ACCOUNT;
-  const pieces = (Array.isArray(body.pieces) && body.pieces.length ? body.pieces : [{ weight: 1, length: 12, width: 9, height: 4 }])
-    .map(p => ({
-      weight: { units: "LB", value: Math.max(0.1, +p.weight || 1) },
-      dimensions: { length: Math.max(1, Math.round(+p.length || 12)), width: Math.max(1, Math.round(+p.width || 9)), height: Math.max(1, Math.round(+p.height || 4)), units: "IN" }
-    }));
+  /* Declared value + signature ride the RATE request so FedEx prices them in the returned
+     amount — the quote is the REAL charge (raw FedEx + the app's markup), never a locally
+     estimated fee. Per package, exactly like the booking. */
+  const SIGQ = { direct: "DIRECT", indirect: "INDIRECT", adult: "ADULT" };
+  const sigType = SIGQ[String(body.signatureOption || "none").toLowerCase()] || null;
+  const money$ = (v) => +String(v == null ? "" : v).replace(/[^0-9.]/g, "") || 0;
+  const rawPieces = (Array.isArray(body.pieces) && body.pieces.length ? body.pieces : [{ weight: 1, length: 12, width: 9, height: 4 }]);
+  const pieces = rawPieces.map(p => {
+      const it = {
+        weight: { units: "LB", value: Math.max(0.1, +p.weight || 1) },
+        dimensions: { length: Math.max(1, Math.round(+p.length || 12)), width: Math.max(1, Math.round(+p.width || 9)), height: Math.max(1, Math.round(+p.height || 4)), units: "IN" }
+      };
+      const dv = money$(p.declaredValue);
+      if (dv > 0) it.declaredValue = { amount: Math.round(dv * 100) / 100, currency: "USD" };
+      if (sigType) it.packageSpecialServices = { signatureOptionType: sigType };
+      return it;
+    });
 
   const req = {
     accountNumber: { value: acct },

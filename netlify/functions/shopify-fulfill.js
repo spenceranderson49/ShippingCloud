@@ -39,6 +39,36 @@ exports.handler = async (event) => {
     if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop) || !token) return J({ ok: false, error: "Missing shop/token." });
     if (!orderId) return J({ ok: false, error: "Missing Shopify order id." });
 
+    /* ── updateOrder: push edited order info (shipping address / email / note) BACK to Shopify ── */
+    if (body.action === "updateOrder") {
+      const a = body.shippingAddress || null;
+      const input = { id: "gid://shopify/Order/" + orderId };
+      if (a) {
+        const name = String(a.name || "").trim();
+        input.shippingAddress = {
+          firstName: name.split(/\s+/)[0] || name || undefined,
+          lastName: name.split(/\s+/).slice(1).join(" ") || undefined,
+          company: S(a.company) || undefined,
+          address1: S(a.address1) || undefined,
+          address2: S(a.address2) || undefined,
+          city: S(a.city) || undefined,
+          provinceCode: S(a.state) || undefined,
+          zip: S(a.zip) || undefined,
+          phone: S(a.phone) || undefined,
+          countryCode: (S(a.country) || "US").slice(0, 2).toUpperCase()
+        };
+      }
+      if (body.email) input.email = S(body.email);
+      if (body.note != null) input.note = S(body.note).slice(0, 5000);
+      const ur = await gql(shop, token,
+        `mutation($input:OrderInput!){orderUpdate(input:$input){order{id} userErrors{field message}}}`,
+        { input });
+      if (ur.status === 401) return J({ ok: false, error: "Shopify rejected the token (401) — reconnect the store." });
+      const upay = ((ur.data || {}).orderUpdate) || {};
+      if (!ur.ok || (upay.userErrors || []).length) return J({ ok: false, error: "Order update failed: " + JSON.stringify((upay.userErrors && upay.userErrors.length ? upay.userErrors : ur.errors) || {}).slice(0, 250) });
+      return J({ ok: true, updated: true });
+    }
+
     // 1) open fulfillment orders for this order
     const fr = await gql(shop, token,
       `query($id:ID!){order(id:$id){fulfillmentOrders(first:20){nodes{id status}}}}`,

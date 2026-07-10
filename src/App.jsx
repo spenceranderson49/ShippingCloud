@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v434";
+const BUILD_TAG="addr-v435";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3195,7 +3195,12 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection}){
 const SUPPLY_ITEMS=["Thermal 4×6 labels","Laser label sheets","Poly mailers","Boxes — small","Boxes — medium","Boxes — large","Packing tape","Bubble mailers","Dunnage / void fill","Thermal printer ribbon"];
 function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featureFlags={},setFeatureFlags,customFeatures=[],settings,onClose,openSection}){
   const CATALOG=[...FEATURE_CATALOG,...(customFeatures||[]).map(c=>({...c,custom:true}))];
-  const [rules,setRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
+  /* RATES ARE DRAFTED: every edit on the Rates tab (rules, breaks, accessorials, markup, mins)
+     lands in a local draft — NOTHING reprices live quotes until the green Save button is pressed.
+     The Live check strip previews from the draft so you see the effect before committing. */
+  const [storeRules,commitRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
+  const _rd=useDraft(storeRules,commitRules,DEFAULT_RATE_RULES);
+  const rules=_rd.draft; const setRules=_rd.setDraft;
   const [tab,setTab]=useState("profile");
   const [lf,setLf]=useState({name:"",email:"",password:""});
   const [flash,setFlash]=useState("");
@@ -3208,6 +3213,13 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
   const upPrefs=(patch)=>setClients(cs=>cs.map(x=>x.id===cid?{...x,prefs:{...(x.prefs||{}),...patch}}:x));
   const upEng=(patch)=>setClients(cs=>cs.map(x=>x.id===cid?{...x,england:{...(x.england||{}),...patch}}:x));
   const upRules=(patch)=>setRules(r=>({...DEFAULT_RATE_RULES,...r,...patch}));
+  const [mk,setMk]=useState({markup:c&&c.markup!=null?c.markup:"",markupMin:c&&c.markupMin!=null?c.markupMin:""});
+  useEffect(()=>{setMk({markup:c&&c.markup!=null?c.markup:"",markupMin:c&&c.markupMin!=null?c.markupMin:""});},[cid]);
+  const mkDirty=!!c&&(String(mk.markup??"")!==String(c.markup??"")||String(mk.markupMin??"")!==String(c.markupMin??""));
+  const cDraft=c?{...c,markup:mk.markup,markupMin:mk.markupMin}:c;
+  const ratesDirty=_rd.dirty||mkDirty;
+  const saveRates=()=>{ _rd.save(); if(mkDirty)upClient({markup:mk.markup===""?"":+mk.markup,markupMin:mk.markupMin===""?"":+mk.markupMin}); };
+  const undoRates=()=>{ _rd.undo(); setMk({markup:c&&c.markup!=null?c.markup:"",markupMin:c&&c.markupMin!=null?c.markupMin:""}); };
   /* Auto-fork: editing rates while this customer sits on the shared Default profile silently
      creates their own dedicated copy first and applies the edit there — so per-customer edits
      can NEVER accidentally reprice every other Default customer. The profile machinery still
@@ -3319,21 +3331,22 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
     </div>}
 
     {tab==="rates"&&<div className="space-y-3">
+      <DraftBar dirty={ratesDirty} onSave={saveRates} onUndo={undoRates} savedNote={"Rates saved — live for "+c.name} saveLabel="Save rates"/>
       {lg.length===0&&<div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">This account has <b>0 logins</b> — nobody can generate a real quote as {c.name} yet, so changes here won’t show up in any quote until a user is added under the <b>Logins</b> tab (or you view them via admin impersonation). The Live check strip below still reflects the math correctly.</div>}
       {/* Account-wide markup — THIS customer's blanket number, over the England/FedEx cost, beats the platform default */}
       <div className="border border-stone-200 rounded-lg bg-white p-3 flex flex-wrap items-end gap-3">
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-stone-800 flex items-center gap-2">Account-wide markup — {c.name} only {(c.markup!=null&&c.markup!==""&&+c.markup!==0)||(c.markupMin!=null&&c.markupMin!==""&&+c.markupMin>0)?<Badge tone="green">on</Badge>:<Badge>off</Badge>}</div>
+          <div className="text-sm font-semibold text-stone-800 flex items-center gap-2">Account-wide markup — {c.name} only {(mk.markup!=null&&mk.markup!==""&&+mk.markup!==0)||(mk.markupMin!=null&&mk.markupMin!==""&&+mk.markupMin>0)?<Badge tone="green">on</Badge>:<Badge>off</Badge>}</div>
           <div className="text-[11px] text-stone-500 mt-0.5 max-w-md">Marks up the England/FedEx cost for every rate, service, and accessorial returned for this account only. Per-service rules below beat this. Leave blank and this account sells at exactly the raw carrier cost — no markup, anywhere.</div>
         </div>
         <span className="flex-1"/>
-        <Field label="Markup %"><Input type="number" className="w-24" placeholder="e.g. 20" value={c.markup==null?"":c.markup} onChange={e=>upClient({markup:e.target.value===""?"":+e.target.value})}/></Field>
-        <Field label="Min $ profit / label"><Input type="number" className="w-24" placeholder="—" value={c.markupMin==null?"":c.markupMin} onChange={e=>upClient({markupMin:e.target.value===""?"":+e.target.value})}/></Field>
-        {((c.markup!=null&&c.markup!==""&&+c.markup!==0)||(c.markupMin!=null&&c.markupMin!==""))&&<button onClick={()=>upClient({markup:"",markupMin:""})} className="text-xs text-rose-500 bg-stone-100 rounded-lg px-2.5 py-1.5 hover:bg-rose-50">Clear</button>}
+        <Field label="Markup %"><Input type="number" className="w-24" placeholder="e.g. 20" value={mk.markup==null?"":mk.markup} onChange={e=>setMk(m=>({...m,markup:e.target.value===""?"":+e.target.value}))}/></Field>
+        <Field label="Min $ profit / label"><Input type="number" className="w-24" placeholder="—" value={mk.markupMin==null?"":mk.markupMin} onChange={e=>setMk(m=>({...m,markupMin:e.target.value===""?"":+e.target.value}))}/></Field>
+        {((mk.markup!=null&&mk.markup!==""&&+mk.markup!==0)||(mk.markupMin!=null&&mk.markupMin!==""))&&<button onClick={()=>setMk({markup:"",markupMin:""})} className="text-xs text-rose-500 bg-stone-100 rounded-lg px-2.5 py-1.5 hover:bg-rose-50">Clear</button>}
       </div>
       <div className="text-[11px] text-stone-600 bg-[#F0F9FF] border border-[#BAE6FD] rounded px-3 py-2">
         <b>Live check</b> — a $10.00 raw cost sells right now for:&nbsp;
-        {["FedEx Ground","FedEx Home Delivery","FedEx 2Day","FedEx Priority Overnight"].map((l,i)=><span key={l}>{i>0&&" · "}{l.replace("FedEx ","")} <b className="font-mono">{money(rateSellFor(10,l,{rules,client:c}))}</b></span>)}
+        {["FedEx Ground","FedEx Home Delivery","FedEx 2Day","FedEx Priority Overnight"].map((l,i)=><span key={l}>{i>0&&" · "}{l.replace("FedEx ","")} <b className="font-mono">{money(rateSellFor(10,l,{rules,client:cDraft}))}</b></span>)}
         &nbsp;— same engine that prices every quote for {c.name}; type a markup above or below and watch these move instantly.
         <div className="mt-1 text-stone-500">Order of operations on every quote: per-fee accessorial rules → weight-break / zone % → the service rule (%, Fixed $, Flat $, or List −%) → this account-wide markup → <b>Min $ floors last</b> (service Min $ on the sell price; Min $ profit against the raw cost). Min $ now holds on every path — including when a % is blank or a list table is missing.</div>
       </div>
@@ -3449,6 +3462,12 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
             return out;
           })()}
         </tbody></table></div>
+      </div>
+      <div className="flex items-center justify-end gap-3 pt-2 border-t border-stone-200">
+        {ratesDirty?<span className="text-[12px] text-amber-700 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>You have unsaved rate changes — nothing is live until you save</span>:<span className="text-[12px] text-stone-400">All rate changes saved</span>}
+        <div className="flex-1"/>
+        <button onClick={undoRates} disabled={!ratesDirty} className="text-[13px] text-stone-600 disabled:opacity-40 px-3 py-2 rounded-lg border border-stone-200 hover:bg-stone-50">Undo changes</button>
+        <button onClick={saveRates} className="text-[15px] font-bold text-white bg-emerald-600 px-10 py-3 rounded-lg hover:bg-emerald-700 flex items-center gap-2 shadow-md"><Check className="w-5 h-5"/>Save rates</button>
       </div>
     </div>}
 

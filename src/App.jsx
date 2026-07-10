@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v433";
+const BUILD_TAG="addr-v434";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2090,38 +2090,38 @@ const RATE_SERVICES={
    England's per-line surcharge breakdown is wired into the resolver. */
 const FEDEX_SURCHARGES=[
   /* Delivery & signature */
-  {id:"SIG-D",desc:"Direct Signature Required",seg:"Express & Ground",charge:"fixed",app:1,def:6.55,g:"Delivery & signature"},
-  {id:"SIG-I",desc:"Indirect Signature Required",seg:"Express & Ground",charge:"fixed",app:1,def:6.55,g:"Delivery & signature"},
-  {id:"SIG-A",desc:"Adult Signature Required",seg:"Express & Ground",charge:"fixed",app:1,def:8.05,g:"Delivery & signature"},
-  {id:"SAT",desc:"Saturday Delivery",seg:"Express",charge:"fixed",app:1,def:16.00,g:"Delivery & signature"},
+  {id:"SIG-D",desc:"Direct Signature Required",seg:"Express & Ground",charge:"fixed",app:1,def:6.55,g:"Delivery & signature",aka:"Direct Signature Required"},
+  {id:"SIG-I",desc:"Indirect Signature Required",seg:"Express & Ground",charge:"fixed",app:1,def:6.55,g:"Delivery & signature",aka:"Indirect Signature Required"},
+  {id:"SIG-A",desc:"Adult Signature Required",seg:"Express & Ground",charge:"fixed",app:1,def:8.05,g:"Delivery & signature",aka:"Adult Signature Required"},
+  {id:"SAT",desc:"Saturday Delivery",seg:"Express",charge:"fixed",app:1,def:16.00,g:"Delivery & signature",aka:"Saturday Delivery"},
   {id:"SATP",desc:"Saturday Pickup",seg:"Express",charge:"fixed",g:"Delivery & signature"},
-  {id:"RES",desc:"Residential Delivery",seg:"Express",charge:"fixed",g:"Delivery & signature"},
-  {id:"RES-G",desc:"Residential Delivery",seg:"Ground",charge:"fixed",g:"Delivery & signature"},
-  {id:"RES-HD",desc:"Home Delivery Charge",seg:"Home Delivery",charge:"fixed",g:"Delivery & signature"},
-  {id:"HAL",desc:"Hold at Location",seg:"All",charge:"fixed",g:"Delivery & signature"},
+  {id:"RES",desc:"Residential Delivery",seg:"Express",charge:"fixed",g:"Delivery & signature",aka:"Residential Surcharge"},
+  {id:"RES-G",desc:"Residential Delivery",seg:"Ground",charge:"fixed",g:"Delivery & signature",aka:"Residential Surcharge"},
+  {id:"RES-HD",desc:"Home Delivery Charge",seg:"Home Delivery",charge:"fixed",g:"Delivery & signature",aka:"Residential Surcharge"},
+  {id:"HAL",desc:"Hold at Location",seg:"All",charge:"fixed",g:"Delivery & signature",aka:"Hold at Location"},
   {id:"HD-APPT",desc:"Home Delivery — Appointment",seg:"Home Delivery",charge:"fixed",g:"Delivery & signature"},
   {id:"HD-EVE",desc:"Home Delivery — Evening",seg:"Home Delivery",charge:"fixed",g:"Delivery & signature"},
   {id:"HD-DATE",desc:"Home Delivery — Date Certain",seg:"Home Delivery",charge:"fixed",g:"Delivery & signature"},
   {id:"REATT",desc:"Delivery Reattempt",seg:"Express",charge:"fixed",g:"Delivery & signature"},
   {id:"REROUTE",desc:"Reroute / Redirect (address change in transit)",seg:"Express & Ground",charge:"fixed",g:"Delivery & signature"},
   /* Coverage, corrections & billing */
-  {id:"INS",desc:"Declared Value (per $100 over $100)",seg:"Express & Ground",charge:"per $100",app:1,def:1.15,g:"Coverage & corrections"},
+  {id:"INS",desc:"Declared Value (per $100 over $100)",seg:"Express & Ground",charge:"per $100",app:1,def:1.15,g:"Coverage & corrections",aka:"Declared Value Surcharge / Insured Value"},
   {id:"ADDR",desc:"Address Correction",seg:"Express & Ground",charge:"fixed",g:"Coverage & corrections"},
   {id:"RW",desc:"Shipping Charge Correction (reweigh / re-dim audit)",seg:"Express & Ground",charge:"fixed",g:"Coverage & corrections"},
-  {id:"3PB",desc:"Third Party Billing Surcharge",seg:"Express & Ground",charge:"percent of base",g:"Coverage & corrections"},
-  {id:"FUEL",desc:"Fuel Surcharge",seg:"Express",charge:"percent of base",g:"Coverage & corrections"},
-  {id:"FUEL-G",desc:"Fuel Surcharge",seg:"Ground",charge:"percent of base",g:"Coverage & corrections"},
+  {id:"3PB",desc:"Third Party Billing Surcharge",seg:"Express & Ground",charge:"percent of base",g:"Coverage & corrections",aka:"Third Party Billing Surcharge"},
+  {id:"FUEL",desc:"Fuel Surcharge",seg:"Express",charge:"percent of base",g:"Coverage & corrections",aka:"Fuel Surcharge"},
+  {id:"FUEL-G",desc:"Fuel Surcharge",seg:"Ground",charge:"percent of base",g:"Coverage & corrections",aka:"Fuel Surcharge"},
   /* Delivery area */
-  {id:"DAS",desc:"DAS — Commercial",seg:"Express",charge:"fixed",g:"Delivery area"},
-  {id:"DAS-G",desc:"DAS — Commercial",seg:"Ground",charge:"fixed",g:"Delivery area"},
-  {id:"DAS-EC",desc:"DAS — Extended Commercial",seg:"Express",charge:"fixed",g:"Delivery area"},
-  {id:"DAS-EC-G",desc:"DAS — Extended Commercial",seg:"Ground",charge:"fixed",g:"Delivery area"},
-  {id:"DAS-R",desc:"DAS — Residential",seg:"Express",charge:"fixed",g:"Delivery area"},
-  {id:"DAS-R-HD",desc:"DAS — Residential",seg:"Home Delivery",charge:"fixed",g:"Delivery area"},
-  {id:"DAS-ER",desc:"DAS — Extended Residential",seg:"Express",charge:"fixed",g:"Delivery area"},
-  {id:"DAS-ER-HD",desc:"DAS — Extended Residential",seg:"Home Delivery",charge:"fixed",g:"Delivery area"},
-  {id:"DAS-RM",desc:"DAS — Remote",seg:"Express",charge:"fixed",g:"Delivery area"},
-  {id:"DAS-RM-G",desc:"DAS — Remote",seg:"Ground & Home Delivery",charge:"fixed",g:"Delivery area"},
+  {id:"DAS",desc:"DAS — Commercial",seg:"Express",charge:"fixed",g:"Delivery area",aka:"Delivery Area Surcharge"},
+  {id:"DAS-G",desc:"DAS — Commercial",seg:"Ground",charge:"fixed",g:"Delivery area",aka:"Delivery Area Surcharge"},
+  {id:"DAS-EC",desc:"DAS — Extended Commercial",seg:"Express",charge:"fixed",g:"Delivery area",aka:"Delivery Area Surcharge Extended"},
+  {id:"DAS-EC-G",desc:"DAS — Extended Commercial",seg:"Ground",charge:"fixed",g:"Delivery area",aka:"Delivery Area Surcharge Extended"},
+  {id:"DAS-R",desc:"DAS — Residential",seg:"Express",charge:"fixed",g:"Delivery area",aka:"Delivery Area Surcharge Residential"},
+  {id:"DAS-R-HD",desc:"DAS — Residential",seg:"Home Delivery",charge:"fixed",g:"Delivery area",aka:"Delivery Area Surcharge Residential"},
+  {id:"DAS-ER",desc:"DAS — Extended Residential",seg:"Express",charge:"fixed",g:"Delivery area",aka:"Delivery Area Surcharge Extended Residential"},
+  {id:"DAS-ER-HD",desc:"DAS — Extended Residential",seg:"Home Delivery",charge:"fixed",g:"Delivery area",aka:"Delivery Area Surcharge Extended Residential"},
+  {id:"DAS-RM",desc:"DAS — Remote",seg:"Express",charge:"fixed",g:"Delivery area",aka:"Delivery Area Surcharge Remote"},
+  {id:"DAS-RM-G",desc:"DAS — Remote",seg:"Ground & Home Delivery",charge:"fixed",g:"Delivery area",aka:"Delivery Area Surcharge Remote"},
   {id:"DAS-AK",desc:"DAS — Alaska Commercial",seg:"Express",charge:"fixed",g:"Delivery area"},
   {id:"DAS-AK-G",desc:"DAS — Alaska Commercial",seg:"Ground",charge:"fixed",g:"Delivery area"},
   {id:"DAS-AK-R",desc:"DAS — Alaska Residential",seg:"Express",charge:"fixed",g:"Delivery area"},
@@ -2131,26 +2131,26 @@ const FEDEX_SURCHARGES=[
   {id:"DAS-HI-R",desc:"DAS — Hawaii Residential",seg:"Express",charge:"fixed",g:"Delivery area"},
   {id:"DAS-HI-R-HD",desc:"DAS — Hawaii Residential",seg:"Home Delivery",charge:"fixed",g:"Delivery area"},
   /* Handling & size */
-  {id:"AH-D",desc:"Additional Handling — Dimensions",seg:"Express",charge:"fixed (zoned)",g:"Handling & size"},
-  {id:"AH-D-G",desc:"Additional Handling — Dimensions",seg:"Ground",charge:"fixed (zoned)",g:"Handling & size"},
-  {id:"AH-W",desc:"Additional Handling — Weight",seg:"Express",charge:"fixed (zoned)",g:"Handling & size"},
-  {id:"AH-W-G",desc:"Additional Handling — Weight",seg:"Ground",charge:"fixed (zoned)",g:"Handling & size"},
-  {id:"AH-P",desc:"Additional Handling — Packaging",seg:"Express",charge:"fixed (zoned)",g:"Handling & size"},
-  {id:"AH-P-G",desc:"Additional Handling — Packaging",seg:"Ground",charge:"fixed (zoned)",g:"Handling & size"},
+  {id:"AH-D",desc:"Additional Handling — Dimensions",seg:"Express",charge:"fixed (zoned)",g:"Handling & size",aka:"Additional Handling Surcharge - Dimensions"},
+  {id:"AH-D-G",desc:"Additional Handling — Dimensions",seg:"Ground",charge:"fixed (zoned)",g:"Handling & size",aka:"Additional Handling Surcharge - Dimensions"},
+  {id:"AH-W",desc:"Additional Handling — Weight",seg:"Express",charge:"fixed (zoned)",g:"Handling & size",aka:"Additional Handling Surcharge - Weight"},
+  {id:"AH-W-G",desc:"Additional Handling — Weight",seg:"Ground",charge:"fixed (zoned)",g:"Handling & size",aka:"Additional Handling Surcharge - Weight"},
+  {id:"AH-P",desc:"Additional Handling — Packaging",seg:"Express",charge:"fixed (zoned)",g:"Handling & size",aka:"Additional Handling Surcharge - Packaging"},
+  {id:"AH-P-G",desc:"Additional Handling — Packaging",seg:"Ground",charge:"fixed (zoned)",g:"Handling & size",aka:"Additional Handling Surcharge - Packaging"},
   {id:"AH-NS",desc:"Additional Handling — Non-Stackable (freight)",seg:"Express Freight",charge:"fixed",g:"Handling & size"},
-  {id:"OVR",desc:"Oversize Charge",seg:"Express",charge:"fixed (zoned)",g:"Handling & size"},
-  {id:"OVR-G",desc:"Oversize Charge",seg:"Ground",charge:"fixed (zoned)",g:"Handling & size"},
-  {id:"UNAUTH",desc:"Unauthorized Package Charge",seg:"Ground",charge:"fixed",g:"Handling & size"},
+  {id:"OVR",desc:"Oversize Charge",seg:"Express",charge:"fixed (zoned)",g:"Handling & size",aka:"Oversize Charge"},
+  {id:"OVR-G",desc:"Oversize Charge",seg:"Ground",charge:"fixed (zoned)",g:"Handling & size",aka:"Oversize Charge"},
+  {id:"UNAUTH",desc:"Unauthorized Package Charge",seg:"Ground",charge:"fixed",g:"Handling & size",aka:"Unauthorized Package Charge"},
   /* Peak / demand */
-  {id:"PEAK-R",desc:"Demand Surcharge — Residential (peak)",seg:"Express",charge:"fixed",g:"Peak / demand"},
-  {id:"PEAK-R-G",desc:"Demand Surcharge — Residential (peak)",seg:"Ground & Home Delivery",charge:"fixed",g:"Peak / demand"},
-  {id:"PEAK-AH",desc:"Demand Surcharge — Additional Handling (peak)",seg:"Express",charge:"fixed",g:"Peak / demand"},
-  {id:"PEAK-AH-G",desc:"Demand Surcharge — Additional Handling (peak)",seg:"Ground",charge:"fixed",g:"Peak / demand"},
-  {id:"PEAK-OS",desc:"Demand Surcharge — Oversize (peak)",seg:"Express",charge:"fixed",g:"Peak / demand"},
-  {id:"PEAK-OS-G",desc:"Demand Surcharge — Oversize (peak)",seg:"Ground",charge:"fixed",g:"Peak / demand"},
+  {id:"PEAK-R",desc:"Demand Surcharge — Residential (peak)",seg:"Express",charge:"fixed",g:"Peak / demand",aka:"Demand Surcharge - Residential"},
+  {id:"PEAK-R-G",desc:"Demand Surcharge — Residential (peak)",seg:"Ground & Home Delivery",charge:"fixed",g:"Peak / demand",aka:"Demand Surcharge - Residential"},
+  {id:"PEAK-AH",desc:"Demand Surcharge — Additional Handling (peak)",seg:"Express",charge:"fixed",g:"Peak / demand",aka:"Demand Surcharge - Additional Handling"},
+  {id:"PEAK-AH-G",desc:"Demand Surcharge — Additional Handling (peak)",seg:"Ground",charge:"fixed",g:"Peak / demand",aka:"Demand Surcharge - Additional Handling"},
+  {id:"PEAK-OS",desc:"Demand Surcharge — Oversize (peak)",seg:"Express",charge:"fixed",g:"Peak / demand",aka:"Demand Surcharge - Oversize"},
+  {id:"PEAK-OS-G",desc:"Demand Surcharge — Oversize (peak)",seg:"Ground",charge:"fixed",g:"Peak / demand",aka:"Demand Surcharge - Oversize"},
   {id:"PEAK-UNAUTH",desc:"Demand Surcharge — Unauthorized Package (peak)",seg:"Ground",charge:"fixed",g:"Peak / demand"},
-  {id:"PEAK-GE",desc:"Demand Surcharge — Ground Economy (peak)",seg:"Ground Economy",charge:"fixed",g:"Peak / demand"},
-  {id:"PEAK-INTL",desc:"Demand Surcharge — International (per lane, peak)",seg:"Express",charge:"fixed",g:"Peak / demand"},
+  {id:"PEAK-GE",desc:"Demand Surcharge — Ground Economy (peak)",seg:"Ground Economy",charge:"fixed",g:"Peak / demand",aka:"Demand Surcharge"},
+  {id:"PEAK-INTL",desc:"Demand Surcharge — International (per lane, peak)",seg:"Express",charge:"fixed",g:"Peak / demand",aka:"Demand Surcharge"},
   /* Pickup & returns */
   {id:"PU-EXP",desc:"On-Call Pickup (per package)",seg:"Express",charge:"fixed",g:"Pickup & returns"},
   {id:"PU-GRD-OC",desc:"On-Call Pickup (per package)",seg:"Ground",charge:"fixed",g:"Pickup & returns"},
@@ -2175,9 +2175,17 @@ const FEDEX_SURCHARGES=[
   {id:"ANC",desc:"Ancillary Clearance Service Fees (intl)",seg:"Express & Ground",charge:"fixed",g:"International & clearance"},
   {id:"TPC",desc:"Third Party Consignee (intl)",seg:"Express & Ground",charge:"fixed",g:"International & clearance"},
   /* Ground Economy */
-  {id:"GE-DR",desc:"Ground Economy Delivery & Return Charge (per package)",seg:"Ground Economy",charge:"fixed",g:"Ground Economy"},
+  {id:"GE-DR",desc:"Ground Economy Delivery & Return Charge (per package)",seg:"Ground Economy",charge:"fixed",g:"Ground Economy",aka:"Delivery and Returns Charge"},
   {id:"GE-PS",desc:"Ground Economy Pickup Charge",seg:"Ground Economy",charge:"fixed",g:"Ground Economy"}
 ];
+/* Token search across desc/id/group/segment AND the aka (the exact name FedEx prints on live
+   quote breakdowns) — so searching what you SEE on a quote ("Residential Surcharge") always
+   finds the row, even mid-word or across fields. Every token must match somewhere. */
+const surMatches=(su,query)=>{
+  const q=String(query||"").trim().toLowerCase(); if(!q)return true;
+  const hay=[su.desc,su.id,su.g,su.seg,su.aka].filter(Boolean).join(" ").toLowerCase();
+  return q.split(/\s+/).every(tok=>hay.includes(tok));
+};
 const RATE_ZONES=["2","3","4","5","6","7","8"];
 /* Finer-grained than canonSvc — rate rules need 2Day ≠ 2Day A.M., intl economy ≠ priority, One Rate per packaging. */
 function rateSvcKey(label){
@@ -3421,19 +3429,19 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
           <div className="text-[10px] uppercase tracking-widest text-stone-400">Accessorial markups — {prof.name} profile</div>
           <Input value={surQ} onChange={e=>setSurQ(e.target.value)} placeholder="Search accessorials…" className="w-44"/>
         </div>
-        <p className="text-[11px] text-stone-500 mb-2">Every FedEx surcharge. <Badge tone="blue">live</Badge> ones change quotes now (signature, Saturday, declared value); the rest are staged for England's per-line breakdown. <b>Fixed</b> = charge that dollar amount; <b>Percent</b> = adjust the published fee (10 = 110% of default, −65 = 35%). Blank = FedEx default.</p>
+        <p className="text-[11px] text-stone-500 mb-2">Every FedEx surcharge — rules here reprice the matching fee line on LIVE quotes for this profile. <b>% off LIST</b> = FedEx list rate −X% · <b>% over cost</b> = England/FedEx fee ±X% (negative = discount) · <b>$ over cost</b> = fee + $X · <b>Flat $</b> = exactly $X. Blank amount = the fee stays inside the service-level markup. Search by the exact name you see on a quote (“Residential Surcharge”, “Fuel Surcharge”…) — it finds the row.</p>
         <div className="border border-stone-200 rounded-lg bg-white overflow-x-auto max-h-[420px] overflow-y-auto"><table className="w-full text-sm min-w-[560px]"><tbody>
           {(()=>{
             const q=(surQ||"").trim().toLowerCase();
-            const listS=FEDEX_SURCHARGES.filter(su=>!q||su.desc.toLowerCase().includes(q)||su.id.toLowerCase().includes(q)||(su.g||"").toLowerCase().includes(q)||(su.seg||"").toLowerCase().includes(q));
+            const listS=FEDEX_SURCHARGES.filter(su=>!q||surMatches(su,q));
             if(!listS.length)return <tr><td className="py-4 text-center text-stone-400">No accessorials match "{surQ}".</td></tr>;
             const out=[];let lastG=null;const sr=prof.surcharges||{};
             listS.forEach(su=>{
               if(su.g!==lastG){lastG=su.g;out.push(<tr key={"g:"+su.g}><td colSpan={4} className="pt-3 pb-1 pl-3 text-[10px] uppercase tracking-widest text-stone-400 font-semibold">{su.g}</td></tr>);}
               const r=sr[su.id]||{};
               out.push(<tr key={su.id} className="border-t border-stone-100 hover:bg-stone-50">
-                <td className="py-1.5 pl-3 pr-2"><span className="text-stone-800">{su.desc}</span> <span className="text-[10px] text-stone-400">{su.seg}</span>{su.app?<Badge tone="blue">live</Badge>:null}</td>
-                <td className="py-1.5 pr-2"><Select value={r.type||(su.app?"fixed":"percent")} onChange={e=>upProfSur(prof.id,su.id,{type:e.target.value})}><option value="fixed">Fixed $</option><option value="percent">Percent</option></Select></td>
+                <td className="py-1.5 pl-3 pr-2"><span className="text-stone-800">{su.desc}</span> <span className="text-[10px] text-stone-400">{su.seg}</span>{su.aka&&su.aka.toLowerCase()!==su.desc.toLowerCase()&&<span className="block text-[10px] text-stone-400">on quotes: “{su.aka}”</span>}</td>
+                <td className="py-1.5 pr-2"><Select value={r.type||(su.app?"fixed":"percent")} onChange={e=>upProfSur(prof.id,su.id,{type:e.target.value})}><option value="listpct">% off LIST</option><option value="percent">% over cost</option><option value="add">$ over cost</option><option value="fixed">Flat $</option></Select></td>
                 <td className="py-1.5 pr-3 whitespace-nowrap text-right"><Input type="number" value={r.amount==null?"":r.amount} onChange={e=>upProfSur(prof.id,su.id,{amount:e.target.value})} placeholder={su.def!=null?String(su.def):"default"} className="w-24 text-right"/></td>
                 <td className="py-1.5 pr-3 text-[11px] text-stone-400 whitespace-nowrap">{su.charge}</td>
               </tr>);
@@ -3949,7 +3957,7 @@ function RatesAdmin({clients=[],brand}){
         </div>
         {(()=>{
           const q=surQ.trim().toLowerCase();
-          const match=(su)=>!q||su.desc.toLowerCase().includes(q)||su.id.toLowerCase().includes(q)||(su.g||"").toLowerCase().includes(q)||(su.seg||"").toLowerCase().includes(q);
+          const match=(su)=>!q||surMatches(su,q);
           const boxesOf=(su)=>{
             const sg=su.seg||"All";
             if(sg==="Express"||sg==="Express Freight")return ["express"];
@@ -3972,7 +3980,7 @@ function RatesAdmin({clients=[],brand}){
                     if(su.g!==lastG){lastG=su.g;out.push(<tr key={"g:"+su.g}><td colSpan={6} className="pt-3 pb-1 text-[10px] uppercase tracking-widest text-stone-400 font-semibold">{su.g}</td></tr>);}
                     const r=surRow[su.id]||{};
                     out.push(<tr key={su.id} onDoubleClick={()=>setSurEdit({...su,type:r.type||(su.app?"fixed":"percent"),amount:r.amount!=null?r.amount:(su.def!=null?su.def:"")})} className="border-t border-stone-100 hover:bg-stone-50 cursor-pointer">
-                      <td className="py-2 pr-2">{su.desc}{su.seg==="Ground & Home Delivery"&&<span className="text-[10px] text-stone-400 ml-1.5">(one rate covers Ground &amp; HD)</span>}{su.seg==="Express Freight"&&<span className="text-[10px] text-stone-400 ml-1.5">(Express Freight)</span>}{su.seg==="Ground Economy"&&<span className="text-[10px] text-stone-400 ml-1.5">(Ground Economy)</span>}</td>
+                      <td className="py-2 pr-2">{su.desc}{su.aka&&su.aka.toLowerCase()!==su.desc.toLowerCase()&&<span className="block text-[10px] text-stone-400">on quotes: “{su.aka}”</span>}{su.seg==="Ground & Home Delivery"&&<span className="text-[10px] text-stone-400 ml-1.5">(one rate covers Ground &amp; HD)</span>}{su.seg==="Express Freight"&&<span className="text-[10px] text-stone-400 ml-1.5">(Express Freight)</span>}{su.seg==="Ground Economy"&&<span className="text-[10px] text-stone-400 ml-1.5">(Ground Economy)</span>}</td>
                       <td className="pr-2 font-mono text-xs text-stone-500">{su.id}</td><td className="pr-2 text-stone-500">{su.charge}</td>
                       <td className="pr-2 text-stone-500">{({listpct:"% off list",percent:"±% over cost",add:"$ over cost",fixed:"flat $"})[r.type]||(su.app?"flat $":"—")}</td>
                       <td className="pr-2 text-right font-mono">{r.amount!=null&&r.amount!==""?(+r.amount).toFixed(2):(su.def!=null?su.def.toFixed(2):"—")}</td>
@@ -3985,7 +3993,7 @@ function RatesAdmin({clients=[],brand}){
             </div>);
           });
         })()}
-        {(()=>{const q=surQ.trim().toLowerCase();return q&&!FEDEX_SURCHARGES.some(su=>su.desc.toLowerCase().includes(q)||su.id.toLowerCase().includes(q)||(su.g||"").toLowerCase().includes(q)||(su.seg||"").toLowerCase().includes(q))?<div className="py-6 text-center text-sm text-stone-400">No surcharges match "{surQ}".</div>:null;})()}
+        {(()=>{const q=surQ.trim().toLowerCase();return q&&!FEDEX_SURCHARGES.some(su=>surMatches(su,q))?<div className="py-6 text-center text-sm text-stone-400">No surcharges match "{surQ}".</div>:null;})()}
       </div>}
 
       {tab==="base"&&<div className="space-y-3">
@@ -5934,7 +5942,7 @@ function AppInner(){
           </div>
         </div>
       </header>
-      {qq&&<QuickQuote onClose={()=>setQQ(false)} client={client} england={englandFor(client,settings)} senderZip={settings?.sender?.zip||""}/>}
+      {qq&&<QuickQuote onClose={()=>setQQ(false)} client={client} clients={clients} isAdmin={isAdmin} england={englandFor(client,settings)} senderZip={settings?.sender?.zip||""}/>}
       {appLabel&&<LabelPreviewModal data={appLabel} settings={settings} onClose={()=>setAppLabel(null)}/>}
       {navOpen&&<div className="md:hidden fixed inset-0 z-40 flex" role="dialog">
         <div className="absolute inset-0 bg-stone-900/40" onClick={()=>setNavOpen(false)}/>
@@ -8240,8 +8248,14 @@ function Pickups({pickups,setPickups,settings}){
 }
 
 /* ════════ QUICK QUOTE ════════ */
-function QuickQuote({onClose,client,england,senderZip}){
+function QuickQuote({onClose,client,clients=[],isAdmin=false,england,senderZip}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 rate database
+  /* Admin logins have no customer, so quotes priced as "yourself" use the Default profile at raw
+     cost — which looks like "my rules are ignored". Admins pick WHO to price as; the selected
+     customer's profile, markups, mins, and accessorial rules all apply exactly as they would for
+     that customer's own login. */
+  const [priceAs,setPriceAs]=useState("");
+  const effClient=isAdmin&&priceAs?(clients.find(c=>c&&c.id===priceAs)||client):client;
   const [fromZip,setFromZip]=useState(senderZip||client?.origin||"");
   const [toZip,setToZip]=useState("90210");
   const [residential,setResidential]=useState(true);
@@ -8278,8 +8292,8 @@ function QuickQuote({onClose,client,england,senderZip}){
     return ()=>{cancel=true;};
   },[fromZip,toZip,residential,JSON.stringify(pieces),sigOption,saturday,insurance,england]);
   const qqOrBox=oneRateBoxFor(pieces[0]&&pieces[0].L,pieces[0]&&pieces[0].W,pieces[0]&&pieces[0].H,totalWeight);
-  const qqOrRates=useMemo(()=>qqOrBox?oneRateQuotes(qqOrBox,{rules:rateRules,client}):[],[qqOrBox&&qqOrBox.code,rateRules,client]);
-  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,surcharges:q.surcharges,fromZip,toZip,weight:pieces.reduce((a,p)=>a+(+p.weight||0),0)})})),...qqOrRates].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,client)})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,client,rateRules,fxTransit,qqOrRates,sigOption,saturday,insurance,fromZip,toZip,JSON.stringify(pieces)]);
+  const qqOrRates=useMemo(()=>qqOrBox?oneRateQuotes(qqOrBox,{rules:rateRules,client:effClient}):[],[qqOrBox&&qqOrBox.code,rateRules,effClient]);
+  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client:effClient,list:q.list,surcharges:q.surcharges,fromZip,toZip,weight:pieces.reduce((a,p)=>a+(+p.weight||0),0)})})),...qqOrRates].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,effClient)})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,effClient,rateRules,fxTransit,qqOrRates,sigOption,saturday,insurance,fromZip,toZip,JSON.stringify(pieces)]);
   const hasExpress=quotes.some(q=>{const l=String(q.label||"").toLowerCase();return /(overnight|2\s?day|express saver)/.test(l);});
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-8 bg-stone-900/40 backdrop-blur-sm overflow-auto" onClick={onClose}>
@@ -8290,6 +8304,14 @@ function QuickQuote({onClose,client,england,senderZip}){
         </div>
         <div className="p-5 flex flex-col lg:flex-row gap-5">
           <div className="lg:w-72 shrink-0"><Panel title="Shipment">
+            {isAdmin&&<div className="bg-violet-50 border border-violet-200 rounded-lg px-2.5 py-2 -mt-1">
+              <div className="text-[10px] uppercase tracking-widest text-violet-500 mb-1">Price as customer</div>
+              <Select value={priceAs} onChange={e=>setPriceAs(e.target.value)} className="w-full">
+                <option value="">— nobody (your raw carrier cost) —</option>
+                {clients.map(cc=><option key={cc.id} value={cc.id}>{cc.name}</option>)}
+              </Select>
+              <div className="text-[10px] text-violet-500 mt-1">{priceAs?"Using this customer's profile: rules, markups, mins, accessorials — exactly what their login sees.":"No customer selected — these prices are your raw FedEx cost with NO rules applied."}</div>
+            </div>}
             <div className="grid grid-cols-2 gap-3"><Field label="From ZIP"><Input value={fromZip} onChange={e=>setFromZip(e.target.value)}/></Field><Field label="To ZIP"><Input value={toZip} onChange={e=>setToZip(e.target.value)}/></Field></div>
             <Toggle on={residential} set={setResidential} label="Residential"/>
             <div className="space-y-2">

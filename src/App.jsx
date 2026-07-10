@@ -70,7 +70,7 @@ const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK
    ever deploys to every login by accident. */
 /* Customer Settings sections (id,label) — mirrored by the `secs` array inside Settings.
    The admin portal uses this list for the per-customer hide/lock controls (featureFlags._secPolicy). */
-const SETTINGS_SEC_LIST=[["general","General"],["customize","Customizations"],["reports","Reports"],["shipscreen","Ship screen"],["carriers","Carrier accounts"],["warehouses","Warehouses"],["boxes","Package sizes"],["boxlogic","Box logic"],["catalog","Product catalog"],["reference","Reference Fields"],["printer","Print settings"],["cieditor","Commercial invoice"],["cihistory","CI history"],["otherdocs","Other documents"],["manifests","Manifests"],["integrations","Integrations"],["notifications","Email automation"],["checkout","Checkout rates"],["billing","Billing"],["subscription","Subscription"]];
+const SETTINGS_SEC_LIST=[["general","General"],["customize","Customizations"],["reports","Reports"],["shipscreen","Ship screen"],["orderspage","Orders"],["carriers","Carrier accounts"],["warehouses","Warehouses"],["boxes","Package sizes"],["boxlogic","Box logic"],["catalog","Product catalog"],["reference","Reference Fields"],["printer","Print settings"],["cieditor","Commercial invoice"],["cihistory","CI history"],["otherdocs","Other documents"],["manifests","Manifests"],["integrations","Integrations"],["notifications","Email automation"],["checkout","Checkout rates"],["billing","Billing"],["subscription","Subscription"]];
 const FEATURE_CATALOG=[
   {id:"orders",label:"Orders",desc:"Order import & fulfillment",default:true},
   {id:"shipments",label:"Shipments",desc:"Shipment history & tracking",default:true},
@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v422";
+const BUILD_TAG="addr-v423";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -872,7 +872,7 @@ function drawFedexMock(g,W,H,{to,sender,service,weight,pieceCount,refNo,resident
       g.fillText("ORIGIN ID:"+(U(s.zip).slice(0,3)||"SHP")+"A",40,64);
       g.font=AR(25,400);g.fillText(fone(s.phone),300,64);
       const hl=[U(s.name||s.company||"SHIPPER"),(s.company&&s.name?U(s.company):""),U(s.address1),(U([s.city,s.state,s.zip].filter(Boolean).join(", "))),"UNITED STATES US"].filter(x=>x);
-      hl.forEach((t,i)=>g.fillText(t.slice(0,34),40,96+i*30));
+      hl.forEach((t,i)=>g.fillText(t.slice(0,34),40,96+i*32));
       g.font=AR(25,400);
       g.fillText("SHIP DATE: "+String(dt.getDate()).padStart(2,"0")+M[dt.getMonth()]+String(dt.getFullYear()).slice(2),840,64);
       g.fillText("ACTWGT: "+(+weight||1).toFixed(2)+" LB",840,94);
@@ -885,22 +885,25 @@ function drawFedexMock(g,W,H,{to,sender,service,weight,pieceCount,refNo,resident
       if(r.company&&r.name){g.font=AR(44,700);g.fillText(U(r.company).slice(0,26),110,ty);ty+=52;}
       g.font=AR(44,700);g.fillText(U(r.address1).slice(0,26),110,ty);ty+=56;
       if(residential===false){g.font=AR(34,700);g.fillText("**COMMERCIAL ADDRESS**",110,ty);ty+=46;}
-      g.font=AR(52,700);g.fillText((U(r.city)+" "+U(r.state)+" "+U(r.zip)).trim().slice(0,22),110,ty);ty+=44;
+      g.font=AR(52,700);g.fillText((U(r.city)+" "+U(r.state)+" "+U(r.zip)).trim().slice(0,22),110,ty);ty+=50;
       g.font=AR(24,400);
-      g.fillText(fone(r.phone),40,ty);g.fillText("REF: "+String(refNo||"").slice(0,18),420,ty);ty+=34;
+      g.fillText(fone(r.phone),40,ty);g.fillText("REF: "+String(refNo||"").slice(0,18),420,ty);ty+=38;
       g.fillText("INV: "+String(refNo||"").slice(0,14),40,ty);g.fillText("PO:",470,ty);g.fillText("DEPT:",820,ty);
-      const zTop=ty+18;
+      const zTop=ty+22;
       g.lineWidth=2;g.beginPath();g.moveTo(30,zTop);g.lineTo(W-30,zTop);g.stroke();
       // ── PDF417 field (guard columns + dense codewords) ──
       const pTop=zTop+26;
       g.fillRect(48,pTop,10,300);g.fillRect(62,pTop,4,300);   // start guard
       for(let row=0;row<25;row++){let x=84;while(x<640){const bw=2+Math.floor(rnd()*7);if(rnd()>0.42)g.fillRect(x,pTop+row*12,bw,10);x+=bw+2+Math.floor(rnd()*3);}}
       g.fillRect(652,pTop,4,300);g.fillRect(662,pTop,10,300);   // end guard
-      // FedEx wordmark + family + service letter box
-      g.font="italic 700 120px Arial,Helvetica,sans-serif";
-      g.fillStyle="#4D148C";g.fillText("Fed",760,pTop+112);
-      g.fillStyle="#FF6600";g.fillText("Ex",952,pTop+112);
-      g.fillStyle="#000";
+      // FedEx wordmark — black mono version like the real thermal label: solid "Fed", outlined "E", solid "x"
+      g.fillStyle="#000";g.strokeStyle="#000";
+      g.font="700 120px Arial,Helvetica,sans-serif";
+      let wx=754;const wy=pTop+114;
+      g.fillText("Fed",wx,wy);wx+=g.measureText("Fed").width-6;
+      g.lineWidth=6;g.strokeText("E",wx,wy);wx+=g.measureText("E").width-12;
+      g.fillText("x",wx,wy);
+      g.lineWidth=2;
       const svcL=String(service||"").toLowerCase();
       const fam=/overnight|2day|express saver|one rate/.test(svcL)?"Express":/economy|smartpost/.test(svcL)?"Ground Economy":/home/.test(svcL)?"Home Delivery":"Ground";
       g.font=AR(38,400);g.textAlign="right";g.fillText(fam,1108,pTop+160);g.textAlign="left";
@@ -942,7 +945,7 @@ function MockLabelImg({to,sender,service,weight,pieceCount,refNo,residential}){
       if(!dead)setSrc(out[0]);
     }catch(e){}
   })();return ()=>{dead=true;};},[JSON.stringify(to||{}),JSON.stringify(sender||{}),service,weight,pieceCount,refNo,residential]);
-  return src?<img src={src} alt="label preview" className="w-full max-w-[340px] mx-auto border border-stone-300 rounded shadow bg-white"/>:<div className="w-full max-w-[340px] h-[510px] mx-auto border border-dashed border-stone-300 rounded"/>;
+  return src?<img src={src} alt="label preview" className="w-full max-w-[460px] mx-auto border border-stone-300 rounded shadow bg-white"/>:<div className="w-full max-w-[460px] h-[690px] mx-auto border border-dashed border-stone-300 rounded"/>;
 }
 /* DRAG-to-place logo editor on a real FedEx-look label. The logo is a live overlay you drag
    anywhere; on release the position (logo center, % of label) saves and the SAME math places it
@@ -973,11 +976,11 @@ function LabelLogoPreviewImg({cfg,logo,setCust}){
       setDragPos(null); el.removeEventListener("pointermove",move); el.removeEventListener("pointerup",up); };
     el.addEventListener("pointermove",move); el.addEventListener("pointerup",up); };
   return (<div>
-    <div ref={boxRef} onPointerDown={logo?down:undefined} className="relative w-64 select-none touch-none border border-stone-300 rounded shadow bg-white overflow-hidden" style={{cursor:logo?"grab":"default"}}>
-      {base?<img src={base} alt="sample label" className="w-full block pointer-events-none" draggable={false}/>:<div className="w-full h-96"/>}
+    <div ref={boxRef} onPointerDown={logo?down:undefined} className="relative w-80 select-none touch-none border border-stone-300 rounded shadow bg-white overflow-hidden" style={{cursor:logo?"grab":"default"}}>
+      {base?<img src={base} alt="sample label" className="w-full block pointer-events-none" draggable={false}/>:<div className="w-full h-[480px]"/>}
       {logo&&<img src={logo} alt="logo" draggable={false} className="absolute pointer-events-none bg-white/95 p-0.5 rounded-sm shadow ring-1 ring-[#0086E0]/60" style={{width:scale+"%",left:anchor.x+"%",top:anchor.y+"%",transform:"translate(-50%,-50%)"}}/>}
     </div>
-    <div className="text-[10px] text-stone-400 mt-1 w-64 text-center">{logo?"Drag the logo anywhere on the label — it prints exactly there.":"Upload a logo to place it."}</div>
+    <div className="text-[10px] text-stone-400 mt-1 w-80 text-center">{logo?"Drag the logo anywhere on the label — it prints exactly there.":"Upload a logo to place it."}</div>
   </div>);
 }
 /* Direct (zero-dialog) printing via a PrintNode agent on the workstation. Config synced
@@ -5735,10 +5738,10 @@ function AppInner(){
         {shopPush.ok?<CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5"/>:<AlertTriangle className="w-5 h-5 shrink-0 mt-0.5"/>}
         <div className="min-w-0">
           <div className="font-semibold">{shopPush.ok?(shopPush.updated?"Shopify tracking REPLACED on "+shopPush.orderName:"Tracking sent to Shopify — "+shopPush.orderName):"Shopify push FAILED — "+shopPush.orderName}</div>
-          <div className="text-xs mt-0.5 break-words">{shopPush.ok?(shopPush.sendingEmail?"Sending the email to the customer…":shopPush.emailed?("Email sent to the customer · "+(shopPush.tracking||"")):shopPush.askNotify?("Customer has NOT been emailed · "+(shopPush.tracking||"")):("Tracking "+(shopPush.tracking||""))):String(shopPush.error||"Unknown error").slice(0,220)}</div>
+          <div className="text-xs mt-0.5 break-words">{shopPush.ok?(shopPush.sendingEmail?"Sending the email to the customer…":shopPush.emailed?("Email sent to the customer · "+(shopPush.tracking||"")):("Tracking "+(shopPush.tracking||""))):String(shopPush.error||"Unknown error").slice(0,220)}</div>
           {shopPush.askNotify&&<div className="flex items-center gap-2 mt-2">
-            <button onClick={notifyShopifyCustomer} className="text-xs font-semibold bg-emerald-600 text-white rounded-lg px-2.5 py-1.5 hover:bg-emerald-700">Email customer the new tracking</button>
-            <button onClick={()=>setShopPush(null)} className="text-xs font-medium bg-white border border-emerald-300 text-emerald-700 rounded-lg px-2.5 py-1.5 hover:bg-emerald-100">Don't email</button>
+            <button onClick={notifyShopifyCustomer} className="text-xs font-semibold bg-emerald-600 text-white rounded-lg px-2.5 py-1.5 hover:bg-emerald-700">Notify customer</button>
+            <button onClick={()=>setShopPush(null)} className="text-xs font-medium bg-white border border-emerald-300 text-emerald-700 rounded-lg px-2.5 py-1.5 hover:bg-emerald-100">Don't notify</button>
           </div>}
         </div>
         <button onClick={()=>setShopPush(null)} className="shrink-0 opacity-60 hover:opacity-100"><X className="w-4 h-4"/></button>
@@ -6293,8 +6296,17 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
 
   const buildRec=(q,carrier,extra)=>({id:Date.now(),date:new Date().toLocaleDateString(),tracking:(extra&&extra.tracking)||newTracking(carrier),carrier,service:q.label,recipient:{...receiver},sender:{...sender},fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,pieces:pieces.map(p=>({...p})),dims:pieces[0],insurance,cost:q.cost,sell:q.sell,rateBase:q.base,rateSurcharges:q.surcharges||[],rateAccessorials:q.accessorials||[],oneRate:!!q._oneRate,billTo,thirdAcct,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference,invoiceNo,poNo,residential,intl,bookNumber:extra&&extra.bookNumber,customs:intl?{...customs,total:customsTotal,ci:"CI-"+rnd(5)}:null});
   const print=async(q,force)=>{
-    /* No reprint-confirmation modal — printing an already-processed order just proceeds. The yellow
-       "already has a label" banner on the Ship screen is the non-blocking heads-up instead. */
+    /* Re-label guard: an order that already has a label must be explicitly confirmed before a new
+       one books — the new tracking OVERRIDES what's on Shopify/the store. Preview re-entry
+       (_confirmed) skips it so the question is asked once, at the first click. */
+    if(!q._confirmed&&!force){
+      const _so=selectedOrder&&orders.find(x=>x.id===selectedOrder);
+      const _dup=dupShipment(reference,shipments);
+      if((_so&&_so.status==="fulfilled")||_dup){
+        const _old=(_so&&_so.tracking)||(_dup&&_dup.tracking)||"";
+        if(!window.confirm("This order already has a label"+(_old?" — tracking "+_old:"")+".\n\nBooking a new label will OVERRIDE the current tracking and shipping info"+((_so&&_so.source==="Shopify")?" on Shopify":"")+".\n\nAre you sure you want to proceed?"))return;
+      }
+    }
     const carrier=carrierOf(q.label);
     const eng=englandFor(client,settings);
     const canBook=eng&&eng.enabled;
@@ -7392,8 +7404,8 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
                       {!hideCol.has("items")&&<td className={ordPad}><div className="text-stone-700 truncate max-w-[220px]">{o.items||"—"}</div>{o.lineItems&&o.lineItems[0]&&o.lineItems[0].sku?<div className="text-[11px] text-stone-400 truncate max-w-[220px]">SKU {o.lineItems[0].sku}</div>:null}</td>}
                       {!hideCol.has("recipient")&&<td className={ordPad}><div className="text-stone-800 truncate max-w-[160px]">{o.customer||"—"}</div><div className="text-[11px] text-stone-400 truncate max-w-[160px]">{o.city}{o.state?`, ${o.state}`:""}</div></td>}
                       {!hideCol.has("requested")&&<td className="px-3 py-2.5 text-stone-500 whitespace-nowrap">{o.shippingService||"—"}</td>}
-                      {filter!=="fulfilled"&&custom.autopilotPreview&&!hideCol.has("autopilot")&&<td className="px-3 py-2.5 whitespace-nowrap"><AutopilotCell o={o} ruleset={ruleset} fromZip={(client&&client.origin)||(settings&&settings.sender&&settings.sender.zip)||""}/></td>}
-                      {filter!=="fulfilled"&&!hideCol.has("estRate")&&<td className="px-3 py-2.5 text-right whitespace-nowrap"><LiveEstRate o={o} client={client} settings={settings} rateRules={rateRules} ruleset={ruleset}/></td>}
+                      {filter!=="fulfilled"&&custom.autopilotPreview&&!hideCol.has("autopilot")&&<td className="px-3 py-2.5 whitespace-nowrap">{o.status==="fulfilled"?<span className="text-stone-300">—</span>:<AutopilotCell o={o} ruleset={ruleset} fromZip={(client&&client.origin)||(settings&&settings.sender&&settings.sender.zip)||""}/>}</td>}
+                      {filter!=="fulfilled"&&!hideCol.has("estRate")&&<td className="px-3 py-2.5 text-right whitespace-nowrap">{o.status==="fulfilled"?<span className="text-stone-300">—</span>:<LiveEstRate o={o} client={client} settings={settings} rateRules={rateRules} ruleset={ruleset}/>}</td>}
                       {!hideCol.has("qty")&&<td className="px-3 py-2.5 text-right text-stone-600">{o.itemCount||"—"}</td>}
                       {!hideCol.has("total")&&<td className="px-3 py-2.5 text-right font-mono text-stone-800 whitespace-nowrap">${o.total}</td>}
                       {!hideCol.has("status")&&<td className={ordPad}><div className="flex items-center gap-1 flex-wrap"><Badge tone={o.status==="fulfilled"?"green":"amber"}>{o.status==="fulfilled"?"Shipped":"Awaiting"}</Badge>{o.hold&&<span title={o.hold}><Badge tone="rose">Held</Badge></span>}{o.gift&&<span title={o.giftMessage||"Gift"}><Badge tone="blue">Gift</Badge></span>}{o.assignee&&<span title={"Assigned to "+o.assignee}><Badge tone="stone">{o.assignee}</Badge></span>}</div></td>}
@@ -9140,7 +9152,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
      policy/fallback logic unchanged. */
   const SEC_GROUPS=[
     ["Workspace",[["general","General",Cog],["customize","Customizations",Sliders]]],
-    ["Shipping",[["shipscreen","Ship screen",Truck],["carriers",BRAND.fw?"FedEx Account":"Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["catalog","Product catalog",Boxes],["reference","Reference Fields",Receipt]]],
+    ["Shipping",[["shipscreen","Ship screen",Truck],["orderspage","Orders",ShoppingBag],["carriers",BRAND.fw?"FedEx Account":"Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["catalog","Product catalog",Boxes],["reference","Reference Fields",Receipt]]],
     ["Documents & printing",[["printer","Print settings",Printer],["cieditor","Commercial invoice",Receipt],["otherdocs","Other documents",FileText],["manifests","Manifests",FileText]]],
     ["Automation & integrations",[["integrations","Integrations",Layers],["notifications","Email automation",Mail],["checkout","Checkout rates",ShoppingBag]]],
     ["Account",[["reports","Reports",TrendingUp],["billing","Billing",CreditCard],["subscription","Subscription",Star]]],
@@ -9189,6 +9201,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="otherdocs"&&<OtherDocs settings={settings} setSettings={setSettings}/>}
         {sec==="customize"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])}/>}
         {sec==="shipscreen"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="ship"/>}
+        {sec==="orderspage"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="orders"/>}
         {sec==="billing"&&<Billing settings={settings} setSettings={setSettings}/>}
         {sec==="integrations"&&<Integrations settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders}/>}
         {sec==="subscription"&&<Subscription settings={settings} setSettings={setSettings}/>}
@@ -9520,7 +9533,7 @@ const DEFAULT_RECEIPT_LINES=[{id:"rl1",field:"recipientName",label:"To",custom:"
    live as label size or tab layout changes, so it's a true before-you-print preview. */
 function LabelStockPreview({size,zones,showLabels,tabStock}){
   const [SW,SH]=stockDims(size);
-  const PXIN=44;                                  // on-screen inches → px (small, fits the panel)
+  const PXIN=54;                                  // on-screen inches → px (small, fits the panel)
   const W=Math.round(SW*PXIN),H=Math.round(SH*PXIN);
   const labelRegionIn=(SW>4.5)?SH:6;
   const tabIn=Math.max(0,Math.round((SH-labelRegionIn)*100)/100);
@@ -9539,19 +9552,19 @@ function LabelStockPreview({size,zones,showLabels,tabStock}){
     <div className="relative bg-white border border-stone-300 shadow-sm rounded-sm overflow-hidden shrink-0" style={{width:W+"px",height:H+"px"}}>
       {/* label region: a simplified FedEx-style 4×6 */}
       <div className="absolute left-0 right-0 overflow-hidden" style={{top:geo.labelY+"px",height:regionPx+"px"}}>
-        <div className="absolute inset-0 p-1.5 flex flex-col" style={{fontSize:"6px",lineHeight:1.25}}>
+        <div className="absolute inset-0 p-2 flex flex-col" style={{fontSize:"7px",lineHeight:1.35}}>
           <div className="flex justify-between text-stone-500"><span>ORIGIN ID:JDYA</span><span>SHIP DATE: 08JUL26</span></div>
           <div className="text-stone-700 font-semibold mt-0.5">LAGENCE · BELL, CA 90201</div>
-          <div className="mt-1 border-t border-stone-300 pt-1"><span className="text-stone-400">TO </span><span className="font-bold text-stone-900" style={{fontSize:"9px"}}>JANE DOE</span></div>
-          <div className="font-bold text-stone-900" style={{fontSize:"8px"}}>123 MAIN ST</div>
-          <div className="font-bold text-stone-900" style={{fontSize:"9px"}}>AUSTIN TX 78701</div>
+          <div className="mt-1.5 border-t border-stone-300 pt-1.5"><span className="text-stone-400">TO </span><span className="font-bold text-stone-900" style={{fontSize:"11px"}}>JANE DOE</span></div>
+          <div className="font-bold text-stone-900" style={{fontSize:"10px"}}>123 MAIN ST</div>
+          <div className="font-bold text-stone-900" style={{fontSize:"11px"}}>AUSTIN TX 78701</div>
           <div className="mt-auto">
             <div className="flex items-end justify-between">
-              <div className="font-black tracking-tighter" style={{fontSize:"13px",fontFamily:"Helvetica,Arial,sans-serif",letterSpacing:"-0.5px"}}><span style={{color:"#4D148C"}}>Fed</span><span style={{color:"#FF6600"}}>Ex</span></div>
-              <div className="w-5 h-5 border-2 border-stone-800 flex items-center justify-center font-bold" style={{fontSize:"9px"}}>E</div>
+              <div className="font-black tracking-tighter text-stone-900" style={{fontSize:"16px",fontFamily:"Helvetica,Arial,sans-serif",letterSpacing:"-0.5px"}}>FedEx</div>
+              <div className="w-6 h-6 border-2 border-stone-800 flex items-center justify-center font-bold" style={{fontSize:"11px"}}>E</div>
             </div>
-            <div className="mt-0.5 flex gap-px h-6 items-stretch">{Array.from({length:60}).map((_,i)=><span key={i} className="bg-stone-900" style={{width:(i%4?1:2)+"px",opacity:i%3?1:0.5}}/>)}</div>
-            <div className="flex justify-between text-stone-700 mt-0.5" style={{fontSize:"7px"}}><span>7941 2345 6789</span><span>2DAY</span></div>
+            <div className="mt-1 flex gap-px h-7 items-stretch">{Array.from({length:60}).map((_,i)=><span key={i} className="bg-stone-900" style={{width:(i%4?1:2)+"px",opacity:i%3?1:0.5}}/>)}</div>
+            <div className="flex justify-between text-stone-700 mt-0.5" style={{fontSize:"8px"}}><span>7941 2345 6789</span><span>2DAY</span></div>
           </div>
         </div>
       </div>
@@ -11477,7 +11490,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
   /* Ship screen is its own top-level Settings section now (v376). It still shows as a tab in
      deployMode so the admin team-deploy screen keeps every option in one place. `only` renders a
      single panel with no tab bar — used by Settings → Ship screen. */
-  const CTABS=[["services","Services"],...(deployMode?[["ship","Ship screen"]]:[]),["orders","Orders & lists"],["appearance","Appearance"]];   // Packing-slip message/footer moved to Settings → Print settings → Packing slip (v393). Autopilot toggles → Print settings (v355). Labels & printing → Printer settings (v281).
+  const CTABS=[["services","Services"],...(deployMode?[["ship","Ship screen"],["orders","Orders & lists"]]:[]),["appearance","Appearance"]];   // Ship screen + Orders are their own top-level Settings sections now (still tabs in deployMode so team-deploy keeps every option in one place). Packing-slip message/footer moved to Settings → Print settings → Packing slip (v393). Autopilot toggles → Print settings (v355). Labels & printing → Printer settings (v281).
   const Toggle=({k,label,hint})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700">
     <span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span>
     <button onClick={()=>set(k,!c[k])}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${c[k]?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
@@ -11486,6 +11499,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
     <DraftBar dirty={_cd.dirty} onSave={_cd.save} onUndo={_cd.undo} onReset={()=>{ if(window.confirm("Reset all customizations to their defaults? You'll still need to click Save to keep it.")) _cd.reset(); }} resetLabel="Reset to defaults" savedNote="Customizations saved"/>
     {!deployMode&&!only&&<div className="text-sm text-stone-500">Make {BRAND.product} yours. Every option here changes the app immediately for <b>your login only</b>.</div>}
     {only==="ship"&&<div className="text-sm text-stone-500">Tune the Ship tab. Every option here changes the app immediately for <b>your login only</b>.</div>}
+    {only==="orders"&&<div className="text-sm text-stone-500">Tune the Orders page — pick which columns show and how lists behave. Changes apply immediately for <b>your login only</b>.</div>}
     {!only&&<div className="flex items-center gap-1 border-b border-stone-200 overflow-x-auto">
       {CTABS.map(([v,l])=><button key={v} onClick={()=>setCs(v)} className={`px-3 py-2 text-sm rounded-t-lg whitespace-nowrap border-b-2 -mb-px ${cs===v?"border-[#0086E0] text-stone-900 font-medium":"border-transparent text-stone-500 hover:bg-stone-50"}`}>{l}</button>)}
     </div>}
@@ -11538,22 +11552,20 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
     </Panel>}
 
 
-    {cs==="orders"&&<Panel title="Lists & alerts">
-      <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
+    {cs==="orders"&&<Panel title="Orders page">
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Columns — untick to hide completely</div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+        {[["age","Age"],["date","Order date"],["items","Items"],["recipient","Recipient"],["requested","Requested"],["estRate","Est. Rate"],["qty","Qty"],["total","Order total"],["status","Status"],...(c.autopilotPreview?[["autopilot","Autopilot"]]:[])].map(([k,l])=>{
+          const hidden=(c.orderCols||[]).includes(k);
+          return <label key={k} className="flex items-center gap-1.5 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!hidden} onChange={()=>{const nx=new Set(c.orderCols||[]);hidden?nx.delete(k):nx.add(k);set("orderCols",[...nx]);}} className="accent-[#0086E0]"/><span className={hidden?"text-stone-300":""}>{l}</span></label>;
+        })}
+      </div>
+      <div className="text-[11px] text-stone-400 mt-1.5">Order # and actions always show. Shipped orders never show Autopilot or Est. Rate — those only mean something before the label is booked.</div>
+      <div className="border-t border-stone-100 mt-3 pt-3 grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
+        <Tog k="autopilotPreview" label="Show an Autopilot preview column" hint="Adds a column showing what your Autopilot rules would pick for each order — the service, a hold, or 'no rule matches' — before you ship. Runs your real rules, updates live."/>
         <Sel k="density" label="List density" opts={[["comfortable","Comfortable"],["compact","Compact — more rows per screen"]]}/>
         <Num k="spendCap" label="Spending cap" hint="Hard-blocks booking any label above this. 0 = off" suffix="$"/>
         <Tog k="hotkeys" label="Keyboard shortcuts" hint="Press ? anywhere for the list — g then o jumps to Orders, etc."/>
-      </div>
-      <div className="border-t border-stone-100 mt-3 pt-3">
-        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Orders table columns</div>
-        <Tog k="autopilotPreview" label="Show an Autopilot preview column" hint="Adds a column to the Orders table showing what your Autopilot rules would pick for each order — the service, a hold, or 'no rule matches' — before you ship. Runs your real rules, updates live."/>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mt-2">
-          {[["age","Age"],["date","Order date"],["items","Items"],["recipient","Recipient"],["requested","Requested"],["qty","Qty"],["total","Order total"],["status","Status"],...(c.autopilotPreview?[["autopilot","Autopilot"]]:[])].map(([k,l])=>{
-            const hidden=(c.orderCols||[]).includes(k);
-            return <label key={k} className="flex items-center gap-1.5 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!hidden} onChange={()=>{const nx=new Set(c.orderCols||[]);hidden?nx.delete(k):nx.add(k);set("orderCols",[...nx]);}} className="accent-[#0086E0]"/><span className={hidden?"text-stone-300":""}>{l}</span></label>;
-          })}
-        </div>
-        <div className="text-[11px] text-stone-400 mt-1.5">Order # and actions always show.</div>
         <Num k="stuckDays" label="Stuck-shipment flag" hint="Highlight in-transit shipments older than this many days. 0 = off" suffix="days"/>
       </div>
     </Panel>}

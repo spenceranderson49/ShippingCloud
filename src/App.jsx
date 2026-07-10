@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v410";
+const BUILD_TAG="addr-v411";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -1750,6 +1750,18 @@ function oneRateQuotes(box,ctx){
 const SIG_FEE={direct:6.55,indirect:6.55,adult:8.05};
 const SAT_FEE=16.00;
 function insuranceFee(declared,unit,minFee){ const d=+declared||0; if(d<=100)return 0; const units=Math.ceil((d-100)/100); const u=unit!=null?+unit:1.15; const m=minFee!=null?+minFee:3.45; return Math.round(Math.max(m,units*u)*100)/100; }
+/* FedEx Ground Economy (SmartPost) packaging limits per the Service Guide: max 70 lb and max
+   130" length-plus-girth per package. Anything bigger must ship Ground/Express — quoting it
+   Ground Economy would just bounce at the hub, so the service is hidden when a box exceeds these. */
+function groundEconOk(pieces){
+  return (pieces||[]).every(p=>{
+    const w=(+p.weight||0)+((+p.oz||0)/16);
+    if(w>70)return false;
+    const L=+p.L||0,W=+p.W||0,H=+p.H||0;
+    if(L&&W&&H){const s=[L,W,H].sort((a,b)=>b-a);if(s[0]+2*(s[1]+s[2])>130)return false;}
+    return true;
+  });
+}
 function applyAccessorials(q, opts){
   if(!opts||q==null) return q;
   if(q.sell==null&&q.cost==null) return q;   // no base price (e.g. blank One Rate placeholder) → nothing to add to
@@ -5812,7 +5824,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       if(!(w>0))probs.push(`${tag} has no weight.`);
       else if(w>150)probs.push(`${tag} is ${w} lb — over FedEx's 150 lb per-package max, so it can't be quoted. Split it into more boxes (or ship it freight).`);
       const L=+p.L||0,W=+p.W||0,H=+p.H||0;
-      if(L>108||W>108||H>108)probs.push(`${tag}'s longest side is over 108" — FedEx won't accept it as a parcel.`);
+      if(L>119||W>119||H>119)probs.push(`${tag}'s longest side is over 119" — FedEx won't accept it as a parcel (Express max is 119", Ground 108").`);
       else if(L&&W&&H){const s=[L,W,H].sort((x,y)=>y-x);const lg=s[0]+2*(s[1]+s[2]);if(lg>165)probs.push(`${tag} is ${lg}" length-plus-girth — over FedEx's 165" limit, so it can't be quoted.`);}
     });
     if(!String(originZip||"").trim())probs.push("Your ship-from ZIP is missing — add it under Settings → General → Default sender.");
@@ -5820,6 +5832,31 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     const started=!!(String(receiver.zip||"").trim()||receiver.address1||receiver.name||receiver.city||totalWeight>0);
     return started?probs:[];
   },[receiver.zip,receiver.country,receiver.address1,receiver.name,receiver.city,JSON.stringify(pieces),originZip]);
+  /* Service Guide heads-ups that DON'T block the quote but change price or service availability:
+     Additional Handling triggers (>50 lb, >48" side, >30" second side, >105" length+girth),
+     Ground Oversize (>130" L+G bills at a 90-lb minimum), Ground-only length (108–119" = Express
+     only), Ground Economy caps (70 lb / 130" — the service is hidden), and FedEx's $50,000
+     per-package declared value ceiling. */
+  const quoteAdvisories=useMemo(()=>{
+    const notes=[];
+    pieces.forEach((p,i)=>{
+      const w=pw(p);
+      const tag=pieces.length>1?`Box #${i+1}`:"This package";
+      const L=+p.L||0,W=+p.W||0,H=+p.H||0;
+      const s=(L&&W&&H)?[L,W,H].sort((x,y)=>y-x):null;
+      const lg=s?s[0]+2*(s[1]+s[2]):0;
+      if(s&&s[0]>108&&s[0]<=119)notes.push(`${tag}'s longest side is over 108" — Ground and Home Delivery can't take it; Express services only.`);
+      if(w>70||(lg&&lg>130))notes.push(`${tag} is over Ground Economy's limits (70 lb / 130" length+girth) — Ground Economy is hidden for this shipment.`);
+      if(w>50)notes.push(`${tag} is over 50 lb — FedEx adds an Additional Handling (weight) surcharge.`);
+      else if(s&&s[0]>48)notes.push(`${tag}'s longest side is over 48" — FedEx adds an Additional Handling (dimensions) surcharge.`);
+      else if(s&&s[1]>30)notes.push(`${tag}'s second-longest side is over 30" — FedEx adds an Additional Handling (dimensions) surcharge.`);
+      else if(lg>105&&lg<=130)notes.push(`${tag} is over 105" length+girth — FedEx adds an Additional Handling surcharge.`);
+      if(lg>130&&lg<=165)notes.push(`${tag} is over 130" length+girth — FedEx's Oversize charge applies and it bills at a 90 lb minimum.`);
+      const dv=(pieces.length>1&&dvEach)?(+p.dv||0):(+insurance||0);
+      if(dv>50000)notes.push(`${tag}'s declared value is over FedEx's $50,000 per-package maximum — the booking will be rejected.`);
+    });
+    return notes;
+  },[JSON.stringify(pieces),dvEach,insurance]);
   const shipment={fromZip:originZip,toZip:receiver.zip,toCountry:receiver.country||"United States",pieces:pieces.map(p=>({...p,weight:pw(p)})),residential,signature,signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:(intl?(+insurance||0):((pieces.length>1&&dvEach)?pieces.reduce((a,p)=>a+(+p.dv||0),0):(+insurance||0)*Math.max(1,pieces.length)))||null,intl,packageTypeCode:orBox?orBox.code:""};
   // Front screen shows FedEx only. Blank-price skeleton before rates load — intl destinations get
   // the INTERNATIONAL skeleton so a domestic list never flashes on an international shipment.
@@ -5875,6 +5912,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     /* International destination → ONLY international services; domestic destination → no
        international services. FedEx would reject the mismatch anyway, so never show it. */
     list=list.filter(q=>intl===isIntlService(q));
+    // Ground Economy caps at 70 lb / 130" length+girth per package — hide it when a box exceeds them
+    if(!groundEconOk(pieces))list=list.filter(q=>canonSvc(q.label)!=="ground_economy");
     /* Ground and Home Delivery are the same shipment mutually exclusive by address type: FedEx uses
        Home Delivery for residential, Ground for commercial. Once the address is classified, show ONLY
        the one that applies and drop the other, so you never see both. Before classification we don't
@@ -5900,7 +5939,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     const _dvList=pieces.map(p=>(pieces.length>1&&dvEach)?(+p.dv||0):(+insurance||0));
     return list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,list:q.list,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:sigOption,saturday,insuranceList:_dvList,fees:surchargeFees(rateRules,client)});})
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
-  },[rateSrc,orRates,client,JSON.stringify(custom.hiddenServices||[]),JSON.stringify(client&&client.blockedServices||[]),rateRules,fxTransit,residential,addrClassified,sigOption,saturday,insurance,intl,dvEach,JSON.stringify(pieces.map(p=>[p.dv,p.weight]))]);
+  },[rateSrc,orRates,client,JSON.stringify(custom.hiddenServices||[]),JSON.stringify(client&&client.blockedServices||[]),rateRules,fxTransit,residential,addrClassified,sigOption,saturday,insurance,intl,dvEach,JSON.stringify(pieces)]);
   const best=null;
   /* Per-box facts for the "Per box" breakdown toggle: each box's declared value and its exact
      per-package coverage fee (FedEx prices declared value per box — first $100 free per box). */
@@ -6235,6 +6274,10 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {quoteProblems.length>0&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-2 text-xs text-rose-700 space-y-1">
           <div className="font-semibold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>{quoteProblems.length===1?"Rates can't load — fix this:":"Rates can't load — fix these:"}</div>
           {quoteProblems.map((p2,i2)=><div key={i2} className="flex items-start gap-1.5"><span className="shrink-0">•</span><span>{p2}</span></div>)}
+        </div>}
+        {quoteAdvisories.length>0&&<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2 text-xs text-amber-800 space-y-1">
+          <div className="font-semibold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Heads up — FedEx rules that affect this shipment:</div>
+          {quoteAdvisories.map((n2,i2)=><div key={i2} className="flex items-start gap-1.5"><span className="shrink-0">•</span><span>{n2}</span></div>)}
         </div>}
         {liveRuleStatus&&!custom.hideAutopilotBox&&<div className={`text-[11px] rounded px-3 py-2 mb-2 flex items-center gap-1.5 ${liveRuleStatus.state==="fired"?"bg-emerald-50 border border-emerald-200 text-emerald-800":liveRuleStatus.state==="error"?"bg-rose-50 border border-rose-200 text-rose-700":"bg-stone-50 border border-stone-200 text-stone-500"}`}>
           <Zap className="w-3.5 h-3.5 shrink-0"/>
@@ -6768,7 +6811,7 @@ function LiveEstRate({o,client,settings,rateRules,ruleset}){
         try{
           const res=await ratesForOrder(o,{residential:true,weightLb:wt,fromZip,sender:settings&&settings.sender},eng);
           const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);
-          const qs=((res&&res.rates)||[]).filter(q=>!hs.has(canonSvc(q.label))&&!bs.has(canonSvc(q.label))).map(q=>({...q,sell:rateSellFor(q.cost,q.label,sellCtx(q.list))}));
+          const qs=((res&&res.rates)||[]).filter(q=>!hs.has(canonSvc(q.label))&&!bs.has(canonSvc(q.label))).filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk([{weight:wt}])).map(q=>({...q,sell:rateSellFor(q.cost,q.label,sellCtx(q.list))}));
           if(qs.length)finish(pickFrom(qs,true)); else offline();
         }catch(e){ offline(); }
         finally{ estDone(); }
@@ -7926,10 +7969,12 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
     const pk=packs[o.id];
     const hs=new Set(cz(settings).hiddenServices||[]);
     const bs=new Set((client&&client.blockedServices)||[]);
+    const _gePcs=pk&&pk.pieces&&pk.pieces.length?pk.pieces:[{weight:o.weight,L:12,W:9,H:4}];
     const qs=quoteRates(pk&&pk.pieces&&pk.pieces.length
       ?{fromZip:client.origin,toZip:o.zip,pieces:pk.pieces,residential:true}
       :{fromZip:client.origin,toZip:o.zip,L:12,W:9,H:4,weight:o.weight,residential:true})
       .filter(q=>!hs.has(canonSvc(q.label))&&!bs.has(canonSvc(q.label)))
+      .filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk(_gePcs))
       .map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:client.origin,toZip:o.zip,weight:(pk&&pk.totalWt)||o.weight||1})}));
     let pick=pickByPref(qs,svcOv[o.id]);
     if(!pick){
@@ -8088,7 +8133,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         _resKnownB=await classifyOrderAddress(o,originZip);   // ground↔home follows the FedEx classification, same as Autopilot
         _resFlagB=_resKnownB==null?true:_resKnownB;
         const res=await ratesForOrder(o,{residential:_resFlagB,weightLb:_wt0,box:pk0&&pk0.pieces[0]?_box0:undefined,fromZip:originZip,sender:settings.sender,packageTypeCode:_orBox0?_orBox0.code:""},eng);
-        const _hs=new Set(cz(settings).hiddenServices||[]);const _bs=new Set((client&&client.blockedServices)||[]);let qs=((res&&res.rates)||[]).filter(q=>!_hs.has(canonSvc(q.label))&&!_bs.has(canonSvc(q.label))).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:originZip,toZip:o.zip,weight:(pk0&&pk0.totalWt)||o.weight||1})}));
+        const _hs=new Set(cz(settings).hiddenServices||[]);const _bs=new Set((client&&client.blockedServices)||[]);let qs=((res&&res.rates)||[]).filter(q=>!_hs.has(canonSvc(q.label))&&!_bs.has(canonSvc(q.label))).filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk(pk0&&pk0.pieces&&pk0.pieces.length?pk0.pieces:[{weight:o.weight,L:12,W:9,H:4}])).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:originZip,toZip:o.zip,weight:(pk0&&pk0.totalWt)||o.weight||1})}));
         picked=pickByPref(qs,svcOv[o.id],_resKnownB);
         if(!picked){
           if(rule==="ground")picked=qs.filter(q=>/ground|home/i.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];

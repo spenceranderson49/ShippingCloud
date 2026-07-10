@@ -83,7 +83,7 @@ exports.handler = async (event) => {
       /* Already fulfilled → this is a RE-LABEL: update the existing fulfillment's tracking to
          the new number (and notify the customer) instead of failing. Newest successful one. */
       const xr = await gql(shop, token,
-        `query($id:ID!){order(id:$id){fulfillments(first:50){id status}}}`,
+        `query($id:ID!){order(id:$id){fulfillments(first:50){id status trackingInfo{number}}}}`,
         { id: "gid://shopify/Order/" + orderId });
       if (xr.status === 401) return J({ ok: false, error: "Shopify rejected the token (401) — reconnect the store." });
       if (!xr.ok) return J({ ok: false, error: "Couldn't read the order's fulfillments: " + JSON.stringify(xr.errors || {}).slice(0, 200) });
@@ -91,26 +91,36 @@ exports.handler = async (event) => {
       const good = allF.filter((f) => S(f.status).toUpperCase() === "SUCCESS");
       const fulfills = good.length ? good : allF.filter((f) => S(f.status).toUpperCase() !== "CANCELLED");
       if (!fulfills.length) return J({ ok: false, error: "No open fulfillment orders and no existing fulfillment to update — check the order in Shopify." });
-      /* Replace tracking on EVERY active fulfillment, with the plural numbers/urls form.
-         Plural REPLACES the fulfillment's whole tracking list (the singular `number` field left
-         old numbers[] entries behind — that's why Shopify's "Tracking added" popover kept showing
-         the stale number while the order page showed the new one). Updating every fulfillment
-         guarantees no stale number survives on orders that grew a second fulfillment. */
-      let lastId = null;
-      for (const target of fulfills) {
+      /* TARGETED replace, plural numbers/urls form (plural REPLACES the fulfillment's whole
+         tracking list — the singular field left stale numbers[] entries behind, which is why
+         the "Tracking added" popover kept showing the old number). Targets: fulfillments that
+         carry the tracking we're replacing (prevTracking) — falling back to the newest one —
+         NEVER every fulfillment blindly, or a genuinely split order (two boxes, two numbers)
+         would lose the other box's valid tracking. */
+      const prev = S(body.prevTracking || "");
+      const hasNum = (f, n) => n && Array.isArray(f.trackingInfo) && f.trackingInfo.some((ti) => ti && S(ti.number) === n);
+      let targets = prev ? fulfills.filter((f) => hasNum(f, prev)) : [];
+      if (!targets.length) targets = [fulfills[fulfills.length - 1]];
+      let done = 0;
+      for (let ti = 0; ti < targets.length; ti++) {
+        const target = targets[ti];
         const ur = await gql(shop, token,
           `mutation($fulfillmentId:ID!,$trackingInfoInput:FulfillmentTrackingInput!,$notifyCustomer:Boolean){
              fulfillmentTrackingInfoUpdate(fulfillmentId:$fulfillmentId,trackingInfoInput:$trackingInfoInput,notifyCustomer:$notifyCustomer){
                fulfillment{id} userErrors{field message}}}`,
           { fulfillmentId: target.id,
             trackingInfoInput: { numbers: tracking ? [tracking] : [], urls: S(body.trackingUrl) ? [S(body.trackingUrl)] : [], company: S(body.carrier) || "FedEx" },
-            notifyCustomer: body.notifyCustomer !== false && target === fulfills[fulfills.length - 1] });
+            /* notify on the FIRST update so a later failure can't swallow the email after tracking already changed */
+            notifyCustomer: body.notifyCustomer !== false && ti === 0 });
         if (ur.status === 401) return J({ ok: false, error: "Shopify rejected the token (401) — reconnect the store." });
         const upay = ((ur.data || {}).fulfillmentTrackingInfoUpdate) || {};
-        if (!ur.ok || (upay.userErrors || []).length) return J({ ok: false, error: "Tracking update failed: " + JSON.stringify((upay.userErrors && upay.userErrors.length ? upay.userErrors : ur.errors) || {}).slice(0, 250) });
-        lastId = target.id;
+        if (!ur.ok || (upay.userErrors || []).length) {
+          const detail = JSON.stringify((upay.userErrors && upay.userErrors.length ? upay.userErrors : ur.errors) || {}).slice(0, 220);
+          return J({ ok: false, error: "Tracking update failed" + (done ? " (after " + done + " of " + targets.length + " fulfillments were already updated — retrying is safe)" : "") + ": " + detail });
+        }
+        done++;
       }
-      return J({ ok: true, fulfillmentId: numId(lastId), status: "tracking_updated", updated: true });
+      return J({ ok: true, fulfillmentId: numId(targets[targets.length - 1].id), status: "tracking_updated", updated: true });
     }
 
     // 2) create the fulfillment with tracking (all line items on each open FO)

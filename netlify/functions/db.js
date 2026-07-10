@@ -222,6 +222,20 @@ exports.handler = async (event) => {
     if (!configured()) return J({ ok: false, notConfigured: true, error: "Cloud database isn't configured yet (SUPABASE_URL / SUPABASE_SERVICE_KEY env vars)." });
 
     /* ── login (+ first-ever bootstrap) ── */
+    /* Every customer login must resolve to a real client record. Minted HERE (server-side)
+       because customers cannot write the global users/clients stores themselves — a client-side
+       "self-heal" can never persist and just wedges that browser's sync queue. Never mints on a
+       failed read, and a no-op for admins/demo and for logins whose clientId resolves. */
+    async function healClientFor(u, users, clients) {
+      if (!u || (u.role || "customer") !== "customer" || u.demo) return null;
+      if (u.clientId && clients.some((c) => c && c.id === u.clientId)) return null;
+      const id = "c" + Date.now() + Math.floor(Math.random() * 1000);
+      const nc = { id, name: u.company || u.name || u.email || "New customer", contact: u.name || "", email: u.email || "", phone: "", origin: "", markup: "", status: "active", since: new Date().toISOString().slice(0, 7), plan: "Standard", selfSignup: true };
+      const w = await putStores({ clients: [...clients, nc], users: users.map((x) => x && x.id === u.id ? { ...x, clientId: id } : x) });
+      if (!w || !w.ok) return null;
+      return { clientId: id, client: nc };
+    }
+
     if (action === "login") {
       const email = String(body.email || "").trim().toLowerCase();
       const password = String(body.password || "");
@@ -265,6 +279,13 @@ exports.handler = async (event) => {
           const merged = users.map((x) => x && x.id === u.id ? { ...x, totp: { ...u.totp, backup: bc.list } } : x);
           const bw = await putStores({ users: merged });
           if (!bw.ok) return J({ ok: false, needsTotp: true, error: "Couldn't verify your backup code just now — try again in a moment." });
+        }
+      }
+      if ((u.role || "customer") === "customer") {
+        const curC = await getStore("clients");
+        if (curC.ok) {
+          const healed = await healClientFor(u, users, Array.isArray(curC.value) ? curC.value : []);
+          if (healed) u = { ...u, clientId: healed.clientId };
         }
       }
       return J({ ok: true, token: makeToken(u), user: { ...u, password: "", passHash: undefined, totp: u.totp ? { enabled: !!u.totp.enabled, backupLeft: backupLeft(u.totp.backup) } : undefined } });
@@ -318,6 +339,23 @@ exports.handler = async (event) => {
       }
       const w = await putStores(writes);
       if (!w.ok) return J({ ok: false, error: "Could not create your account — try again." });
+      /* Concurrent-signup guard: two overlapping signups (or an admin save racing this one) are
+         whole-array last-write-wins — verify OUR row survived, and if it got clobbered, merge it
+         into the CURRENT arrays and rewrite (twice max). Without this, a signup can return ok
+         with a session token whose account no longer exists. */
+      for (let tries = 0; tries < 2; tries++) {
+        const [chkU, chkC] = await Promise.all([getStore("users"), getStore("clients")]);
+        const uArr = (chkU.ok && Array.isArray(chkU.value)) ? chkU.value : null;
+        const cArr = (chkC.ok && Array.isArray(chkC.value)) ? chkC.value : null;
+        if (!uArr) break;
+        const uThere = uArr.some((x) => x && x.id === newUser.id);
+        const cThere = !cArr || cArr.some((x) => x && x.id === newClientId);
+        if (uThere && cThere) break;
+        const fix = {};
+        if (!uThere) fix.users = [...uArr, newUser];
+        if (!cThere) fix.clients = [...(cArr || []), newClient];
+        await putStores(fix);
+      }
       return J({ ok: true, token: makeToken(newUser), user: { ...newUser, passHash: undefined }, fedexFiled: !!writes.fedexRequests });
     }
     // ── self-serve password reset ──
@@ -466,7 +504,16 @@ exports.handler = async (event) => {
         // fresh access facts so company-admin approval works without re-login
         const usersRow = rows.find((row) => row && row.key === "users");
         const allUsers = (usersRow && Array.isArray(usersRow.value)) ? usersRow.value : [];
-        const me = allUsers.find((x) => x && x.id === auth.uid) || null;
+        let me = allUsers.find((x) => x && x.id === auth.uid) || null;
+        /* Heal ACTIVE sessions too (not just fresh logins): a customer whose clientId is missing
+           or points at a deleted client gets a real client minted and assigned right here, so the
+           very next poll prices through the normal path — no re-login needed. */
+        if (me && (me.role || "customer") === "customer" && usersRow) {
+          const cRow0 = rows.find((row) => row && row.key === "clients");
+          const clients0 = (cRow0 && Array.isArray(cRow0.value)) ? cRow0.value : [];
+          const healed = await healClientFor(me, allUsers, clients0);
+          if (healed) { me = { ...me, clientId: healed.clientId }; if (cRow0) cRow0.value = [...clients0, healed.client]; else rows.push({ key: "clients", value: [healed.client] }); }
+        }
         stores.myAccess = { companyAdmin: !!(me && me.companyAdmin), clientId: (me && me.clientId) || null };
         /* Pricing facts a customer session needs to quote correctly. Withholding ALL global
            stores from non-admins also withheld the customer's OWN client record and rate
@@ -623,7 +670,9 @@ exports.handler = async (event) => {
           } catch (e) { /* backup must never block the save itself */ }
         }
       }
-      if (!Object.keys(toWrite).length) return J({ ok: false, error: "Nothing saved — " + rejected.join("; ") });
+      /* rejectedOnly: every key was refused by policy (permissions / wipe-guard) — a retry can
+         never succeed, so the client must DROP these keys instead of looping offline forever. */
+      if (!Object.keys(toWrite).length) return J({ ok: false, rejectedOnly: true, rejected, error: "Nothing saved — " + rejected.join("; ") });
       const w = await putStores(toWrite);
       if (!w.ok) return J({ ok: false, error: "Save failed: " + ((w.err && w.err.text) || "").slice(0, 200) });
       return J({ ok: true, saved: Object.keys(toWrite), rejected });

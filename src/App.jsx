@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v427";
+const BUILD_TAG="addr-v428";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -962,7 +962,7 @@ function MockLabelImg({to,sender,service,weight,pieceCount,refNo,residential}){
       try{ const xx=(typeof window!=="undefined"&&window.__scPrintExtras)||null; if(xx&&xx.logo&&xx.logo.on&&xx.logo.src)out=await stampLogo(out,{labelLogoOn:true,labelLogoPos:xx.logo.pos,labelLogoScale:xx.logo.scale,labelLogoDX:xx.logo.dx,labelLogoDY:xx.logo.dy,labelLogoX:xx.logo.x,labelLogoY:xx.logo.y},xx.logo.src); }catch(e){}
       if(!dead)setSrc(out[0]);
     }catch(e){}
-  })();return ()=>{dead=true;};},[JSON.stringify(to||{}),JSON.stringify(sender||{}),service,weight,pieceCount,refNo,residential]);
+  })();return ()=>{dead=true;};},[JSON.stringify(to||{}),JSON.stringify(sender||{}),service,weight,pieceCount,refNo,residential,JSON.stringify((typeof window!=="undefined"&&window.__scPrintExtras&&window.__scPrintExtras.logo)||null)]);
   return src?<img src={src} alt="label preview" style={{maxHeight:"46vh"}} className="w-auto max-w-full mx-auto border border-stone-300 rounded shadow bg-white"/>:<div style={{height:"46vh"}} className="w-full max-w-[320px] mx-auto border border-dashed border-stone-300 rounded"/>;
 }
 /* DRAG-to-place logo editor on a real FedEx-look label. The logo is a live overlay you drag
@@ -1314,7 +1314,7 @@ const shopifyConns=(s)=>{ if(!s)return []; if(Array.isArray(s.shopifyConns))retu
 const shopifyConnFor=(s,shop)=>{ const l=shopifyConns(s); return (shop&&l.find(c=>c.shop===shop))||l[0]||null; };
 const shopifyConnected=(s)=>shopifyConns(s).length>0;
 async function shopifySyncOrders(conn){ return shopifyCall(SHOPIFY_SYNC,{shop:conn.shop,token:conn.token}); }
-async function shopifyPushTracking(conn,o){ return shopifyCall(SHOPIFY_FULFILL,{shop:conn.shop,token:conn.token,shopifyId:o.shopifyId,tracking:o.tracking,trackingUrl:o.trackingUrl||(o.tracking?`https://www.fedex.com/fedextrack/?trknbr=${o.tracking}`:""),carrier:o.carrier||"FedEx",notifyCustomer:o.notifyCustomer}); }
+async function shopifyPushTracking(conn,o){ return shopifyCall(SHOPIFY_FULFILL,{shop:conn.shop,token:conn.token,shopifyId:o.shopifyId,tracking:o.tracking,trackingUrl:o.trackingUrl||(o.tracking?`https://www.fedex.com/fedextrack/?trknbr=${o.tracking}`:""),carrier:o.carrier||"FedEx",notifyCustomer:o.notifyCustomer,prevTracking:o.prevTracking}); }
 const fn=(name)=>"/.netlify/functions/"+name;
 async function connectorCall(endpoint,payload){ return shopifyCall(endpoint,payload); }
 // OAuth returns handed back in the URL fragment by the *-auth functions
@@ -4674,6 +4674,12 @@ async function cloudFlush(){
     return;
   }
   if(res&&res.authFailed){ lsDel("cloud.token"); window.location.reload(); return; }
+  if(res&&res.rejectedOnly){
+    /* Every key was refused by server policy (permissions / wipe-guard) — a retry can NEVER
+       succeed, so drop the batch instead of looping "offline" forever on doomed writes. */
+    try{ window.dispatchEvent(new CustomEvent("sc-save-failed",{detail:{keys,error:res.error||"not permitted"}})); }catch(e){}
+    return;
+  }
   CLOUD.offline=true;
   CLOUD.queue={...stores,...CLOUD.queue};
   for(const k in stores) delete CLOUD.baseline[k];
@@ -5403,17 +5409,21 @@ function AppInner(){
   /* Shopify push toast: success (created / replaced tracking) and FAILURE (with the real reason)
      both surface on screen — a failed push must never die silently in a system log. */
   const [shopPush,setShopPush]=useState(null);
-  useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};setShopPush(d);if(!d.askNotify)setTimeout(()=>setShopPush(p=>p===d?null:p),d.ok?6000:15000);};window.addEventListener("sc-shopify-push",h);return()=>window.removeEventListener("sc-shopify-push",h);},[]);
-  // Re-label: user clicked "Email customer" on the toast — re-send the same tracking with notifyCustomer:true (that's what triggers Shopify's shipping-update email)
+  /* A plain success must not clobber an UNANSWERED "notify customer?" question; failures and
+     new questions still replace (they need attention). */
+  useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};setShopPush(p=>(p&&p.askNotify&&d.ok&&!d.askNotify)?p:d);if(!d.askNotify)setTimeout(()=>setShopPush(p=>p===d?null:p),d.ok?6000:15000);};window.addEventListener("sc-shopify-push",h);return()=>window.removeEventListener("sc-shopify-push",h);},[]);
+  // Re-label: user clicked "Notify customer" on the toast — re-send the same tracking with notifyCustomer:true (that's what triggers Shopify's shipping-update email)
   const notifyShopifyCustomer=async()=>{
     const d=shopPush; if(!d||!d.shopifyId)return;
     const _conns=shopifyConns(settings);
     const conn=_conns.find(c=>c.shop===d.shop)||(_conns.length===1?_conns[0]:null);
     if(!conn){setShopPush({ok:false,orderName:d.orderName,error:"Couldn't find that store's connection — email not sent."});return;}
-    setShopPush({...d,askNotify:false,sendingEmail:true});
-    const res=await shopifyPushTracking(conn,{shopifyId:d.shopifyId,tracking:d.tracking,carrier:d.carrier,notifyCustomer:true});
+    const sending={...d,askNotify:false,sendingEmail:true};
+    setShopPush(sending);
+    const res=await shopifyPushTracking(conn,{shopifyId:d.shopifyId,tracking:d.tracking,carrier:d.carrier,notifyCustomer:true,prevTracking:d.tracking});
     const nd={ok:!!(res&&res.ok),updated:true,emailed:!!(res&&res.ok),error:(res&&res.error)||"",orderName:d.orderName,tracking:d.tracking};
-    setShopPush(nd); setTimeout(()=>setShopPush(p=>p===nd?null:p),nd.ok?6000:15000);
+    setShopPush(p=>p===sending?nd:p);   // a newer toast that appeared during the await wins — never clobber it with this stale result
+    setTimeout(()=>setShopPush(p=>p===nd?null:p),nd.ok?6000:15000);
   };
   useEffect(()=>{ try{
     if(localStorage.getItem("scPurge")!=="2"){
@@ -5439,19 +5449,10 @@ function AppInner(){
     if(old&&Array.isArray(old)&&old.length>1) setClients(old);
   }catch(e){} },[currentUser&&currentUser.id]);
   useEffect(()=>{ startCloudPoll(); },[]);
-  /* Every login IS a customer. New signups get their client minted server-side; this self-heal
-     covers logins created before that (or with a dead clientId): mint a client on the spot and
-     assign it, so no one ever runs unassigned (at raw carrier cost) and the old "no customer
-     assigned" banner has nothing to warn about — the admin just opens the customer and sets rates. */
-  useEffect(()=>{ try{
-    if(!currentUser||currentUser.role!=="customer"||currentUser.demo)return;
-    if(currentUser.clientId&&clients.some(c=>c&&c.id===currentUser.clientId))return;
-    const id="c"+Date.now()+Math.floor(Math.random()*1000);
-    const nc={id,name:currentUser.company||currentUser.name||currentUser.email||"New customer",contact:currentUser.name||"",email:currentUser.email||"",phone:"",origin:"",markup:"",status:"active",since:new Date().toISOString().slice(0,7),plan:"Standard",selfSignup:true};
-    setClients(p=>[...p,nc]);
-    setUsers(us=>us.map(u=>u.id===currentUser.id?{...u,clientId:id}:u));
-    setCurrentUser(cu=>cu&&({...cu,clientId:id}));
-  }catch(e){} },[currentUser&&currentUser.id,currentUser&&currentUser.clientId,clients.length]);
+  /* Every login IS a customer — the client record is minted SERVER-SIDE (db.js: signup, login,
+     and getAll all heal a missing/dead clientId). No client-side minting: customers can't write
+     the global users/clients stores, so a browser-side "self-heal" could never persist and only
+     wedged that browser's sync queue with permanently-rejected writes. */
   const [clientId,setClientId]=useState("");   // "" = unassigned; never a guessed id — c1 has never existed (SEED_CLIENTS starts at c2)
   const [accounts,setAccounts]=usePersist("accounts",SEED_ACCOUNTS);
   const [orders,setOrders]=usePersist("orders",SEED_ORDERS);
@@ -5689,7 +5690,7 @@ function AppInner(){
           /* Re-label (order already shipped): replace the tracking WITHOUT emailing the customer,
              then ask in the toast whether to send the email — never auto-notify on a redo. */
           const _relabel=ord.status==="fulfilled"||!!ord.shopifyFulfilled;
-          shopifyPushTracking(_conn,{shopifyId:ord.shopifyId,tracking:rec.tracking,carrier:rec.carrier,notifyCustomer:_relabel?false:undefined}).then(res=>{
+          shopifyPushTracking(_conn,{shopifyId:ord.shopifyId,tracking:rec.tracking,carrier:rec.carrier,notifyCustomer:_relabel?false:undefined,prevTracking:_relabel?(ord.tracking||""):undefined}).then(res=>{
           if(res&&res.ok){ setOrders(o=>o.map(x=>x.id===orderId?{...x,shopifyFulfilled:true,tracking:rec.tracking}:x)); }
           else { logEmail&&logEmail({to:"system",subject:"Shopify fulfillment failed: "+((res&&res.error)||"unknown"),type:"System"}); }
           /* SURFACE the result — a failed (or successful re-label) push must never die silently in a log */
@@ -6807,7 +6808,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <Printer className="w-3.5 h-3.5 shrink-0"/>
           <span><b>Hands-free:</b> {hfWait.m}</span>
         </div>}
-        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
+        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${orBox?orBox.code:""}|${pieces.length}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
         {intl&&(
           <div className="border border-[#99D6FF] bg-[#E6F4FF]/40 rounded-lg p-3 space-y-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-[#006FBF]"><FileText className="w-4 h-4"/>Customs · Commercial invoice</div>
@@ -7171,7 +7172,7 @@ function matchRequestedService(quotes,requested,res=null){
   const hit=quotes.find(q=>canonSvc(q.label)===c&&(q.sell??q.cost)!=null);
   return hit?hit.key:null;
 }
-function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=true,onOneRate,custom=CUSTOM_DEFAULTS,matched=null,matchedSrc=null,collapsible=false,oneRateWarning=null,billing=null,live=false,loading=false,addrClassified=true,perBox=null}){
+function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=true,onOneRate,custom=CUSTOM_DEFAULTS,matched=null,matchedSrc=null,collapsible=false,oneRateWarning=null,billing=null,live=false,loading=false,addrClassified=true,perBox=null,resetKey=""}){
   const [showAll,setShowAll]=useState(false);
   /* "Hide other services" mode shows ONE service box. It must stay a single box at all times —
      switching orders and the Ground<->Home Delivery swap (FedEx address classification, which also
@@ -7212,11 +7213,18 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
   const famRank=(l)=>{const k=svcFamilyKey(l);const base=k.replace(/^or_/,"");let i=LADDER.indexOf(base);if(i<0)i=LADDER.indexOf(k);const or=/one\s*rate/i.test(String(l))?100:0;return (i<0?50:i)+or;};
   const ladderSort=(a,b)=>famRank(a.label)-famRank(b.label)||String(a.label).localeCompare(String(b.label));
   const tombRef=React.useRef({});
+  /* Tombstones are PER SHIPMENT. The Ship tab substitutes a skeleton list when rates are empty,
+     so the "cleared when the list empties" reset never fired there — ghosts of the previous
+     order (OneRate boxes, domestic families on an intl order) stuck around as red "Unavailable"
+     rows forever. resetKey names the shipment identity; when it changes, the slate clears.
+     While loading, remembered families render as plain quiet rows — never "Unavailable". */
+  const lastResetRef=React.useRef(resetKey);
+  if(lastResetRef.current!==resetKey){lastResetRef.current=resetKey;tombRef.current={};}
   const rowsForView=(list)=>{
     if(!list.length){tombRef.current={};return list;}
     const seen=new Set(list.map(q=>svcFamilyKey(q.label)));
-    for(const q of list)tombRef.current[svcFamilyKey(q.label)]=q;
-    const tombs=Object.keys(tombRef.current).filter(k=>!seen.has(k)).map(k=>({...tombRef.current[k],sell:null,cost:null,_unavailable:true}));
+    if(!loading)for(const q of list)tombRef.current[svcFamilyKey(q.label)]=q;
+    const tombs=Object.keys(tombRef.current).filter(k=>!seen.has(k)).map(k=>({...tombRef.current[k],sell:null,cost:null,_unavailable:!loading}));
     return [...list,...tombs].sort(ladderSort);
   };
   const Row=(q)=>{
@@ -8031,7 +8039,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
               </div>
             </div>
             {!shipped&&<div className="bg-white border border-stone-200 rounded-lg p-4">
-              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyORBox} custom={cz(settings||{})} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} billing={weighInfo([{weight:totalWeight,L:box.L,W:box.W,H:box.H}])}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
+              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyORBox} custom={cz(settings||{})} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} resetKey={`${rcv.zip}|${rcv.country||"US"}|${orPkg||""}`} billing={weighInfo([{weight:totalWeight,L:box.L,W:box.W,H:box.H}])}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
               {ready&&rateSrc.loading&&<div className="text-xs text-stone-400 flex items-center gap-1.5 mt-2"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Loading rates…</div>}
               {status&&<div className={`mt-2 text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${status.state==="error"?"text-rose-600 bg-rose-50 border border-rose-200":status.state==="booking"?"text-stone-600 bg-stone-50 border border-stone-200":"text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF]"}`}>{status.state==="error"?<AlertTriangle className="w-3.5 h-3.5"/>:status.state==="booking"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{status.msg}</div>}
             </div>}
@@ -8733,7 +8741,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
       let _resKnownB=null,_resFlagB=true;   // classification survives past the try — booking uses it too
       try{
         const dup=dupShipment(o.name,shipments);
-        if(dup){ out.push({o,name:o.name,orderId:o.id,ok:false,error:"Skipped — already shipped "+dup.date+" ("+dup.tracking+"). Void that label first if this is intentional."}); setResults([...out]); setProgress(pr0=>({...pr0,n:pr0.n+1})); continue; }
+        if(dup){ out.push({o,name:o.name,orderId:o.id,ok:false,error:"Skipped — already shipped "+dup.date+" ("+dup.tracking+"). Void that label first if this is intentional."}); setResults([...out]); continue; }
         if(orderHasHazmat(o,settings.products||[])&&!/ground|home/i.test(String((svcOv[o.id]||"")))){ /* ground-only enforcement happens at pick below */ }
         const pk0=packs[o.id];
         const _wt0=(pk0&&pk0.totalWt)||o.weight||0;

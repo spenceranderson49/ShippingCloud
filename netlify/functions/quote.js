@@ -190,7 +190,15 @@ exports.handler = async (event) => {
     delete oneRateReq.requestedShipment.smartPostInfoDetail;
     oneRateReq.requestedShipment.packagingType = fedexPackaging;
     oneRateReq.requestedShipment.shipmentSpecialServices = { specialServiceTypes: ["FEDEX_ONE_RATE"] };
-    oneRateReq.requestedShipment.requestedPackageLineItems = pieces.map(pp => ({ weight: pp.weight }));
+    /* One Rate drops the DIMENSIONS (the FedEx box defines them) but must keep declared value +
+       signature — stripping them quoted a flat price without the coverage/signature fees while
+       ship.js still booked them, so the bill came in higher than the quote. */
+    oneRateReq.requestedShipment.requestedPackageLineItems = pieces.map(pp => {
+      const it = { weight: pp.weight };
+      if (pp.declaredValue) it.declaredValue = pp.declaredValue;
+      if (pp.packageSpecialServices) it.packageSpecialServices = pp.packageSpecialServices;
+      return it;
+    });
   }
 
   try {

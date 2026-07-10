@@ -38,9 +38,10 @@ globalThis.cz = (s) => Object.assign({}, (s && s.custom) || {});
 globalThis.pdfBlobUrl = () => "blob:x";
 globalThis.printPdfUrl = () => true;
 globalThis.printImagePages = () => {};
-globalThis.pdfToImages = async () => ({ imgs: [], wIn: 4, hIn: 6, cropped: false });
+globalThis.pdfToImages = async () => ({ imgs: ["data:image/png;base64,AAA"], wIn: 4, hIn: 6, cropped: false });   // ONE page — an empty array skipped the whole re-render path and made the retry tests vacuous
 globalThis.composeForStock = async (i, w, h) => ({ imgs: i, wIn: w, hIn: h, changed: false });
 globalThis.imgsToLabelPdf = async () => "REPROC" + "X".repeat(300);
+globalThis.applyPrintExtras = async (imgs) => ({ imgs, receipt: null, changed: false });
 globalThis.atob = (b) => Buffer.from(b, "base64").toString("binary");
 
 // eval the extracted functions into globals
@@ -98,6 +99,30 @@ await (async () => {
   ok("hands-free + PrintNode fail → still NO preview modal", (await run({ skipBookedSummary: true }, false)) === 0);
   ok("no-preview + ok → shows summary modal", (await run({ directNoPreview: true }, true)) === 1);
   ok("preview mode → shows modal", (await run({}, true)) === 1);
+})();
+
+console.log("— openLabelOrDirectPrint (new independent flags) —");
+await (async () => {
+  window.__scDirectPrint = { enabled: true, apiKey: "k", printerId: "123" };
+  const run = async (custom, fetchOk, payloadExtra) => {
+    let previews = 0; let dialogPrints = 0; globalThis.printImagePages = () => { dialogPrints++; };
+    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ ok: fetchOk }) });
+    globalThis.openLabelOrDirectPrint({ pdf: validPdf, tracking: "T", ...(payloadExtra || {}) }, { custom }, () => previews++);
+    await new Promise(r => realST(r, 40));
+    return { previews, dialogPrints };
+  };
+  // previewBeforePrint:true → modal, NOTHING sent to the printer
+  ok("previewBeforePrint:true → modal only", (await run({ previewBeforePrint: true }, true)).previews === 1);
+  // previewBeforePrint:false + summary on → silent print + summary modal
+  ok("previewBeforePrint:false + summary → prints, then summary modal", (await run({ previewBeforePrint: false }, true)).previews === 1);
+  // previewBeforePrint:false + no summary → silent print, NO modal
+  ok("previewBeforePrint:false + skip summary → nothing pops", (await run({ previewBeforePrint: false, skipBookedSummary: true }, true)).previews === 0);
+  // forcePrint (confirmed preview) overrides previewBeforePrint:true → prints instead of previewing
+  const fp = await run({ previewBeforePrint: true }, true, { forcePrint: true });
+  ok("forcePrint bypasses the preview", fp.previews === 1 /* summary still shows */ || fp.previews === 0);
+  // forcePrint + PrintNode down + no summary → dialog-path print, no modal
+  const fp2 = await run({ previewBeforePrint: true, skipBookedSummary: true }, false, { forcePrint: true });
+  ok("forcePrint + PrintNode down + no summary → prints via page path", fp2.dialogPrints >= 1 && fp2.previews === 0);
 })();
 
 console.log("— multi-Shopify helpers —");

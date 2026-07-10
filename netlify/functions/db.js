@@ -289,7 +289,7 @@ exports.handler = async (event) => {
       const users = (curU.ok && Array.isArray(curU.value)) ? curU.value : [];
       if (users.some((u) => u && String(u.email || "").toLowerCase() === email)) return J({ ok: false, error: "That email already has a login. Try signing in." });
       if (users.length >= 2000) return J({ ok: false, error: "Signups are temporarily paused — give us a call." });
-      const newUser = { id: "u" + Date.now(), name, company, email, role: "customer", clientId: null, status: "active", password: "", passHash: hashPw(password), volume, carrier, createdAt: new Date().toISOString(), lastLogin: new Date().toLocaleDateString() };
+      const newUser = { id: "u" + Date.now() + Math.floor(Math.random() * 1000), name, company, email, role: "customer", clientId: null, status: "active", password: "", passHash: hashPw(password), volume, carrier, createdAt: new Date().toISOString(), lastLogin: new Date().toLocaleDateString() };
       const writes = { users: [...users, newUser] };
       const reqs = (curR.ok && Array.isArray(curR.value)) ? curR.value : [];
       const remaining = reqs.filter((r) => r && String(r.email || "").toLowerCase() !== email);
@@ -595,11 +595,14 @@ exports.handler = async (event) => {
       const email = String(body.email || "").trim().toLowerCase();
       const newPassword = String(body.newPassword || "");
       if (!email || newPassword.length < 4) return J({ ok: false, error: "Password must be at least 4 characters." });
-      if (auth.role !== "admin" && String(auth.email || "").toLowerCase() !== email) return J({ ok: false, error: "You can only change your own password." });
       const cur = await getStore("users");
       const users = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
       const idx = users.findIndex((x) => x && String(x.email || "").toLowerCase() === email);
       if (idx < 0) return J({ ok: false, error: "No user with that email." });
+      /* Self-service is authorized by UID, not the token's embedded email — after a changeEmail,
+         an old token still carries the OLD address, and if that address is later re-registered by
+         someone else, an email-keyed check would let the old token reset the NEW user's password. */
+      if (auth.role !== "admin" && String(users[idx].id) !== String(auth.uid)) return J({ ok: false, error: "You can only change your own password." });
       users[idx] = { ...users[idx], password: "", passHash: hashPw(newPassword) };
       const w = await putStores({ users });
       if (!w.ok) return J({ ok: false, error: "Save failed." });
@@ -695,7 +698,8 @@ exports.handler = async (event) => {
         const w = await putStores({ signupRequests: remaining });
         return w.ok ? J({ ok: true, requests: stripUsers(remaining) }) : J({ ok: false, error: "Save failed." });
       }
-      const newUser = { id: "u" + Date.now(), name: req.name, email: req.email, company: req.company || "", role: String(body.role || "customer") === "admin" ? "admin" : "customer", clientId: body.clientId || null, status: "active", password: "", passHash: req.passHash, lastLogin: "—" };
+      if (users.some((u) => u && String(u.email || "").toLowerCase() === email)) return J({ ok: false, error: "A user with that email already exists — deny this request (or delete the existing user first)." });
+      const newUser = { id: "u" + Date.now() + Math.floor(Math.random() * 1000), name: req.name, email: req.email, company: req.company || "", role: String(body.role || "customer") === "admin" ? "admin" : "customer", clientId: body.clientId || null, status: "active", password: "", passHash: req.passHash, lastLogin: "—" };
       const w = await putStores({ users: [...users, newUser], signupRequests: remaining });
       if (!w.ok) return J({ ok: false, error: "Save failed." });
       return J({ ok: true, users: stripUsers([...users, newUser]), requests: stripUsers(remaining) });

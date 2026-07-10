@@ -92,5 +92,28 @@ ok(consumeBackup(stored, "ZZZZ-ZZZZ").ok === false, "unknown code rejected");
 ok(consumeBackup(stored, plain[1].toLowerCase()).ok === true, "lowercase + normalized code accepted");
 ok(consumeBackup(stored, "").ok === false, "empty code rejected");
 
+// ── mergeUsersForWrite preserves passHash + totp across an email change (keyed by id) ──
+const mCode = [
+  // hashPw is a one-liner whose body has semicolons; provide an equivalent for the harness
+  'const hashPw = (pw) => { const salt = crypto.randomBytes(16).toString("hex"); return "scrypt$" + salt + "$" + crypto.scryptSync(String(pw), salt, 64).toString("hex"); };',
+  extractFn("mergeUsersForWrite"),
+  "return { mergeUsersForWrite };",
+].join("\n");
+const { mergeUsersForWrite } = new Function("crypto", "Buffer", mCode)(crypto, Buffer);
+
+const currentUsers = [{ id: "u1", email: "old@x.com", role: "admin", passHash: "scrypt$abc$def", totp: { secret: "SECRETXYZ", enabled: true, backup: [{ h: "hh", used: false }] } }];
+// client sends back the stripped user with a CHANGED email and no passHash/totp secret
+const incoming = [{ id: "u1", email: "new@x.com", role: "admin", password: "", totp: { enabled: true, backupLeft: 1 } }];
+const merged = mergeUsersForWrite(incoming, currentUsers);
+ok(merged[0].email === "new@x.com", "email change is applied");
+ok(merged[0].passHash === "scrypt$abc$def", "passHash preserved across email change (no lockout)");
+ok(merged[0].totp && merged[0].totp.secret === "SECRETXYZ", "totp secret preserved across email change");
+ok(merged[0].totp.backup && merged[0].totp.backup.length === 1, "backup codes preserved across email change");
+// a brand-new user (no matching id/email) with an initial password gets hashed, no totp injected
+const merged2 = mergeUsersForWrite([{ id: "u2", email: "z@x.com", password: "hunter2", totp: { enabled: true } }], currentUsers);
+ok(merged2[0].passHash && merged2[0].passHash.startsWith("scrypt$"), "new user's initial password is hashed");
+ok(merged2[0].password === "", "plaintext password never stored");
+ok(!merged2[0].totp, "client cannot inject a totp secret for a new user");
+
 console.log(pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

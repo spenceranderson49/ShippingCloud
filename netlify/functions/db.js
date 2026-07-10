@@ -168,10 +168,14 @@ const backupLeft = (list) => (Array.isArray(list) ? list : []).filter((e) => e &
 const stripUsers = (arr) => (Array.isArray(arr) ? arr : []).map((u) => ({ ...u, password: "", passHash: undefined, totp: u && u.totp ? { enabled: !!u.totp.enabled, backupLeft: backupLeft(u.totp.backup) } : undefined }));
 function mergeUsersForWrite(incoming, current) {
   const cur = Array.isArray(current) ? current : [];
-  const byEmail = {}; for (const u of cur) if (u && u.email) byEmail[String(u.email).toLowerCase()] = u;
+  // Match on the STABLE id first (fall back to email) so renaming a user's email doesn't lose
+  // their password hash or 2FA secret — an email-keyed lookup would miss the renamed record and
+  // wipe both, locking the user out.
+  const byId = {}, byEmail = {};
+  for (const u of cur) { if (u && u.id != null) byId[String(u.id)] = u; if (u && u.email) byEmail[String(u.email).toLowerCase()] = u; }
   return (Array.isArray(incoming) ? incoming : []).map((u) => {
     if (!u) return u;
-    const existing = u.email ? byEmail[String(u.email).toLowerCase()] : null;
+    const existing = (u.id != null && byId[String(u.id)]) || (u.email ? byEmail[String(u.email).toLowerCase()] : null) || null;
     const out = { ...u, password: "" };
     if (existing && existing.passHash) out.passHash = existing.passHash;      // NEVER change an existing password via a store write
     else if (u.password) out.passHash = hashPw(u.password);                    // brand-new user: hash their initial password
@@ -245,7 +249,10 @@ exports.handler = async (event) => {
       if (!u || !checkPw(password, u.passHash)) return J({ ok: false, error: "Incorrect email or password." });
       if (u.status && u.status !== "active") return J({ ok: false, error: "This account is inactive. Contact your administrator." });
       // Two-factor: only enforced once the user has fully enabled it (opt-in). Password is already verified here.
-      if (u.totp && u.totp.enabled && u.totp.secret) {
+      if (u.totp && u.totp.enabled) {
+        // Fail CLOSED if the record is enabled but somehow missing its secret (corruption) — an
+        // admin can clear 2FA to recover. Never let a broken record downgrade to password-only.
+        if (!u.totp.secret) return J({ ok: false, needsTotp: true, error: "Two-factor is on but not set up correctly for this account — ask your administrator to reset it." });
         const raw = String(body.code || "");
         const code = raw.replace(/\D/g, "");
         if (!raw.trim()) return J({ ok: false, needsTotp: true, error: "Enter the 6-digit code from your authenticator app." });
@@ -253,9 +260,11 @@ exports.handler = async (event) => {
           // fall back to a one-time backup code (lost-phone escape hatch)
           const bc = consumeBackup(u.totp.backup, raw);
           if (!bc.ok) return J({ ok: false, needsTotp: true, error: "That code isn't right or has expired — try the current one, or a backup code." });
-          // consumed a backup code — persist it as used so it can't be reused
+          // A backup code is one-time — its "used" state MUST persist before we grant a session,
+          // or a failed write would leave the code replayable. Refuse the login if we can't record it.
           const merged = users.map((x) => x && x.id === u.id ? { ...x, totp: { ...u.totp, backup: bc.list } } : x);
-          await putStores({ users: merged });
+          const bw = await putStores({ users: merged });
+          if (!bw.ok) return J({ ok: false, needsTotp: true, error: "Couldn't verify your backup code just now — try again in a moment." });
         }
       }
       return J({ ok: true, token: makeToken(u), user: { ...u, password: "", passHash: undefined, totp: u.totp ? { enabled: !!u.totp.enabled, backupLeft: backupLeft(u.totp.backup) } : undefined } });
@@ -376,7 +385,7 @@ exports.handler = async (event) => {
       const me = allUsers.find((x) => x && x.id === auth.uid) || null;
       if (!me) return J({ ok: false, error: "Account not found." });
 
-      if (action === "totpStatus") return J({ ok: true, enabled: !!(me.totp && me.totp.enabled), pending: !!(me.totp && me.totp.secret && !me.totp.enabled), backupLeft: backupLeft(me.totp && me.totp.backup) });
+      if (action === "totpStatus") return J({ ok: true, enabled: !!(me.totp && me.totp.enabled), pending: !!(me.totp && me.totp.pendingSecret), backupLeft: backupLeft(me.totp && me.totp.backup) });
 
       if (action === "totpBackupRegen") {
         // regenerate the one-time backup codes; requires a current code or the password (it's a sensitive op)
@@ -392,20 +401,25 @@ exports.handler = async (event) => {
       }
 
       if (action === "totpBegin") {
-        // generate a fresh secret and stash it as pending (not yet enforced). Overwrites any prior pending.
+        // Generate a fresh secret and stash it as a SEPARATE pendingSecret. Never touch an
+        // already-enabled secret or its backup codes here — otherwise a stolen session (no device)
+        // could call totpBegin to silently drop enforcement + destroy backup codes. Enforcement
+        // only flips on the confirmed totpEnable below.
         const secret = newTotpSecret();
-        const merged = allUsers.map((x) => x && x.id === auth.uid ? { ...x, totp: { secret, enabled: false } } : x);
+        const merged = allUsers.map((x) => x && x.id === auth.uid ? { ...x, totp: { ...(x.totp || {}), pendingSecret: secret } } : x);
         const w = await putStores({ users: merged });
         if (!w.ok) return J({ ok: false, error: "Could not start 2FA setup — try again." });
         return J({ ok: true, secret, otpauth: otpauthUrl(me.email || auth.email || "user", secret, "ShippingCloud") });
       }
 
       if (action === "totpEnable") {
-        if (!me.totp || !me.totp.secret) return J({ ok: false, error: "Start 2FA setup first." });
+        const pending = me.totp && me.totp.pendingSecret;
+        if (!pending) return J({ ok: false, error: "Start 2FA setup first." });
         const code = String(body.code || "").replace(/\D/g, "");
-        if (!totpVerify(me.totp.secret, code)) return J({ ok: false, error: "That code isn't right or has expired — try the current one." });
+        if (!totpVerify(pending, code)) return J({ ok: false, error: "That code isn't right or has expired — try the current one." });
         const bc = newBackupCodes(10);
-        const merged = allUsers.map((x) => x && x.id === auth.uid ? { ...x, totp: { secret: me.totp.secret, enabled: true, backup: bc.stored } } : x);
+        // promote the pending secret to the live one, issue backup codes, clear the pending field
+        const merged = allUsers.map((x) => x && x.id === auth.uid ? { ...x, totp: { secret: pending, enabled: true, backup: bc.stored } } : x);
         const w = await putStores({ users: merged });
         if (!w.ok) return J({ ok: false, error: "Could not turn on 2FA — try again." });
         return J({ ok: true, enabled: true, backupCodes: bc.plain });

@@ -27,5 +27,15 @@ ok(rateSellFor(20,"FedEx Home Delivery®",{rules:R,client:{id:"cX",markup:10},su
 const R2=JSON.parse(JSON.stringify(R));R2.profiles[0].services["2day"]={basis:"flat",pct:25,on:true};
 ok(rateSellFor(20,"FedEx 2Day®",{rules:R2,surcharges:lines})===25,"flat service rule wins - adjustments skipped");
 ok(rateSellFor(20,"FedEx 2Day®",{rules:R})===20,"no surcharge lines → unchanged pricing");
+// ── Min $ floors (the "minimums not honored" bug) ──
+const R3={profiles:[{id:"default",name:"D",services:{
+  "2day":{basis:"percent",pct:"",min:30,on:true},          // Min $ set, % left blank
+  "ground":{basis:"list",pct:"",min:12,on:true},           // list basis with no table loaded
+},surcharges:{"FUEL-G":{type:"percent",amount:-100}}}],assign:{},baseCosts:{}};
+ok(rateSellFor(20,"FedEx 2Day®",{rules:R3})===30,"Min $ floors even with a blank percent");
+ok(rateSellFor(8,"FedEx Ground",{rules:R3})===12,"Min $ floors the list-basis fallback (no table)");
+ok(rateSellFor(50,"FedEx 2Day®",{rules:R3})===50,"above the floor, cost passes through untouched");
+// account Min-$-profit floor must hold against the TRUE cost even when fees are discounted away
+ok(rateSellFor(20,"FedEx Home Delivery®",{rules:R3,client:{id:"cY",markupMin:10},surcharges:[{label:"Fuel Surcharge",amount:2}]})===30,"Min $ profit holds vs TRUE cost when a fee is waived");
 console.log(p+" passed, "+f+" failed");
 process.exit(f?1:0);

@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v416";
+const BUILD_TAG="addr-v417";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -5893,7 +5893,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   };
   useEffect(()=>{ if(!prefill)return;
     if(prefill.draft){const s=prefill.draft;setSender(s.sender);setReceiver(s.receiver);setReference(s.reference||"");setInvoiceNo(s.invoiceNo||"");setPoNo(s.poNo||"");setPieces(s.pieces||[{weight:3,L:12,W:9,H:4}]);setRes(s.residential);setSig(s.signature);setBillTo(s.billTo);setThirdAcct(s.thirdAcct||"");setInsurance(s.insurance||"");setSelectedOrder(s.selectedOrder||null);if(s.customs)setCustoms(s.customs);clearPrefill();return;}
-    if(prefill.receiver)setReceiver({...empty,...prefill.receiver}); if(prefill.weight)setPieces([{weight:prefill.weight,L:12,W:9,H:4}]); if(prefill.reference)setReference(prefill.reference); setSelectedOrder(prefill.fromOrderId||null); if(prefill.fromOrderId)setHfArmed(prefill.fromOrderId); clearPrefill();
+    if(prefill.receiver)setReceiver({...empty,...prefill.receiver}); if(prefill.weight)setPieces([{weight:prefill.weight,L:12,W:9,H:4}]); if(prefill.reference)setReference(prefill.reference); setSelectedOrder(prefill.fromOrderId||null); if(prefill.fromOrderId&&!prefill.refulfill)setHfArmed(prefill.fromOrderId); /* a RE-label opens un-armed so hands-free can't book it before you've made your changes */ clearPrefill();
   },[prefill]);
 
   const swap=()=>{const s=sender;setSender(receiver);setReceiver(s);};
@@ -7018,7 +7018,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
     if(sort==="source")return (a.source||"").localeCompare(b.source||"");
     return String(b.id).localeCompare(String(a.id)); // date / newest
   }),[filtered,sort]);
-  const ship=(o)=>goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},weight:o.weight,reference:o.name,fromOrderId:o.id});
+  const ship=(o)=>goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},weight:o.weight,reference:o.name,fromOrderId:o.id,refulfill:o.status==="fulfilled"});
   const [syncing,setSyncing]=useState(false);
   const [syncMsg,setSyncMsg]=useState(null);
   // Every connected platform that can supply orders (Shopify + token/OAuth connectors flagged orders:true)
@@ -7460,10 +7460,11 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
               <button onClick={goNext} disabled={!navNext} className="p-1.5 rounded hover:bg-stone-100 disabled:opacity-30"><ChevronRight className="w-4 h-4"/></button>
             </div>}
             {o.country&&o.country!=="United States"&&o.country!=="US"&&<button onClick={()=>printCommercialInvoice(o,(settings&&settings.products)||[],settings&&settings.sender,{...ciOpts,signature:ciOpts.signature||defaultSig(settings),senderTax:ciOpts.senderTax??((settings&&settings.taxId)||""),eei:ciOpts.eei??"NOEEI 30.37(a)",attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(ciOpts.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data}))})} className="text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Commercial invoice</button>}
-            <button onClick={()=>{goShip&&goShip(o);onClose&&onClose();}} className="text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/>Open in Ship tab</button>
+            <button onClick={()=>{goShip&&goShip(o);onClose&&onClose();}} className="text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/>{shipped?"New label (Ship tab)":"Open in Ship tab"}</button>
             <button onClick={onClose} className="text-stone-400 hover:text-stone-700 p-1"><X className="w-5 h-5"/></button>
           </div>
         </div>
+        {shipped&&o.source==="Shopify"&&o.shopifyId&&<div className="bg-[#E6F4FF]/70 border-b border-[#99D6FF] px-4 py-2 text-xs text-[#006FBF] flex items-center gap-2 shrink-0"><RotateCcw className="w-3.5 h-3.5 shrink-0"/><span>Already shipped{o.tracking?<> — tracking <b className="font-mono">{o.tracking}</b></>:null}. Need to redo it? Book a new label and the <b>new tracking number replaces the old one on Shopify</b> (the customer is notified automatically).</span></div>}
         {o.country&&o.country!=="United States"&&o.country!=="US"&&<div className="border border-stone-200 rounded-lg p-3 mt-3 space-y-2 bg-stone-50/60">
           <div className="text-[10px] uppercase tracking-widest text-stone-400">Commercial invoice options</div>
           <div className="flex flex-wrap items-center gap-2 text-sm">

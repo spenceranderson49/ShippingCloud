@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v414";
+const BUILD_TAG="addr-v415";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -946,7 +946,7 @@ function openLabelOrDirectPrint(payload,settings,setLabelPreview){
        • skipBookedSummary  — after printing, show the booked-summary popup or nothing
      Legacy accounts (no previewBeforePrint saved) derive it from the old modes: hands-free and
      no-preview both meant "print immediately", preview meant "show it first". */
-  const wantPreview=c.previewBeforePrint!=null?!!c.previewBeforePrint:!(c.skipBookedSummary||c.directNoPreview);
+  const wantPreview=(payload&&payload.forcePrint)?false:(c.previewBeforePrint!=null?!!c.previewBeforePrint:!(c.skipBookedSummary||c.directNoPreview));
   const wantSummary=!c.skipBookedSummary;
   if(!wantPreview&&payload&&payload.pdf){
     directPrintPdf(payload.pdf,"Shipping label"+(payload.tracking?" "+payload.tracking:""),docCtxFor(payload.rec,payload.tracking)).then(sent=>{
@@ -6022,6 +6022,18 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     }
     setRecErrors([]);
     if(custom.spendCap>0&&(q.sell??q.cost)>custom.spendCap){setShipStatus({state:"error",key:q.key,msg:`This rate is over your $${custom.spendCap} spending cap (Settings → Customizations).`});setTimeout(()=>setShipStatus(null),5000);return;}
+    /* Preview-first flow: the click does NOT book anything. A pre-booking preview shows exactly
+       what will be booked; clicking "Print label" there re-enters with _confirmed, which books
+       and prints straight (no second popup). Validations above run first so a broken shipment
+       shows its error instead of a preview. */
+    const _wantPrev=custom.previewBeforePrint!=null?!!custom.previewBeforePrint:!(custom.skipBookedSummary||custom.directNoPreview);
+    if(_wantPrev&&!q._confirmed){
+      setLabelPreview({pendingBook:true,service:q.label,carrier,sell:q.sell??q.cost,fxDate:q.fxDate,
+        rec:{recipient:{name:receiver.name,company:receiver.company,city:receiver.city,state:receiver.state,zip:receiver.zip,address1:receiver.address1},service:q.label,carrier},
+        pieceCount:pieces.length,weight:totalWeight,signature:sigOption!=="none",insurance:(pieces.length>1&&dvEach)?pieces.reduce((a,p)=>a+(+p.dv||0),0):(+insurance||0),
+        onConfirm:()=>{setLabelPreview(null);print({...q,_confirmed:true});}});
+      return;
+    }
     if(!canBook){
       onShipped(buildRec(q,carrier),selectedOrder);
       setBought(q.key);fireConfetti();setTimeout(()=>setBought(null),1800);
@@ -6040,7 +6052,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       pieces:pieces.map(p=>({weight:Math.ceil(pw(p)||1),length:p.L,width:p.W,height:p.H,declaredValue:intl?(p.value||null):((pieces.length>1&&dvEach)?(+p.dv||null):(+insurance||null))}))};   // book at the rounded-up billing weight the quote priced · per-box declared value on multipiece
     const res=await shipCall({action:"ship",account:acctOf(eng),order});
     if(!res||!res.ok){setShipStatus({state:"error",key:q.key,msg:(res&&res.error)||"Booking failed"});setBought(null);return;}
-    const done=(st)=>{ justBookedRef.current=selectedOrder; const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec},settings,setLabelPreview); if(cz(settings).autoPackSlip){ const so=selectedOrder&&orders.find(x=>x.id===selectedOrder); setTimeout(()=>{ try{ printPackingSlipAuto([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:st.tracking||"",service:q.label}],settings); }catch(e){} },(cz(settings).previewBeforePrint!=null?cz(settings).previewBeforePrint:!(cz(settings).skipBookedSummary||cz(settings).directNoPreview))?0:2500); }   /* label pipeline gets a head start — its dialog must always beat the slip fallback */ if(cz(settings).printFlowV2?cz(settings).resetAfterPrint:(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint)){ setTimeout(()=>{ try{newShipment();}catch(e){} },900); };} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
+    const done=(st)=>{ justBookedRef.current=selectedOrder||"manual"; const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec,forcePrint:!!q._confirmed},settings,setLabelPreview); if(cz(settings).autoPackSlip){ const so=selectedOrder&&orders.find(x=>x.id===selectedOrder); setTimeout(()=>{ try{ printPackingSlipAuto([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:st.tracking||"",service:q.label}],settings); }catch(e){} },(cz(settings).previewBeforePrint!=null?cz(settings).previewBeforePrint:!(cz(settings).skipBookedSummary||cz(settings).directNoPreview))?0:2500); }   /* label pipeline gets a head start — its dialog must always beat the slip fallback */ if(cz(settings).printFlowV2?cz(settings).resetAfterPrint:(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint)){ setTimeout(()=>{ try{newShipment();}catch(e){} },900); };} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
     if(res.booked){done(res);return;}
     setShipStatus({state:"pending",key:q.key,orderId:res.orderId});
     pollLabel(eng,res.orderId,done).then(r=>{ if(r&&r.timedOut){ onPending&&onPending({orderId:res.orderId,rec:buildRec(q,carrier,{}),service:q.label,carrier,orderRef:selectedOrder}); setShipStatus({state:"pending_timeout",key:q.key});setBought(null);} });
@@ -6166,7 +6178,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   );
   return (
     <div className="relative flex flex-row gap-4 items-start">
-      {ordersOpen?(
+      {!custom.hideShipOrders&&(ordersOpen?(
       <aside className="w-60 shrink-0 space-y-2">
         <div className="flex items-center justify-between gap-2">
           <button onClick={()=>setOrdersOpen(false)} className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-stone-500 hover:text-stone-700"><ChevronDown className="w-4 h-4"/><ShoppingBag className="w-4 h-4"/>Orders{ordersToShow.length?<span className="text-stone-400 normal-case font-normal">· {ordersToShow.length}</span>:""}</button>
@@ -6201,7 +6213,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       </aside>
       ):(
         <button onClick={()=>setOrdersOpen(true)} title="Show orders" className="shrink-0 self-start flex flex-col items-center gap-1 text-stone-500 hover:text-stone-700 hover:border-stone-300 border border-stone-200 bg-white rounded-lg px-1.5 py-2 w-9"><ChevronRight className="w-4 h-4"/><ShoppingBag className="w-4 h-4"/>{ordersToShow.length?<span className="text-[10px] font-bold text-[#0086E0] leading-none">{ordersToShow.length}</span>:null}</button>
-      )}
+      ))}
       <div className="flex-1 min-w-0 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-base font-semibold text-stone-800 flex items-center gap-2 whitespace-nowrap"><Package className="w-4 h-4 text-[#0086E0]"/>Create shipment</h1>
@@ -6253,7 +6265,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <PackNote/>
           {isPOBox(receiver.address1)&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-xs text-rose-700 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>This looks like a PO Box — FedEx can’t deliver to PO Boxes. Use a street address (or USPS when available).</div>}
           {(()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);return so&&orderHasHazmat(so,settings.products||[])?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Contains a hazmat / lithium-battery item — ship ground only; air services aren’t allowed.</div>:null;})()}
-          {(()=>{const d=dupShipment(reference,shipments);return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex flex-wrap items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="flex-1 min-w-[180px]">Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}).</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:d.tracking}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><FileText className="w-3 h-3"/>See details</button><button onClick={()=>setLabelPreview({rec:d,tracking:d.tracking,service:d.service,carrier:d.carrier,pdf:d.labelPdf||d.pdf||null,fromExisting:true})} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><Printer className="w-3 h-3"/>Reprint</button><button onClick={newShipment} className="shrink-0 text-[11px] font-semibold text-white bg-stone-900 hover:bg-stone-800 border border-stone-900 rounded-lg px-2.5 py-1 flex items-center gap-1"><Plus className="w-3 h-3"/>New shipment</button></div>:null;})()}
+          {(()=>{const d=dupShipment(reference,shipments);if(justBookedRef.current!=null)return null;/* our own just-booked label — not a reprint attempt; also kills the yellow flash before auto-reset */return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex flex-wrap items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="flex-1 min-w-[180px]">Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}).</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:d.tracking}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><FileText className="w-3 h-3"/>See details</button><button onClick={()=>setLabelPreview({rec:d,tracking:d.tracking,service:d.service,carrier:d.carrier,pdf:d.labelPdf||d.pdf||null,fromExisting:true})} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><Printer className="w-3 h-3"/>Reprint</button><button onClick={newShipment} className="shrink-0 text-[11px] font-semibold text-white bg-stone-900 hover:bg-stone-800 border border-stone-900 rounded-lg px-2.5 py-1 flex items-center gap-1"><Plus className="w-3 h-3"/>New shipment</button></div>:null;})()}
           {pieces.map((p,i)=>(
             <div key={i} className="flex flex-wrap items-end gap-2 bg-white border border-stone-200 rounded-lg px-2 py-2">
               <div className="text-[11px] text-stone-400 font-mono w-6">#{i+1}</div>
@@ -6297,7 +6309,24 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <div className="font-semibold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Heads up — FedEx rules that affect this shipment:</div>
           {quoteAdvisories.map((n2,i2)=><div key={i2} className="flex items-start gap-1.5"><span className="shrink-0">•</span><span>{n2}</span></div>)}
         </div>}
-        {liveRuleStatus&&!custom.hideAutopilotBox&&<div className={`text-[11px] rounded px-3 py-2 mb-2 flex items-center gap-1.5 ${liveRuleStatus.state==="fired"?"bg-emerald-50 border border-emerald-200 text-emerald-800":liveRuleStatus.state==="error"?"bg-rose-50 border border-rose-200 text-rose-700":"bg-stone-50 border border-stone-200 text-stone-500"}`}>
+        {handsFree&&(()=>{ /* Hands-free: FIXED slim status strip, always rendered — only the text
+                   changes, so the screen never jumps when Autopilot/hands-free state updates. */
+          const fired=liveRuleStatus&&liveRuleStatus.state==="fired";
+          const _sw=fired?groundFamilySwap(liveRuleStatus.service,addrClassified?residential:null):null;
+          const ap=!liveRuleStatus?"waiting for an order…"
+            :fired?<>rule <b>“{liveRuleStatus.rule}”</b> → <b>{_sw}</b></>
+            :liveRuleStatus.state==="no-order"?"waiting for an order (open one from the sidebar or scan)"
+            :liveRuleStatus.state==="no-rules"?"on — but no rules are enabled"
+            :liveRuleStatus.state==="no-match"?"no rule matched this order — pick the service yourself"
+            :liveRuleStatus.state==="error"?("error: "+liveRuleStatus.msg)
+            :"—";
+          const hf=hfWait?hfWait.m:(shipStatus&&shipStatus.state==="booking"?"booking…":(shipStatus&&shipStatus.state==="booked"?"booked ✓":(bought?"printing…":"ready")));
+          return <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 mb-2 text-[11px] leading-tight space-y-1">
+            {!custom.hideAutopilotBox&&<div className="flex items-center gap-1.5 min-h-[16px]"><Zap className={`w-3 h-3 shrink-0 ${fired?"text-emerald-600":"text-stone-400"}`}/><span className={`truncate ${liveRuleStatus&&liveRuleStatus.state==="error"?"text-rose-600":fired?"text-emerald-700":"text-stone-500"}`}>Autopilot: {ap}</span></div>}
+            <div className="flex items-center gap-1.5 min-h-[16px]"><Printer className={`w-3 h-3 shrink-0 ${hfWait&&hfWait.t==="warn"?"text-amber-600":"text-stone-400"}`}/><span className={`truncate ${hfWait&&hfWait.t==="warn"?"text-amber-700":"text-stone-500"}`}>Hands-free: {hf}</span></div>
+          </div>;
+        })()}
+        {!handsFree&&liveRuleStatus&&!custom.hideAutopilotBox&&<div className={`text-[11px] rounded px-3 py-2 mb-2 flex items-center gap-1.5 ${liveRuleStatus.state==="fired"?"bg-emerald-50 border border-emerald-200 text-emerald-800":liveRuleStatus.state==="error"?"bg-rose-50 border border-rose-200 text-rose-700":"bg-stone-50 border border-stone-200 text-stone-500"}`}>
           <Zap className="w-3.5 h-3.5 shrink-0"/>
           {liveRuleStatus.state==="fired"&&(()=>{const _sw=groundFamilySwap(liveRuleStatus.service,addrClassified?residential:null);return <span>Autopilot rule <b>"{liveRuleStatus.rule}"</b> matched this order — highlighted <b>{_sw}</b> below{_sw!==liveRuleStatus.service&&<span> (rule says {liveRuleStatus.service}, but FedEx classified this address {residential?"residential, so Home Delivery applies":"commercial, so Ground applies"})</span>}.</span>;})()}
           {liveRuleStatus.state==="no-order"&&<span>Autopilot is on, but no order is loaded on this screen — it only checks orders pulled in from the sidebar, not manually-typed shipments.</span>}
@@ -6305,7 +6334,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           {liveRuleStatus.state==="no-match"&&<span>Autopilot is on — none of your rules matched this order, so nothing was auto-selected.</span>}
           {liveRuleStatus.state==="error"&&<span>Autopilot hit an error checking this order: {liveRuleStatus.msg}</span>}
         </div>}
-        {hfWait&&<div className={`text-[11px] rounded px-3 py-2 mb-2 flex items-center gap-1.5 ${hfWait.t==="warn"?"bg-amber-50 border border-amber-200 text-amber-800":"bg-[#E6F4FF]/60 border border-[#99D6FF] text-[#006FBF]"}`}>
+        {!handsFree&&hfWait&&<div className={`text-[11px] rounded px-3 py-2 mb-2 flex items-center gap-1.5 ${hfWait.t==="warn"?"bg-amber-50 border border-amber-200 text-amber-800":"bg-[#E6F4FF]/60 border border-[#99D6FF] text-[#006FBF]"}`}>
           <Printer className="w-3.5 h-3.5 shrink-0"/>
           <span><b>Hands-free:</b> {hfWait.m}</span>
         </div>}
@@ -6397,7 +6426,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             
           </div>
         )}
-        {labelPreview&&<LabelPreviewModal data={labelPreview} settings={settings} onNewShipment={newShipment} onClose={()=>{setLabelPreview(null);if(cz(settings).printFlowV2?cz(settings).resetAfterPrint:(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint))newShipment();}}/>}
+        {labelPreview&&<LabelPreviewModal data={labelPreview} settings={settings} onNewShipment={newShipment} onClose={()=>{const pend=labelPreview&&labelPreview.pendingBook;setLabelPreview(null);if(!pend&&(cz(settings).printFlowV2?cz(settings).resetAfterPrint:(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint)))newShipment();}}/>}
         {naming&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setNaming(false)}><div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-sm space-y-3" onClick={e=>e.stopPropagation()}><div className="text-sm font-semibold text-stone-800">Name this draft</div><input autoFocus value={draftName} onChange={e=>setDraftName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")commitDraft(draftName.trim());}} placeholder="e.g. Dana Cole – Miami" className="w-full bg-white border border-stone-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><div className="flex justify-end gap-2"><button onClick={()=>setNaming(false)} className="text-sm px-3 py-1.5 rounded text-stone-600 hover:bg-stone-100">Cancel</button><button onClick={()=>commitDraft(draftName.trim())} className="text-sm px-3 py-1.5 rounded bg-stone-900 text-white font-medium hover:bg-stone-800">Save draft</button></div></div></div>}
         {shipStatus&&<div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2.5 ${shipStatus.state==="error"?"bg-rose-50 text-rose-700 border border-rose-200":shipStatus.state==="booked"?"bg-emerald-50 text-emerald-700 border border-emerald-200":shipStatus.state==="pending_timeout"?"bg-amber-50 text-amber-700 border border-amber-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
           {shipStatus.state==="booking"&&<><Loader2 className="w-4 h-4 animate-spin"/>Booking label on your FedEx account…</>}
@@ -6554,6 +6583,33 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
     window.location.href="mailto:"+encodeURIComponent(to)+"?subject="+encodeURIComponent(subject)+"&body="+encodeURIComponent(body);
   };
   const download=()=>{ if(!url)return; const a=document.createElement("a");a.href=url;a.download=`label-${data.tracking||"shipment"}.pdf`;a.click(); };
+  /* Pre-booking preview: NOTHING has been booked yet. Shows exactly what will be booked;
+     "Print label" books it for real and prints straight (no second popup). */
+  if(data.pendingBook){
+    const r=(data.rec&&data.rec.recipient)||{};
+    return (
+      <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
+        <div className="bg-white rounded-xl w-full max-w-md flex flex-col overflow-hidden shadow-2xl" onClick={e=>e.stopPropagation()}>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-stone-200">
+            <div><div className="font-semibold text-stone-800 flex items-center gap-2"><Printer className="w-4 h-4 text-[#0086E0]"/>Review before booking</div><div className="text-[11px] text-stone-400">Nothing is booked yet — the label is created when you click Print label.</div></div>
+            <button onClick={onClose} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button>
+          </div>
+          <div className="p-4 space-y-2 text-sm">
+            <div className="flex justify-between"><span className="text-stone-500">Service</span><span className="font-medium text-stone-800">{data.service}</span></div>
+            <div className="flex justify-between"><span className="text-stone-500">Price</span><span className="font-mono font-semibold text-stone-900">{data.sell!=null?money(data.sell):"—"}</span></div>
+            <div className="flex justify-between"><span className="text-stone-500">To</span><span className="text-right text-stone-800">{r.name||r.company||"—"}{r.company&&r.name?<span className="block text-[11px] text-stone-500">{r.company}</span>:null}<span className="block text-[11px] text-stone-500">{[r.address1,r.city,r.state,r.zip].filter(Boolean).join(", ")}</span></span></div>
+            <div className="flex justify-between"><span className="text-stone-500">Packages</span><span className="text-stone-800">{data.pieceCount||1} · {data.weight} lb total</span></div>
+            {data.signature?<div className="flex justify-between"><span className="text-stone-500">Signature</span><span className="text-stone-800">Yes</span></div>:null}
+            {data.insurance>0?<div className="flex justify-between"><span className="text-stone-500">Declared value</span><span className="font-mono text-stone-800">{money(data.insurance)}</span></div>:null}
+          </div>
+          <div className="px-4 pb-4 flex gap-2">
+            <button onClick={()=>data.onConfirm&&data.onConfirm()} className="flex-1 bg-stone-900 text-white rounded-lg px-4 py-2.5 font-medium hover:bg-stone-800 flex items-center justify-center gap-2"><Printer className="w-4 h-4"/>Print label — book it</button>
+            <button onClick={onClose} className="px-4 py-2.5 text-sm text-stone-500 hover:text-stone-800 border border-stone-200 rounded-lg">Cancel</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl" onClick={e=>e.stopPropagation()}>
@@ -11028,6 +11084,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
         <Tog k="hideRateSrcBar" label="Hide the rate-source banner" hint="Removes the ‘Live rates from your FedEx account / Estimated rates’ strip above the service list."/>
         <Tog k="hideAutopilotBox" label="Hide the Autopilot match banner" hint="Removes the ‘Autopilot rule matched…’ box above Select service. Rules still run and still pre-highlight the service."/>
         <Tog k="hideNotifyBox" label="Hide the Send label & notify box" hint="Removes the email panel at the bottom of the Ship tab. Automated notifications in Settings → Email automation still send."/>
+        <Tog k="hideShipOrders" label="Hide the orders list on the Ship screen" hint="Removes the orders sidebar (and its collapsed tab) from the Ship screen completely — ship by scanning or typing shipments in manually. Orders still live on the Orders tab."/>
         <Tog k="scanAutoFocus" label="Scan mode — keep the scan box ready" hint="The cursor lives in the scan box: it's focused when the Ship tab opens, re-arms after every scan and booking, and returns after you click orders, services or buttons. It only steps aside while you're typing in another field (like editing the shipping information), then comes back on your next click."/>
         <Tog k="hideInvoice" label="Hide Invoice # field"/>
         <Tog k="hidePO" label="Hide PO # field"/>

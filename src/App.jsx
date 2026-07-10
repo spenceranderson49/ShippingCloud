@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v421";
+const BUILD_TAG="addr-v422";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -5735,7 +5735,7 @@ function AppInner(){
         {shopPush.ok?<CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5"/>:<AlertTriangle className="w-5 h-5 shrink-0 mt-0.5"/>}
         <div className="min-w-0">
           <div className="font-semibold">{shopPush.ok?(shopPush.updated?"Shopify tracking REPLACED on "+shopPush.orderName:"Tracking sent to Shopify — "+shopPush.orderName):"Shopify push FAILED — "+shopPush.orderName}</div>
-          <div className="text-xs mt-0.5 break-words">{shopPush.ok?(shopPush.sendingEmail?"Sending the email to the customer…":shopPush.emailed?("Email sent to the customer · "+(shopPush.tracking||"")):shopPush.askNotify?("Customer has NOT been emailed · "+(shopPush.tracking||"")):("Customer notified · "+(shopPush.tracking||""))):String(shopPush.error||"Unknown error").slice(0,220)}</div>
+          <div className="text-xs mt-0.5 break-words">{shopPush.ok?(shopPush.sendingEmail?"Sending the email to the customer…":shopPush.emailed?("Email sent to the customer · "+(shopPush.tracking||"")):shopPush.askNotify?("Customer has NOT been emailed · "+(shopPush.tracking||"")):("Tracking "+(shopPush.tracking||""))):String(shopPush.error||"Unknown error").slice(0,220)}</div>
           {shopPush.askNotify&&<div className="flex items-center gap-2 mt-2">
             <button onClick={notifyShopifyCustomer} className="text-xs font-semibold bg-emerald-600 text-white rounded-lg px-2.5 py-1.5 hover:bg-emerald-700">Email customer the new tracking</button>
             <button onClick={()=>setShopPush(null)} className="text-xs font-medium bg-white border border-emerald-300 text-emerald-700 rounded-lg px-2.5 py-1.5 hover:bg-emerald-100">Don't email</button>

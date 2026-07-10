@@ -27,6 +27,10 @@ ok(rateSellFor(20,"FedEx Home Delivery®",{rules:R,client:{id:"cX",markup:10},su
 const R2=JSON.parse(JSON.stringify(R));R2.profiles[0].services["2day"]={basis:"flat",pct:25,on:true};
 ok(rateSellFor(20,"FedEx 2Day®",{rules:R2,surcharges:lines})===25,"flat service rule wins - adjustments skipped");
 ok(rateSellFor(20,"FedEx 2Day®",{rules:R})===20,"no surcharge lines → unchanged pricing");
+// % off LIST: fee billed $8 at account, $10 at list; 10% off list → sells $9 (removed 8, add 9 → +1 net)
+const RL={profiles:[{id:"default",name:"D",services:{},surcharges:{"FUEL-G":{type:"listpct",amount:10}}}],assign:{},baseCosts:{}};
+ok(rateSellFor(20,"FedEx Home Delivery®",{rules:RL,surcharges:[{label:"Fuel Surcharge",amount:8,list:10}]})===21,"% off LIST prices the fee from its list amount");
+ok(rateSellFor(20,"FedEx Home Delivery®",{rules:RL,surcharges:[{label:"Fuel Surcharge",amount:8}]})===19.2,"% off LIST falls back to the billed amount when no list line");
 // ── Min $ floors (the "minimums not honored" bug) ──
 const R3={profiles:[{id:"default",name:"D",services:{
   "2day":{basis:"percent",pct:"",min:30,on:true},          // Min $ set, % left blank

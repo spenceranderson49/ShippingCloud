@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v400";
+const BUILD_TAG="addr-v401";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6119,7 +6119,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         </div>
 
 
-        {(client._unassigned||client._unresolved)&&<div className="flex flex-wrap items-center gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+        {(client._unassigned||client._unresolved)&&!(currentUser&&currentUser.demo)&&<div className="flex flex-wrap items-center gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0"/>
                   <span className="flex-1 min-w-[220px]">{client._unresolved?`This login is set to an unknown customer (id "${client.id}") — no such customer exists, so no account markup can apply.`:"This login has no customer assigned — quotes price at exactly the raw carrier cost, no markup at all."}</span>
                   {currentUser&&setUsers&&setCurrentUser&&<select onChange={e=>{const cid=e.target.value;if(!cid)return;setCurrentUser(cu=>cu&&({...cu,clientId:cid}));setUsers(us=>us.map(u=>u.id===currentUser.id?{...u,clientId:cid}:u));e.target.value="";}} defaultValue="" className="bg-white border border-amber-300 rounded px-2 py-1 text-xs">
@@ -7687,7 +7687,7 @@ function Dashboard({shipments,orders,returns,goTab}){
 
 /* ════════ BATCH ════════ */
 const US_STATES=["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
-const SERVICE_OPTIONS={FedEx:["FedEx Ground","FedEx Home Delivery","FedEx 2Day","FedEx Express Saver","FedEx Standard Overnight","FedEx Priority Overnight"]};
+const SERVICE_OPTIONS={FedEx:["FedEx Ground","FedEx Home Delivery","FedEx Ground Economy","FedEx 2Day","FedEx Express Saver","FedEx Standard Overnight","FedEx Priority Overnight"]};
 const speedRank=(label)=>{const t=String(label||"").toLowerCase();if(/first overnight/.test(t))return 1;if(/priority overnight/.test(t))return 2;if(/standard overnight|next day/.test(t))return 3;if(/2.?day|2nd day air/.test(t))return 4;if(/express saver|3 day/.test(t))return 5;if(/home|ground/.test(t))return 7;return 6;};
 function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings,setSettings,onShipped,batchCmd,onBatchCmdDone,showMoney=true}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);

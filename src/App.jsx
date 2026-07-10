@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v405";
+const BUILD_TAG="addr-v406";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -5948,8 +5948,14 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
      once per order (ref), never while booking/booked. print() still runs its own required-
      field validation — a missing phone/email surfaces the normal error instead of booking. */
   const autoBookedRef=React.useRef(null);
+  /* Hands-free is derived the SAME way the Print-settings radio displays it: skipBookedSummary
+     alone means hands-free. autoBookOnShip is only written when the radio is CLICKED, so settings
+     saved on an older build can show "Hands-free" selected while the flag is still false — auto-book
+     then silently never fires ("I still have to click print"). Deriving from either flag self-heals
+     every stale account without anyone touching Settings. */
+  const handsFree=!!(custom.autoBookOnShip||custom.skipBookedSummary);
   useEffect(()=>{
-    if(!custom.autoBookOnShip||!custom.autoRulesOnShip)return;
+    if(!handsFree||!custom.autoRulesOnShip)return;
     if(!selectedOrder||autoBookedRef.current===selectedOrder)return;
     if(!ready||rateSrc.loading||!rateSrc.live)return;
     if(!addrClassified)return;
@@ -5961,7 +5967,28 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(!(eng&&eng.enabled))return;
     autoBookedRef.current=selectedOrder;
     print(q);
-  },[selectedOrder,matched,quotes,ready,rateSrc.live,rateSrc.loading,addrClassified,bought,shipStatus,custom.autoBookOnShip,custom.autoRulesOnShip]);
+  },[selectedOrder,matched,quotes,ready,rateSrc.live,rateSrc.loading,addrClassified,bought,shipStatus,handsFree,custom.autoRulesOnShip]);
+  /* Hands-free visibility: the auto-book above has eight silent guards, and when any one of
+     them blocks, the screen used to just… sit there, looking like a bug ("I still have to click
+     print"). This mirrors the guards IN ORDER and names the first blocker in plain language, so
+     the person (and a screenshot) can see exactly what hands-free is waiting on. */
+  const hfWait=useMemo(()=>{
+    if(!handsFree)return null;                                                   // hands-free off — nothing to say
+    if(bought||shipStatus)return null;                                           // booking / just booked — normal flow
+    if(selectedOrder&&autoBookedRef.current===selectedOrder)return null;         // already auto-booked this order
+    if(!custom.autoRulesOnShip)return {t:"warn",m:"the service dropdown is set to “I choose the service” — switch it to a Pre-select option so hands-free can pick one"};
+    if(!selectedOrder)return {t:"info",m:"no order loaded — hands-free only books orders opened from the sidebar (manual shipments always wait for your click)"};
+    if(!ready)return {t:"info",m:"waiting for a valid destination ZIP and weight"};
+    if(rateSrc.loading)return {t:"info",m:"waiting for live rates…"};
+    if(!rateSrc.live)return {t:"warn",m:"live rates aren't coming back (these are estimates) — hands-free never books on an estimate. Check the carrier account under Settings → FedEx Account"};
+    if(!addrClassified)return {t:"info",m:"waiting for FedEx to classify the address (residential vs commercial)…"};
+    if(!matched||matched.src!=="autopilot")return {t:"warn",m:"no Autopilot rule matched this order, so it's waiting for your click — add a rule that covers it (or set a fallback service) under Batch → Autopilot"};
+    const q=quotes.find(x=>x.key===matched.key);
+    if(!q||(q.sell??q.cost)==null)return {t:"info",m:"the matched service hasn't returned a live price yet…"};
+    const eng=englandFor(client,settings);
+    if(!(eng&&eng.enabled))return {t:"warn",m:"no carrier account is enabled on this login, so live booking is off — hands-free can't book here"};
+    return {t:"info",m:"booking now…"};
+  },[handsFree,custom.autoRulesOnShip,selectedOrder,ready,rateSrc.live,rateSrc.loading,addrClassified,matched,quotes,bought,shipStatus,client,settings]);
 
   const sendEmail=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Tracking for your ${settings.company} shipment ☁️`,type:"Shipped",body:emailMsg});setSent("email");setTimeout(()=>setSent(""),1800);};
   const sendLabel=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Your shipping label from ${settings.company}`,type:"Label",body:emailMsg});setSent("label");setTimeout(()=>setSent(""),1800);};
@@ -6165,6 +6192,10 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           {liveRuleStatus.state==="no-rules"&&<span>Autopilot is on, but you have no enabled rules — check Autopilot \u2192 your rules aren’t toggled off.</span>}
           {liveRuleStatus.state==="no-match"&&<span>Autopilot is on — none of your rules matched this order, so nothing was auto-selected.</span>}
           {liveRuleStatus.state==="error"&&<span>Autopilot hit an error checking this order: {liveRuleStatus.msg}</span>}
+        </div>}
+        {hfWait&&<div className={`text-[11px] rounded px-3 py-2 mb-2 flex items-center gap-1.5 ${hfWait.t==="warn"?"bg-amber-50 border border-amber-200 text-amber-800":"bg-[#E6F4FF]/60 border border-[#99D6FF] text-[#006FBF]"}`}>
+          <Printer className="w-3.5 h-3.5 shrink-0"/>
+          <span><b>Hands-free:</b> {hfWait.m}</span>
         </div>}
         <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
         {intl&&(

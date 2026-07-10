@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v426";
+const BUILD_TAG="addr-v430";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -962,7 +962,7 @@ function MockLabelImg({to,sender,service,weight,pieceCount,refNo,residential}){
       try{ const xx=(typeof window!=="undefined"&&window.__scPrintExtras)||null; if(xx&&xx.logo&&xx.logo.on&&xx.logo.src)out=await stampLogo(out,{labelLogoOn:true,labelLogoPos:xx.logo.pos,labelLogoScale:xx.logo.scale,labelLogoDX:xx.logo.dx,labelLogoDY:xx.logo.dy,labelLogoX:xx.logo.x,labelLogoY:xx.logo.y},xx.logo.src); }catch(e){}
       if(!dead)setSrc(out[0]);
     }catch(e){}
-  })();return ()=>{dead=true;};},[JSON.stringify(to||{}),JSON.stringify(sender||{}),service,weight,pieceCount,refNo,residential]);
+  })();return ()=>{dead=true;};},[JSON.stringify(to||{}),JSON.stringify(sender||{}),service,weight,pieceCount,refNo,residential,JSON.stringify((typeof window!=="undefined"&&window.__scPrintExtras&&window.__scPrintExtras.logo)||null)]);
   return src?<img src={src} alt="label preview" style={{maxHeight:"46vh"}} className="w-auto max-w-full mx-auto border border-stone-300 rounded shadow bg-white"/>:<div style={{height:"46vh"}} className="w-full max-w-[320px] mx-auto border border-dashed border-stone-300 rounded"/>;
 }
 /* DRAG-to-place logo editor on a real FedEx-look label. The logo is a live overlay you drag
@@ -1314,7 +1314,7 @@ const shopifyConns=(s)=>{ if(!s)return []; if(Array.isArray(s.shopifyConns))retu
 const shopifyConnFor=(s,shop)=>{ const l=shopifyConns(s); return (shop&&l.find(c=>c.shop===shop))||l[0]||null; };
 const shopifyConnected=(s)=>shopifyConns(s).length>0;
 async function shopifySyncOrders(conn){ return shopifyCall(SHOPIFY_SYNC,{shop:conn.shop,token:conn.token}); }
-async function shopifyPushTracking(conn,o){ return shopifyCall(SHOPIFY_FULFILL,{shop:conn.shop,token:conn.token,shopifyId:o.shopifyId,tracking:o.tracking,trackingUrl:o.trackingUrl||(o.tracking?`https://www.fedex.com/fedextrack/?trknbr=${o.tracking}`:""),carrier:o.carrier||"FedEx",notifyCustomer:o.notifyCustomer}); }
+async function shopifyPushTracking(conn,o){ return shopifyCall(SHOPIFY_FULFILL,{shop:conn.shop,token:conn.token,shopifyId:o.shopifyId,tracking:o.tracking,trackingUrl:o.trackingUrl||(o.tracking?`https://www.fedex.com/fedextrack/?trknbr=${o.tracking}`:""),carrier:o.carrier||"FedEx",notifyCustomer:o.notifyCustomer,prevTracking:o.prevTracking}); }
 const fn=(name)=>"/.netlify/functions/"+name;
 async function connectorCall(endpoint,payload){ return shopifyCall(endpoint,payload); }
 // OAuth returns handed back in the URL fragment by the *-auth functions
@@ -2069,6 +2069,12 @@ const RATE_SERVICES={
     {k:"intl_priority",l:"FedEx International Priority",g:"International"},
     {k:"intl_priority_express",l:"FedEx International Priority Express",g:"International"},
     {k:"intl_first",l:"FedEx International First",g:"International"},
+    {k:"first_overnight_freight",l:"FedEx First Overnight Freight",g:"Freight"},
+    {k:"1day_freight",l:"FedEx 1Day Freight",g:"Freight"},
+    {k:"2day_freight",l:"FedEx 2Day Freight",g:"Freight"},
+    {k:"3day_freight",l:"FedEx 3Day Freight",g:"Freight"},
+    {k:"intl_priority_freight",l:"FedEx International Priority Freight",g:"Freight"},
+    {k:"intl_economy_freight",l:"FedEx International Economy Freight",g:"Freight"},
   ].concat(OR_RATE_SVCS.reduce((acc,sv)=>acc.concat(OR_RATE_PKGS.map(pk=>({k:"or_"+sv[0]+"_"+pk[0],l:"One Rate "+sv[1]+" "+pk[1],g:"One Rate",or:true}))),[])),
   dhl:[
     {k:"dhl_worldwide",l:"DHL Express Worldwide",g:"International"},
@@ -2167,7 +2173,10 @@ const FEDEX_SURCHARGES=[
   {id:"CEF",desc:"Clearance Entry Fee (intl / Ground to Canada)",seg:"Ground",charge:"fixed",g:"International & clearance"},
   {id:"DISB",desc:"Disbursement / Duty & Tax Advancement Fee (intl)",seg:"Express & Ground",charge:"percent or min",g:"International & clearance"},
   {id:"ANC",desc:"Ancillary Clearance Service Fees (intl)",seg:"Express & Ground",charge:"fixed",g:"International & clearance"},
-  {id:"TPC",desc:"Third Party Consignee (intl)",seg:"Express & Ground",charge:"fixed",g:"International & clearance"}
+  {id:"TPC",desc:"Third Party Consignee (intl)",seg:"Express & Ground",charge:"fixed",g:"International & clearance"},
+  /* Ground Economy */
+  {id:"GE-DR",desc:"Ground Economy Delivery & Return Charge (per package)",seg:"Ground Economy",charge:"fixed",g:"Ground Economy"},
+  {id:"GE-PS",desc:"Ground Economy Pickup Charge",seg:"Ground Economy",charge:"fixed",g:"Ground Economy"}
 ];
 const RATE_ZONES=["2","3","4","5","6","7","8"];
 /* Finer-grained than canonSvc — rate rules need 2Day ≠ 2Day A.M., intl economy ≠ priority, One Rate per packaging. */
@@ -2220,6 +2229,84 @@ function rateSvcKey(label){
   if(/priority/.test(t))return "intl_priority";
   if(/economy/.test(t))return "intl_economy";
   return t.replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
+}
+/* Map a LIVE FedEx surcharge line (the itemized breakdown quote.js returns per rate) to its
+   FEDEX_SURCHARGES row, picking the Express / Ground / Home Delivery / Ground Economy variant
+   from the service being priced. Unmatched lines stay inside the service-level pricing. */
+function fedexSurchargeIdFor(lineLabel,svcLabel){
+  const t=String(lineLabel||"").toLowerCase(); if(!t)return null;
+  const k=rateSvcKey(svcLabel||"");
+  const ge=k==="ground_economy",home=k==="home",grd=ge||home||k==="ground"||k==="intl_ground_ca";
+  const G=(ex,g)=>grd?g:ex;
+  if(/fuel/.test(t))return G("FUEL","FUEL-G");
+  if(/declared value|insured value|insurance/.test(t))return "INS";
+  if(/adult signature/.test(t))return "SIG-A";
+  if(/indirect signature/.test(t))return "SIG-I";
+  if(/signature/.test(t))return "SIG-D";
+  if(/saturday.*pickup/.test(t))return "SATP";
+  if(/saturday/.test(t))return "SAT";
+  if(/peak|demand/.test(t)){
+    if(/additional handling|addl handling/.test(t))return G("PEAK-AH","PEAK-AH-G");
+    if(/oversize/.test(t))return G("PEAK-OS","PEAK-OS-G");
+    if(/unauthorized/.test(t))return "PEAK-UNAUTH";
+    if(ge)return "PEAK-GE";
+    if(/international/.test(t)||k.indexOf("intl")===0)return "PEAK-INTL";
+    return G("PEAK-R","PEAK-R-G");
+  }
+  if(/additional handling|addl handling/.test(t)){
+    if(/weight/.test(t))return G("AH-W","AH-W-G");
+    if(/packag/.test(t))return G("AH-P","AH-P-G");
+    if(/non.?stack/.test(t))return "AH-NS";
+    return G("AH-D","AH-D-G");
+  }
+  if(/oversize/.test(t))return G("OVR","OVR-G");
+  if(/unauthorized/.test(t))return "UNAUTH";
+  if(/delivery (and|&) returns?/.test(t))return "GE-DR";
+  if(/delivery area|\bdas\b/.test(t)){
+    const resi=/residential/.test(t);
+    if(/alaska/.test(t))return resi?(home?"DAS-AK-R-HD":"DAS-AK-R"):G("DAS-AK","DAS-AK-G");
+    if(/hawaii/.test(t))return resi?(home?"DAS-HI-R-HD":"DAS-HI-R"):G("DAS-HI","DAS-HI-G");
+    if(/remote/.test(t))return G("DAS-RM","DAS-RM-G");
+    if(/extended/.test(t))return resi?(home?"DAS-ER-HD":"DAS-ER"):G("DAS-EC","DAS-EC-G");
+    if(resi)return home?"DAS-R-HD":"DAS-R";
+    return G("DAS","DAS-G");
+  }
+  if(/home delivery/.test(t))return "RES-HD";
+  if(/residential/.test(t))return home?"RES-HD":G("RES","RES-G");
+  if(/address correction/.test(t))return "ADDR";
+  if(/third party billing/.test(t))return "3PB";
+  if(/hold at location/.test(t))return "HAL";
+  if(/reroute|redirect/.test(t))return "REROUTE";
+  if(/dry ice/.test(t))return "DRY";
+  if(/dangerous goods.*inaccessible|inaccessible.*dangerous/.test(t))return "DG-I";
+  if(/dangerous goods/.test(t))return "DG-A";
+  if(/hazardous/.test(t))return "HAZ";
+  if(/limited quantity|orm.?d/.test(t))return "LTDQ";
+  if(/broker select/.test(t))return "BSO";
+  if(/duty.*tax.*forward/.test(t))return "DTF";
+  if(/out of pickup/.test(t))return "OPA";
+  if(/out of delivery/.test(t))return "ODA";
+  if(/controlled export/.test(t))return "ICE";
+  if(/clearance entry/.test(t))return "CEF";
+  if(/disbursement|advancement/.test(t))return "DISB";
+  if(/third party consignee/.test(t))return "TPC";
+  if(/on.?call pickup/.test(t))return G("PU-EXP","PU-GRD-OC");
+  return null;
+}
+/* Per-surcharge price adjustments for a live quote's itemized fee lines. For every line whose
+   FEDEX_SURCHARGES row has a saved rule: percent = sell that fee at FedEx's amount ±X%;
+   fixed = sell that fee at exactly $X. Returns the cost carved out and the price added back. */
+function surchargeAdjust(lines,svcLabel,prof){
+  const sc=(prof&&prof.surcharges)||{}; let removed=0,add=0,hit=false;
+  for(const ln of (lines||[])){
+    const amt=+(ln&&ln.amount)||0; if(!amt)continue;
+    const id=fedexSurchargeIdFor(ln.label,svcLabel); if(!id)continue;
+    const r=sc[id]; if(!r||r.amount==null||r.amount==="")continue;
+    const a=+r.amount; if(isNaN(a))continue;
+    hit=true; removed+=amt;
+    add+=r.type==="percent"?amt*(1+a/100):a;
+  }
+  return hit?{removed:Math.round(removed*100)/100,add:Math.round(add*100)/100}:null;
 }
 /* Does a live quote row satisfy a "Set Service" preference string ("FedEx - 2Day",
    "FedEx - 2Day OneRate", "DHL - Express Worldwide")? Exact rateSvcKey equality —
@@ -2296,6 +2383,23 @@ function list2025Lookup(key,weight,zone){
    customer's legacy flat markup whenever no rule answers — nothing changes until a rule is set. */
 function rateSellFor(cost,label,ctx){
   const c=ctx||{};
+  /* Per-surcharge rules on LIVE quotes: carve each adjusted fee line (fuel, peak/demand, DAS,
+     residential, additional handling, declared value…) out of the carrier cost, price the
+     remainder through the normal path (service rule or account markup), then add each fee back
+     at its ruled price. Flat and list bases are exempt — flat is exact by definition, and list
+     prices off the rate book, not off cost. */
+  if(cost!=null&&c.rules&&Array.isArray(c.surcharges)&&c.surcharges.length&&!c._noSurAdj){
+    const prof=c.prof||rateProfileFor(c.rules,c.client&&c.client.id);
+    const rule=prof&&prof.services&&prof.services[rateSvcKey(label)];
+    const basis=(rule&&rule.on!==false)?(rule.basis||"percent"):null;
+    if(basis!=="flat"&&basis!=="list"){
+      const adj=surchargeAdjust(c.surcharges,label,prof);
+      if(adj){
+        const core=rateSellFor(Math.max(0,Math.round((cost-adj.removed)*100)/100),label,{...c,prof,_noSurAdj:true});
+        return core==null?null:Math.round((core+adj.add)*100)/100;
+      }
+    }
+  }
   if(cost==null){
     /* Flat-priced services sell at exactly their flat price even when the carrier cost is
        unknown (e.g. One Rate with no imported table) — the whole point of flat is that the
@@ -3549,7 +3653,7 @@ function DraftBar({dirty,onSave,onUndo,onReset,resetLabel,savedNote,saveLabel}){
     <div className="flex-1"/>
     {onReset&&<button onClick={onReset} className="text-[13px] text-stone-500 hover:text-stone-700 px-2.5 py-1.5 rounded-lg hover:bg-stone-100">{resetLabel||"Restore defaults"}</button>}
     <button onClick={onUndo} disabled={!dirty} className="text-[13px] text-stone-600 disabled:opacity-40 px-3 py-1.5 rounded-lg border border-stone-200 hover:bg-stone-50">Undo changes</button>
-    <button onClick={doSave} className="text-[14px] font-bold text-white bg-emerald-600 px-5 py-2 rounded-lg hover:bg-emerald-700 flex items-center gap-1.5 shadow-sm"><Check className="w-4 h-4"/>{saveLabel||"Save"}</button>
+    <button onClick={doSave} className="text-[15px] font-bold text-white bg-emerald-600 px-8 py-2.5 rounded-lg hover:bg-emerald-700 flex items-center gap-2 shadow-md"><Check className="w-5 h-5"/>{saveLabel||"Save"}</button>
   </div>);
 }
 /* ════════ ADMIN → RATES (v196) — the rate markup database ════════ */
@@ -3818,7 +3922,7 @@ function RatesAdmin({clients=[],brand}){
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <p className="text-[11px] text-stone-500 flex-1 min-w-[260px]">All {FEDEX_SURCHARGES.length} Service Guide surcharges in their own boxes — Express, Ground, and Home Delivery each carry their own rates. Double-click a row to edit. <Badge tone="blue">app-applied</Badge> fees change quotes immediately; the rest are billed inside England's quote total — your service % marks them up today, and per-surcharge adjustments plug in when England's per-line breakdown is wired.</p>
+          <p className="text-[11px] text-stone-500 flex-1 min-w-[260px]">All {FEDEX_SURCHARGES.length} Service Guide surcharges in their own boxes — Express, Ground, and Home Delivery each carry their own rates. Double-click a row to set your price on that fee: <b>Percent</b> sells it at FedEx's billed amount ±X% (negative = discount), <b>Fixed</b> sells it at exactly $X. Rules apply to live quotes line-by-line — fuel, peak/demand, DAS, residential, additional handling, declared value, all of it. Rows with no rule stay inside your service-level markup.</p>
           <Input value={surQ} onChange={e=>setSurQ(e.target.value)} placeholder="Search surcharges…" className="w-52"/>
         </div>
         {(()=>{
@@ -3850,7 +3954,7 @@ function RatesAdmin({clients=[],brand}){
                       <td className="pr-2 font-mono text-xs text-stone-500">{su.id}</td><td className="pr-2 text-stone-500">{su.charge}</td>
                       <td className="pr-2 text-stone-500">{r.type||(su.app?"fixed":"—")}</td>
                       <td className="pr-2 text-right font-mono">{r.amount!=null&&r.amount!==""?(+r.amount).toFixed(2):(su.def!=null?su.def.toFixed(2):"—")}</td>
-                      <td>{su.app?<Badge tone="blue">app-applied</Badge>:<Badge tone="stone">England-billed</Badge>}</td>
+                      <td>{su.app?<Badge tone="blue">app-applied</Badge>:<Badge tone="green">live-adjustable</Badge>}</td>
                     </tr>);
                   });
                   return out;
@@ -3905,7 +4009,7 @@ function RatesAdmin({clients=[],brand}){
           <div className="text-stone-500 text-right">Amount</div><div><Input type="number" value={surEdit.amount} onChange={e=>setSurEdit(s=>({...s,amount:e.target.value}))} className="w-32"/></div>
         </div>
         {surEdit.app?<p className="text-[11px] text-stone-400 mt-3">Fixed = charge this amount. Percent = adjust the published fee (e.g. 10 charges 110% of the default, −65 charges 35%). Changes hit quotes for every customer on the "{prof.name}" profile immediately.</p>
-          :<p className="text-[11px] text-stone-400 mt-3">Stored on "{prof.name}". This surcharge is billed inside England's quote total today, so this value doesn't change prices yet — it's staged for the per-line surcharge wiring.</p>}
+          :<p className="text-[11px] text-stone-400 mt-3">Applies to live quotes immediately for every customer on "{prof.name}": <b>Percent</b> sells this fee at FedEx's billed amount ±X% (e.g. 25 charges 125% of the fee, −100 waives it), <b>Fixed</b> sells it at exactly this $ per shipment. Clear the amount to fold it back into the service-level markup.</p>}
         <div className="flex justify-end gap-2 mt-4"><button onClick={()=>setSurEdit(null)} className="text-sm bg-stone-100 rounded-lg px-3 py-2 hover:bg-stone-200">Close</button><button onClick={()=>{upSur(surEdit.id,{type:surEdit.type,amount:surEdit.amount});setSurEdit(null);}} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8]">Confirm</button></div>
       </div>
     </div>}
@@ -3933,7 +4037,7 @@ function RatesAdmin({clients=[],brand}){
     <div className="flex items-center justify-end gap-3 pt-2 border-t border-stone-200">
       {_d.dirty?<span className="text-[12px] text-amber-700 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>You have unsaved rate changes</span>:<span className="text-[12px] text-stone-400">All rate changes saved</span>}
       <div className="flex-1"/>
-      <button onClick={_d.save} className="text-[14px] font-bold text-white bg-emerald-600 px-6 py-2.5 rounded-lg hover:bg-emerald-700 flex items-center gap-1.5 shadow-sm"><Check className="w-4 h-4"/>Save rates</button>
+      <button onClick={_d.save} className="text-[15px] font-bold text-white bg-emerald-600 px-10 py-3 rounded-lg hover:bg-emerald-700 flex items-center gap-2 shadow-md"><Check className="w-5 h-5"/>Save rates</button>
     </div>
   </div>);
 }
@@ -4283,8 +4387,8 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
       <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="flex-1">Login</div><div className="w-24">Role</div><div className="w-32 hidden sm:block">Company</div><div className="w-24 hidden sm:block">Last login</div><div className="text-right flex-1 hidden lg:block">Actions</div></div>
       {users.map(u=>(
         <div key={u.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
-          <div className="flex-1 min-w-0"><div className="font-medium truncate">{u.name}</div><div className="text-[11px] text-stone-400 truncate">{u.email}</div></div>
-          <div className="w-24"><Badge tone={u.role==="admin"?"blue":"stone"}>{u.role}</Badge></div>
+          <div className="flex-1 min-w-0"><div className="font-medium truncate">{u.name}{u.company?<span className="text-stone-400 font-normal"> · {u.company}</span>:null}</div><div className="text-[11px] text-stone-400 truncate">{u.email}{u.volume?` · ${u.volume}/mo`:""}{u.carrier?` · ships ${u.carrier}`:""}{u.createdAt?` · joined ${new Date(u.createdAt).toLocaleDateString()}`:""}</div></div>
+          <div className="w-24 flex items-center gap-1"><Badge tone={u.role==="admin"?"blue":"stone"}>{u.role}</Badge>{u.totp&&u.totp.enabled&&<Badge tone="green">2FA</Badge>}</div>
           <div className="w-32 hidden sm:block text-xs text-stone-500 truncate">{u.role==="admin"?"— all —":(clients.find(c=>c.id===u.clientId)||{}).name||"—"}</div>
           <div className="w-24 hidden sm:block text-xs text-stone-400">{u.lastLogin||"—"}</div>
           <div className="flex flex-wrap items-center justify-end gap-1.5">
@@ -4570,12 +4674,26 @@ async function cloudFlush(){
     return;
   }
   if(res&&res.authFailed){ lsDel("cloud.token"); window.location.reload(); return; }
+  if(res&&res.rejectedOnly){
+    /* Every key was refused by server policy (permissions / wipe-guard) — a retry can NEVER
+       succeed, so drop the batch instead of looping "offline" forever on doomed writes. */
+    try{ window.dispatchEvent(new CustomEvent("sc-save-failed",{detail:{keys,error:res.error||"not permitted"}})); }catch(e){}
+    return;
+  }
   CLOUD.offline=true;
   CLOUD.queue={...stores,...CLOUD.queue};
   for(const k in stores) delete CLOUD.baseline[k];
   try{ window.dispatchEvent(new CustomEvent("sc-save-failed",{detail:{keys,error:(res&&res.error)||"offline"}})); }catch(e){}
   if(!CLOUD.timer)CLOUD.timer=setTimeout(cloudFlush,10000);
 }
+/* Closing/refreshing the tab inside the ~800ms flush debounce must not lose a just-saved edit:
+   sendBeacon delivers the queued putMany even as the page unloads (fire-and-forget by design). */
+if(typeof window!=="undefined"){window.addEventListener("pagehide",()=>{try{
+  const stores=CLOUD.queue;
+  if(!CLOUD.token||!Object.keys(stores).length||!navigator.sendBeacon)return;
+  const sent=navigator.sendBeacon(DB_ENDPOINT,new Blob([JSON.stringify({action:"putMany",token:CLOUD.token,stores})],{type:"application/json"}));
+  if(sent)CLOUD.queue={};
+}catch(e){}});}
 /* Cross-site freshness: shared stores (clients, rateRules, users…) are pulled from the
    cloud every 20s and pushed through PERSIST_BUS, so an edit made on admin.shippingcloud.net
    reaches an open shippingcloud.net tab within seconds — no reload. Baseline is updated
@@ -5299,17 +5417,21 @@ function AppInner(){
   /* Shopify push toast: success (created / replaced tracking) and FAILURE (with the real reason)
      both surface on screen — a failed push must never die silently in a system log. */
   const [shopPush,setShopPush]=useState(null);
-  useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};setShopPush(d);if(!d.askNotify)setTimeout(()=>setShopPush(p=>p===d?null:p),d.ok?6000:15000);};window.addEventListener("sc-shopify-push",h);return()=>window.removeEventListener("sc-shopify-push",h);},[]);
-  // Re-label: user clicked "Email customer" on the toast — re-send the same tracking with notifyCustomer:true (that's what triggers Shopify's shipping-update email)
+  /* A plain success must not clobber an UNANSWERED "notify customer?" question; failures and
+     new questions still replace (they need attention). */
+  useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};setShopPush(p=>(p&&p.askNotify&&d.ok&&!d.askNotify)?p:d);if(!d.askNotify)setTimeout(()=>setShopPush(p=>p===d?null:p),d.ok?6000:15000);};window.addEventListener("sc-shopify-push",h);return()=>window.removeEventListener("sc-shopify-push",h);},[]);
+  // Re-label: user clicked "Notify customer" on the toast — re-send the same tracking with notifyCustomer:true (that's what triggers Shopify's shipping-update email)
   const notifyShopifyCustomer=async()=>{
     const d=shopPush; if(!d||!d.shopifyId)return;
     const _conns=shopifyConns(settings);
     const conn=_conns.find(c=>c.shop===d.shop)||(_conns.length===1?_conns[0]:null);
     if(!conn){setShopPush({ok:false,orderName:d.orderName,error:"Couldn't find that store's connection — email not sent."});return;}
-    setShopPush({...d,askNotify:false,sendingEmail:true});
-    const res=await shopifyPushTracking(conn,{shopifyId:d.shopifyId,tracking:d.tracking,carrier:d.carrier,notifyCustomer:true});
+    const sending={...d,askNotify:false,sendingEmail:true};
+    setShopPush(sending);
+    const res=await shopifyPushTracking(conn,{shopifyId:d.shopifyId,tracking:d.tracking,carrier:d.carrier,notifyCustomer:true,prevTracking:d.tracking});
     const nd={ok:!!(res&&res.ok),updated:true,emailed:!!(res&&res.ok),error:(res&&res.error)||"",orderName:d.orderName,tracking:d.tracking};
-    setShopPush(nd); setTimeout(()=>setShopPush(p=>p===nd?null:p),nd.ok?6000:15000);
+    setShopPush(p=>p===sending?nd:p);   // a newer toast that appeared during the await wins — never clobber it with this stale result
+    setTimeout(()=>setShopPush(p=>p===nd?null:p),nd.ok?6000:15000);
   };
   useEffect(()=>{ try{
     if(localStorage.getItem("scPurge")!=="2"){
@@ -5335,19 +5457,10 @@ function AppInner(){
     if(old&&Array.isArray(old)&&old.length>1) setClients(old);
   }catch(e){} },[currentUser&&currentUser.id]);
   useEffect(()=>{ startCloudPoll(); },[]);
-  /* Every login IS a customer. New signups get their client minted server-side; this self-heal
-     covers logins created before that (or with a dead clientId): mint a client on the spot and
-     assign it, so no one ever runs unassigned (at raw carrier cost) and the old "no customer
-     assigned" banner has nothing to warn about — the admin just opens the customer and sets rates. */
-  useEffect(()=>{ try{
-    if(!currentUser||currentUser.role!=="customer"||currentUser.demo)return;
-    if(currentUser.clientId&&clients.some(c=>c&&c.id===currentUser.clientId))return;
-    const id="c"+Date.now()+Math.floor(Math.random()*1000);
-    const nc={id,name:currentUser.company||currentUser.name||currentUser.email||"New customer",contact:currentUser.name||"",email:currentUser.email||"",phone:"",origin:"",markup:"",status:"active",since:new Date().toISOString().slice(0,7),plan:"Standard",selfSignup:true};
-    setClients(p=>[...p,nc]);
-    setUsers(us=>us.map(u=>u.id===currentUser.id?{...u,clientId:id}:u));
-    setCurrentUser(cu=>cu&&({...cu,clientId:id}));
-  }catch(e){} },[currentUser&&currentUser.id,currentUser&&currentUser.clientId,clients.length]);
+  /* Every login IS a customer — the client record is minted SERVER-SIDE (db.js: signup, login,
+     and getAll all heal a missing/dead clientId). No client-side minting: customers can't write
+     the global users/clients stores, so a browser-side "self-heal" could never persist and only
+     wedged that browser's sync queue with permanently-rejected writes. */
   const [clientId,setClientId]=useState("");   // "" = unassigned; never a guessed id — c1 has never existed (SEED_CLIENTS starts at c2)
   const [accounts,setAccounts]=usePersist("accounts",SEED_ACCOUNTS);
   const [orders,setOrders]=usePersist("orders",SEED_ORDERS);
@@ -5585,7 +5698,7 @@ function AppInner(){
           /* Re-label (order already shipped): replace the tracking WITHOUT emailing the customer,
              then ask in the toast whether to send the email — never auto-notify on a redo. */
           const _relabel=ord.status==="fulfilled"||!!ord.shopifyFulfilled;
-          shopifyPushTracking(_conn,{shopifyId:ord.shopifyId,tracking:rec.tracking,carrier:rec.carrier,notifyCustomer:_relabel?false:undefined}).then(res=>{
+          shopifyPushTracking(_conn,{shopifyId:ord.shopifyId,tracking:rec.tracking,carrier:rec.carrier,notifyCustomer:_relabel?false:undefined,prevTracking:_relabel?(ord.tracking||""):undefined}).then(res=>{
           if(res&&res.ok){ setOrders(o=>o.map(x=>x.id===orderId?{...x,shopifyFulfilled:true,tracking:rec.tracking}:x)); }
           else { logEmail&&logEmail({to:"system",subject:"Shopify fulfillment failed: "+((res&&res.error)||"unknown"),type:"System"}); }
           /* SURFACE the result — a failed (or successful re-label) push must never die silently in a log */
@@ -6283,7 +6396,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
        prices stay plausible. NO fee is ever invented on top of a live FedEx price. */
     const _live=!!rateSrc.live;
     const _dvList=_live?null:pieces.map(p=>(pieces.length>1&&dvEach)?(+p.dv||0):(+insurance||0));
-    return list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,list:q.list,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:_live?"none":sigOption,saturday,insuranceList:_dvList,fees:surchargeFees(rateRules,client)});})
+    return list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;return applyAccessorials({...q,sell:q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,list:q.list,surcharges:q.surcharges,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}),fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:_live?"none":sigOption,saturday,insuranceList:_dvList,fees:surchargeFees(rateRules,client)});})
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
   },[rateSrc,orRates,client,JSON.stringify(custom.hiddenServices||[]),JSON.stringify(client&&client.blockedServices||[]),rateRules,fxTransit,residential,addrClassified,sigOption,saturday,insurance,intl,dvEach,JSON.stringify(pieces)]);
   const best=null;
@@ -6703,7 +6816,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <Printer className="w-3.5 h-3.5 shrink-0"/>
           <span><b>Hands-free:</b> {hfWait.m}</span>
         </div>}
-        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
+        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${orBox?orBox.code:""}|${pieces.length}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
         {intl&&(
           <div className="border border-[#99D6FF] bg-[#E6F4FF]/40 rounded-lg p-3 space-y-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-[#006FBF]"><FileText className="w-4 h-4"/>Customs · Commercial invoice</div>
@@ -7067,7 +7180,7 @@ function matchRequestedService(quotes,requested,res=null){
   const hit=quotes.find(q=>canonSvc(q.label)===c&&(q.sell??q.cost)!=null);
   return hit?hit.key:null;
 }
-function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=true,onOneRate,custom=CUSTOM_DEFAULTS,matched=null,matchedSrc=null,collapsible=false,oneRateWarning=null,billing=null,live=false,loading=false,addrClassified=true,perBox=null}){
+function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=true,onOneRate,custom=CUSTOM_DEFAULTS,matched=null,matchedSrc=null,collapsible=false,oneRateWarning=null,billing=null,live=false,loading=false,addrClassified=true,perBox=null,resetKey=""}){
   const [showAll,setShowAll]=useState(false);
   /* "Hide other services" mode shows ONE service box. It must stay a single box at all times —
      switching orders and the Ground<->Home Delivery swap (FedEx address classification, which also
@@ -7108,11 +7221,18 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
   const famRank=(l)=>{const k=svcFamilyKey(l);const base=k.replace(/^or_/,"");let i=LADDER.indexOf(base);if(i<0)i=LADDER.indexOf(k);const or=/one\s*rate/i.test(String(l))?100:0;return (i<0?50:i)+or;};
   const ladderSort=(a,b)=>famRank(a.label)-famRank(b.label)||String(a.label).localeCompare(String(b.label));
   const tombRef=React.useRef({});
+  /* Tombstones are PER SHIPMENT. The Ship tab substitutes a skeleton list when rates are empty,
+     so the "cleared when the list empties" reset never fired there — ghosts of the previous
+     order (OneRate boxes, domestic families on an intl order) stuck around as red "Unavailable"
+     rows forever. resetKey names the shipment identity; when it changes, the slate clears.
+     While loading, remembered families render as plain quiet rows — never "Unavailable". */
+  const lastResetRef=React.useRef(resetKey);
+  if(lastResetRef.current!==resetKey){lastResetRef.current=resetKey;tombRef.current={};}
   const rowsForView=(list)=>{
     if(!list.length){tombRef.current={};return list;}
     const seen=new Set(list.map(q=>svcFamilyKey(q.label)));
-    for(const q of list)tombRef.current[svcFamilyKey(q.label)]=q;
-    const tombs=Object.keys(tombRef.current).filter(k=>!seen.has(k)).map(k=>({...tombRef.current[k],sell:null,cost:null,_unavailable:true}));
+    if(!loading)for(const q of list)tombRef.current[svcFamilyKey(q.label)]=q;
+    const tombs=Object.keys(tombRef.current).filter(k=>!seen.has(k)).map(k=>({...tombRef.current[k],sell:null,cost:null,_unavailable:!loading}));
     return [...list,...tombs].sort(ladderSort);
   };
   const Row=(q)=>{
@@ -7261,7 +7381,7 @@ function LiveEstRate({o,client,settings,rateRules,ruleset}){
     let pref=null;
     try{ const enabled=(ruleset||[]).filter(r=>r&&r.enabled); if(enabled.length){ const rr=runRuleEngine(enabled,[o],fromZip); const r0=rr.results&&rr.results[0]; if(r0&&r0.fires&&r0.fires.length&&r0.view&&r0.view.selectedService)pref=r0.view.selectedService; } }catch(e){}
     const wt=+o.weight||1;
-    const sellCtx=(list)=>({rules:rateRules,client,list,fromZip,toZip:o.zip,weight:wt});
+    const sellCtx=(list,sur)=>({rules:rateRules,client,list,surcharges:sur,fromZip,toZip:o.zip,weight:wt});
     const pickFrom=(qs,live)=>{
       if(!qs||!qs.length)return {none:true};
       const hit=pref?qs.filter(q=>svcPrefHit(pref,q.label)).sort((a,b)=>(a.cost||0)-(b.cost||0))[0]:null;
@@ -7279,7 +7399,7 @@ function LiveEstRate({o,client,settings,rateRules,ruleset}){
         try{
           const res=await ratesForOrder(o,{residential:true,weightLb:wt,fromZip,sender:settings&&settings.sender},eng);
           const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);
-          const qs=((res&&res.rates)||[]).filter(q=>!hs.has(canonSvc(q.label))&&!bs.has(canonSvc(q.label))).filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk([{weight:wt}])).map(q=>({...q,sell:rateSellFor(q.cost,q.label,sellCtx(q.list))}));
+          const qs=((res&&res.rates)||[]).filter(q=>!hs.has(canonSvc(q.label))&&!bs.has(canonSvc(q.label))).filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk([{weight:wt}])).map(q=>({...q,sell:rateSellFor(q.cost,q.label,sellCtx(q.list,q.surcharges))}));
           if(qs.length)finish(pickFrom(qs,true)); else finish({none:true});   // live account: no rate = show "—", never an offline guess
         }catch(e){ finish({none:true}); }
         finally{ estDone(); }
@@ -7517,7 +7637,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
     return ()=>{cancel=true;};
   },[rateNonce,o.zip,weight,box.L,box.W,box.H,residential,oneRate,orBox&&orBox.code,eng.enabled,eng.apiKey,eng.customerId,eng.base,eng.fedexAccount]);   /* eng is a fresh object every render (englandFor) — depend on its primitives or this effect loops forever */
   const localOrderQuotes=()=>quoteRates({fromZip,toZip:o.zip,pieces:[{weight:+weight||0,L:box.L,W:box.W,H:box.H}],residential,intl:false}).filter(qq=>qq.carrier==="FedEx");
-  const quotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,fromZip:(settings&&settings.sender&&settings.sender.zip)||"",toZip:o.zip,weight:+weight||o.weight||1})})).sort((a,b)=>(a.sell||1e9)-(b.sell||1e9));},[rateSrc,residential,client,settings,rateRules,weight]);
+  const quotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,surcharges:qq.surcharges,fromZip:(settings&&settings.sender&&settings.sender.zip)||"",toZip:o.zip,weight:+weight||o.weight||1})})).sort((a,b)=>(a.sell||1e9)-(b.sell||1e9));},[rateSrc,residential,client,settings,rateRules,weight]);
   const best=(rateSrc.live&&quotes[0])?quotes[0].key:null;
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
   const printHere=async(qq)=>{
@@ -7718,7 +7838,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   },[rcv.zip,fromZip,residential,totalWeight,box.L,box.W,box.H]);
   // FedEx One Rate 2Day — flat, zone-independent.
   const orRates=useMemo(()=>selectedOrBox?oneRateQuotes(selectedOrBox,{rules:rateRules,client}):[],[selectedOrBox&&selectedOrBox.code,client,rateRules]);
-  const baseQuotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,fromZip,toZip:rcv.zip,weight:totalWeight})}));},[rateSrc,residential,client,addrClassified,rateRules,settings]);
+  const baseQuotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,surcharges:qq.surcharges,fromZip,toZip:rcv.zip,weight:totalWeight})}));},[rateSrc,residential,client,addrClassified,rateRules,settings]);
   const quotes=useMemo(()=>{
     const withTransit=(list)=>list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};});
     return cleanServiceList(withTransit([...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday:sat,insurance,fees:surchargeFees(rateRules,client)}))),{intl:_intl,residential:addrClassified?residential:null}).sort((a,b)=>(a.sell||0)-(b.sell||0));
@@ -7927,7 +8047,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
               </div>
             </div>
             {!shipped&&<div className="bg-white border border-stone-200 rounded-lg p-4">
-              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyORBox} custom={cz(settings||{})} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} billing={weighInfo([{weight:totalWeight,L:box.L,W:box.W,H:box.H}])}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
+              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyORBox} custom={cz(settings||{})} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} resetKey={`${rcv.zip}|${rcv.country||"US"}|${orPkg||""}`} billing={weighInfo([{weight:totalWeight,L:box.L,W:box.W,H:box.H}])}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
               {ready&&rateSrc.loading&&<div className="text-xs text-stone-400 flex items-center gap-1.5 mt-2"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Loading rates…</div>}
               {status&&<div className={`mt-2 text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${status.state==="error"?"text-rose-600 bg-rose-50 border border-rose-200":status.state==="booking"?"text-stone-600 bg-stone-50 border border-stone-200":"text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF]"}`}>{status.state==="error"?<AlertTriangle className="w-3.5 h-3.5"/>:status.state==="booking"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{status.msg}</div>}
             </div>}
@@ -8137,7 +8257,7 @@ function QuickQuote({onClose,client,england,senderZip}){
   },[fromZip,toZip,residential,JSON.stringify(pieces),sigOption,saturday,insurance,england]);
   const qqOrBox=oneRateBoxFor(pieces[0]&&pieces[0].L,pieces[0]&&pieces[0].W,pieces[0]&&pieces[0].H,totalWeight);
   const qqOrRates=useMemo(()=>qqOrBox?oneRateQuotes(qqOrBox,{rules:rateRules,client}):[],[qqOrBox&&qqOrBox.code,rateRules,client]);
-  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip,toZip,weight:pieces.reduce((a,p)=>a+(+p.weight||0),0)})})),...qqOrRates].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,client)})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,client,rateRules,fxTransit,qqOrRates,sigOption,saturday,insurance,fromZip,toZip,JSON.stringify(pieces)]);
+  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,surcharges:q.surcharges,fromZip,toZip,weight:pieces.reduce((a,p)=>a+(+p.weight||0),0)})})),...qqOrRates].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,client)})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,client,rateRules,fxTransit,qqOrRates,sigOption,saturday,insurance,fromZip,toZip,JSON.stringify(pieces)]);
   const hasExpress=quotes.some(q=>{const l=String(q.label||"").toLowerCase();return /(overnight|2\s?day|express saver)/.test(l);});
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-8 bg-stone-900/40 backdrop-blur-sm overflow-auto" onClick={onClose}>
@@ -8480,7 +8600,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
       :{fromZip:client.origin,toZip:o.zip,L:12,W:9,H:4,weight:o.weight,residential:true})
       .filter(q=>!hs.has(canonSvc(q.label))&&!bs.has(canonSvc(q.label)))
       .filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk(_gePcs))
-      .map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:client.origin,toZip:o.zip,weight:(pk&&pk.totalWt)||o.weight||1})}));
+      .map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,surcharges:q.surcharges,fromZip:client.origin,toZip:o.zip,weight:(pk&&pk.totalWt)||o.weight||1})}));
     let pick=pickByPref(qs,svcOv[o.id]);
     if(!pick){
       if(rule==="ground") pick=qs.filter(q=>/Ground|Home/.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
@@ -8629,7 +8749,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
       let _resKnownB=null,_resFlagB=true;   // classification survives past the try — booking uses it too
       try{
         const dup=dupShipment(o.name,shipments);
-        if(dup){ out.push({o,name:o.name,orderId:o.id,ok:false,error:"Skipped — already shipped "+dup.date+" ("+dup.tracking+"). Void that label first if this is intentional."}); setResults([...out]); setProgress(pr0=>({...pr0,n:pr0.n+1})); continue; }
+        if(dup){ out.push({o,name:o.name,orderId:o.id,ok:false,error:"Skipped — already shipped "+dup.date+" ("+dup.tracking+"). Void that label first if this is intentional."}); setResults([...out]); continue; }
         if(orderHasHazmat(o,settings.products||[])&&!/ground|home/i.test(String((svcOv[o.id]||"")))){ /* ground-only enforcement happens at pick below */ }
         const pk0=packs[o.id];
         const _wt0=(pk0&&pk0.totalWt)||o.weight||0;
@@ -8638,7 +8758,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         _resKnownB=await classifyOrderAddress(o,originZip);   // ground↔home follows the FedEx classification, same as Autopilot
         _resFlagB=_resKnownB==null?true:_resKnownB;
         const res=await ratesForOrder(o,{residential:_resFlagB,weightLb:_wt0,box:pk0&&pk0.pieces[0]?_box0:undefined,fromZip:originZip,sender:settings.sender,packageTypeCode:_orBox0?_orBox0.code:""},eng);
-        const _hs=new Set(cz(settings).hiddenServices||[]);const _bs=new Set((client&&client.blockedServices)||[]);let qs=((res&&res.rates)||[]).filter(q=>!_hs.has(canonSvc(q.label))&&!_bs.has(canonSvc(q.label))).filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk([{weight:_wt0,L:_box0.L,W:_box0.W,H:_box0.H}])).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:originZip,toZip:o.zip,weight:(pk0&&pk0.totalWt)||o.weight||1})}));   // GE filter checks the SAME single piece the rate call priced
+        const _hs=new Set(cz(settings).hiddenServices||[]);const _bs=new Set((client&&client.blockedServices)||[]);let qs=((res&&res.rates)||[]).filter(q=>!_hs.has(canonSvc(q.label))&&!_bs.has(canonSvc(q.label))).filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk([{weight:_wt0,L:_box0.L,W:_box0.W,H:_box0.H}])).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,surcharges:q.surcharges,fromZip:originZip,toZip:o.zip,weight:(pk0&&pk0.totalWt)||o.weight||1})}));   // GE filter checks the SAME single piece the rate call priced
         picked=pickByPref(qs,svcOv[o.id],_resKnownB);
         if(!picked){
           if(rule==="ground")picked=qs.filter(q=>/ground|home/i.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];
@@ -10520,7 +10640,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
         _resFlag=_resKnown==null?true:_resKnown;
         const res=await ratesForOrder(o,{residential:_resFlag,weightLb:wt,fromZip:senderZip,sender:settings.sender,box:_box0,packageTypeCode:_orBox0?_orBox0.code:""},eng);
         const _apHs=new Set(cz(settings).hiddenServices||[]);const _apBs=new Set((client&&client.blockedServices)||[]);
-        const qs=((res&&res.rates)||[]).filter(q=>!_apHs.has(canonSvc(q.label))&&!_apBs.has(canonSvc(q.label))).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,fromZip:senderZip,toZip:o.zip,weight:wt})}));
+        const qs=((res&&res.rates)||[]).filter(q=>!_apHs.has(canonSvc(q.label))&&!_apBs.has(canonSvc(q.label))).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,surcharges:q.surcharges,fromZip:senderZip,toZip:o.zip,weight:wt})}));
         picked=pickRate(qs,pref,_resKnown);
       }catch(e){}
       if(!picked){rows.push({name:o.name,orderId:o.id,ok:false,error:"No rate returned"});setApResults({rows:[...rows],heldN});continue;}

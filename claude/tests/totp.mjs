@@ -61,5 +61,36 @@ ok(totpVerify(secret, totpAt(secret, nowCounter - 1)) === true, "verify accepts 
 ok(totpVerify(secret, totpAt(secret, nowCounter - 3)) === false, "verify rejects far-past code");
 ok(totpVerify(secret, "12345") === false, "verify rejects short code");
 
+// ── backup codes ──
+const bcCode = [
+  extractConst("BC_ALPHA"),
+  extractConst("normBackup"),
+  extractConst("hashBackup"),
+  extractFn("newBackupCodes"),
+  extractFn("consumeBackup"),
+  extractConst("backupLeft"),
+  "return { newBackupCodes, consumeBackup, backupLeft, normBackup };",
+].join("\n");
+const { newBackupCodes, consumeBackup, backupLeft } = new Function("crypto", "Buffer", bcCode)(crypto, Buffer);
+
+const { plain, stored } = newBackupCodes(10);
+ok(plain.length === 10 && stored.length === 10, "10 backup codes generated");
+ok(plain.every((c) => /^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(c)), "codes are XXXX-XXXX format");
+ok(new Set(plain).size === 10, "codes are unique");
+ok(stored.every((s) => s.h && s.used === false), "stored codes are hashed + unused");
+ok(!plain.some((c) => stored.some((s) => s.h === c)), "plaintext never equals a stored hash");
+ok(backupLeft(stored) === 10, "backupLeft counts 10");
+
+// consume one code
+const first = plain[0];
+const r1 = consumeBackup(stored, first);
+ok(r1.ok === true, "valid backup code consumed");
+ok(backupLeft(stored) === 9, "backupLeft drops to 9 after use");
+const r2 = consumeBackup(stored, first);
+ok(r2.ok === false, "same code cannot be reused");
+ok(consumeBackup(stored, "ZZZZ-ZZZZ").ok === false, "unknown code rejected");
+ok(consumeBackup(stored, plain[1].toLowerCase()).ok === true, "lowercase + normalized code accepted");
+ok(consumeBackup(stored, "").ok === false, "empty code rejected");
+
 console.log(pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

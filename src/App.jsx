@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v420";
+const BUILD_TAG="addr-v421";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -1293,7 +1293,7 @@ const shopifyConns=(s)=>{ if(!s)return []; if(Array.isArray(s.shopifyConns))retu
 const shopifyConnFor=(s,shop)=>{ const l=shopifyConns(s); return (shop&&l.find(c=>c.shop===shop))||l[0]||null; };
 const shopifyConnected=(s)=>shopifyConns(s).length>0;
 async function shopifySyncOrders(conn){ return shopifyCall(SHOPIFY_SYNC,{shop:conn.shop,token:conn.token}); }
-async function shopifyPushTracking(conn,o){ return shopifyCall(SHOPIFY_FULFILL,{shop:conn.shop,token:conn.token,shopifyId:o.shopifyId,tracking:o.tracking,trackingUrl:o.trackingUrl||(o.tracking?`https://www.fedex.com/fedextrack/?trknbr=${o.tracking}`:""),carrier:o.carrier||"FedEx"}); }
+async function shopifyPushTracking(conn,o){ return shopifyCall(SHOPIFY_FULFILL,{shop:conn.shop,token:conn.token,shopifyId:o.shopifyId,tracking:o.tracking,trackingUrl:o.trackingUrl||(o.tracking?`https://www.fedex.com/fedextrack/?trknbr=${o.tracking}`:""),carrier:o.carrier||"FedEx",notifyCustomer:o.notifyCustomer}); }
 const fn=(name)=>"/.netlify/functions/"+name;
 async function connectorCall(endpoint,payload){ return shopifyCall(endpoint,payload); }
 // OAuth returns handed back in the URL fragment by the *-auth functions
@@ -5279,7 +5279,18 @@ function AppInner(){
   /* Shopify push toast: success (created / replaced tracking) and FAILURE (with the real reason)
      both surface on screen — a failed push must never die silently in a system log. */
   const [shopPush,setShopPush]=useState(null);
-  useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};setShopPush(d);const tmr=setTimeout(()=>setShopPush(null),d.ok?6000:15000);return;};window.addEventListener("sc-shopify-push",h);return()=>window.removeEventListener("sc-shopify-push",h);},[]);
+  useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};setShopPush(d);if(!d.askNotify)setTimeout(()=>setShopPush(p=>p===d?null:p),d.ok?6000:15000);};window.addEventListener("sc-shopify-push",h);return()=>window.removeEventListener("sc-shopify-push",h);},[]);
+  // Re-label: user clicked "Email customer" on the toast — re-send the same tracking with notifyCustomer:true (that's what triggers Shopify's shipping-update email)
+  const notifyShopifyCustomer=async()=>{
+    const d=shopPush; if(!d||!d.shopifyId)return;
+    const _conns=shopifyConns(settings);
+    const conn=_conns.find(c=>c.shop===d.shop)||(_conns.length===1?_conns[0]:null);
+    if(!conn){setShopPush({ok:false,orderName:d.orderName,error:"Couldn't find that store's connection — email not sent."});return;}
+    setShopPush({...d,askNotify:false,sendingEmail:true});
+    const res=await shopifyPushTracking(conn,{shopifyId:d.shopifyId,tracking:d.tracking,carrier:d.carrier,notifyCustomer:true});
+    const nd={ok:!!(res&&res.ok),updated:true,emailed:!!(res&&res.ok),error:(res&&res.error)||"",orderName:d.orderName,tracking:d.tracking};
+    setShopPush(nd); setTimeout(()=>setShopPush(p=>p===nd?null:p),nd.ok?6000:15000);
+  };
   useEffect(()=>{ try{
     if(localStorage.getItem("scPurge")!=="2"){
       ["orders","shipments","returns","ledger","invoices","emails","drafts","pendingShips","rules","accounts"].forEach(k=>localStorage.removeItem(k));
@@ -5537,12 +5548,17 @@ function AppInner(){
         const _conns=shopifyConns(settings);
         const _conn=ord._shop?_conns.find(c=>c.shop===ord._shop):(_conns.length===1?_conns[0]:null);
         if(!_conn){ if(_conns.length>1)logEmail&&logEmail({to:"system",subject:"Shopify: couldn't tell which store order "+(ord.name||ord.shopifyId)+" came from — tracking not pushed. Re-sync to tag it.",type:"System"}); }
-        else shopifyPushTracking(_conn,{shopifyId:ord.shopifyId,tracking:rec.tracking,carrier:rec.carrier}).then(res=>{
+        else {
+          /* Re-label (order already shipped): replace the tracking WITHOUT emailing the customer,
+             then ask in the toast whether to send the email — never auto-notify on a redo. */
+          const _relabel=ord.status==="fulfilled"||!!ord.shopifyFulfilled;
+          shopifyPushTracking(_conn,{shopifyId:ord.shopifyId,tracking:rec.tracking,carrier:rec.carrier,notifyCustomer:_relabel?false:undefined}).then(res=>{
           if(res&&res.ok){ setOrders(o=>o.map(x=>x.id===orderId?{...x,shopifyFulfilled:true,tracking:rec.tracking}:x)); }
           else { logEmail&&logEmail({to:"system",subject:"Shopify fulfillment failed: "+((res&&res.error)||"unknown"),type:"System"}); }
           /* SURFACE the result — a failed (or successful re-label) push must never die silently in a log */
-          try{ window.dispatchEvent(new CustomEvent("sc-shopify-push",{detail:{ok:!!(res&&res.ok),updated:!!(res&&res.updated),error:(res&&res.error)||"",orderName:ord.name||("#"+ord.shopifyId),tracking:rec.tracking}})); }catch(e){}
-        });
+          try{ window.dispatchEvent(new CustomEvent("sc-shopify-push",{detail:{ok:!!(res&&res.ok),updated:!!(res&&res.updated),error:(res&&res.error)||"",orderName:ord.name||("#"+ord.shopifyId),tracking:rec.tracking,askNotify:!!(_relabel&&res&&res.ok),shop:_conn.shop,shopifyId:ord.shopifyId,carrier:rec.carrier||"FedEx"}})); }catch(e){}
+          });
+        }
       }
     }
     // push tracking back to any other connected platform this order came from
@@ -5719,7 +5735,11 @@ function AppInner(){
         {shopPush.ok?<CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5"/>:<AlertTriangle className="w-5 h-5 shrink-0 mt-0.5"/>}
         <div className="min-w-0">
           <div className="font-semibold">{shopPush.ok?(shopPush.updated?"Shopify tracking REPLACED on "+shopPush.orderName:"Tracking sent to Shopify — "+shopPush.orderName):"Shopify push FAILED — "+shopPush.orderName}</div>
-          <div className="text-xs mt-0.5 break-words">{shopPush.ok?("Customer notified · "+(shopPush.tracking||"")):String(shopPush.error||"Unknown error").slice(0,220)}</div>
+          <div className="text-xs mt-0.5 break-words">{shopPush.ok?(shopPush.sendingEmail?"Sending the email to the customer…":shopPush.emailed?("Email sent to the customer · "+(shopPush.tracking||"")):shopPush.askNotify?("Customer has NOT been emailed · "+(shopPush.tracking||"")):("Customer notified · "+(shopPush.tracking||""))):String(shopPush.error||"Unknown error").slice(0,220)}</div>
+          {shopPush.askNotify&&<div className="flex items-center gap-2 mt-2">
+            <button onClick={notifyShopifyCustomer} className="text-xs font-semibold bg-emerald-600 text-white rounded-lg px-2.5 py-1.5 hover:bg-emerald-700">Email customer the new tracking</button>
+            <button onClick={()=>setShopPush(null)} className="text-xs font-medium bg-white border border-emerald-300 text-emerald-700 rounded-lg px-2.5 py-1.5 hover:bg-emerald-100">Don't email</button>
+          </div>}
         </div>
         <button onClick={()=>setShopPush(null)} className="shrink-0 opacity-60 hover:opacity-100"><X className="w-4 h-4"/></button>
       </div>}
@@ -7579,6 +7599,9 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
     setRcv(prev=>{ const next={...prev}; for(const k of keys) next[k]=parsed[k]; return next; });
   };
   const [reference,setReference]=useState(o.name||"");
+  const [oNote,setONote]=useState(o.note||"");
+  const [oTags,setOTags]=useState(Array.isArray(o.tags)?o.tags.join(", "):(o.tags||""));
+  const [savedInfo,setSavedInfo]=useState(false);
   const [poNo,setPoNo]=useState("");
   const [invoiceNo,setInvoiceNo]=useState("");
   const [weight,setWeight]=useState(o.weight||1);
@@ -7613,6 +7636,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   const localOrderQuotes=()=>quoteRates({fromZip,toZip:rcv.zip,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],residential,intl:_intl}).filter(qq=>qq.carrier==="FedEx");
   // FedEx address verification + residential/commercial classification (parity with the Ship page)
   useEffect(()=>{
+    if(o.status==="fulfilled"){setVerify(null);return;}   // already shipped — nothing left to verify
     if(rcv.country&&!_isUSCountry(rcv.country)){setVerify(null);return;}   // FedEx classification is US-only
     const core=rcv.address1&&/^\d{5}/.test(rcv.zip||"")&&rcv.city&&rcv.state;
     if(!core){setVerify(null);return;}
@@ -7637,7 +7661,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   const addrClassified=!!(resTouched||(verify&&verify.type));
   useEffect(()=>{
     let cancel=false;
-    if(!ready){setRateSrc({rates:[],live:false,loading:false});return;}
+    if(!ready||o.status==="fulfilled"){setRateSrc({rates:[],live:false,loading:false});return;}   /* shipped orders don't quote */
     if(canBook){
       setRateSrc(s=>({...s,loading:true}));
       ratesForOrder(dest,{residential,box,weightLb:totalWeight,fromZip,sender:settings.sender,packageTypeCode:selectedOrBox?selectedOrBox.code:"",signatureOption:sigOption,saturdayDelivery:sat,insuranceAmount:insurance||null},eng).then(res=>{ if(cancel)return;
@@ -7650,7 +7674,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   // FedEx transit times via the FedEx API
   useEffect(()=>{
     let cancel=false;
-    if(!ready){setFxTransit({});return;}
+    if(!ready||o.status==="fulfilled"){setFxTransit({});return;}
     fedexTransit({fromZip,toZip:rcv.zip,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],residential}).then(m=>{if(!cancel)setFxTransit(m||{});});
     return ()=>{cancel=true;};
   },[rcv.zip,fromZip,residential,totalWeight,box.L,box.W,box.H]);
@@ -7679,6 +7703,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   },[quotes,apLive,o&&o.shippingService,o&&o.ruleService,residential,addrClassified]);
   const applyORBox=(code)=>{const b=FEDEX_ONERATE.find(x=>x.code===code);if(!b)return;if(b.dims){setDims({L:b.dims.L,W:b.dims.W,H:b.dims.H});}setBoxIdx(-1);setOrPkg(code);const val="FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,"");const f=settings?.orBoxField||"invoice";const fill=(set)=>set(prev=>prev&&prev.trim()?prev:val);if(f==="invoice")fill(setInvoiceNo);else if(f==="po")fill(setPoNo);else if(f==="reference")fill(setReference);};
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
+  const saveOrderInfo=()=>{ upd({name:reference||o.name,customer:rcv.name,company:rcv.company,address1:rcv.address1,address2:rcv.address2,city:rcv.city,state:rcv.state,zip:rcv.zip,country:rcv.country,phone:rcv.phone,email:rcv.email,note:oNote,tags:oTags.split(",").map(s=>s.trim()).filter(Boolean)}); setSavedInfo(true); setTimeout(()=>setSavedInfo(false),2500); };
   const pickBox=(j)=>{ setBoxIdx(j); if(j>=0){const b=boxes[j];setDims({L:b.L,W:b.W,H:b.H});} };
   const printHere=async(qq)=>{
     if(!qq)return;
@@ -7732,7 +7757,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
             <button onClick={onClose} className="text-stone-400 hover:text-stone-700 p-1"><X className="w-5 h-5"/></button>
           </div>
         </div>
-        {shipped&&o.source==="Shopify"&&o.shopifyId&&<div className="bg-[#E6F4FF]/70 border-b border-[#99D6FF] px-4 py-2 text-xs text-[#006FBF] flex items-center gap-2 shrink-0"><RotateCcw className="w-3.5 h-3.5 shrink-0"/><span>Already shipped{o.tracking?<> — tracking <b className="font-mono">{o.tracking}</b></>:null}. Need to redo it? Book a new label and the <b>new tracking number replaces the old one on Shopify</b> (the customer is notified automatically).</span></div>}
+        {shipped&&o.source==="Shopify"&&o.shopifyId&&<div className="bg-[#E6F4FF]/70 border-b border-[#99D6FF] px-4 py-2 text-xs text-[#006FBF] flex items-center gap-2 shrink-0"><RotateCcw className="w-3.5 h-3.5 shrink-0"/><span>Already shipped{o.tracking?<> — tracking <b className="font-mono">{o.tracking}</b></>:null}. Need to redo it? Book a new label and the <b>new tracking number replaces the old one on Shopify</b> — you'll choose whether to email the customer.</span></div>}
         {o.country&&o.country!=="United States"&&o.country!=="US"&&<div className="border border-stone-200 rounded-lg p-3 mt-3 space-y-2 bg-stone-50/60">
           <div className="text-[10px] uppercase tracking-widest text-stone-400">Commercial invoice options</div>
           <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -7775,7 +7800,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
                         <div className="grid grid-cols-2 gap-1.5"><input value={rcv.phone} onChange={e=>rset("phone",e.target.value)} onPaste={rcvSmartPaste} placeholder="Phone" className={inC}/><input value={rcv.email} onChange={e=>rset("email",e.target.value)} onPaste={rcvSmartPaste} placeholder="Email" className={inC}/></div>
                         {o.source==="Shopify"&&o.shopifyId&&(()=>{const conn=shopifyConnFor(settings,o._shop);return conn?<ShopifyAddrPush conn={conn} o={o} rcv={rcv} setOrders={setOrders}/>:null;})()}
                       </div>
-                      <div className="flex flex-wrap items-center gap-1.5 text-[11px] mt-2">
+                      {!shipped&&<div className="flex flex-wrap items-center gap-1.5 text-[11px] mt-2">
                         {verify&&verify.loading&&<span className="text-stone-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin"/>Checking with FedEx…</span>}
                         {verify&&!verify.loading&&<>
                           {(resTouched||verify.type)&&<span className={`flex items-center gap-1 rounded-full px-2 py-0.5 font-medium border ${residential?"text-[#006FBF] bg-[#E6F4FF] border-[#99D6FF]":"text-stone-700 bg-stone-100 border-stone-200"}`}>{residential?<Home className="w-3 h-3"/>:<Building2 className="w-3 h-3"/>}{residential?"Residential":"Commercial"}{resTouched?" · manual":""}</span>}
@@ -7787,7 +7812,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
                         <label className="flex items-center gap-1 text-stone-500 cursor-pointer"><input type="checkbox" checked={resTouched} onChange={e=>setOverride(e.target.checked)} className="accent-[#0086E0]"/>Override</label>
                         {resTouched&&<div className="flex rounded-full border border-stone-200 overflow-hidden"><button onClick={()=>setRes(true)} className={`px-2 py-0.5 ${residential?"bg-[#E6F4FF] text-[#006FBF] font-medium":"bg-white text-stone-500"}`}>Res</button><button onClick={()=>setRes(false)} className={`px-2 py-0.5 border-l border-stone-200 ${!residential?"bg-stone-100 text-stone-800 font-medium":"bg-white text-stone-500"}`}>Com</button></div>}
                         {rcv.address1&&/^\d{5}/.test(rcv.zip||"")&&<button onClick={()=>setVerifyNonce(n=>n+1)} className="flex items-center gap-1 text-stone-400 hover:text-[#0086E0] underline"><ShieldCheck className="w-3 h-3"/>Re-check</button>}
-                      </div>
+                      </div>}
                     </div>
                     <div>
                       {lbl("Cost summary")}
@@ -7823,10 +7848,22 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
               </div>
               <div className="space-y-4">
                 <div className="bg-white border border-stone-200 rounded-lg p-4 space-y-3">
-                  <div className="text-sm font-semibold text-stone-800">Configure shipment</div>
-                  {shipped?(
+                  <div className="text-sm font-semibold text-stone-800">{shipped?"Order info":"Configure shipment"}</div>
+                  {shipped?(<>
                     <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2"><CheckCircle2 className="w-4 h-4"/>Shipped{o.tracking?<> · <span className="font-mono">{o.tracking}</span></>:""}</div>
-                  ):(<>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>{lbl("Order #")}<input value={reference} onChange={e=>setReference(e.target.value)} className={inC+" w-full"}/></div>
+                      <div>{lbl("Order date")}<div className="text-[13px] text-stone-600 py-1.5">{o.date||"—"}</div></div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>{lbl("Requested service")}<div className="text-[13px] text-stone-600 py-1.5">{o.shippingService||"Standard"}</div></div>
+                      <div>{lbl("Shipped with")}<div className="text-[13px] text-stone-600 py-1.5">{o.service||o.carrier||"—"}</div></div>
+                    </div>
+                    <div>{lbl("Tags")}<input value={oTags} onChange={e=>setOTags(e.target.value)} placeholder="comma, separated" className={inC+" w-full"}/></div>
+                    <div>{lbl("Order notes")}<textarea value={oNote} onChange={e=>setONote(e.target.value)} rows={3} placeholder="Notes on this order…" className={inC+" w-full"}/></div>
+                    <button onClick={saveOrderInfo} className="w-full text-sm bg-stone-800 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-900 flex items-center justify-center gap-1.5">{savedInfo?<><CheckCircle2 className="w-4 h-4"/>Saved</>:<>Save changes to this order</>}</button>
+                    <div className="text-[11px] text-stone-400">Saves the ship-to details on the left plus the info above. For Shopify orders, "Save these changes back to Shopify" under the address pushes the address &amp; email to Shopify too.</div>
+                  </>):(<>
                     <div>{lbl("Ship from")}{(settings?.sender?.zip||settings?.sender?.company||settings?.sender?.name)?<div className="text-[13px] text-stone-600">{settings?.sender?.company||settings?.sender?.name||"Your address"} · {settings?.sender?.city} {settings?.sender?.state} {settings?.sender?.zip}</div>:<div className="text-[13px] text-amber-700">No sender set — set your default sender in Settings → Company.</div>}</div>
                     <div className="grid grid-cols-3 gap-2">
                       <div>{lbl("Reference")}<input value={reference} onChange={e=>setReference(e.target.value)} placeholder="order / ref" className={inC+" w-full"}/></div>

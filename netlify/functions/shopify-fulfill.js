@@ -97,7 +97,10 @@ exports.handler = async (event) => {
            fulfillmentTrackingInfoUpdate(fulfillmentId:$fulfillmentId,trackingInfoInput:$trackingInfoInput,notifyCustomer:$notifyCustomer){
              fulfillment{id} userErrors{field message}}}`,
         { fulfillmentId: target.id,
-          trackingInfoInput: { number: tracking || null, url: S(body.trackingUrl) || null, company: S(body.carrier) || "FedEx" },
+          /* plural numbers/urls REPLACE the fulfillment's whole tracking list — the singular
+             `number` field left an old numbers[] entry behind, so Shopify's "Tracking added"
+             popover kept showing the stale number while the order page showed the new one */
+          trackingInfoInput: { numbers: tracking ? [tracking] : [], urls: S(body.trackingUrl) ? [S(body.trackingUrl)] : [], company: S(body.carrier) || "FedEx" },
           notifyCustomer: body.notifyCustomer !== false });
       if (ur.status === 401) return J({ ok: false, error: "Shopify rejected the token (401) — reconnect the store." });
       const upay = ((ur.data || {}).fulfillmentTrackingInfoUpdate) || {};

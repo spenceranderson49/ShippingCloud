@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v394";
+const BUILD_TAG="addr-v395";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -5249,8 +5249,13 @@ function AppInner(){
     if(orderId&&shopifyConnected(settings)){
       const ord=orders.find(x=>x.id===orderId);
       if(ord&&ord.source==="Shopify"&&ord.shopifyId){
-        const _conn=shopifyConnFor(settings,ord._shop);   // push back to the SAME store the order came from
-        if(_conn) shopifyPushTracking(_conn,{shopifyId:ord.shopifyId,tracking:rec.tracking,carrier:rec.carrier}).then(res=>{
+        /* Push back to the SAME store the order came from. If the order predates the _shop tag and
+           more than one store is connected, we can't know which — skip rather than fulfill the wrong
+           store, and log it. With a single store, the one connection is always correct. */
+        const _conns=shopifyConns(settings);
+        const _conn=ord._shop?_conns.find(c=>c.shop===ord._shop):(_conns.length===1?_conns[0]:null);
+        if(!_conn){ if(_conns.length>1)logEmail&&logEmail({to:"system",subject:"Shopify: couldn't tell which store order "+(ord.name||ord.shopifyId)+" came from — tracking not pushed. Re-sync to tag it.",type:"System"}); }
+        else shopifyPushTracking(_conn,{shopifyId:ord.shopifyId,tracking:rec.tracking,carrier:rec.carrier}).then(res=>{
           if(res&&res.ok){ setOrders(o=>o.map(x=>x.id===orderId?{...x,shopifyFulfilled:true}:x)); }
           else { logEmail&&logEmail({to:"system",subject:"Shopify fulfillment failed: "+((res&&res.error)||"unknown"),type:"System"}); }
         });
@@ -5270,7 +5275,7 @@ function AppInner(){
         }
       }
     }
-    if(settings.notify.shipped&&rec.recipient?.name) logEmail({to:(rec.recipient?.email)||"customer@example.com",subject:`Your ${settings.company} order has shipped ☁️`,type:"Shipped"});
+    if(settings.notify?.shipped&&rec.recipient?.name) logEmail({to:(rec.recipient?.email)||"customer@example.com",subject:`Your ${settings.company} order has shipped ☁️`,type:"Shipped"});
     addLedger({type:"Shipping charge",ref:rec.reference||rec.tracking,amount:-(rec.sell||0)});
   };
   // record an order that pushed to England but hasn't booked yet, so we can pull its label later
@@ -5296,7 +5301,7 @@ function AppInner(){
     if(!shopifyConnected(settings))return;
     const id=setInterval(()=>{syncOrders();},120000);
     return ()=>clearInterval(id);
-  },[JSON.stringify(shopifyConns(settings).map(c=>c.shop))]);
+  },[JSON.stringify(shopifyConns(settings).map(c=>[c.shop,c.token]))]);
   // blank the receiver on a fresh page load / login (stays filled across tab switches within a session)
   /* receiver + package dims are cleared on login (clearScratchFor) so a fresh session always starts blank */
   // re-check England for any staged orders that have since booked; pull label + tracking into Shipments
@@ -5550,6 +5555,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const [poNo,setPoNo]=usePersist("ship.poNo","");
   const [pieces,setPieces]=usePersist("ship.pieces",[{weight:"",L:"",W:"",H:""}]);
   const [insurance,setInsurance]=usePersist("ship.insurance","");
+  const [dvEach,setDvEach]=useState(false);   // multipiece declared value: false = same $ on every box, true = per-box amount (piece.dv)
   const [residential,setRes]=usePersist("ship.residential",true);
   const [resTouched,setResTouched]=useState(false);
   const [signature,setSig]=usePersist("ship.signature",false);
@@ -5742,7 +5748,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const liveRuleMatch=liveRuleStatus&&liveRuleStatus.state==="fired"?liveRuleStatus.service:null;
 
   const ready=postalOkFor(receiver.zip,receiver.country)&&totalWeight>0;
-  const shipment={fromZip:originZip,toZip:receiver.zip,toCountry:receiver.country||"United States",pieces:pieces.map(p=>({...p,weight:pw(p)})),residential,signature,signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null,intl,packageTypeCode:orBox?orBox.code:""};
+  const shipment={fromZip:originZip,toZip:receiver.zip,toCountry:receiver.country||"United States",pieces:pieces.map(p=>({...p,weight:pw(p)})),residential,signature,signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:(intl?(+insurance||0):((pieces.length>1&&dvEach)?pieces.reduce((a,p)=>a+(+p.dv||0),0):(+insurance||0)*Math.max(1,pieces.length)))||null,intl,packageTypeCode:orBox?orBox.code:""};
   // Front screen shows FedEx only. Blank-price skeleton before rates load — intl destinations get
   // the INTERNATIONAL skeleton so a domestic list never flashes on an international shipment.
   const FEDEX_SKELETON=intl?[
@@ -5892,7 +5898,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       billingParty:billTo==="third"?"third_party":(billTo==="receiver"?"receiver":"sender"),billingAccount:billTo==="third"?(thirdAcct||null):null,
       providerAccountId:eng.providerAccountId||null,
       sender:{...sender,country:sender.country||"US"},receiver:{...receiver,country:receiver.country||"US"},
-      pieces:pieces.map(p=>({weight:Math.ceil(pw(p)||1),length:p.L,width:p.W,height:p.H,declaredValue:intl?(p.value||null):null}))};   // book at the rounded-up billing weight the quote priced
+      pieces:pieces.map(p=>({weight:Math.ceil(pw(p)||1),length:p.L,width:p.W,height:p.H,declaredValue:intl?(p.value||null):((pieces.length>1&&dvEach)?(+p.dv||null):(+insurance||null))}))};   // book at the rounded-up billing weight the quote priced · per-box declared value on multipiece
     const res=await shipCall({action:"ship",account:acctOf(eng),order});
     if(!res||!res.ok){setShipStatus({state:"error",key:q.key,msg:(res&&res.error)||"Booking failed"});setBought(null);return;}
     const done=(st)=>{ justBookedRef.current=selectedOrder; const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,tracking:st.tracking,service:q.label,carrier,rec:_rec},settings,setLabelPreview); if(cz(settings).autoPackSlip){ const so=selectedOrder&&orders.find(x=>x.id===selectedOrder); setTimeout(()=>{ try{ printPackingSlipAuto([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:st.tracking||"",service:q.label}],settings); }catch(e){} },(!cz(settings).skipBookedSummary&&!cz(settings).directNoPreview)?0:2500); }   /* label pipeline gets a head start — its dialog must always beat the slip fallback */ if(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint){ setTimeout(()=>{ try{newShipment();}catch(e){} },900); };} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
@@ -6072,7 +6078,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             </div>
             <div className="flex flex-wrap items-center gap-4">
               <span className="text-[11px] text-stone-400 font-mono">total {totalWeight} lb</span>
-              {!custom.hideInsure&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Insure $</span><input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0" className="w-16 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>}
+              {!custom.hideInsure&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">{pieces.length>1?"Insure $/box":"Insure $"}</span><input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} disabled={pieces.length>1&&dvEach} placeholder="0" title={pieces.length>1&&!dvEach?"Declared value applied to every box":undefined} className="w-16 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300 disabled:opacity-40"/>{pieces.length>1&&<label className="flex items-center gap-1 text-[11px] text-stone-500 cursor-pointer ml-0.5" title="Enter a different declared value on each box below"><input type="checkbox" checked={dvEach} onChange={e=>setDvEach(e.target.checked)} className="accent-[#0086E0]"/>per box</label>}</div>}
               <div className="flex items-center gap-1.5"><span className="text-[10px] uppercase tracking-widest text-stone-500">Signature</span><select value={sigOption} onChange={e=>{setSigOption(e.target.value);setSig(e.target.value!=="none");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="none">None</option><option value="direct">Direct signature</option><option value="indirect">Indirect signature</option><option value="adult">Adult signature</option></select></div>
               {quotes.some(q=>{const l=String(q.label||"").toLowerCase();return l.includes("fedex")&&/(overnight|2\s?day|express saver)/.test(l);})&&<label className="flex items-center gap-1.5 text-[11px] text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSat(e.target.checked)} className="accent-[#0086E0]"/><span className="uppercase tracking-widest text-stone-500">Saturday delivery <span className="normal-case text-stone-400">(Express only)</span></span></label>}
             </div>
@@ -6090,6 +6096,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <PkgInput label="H" req value={p.H} onChange={e=>setPiece(i,{H:e.target.value})}/>
               <PkgInput label="Weight (lb)" req value={p.weight} onChange={e=>setPiece(i,{weight:e.target.value})} w="w-20"/>
               {!custom.hideOz&&<PkgInput label="oz" value={p.oz} onChange={e=>setPiece(i,{oz:e.target.value})}/>}
+              {!custom.hideInsure&&pieces.length>1&&dvEach&&<PkgInput label="Insure $" value={p.dv} onChange={e=>setPiece(i,{dv:e.target.value})} w="w-20"/>}
               {pieces.length>1&&<button onClick={()=>delPiece(i)} className="text-stone-300 hover:text-rose-500 mb-1"><Trash2 className="w-4 h-4"/></button>}
               {i===pieces.length-1&&<button onClick={addPiece} className="flex items-center gap-1 text-xs bg-stone-200 hover:bg-stone-300 rounded-lg px-2.5 py-1.5 font-medium text-stone-700 ml-1"><Plus className="w-3.5 h-3.5"/>Add package</button>}
             </div>

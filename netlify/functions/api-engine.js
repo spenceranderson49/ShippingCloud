@@ -385,7 +385,7 @@ function rateSellFor(cost,label,ctx){
     const amt=num(rule.pct); if(amt==null)return fallback();
     return Math.round(amt*100)/100;
   } else {
-    /* Weight-break × zone matrix (England-style). Resolution, most specific wins:
+    /* Weight-break × zone matrix. Resolution, most specific wins:
        break's zone cell → rule-level zone % → break % → service %.
        Rule-level zones still beat a break's plain % (pre-existing behavior, unchanged). */
     let pct=num(rule.pct);

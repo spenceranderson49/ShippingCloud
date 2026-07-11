@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v462";
+const BUILD_TAG="addr-v463";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10304,6 +10304,7 @@ function PrinterSettings({settings,setSettings}){
             </Box>
           </>);
         })()}
+        <div className="pt-2"><div className="text-sm font-semibold text-stone-800 flex items-center gap-1.5"><Printer className="w-4 h-4 text-[#0086E0]"/>Skip the print preview — labels go straight to the printer</div></div>
         <p className="text-xs text-stone-500">Browsers can't skip the print dialog on their own — a tiny free agent called PrintNode does it. Five-minute, one-time setup:</p>
         <ol className="text-xs text-stone-600 space-y-1.5 list-none">
           <li className="flex gap-2"><span className="shrink-0 w-4 h-4 rounded-full bg-[#E6F4FF] text-[#006FBF] text-[10px] font-bold flex items-center justify-center">1</span><span>Create a free account at <a href="https://www.printnode.com" target="_blank" rel="noreferrer" className="text-[#0086E0] hover:underline font-medium">printnode.com</a> (the free tier covers a normal label printer).</span></li>

@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v439";
+const BUILD_TAG="addr-v441";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2150,7 +2150,7 @@ const FEDEX_SURCHARGES=[
   {id:"PEAK-OS-G",desc:"Demand Surcharge — Oversize (peak)",seg:"Ground",charge:"fixed",g:"Peak / demand",aka:"Demand Surcharge - Oversize"},
   {id:"PEAK-UNAUTH",desc:"Demand Surcharge — Unauthorized Package (peak)",seg:"Ground",charge:"fixed",g:"Peak / demand"},
   {id:"PEAK-GE",desc:"Demand Surcharge — Ground Economy (peak)",seg:"Ground Economy",charge:"fixed",g:"Peak / demand",aka:"Demand Surcharge"},
-  {id:"PEAK-INTL",desc:"Demand Surcharge — International (per lane, peak)",seg:"Express",charge:"fixed",g:"Peak / demand",aka:"Demand Surcharge"},
+  {id:"PEAK-INTL",desc:"Demand Surcharge — International (per lane, peak)",seg:"Express",charge:"fixed",g:"Peak / demand",aka:"Demand Surcharge - International"},
   /* Pickup & returns */
   {id:"PU-EXP",desc:"On-Call Pickup (per package)",seg:"Express",charge:"fixed",g:"Pickup & returns"},
   {id:"PU-GRD-OC",desc:"On-Call Pickup (per package)",seg:"Ground",charge:"fixed",g:"Pickup & returns"},
@@ -2186,6 +2186,42 @@ const surMatches=(su,query)=>{
   const hay=[su.desc,su.id,su.g,su.seg,su.aka].filter(Boolean).join(" ").toLowerCase();
   return q.split(/\s+/).every(tok=>hay.includes(tok));
 };
+/* ── England tier guide (Spencer's contract tiers): weekly-volume tiers set his COST as a
+   discount off FedEx list, per service family and weight band, plus tier minimums and dim
+   divisors. Used for margin analysis until the raw England rate tables are imported. ── */
+const ENGLAND_TIERS=[
+ {id:"t1",name:"Tier 1",vol:"Under $400/wk",min:11.99,dims:{ground:194,ground_economy:139,express:139,intl:139},
+  ground:[[5,26],[10,34],[20,42],[30,42],[75,42],[150,42]],home:[[5,13],[10,19],[20,26],[30,33],[70,33]],ge:null,
+  express:{priority_overnight:41,standard_overnight:41,"2day_am":36,"2day":29,express_saver:28},intl:null,canada:null,onerate:false},
+ {id:"t6",name:"Tier 6",vol:"$400–$999/wk",min:11.49,dims:{ground:194,ground_economy:139,express:139,intl:139},
+  ground:[[5,40],[10,45],[20,50],[30,52],[75,53],[150,54]],home:[[5,40],[10,45],[20,50],[30,52],[70,53]],ge:null,
+  express:{priority_overnight:69,standard_overnight:69,"2day_am":50,"2day":60,express_saver:55},intl:null,canada:null,onerate:false},
+ {id:"t2021",name:"Tier 2021",vol:"$1,000–$1,499/wk",min:9.49,dims:{ground:225,ground_economy:194,express:139,intl:194},
+  ground:[[5,54],[10,57],[20,60],[30,64],[75,67],[150,67]],home:[[5,54],[10,57],[20,60],[30,64],[70,67]],ge:51.5,
+  express:{priority_overnight:78,standard_overnight:78,"2day_am":50,"2day":66,express_saver:66},intl:{export:77,import:55},canada:[[5,30],[10,35],[999,42]],onerate:false},
+ {id:"t2023",name:"Tier 2023",vol:"$1,500–$1,999/wk",min:9.49,dims:{ground:225,ground_economy:194,express:194,intl:194},
+  ground:[[5,57],[10,60],[20,63],[30,67],[75,69],[150,69]],home:[[5,57],[10,60],[20,63],[30,67],[70,69]],ge:55,
+  express:{priority_overnight:80,standard_overnight:80,"2day_am":50,"2day":71,express_saver:68},intl:{export:81,import:55},canada:[[5,30],[10,35],[999,42]],onerate:true},
+ {id:"t2025",name:"Tier 2025",vol:"$2,000+/wk",min:7.39,dims:{ground:225,ground_economy:194,express:225,intl:194},
+  ground:[[5,60],[10,62],[20,65],[30,69],[75,70.5],[150,70.5]],home:[[5,60],[10,62],[20,65],[30,69],[70,70.5]],ge:62,
+  express:{priority_overnight:81.5,standard_overnight:81.5,"2day_am":51.5,"2day":72.5,express_saver:69.5},intl:{export:81,import:55},canada:[[5,30],[10,35],[999,42]],onerate:true},
+];
+/* England cost estimate for a service at a LIST price under the selected tier (margin analysis). */
+function englandTierCost(tier,key,weight,list){
+  if(!tier||list==null||isNaN(+list))return null;
+  const band=(rows)=>{if(!rows)return null;const r=rows.find(x=>+weight<=x[0])||rows[rows.length-1];return r?r[1]:null;};
+  let d=null;
+  if(key==="ground")d=band(tier.ground);
+  else if(key==="home")d=band(tier.home);
+  else if(key==="ground_economy")d=tier.ge;
+  else if(key==="intl_ground_ca")d=band(tier.canada);
+  else if(/^intl/.test(key))d=tier.intl?tier.intl.export:null;
+  else d=tier.express?tier.express[key]:null;
+  if(d==null)return null;
+  let c=+list*(1-d/100);
+  if(tier.min!=null&&(key==="ground"||key==="home"||key==="ground_economy")&&c<tier.min)c=tier.min;
+  return Math.round(c*100)/100;
+}
 /* Accessorial category tabs — quick filters over the ~70 Service Guide rows. */
 const SUR_CATS=[["all","All"],["resi","Residential"],["fuel","Fuel"],["das","DAS & EDAS"],["peak","Peak / Demand"],["ah","Addl Handling"],["ovr","Oversize"],["sig","Signature & Delivery"],["ge","Ground Economy"],["intl","International"],["misc","Misc"]];
 const surCat=(su)=>{const i=String(su.id||"");
@@ -2454,7 +2490,7 @@ function rateSellFor(cost,label,ctx){
     if(c.rules){
       const prof0=c.prof||rateProfileFor(c.rules,c.client&&c.client.id);
       const r0=prof0&&prof0.services&&prof0.services[rateSvcKey(label)];
-      if(r0&&r0.on!==false&&r0.basis==="flat"&&r0.pct!=null&&r0.pct!==""&&!isNaN(+r0.pct))return Math.round(+r0.pct*100)/100;
+      if(r0&&r0.basis==="flat"&&r0.pct!=null&&r0.pct!==""&&!isNaN(+r0.pct))return Math.round(+r0.pct*100)/100;
     }
     return null;
   }
@@ -2471,7 +2507,7 @@ function rateSellFor(cost,label,ctx){
   /* The rule's Min $ floor applies to EVERY path out of this function — including the fallbacks
      (blank %, missing list table, no zone). It used to vanish on fallback, so "Min $ 15 and no
      percent" priced with no floor at all: the exact "minimums not honored" bug. */
-  const ruleMin=(rule&&rule.on!==false)?num(rule.min):null;
+  const ruleMin=rule?num(rule.min):null;
   const fallback=()=>{
     let s;
     if(aPct!=null||aMin!=null){s=cost*(1+((aPct||0))/100);if(aMin!=null&&s<cost+aMin)s=cost+aMin;}
@@ -2480,7 +2516,7 @@ function rateSellFor(cost,label,ctx){
     return Math.round(s*100)/100;
   };
   if(!rules)return fallback();
-  if(!rule||rule.on===false)return fallback();
+  if(!rule)return fallback();
   let sell=null;
   if(rule.basis==="list"){
     const dom=c.fromZip&&c.toZip&&/^\d/.test(String(c.toZip));
@@ -3402,7 +3438,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
           const items=g.items.filter(sv=>f?f.split(/\s+/).every(w=>sv.l.toLowerCase().includes(w)):(showHiddenSvc||!svcHiddenMap[sv.k]));
           if(!items.length)return null;
           return (<React.Fragment key={g.g}>
-          <tr><td colSpan={6} className="pt-3 pb-1 pl-3 text-[10px] uppercase tracking-widest text-stone-400 font-semibold">{g.g}{g.g==="One Rate"&&<span className="normal-case tracking-normal font-normal"> — price these Flat $ (always sells at exactly that), or import the One Rate table under Advanced below</span>}</td></tr>
+          <tr><td colSpan={5} className="pt-3 pb-1 pl-3 text-[10px] uppercase tracking-widest text-stone-400 font-semibold">{g.g}{g.g==="One Rate"&&<span className="normal-case tracking-normal font-normal"> — price these Flat $ (always sells at exactly that), or import the One Rate table under Advanced below</span>}</td></tr>
           {items.map(sv=>{const r=(prof.services||{})[sv.k]||{};
           const brkSorted=(r.breaks||[]).map((b,_i)=>({...b,_i})).sort((a,b)=>{const A=(a.upTo==null||a.upTo==="")?1e12:+a.upTo,B=(b.upTo==null||b.upTo==="")?1e12:+b.upTo;return A-B;});
           const upBrkAt=(idx,patch)=>{const br=[...(r.breaks||[])];br[idx]={...br[idx],...patch};upProfSvc(prof.id,sv.k,{breaks:br});};
@@ -3410,15 +3446,14 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
           const seedStd=()=>{ if(r.breaks&&r.breaks.length&&!window.confirm("Replace the existing weight breaks with the standard ranges (0–5, 6–10, 11–30, 31–75, 76+)?"))return; upProfSvc(prof.id,sv.k,{breaks:[{upTo:5},{upTo:10},{upTo:30},{upTo:75},{upTo:99999}].map(b=>({...b,pct:"",min:"",zones:{}}))}); };
           return (<React.Fragment key={sv.k}>
           <tr className={`border-t border-stone-100 hover:bg-stone-50 ${svcHiddenMap[sv.k]?"opacity-50":""}`}>
-            <td className="py-1.5 pl-3 pr-1 w-6"><input type="checkbox" checked={r.on!==false} onChange={e=>upProfSvc(prof.id,sv.k,{on:e.target.checked})} className="accent-[#0086E0]"/></td>
-            <td className="py-1.5 pr-2 font-medium text-stone-800 whitespace-nowrap">{sv.l}</td>
+            <td className="py-1.5 pl-3 pr-2 font-medium text-stone-800 whitespace-nowrap">{sv.l}</td>
             <td className="py-1.5 pr-2"><Select value={r.basis||"pct"} onChange={e=>upProfSvc(prof.id,sv.k,{basis:e.target.value})}><option value="pct">% Markup over England cost</option><option value="list">Discount off FedEx list %</option><option value="fixed">Fixed $ over cost</option><option value="flat">Flat $ (always sells at exactly this)</option></Select></td>
             <td className="py-1.5 pr-2 whitespace-nowrap"><Input type="number" value={r.pct==null?"":r.pct} onChange={e=>upProfSvc(prof.id,sv.k,{pct:e.target.value})} className="w-20 text-right"/> <span className="text-stone-400 text-xs">{(r.basis==="fixed"||r.basis==="flat")?"$":"%"}</span></td>
             <td className="py-1.5 pr-3 whitespace-nowrap"><span className="text-stone-400 text-xs">Min $</span> <Input type="number" value={r.min==null?"":r.min} onChange={e=>upProfSvc(prof.id,sv.k,{min:e.target.value})} className="w-24 text-right"/> {["pct","list"].includes(r.basis||"pct")&&<button onClick={()=>setOpenBrk(o=>({...o,[sv.k]:!o[sv.k]}))} className={`text-[11px] rounded px-2 py-1 ml-1 align-middle ${r.breaks&&r.breaks.length?"bg-sky-100 text-sky-700":"bg-stone-100 text-stone-500 hover:bg-stone-200"}`}>{r.breaks&&r.breaks.length?r.breaks.length+" breaks":"Breaks"}</button>}</td>
             <td className="py-1.5 pr-2 w-6 text-right"><button onClick={()=>togHide(sv.k)} title={svcHiddenMap[sv.k]?"Show this row again":"Hide this row to declutter — pricing untouched; the checkbox turns the rule off"} className="text-stone-300 hover:text-stone-500">{svcHiddenMap[sv.k]?<Eye className="w-3.5 h-3.5"/>:<EyeOff className="w-3.5 h-3.5"/>}</button></td>
           </tr>
           {openBrk[sv.k]&&["pct","list"].includes(r.basis||"pct")&&<tr className="border-t border-stone-100 bg-sky-50/50">
-            <td colSpan={6} className="py-2.5 pl-10 pr-3">
+            <td colSpan={5} className="py-2.5 pl-10 pr-3">
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[10px] uppercase tracking-widest text-stone-500 font-semibold">Weight breaks — {sv.l}</span>
@@ -3475,7 +3510,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         </div>
         <div className="mb-2"><SurCatChips val={surTab} set={setSurTab}/></div>
         <p className="text-[11px] text-stone-500 mb-2">Every FedEx surcharge — rules here reprice the matching fee line on LIVE quotes for this profile. <b>% off LIST</b> = FedEx list rate −X% · <b>% over cost</b> = England/FedEx fee ±X% (negative = discount) · <b>$ over cost</b> = fee + $X · <b>Flat $</b> = exactly $X. Blank amount = the fee stays inside the service-level markup. Search by the exact name you see on a quote (“Residential Surcharge”, “Fuel Surcharge”…) — it finds the row.</p>
-        <div className="border border-stone-200 rounded-lg bg-white overflow-x-auto max-h-[420px] overflow-y-auto"><table className="w-full text-sm min-w-[560px]"><tbody>
+        <div className="border border-stone-200 rounded-lg bg-white overflow-x-auto h-[420px] overflow-y-auto"><table className="w-full text-sm min-w-[560px]"><tbody>
           {(()=>{
             const q=(surQ||"").trim().toLowerCase();
             const listS=FEDEX_SURCHARGES.filter(su=>(!q||surMatches(su,q))&&(surTab==="all"||surCat(su)===surTab));
@@ -3788,7 +3823,7 @@ function RatesAdmin({clients=[],brand}){
   /* sheet pricing with an explicit zone (the live resolver derives zone from zips) */
   const sheetSell=(rule,cost,weight,zone,key)=>{
     const gFall=()=>null;   // no platform-wide default — a rate sheet cell with no rule shows "—", never an invented price
-    if(!rule||rule.on===false)return gFall();
+    if(!rule)return gFall();
     const num=(x)=>(x==null||x==="")?null:+x;
     if(rule.basis==="flat"){const a=num(rule.pct);if(a==null)return gFall();return {sell:Math.round(a*100)/100,starred:false};}
     if(cost==null)return null;
@@ -3800,9 +3835,8 @@ function RatesAdmin({clients=[],brand}){
     if(mn!=null&&sell<mn){sell=mn;starred=true;}
     return {sell:Math.round(sell*100)/100,starred};
   };
-  const sheetData=useMemo(()=>{
-    if(!sheet)return null;
-    const key=sheet.k;const rule=(prof.services||{})[key]||{};
+  const buildSheet=(key)=>{
+    const rule=(prof.services||{})[key]||{};
     const src=rule.basis==="list"?(String(prof&&prof.listYear||"2026")==="2025"?(baseCosts["list2025:"+key]||LIST_2025[key]||baseCosts[key]):(baseCosts["list:"+key]||baseCosts[key])):baseCosts[key];
     const costT=baseCosts[key];
     if(!src||!src.rows||!src.rows.length)return {empty:true};
@@ -3812,10 +3846,57 @@ function RatesAdmin({clients=[],brand}){
         const f=costT&&costT.zones?(()=>{const ci=costT.zones.indexOf(String(z));const rr=costT.rows.find(x=>+x[0]>=+w)||costT.rows[costT.rows.length-1];return ci>=0&&rr?rr[ci+1]:null;})():null;
         const base=rule.basis==="list"?r[i+1]:f;
         const s=sheetSell(rule,base==null?null:+base,w,z,key);
-        return {f:f==null?null:+f,c:s?s.sell:null,star:s?s.starred:false};
+        /* no imported England cost table → estimate cost from the selected England tier (list − tier %) */
+        const fEff=f!=null?+f:(rule.basis==="list"&&base!=null&&base!==""?englandTierCost(TIER,key,+w,+base):null);
+        return {f:fEff,c:s?s.sell:null,star:s?s.starred:false};
       })};
     })};
-  },[sheet,rules,profId]);
+  };
+  const sheetData=useMemo(()=>sheet?buildSheet(sheet.k):null,[sheet,rules,profId]);
+  const TIER=ENGLAND_TIERS.find(t=>t.id===rules.englandTier)||null;
+  const [shSvcs,setShSvcs]=useState({});
+  const [shAccs,setShAccs]=useState({});
+  const _sheetStyles="body{font-family:system-ui,Segoe UI,Arial;padding:28px;color:#1c1917}table{border-collapse:collapse;width:100%;font-size:12px;margin:10px 0 22px}th,td{border:1px solid #e5e5e5;padding:6px 8px;text-align:right}th{background:#f5f5f4}h1{font-size:16px;margin:18px 0 2px}.sub{color:#78716c;font-size:12px}td:first-child,th:first-child{text-align:left}";
+  const _sheetLogo=()=>BRAND.fw?('<img src="'+FW_LOGO+'" style="height:42px"/>'):('<div style="font:800 22px system-ui;letter-spacing:.02em">'+brandWordmark()+'</div>');
+  const printSheetsMulti=()=>{
+    const keys=RATE_SERVICES.fedex.filter(sv=>!sv.or&&shSvcs[sv.k]).map(sv=>sv.k);
+    if(!keys.length)return;
+    let html="";
+    keys.forEach(k=>{
+      const sv=RATE_SERVICES.fedex.find(x=>x.k===k);const d=buildSheet(k);
+      html+="<h1>"+sv.l+"</h1>";
+      if(!d||d.empty){html+="<div class='sub'>No cost / list table imported for this service yet — add one under Base costs and reprint.</div>";return;}
+      html+="<table><tr><th>Weight (lb)</th>"+d.zones.map(z=>"<th>Zone "+z+"</th>").join("")+"</tr>"
+        +d.rows.map(r=>"<tr><td style='font-weight:600'>"+r.w+"</td>"+r.cells.map(c=>c.c==null?"<td>—</td>":"<td>$"+c.c.toFixed(2)+(c.star?"*":"")+"</td>").join("")+"</tr>").join("")+"</table>";
+    });
+    const w=window.open("","_blank");if(!w)return window.alert("Allow pop-ups to print the rate sheets.");
+    w.document.write("<html><head><title>Rate sheets — "+prof.name+"</title><style>"+_sheetStyles+"</style></head><body>"+_sheetLogo()+"<div class='sub'>Customer rate sheets · Profile: "+prof.name+" · Generated "+new Date().toLocaleDateString()+" · * = Min $ floor applied. Rates include base transportation; fees per the accessorials sheet.</div>"+html+"<script>window.print()</scr"+"ipt></body></html>");
+    w.document.close();
+  };
+  const printAccSheet=()=>{
+    const rows=FEDEX_SURCHARGES.filter(su=>shAccs[su.id]);
+    if(!rows.length)return;
+    const priceDesc=(su)=>{
+      const r=(prof.surcharges||{})[su.id]||{};
+      const a=(r.amount!=null&&r.amount!==""&&!isNaN(+r.amount))?+r.amount:null;
+      const t=r.type||(su.app?"fixed":"percent");
+      if(a==null)return su.def!=null?"$"+(+su.def).toFixed(2):"Carrier rate";
+      if(t==="fixed")return "$"+a.toFixed(2);
+      if(t==="add")return "Carrier fee + $"+a.toFixed(2);
+      if(t==="listpct")return a?("FedEx list − "+a+"%"):"FedEx list";
+      return a===0?"Carrier fee":(a>0?"Carrier fee + "+a+"%":"Carrier fee − "+Math.abs(a)+"%");
+    };
+    let html="<table><tr><th>Fee</th><th>Applies to</th><th>Charge basis</th><th>Your price</th></tr>";
+    let lastG=null;
+    rows.forEach(su=>{
+      if(su.g!==lastG){lastG=su.g;html+="<tr><td colspan='4' style='background:#fafaf9;font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:.08em'>"+su.g+"</td></tr>";}
+      html+="<tr><td>"+(su.aka||su.desc)+"</td><td>"+(su.seg||"All")+"</td><td>"+(su.charge||"")+"</td><td style='font-weight:600'>"+priceDesc(su)+"</td></tr>";
+    });
+    html+="</table>";
+    const w=window.open("","_blank");if(!w)return window.alert("Allow pop-ups to print the accessorials sheet.");
+    w.document.write("<html><head><title>Accessorials — "+prof.name+"</title><style>"+_sheetStyles+"</style></head><body>"+_sheetLogo()+"<h1>Accessorial charges</h1><div class='sub'>Profile: "+prof.name+" · Generated "+new Date().toLocaleDateString()+" · Fee names as they appear on FedEx quotes. Charges subject to FedEx Service Guide terms.</div>"+html+"<script>window.print()</scr"+"ipt></body></html>");
+    w.document.close();
+  };
   const brandWordmark=()=>((brand&&brand.name1)||"SHIPPING")+((brand&&brand.name2)||"CLOUD");
   const exportCSV=()=>{
     if(!sheetData||sheetData.empty||!sheet)return;
@@ -3902,6 +3983,15 @@ function RatesAdmin({clients=[],brand}){
   const surRow=(prof.surcharges||{});
   return (<div className="space-y-4">
     <DraftBar dirty={_d.dirty} onSave={_d.save} onUndo={_d.undo} onReset={()=>{ if(window.confirm("Reset ALL rate rules to the blank default? This clears every profile, markup, and imported cost. You'll still need to click Save to make it permanent.")) _d.reset(); }} resetLabel="Reset all rates to default" savedNote="Rates saved" saveLabel="Save rates"/>
+    <div className="border border-stone-200 rounded-lg bg-white p-3 flex flex-wrap items-center gap-3">
+      <div className="text-sm font-semibold text-stone-800">England tier</div>
+      <Select value={rules.englandTier||""} onChange={e=>upRules({englandTier:e.target.value})} className="w-56">
+        <option value="">— not set —</option>
+        {ENGLAND_TIERS.map(t=><option key={t.id} value={t.id}>{t.name} · {t.vol}</option>)}
+      </Select>
+      {TIER?<span className="text-[11px] text-stone-500">Min ${TIER.min.toFixed(2)} · dims G/HD {TIER.dims.ground} · GE {TIER.dims.ground_economy} · Express {TIER.dims.express} · Intl {TIER.dims.intl}{TIER.onerate?" · One Rate ✓":""} — used to estimate your England cost (list − tier %) for margin analysis until raw England tables are imported under Base costs.</span>
+      :<span className="text-[11px] text-stone-400">Pick the contract tier you're on — rate sheets estimate your England cost from it (list − tier %) so margin analysis works before the raw England tables are imported.</span>}
+    </div>
     {/* Markup itself is edited from each customer's Rates tab — this screen is for the shared plumbing: profiles, per-service rules, base-cost tables, zones. */}
     <div className="text-[11px] text-stone-500 bg-stone-50 border border-stone-200 rounded px-3 py-2">
       Markup is edited on each customer’s <b>Rates</b> tab — every account’s number lives there. There's no platform-wide default: an account with nothing set of its own sells at raw carrier cost. This screen holds the shared pieces: rate profiles, per-service rules below, base-cost tables, and zone data.
@@ -3951,7 +4041,7 @@ function RatesAdmin({clients=[],brand}){
           const items=showHidden?g.items:g.items.filter(s=>!svcHiddenMap[s.k]);
           if(!items.length)return null;
           return (<React.Fragment key={g.g}>
-          <tr><td colSpan={8} className="pt-4 pb-1 text-[10px] uppercase tracking-widest text-stone-400 font-semibold">{g.g}{g.g==="One Rate"&&<span className="normal-case tracking-normal font-normal"> — priced from the imported One Rate table under Base costs, or exactly at a Flat $ rule</span>}</td></tr>
+          <tr><td colSpan={7} className="pt-4 pb-1 text-[10px] uppercase tracking-widest text-stone-400 font-semibold">{g.g}{g.g==="One Rate"&&<span className="normal-case tracking-normal font-normal"> — priced from the imported One Rate table under Base costs, or exactly at a Flat $ rule</span>}</td></tr>
           {items.map(s=>{
             const r=(prof.services||{})[s.k]||{};
             const zOn=!!(openZ[s.k]||(r.zones&&Object.keys(r.zones).length));
@@ -3959,7 +4049,7 @@ function RatesAdmin({clients=[],brand}){
             const hasCost=!!baseCosts[s.k];const hasList=!!baseCosts["list:"+s.k];
             return (<React.Fragment key={s.k}>
             <tr className={`border-t border-stone-100 hover:bg-stone-50 ${svcHiddenMap[s.k]?"opacity-50":""}`}>
-              <td className="py-2 pr-1 w-6"><input type="checkbox" checked={r.on!==false} onChange={e=>upSvc(s.k,{on:e.target.checked})} className="accent-[#0086E0]"/></td>
+
               <td className="py-2 pr-2 font-medium text-stone-800 whitespace-nowrap">{s.l}{s.or&&r.basis!=="flat"&&!(baseCosts.onerate&&baseCosts.onerate[s.k]!=null)&&<Badge tone="stone">needs One Rate table or Flat $</Badge>}</td>
               <td className="py-2 pr-2"><Select value={r.basis||"pct"} onChange={e=>upSvc(s.k,{basis:e.target.value})}><option value="pct">% Markup over England cost</option><option value="list">Discount off FedEx list %</option><option value="fixed">Fixed $ over cost</option><option value="flat">Flat $ (always sells at exactly this)</option></Select></td>
               <td className="py-2 pr-2 whitespace-nowrap"><Input type="number" value={r.pct==null?"":r.pct} onChange={e=>upSvc(s.k,{pct:e.target.value})} className="w-20 text-right"/> <span className="text-stone-400 text-xs">{(r.basis==="fixed"||r.basis==="flat")?"$":"%"}</span></td>
@@ -3971,11 +4061,11 @@ function RatesAdmin({clients=[],brand}){
               <td className="py-2 whitespace-nowrap">{s.z?<label className="flex items-center gap-1.5 text-xs text-stone-500 cursor-pointer"><input type="checkbox" checked={zOn} onChange={e=>{setOpenZ(o=>({...o,[s.k]:e.target.checked}));if(!e.target.checked)upSvc(s.k,{zones:null});}} className="accent-[#0086E0]"/>By zone</label>:<span className="text-[11px] text-stone-300">{hasList&&r.basis==="list"?<Badge tone="green">list table ✓</Badge>:null}</span>}</td>
               <td className="py-2 pl-1 w-6 text-right"><button onClick={()=>togHideSvc(s.k)} title={svcHiddenMap[s.k]?"Show this row again":"Hide this row to declutter the table — pricing is untouched; the checkbox turns the rule off"} className="text-stone-300 hover:text-stone-500">{svcHiddenMap[s.k]?<Eye className="w-3.5 h-3.5"/>:<EyeOff className="w-3.5 h-3.5"/>}</button></td>
             </tr>
-            {zOn&&s.z&&<tr><td colSpan={8}><div className="ml-7 mb-2 border border-stone-200 bg-stone-50 rounded-lg p-2.5">
+            {zOn&&s.z&&<tr><td colSpan={7}><div className="ml-7 mb-2 border border-stone-200 bg-stone-50 rounded-lg p-2.5">
               <div className="flex gap-2 flex-wrap">{RATE_ZONES.map(z=>(<div key={z} className="text-center"><div className="text-[10px] font-semibold text-stone-500 mb-0.5">{z}</div><Input type="number" value={(r.zones&&r.zones[z])==null?"":r.zones[z]} onChange={e=>upSvc(s.k,{zones:{...(r.zones||{}),[z]:e.target.value}})} className="w-14 text-center"/></div>))}</div>
               <div className="text-[11px] text-stone-400 mt-1.5">Zone % overrides the service % when the lane's zone is known. Blank = fall back to the service %. AK/HI/territory zone columns light up once real FedEx zone charts are imported (today zones are estimated 2–8).</div>
             </div></td></tr>}
-            {bOn&&<tr><td colSpan={8}><div className="ml-7 mb-2 border border-stone-200 bg-stone-50 rounded-lg p-2.5 space-y-1.5">
+            {bOn&&<tr><td colSpan={7}><div className="ml-7 mb-2 border border-stone-200 bg-stone-50 rounded-lg p-2.5 space-y-1.5">
               {(r.breaks||[]).map((b,i)=>(<div key={i} className="flex items-center gap-2 text-sm"><span className="text-stone-500 text-xs">Up to</span><Input type="number" value={b.upTo} onChange={e=>{const br=[...r.breaks];br[i]={...br[i],upTo:e.target.value};upSvc(s.k,{breaks:br});}} className="w-20 text-right"/><span className="text-stone-500 text-xs">lb →</span><Input type="number" value={b.pct==null?"":b.pct} onChange={e=>{const br=[...r.breaks];br[i]={...br[i],pct:e.target.value};upSvc(s.k,{breaks:br});}} className="w-20 text-right"/><span className="text-stone-500 text-xs">%</span><button onClick={()=>upSvc(s.k,{breaks:r.breaks.filter((_,j)=>j!==i)})} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button></div>))}
               <button onClick={()=>upSvc(s.k,{breaks:[...(r.breaks||[]),{upTo:"",pct:""}]})} className="text-xs bg-stone-100 rounded-lg px-2.5 py-1.5 hover:bg-stone-200">＋ Add weight break</button>
               <div className="text-[11px] text-stone-400">Weight-band % overrides the service % (heaviest band applies above the last break). Zone % still wins over both.</div>
@@ -4002,7 +4092,7 @@ function RatesAdmin({clients=[],brand}){
         </div>
       </div>}
 
-      {tab==="surcharges"&&<div className="space-y-4">
+      {tab==="surcharges"&&<div className="space-y-4 min-h-[640px]">
         <SurCatChips val={surTab} set={setSurTab}/>
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-[11px] text-stone-500 flex-1 min-w-[260px]">All {FEDEX_SURCHARGES.length} Service Guide surcharges in their own boxes — Express, Ground, and Home Delivery each carry their own rates. Double-click a row to set your price on that fee: <b>% off LIST</b> prices it off FedEx's list rate, <b>% over cost</b> marks the England/FedEx fee up or down, <b>$ over cost</b> adds $X on top, <b>Flat $</b> sells it at exactly $X. Rules apply to live quotes line-by-line — fuel, peak/demand, DAS, residential, additional handling, declared value, all of it. Rows with no rule stay inside your service-level markup.</p>
@@ -4117,6 +4207,32 @@ function RatesAdmin({clients=[],brand}){
         </div>}
       </div>
     </div>}
+    {/* ── Print rate sheets & accessorials sheet ── */}
+    <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
+      <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><Printer className="w-4 h-4 text-[#0086E0]"/>Print rate sheets</div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] text-stone-500">Pick the services to include:</span>
+        <button onClick={()=>setShSvcs(Object.fromEntries(RATE_SERVICES.fedex.filter(sv=>!sv.or).map(sv=>[sv.k,true])))} className="text-[11px] text-[#0086E0] hover:underline">Select all</button>
+        <button onClick={()=>setShSvcs({})} className="text-[11px] text-stone-400 hover:underline">None</button>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5">
+        {RATE_SERVICES.fedex.filter(sv=>!sv.or).map(sv=>(<label key={sv.k} className="flex items-center gap-1.5 text-[12px] text-stone-700 cursor-pointer"><input type="checkbox" checked={!!shSvcs[sv.k]} onChange={e=>setShSvcs(m=>({...m,[sv.k]:e.target.checked}))} className="accent-[#0086E0]"/><span className="truncate">{sv.l.replace("FedEx ","")}</span></label>))}
+      </div>
+      <button onClick={printSheetsMulti} disabled={!Object.keys(shSvcs).some(k=>shSvcs[k])} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5"><Printer className="w-4 h-4"/>Print rate sheets ({Object.keys(shSvcs).filter(k=>shSvcs[k]).length})</button>
+      <div className="text-[11px] text-stone-400">Services without an imported cost/list table print a note instead of a grid — import tables under Base costs to fill them in. One Rate prices live on the flat rules above.</div>
+      <div className="border-t border-stone-100 pt-3 space-y-2">
+        <div className="text-sm font-semibold text-stone-800">Accessorials sheet</div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] text-stone-500">Pick the fees to include:</span>
+          <button onClick={()=>setShAccs(Object.fromEntries(FEDEX_SURCHARGES.map(su=>[su.id,true])))} className="text-[11px] text-[#0086E0] hover:underline">Select all</button>
+          <button onClick={()=>setShAccs({})} className="text-[11px] text-stone-400 hover:underline">None</button>
+        </div>
+        <div className="max-h-[220px] overflow-y-auto border border-stone-100 rounded-lg p-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
+          {FEDEX_SURCHARGES.map(su=>(<label key={su.id} className="flex items-center gap-1.5 text-[11px] text-stone-700 cursor-pointer"><input type="checkbox" checked={!!shAccs[su.id]} onChange={e=>setShAccs(m=>({...m,[su.id]:e.target.checked}))} className="accent-[#0086E0]"/><span className="truncate">{su.aka||su.desc}<span className="text-stone-400"> · {su.seg}</span></span></label>))}
+        </div>
+        <button onClick={printAccSheet} disabled={!Object.keys(shAccs).some(k=>shAccs[k])} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5"><Printer className="w-4 h-4"/>Print accessorials sheet ({Object.keys(shAccs).filter(k=>shAccs[k]).length})</button>
+      </div>
+    </div>
     <div className="flex items-center justify-end gap-3 pt-2 border-t border-stone-200">
       {_d.dirty?<span className="text-[12px] text-amber-700 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>You have unsaved rate changes</span>:<span className="text-[12px] text-stone-400">All rate changes saved</span>}
       <div className="flex-1"/>
@@ -4759,8 +4875,10 @@ async function cloudFlush(){
   if(res&&res.authFailed){ lsDel("cloud.token"); window.location.reload(); return; }
   if(res&&res.rejectedOnly){
     /* Every key was refused by server policy (permissions / wipe-guard) — a retry can NEVER
-       succeed, so drop the batch instead of looping "offline" forever on doomed writes. */
-    try{ window.dispatchEvent(new CustomEvent("sc-save-failed",{detail:{keys,error:res.error||"not permitted"}})); }catch(e){}
+       succeed, so drop the batch. SILENTLY: these are writes this login was never allowed to
+       make (e.g. a customer session echoing the shared rateRules slice) — a red "couldn't save"
+       toast for them is pure noise. Real user saves are admin-scoped and never land here. */
+    try{ console.warn("cloud: dropped policy-rejected write:",keys.join(", ")); }catch(e){}
     return;
   }
   CLOUD.offline=true;
@@ -6011,7 +6129,7 @@ function AppInner(){
           </div>
         </div>
       </header>
-      {qq&&<QuickQuote onClose={()=>setQQ(false)} client={client} clients={clients} isAdmin={isAdmin} priceAsShared={adminPriceAs} setPriceAsShared={setAdminPriceAs} england={englandFor(client,settings)} senderZip={settings?.sender?.zip||""}/>}
+      {qq&&<QuickQuote onClose={()=>setQQ(false)} client={client} clients={clients} isAdmin={isAdmin} priceAsShared={adminPriceAs} setPriceAsShared={setAdminPriceAs} england={englandFor(client,settings)} settings={settings} senderZip={settings?.sender?.zip||""}/>}
       {appLabel&&<LabelPreviewModal data={appLabel} settings={settings} onClose={()=>setAppLabel(null)}/>}
       {navOpen&&<div className="md:hidden fixed inset-0 z-40 flex" role="dialog">
         <div className="absolute inset-0 bg-stone-900/40" onClick={()=>setNavOpen(false)}/>
@@ -6370,19 +6488,15 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
      over FedEx's 150-lb parcel max, over the 108" side / 165" length-plus-girth limits) plus
      the destination ZIP and the ship-from ZIP. */
   const quoteProblems=useMemo(()=>{
+    /* Missing-input nags (no weight, no ZIP…) are NOT errors while someone is still typing —
+       booking-time validation in print() catches anything truly missing. Only surface problems
+       the form can't fix by finishing: physical over-limit packages (which explain an empty
+       rate list) and a missing ship-from ZIP (a settings problem, not a typing problem). */
     const probs=[];
-    const z=String(receiver.zip||"").trim();
-    const isUS=!receiver.country||_isUSCountry(receiver.country);
-    const noPostal=!isUS&&NO_POSTAL_COUNTRIES.has(String(receiver.country||"").trim());   // e.g. Hong Kong, Panama — FedEx rates fine with no postal code
-    if(!noPostal){
-      if(!z)probs.push("Destination ZIP is missing.");
-      else if(!postalOkFor(receiver.zip,receiver.country))probs.push(`“${z}” isn't a valid ${isUS?"US ZIP":"postal code for "+receiver.country}.`);
-    }
     pieces.forEach((p,i)=>{
       const w=pw(p);
       const tag=pieces.length>1?`Box #${i+1}`:"The package";
-      if(!(w>0))probs.push(`${tag} has no weight.`);
-      else if(w>150)probs.push(`${tag} is ${w} lb — over FedEx's 150 lb per-package max, so it can't be quoted. Split it into more boxes (or ship it freight).`);
+      if(w>150)probs.push(`${tag} is ${w} lb — over FedEx's 150 lb per-package max, so it can't be quoted. Split it into more boxes (or ship it freight).`);
       const L=+p.L||0,W=+p.W||0,H=+p.H||0;
       if(L>119||W>119||H>119)probs.push(`${tag}'s longest side is over 119" — FedEx won't accept it as a parcel (Express max is 119", Ground 108").`);
       else if(L&&W&&H){const s=[L,W,H].sort((x,y)=>y-x);const lg=s[0]+2*(s[1]+s[2]);if(lg>165)probs.push(`${tag} is ${lg}" length-plus-girth — over FedEx's 165" limit, so it can't be quoted.`);}
@@ -8329,7 +8443,8 @@ function Pickups({pickups,setPickups,settings}){
 }
 
 /* ════════ QUICK QUOTE ════════ */
-function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",setPriceAsShared=null,england,senderZip}){
+const QQ_BLANK={toZip:"",residential:true,pieces:[{weight:"",L:"",W:"",H:"",oz:""}],sigOption:"none",saturday:false,insurance:""};
+function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",setPriceAsShared=null,england,settings=null,senderZip}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 rate database
   /* "Price as" is the SESSION-WIDE admin choice (shared with the Ship tab) — the client prop
      already arrives resolved to that customer, so pricing here just uses it. */
@@ -8337,12 +8452,19 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
   const setPriceAs=(v)=>{setPriceAsShared&&setPriceAsShared(v);};
   const effClient=client;
   const [fromZip,setFromZip]=useState(senderZip||client?.origin||"");
-  const [toZip,setToZip]=useState("");   // starts EMPTY — no canned destination/package on a fresh quote
-  const [residential,setResidential]=useState(true);
-  const [pieces,setPieces]=useState([{weight:"",L:"",W:"",H:"",oz:""}]);
-  const [sigOption,setSigOption]=useState("none");
-  const [saturday,setSaturday]=useState(false);
-  const [insurance,setInsurance]=useState("");
+  /* The whole quote form PERSISTS per login — close Quick quote, come back, and the shipment
+     you were pricing is still there. The Clear button wipes it back to blank. */
+  const [qqForm,setQqForm]=usePersist("qqForm",QQ_BLANK);
+  const F=qqForm&&typeof qqForm==="object"?qqForm:QQ_BLANK;
+  const upF=(patch)=>setQqForm(f=>({...QQ_BLANK,...(f||{}),...patch}));
+  const toZip=F.toZip||"";const setToZip=(v)=>upF({toZip:v});
+  const residential=F.residential!==false;const setResidential=(v)=>upF({residential:v});
+  const pieces=(Array.isArray(F.pieces)&&F.pieces.length)?F.pieces:QQ_BLANK.pieces;
+  const setPieces=(fn)=>setQqForm(f=>{const cur=(f&&Array.isArray(f.pieces)&&f.pieces.length)?f.pieces:QQ_BLANK.pieces;return {...QQ_BLANK,...(f||{}),pieces:typeof fn==="function"?fn(cur):fn};});
+  const sigOption=F.sigOption||"none";const setSigOption=(v)=>upF({sigOption:v});
+  const saturday=!!F.saturday;const setSaturday=(v)=>upF({saturday:v});
+  const insurance=F.insurance||"";const setInsurance=(v)=>upF({insurance:v});
+  const clearQuote=()=>setQqForm({...QQ_BLANK,pieces:[{weight:"",L:"",W:"",H:"",oz:""}]});
   const pw=(p)=>Math.round(((+p.weight||0)+(+p.oz||0)/16)*1000)/1000;
   const setPiece=(i,patch)=>setPieces(ps=>ps.map((p,j)=>j===i?{...p,...patch}:p));
   const addPiece=()=>setPieces(ps=>[...ps,{weight:"",L:"",W:"",H:"",oz:""}]);
@@ -8373,7 +8495,10 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
   },[fromZip,toZip,residential,JSON.stringify(pieces),sigOption,saturday,insurance,england]);
   const qqOrBox=oneRateBoxFor(pieces[0]&&pieces[0].L,pieces[0]&&pieces[0].W,pieces[0]&&pieces[0].H,totalWeight);
   const qqOrRates=useMemo(()=>qqOrBox?oneRateQuotes(qqOrBox,{rules:rateRules,client:effClient}):[],[qqOrBox&&qqOrBox.code,rateRules,effClient]);
-  const quotes=useMemo(()=>[...rateSrc.rates.filter(q=>q.carrier==="FedEx").map(q=>{const _p={};const _sell=rateSellFor(q.cost,q.label,{rules:rateRules,client:effClient,list:q.list,listBase:q.listBase,surcharges:q.surcharges,fromZip,toZip,weight:pieces.reduce((a,p)=>a+(+p.weight||0),0),_parts:_p});return {...q,sell:_sell,_sellParts:_p.fees?_p:undefined};}),...qqOrRates].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,effClient)})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,effClient,rateRules,fxTransit,qqOrRates,sigOption,saturday,insurance,fromZip,toZip,JSON.stringify(pieces)]);
+  const QQ_SKELETON=[["fedex_ground","FedEx Ground®"],["fedex_home","FedEx Home Delivery®"],["fedex_saver","FedEx Express Saver®"],["fedex_2day","FedEx 2Day®"],["fedex_std","FedEx Standard Overnight®"],["fedex_prio","FedEx Priority Overnight®"]].map(([k,l])=>({key:k,carrier:"FedEx",label:l,cost:null}));
+  const _qqHs=new Set(cz(settings||{}).hiddenServices||[]);
+  const _qqBs=new Set((effClient&&effClient.blockedServices)||[]);
+  const quotes=useMemo(()=>[...(rateSrc.rates.length?rateSrc.rates:QQ_SKELETON).filter(q=>q.carrier==="FedEx"&&!_qqHs.has(canonSvc(q.label))&&!_qqBs.has(canonSvc(q.label))).map(q=>{const _p={};const _sell=rateSellFor(q.cost,q.label,{rules:rateRules,client:effClient,list:q.list,listBase:q.listBase,surcharges:q.surcharges,fromZip,toZip,weight:pieces.reduce((a,p)=>a+(+p.weight||0),0),_parts:_p});return {...q,sell:_sell,_sellParts:_p.fees?_p:undefined};}),...qqOrRates.filter(q=>!_qqHs.has(canonSvc(q.label))&&!_qqBs.has(canonSvc(q.label)))].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,effClient)})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,effClient,rateRules,fxTransit,qqOrRates,sigOption,saturday,insurance,fromZip,toZip,JSON.stringify(pieces)]);
   const hasExpress=quotes.some(q=>{const l=String(q.label||"").toLowerCase();return /(overnight|2\s?day|express saver)/.test(l);});
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-8 bg-stone-900/40 backdrop-blur-sm overflow-auto" onClick={onClose}>
@@ -8393,7 +8518,7 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
               <div className="text-[10px] text-violet-500 mt-1">{priceAs?"Using this customer's profile: rules, markups, mins, accessorials — exactly what their login sees.":"No customer selected — these prices are your raw FedEx cost with NO rules applied."}</div>
             </div>}
             <div className="grid grid-cols-2 gap-3"><Field label="From ZIP"><Input value={fromZip} onChange={e=>setFromZip(e.target.value)}/></Field><Field label="To ZIP"><Input value={toZip} onChange={e=>setToZip(e.target.value)}/></Field></div>
-            <Toggle on={residential} set={setResidential} label="Residential"/>
+            <div className="flex items-center justify-between"><Toggle on={residential} set={setResidential} label="Residential"/><button onClick={clearQuote} className="text-[11px] text-stone-400 hover:text-rose-600 underline underline-offset-2">Clear quote</button></div>
             <div className="space-y-2">
               <div className="flex items-center justify-between"><span className="text-[10px] uppercase tracking-widest text-stone-400">Packages · {pieces.length}</span><span className="text-[11px] text-stone-400 font-mono">total {totalWeight} lb</span></div>
               {pieces.map((p,i)=>(
@@ -8415,11 +8540,7 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
             <div className="grid grid-cols-2 gap-px bg-stone-200 border border-stone-200 rounded overflow-hidden font-mono text-center"><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">zone</div><div className="font-semibold">{ready?zoneEst(fromZip,toZip):"—"}</div></div><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">billable</div><div className="font-semibold">{ready?billable(pieces[0].L,pieces[0].W,pieces[0].H,totalWeight)+" lb":"—"}</div></div></div>
             {ready&&<div className={`text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700":"bg-[#E6F4FF] text-[#006FBF]"}`}>{rateSrc.loading?<><Loader2 className="w-3 h-3 animate-spin"/>Fetching…</>:rateSrc.live?<><Wifi className="w-3 h-3"/>Live rates</>:<><Calculator className="w-3 h-3"/>Estimated</>}</div>}
           </Panel></div>
-          <div className="flex-1 min-w-0">
-            {!ready?<div className="border border-dashed border-stone-300 rounded-lg py-14 text-center text-sm text-stone-400">Enter both ZIPs and the package size &amp; weight — every service prices at once.</div>
-            :rateSrc.loading?<div className="border border-stone-200 rounded-lg py-14 text-center text-sm text-stone-500 flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>Pricing every service…</div>
-            :<ServiceList quotes={quotes} ready={ready} live={rateSrc.live}/>}
-          </div>
+          <div className="flex-1 min-w-0"><ServiceList quotes={quotes} ready={ready} live={rateSrc.live} loading={rateSrc.loading} resetKey={`${fromZip}|${toZip}|${residential}|${pieces.length}`}/></div>
         </div>
       </div>
     </div>

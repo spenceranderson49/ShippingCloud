@@ -69,6 +69,14 @@ ok(rateSellFor(20,"FedEx Home Delivery®",{rules:mk7("percent",-50),surcharges:l
 ok(rateSellFor(20,"FedEx Home Delivery®",{rules:mk7("add",0.75),surcharges:l7})===20.75,"$ over cost 0.75 → fee $2.75");
 ok(rateSellFor(20,"FedEx Home Delivery®",{rules:mk7("listpct",10),surcharges:l7})===20.25,"% off list 10 → fee $2.25 (list 2.50)");
 ok(rateSellFor(20,"FedEx Home Delivery®",{rules:mk7("fixed",5),surcharges:l7})===23,"flat $5 → fee exactly $5");
+// ── Pickup fee follows the Rates-tab accessorial rules ──
+const pfCode=[cn("DEFAULT_RATE_RULES"),'const money=(v)=>"$"+(+v).toFixed(2);',fn("rateProfileFor"),fn("pickupFeeFor"),"return {pickupFeeFor};"].join("\n");
+const {pickupFeeFor}=new Function(pfCode)();
+ok(pickupFeeFor(null,null,"FDXE").fee===16.25,"pickup fee default $16.25 with no rules");
+const RP={profiles:[{id:"default",name:"D",services:{},surcharges:{"PU-EXP":{type:"percent",amount:-35},"PU-GRD-OC":{type:"fixed",amount:5}}}],assign:{},baseCosts:{}};
+ok(pickupFeeFor(RP,null,"FDXE").fee===10.56,"pickup fee honors a -35% rules-tab discount (16.25 → 10.56)");
+ok(pickupFeeFor(RP,null,"FDXG").fee===5,"ground pickup flat $5 rule honored");
+ok(pickupFeeFor(null,{id:"c1",markup:20},"FDXE").fee===19.5,"account markup applies when no rule (16.25 → 19.50)");
 // ── NAME WIRING: every FedEx API service label keys to the exact Rates-tab service key ──
 const qsrc=fs.readFileSync("netlify/functions/quote.js","utf8");
 const svcMap=[...qsrc.matchAll(/([A-Z0-9_]+):\s*\{ key: "([a-z0-9_]+)",\s*label: "([^"]+)" \}/g)].map(m=>({api:m[1],key:m[2],label:m[3]}));

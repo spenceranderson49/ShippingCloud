@@ -95,7 +95,7 @@ function scAuth(body) {
     const got = Buffer.from(sig, "hex");
     if (want.length !== got.length || !scCrypto.timingSafeEqual(want, got)) return null;
     const d = JSON.parse(Buffer.from(String(p).replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
-    if (!d || !d.uid || !d.exp || Date.now() > d.exp) return null;
+    if (!d || d.kind || !d.uid || !d.exp || Date.now() > d.exp) return null;   /* d.kind = special-purpose token (password reset) — never a session */
     return d;
   } catch (e) { return null; }
 }
@@ -177,7 +177,7 @@ exports.handler = async (event) => {
 
     // RockSolid/XPS exposes only ONE reference field (shipmentReference) — no separate PO/invoice fields —
     // so pack order ref + PO + invoice into it, trimmed to FedEx's ~40-char reference limit.
-    const refBits = [S(o.reference || o.orderNumber), o.poNo ? ("PO " + S(o.poNo)) : "", o.invoiceNo ? ("INV " + S(o.invoiceNo)) : ""].filter(Boolean);
+    const refBits = [S(o.reference || o.orderNumber), o.poNo ? ("PO " + S(o.poNo)) : "", o.invoiceNo ? ("INV " + S(o.invoiceNo)) : "", o.department ? "DEPT " + S(o.department) : "",].filter(Boolean);
     const shipmentReference = (refBits.join("  ") || ("SC" + Date.now())).slice(0, 40);
 
     const shipBody = {

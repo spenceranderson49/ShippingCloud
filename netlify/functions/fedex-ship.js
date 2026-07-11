@@ -168,7 +168,7 @@ function scAuth(body) {
     const got = Buffer.from(sig, "hex");
     if (want.length !== got.length || !scCrypto.timingSafeEqual(want, got)) return null;
     const d = JSON.parse(Buffer.from(String(p).replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
-    if (!d || !d.uid || !d.exp || Date.now() > d.exp) return null;
+    if (!d || d.kind || !d.uid || !d.exp || Date.now() > d.exp) return null;   /* d.kind = special-purpose token (password reset) — never a session */
     return d;
   } catch (e) { return null; }
 }

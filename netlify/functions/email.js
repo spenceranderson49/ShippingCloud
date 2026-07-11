@@ -17,11 +17,12 @@ function verifyToken(token) {
   try {
     const [p, sig] = String(token || "").split(".");
     if (!p || !sig) return null;
-    const want = Buffer.from(crypto.createHmac("sha256", (process.env.SESSION_SECRET || "").trim()).update(p).digest("hex"), "hex");
+    const _sec = (process.env.SESSION_SECRET || "").trim() || ((process.env.SUPABASE_SERVICE_KEY || "").trim() ? crypto.createHash("sha256").update("sc1|" + (process.env.SUPABASE_SERVICE_KEY || "").trim()).digest("hex") : "");
+    const want = Buffer.from(crypto.createHmac("sha256", _sec).update(p).digest("hex"), "hex");
     const got = Buffer.from(sig, "hex");
     if (want.length !== got.length || !crypto.timingSafeEqual(want, got)) return null;
     const data = JSON.parse(Buffer.from(String(p).replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
-    if (!data || !data.uid || !data.exp || Date.now() > data.exp) return null;
+    if (!data || data.kind || !data.uid || !data.exp || Date.now() > data.exp) return null;
     return data;
   } catch (e) { return null; }
 }

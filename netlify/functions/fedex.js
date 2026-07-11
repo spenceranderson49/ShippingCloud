@@ -352,6 +352,18 @@ exports.handler = async (event) => {
       const out = await address(c, body, tk);
       return J(out);
     }
+    if (body.action === "cancelShipment") {
+      try {
+        const tn = String(body.trackingNumber || "").replace(/\s/g, "");
+        if (!tn) return J({ ok: false, error: "trackingNumber required" });
+        const acct = String(body.account || c.account || "").replace(/\D/g, "");
+        const r = await fetch(c.base + "/ship/v1/shipments/cancel", { method: "PUT", headers: { "Content-Type": "application/json", Authorization: "Bearer " + tk }, body: JSON.stringify({ accountNumber: { value: acct }, trackingNumber: tn, deletionControl: "DELETE_ALL_PACKAGES" }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) return J({ ok: false, error: "Carrier cancel error " + r.status });
+        const ok = !!(j.output && (j.output.cancelledShipment === true || j.output.cancelledShipment === "true")) || (Array.isArray(j.errors) ? j.errors.length === 0 : r.ok);
+        return J({ ok });
+      } catch (e) { return J({ ok: false, error: (e && e.message) || "cancel failed" }); }
+    }
     if (body.action === "track") {
       try {
         const tn = String(body.trackingNumber || "").replace(/\s/g, "");

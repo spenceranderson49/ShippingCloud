@@ -79,7 +79,7 @@ X-API-Key: sck_live_xxxxxxxxxxxxxxxx</code></pre>
   <p>Same body as <code>/v1/labels</code>. By default <code>from</code>/<code>to</code> are swapped (the parcel ships from the buyer back to you); pass <code>"swap": false</code> if you already set them return-direction. Response adds <code>is_return: true</code>.</p>
 
   <h2><span class="pill get">GET</span>/v1/shipments · <span class="pill post">POST</span>/v1/shipments/{label_id}/void</h2>
-  <p><code>GET /v1/shipments?limit=50</code> lists your labels newest-first with status and charge. Void marks the label refunded-in-progress; unshipped labels refund automatically.</p>
+  <p><code>GET /v1/shipments?page=1&amp;limit=50</code> lists your labels newest-first (paginated: <code>total</code>, <code>has_more</code>). <b>Void</b> cancels the label with the carrier and marks it Voided — the label credit is automatic when cancelled inside the carrier's void window.</p>
 
   <h2><span class="pill get">GET</span>/v1/tracking/{tracking_number}</h2>
   <p>Returns live FedEx scan events, an <code>estimated_delivery</code>, and a <b>normalized</b> <code>status</code> — one of <code>pre_transit · in_transit · delivered · returned · exception · voided · unknown</code> — plus <code>status_detail</code> (the raw carrier text) and a carrier <code>tracking_url</code>. <code>GET /v1/shipments</code> paginates with <code>?page=&amp;limit=</code> and returns <code>total</code>/<code>has_more</code>.</p>
@@ -104,7 +104,7 @@ X-API-Key: sck_live_xxxxxxxxxxxxxxxx</code></pre>
 
   <h2>Idempotency — safe retries</h2>
   <pre><code>Idempotency-Key: order-1042-attempt   # any unique string, per label</code></pre>
-  <p>Send it on <code>POST /v1/labels</code>. If your request times out and you retry with the same key, you get the <b>original</b> booking back (marked <code>Idempotency-Replayed: true</code>) — a retry can never double-book or double-charge.</p>
+  <p>Send it on <code>POST /v1/labels</code>. A retry with the same key returns the <b>original</b> booking (marked <code>Idempotency-Replayed: true</code>); a concurrent duplicate gets <code>409 in_progress</code> — a retry or race can never double-book or double-charge.</p>
 
   <h2>Webhooks — signed push events</h2>
   <pre><code>POST /v1/webhooks   { "url": "https://yourapp.com/hooks/shipping", "events": ["label.created","label.voided"] }</code></pre>

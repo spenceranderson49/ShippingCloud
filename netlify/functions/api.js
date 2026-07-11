@@ -149,8 +149,7 @@ exports.handler = async (event) => {
     if (!allow("k:" + keyRow.id, 240)) return ERR(429, "rate_limited", "Too many requests — slow down (240/min per key).");
     /* best-effort last-used stamp (never blocks the request) */
     if (!keyRow.lastUsed || Date.now() - new Date(keyRow.lastUsed).getTime() > 3600e3) {
-      keyRow.lastUsed = new Date().toISOString();
-      putStore("apiKeys", world.keys).catch(() => {});
+      putStore("u/api_" + client.id + "/keyUsage_" + keyRow.id, { lastUsed: new Date().toISOString() }).catch(() => {});   /* per-key row — never rewrites the shared apiKeys array (F6) */
     }
     const fedexAccount = (client.fedex && S(client.fedex.accountNumber).trim()) || undefined;
     const isTest = (keyRow.mode || "live") === "test";   /* test keys: real quotes, ZERO real bookings/pickups */
@@ -201,7 +200,7 @@ exports.handler = async (event) => {
       const res = isTest
         ? { ok: true, tracking: "TEST" + String(Date.now()).slice(-10), labelPdfBase64: null }
         : await callFn("./ship.js", { action: "ship", order });
-      if (!res || !res.ok) return { code: 502, resp: { error: { code: "booking_failed", message: (res && res.error) || "Booking failed." } } };
+      if (!res || !res.ok) return { code: 502, resp: { error: { code: "booking_failed", message: String((res && res.error) || "Booking failed.").replace(/FedEx/gi, "the carrier") } } };
       /* 3) record the shipment on the account (shows in the admin dashboard + billing) */
       const rec = {
         id: Date.now(), date: new Date().toLocaleDateString(), time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
@@ -266,16 +265,20 @@ exports.handler = async (event) => {
       /* Idempotency-Key: replaying the same key returns the ORIGINAL response — a network
          retry can never double-book a label. */
       const idemKey = S((event.headers && (event.headers["idempotency-key"] || event.headers["Idempotency-Key"])) || "").slice(0, 80);
-      let idem = null;
       if (idemKey) {
-        const cur = await getStore(idemStoreKey(client));
-        idem = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
-        const hit = idem.find((x) => x && x.k === idemKey);
-        if (hit) return { ...J(hit.code, hit.resp), headers: { ...J(200, {}).headers, "Idempotency-Replayed": "true" } };
+        const irow = "u/api_" + client.id + "/idemk_" + sha(idemKey).slice(0, 40);
+        /* replay a completed one */
+        const done = await getStore(irow);
+        if (done.ok && done.value && done.value.status === "done") return { ...J(done.value.code || 201, done.value.resp), headers: { ...J(200, {}).headers, "Idempotency-Replayed": "true" } };
+        /* MUTEX: only the container that wins the INSERT proceeds to book — a concurrent sibling
+           carrying the same key gets a conflict and returns 409 instead of double-booking. */
+        const res0 = await insertNew(irow, { status: "pending", at: Date.now() });
+        if (res0.conflict) return ERR(409, "in_progress", "A label with this Idempotency-Key is already being created — retry shortly to fetch the result.");
+        const r = await bookLabel(body);
+        putStore(irow, { status: "done", code: r.code, resp: { ...r.resp, label_pdf_base64: null } }).catch(() => {});
+        return J(r.code, r.resp);
       }
-      const sc0 = S(body.service_code).trim();
       const r = await bookLabel(body);
-      if (r.code === 201 && idemKey && idem) { putStore(idemStoreKey(client), [{ k: idemKey, code: 201, resp: { ...r.resp, label_pdf_base64: null } }, ...idem].slice(0, 50)).catch(() => {}); }
       return J(r.code, r.resp);
     }
 
@@ -321,9 +324,13 @@ exports.handler = async (event) => {
         const hit = arr.find((x) => String(x.id) === id);
         if (!hit) return ERR(404, "not_found", "No shipment with label_id " + id + " on this account.");
         if (hit.status === "Voided") return J(200, { label_id: id, status: "Voided", note: "Already voided." });
+        let cancelNote = "Marked void.";
+        if (!isTest && hit.tracking) {
+          try { const cx = await callFn("./fedex.js", { action: "cancelShipment", trackingNumber: hit.tracking, account: fedexAccount }); cancelNote = (cx && cx.ok) ? "Voided and cancelled with the carrier — the label credit is automatic." : "Voided here, but the carrier cancel didn't confirm — verify the refund or contact support."; } catch (e) { cancelNote = "Voided here; the carrier cancel couldn't be reached — verify the refund."; }
+        }
         await putStore(shipStoreKey(client, isTest), arr.map((x) => String(x.id) === id ? { ...x, status: "Voided", voidedAt: new Date().toLocaleString() } : x));
         fireHooks(client, "label.voided", { label_id: id, tracking_number: hit.tracking || null });
-        return J(200, { label_id: id, status: "Voided", note: "Marked void; the carrier refund is processed automatically." });
+        return J(200, { label_id: id, status: "Voided", note: cancelNote });
       }
     }
 

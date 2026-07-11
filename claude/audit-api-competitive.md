@@ -35,7 +35,7 @@ matter for scoping our build.
 | **Pickups** | `POST/GET/DELETE /v1/pickups` | `POST /pickups` + buy + cancel; pickup_rates | `POST /pickups` |
 | **Webhooks** | CRUD `/environment/webhooks`; events batch/track/rate/carrier_connected; custom headers | CRUD `/webhooks`; many event types; HMAC `X-Hmac-Signature` (+v2 replay-safe) | webhooks; event types track_updated/transaction_created |
 | **Test mode** | sandbox keys `TEST_`, isolated, watermarked labels | test vs prod keys (EZTK/EZAK); simulated tracking codes | test vs live token; test objects |
-| **Idempotency** | none (dedupe via external_shipment_id) | none documented (use `reference`) | `SHIPPO-IDEMPOTENCY-KEY` header on POST |
+| **Idempotency** | none (dedupe via external_shipment_id) | none documented (use `reference`) | none documented (disposable objects; client-side dedupe) |
 | **Pagination** | `page`/`page_size` + `links{next,prev,first,last}` + `total` | cursor `before_id`/`after_id` + `has_more` | `page`/`results` count + `next`/`previous` URLs |
 | **Error model** | `{request_id, errors:[{error_source,error_type,error_code,message}]}` | `{error:{code,message,errors[]}}` | field-keyed `{field:[msgs]}` / `detail` |
 | **SDKs** | JS, Python, .NET, PHP (+Ruby/Java) | Python, Ruby, PHP, Node, .NET, Java, Go | Python, Node, Ruby, PHP, Java, Go, C#, Elixir |
@@ -60,7 +60,7 @@ FedEx-only `ship.js`).
 | Webhooks (signed) | yes | yes (HMAC) | yes | **partial** — 2 event types, HMAC signed, SSRF-weak, no delivery log/retry | Medium | Yes but scope-limited |
 | Tracking pull | yes | yes | yes | **partial** — returns only stored platform status, not live FedEx scans | Medium | **YES** — biggest functional gap |
 | Tracking webhooks / status push | yes | yes | yes | **no** (only label.created/voided fire) | Medium | **YES** for customers automating fulfillment |
-| Idempotency on buy | no | no | yes (header) | **partial** — works for sequential retry, **races on concurrent** (§P2-F1) | Small | Yes |
+| Idempotency on buy | no | no | no | **partial** — works for sequential retry, **races on concurrent** (§P2-F1) | Small | Yes — our `Idempotency-Key` is actually ahead of all three, if the race is fixed |
 | Batch / bulk labels | yes | yes | yes | **no** | Large | Medium — high-volume shippers want it |
 | Return labels | yes | yes | yes | **no** | Medium | **YES** — common reseller-customer ask |
 | Manifests / SCAN / close-out | yes | yes | yes | **no** | Medium | Medium (FedEx less manifest-dependent than USPS) |

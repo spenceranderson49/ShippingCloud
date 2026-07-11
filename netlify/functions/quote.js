@@ -312,7 +312,15 @@ exports.handler = async (event) => {
       let surch = Object.keys(merged).map(label => ({ label, amount: merged[label], ...(listSur[label] != null ? { list: listSur[label] } : {}) }));
       /* LIST base = list total minus list fees — service-level "% off list" prices the BASE only */
       const listSurTotal = Object.values(listSur).reduce((a, v) => a + v, 0);
-      const listBase = list != null ? Math.round((list - listSurTotal) * 100) / 100 : null;
+      let listBase = list != null ? Math.round((list - listSurTotal) * 100) / 100 : null;
+      /* Fees FedEx itemized ONLY on the account detail (or worded differently between the two
+         details) still sit INSIDE the list total — leaving them there makes a "list −%" service
+         rule price that fee twice (once in the base, once via its own fee rule). Approximate
+         their list share with the account amount (never higher than list). */
+      if (listBase != null) {
+        const acctOnly = Object.keys(merged).filter((lb) => listSur[lb] == null).reduce((a, lb) => a + merged[lb], 0);
+        if (acctOnly > 0) listBase = Math.round((listBase - acctOnly) * 100) / 100;
+      }
       if (!surch.length && acctD && acctD.shipmentRateDetail && +acctD.shipmentRateDetail.totalSurcharges > 0) {
         surch = [{ label: "Carrier surcharges", amount: Math.round(+acctD.shipmentRateDetail.totalSurcharges * 100) / 100 }];
       }

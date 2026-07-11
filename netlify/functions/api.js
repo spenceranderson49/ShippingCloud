@@ -278,10 +278,18 @@ exports.handler = async (event) => {
         const done = await getStore(irow);
         if (done.ok && done.value && done.value.status === "done") return { ...J(done.value.code || 201, done.value.resp), headers: { ...J(200, {}).headers, "Idempotency-Replayed": "true" } };
         /* MUTEX: only the container that wins the INSERT proceeds to book — a concurrent sibling
-           carrying the same key gets a conflict and returns 409 instead of double-booking. */
+           gets a conflict and returns 409. A pending row older than 3 min means the original
+           booking crashed/timed out mid-flight, so we RECLAIM it rather than lock the key forever. */
         const res0 = await insertNew(irow, { status: "pending", at: Date.now() });
-        if (res0.conflict) return ERR(409, "in_progress", "A label with this Idempotency-Key is already being created — retry shortly to fetch the result.");
-        const r = await bookLabel(body);
+        if (res0.conflict) {
+          const stale = done.ok && done.value && done.value.status === "pending" && done.value.at && (Date.now() - done.value.at > 180000);
+          if (!stale) return ERR(409, "in_progress", "A label with this Idempotency-Key is already being created — retry shortly to fetch the result.");
+          await putStore(irow, { status: "pending", at: Date.now() });   // take over the stale lock
+        }
+        let r;
+        try { r = await bookLabel(body); }
+        catch (e) { putStore(irow, { status: "failed", at: Date.now() }).catch(() => {}); throw e; }
+        if (r.code >= 400) { putStore(irow, { status: "failed", at: Date.now() }).catch(() => {}); return J(r.code, r.resp); }   // don't cache a failure as "done"
         putStore(irow, { status: "done", code: r.code, resp: { ...r.resp, label_pdf_base64: null } }).catch(() => {});
         return J(r.code, r.resp);
       }
@@ -336,6 +344,7 @@ exports.handler = async (event) => {
           try { const cx = await callFn("./fedex.js", { action: "cancelShipment", trackingNumber: hit.tracking, account: fedexAccount }); cancelNote = (cx && cx.ok) ? "Voided and cancelled with the carrier — the label credit is automatic." : "Voided here, but the carrier cancel didn't confirm — verify the refund or contact support."; } catch (e) { cancelNote = "Voided here; the carrier cancel couldn't be reached — verify the refund."; }
         }
         await putStore(shipStoreKey(client, isTest), arr.map((x) => String(x.id) === id ? { ...x, status: "Voided", voidedAt: new Date().toLocaleString() } : x));
+        if (!isTest) putStore("u/api_" + client.id + "/rec_" + id, { id: hit.id, date: hit.date, tracking: hit.tracking, service: hit.service, reference: hit.reference || "", sell: hit.sell, status: "Voided" }).catch(() => {});
         fireHooks(client, "label.voided", { label_id: id, tracking_number: hit.tracking || null });
         return J(200, { label_id: id, status: "Voided", note: cancelNote });
       }

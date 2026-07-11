@@ -283,6 +283,25 @@ async function schedulePickup(c, body, tk) {
   return { ok: true, confirmationCode: o.pickupConfirmationCode || o.confirmationNumber || null, location: o.location || null, message: o.message || null };
 }
 
+async function cancelPickup(c, body, tk) {
+  const payload = {
+    associatedAccountNumber: { value: c.account },
+    pickupConfirmationCode: S(body.confirmationCode),
+    carrierCode: body.carrierCode || "FDXE",
+    scheduledDate: S(body.date),
+    location: S(body.location) || undefined,
+    remarks: S(body.remarks) || undefined,
+  };
+  let r, t, d = null;
+  try {
+    r = await fetch(c.base + "/pickup/v1/pickups/cancel", { method: "PUT", headers: { "Authorization": "Bearer " + tk, "Content-Type": "application/json", "X-locale": "en_US" }, body: JSON.stringify(payload) });
+    t = await r.text(); try { d = JSON.parse(t); } catch {}
+  } catch (e) { return { ok: false, error: "cancel fetch failed: " + (e && e.message) }; }
+  if (!r.ok) return { ok: false, error: "cancel HTTP " + r.status + (d && d.errors && d.errors[0] ? ": " + (d.errors[0].message || "") : "") };
+  const o = (d && d.output) || {};
+  return { ok: true, cancelled: true, message: o.cancelConfirmationMessage || o.message || "Pickup cancelled" };
+}
+
 exports.handler = async (event) => {
   try {
     if (event.httpMethod === "OPTIONS") return { statusCode: 204, body: "" };
@@ -307,6 +326,11 @@ exports.handler = async (event) => {
     if (body.action === "pickupAvailability") {
       if (!c.account) return J({ ok: false, error: "Missing FedEx account number." });
       const out = await pickupAvailability(c, body, tk);
+      return J(out);
+    }
+    if (body.action === "pickupCancel") {
+      if (!c.account) return J({ ok: false, error: "Missing FedEx account number." });
+      const out = await cancelPickup(c, body, tk);
       return J(out);
     }
     // default: transit

@@ -81,6 +81,7 @@ const FEATURE_CATALOG=[
   {id:"pickups",label:"Pickups",desc:"Schedule carrier pickups",default:true},
   {id:"batch",label:"Batch",desc:"Rate & print in bulk",default:true},
   {id:"invoices",label:"Invoice Audit",desc:"Carrier invoice auditing",default:false},   /* off unless the admin grants it per login */
+  {id:"pickupCosts",label:"Pickup fee display",desc:"Show pickup fee estimates on the Pickups tab",default:true},
   {id:"rules",label:"Autopilot",desc:"Autopilot Mode — automation rules",default:true},
   {id:"scan",label:"Scan",desc:"Barcode scan station",default:true},
   {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:true},
@@ -106,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v444";
+const BUILD_TAG="addr-v445";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -1453,6 +1454,9 @@ async function fedexSchedulePickup(p){
     date:p.date,readyTime:p.readyTime,closeTime:p.closeTime,packageCount:p.packageCount,totalWeight:p.totalWeight,carrierCode:p.carrierCode,packageLocation:p.packageLocation,residential:p.residential,remarks:p.remarks},25000);
 }
 
+async function fedexCancelPickup(p){
+  return await fedexCall({action:"pickupCancel",confirmationCode:p.confirmationCode,carrierCode:p.carrierCode||"FDXE",date:p.date,location:p.location||""},25000);
+}
 /* ════════ SEED ════════ */
 const SEED_CLIENTS=[
     {id:"c2",name:"House accounts",markup:"",origin:"84057",contact:"—",email:"",phone:"",status:"active",since:"2025-06",plan:"Standard"},
@@ -2155,9 +2159,9 @@ const FEDEX_SURCHARGES=[
   {id:"PEAK-GE",desc:"Demand Surcharge — Ground Economy (peak)",seg:"Ground Economy",charge:"fixed",g:"Peak / demand",aka:"Demand Surcharge"},
   {id:"PEAK-INTL",desc:"Demand Surcharge — International (per lane, peak)",seg:"Express",charge:"fixed",g:"Peak / demand",aka:"Demand Surcharge - International"},
   /* Pickup & returns */
-  {id:"PU-EXP",desc:"On-Call Pickup (per package)",seg:"Express",charge:"fixed",g:"Pickup & returns"},
-  {id:"PU-GRD-OC",desc:"On-Call Pickup (per package)",seg:"Ground",charge:"fixed",g:"Pickup & returns"},
-  {id:"PU-GRD",desc:"Scheduled / Alternate-Day Pickup (weekly)",seg:"Ground",charge:"fixed",g:"Pickup & returns"},
+  {id:"PU-EXP",desc:"On-Call Pickup (per package)",seg:"Express",charge:"fixed",def:16.25,g:"Pickup & returns"},
+  {id:"PU-GRD-OC",desc:"On-Call Pickup (per package)",seg:"Ground",charge:"fixed",def:16.25,g:"Pickup & returns"},
+  {id:"PU-GRD",desc:"Scheduled / Alternate-Day Pickup (weekly)",seg:"Ground",charge:"fixed",def:35.50,g:"Pickup & returns"},
   {id:"RTN",desc:"Print Return Label",seg:"Express & Ground",charge:"fixed",g:"Pickup & returns"},
   {id:"RTN-E",desc:"Email Return Label",seg:"Express & Ground",charge:"fixed",g:"Pickup & returns"},
   {id:"RETAG",desc:"Ground Call Tag / Express Tag (pickup return)",seg:"Express & Ground",charge:"fixed",g:"Pickup & returns"},
@@ -6253,7 +6257,7 @@ function AppInner(){
           </div>}
           {tab==="drafts"&&<Drafts drafts={drafts} setDrafts={setDrafts} goShip={goShip}/>}
           {tab==="returns"&&<Returns returns={returns} setReturns={setReturns} orders={orders} settings={settings} logEmail={logEmail}/>}
-          {tab==="pickups"&&<Pickups pickups={pickups} setPickups={setPickups} settings={settings}/>}
+          {tab==="pickups"&&<Pickups pickups={pickups} setPickups={setPickups} settings={settings} client={client} showCosts={featureOn("pickupCosts",currentUser,myFlags)}/>}
           {tab==="invoices"&&<Invoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>}
           {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings} client={client} onShipped={onShipped}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
@@ -8470,11 +8474,35 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
 }
 
 /* ════════ PICKUPS ════════ */
-function Pickups({pickups,setPickups,settings}){
+function Pickups({pickups,setPickups,settings,client=null,showCosts=true}){
   const [f,setF]=useState({carrierCode:"FDXE",date:"",ready:"10:00",close:"17:00",count:1,weight:5,location:"FRONT"});
   const [busy,setBusy]=useState(false);
+  const [canceling,setCanceling]=useState(null);
   const [err,setErr]=useState(null);
   const s=settings.sender||{};
+  /* Pickup fee, priced exactly like any accessorial: the customer's profile rule on the on-call
+     pickup row (percent / $ over cost / % off list / flat) applied to the Service Guide default,
+     account markup as the fallback. Admin can hide this per login (Pickup fee display feature). */
+  const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
+  const pickupFee=useMemo(()=>{
+    const id=f.carrierCode==="FDXG"?"PU-GRD-OC":"PU-EXP";
+    const su=FEDEX_SURCHARGES.find(x=>x.id===id);const def=(su&&su.def)||16.25;
+    const prof=rateProfileFor(rateRules,client&&client.id);
+    const r=((prof&&prof.surcharges)||{})[id];
+    const a=(r&&r.amount!=null&&r.amount!==""&&!isNaN(+r.amount))?+r.amount:null;
+    const aPct=(client&&client.markup!=null&&client.markup!==""&&!isNaN(+client.markup)&&+client.markup!==0)?+client.markup:null;
+    if(a==null)return Math.round((aPct!=null?def*(1+aPct/100):def)*100)/100;
+    const t=(r&&r.type)||"percent";
+    return Math.round((t==="percent"?def*(1+a/100):t==="add"?def+a:t==="listpct"?def*(1-a/100):a)*100)/100;
+  },[rateRules,client,f.carrierCode]);
+  const cancelLive=async(p)=>{
+    if(!window.confirm("Cancel this FedEx pickup ("+p.conf+")? The driver will not come."))return;
+    setCanceling(p.id);
+    const res=await fedexCancelPickup({confirmationCode:p.conf,carrierCode:p.carrierCode||"FDXE",date:p.date,location:p.fxLocation||""});
+    setCanceling(null);
+    if(res&&res.ok)setPickups(x=>x.map(y=>y.id===p.id?{...y,canceled:true,live:false}:y));
+    else setErr((res&&res.error)||"FedEx couldn't cancel this pickup — call FedEx with the confirmation code.");
+  };
   const PKG_LOC=[["FRONT","Front"],["NONE","None"],["REAR","Rear"],["SIDE","Side"]];
   const add=async()=>{
     if(!f.date){setErr("Pick a date");return;}
@@ -8485,7 +8513,7 @@ function Pickups({pickups,setPickups,settings}){
     });
     setBusy(false);
     if(res&&res.ok){
-      setPickups(p=>[{id:Date.now(),conf:res.confirmationCode||"PENDING",carrier:"FedEx",carrierCode:f.carrierCode,date:f.date,count:f.count,ready:f.ready,close:f.close,location:f.location,live:!!res.confirmationCode},...p]);
+      setPickups(p=>[{id:Date.now(),conf:res.confirmationCode||"PENDING",carrier:"FedEx",carrierCode:f.carrierCode,date:f.date,count:f.count,ready:f.ready,close:f.close,location:f.location,fxLocation:res.location||"",fee:showCosts?pickupFee:null,live:!!res.confirmationCode},...p]);
     } else {
       setErr((res&&res.error)||"FedEx pickup failed");
     }
@@ -8499,6 +8527,8 @@ function Pickups({pickups,setPickups,settings}){
         <div className="grid grid-cols-2 gap-3"><Field label="Ready time"><Input type="time" value={f.ready} onChange={e=>setF({...f,ready:e.target.value})}/></Field><Field label="Close time"><Input type="time" value={f.close} onChange={e=>setF({...f,close:e.target.value})}/></Field></div>
         <div className="grid grid-cols-2 gap-3"><Field label="Total weight (lb)"><Input type="number" value={f.weight} onChange={e=>setF({...f,weight:+e.target.value})}/></Field><Field label="Package location"><Select value={f.location} onChange={e=>setF({...f,location:e.target.value})}>{PKG_LOC.map(([v,l])=><option key={v} value={v}>{l}</option>)}</Select></Field></div>
         <div className="text-[11px] text-stone-400 flex items-center gap-1"><MapPin className="w-3.5 h-3.5"/>{addrReady?`${s.address1}, ${s.city} ${s.state} ${s.zip}`:"Set your pickup address in Settings → Company"}</div>
+        {showCosts&&<div className="flex items-center justify-between text-sm bg-stone-50 border border-stone-200 rounded-lg px-3 py-2"><span className="text-stone-600">On-call pickup fee ({f.carrierCode==="FDXG"?"Ground":"Express"})</span><span className="font-mono font-semibold text-stone-900">{money(pickupFee)}</span></div>}
+        {showCosts&&<div className="text-[10px] text-stone-400 -mt-1">Billed by FedEx per on-call pickup. Regular scheduled pickup routes bill weekly instead. Priced from your account's accessorial rules.</div>}
         {err&&<div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1.5 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>{err}</div>}
         <button onClick={add} disabled={busy||!addrReady} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Scheduling with FedEx…</>:<><Calendar className="w-4 h-4"/>Schedule pickup</>}</button>
       </Panel>
@@ -8508,8 +8538,10 @@ function Pickups({pickups,setPickups,settings}){
           <div key={p.id} className="border border-stone-200 rounded-lg bg-white p-3 flex items-center gap-3">
             <div className={`text-xs font-bold ${CARRIER_TINT[p.carrier]||"text-[#0086E0]"}`}>{p.carrier}</div>
             <div className="flex-1"><div className="text-sm text-stone-800">{p.date} · {p.count} pkg{p.carrierCode==="FDXG"?" · Ground":" · Express"}</div><div className="text-[11px] text-stone-400">{p.ready}–{p.close} · {p.location}</div></div>
-            <div className="text-right"><div className="font-mono text-[11px] text-stone-600">{p.conf}</div>{p.live&&<div className="text-[10px] uppercase tracking-wide text-emerald-600">confirmed</div>}</div>
-            <button onClick={()=>setPickups(x=>x.filter(y=>y.id!==p.id))} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>
+            <div className="text-right"><div className="font-mono text-[11px] text-stone-600">{p.conf}</div>{p.canceled?<div className="text-[10px] uppercase tracking-wide text-stone-400">canceled</div>:p.live?<div className="text-[10px] uppercase tracking-wide text-emerald-600">confirmed</div>:null}{showCosts&&p.fee!=null&&!p.canceled&&<div className="text-[10px] text-stone-400 font-mono">{money(p.fee)}</div>}</div>
+            {p.live&&!p.canceled
+              ?<button onClick={()=>cancelLive(p)} disabled={canceling===p.id} title="Cancel this pickup with FedEx" className="text-[11px] text-rose-600 bg-rose-50 border border-rose-200 rounded px-2 py-1 hover:bg-rose-100 disabled:opacity-50">{canceling===p.id?"Canceling…":"Cancel"}</button>
+              :<button onClick={()=>setPickups(x=>x.filter(y=>y.id!==p.id))} title="Remove from this list" className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
           </div>
         ))}
       </div>

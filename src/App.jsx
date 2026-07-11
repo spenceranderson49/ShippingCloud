@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v456";
+const BUILD_TAG="addr-v457";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -1430,12 +1430,15 @@ function cleanServiceList(list,{intl=false,residential=null}={}){
   out=out.filter(q=>!!intl===isIntlService(q));
   if(residential===true)out=out.filter(q=>canonSvc(q.label)!=="ground");
   else if(residential===false)out=out.filter(q=>canonSvc(q.label)!=="home");
+  /* dedupe family: with an UNKNOWN classification Ground and Home Delivery must BOTH show, so
+     they only share a family once classified (the merge exists for skeleton→live swaps). */
+  const famOf=(q)=>{const k=canonSvc(q.label);return (residential==null&&(k==="ground"||k==="home"))?k:svcFamilyKey(q.label);};
   const byFam={};
-  for(const q of out){ const fk=svcFamilyKey(q.label); const priced=(q.sell??q.cost)!=null;
+  for(const q of out){ const fk=famOf(q); const priced=(q.sell??q.cost)!=null;
     if(!(fk in byFam)){ byFam[fk]=q; }
     else { const cur=byFam[fk]; const curPriced=(cur.sell??cur.cost)!=null; if(priced&&!curPriced)byFam[fk]=q; }
   }
-  return out.filter(q=>byFam[svcFamilyKey(q.label)]===q);
+  return out.filter(q=>byFam[famOf(q)]===q);
 }
 async function fedexTransit(s){
   const body={fromZip:s.fromZip,toZip:s.toZip,fromCountry:s.fromCountry||"US",toCountry:s.toCountry||"US",residential:!!s.residential,pieces:(s.pieces||[]).map(p=>({weight:Math.ceil(+p.weight||1)}))};
@@ -3254,6 +3257,7 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection}){
      rollup, all switchable Today / Week / Month / All. */
   const [period,setPeriod]=useState("today");
   const ships=platform.ships||[];
+  const partial=!!platform._partial;   // cloud snapshot not in yet — numbers below are this login only
   const tsOf=(x)=>(typeof x.id==="number"&&x.id>1e12)?x.id:(new Date(x.date).getTime()||0);
   const now=Date.now();
   const dayStart=(()=>{const d=new Date();d.setHours(0,0,0,0);return d.getTime();})();
@@ -3281,6 +3285,7 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection}){
   const [drill,setDrill]=useState(null);   // {_from,_to,_t} — a clicked chart bucket
   const Combo=({title,data})=>{const W=340,H=104,P=14;const mMax=Math.max(1,...data.map(d=>d.m));const cMax=Math.max(1,...data.map(d=>d.c));const bw=(W-P*2)/data.length;
     return (<div className="border border-stone-200 rounded-lg bg-white p-3">
+      {partial&&<div className="text-[11px] text-stone-400 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 flex items-center gap-1.5"><Loader2 className="w-3 h-3 animate-spin"/>Loading platform-wide data… showing only your own login's shipments until it lands (a few seconds).</div>}
       <div className="text-xs font-semibold text-stone-600 mb-1">{title} <span className="font-normal text-stone-400">— click a bar for the breakdown</span></div>
       <svg viewBox={"0 0 "+W+" "+H} className="w-full">
         {data.map((d,i)=>{const h=(H-32)*(d.m/mMax);const sel=drill&&drill._from===d._from&&drill._to===d._to;return <g key={i} className="cursor-pointer" onClick={()=>setDrill(sel?null:d)}>
@@ -4419,7 +4424,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
     const rev=ships.reduce((a,x)=>a+(+x.sell||0),0);
     const cost=ships.reduce((a,x)=>a+(+x.cost||0),0);
     const latest=[...ships].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,8);
-    return {total:ships.length,t30,rev,margin:rev-cost,openOrders,shippers:shippers.size,latest,ships};
+    return {total:ships.length,t30,rev,margin:rev-cost,openOrders,shippers:shippers.size,latest,ships,_partial:!sawCloud};
   },[shipments,orders,users]);
   const loginStats=useMemo(()=>{
     const real=users.filter(u=>u&&u.id!=="demo");
@@ -6482,6 +6487,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const [saved,setSaved]=useState(false);
   const [emailTo,setEmailTo]=useState("");
   const [emailMsg,setEmailMsg]=useState(settings.emailMessage||"");
+  const emailMsgTouched=React.useRef(false);
+  useEffect(()=>{ if(!emailMsgTouched.current)setEmailMsg(settings.emailMessage||""); },[settings.emailMessage]);   /* the saved default loads from the cloud after mount — sync it in until the person types */
   const [msgSaved,setMsgSaved]=useState(false);
   const [sent,setSent]=useState("");
   useEffect(()=>{ if(receiver.email&&!String(emailTo||"").trim()) setEmailTo(receiver.email); },[receiver.email]);
@@ -6756,12 +6763,13 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
        (e.g. "FedEx Ground®" placeholder + "FedEx Ground" live) must never both show. Keep the priced
        one; if neither is priced, keep the first. This is what caused two identical Ground rows. */
     {
+      const famOf=(q)=>{const k=canonSvc(q.label);return (!addrClassified&&(k==="ground"||k==="home"))?k:svcFamilyKey(q.label);};
       const byFam={};
-      for(const q of list){ const fk=svcFamilyKey(q.label); const priced=(q.sell??q.cost)!=null;
+      for(const q of list){ const fk=famOf(q); const priced=(q.sell??q.cost)!=null;
         if(!(fk in byFam)){ byFam[fk]=q; }
         else { const cur=byFam[fk]; const curPriced=(cur.sell??cur.cost)!=null; if(priced&&!curPriced)byFam[fk]=q; }
       }
-      list=list.filter(q=>byFam[svcFamilyKey(q.label)]===q);
+      list=list.filter(q=>byFam[famOf(q)]===q);
     }
     /* LIVE rates: FedEx priced declared value + signature INSIDE the returned amount (they ride
        the rate request per package) — so locally we add ONLY the Saturday flat fee (a published
@@ -7140,9 +7148,12 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           </select>
           <span className="text-violet-500 min-w-0 truncate">{priceAs?"Quoting with this customer's rules, markups and mins — exactly what their login sees.":"Pick a customer to see their prices; admins have no rules of their own."}</span>
         </div>}
-        {/* Rate-source banner — hideable via Settings → Customizations → Ship screen */}
-        {ready&&!custom.hideRateSrcBar&&<div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
-          {rateSrc.loading?<><Loader2 className="w-3.5 h-3.5 animate-spin"/>Fetching live rates…</>
+        {/* Rate-source strip — ALWAYS mounted (fixed slot, only the text swaps) so flipping
+            `ready` mid-keystroke never shoves the service list down. Hideable in Settings →
+            Customizations → Ship screen. */}
+        {!custom.hideRateSrcBar&&<div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 min-h-[36px] ${!ready?"bg-stone-50 text-stone-400 border border-stone-100":rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
+          {!ready?<><Calculator className="w-3.5 h-3.5"/>Enter a destination ZIP and weight — rates price automatically</>
+          :rateSrc.loading?<><Loader2 className="w-3.5 h-3.5 animate-spin"/>Fetching live rates…</>
           :rateSrc.live?<><Wifi className="w-3.5 h-3.5"/>Live rates from your FedEx account</>
           :<><Calculator className="w-3.5 h-3.5"/>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""} — turn on live rates in Settings → Carrier accounts to price with your real account</>}
         </div>}
@@ -7317,7 +7328,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <div className="text-[10px] uppercase tracking-widest text-stone-400">Message to customer</div>
               <button onClick={saveMsgDefault} className={`text-[11px] font-medium ${msgSaved?"text-emerald-600":"text-[#0086E0] hover:text-[#006FBF]"}`}>{msgSaved?"✓ Saved as default":"Save as default"}</button>
             </div>
-            <textarea value={emailMsg} onChange={e=>setEmailMsg(e.target.value)} rows={3} placeholder="Add a custom note to include in the email — or save a default that's always pre-filled here." className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 resize-y"/>
+            <textarea value={emailMsg} onChange={e=>{emailMsgTouched.current=true;setEmailMsg(e.target.value);}} rows={3} placeholder="Add a custom note to include in the email — or save a default that's always pre-filled here." className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 resize-y"/>
           </div>
           <p className="text-[11px] text-stone-400">Emails the buyer a tracking link or a printable label PDF. Logged under Settings → Email automation.</p>
         </div>}
@@ -7852,7 +7863,8 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
   };
   return (
     <div className="space-y-3">
-      {syncMsg&&<div className={`text-xs rounded px-3 py-2 flex items-center gap-1.5 ${syncMsg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{syncMsg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{syncMsg.err||syncMsg.ok}</div>}
+      {/* floats in a zero-height layer — the 5s sync flash must not jump the table (twice per auto-sync) */}
+      {syncMsg&&<div className="relative h-0 z-20"><div className={`absolute right-0 top-0 shadow-md text-xs rounded px-3 py-2 flex items-center gap-1.5 ${syncMsg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{syncMsg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{syncMsg.err||syncMsg.ok}</div></div>}
       {adding&&<NewOrderForm onClose={()=>setAdding(false)} onCreate={(o)=>{setOrders(p=>[o,...p]);setAdding(false);}}/>}
       <div className="flex gap-4">
         <aside className="w-48 shrink-0 hidden md:block space-y-4">

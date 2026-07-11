@@ -73,7 +73,7 @@ const TOOLS = [
   }
 ];
 
-const SYSTEM = (product, site) => `You are ShipHub AI, the in-app assistant for ${product} (${site}) — a multi-carrier shipping platform with enterprise FedEx and DHL rates, built and supported by shipping people.
+const SYSTEM = (product, site) => `You are ${product} AI, the in-app assistant for ${product} (${site}) — a multi-carrier shipping platform with enterprise FedEx and DHL rates, built and supported by shipping people.
 
 What the platform does, by tab:
 - Ship: quote and book shipments. Enter sender/recipient, packages, and options (residential, signature, insurance); compare live rates across services and print labels.
@@ -92,9 +92,9 @@ What the platform does, by tab:
 
 How to behave:
 - Be brief, concrete, and warm. Point to tabs by name ("head to Returns and click New return").
-- Refer to yourself as ShipHub AI (the feature is called "Ask ShipHub AI"). If someone asks directly what technology powers you, you may say you are built on Anthropic's Claude models, but you speak for ${product} here — you do not represent Anthropic, and Anthropic does not endorse ${product}.
+- Refer to yourself as ${product} AI (the feature is called "Ask ${product} AI"). If someone asks directly what technology powers you, you may say you are built on Anthropic's Claude models, but you speak for ${product} here — you do not represent Anthropic, and Anthropic does not endorse ${product}.
 - Give genuinely useful shipping advice (packaging, service selection, residential vs commercial, dimensional weight, insurance) when asked.
-- NEVER invent prices, discounts, or rate numbers. Real rates come from quoting in the Ship tab. For pricing, account, or billing specifics, direct people to support: (801) 555-0123 or support@${site}.
+- NEVER invent prices, discounts, or rate numbers. Real rates come from quoting in the Ship tab. For pricing, account, or billing specifics, direct people to support at support@${site}.
 - Never discuss internal systems, credentials, API keys, other customers, or how the platform is built. Politely steer off-topic conversations back to shipping.
 You are also a COPILOT with tools that act on the app:
 - batch_orders stages a selection in the Batch tab; create_rule writes an Autopilot rule; apply_autopilot runs the rules; prefill_shipment opens a pre-filled Ship form; add_address saves a contact; go_to_tab navigates.
@@ -105,15 +105,49 @@ You are also a COPILOT with tools that act on the app:
 - Keep the accompanying text short: one line about what you staged and what to check.
 - If the person is exploring the public demo, everything they see is sample data — encourage them to click around, and mention they can create a real account from the banner up top when ready.`;
 
+/* ── session gate (see claude/audit-security.md F1) ──────────────────────
+   This endpoint spends real money or exposes the account's rate card, so the
+   caller must present a valid ShippingCloud session token (body.token — the
+   same HMAC token db.js issues at login). Server-to-server callers
+   (warm-rates, shopify-rates) send body.internalKey instead — an HMAC only
+   computable with this site's env secrets. With no SESSION_SECRET and no
+   Supabase key configured there is no auth system at all (bare local dev),
+   so the gate stands down rather than lock everything out. */
+const scCrypto = require("crypto");
+const scSecret = () => { const s = (process.env.SESSION_SECRET || "").trim(); if (s) return s; const k = (process.env.SUPABASE_SERVICE_KEY || "").trim(); return k ? scCrypto.createHash("sha256").update("sc1|" + k).digest("hex") : ""; };
+const scInternalKey = () => { const s = scSecret(); return s ? scCrypto.createHmac("sha256", s).update("internal:carrier").digest("hex") : ""; };
+function scAuth(body) {
+  const sec = scSecret();
+  if (!sec) return { uid: "local", local: true };
+  const ik = String((body && body.internalKey) || "");
+  if (ik) { const want = scInternalKey(); try { if (want && ik.length === want.length && scCrypto.timingSafeEqual(Buffer.from(ik), Buffer.from(want))) return { uid: "internal", internal: true }; } catch (e) {} }
+  try {
+    const [p, sig] = String((body && body.token) || "").split(".");
+    if (!p || !sig) return null;
+    const want = Buffer.from(scCrypto.createHmac("sha256", sec).update(p).digest("hex"), "hex");
+    const got = Buffer.from(sig, "hex");
+    if (want.length !== got.length || !scCrypto.timingSafeEqual(want, got)) return null;
+    const d = JSON.parse(Buffer.from(String(p).replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
+    if (!d || !d.uid || !d.exp || Date.now() > d.exp) return null;
+    return d;
+  } catch (e) { return null; }
+}
+/* best-effort per-container burst limit (the auth gate above is the real control) */
+const scHits = {};
+function scAllow(k, max) { const w = Math.floor(Date.now() / 60000), kk = k + ":" + w; scHits[kk] = (scHits[kk] || 0) + 1; if (Object.keys(scHits).length > 4000) { for (const x in scHits) { if (!x.endsWith(":" + w)) delete scHits[x]; } } return scHits[kk] <= max; }
+
 exports.handler = async (event) => {
   const J = (code, obj) => ({ statusCode: code, headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) });
   if (event.httpMethod !== "POST") return J(405, { ok: false, error: "POST only" });
 
   const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return J(200, { ok: false, error: "The assistant isn't configured yet — set ANTHROPIC_API_KEY in Netlify and redeploy." });
+  if (!key) return J(200, { ok: false, error: "The assistant is offline right now — try again later." });
 
   let body;
   try { body = JSON.parse(event.body || "{}"); } catch { return J(400, { ok: false, error: "Bad JSON" }); }
+  const gateAuth = scAuth(body);
+  if (!gateAuth) return J(200, { ok: false, authFailed: true, error: "Sign in to use the assistant." });
+  if (!scAllow("assistant:" + gateAuth.uid, 30)) return J(200, { ok: false, error: "One moment \u2014 too many questions at once." });
 
   const raw = Array.isArray(body.messages) ? body.messages : [];
   const msgs = raw

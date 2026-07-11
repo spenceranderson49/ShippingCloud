@@ -33,7 +33,7 @@ function shippedHtml(p) {
   const url = p.trackUrl ? esc(p.trackUrl) : (track ? "https://www.fedex.com/fedextrack/?trknbr=" + track : "");
   return `<!doctype html><body style="margin:0;background:#fafaf9;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;">
   <div style="max-width:520px;margin:0 auto;padding:28px 20px;">
-    <div style="font-size:22px;font-weight:800;color:#0c4a6e;">Shipping<span style="color:#0086E0;">Cloud</span></div>
+    <div style="font-size:22px;font-weight:800;color:#0c4a6e;">${p.brand?esc(p.brand):'Shipping<span style="color:#0086E0;">Cloud</span>'}</div>
     <div style="background:#fff;border:1px solid #e7e5e4;border-radius:14px;padding:22px;margin-top:14px;">
       <div style="font-size:17px;font-weight:700;">${esc(p.title || "Your order is on the way")}</div>
       ${p.line ? `<p style="font-size:14px;color:#57534e;margin:10px 0 0;">${esc(p.line)}</p>` : ""}
@@ -42,7 +42,7 @@ function shippedHtml(p) {
       ${url ? `<a href="${url}" style="display:inline-block;margin-top:16px;background:#0086E0;color:#fff;text-decoration:none;font-weight:600;border-radius:8px;padding:10px 18px;font-size:14px;">Track your package</a>` : ""}
       ${p.service ? `<p style="font-size:12px;color:#a8a29e;margin:16px 0 0;">${esc(p.service)}${p.eta ? " \u00b7 estimated delivery " + esc(p.eta) : ""}</p>` : ""}
     </div>
-    <p style="font-size:11px;color:#a8a29e;margin-top:14px;">${esc(p.footer || "Sent by ShippingCloud on behalf of the sender.")}</p>
+    <p style="font-size:11px;color:#a8a29e;margin-top:14px;">${esc(p.footer || "Sent by "+(p.brand||"ShippingCloud")+" on behalf of the sender.")}</p>
   </div></body>`;
 }
 

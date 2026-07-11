@@ -210,7 +210,10 @@ const MAX_UPLOAD_B64 = 4.6 * 1024 * 1024;   // ~3.4 MB file
 const OK_UPLOAD_TYPES = ["application/pdf", "text/csv", "image/png", "image/jpeg", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"];
 
 const userScope = (auth) => "u/" + auth.uid + "/";
-const canWriteKey = (auth, key) => auth.role === "admin" ? key !== "session" : String(key).startsWith(userScope(auth));
+const canWriteKey = (auth, key) => String(key).startsWith("bak:") ? false : (auth.role === "admin" ? key !== "session" : String(key).startsWith(userScope(auth)));   /* bak: rows are server-written snapshots — no app write may forge or clobber them */
+/* best-effort per-container throttle for the unauthenticated signup endpoint (F3) */
+const RA_HITS = {};
+const signupThrottleOk = (ip) => { const w = Math.floor(Date.now() / 3600000), k = String(ip || "?") + ":" + w; RA_HITS[k] = (RA_HITS[k] || 0) + 1; if (Object.keys(RA_HITS).length > 2000) { for (const x in RA_HITS) { if (!x.endsWith(":" + w)) delete RA_HITS[x]; } } return RA_HITS[k] <= 5; };
 const SYNC_BLOCK = { session: 1 }; // never stored server-side
 
 exports.handler = async (event) => {
@@ -221,7 +224,7 @@ exports.handler = async (event) => {
     const action = body.action || "";
 
     if (action === "ping") return J({ ok: true, configured: configured() });
-    if (!configured()) return J({ ok: false, notConfigured: true, error: "Cloud database isn't configured yet (SUPABASE_URL / SUPABASE_SERVICE_KEY env vars)." });
+    if (!configured()) return J({ ok: false, notConfigured: true, error: "We're having trouble reaching the server — try again in a moment." });
 
     /* ── login (+ first-ever bootstrap) ── */
     /* Every customer login must resolve to a real client record. Minted HERE (server-side)
@@ -243,7 +246,7 @@ exports.handler = async (event) => {
       const password = String(body.password || "");
       if (!email || !password) return J({ ok: false, error: "Enter your email and password." });
       const cur = await getStore("users");
-      if (!cur.ok) return J({ ok: false, error: "Database error: " + ((cur.err && cur.err.text) || cur.err && cur.err.status || "unreachable") + ". Check the SQL setup step and env vars." });
+      if (!cur.ok) return J({ ok: false, error: "We're having trouble reaching the server — try again in a moment." });
       let users = Array.isArray(cur.value) ? cur.value : [];
       if (!users.length) {
         // BOOTSTRAP: very first login creates the admin account with this email + password.
@@ -308,6 +311,8 @@ exports.handler = async (event) => {
       const volume = String(body.volume || "").slice(0, 40);
       const carrier = String(body.carrier || "").slice(0, 40);
       if (!name || !/.+@.+\..+/.test(email) || password.length < 4) return J({ ok: false, error: "Enter your name, a valid email, and a password (4+ characters)." });
+      const _raIp = (event.headers && (event.headers["x-nf-client-connection-ip"] || String(event.headers["x-forwarded-for"] || "").split(",")[0].trim())) || "";
+      if (!signupThrottleOk(_raIp)) return J({ ok: false, error: "Too many signups from this connection — try again in an hour." });
       const [curU, curR, curF, curC] = await Promise.all([getStore("users"), getStore("signupRequests"), getStore("fedexRequests"), getStore("clients")]);
       const users = (curU.ok && Array.isArray(curU.value)) ? curU.value : [];
       if (users.some((u) => u && String(u.email || "").toLowerCase() === email)) return J({ ok: false, error: "That email already has a login. Try signing in." });
@@ -369,7 +374,12 @@ exports.handler = async (event) => {
       const users = Array.isArray(curU.value) ? curU.value : [];
       const u = users.find((x) => x && String(x.email || "").toLowerCase() === email && x.status !== "disabled");
       if (!u) return J(generic); // never reveal which emails exist
-      const payload = b64u(JSON.stringify({ uid: String(u.id), kind: "pwreset", exp: Date.now() + 60 * 60 * 1000 }));
+      /* welcome variant: only an authenticated ADMIN can request it (it says "an account was
+         created for you", so it must never be triggerable by an anonymous visitor). 72h link —
+         a brand-new user may not check email within the reset flow's 1 hour. */
+      const _wAuth = verifyToken(body.token);
+      const isWelcome = !!(body.welcome && _wAuth && _wAuth.role === "admin");
+      const payload = b64u(JSON.stringify({ uid: String(u.id), kind: "pwreset", exp: Date.now() + (isWelcome ? 72 : 1) * 60 * 60 * 1000 }));
       const rtoken = payload + "." + sign(payload);
       /* Send the person back to the site they asked from, with that site's branding.
          Origin is whitelisted — never trusted raw — so a reset email can't be pointed
@@ -391,8 +401,8 @@ exports.handler = async (event) => {
       const from = (process.env.EMAIL_FROM || "ShippingCloud <notify@shippingcloud.net>").trim();
       try {
         const rr = await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
-          body: JSON.stringify({ from, to: [email], subject: "Reset your " + product + " password",
-            html: `<body style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;"><div style="max-width:480px;margin:0 auto;padding:28px 20px;"><div style="font-size:20px;font-weight:800;color:#0c4a6e;">${wordmark}</div><p style="font-size:14px;color:#57534e;">Someone (hopefully you) asked to reset the password for this account. This link works for 1 hour.</p><a href="${link}" style="display:inline-block;background:#0086E0;color:#fff;text-decoration:none;font-weight:600;border-radius:8px;padding:10px 18px;font-size:14px;">Choose a new password</a><p style="font-size:11px;color:#a8a29e;margin-top:16px;">Didn\u2019t ask for this? Ignore this email \u2014 nothing changes.</p></div></body>` }) });
+          body: JSON.stringify({ from, to: [email], subject: isWelcome ? ("Welcome to " + product + " — set your password") : ("Reset your " + product + " password"),
+            html: `<body style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;"><div style="max-width:480px;margin:0 auto;padding:28px 20px;"><div style="font-size:20px;font-weight:800;color:#0c4a6e;">${wordmark}</div>${isWelcome?`<p style="font-size:14px;color:#57534e;">An account was created for you. Click below to choose your password and sign in. This link works for 72 hours.</p>`:`<p style="font-size:14px;color:#57534e;">Someone (hopefully you) asked to reset the password for this account. This link works for 1 hour.</p>`}<a href="${link}" style="display:inline-block;background:#0086E0;color:#fff;text-decoration:none;font-weight:600;border-radius:8px;padding:10px 18px;font-size:14px;">${isWelcome?"Set my password":"Choose a new password"}</a>${isWelcome?"":`<p style="font-size:11px;color:#a8a29e;margin-top:16px;">Didn\u2019t ask for this? Ignore this email \u2014 nothing changes.</p>`}</div></body>` }) });
         const rt = await rr.text().catch(() => "");
         if (rr.ok) console.log("[requestReset] sent OK via Resend from <" + from + "> (origin " + (reqOrigin || "none") + ")");
         else console.log("[requestReset] Resend REJECTED the send (" + rr.status + "): " + rt.slice(0, 300) + " — common causes: wrong API key, or the EMAIL_FROM domain isn't verified in the Resend dashboard.");
@@ -683,10 +693,29 @@ exports.handler = async (event) => {
             // prune: keep the newest 10 snapshots per key
             const lr = await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=like." + encodeURIComponent("bak:" + key + ":") + "*&select=key&order=key.desc");
             const keys = (Array.isArray(lr.data) ? lr.data : []).map((r2) => r2.key);
-            if (keys.length > 10) {
-              const drop = keys.slice(10);
-              await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=in.(" + drop.map((k) => '"' + k.replace(/"/g, "") + '"').join(",") + ")", { method: "DELETE" });
-            }
+            for (const bk of keys.slice(10)) { await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=eq." + encodeURIComponent(bk), { method: "DELETE" }); }
+          } catch (e) { /* backup must never block the save itself */ }
+        }
+      }
+      /* ── same protection for each customer's own operational stores (F14): orders/shipments
+         are whole-array last-write-wins from the browser, so a stale tab could silently truncate
+         them. A write that would EMPTY a non-empty store is refused; a big shrink (≥25% gone,
+         store had ≥8 rows) snapshots the current value first so it stays restorable. ── */
+      for (const key of Object.keys(toWrite)) {
+        if (!/^u\/[^/]+\/(orders|shipments)$/.test(key)) continue;
+        const curP = await getStore(key);
+        const curArr = (curP.ok && Array.isArray(curP.value)) ? curP.value : null;
+        if (!curArr || !curArr.length) continue;
+        const nv = toWrite[key];
+        const nvLen = Array.isArray(nv) ? nv.length : 0;
+        if (nv == null || nvLen === 0) { delete toWrite[key]; rejected.push(key + " (refused: would erase " + curArr.length + " records — reload and try again)"); continue; }
+        if (curArr.length >= 8 && nvLen <= curArr.length * 0.75) {
+          try {
+            const ts = new Date().toISOString().replace(/[:.]/g, "-");
+            await putStores({ ["bak:" + key + ":" + ts]: curArr });
+            const lr = await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=like." + encodeURIComponent("bak:" + key + ":") + "*&select=key&order=key.desc");
+            const bkeys = (Array.isArray(lr.data) ? lr.data : []).map((r2) => r2.key);
+            for (const bk of bkeys.slice(5)) { await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=eq." + encodeURIComponent(bk), { method: "DELETE" }); }
           } catch (e) { /* backup must never block the save itself */ }
         }
       }
@@ -696,6 +725,29 @@ exports.handler = async (event) => {
       const w = await putStores(toWrite);
       if (!w.ok) return J({ ok: false, error: "Save failed: " + ((w.err && w.err.text) || "").slice(0, 200) });
       return J({ ok: true, saved: Object.keys(toWrite), rejected });
+    }
+
+    /* ── snapshot management (F17): bak:<key>:<ts> rows are written by the wipe-guards above.
+       listBackups shows what exists; restoreBackup puts one back — after snapshotting the
+       CURRENT value first, so a restore is itself reversible. Admin only. ── */
+    if (action === "listBackups") {
+      if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
+      const lr = await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=like." + encodeURIComponent("bak:") + "*&select=key&order=key.desc");
+      const rows = (Array.isArray(lr.data) ? lr.data : []).map((r2) => r2.key);
+      return J({ ok: true, backups: rows.slice(0, 400) });
+    }
+    if (action === "restoreBackup") {
+      if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
+      const bkey = String(body.key || "");
+      const cut = bkey.lastIndexOf(":");
+      const orig = bkey.startsWith("bak:") && cut > 4 ? bkey.slice(4, cut) : "";
+      if (!orig || orig === "session" || orig.startsWith("bak:")) return J({ ok: false, error: "Not a valid backup key." });
+      const bak = await getStore(bkey);
+      if (!bak.ok || bak.value === undefined) return J({ ok: false, error: "Backup not found." });
+      try { const cur = await getStore(orig); if (cur.ok && cur.value !== undefined) { const ts = new Date().toISOString().replace(/[:.]/g, "-"); await putStores({ ["bak:" + orig + ":" + ts]: cur.value }); } } catch (e) {}
+      const w = await putStores({ [orig]: bak.value });
+      if (!w.ok) return J({ ok: false, error: "Restore failed: " + ((w.err && w.err.text) || "").slice(0, 150) });
+      return J({ ok: true, restored: orig });
     }
 
     if (action === "setPassword") {
@@ -710,6 +762,9 @@ exports.handler = async (event) => {
          an old token still carries the OLD address, and if that address is later re-registered by
          someone else, an email-keyed check would let the old token reset the NEW user's password. */
       if (auth.role !== "admin" && String(users[idx].id) !== String(auth.uid)) return J({ ok: false, error: "You can only change your own password." });
+      /* a stolen 30-day session token must not be enough to silently take the account over —
+         the self path re-proves identity with the current password, exactly like changeEmail */
+      if (auth.role !== "admin" && !checkPw(String(body.currentPassword || ""), users[idx].passHash)) return J({ ok: false, error: "Enter your current password to set a new one." });
       users[idx] = { ...users[idx], password: "", passHash: hashPw(newPassword) };
       const w = await putStores({ users });
       if (!w.ok) return J({ ok: false, error: "Save failed." });

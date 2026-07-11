@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v457";
+const BUILD_TAG="addr-v458";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -1365,14 +1365,14 @@ const CONNECTORS=[
     instr:["Enable SuiteTalk REST Web Services + Token-Based Auth (Setup → Company → Enable Features).","Create an Integration record → copy Consumer Key + Secret.","Create an Access Token (Setup → Users/Roles → Access Tokens) → copy Token ID + Secret.","Paste all five (plus your Account ID) above and click Save."]},
   // OAuth connectors — Connect button starts the handshake; tokens come back automatically
   {id:"quickbooks",name:"QuickBooks Online",tint:"bg-[#2CA01C]/15 text-[#2CA01C]",auth:"oauth",orders:false,endpoint:"quickbooks",env:["QBO_CLIENT_ID","QBO_CLIENT_SECRET"],
-    instr:["Go to developer.intuit.com → My Apps → create an app with the Accounting scope.","Set the Redirect URI to:  "+APP_ORIGIN+"/.netlify/functions/quickbooks","Copy the Client ID + Client Secret. (Send them to your admin to set as QBO_CLIENT_ID / QBO_CLIENT_SECRET in Netlify, or set them yourself.)","Then click “Connect with QuickBooks” below and approve."]},
+    instr:["Go to developer.intuit.com → My Apps → create an app with the Accounting scope.","Set the Redirect URI to:  "+APP_ORIGIN+"/.netlify/functions/quickbooks","Copy the Client ID + Client Secret. (Send them to support and we'll finish the connection.)","Then click “Connect with QuickBooks” below and approve."]},
   {id:"salesforce",name:"Salesforce",tint:"bg-[#00A1E0]/15 text-[#0079A1]",auth:"oauth",orders:false,endpoint:"salesforce",env:["SF_CLIENT_ID","SF_CLIENT_SECRET"],
-    instr:["In Salesforce: Setup → App Manager → New Connected App, enable OAuth.","Set the Callback URL to:  "+APP_ORIGIN+"/.netlify/functions/salesforce","Scopes: api, refresh_token. Copy the Consumer Key + Secret and set them as SF_CLIENT_ID / SF_CLIENT_SECRET in Netlify.","Then click “Connect with Salesforce” below and approve."]},
+    instr:["In Salesforce: Setup → App Manager → New Connected App, enable OAuth.","Set the Callback URL to:  "+APP_ORIGIN+"/.netlify/functions/salesforce","Scopes: api, refresh_token. Copy the Consumer Key + Secret and send them to support.","Then click “Connect with Salesforce” below and approve."]},
   {id:"ebay",name:"eBay",tint:"bg-[#E53238]/12 text-[#E53238]",auth:"oauth",orders:true,endpoint:"ebay",env:["EBAY_CLIENT_ID","EBAY_CLIENT_SECRET","EBAY_RUNAME"],
-    instr:["Go to developer.ebay.com → your keyset → User Tokens → create a Redirect URL name (RuName).","Set the RuName’s accepted URL to:  "+APP_ORIGIN+"/.netlify/functions/ebay","Set EBAY_CLIENT_ID, EBAY_CLIENT_SECRET and EBAY_RUNAME in Netlify.","Then click “Connect with eBay” below and approve."]},
+    instr:["Go to developer.ebay.com → your keyset → User Tokens → create a Redirect URL name (RuName).","Set the RuName’s accepted URL to:  "+APP_ORIGIN+"/.netlify/functions/ebay","Send the keyset details to support and we'll finish the connection.","Then click “Connect with eBay” below and approve."]},
   // QuickBooks Desktop — Web Connector
   {id:"quickbooks-desktop",name:"QuickBooks Desktop",tint:"bg-[#2CA01C]/15 text-[#2CA01C]",auth:"qwc",orders:false,endpoint:"quickbooks-desktop",env:["QBWC_USER","QBWC_PASS"],
-    instr:["Have an admin set QBWC_USER and QBWC_PASS in Netlify (the Web Connector login).","On the PC running QuickBooks, install the QuickBooks Web Connector (free from Intuit).","Click “Download .qwc” below, then in the Web Connector choose File → Add an Application and pick that file; enter the QBWC password.","Open QuickBooks as Admin and approve the app. It will sync every few minutes; queued invoices post automatically."]},
+    instr:["Ask support for your Web Connector login.","On the PC running QuickBooks, install the QuickBooks Web Connector (free from Intuit).","Click “Download .qwc” below, then in the Web Connector choose File → Add an Application and pick that file; enter the QBWC password.","Open QuickBooks as Admin and approve the app. It will sync every few minutes; queued invoices post automatically."]},
 ];
 const connectorOf=(id)=>CONNECTORS.find(c=>c.id===id);
 const connConnected=(settings,c)=>{ const v=(settings.conn||{})[c.id]; if(!v)return false; if(c.auth==="token")return c.fields.every(([k])=>k==="channelId"||k==="env"||k==="marketplaceId"||v[k]); if(c.auth==="oauth")return !!(v.accessToken||v.token); return !!v.saved; };
@@ -1785,7 +1785,7 @@ function recToDocCtx(rec){
     recipient:rcp, sender:snd,
     recipientName:rcp.name||"", recipientCompany:rcp.company||"", recipientZip:rcp.zip||r.toZip||"",
     senderName:snd.name||"", senderCompany:snd.company||"",
-    cost:(r.sell??r.cost),
+    cost:(r.sell!=null?r.sell:null),
     carrier:r.carrier||"", tracking:r.tracking||""
   };
 }
@@ -2933,7 +2933,7 @@ function Login({users,onLogin,brand}){
     const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"requestReset",email:fpEmail})});
     const d=await r.json().catch(()=>null);
     /* The server tells us when email sending isn't configured — say so instead of a fake "sent". */
-    if(d&&d.configured===false){setFpErr("Reset emails aren't switched on for this site yet — no email was sent. (Admin: add RESEND_API_KEY in Netlify env vars and redeploy.)");return;}
+    if(d&&d.configured===false){setFpErr("Reset emails aren't available on this site yet — contact support and we'll reset your password.");return;}
     setFp("sent");
   }catch(e){setFpErr("Network error — try again.");}};
   const fpSave=async()=>{setFpErr("");try{const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"resetPassword",rtoken:fp.reset,password:fpPw})});const d=await r.json();if(d&&d.ok){setFp("done");try{window.history.replaceState({},"",window.location.pathname);}catch(e){}}else setFpErr((d&&d.error)||"Could not reset.");}catch(e){setFpErr("Network error — try again.");}};
@@ -2965,7 +2965,7 @@ function Login({users,onLogin,brand}){
   };
   const signup=()=>{
     if(!name||!email||!pw){setErr("Fill in your name, email, and a password.");return;}
-    setNote("Account request submitted. In production this would await admin approval; for now you can sign in with the demo accounts below.");
+    setNote("Request received — you'll get an email as soon as your account is approved.");
     setMode("signin");
   };
   return (
@@ -5177,7 +5177,7 @@ function CloudAuth({onDone,initialMode,intake}){
     const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"requestReset",email:fpEmail})});
     const d=await r.json().catch(()=>null);
     /* The server tells us when email sending isn't configured — say so instead of a fake "sent". */
-    if(d&&d.configured===false){setFpErr("Reset emails aren't switched on for this site yet — no email was sent. (Admin: add RESEND_API_KEY in Netlify env vars and redeploy.)");return;}
+    if(d&&d.configured===false){setFpErr("Reset emails aren't available on this site yet — contact support and we'll reset your password.");return;}
     setFp("sent");
   }catch(e){setFpErr("Network error — try again.");}};
   const fpSave=async()=>{setFpErr("");try{const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"resetPassword",rtoken:fp.reset,password:fpPw})});const d=await r.json();if(d&&d.ok){setFp("done");try{window.history.replaceState({},"",window.location.pathname);}catch(e){}}else setFpErr((d&&d.error)||"Could not reset.");}catch(e){setFpErr("Network error — try again.");}};
@@ -5256,8 +5256,10 @@ function CloudAuth({onDone,initialMode,intake}){
 }
 
 /* ════════ PUBLIC LANDING PAGE ════════ */
+const AI_NAME=BRAND.product+" AI";
 const CONTACT_PHONE="(801) 555-0123";   // ← REPLACE with your real number (shows on the public landing page)
 const CONTACT_PHONE_TEL="+18015550123"; // ← same number, digits only with +1, used for tap-to-call
+const PHONE_REAL=!/555-?01/.test(CONTACT_PHONE);   /* placeholder guard: phone CTAs stay hidden until a real number replaces the 555 placeholder above */
 const CONTACT_EMAIL=BRAND.fw?"support@freightwireship.com":"support@shippingcloud.net"; // brand-matched support email (shows on the Contact page)
 
 /* Terms & Privacy — quiet footer links opening a self-contained reader. Not legal advice; standard SaaS coverage. */
@@ -5362,7 +5364,7 @@ function Landing({onAuth}){
         <NavTab label="Rates" onClick={()=>setPage("home","rates")}/>
         <NavTab label="About" onClick={()=>setPage("about")}/>
         <NavTab label="Contact" onClick={()=>setPage("contact")}/>
-        <a href={"tel:"+CONTACT_PHONE_TEL} className="hidden md:flex items-center gap-2 text-sm text-stone-600 hover:text-stone-900 px-2.5 py-2"><Phone className="w-4 h-4 text-[#0086E0]"/>{CONTACT_PHONE}</a>
+        {PHONE_REAL&&<a href={"tel:"+CONTACT_PHONE_TEL} className="hidden md:flex items-center gap-2 text-sm text-stone-600 hover:text-stone-900 px-2.5 py-2"><Phone className="w-4 h-4 text-[#0086E0]"/>{CONTACT_PHONE}</a>}
         <button onClick={()=>onAuth("signin")} className="text-sm text-stone-600 hover:text-stone-900 px-2.5 py-2">Sign in</button>
         <button onClick={()=>onAuth("request")} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white font-medium rounded-lg px-4 py-2">Create account</button>
       </div>
@@ -5420,13 +5422,13 @@ function Landing({onAuth}){
     {/* built-in ShipHub AI */}
     <div className="max-w-6xl mx-auto px-5 pb-4">
       <div className="rounded-2xl p-8 sm:p-12 border border-[#0086E0]/25 bg-gradient-to-br from-[#0086E0]/10 via-white/40 to-transparent">
-        <div className="flex items-center gap-2 text-[#0086E0] font-semibold text-sm"><Sparkles className="w-4 h-4"/>Built-in assistant · ShipHub AI</div>
-        <h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="mt-3 text-3xl sm:text-4xl font-bold text-stone-900 leading-tight max-w-3xl">Let ShipHub AI do the shipping busywork for you.</h2>
-        <p className="mt-4 text-stone-600 max-w-2xl text-[15px] leading-relaxed">{BRAND.product} has ShipHub AI built right in — not a canned help bot, but an assistant that actually works your account. Ask in plain English and it sets things up for you to approve.</p>
+        <div className="flex items-center gap-2 text-[#0086E0] font-semibold text-sm"><Sparkles className="w-4 h-4"/>Built-in assistant · {AI_NAME}</div>
+        <h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="mt-3 text-3xl sm:text-4xl font-bold text-stone-900 leading-tight max-w-3xl">Let {AI_NAME} do the shipping busywork for you.</h2>
+        <p className="mt-4 text-stone-600 max-w-2xl text-[15px] leading-relaxed">{BRAND.product} has {AI_NAME} built right in — not a canned help bot, but an assistant that actually works your account. Ask in plain English and it sets things up for you to approve.</p>
         <div className="mt-8 grid sm:grid-cols-3 gap-4 max-w-4xl">
           <div className="bg-white border border-stone-200/80 rounded-xl p-5">
             <div className="flex items-center gap-2 text-stone-900 font-semibold"><Layers className="w-4 h-4 text-[#0086E0]"/>Batch by voice</div>
-            <p className="mt-2 text-[13px] text-stone-500 leading-relaxed">“Batch every Shopify order under 5 lb to Texas as cheapest ground.” ShipHub AI filters, selects, and stages the whole run.</p>
+            <p className="mt-2 text-[13px] text-stone-500 leading-relaxed">“Batch every Shopify order under 5 lb to Texas as cheapest ground.” {AI_NAME} filters, selects, and stages the whole run.</p>
           </div>
           <div className="bg-white border border-stone-200/80 rounded-xl p-5">
             <div className="flex items-center gap-2 text-stone-900 font-semibold"><Zap className="w-4 h-4 text-[#0086E0]"/>Rules in plain English</div>
@@ -5439,7 +5441,7 @@ function Landing({onAuth}){
         </div>
         <div className="mt-7 flex flex-wrap items-center gap-4">
           <button onClick={enterDemo} className="inline-flex items-center gap-2 bg-white text-stone-900 font-semibold rounded-lg px-6 py-3 hover:bg-stone-200"><Eye className="w-4 h-4"/>Try it in the demo</button>
-          <span className="inline-flex items-center gap-1.5 text-[13px] text-stone-500"><ShieldCheck className="w-4 h-4 text-[#0086E0]"/>It stages, you approve — ShipHub AI never prints a label without you.</span>
+          <span className="inline-flex items-center gap-1.5 text-[13px] text-stone-500"><ShieldCheck className="w-4 h-4 text-[#0086E0]"/>It stages, you approve — {AI_NAME} never prints a label without you.</span>
         </div>
       </div>
     </div>
@@ -5447,8 +5449,8 @@ function Landing({onAuth}){
     <div className="max-w-6xl mx-auto px-5 pb-16 pt-8">
       <div className="bg-gradient-to-br from-[#0086E0]/15 to-transparent border border-[#0086E0]/25 rounded-2xl p-8 sm:p-10 text-center">
         <h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-2xl sm:text-3xl font-bold text-stone-900 leading-snug">Real people answer the phone.</h2>
-        <p className="mt-3 text-stone-500 max-w-xl mx-auto">ShipHub AI handles the busywork inside the app — but when you need a human, you get one. No week-old tickets, no runaround. One call covers your shipping and your tech, from someone who knows your account.</p>
-        <a href={"tel:"+CONTACT_PHONE_TEL} className="mt-6 inline-flex items-center gap-2 bg-white text-stone-900 font-semibold rounded-lg px-6 py-3 hover:bg-stone-200"><Phone className="w-4 h-4"/>{CONTACT_PHONE}</a>
+        <p className="mt-3 text-stone-500 max-w-xl mx-auto">{AI_NAME} handles the busywork inside the app — but when you need a human, you get one. No week-old tickets, no runaround. One call covers your shipping and your tech, from someone who knows your account.</p>
+        {PHONE_REAL&&<a href={"tel:"+CONTACT_PHONE_TEL} className="mt-6 inline-flex items-center gap-2 bg-white text-stone-900 font-semibold rounded-lg px-6 py-3 hover:bg-stone-200"><Phone className="w-4 h-4"/>{CONTACT_PHONE}</a>}
       </div>
     </div>
     </>}
@@ -5466,10 +5468,10 @@ function Landing({onAuth}){
       <h1 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-3xl sm:text-4xl font-bold text-stone-900">Talk to a real person</h1>
       <p className="mt-4 text-stone-500 leading-relaxed text-lg">No chatbots, no ticket black holes. Call or write — a human who can actually fix it answers.</p>
       <div className="mt-8 grid sm:grid-cols-2 gap-4">
-        <a href={"tel:"+CONTACT_PHONE_TEL} className="bg-white border border-stone-200/80 hover:bg-stone-50 rounded-2xl p-6 block">
+        <a href={PHONE_REAL?("tel:"+CONTACT_PHONE_TEL):("mailto:support@"+(BRAND.fw?"freightwireship.com":"shippingcloud.net"))} className="bg-white border border-stone-200/80 hover:bg-stone-50 rounded-2xl p-6 block">
           <Phone className="w-6 h-6 text-[#0086E0]"/>
-          <div className="mt-3 font-semibold text-stone-900">Call us</div>
-          <div className="text-[#0086E0] text-lg font-semibold mt-1">{CONTACT_PHONE}</div>
+          <div className="mt-3 font-semibold text-stone-900">{PHONE_REAL?"Call us":"Email us"}</div>
+          <div className="text-[#0086E0] text-lg font-semibold mt-1">{PHONE_REAL?CONTACT_PHONE:("support@"+(BRAND.fw?"freightwireship.com":"shippingcloud.net"))}</div>
           <div className="text-[13px] text-stone-500 mt-1">Monday–Friday, business hours (MT)</div>
         </a>
         <a href={"mailto:"+CONTACT_EMAIL} className="bg-white border border-stone-200/80 hover:bg-stone-50 rounded-2xl p-6 block">
@@ -5648,7 +5650,7 @@ function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,set
 /* ════════ ASSISTANT CHAT ════════ */
 function AssistantChat({who,getContext,onAction}){
   const [open,setOpen]=useState(false);
-  const [msgs,setMsgs]=useState([{role:"assistant",content:who==="demo"?`Hi, I’m ShipHub AI! Ask me anything about ${BRAND.product} — how a tab works, what Autopilot does, shipping advice, whatever. Everything in this demo is sample data, so click around freely.`:`Hi, I’m ShipHub AI! Ask me anything about ${BRAND.product} — how features work, or general shipping advice.`}]);
+  const [msgs,setMsgs]=useState([{role:"assistant",content:who==="demo"?`Hi, I’m ${AI_NAME}! Ask me anything about ${BRAND.product} — how a tab works, what Autopilot does, shipping advice, whatever. Everything in this demo is sample data, so click around freely.`:`Hi, I’m ${AI_NAME}! Ask me anything about ${BRAND.product} — how features work, or general shipping advice.`}]);
   const [input,setInput]=useState("");
   const [busy,setBusy]=useState(false);
   const endRef=React.useRef(null);
@@ -5686,7 +5688,7 @@ function AssistantChat({who,getContext,onAction}){
     {open&&<div className="fixed bottom-20 right-4 sm:right-5 w-[min(92vw,370px)] h-[480px] max-h-[70vh] bg-white border border-stone-200 rounded-2xl shadow-2xl z-40 flex flex-col overflow-hidden">
       <div className="px-4 py-3 border-b border-stone-200 bg-stone-50 flex items-center gap-2">
         <span className="w-7 h-7 rounded-full bg-[#0086E0] text-white flex items-center justify-center"><Sparkles className="w-3.5 h-3.5"/></span>
-        <div className="flex-1"><div className="text-sm font-semibold text-stone-800 leading-tight">Ask ShipHub AI</div><div className="text-[11px] text-stone-500 leading-tight">answers, advice — and it can batch, rule &amp; route for you</div></div>
+        <div className="flex-1"><div className="text-sm font-semibold text-stone-800 leading-tight">Ask {AI_NAME}</div><div className="text-[11px] text-stone-500 leading-tight">answers, advice — and it can batch, rule &amp; route for you</div></div>
         <button onClick={()=>setOpen(false)} className="p-1 rounded hover:bg-stone-200"><X className="w-4 h-4 text-stone-500"/></button>
       </div>
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 text-sm">
@@ -5703,9 +5705,9 @@ function AssistantChat({who,getContext,onAction}){
         <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}} rows={1} placeholder="Ask about the platform…" className="flex-1 resize-none text-sm border border-stone-300 rounded-lg px-3 py-2 focus:outline-none focus:border-[#0086E0] max-h-24"/>
         <button onClick={send} disabled={busy||!input.trim()} className="bg-[#0086E0] hover:bg-[#0072BE] disabled:opacity-40 text-white rounded-lg p-2.5"><Send className="w-4 h-4"/></button>
       </div>
-      <div className="text-center text-[10px] text-stone-500 pb-1.5 -mt-0.5">Powered by ShipHub AI</div>
+      <div className="text-center text-[10px] text-stone-500 pb-1.5 -mt-0.5">Powered by {AI_NAME}</div>
     </div>}
-    <button onClick={()=>setOpen(v=>!v)} title={"Ask ShipHub AI about "+BRAND.product} className="fixed bottom-4 right-4 sm:bottom-5 sm:right-5 z-40 w-14 h-14 rounded-full bg-[#0086E0] hover:bg-[#0072BE] text-white shadow-lg flex items-center justify-center">
+    <button onClick={()=>setOpen(v=>!v)} title={"Ask "+AI_NAME+" about "+BRAND.product} className="fixed bottom-4 right-4 sm:bottom-5 sm:right-5 z-40 w-14 h-14 rounded-full bg-[#0086E0] hover:bg-[#0072BE] text-white shadow-lg flex items-center justify-center">
       {/* Curved "SHIPHUB AI" wrapping the top half of the circle */}
       {!open&&<svg viewBox="0 0 56 56" className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
         <defs><path id="sc-ai-arc" d="M 10 28 A 18 18 0 0 1 46 28" fill="none"/></defs>
@@ -5878,7 +5880,7 @@ function AppInner(){
   const [qq,setQQ]=useState(false);
   const [navOpen,setNavOpen]=useState(false);
   const [prefill,setPrefill]=useState(null);
-  const [settingsRaw,setSettingsRaw]=usePersist("settings",{company:"",sender:{name:"",company:"",zip:"",state:"",city:"",address1:"",phone:"",email:""},defaultBillTo:"sender",thirdPartyAccts:[{id:"tp1",carrier:"FedEx",account:"20601652",label:"England FedEx"}],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,products:SEED_PRODUCTS,checkout:CHECKOUT_DEFAULTS,platforms:PLATFORM_DEFAULTS,plan:"starter",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:"20601652"},addresses:[],warehouses:[],autoRunRules:false,brand:DEFAULT_BRAND,domains:[],companyLogo:""});
+  const [settingsRaw,setSettingsRaw]=usePersist("settings",{company:"",sender:{name:"",company:"",zip:"",state:"",city:"",address1:"",phone:"",email:""},defaultBillTo:"sender",thirdPartyAccts:[],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,products:SEED_PRODUCTS,checkout:CHECKOUT_DEFAULTS,platforms:PLATFORM_DEFAULTS,plan:"starter",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:""},addresses:[],warehouses:[],autoRunRules:false,brand:DEFAULT_BRAND,domains:[],companyLogo:""});
   const deployedCustom=useMemo(()=>{ const uid=currentUser&&currentUser.id;
     const fl=(uid&&featureFlags&&featureFlags[uid])||(CLOUD.mode==="cloud"?(myFeatures||{}):{});
     return (fl&&fl._custom)||{};
@@ -6017,7 +6019,7 @@ function AppInner(){
      customer, exactly like their login. */
   const [adminPriceAs,setAdminPriceAs]=usePersist("adminPriceAs","");
   const _apClient=(currentUser&&currentUser.role==="admin"&&adminPriceAs)?clients.find(c=>c&&c.id===adminPriceAs):null;
-  const client=_apClient||clients.find(c=>c.id===clientId)||(clientId?{id:clientId,name:"(unknown customer — "+clientId+")",_unresolved:true}:{id:"",name:"",_unassigned:true});
+  const client=_apClient||clients.find(c=>c.id===clientId)||(clientId?{id:clientId,name:"",_unresolved:true}:{id:"",name:"",_unassigned:true});
   /* An unresolved customer is often just staleness — a customer created seconds ago on a different tab/domain,
      and this session hasn't caught up yet. The normal poll is every 20s AND skips entirely while the tab is
      backgrounded, so switching between the admin tab and this one can leave it stale far longer than 20s.
@@ -6049,7 +6051,7 @@ function AppInner(){
     const canSend=CLOUD.mode==="cloud"&&CLOUD.token&&!isDemo&&e&&/.+@.+\..+/.test(String(e.to||""));
     setEmails(p=>[{id,date:new Date().toLocaleString(),status:canSend?"sending":"logged",...e},...p]);
     if(!canSend)return;
-    fetch(fn("email"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:CLOUD.token,to:e.to,subject:e.subject||"Update on your shipment",template:{title:e.subject||"Your order is on the way",line:e.body||"",tracking:e.tracking||"",service:e.service||"",eta:e.eta||""}})})
+    fetch(fn("email"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:CLOUD.token,to:e.to,subject:e.subject||"Update on your shipment",template:{brand:BRAND.product,title:e.subject||"Your order is on the way",line:e.body||"",tracking:e.tracking||"",service:e.service||"",eta:e.eta||""}})})
       .then(r=>r.json()).then(d=>{
         const st=d&&d.sent?"sent":(d&&d.configured===false?"logged":"failed");
         setEmails(p=>p.map(x=>x.id===id?{...x,status:st,err:(d&&!d.ok&&d.error)||undefined}:x));
@@ -6099,7 +6101,7 @@ function AppInner(){
         }
       }
     }
-    if(settings.notify?.shipped&&rec.recipient?.name) logEmail({to:(rec.recipient?.email)||"customer@example.com",subject:`Your ${settings.company||BRAND.product} order has shipped ☁️`,type:"Shipped"});
+    if(settings.notify?.shipped&&rec.recipient?.name) logEmail({to:(rec.recipient?.email)||"customer@example.com",subject:`Your ${settings.company||BRAND.product} order has shipped`,type:"Shipped"});
     addLedger({type:"Shipping charge",ref:rec.reference||rec.tracking,amount:-(rec.sell||0)});
   };
   // record an order that pushed to England but hasn't booked yet, so we can pull its label later
@@ -6131,7 +6133,7 @@ function AppInner(){
   // re-check England for any staged orders that have since booked; pull label + tracking into Shipments
   const checkPendingLabels=async()=>{
     const eng=englandFor(client,settings);
-    if(!eng||!eng.integrationId||!pendingShips.length) return {checked:0,booked:0,error:eng&&eng.integrationId?null:"Connect England first"};
+    if(!eng||!eng.integrationId||!pendingShips.length) return {checked:0,booked:0,error:eng&&eng.integrationId?null:"Live label pickup isn't enabled on this account — contact support."};
     let booked=0,firstLabel=null;
     for(const pend of [...pendingShips]){
       let res=null; try{ res=await shipCall({action:"status",account:acctOf(eng),orderId:pend.orderId}); }catch(e){}
@@ -6290,7 +6292,7 @@ function AppInner(){
           </div>
         </div>
       </header>
-      {qq&&<QuickQuote onClose={()=>setQQ(false)} client={client} clients={clients} isAdmin={isAdmin} priceAsShared={adminPriceAs} setPriceAsShared={setAdminPriceAs} england={englandFor(client,settings)} settings={settings} senderZip={settings?.sender?.zip||""}/>}
+      {qq&&<QuickQuote onClose={()=>setQQ(false)} client={client} clients={clients} isAdmin={isAdmin} demo={!!(currentUser&&currentUser.demo)} priceAsShared={adminPriceAs} setPriceAsShared={setAdminPriceAs} england={englandFor(client,settings)} settings={settings} senderZip={settings?.sender?.zip||""}/>}
       {appLabel&&<LabelPreviewModal data={appLabel} settings={settings} onClose={()=>setAppLabel(null)}/>}
       {navOpen&&<div className="md:hidden fixed inset-0 z-40 flex" role="dialog">
         <div className="absolute inset-0 bg-stone-900/40" onClick={()=>setNavOpen(false)}/>
@@ -6339,7 +6341,7 @@ function AppInner(){
           </div>}
           {tab==="drafts"&&<Drafts drafts={drafts} setDrafts={setDrafts} goShip={goShip}/>}
           {tab==="returns"&&<Returns returns={returns} setReturns={setReturns} orders={orders} settings={settings} logEmail={logEmail}/>}
-          {tab==="pickups"&&<Pickups pickups={pickups} setPickups={setPickups} settings={settings} client={client} showCosts={featureOn("pickupCosts",currentUser,myFlags)}/>}
+          {tab==="pickups"&&<Pickups pickups={pickups} setPickups={setPickups} settings={settings} client={client} isAdmin={isAdmin} showCosts={featureOn("pickupCosts",currentUser,myFlags)}/>}
           {tab==="invoices"&&<Invoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>}
           {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings} client={client} onShipped={onShipped}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
@@ -6515,7 +6517,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     try{ const rs=await fetch("/.netlify/functions/hs-lookup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:CLOUD.token||undefined,description:l0.desc,destination:receiver.country||""})});
       if(rs.status===404){setShipHsMsg({err:"The AI lookup isn't deployed yet: commit netlify/functions/hs-lookup.js to the repo, then add ANTHROPIC_API_KEY on Netlify and redeploy."});setShipHsBusy(-1);return;}
       const d=await rs.json();
-      if(d&&d.ok&&(d.options||d.code)){ const opts=(d.options&&d.options.length)?d.options:[{code:d.code,reason:d.reason||""}]; setShipHsOpts({line:i,opts}); setShipHsMsg({ok:"ShipHub AI suggests — pick the code that fits best (verify before filing; classification is the shipper's responsibility):"}); }
+      if(d&&d.ok&&(d.options||d.code)){ const opts=(d.options&&d.options.length)?d.options:[{code:d.code,reason:d.reason||""}]; setShipHsOpts({line:i,opts}); setShipHsMsg({ok:AI_NAME+" suggests — pick the code that fits best (verify before filing; classification is the shipper's responsibility):"}); }
       else setShipHsMsg({err:(d&&d.error)||"Lookup failed — is ANTHROPIC_API_KEY set on Netlify (non-secret) with a redeploy after?"});
     }catch(e){ setShipHsMsg({err:"Lookup failed — likely hs-lookup.js isn't committed or ANTHROPIC_API_KEY isn't set on Netlify."}); }
     setShipHsBusy(-1);
@@ -7151,8 +7153,9 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {/* Rate-source strip — ALWAYS mounted (fixed slot, only the text swaps) so flipping
             `ready` mid-keystroke never shoves the service list down. Hideable in Settings →
             Customizations → Ship screen. */}
-        {!custom.hideRateSrcBar&&<div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 min-h-[36px] ${!ready?"bg-stone-50 text-stone-400 border border-stone-100":rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
-          {!ready?<><Calculator className="w-3.5 h-3.5"/>Enter a destination ZIP and weight — rates price automatically</>
+        {!custom.hideRateSrcBar&&<div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 min-h-[36px] ${(currentUser&&currentUser.demo)?"bg-amber-50 text-amber-800 border border-amber-200":!ready?"bg-stone-50 text-stone-400 border border-stone-100":rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
+          {(currentUser&&currentUser.demo)?<><Eye className="w-3.5 h-3.5"/>Demo — example rates only. Labels can't be created in the demo; create a free account for real pricing.</>
+          :!ready?<><Calculator className="w-3.5 h-3.5"/>Enter a destination ZIP and weight — rates price automatically</>
           :rateSrc.loading?<><Loader2 className="w-3.5 h-3.5 animate-spin"/>Fetching live rates…</>
           :rateSrc.live?<><Wifi className="w-3.5 h-3.5"/>Live rates from your FedEx account</>
           :<><Calculator className="w-3.5 h-3.5"/>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""} — turn on live rates in Settings → Carrier accounts to price with your real account</>}
@@ -7257,7 +7260,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                   <input type="number" value={l.wkg??""} onChange={e=>setLine(i,{wkg:e.target.value})} placeholder="kg" className="w-[120px] bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/>}
                   <input type="number" value={l.qty} onChange={e=>setLine(i,{qty:+e.target.value})} className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
                   <input type="number" value={l.value} onChange={e=>setLine(i,{value:e.target.value})} placeholder="0.00" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
-                  <button onClick={()=>shipSuggestHS(i)} disabled={!l.desc||shipHsBusy===i} title="ShipHub AI reads the item description and suggests an HTS code" className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap self-center">{shipHsBusy===i?"Searching…":"✨ Search HTS codes"}</button>
+                  <button onClick={()=>shipSuggestHS(i)} disabled={!l.desc||shipHsBusy===i} title={AI_NAME+" reads the item description and suggests an HTS code"} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap self-center">{shipHsBusy===i?"Searching…":"✨ Search HTS codes"}</button>
                   {!!(l.desc&&l.hts)&&<button onClick={()=>saveHtsToCatalog(l)} title="Save this HTS code to your product catalog for next time" className="text-xs text-[#006FBF] hover:underline whitespace-nowrap self-center">💾 Save to catalog</button>}
                   <button onClick={()=>delLine(i)} className="text-stone-300 hover:text-rose-500 w-5"><X className="w-4 h-4"/></button>
                 </div>
@@ -7299,9 +7302,9 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {naming&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setNaming(false)}><div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-sm space-y-3" onClick={e=>e.stopPropagation()}><div className="text-sm font-semibold text-stone-800">Name this draft</div><input autoFocus value={draftName} onChange={e=>setDraftName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")commitDraft(draftName.trim());}} placeholder="e.g. Dana Cole – Miami" className="w-full bg-white border border-stone-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><div className="flex justify-end gap-2"><button onClick={()=>setNaming(false)} className="text-sm px-3 py-1.5 rounded text-stone-600 hover:bg-stone-100">Cancel</button><button onClick={()=>commitDraft(draftName.trim())} className="text-sm px-3 py-1.5 rounded bg-stone-900 text-white font-medium hover:bg-stone-800">Save draft</button></div></div></div>}
         {shipStatus&&(!handsFree||shipStatus.state==="error"||shipStatus.state==="pending_timeout")&&<div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2.5 ${shipStatus.state==="error"?"bg-rose-50 text-rose-700 border border-rose-200":shipStatus.state==="booked"?"bg-emerald-50 text-emerald-700 border border-emerald-200":shipStatus.state==="pending_timeout"?"bg-amber-50 text-amber-700 border border-amber-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
           {shipStatus.state==="booking"&&<><Loader2 className="w-4 h-4 animate-spin"/>Booking label on your FedEx account…</>}
-          {shipStatus.state==="pending"&&<><Loader2 className="w-4 h-4 animate-spin"/>Order pushed to England — waiting for it to book and return the label…</>}
+          {shipStatus.state==="pending"&&<><Loader2 className="w-4 h-4 animate-spin"/>Booking your label — waiting for the carrier to confirm…</>}
           {shipStatus.state==="booked"&&<><CheckCircle2 className="w-4 h-4"/>Label printed{shipStatus.tracking?<> · tracking <span className="font-mono">{shipStatus.tracking}</span></>:""} — moved to Shipments.</>}
-          {shipStatus.state==="pending_timeout"&&<><AlertTriangle className="w-4 h-4"/>Order is staged in your England account. Ship it in Webship (or turn on auto-ship), then go to Shipments → “Check for labels” to pull the label & tracking here.</>}
+          {shipStatus.state==="pending_timeout"&&<><AlertTriangle className="w-4 h-4"/>Your label is still being prepared. Check Shipments → “Check for labels” in a few minutes — or contact support if it doesn’t appear.</>}
           {shipStatus.state==="error"&&<><AlertTriangle className="w-4 h-4"/>{shipStatus.msg}</>}
         </div>}
 
@@ -7888,7 +7891,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
             <div className="flex-1 relative min-w-[160px]"><Search className="w-4 h-4 absolute left-2.5 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search orders, items, recipient…" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-3 py-2 text-sm outline-none focus:border-[#0099FF]"/></div>
             <div className="flex items-center gap-1.5 text-sm"><span className="text-stone-500 hidden sm:inline">Sort</span><select value={sort} onChange={e=>setSort(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="total">Order total</option><option value="customer">Recipient</option><option value="state">Dest. state</option><option value="weight">Weight</option><option value="source">Store</option></select></div>
             <button onClick={()=>downloadCSV("shippingcloud-orders.csv",[["Order","Customer","Company","Address","City","State","ZIP","Country","Items","SKU","Weight","Total","Source","Date","Note"],...orders.map(o=>[o.name,o.customer,o.company||"",o.address1||"",o.city,o.state,o.zip,o.country||"US",o.items||"",o.sku||"",o.weight,o.total||"",o.source||"",o.date||"",o.note||""])])} title="Download every open order as CSV" className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 px-2 py-2"><Download className="w-4 h-4"/>Export</button>
-            <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Batch "}}))} title="e.g. ‘batch everything going to Texas under 5 lb as cheapest ground’" className="flex items-center gap-1.5 text-sm bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-3 py-2 font-medium hover:bg-[#CCEAFF]"><Sparkles className="w-4 h-4"/>Ask ShipHub AI to batch these</button>
+            <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Batch "}}))} title="e.g. ‘batch everything going to Texas under 5 lb as cheapest ground’" className="flex items-center gap-1.5 text-sm bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-3 py-2 font-medium hover:bg-[#CCEAFF]"><Sparkles className="w-4 h-4"/>Ask {AI_NAME} to batch these</button>
             {setSettings&&(()=>{const on=custom.autoRulesOnShip!==false;const toggle=()=>setSettings(pp=>({...pp,custom:{...(pp.custom||{}),autoRulesOnShip:!on}}));
               return <button onClick={toggle} title="When on, pulling an order into Ship pre-selects the service your Autopilot rules pick — applied as you ship." className={`flex items-center gap-1.5 text-sm rounded-lg px-3 py-2 font-medium border ${on?"bg-violet-50 border-violet-300 text-violet-700 hover:bg-violet-100":"bg-white border-stone-200 text-stone-500 hover:bg-stone-50"}`}><Zap className="w-4 h-4"/>Autopilot as I ship<span className={`ml-0.5 w-8 h-4 rounded-full flex items-center px-0.5 transition-colors ${on?"bg-violet-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-3 h-3 bg-white rounded-full"/></span></button>;
             })()}
@@ -8027,7 +8030,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
     const carrier=carrierOf(qq.label);
     if(!canBook){ // demo mode: record locally
       const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:newTracking(carrier),carrier,service:qq.label,recipient:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings?.sender||{})},fromZip,toZip:o.zip,weight:+weight,pieces:[{weight:+weight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference:o.name};
-      onShipped(rec,o.id); setBought(qq.key); setStatus({state:"demo",msg:"Recorded (demo — turn on live rates in Settings to book real labels)."}); return;
+      onShipped(rec,o.id); setBought(qq.key); setStatus({state:"demo",msg:"Demo only — no real label was created."}); return;
     }
     const need=[]; if(!o.customer&&!o.company)need.push("name"); if(String(o.phone||"").replace(/\D/g,"").length<10)need.push("10-digit phone"); if(!o.email)need.push("email");
     if(need.length){ setStatus({state:"error",msg:"FedEx needs the receiver's "+need.join(", ")+". Edit the order or open in Ship tab."}); return; }
@@ -8070,7 +8073,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
           <label className="flex items-center gap-1.5 text-[13px] text-stone-600"><input type="checkbox" checked={oneRate} onChange={e=>setOneRate(e.target.checked)} className="accent-[#0086E0]"/>One Rate</label>
           <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border ${residential?"text-[#006FBF] bg-[#E6F4FF] border-[#99D6FF]":"text-stone-700 bg-stone-100 border-stone-200"}`}>{residential?<Home className="w-3.5 h-3.5"/>:<Building2 className="w-3.5 h-3.5"/>}{residential?"Residential":"Commercial"}</span>
           <div className="flex-1"/>
-          {rateSrc.live?<span className="text-[11px] text-emerald-600 flex items-center gap-1"><Wifi className="w-3.5 h-3.5"/>Live FedEx rates</span>:canBook?<span className="text-[11px] text-stone-400">{rateSrc.loading?"Loading rates…":""}</span>:<span className="text-[11px] text-amber-600">Demo rates — connect England</span>}
+          {rateSrc.live?<span className="text-[11px] text-emerald-600 flex items-center gap-1"><Wifi className="w-3.5 h-3.5"/>Live FedEx rates</span>:canBook?<span className="text-[11px] text-stone-400">{rateSrc.loading?"Loading rates…":""}</span>:<span className="text-[11px] text-amber-600">Estimated rates — live pricing unavailable</span>}
           <button onClick={()=>goShip(o)} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/>Open in Ship tab</button>
           <button onClick={()=>printPackingSlips([slipFromOrder(o,settings&&settings.sender)])} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing slip</button>
           {o.country&&o.country!=="US"&&<button onClick={()=>printCommercialInvoice(o,(settings&&settings.products)||[],settings&&settings.sender,{...ciOpts,signature:ciOpts.signature||defaultSig(settings),senderTax:ciOpts.senderTax??((settings&&settings.taxId)||""),eei:ciOpts.eei??"NOEEI 30.37(a)",attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(ciOpts.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data}))})} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Commercial invoice</button>}
@@ -8252,7 +8255,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
     const baseRec={service:qq.label,recipient:{name:rcv.name,company:rcv.company,zip:rcv.zip,state:rcv.state,city:rcv.city,address1:rcv.address1,phone:rcv.phone,email:rcv.email},sender:{...(settings?.sender||{})},fromZip,toZip:rcv.zip,weight:totalWeight,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",insurance:insurance||null,signature:sigOption!=="none",signatureOption:sigOption,saturdayDelivery:sat,reference:reference||o.name,poNo,invoiceNo};
     if(!canBook){
       const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:newTracking(carrier),carrier,...baseRec,status:"Label created",lastScan:"Label created",eta:"—",onTime:true};
-      onShipped(rec,o.id); setBought(qq.key); setStatus({state:"demo",msg:"Recorded (demo — turn on live rates in Settings to book real labels)."}); return;
+      onShipped(rec,o.id); setBought(qq.key); setStatus({state:"demo",msg:"Demo only — no real label was created."}); return;
     }
     const need=[]; if(!rcv.name&&!rcv.company)need.push("name"); if(String(rcv.phone||"").replace(/\D/g,"").length<10)need.push("10-digit phone"); if(!rcv.email)need.push("email");
     if(need.length){ setStatus({state:"error",msg:"FedEx needs the receiver's "+need.join(", ")+"."}); return; }
@@ -8458,11 +8461,11 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
   const [q,setQ]=useState("");
   const [checking,setChecking]=useState(false);
   const [chkMsg,setChkMsg]=useState(null);
-  const check=async()=>{ if(!onCheckLabels)return; setChecking(true);setChkMsg(null); const r=await onCheckLabels(); setChecking(false); setChkMsg(r.error?{err:r.error}:{ok:`Checked ${r.checked} · ${r.booked} booked${r.booked?" — label ready":", still not booked in Webship"}`}); };
+  const check=async()=>{ if(!onCheckLabels)return; setChecking(true);setChkMsg(null); const r=await onCheckLabels(); setChecking(false); setChkMsg(r.error?{err:r.error}:{ok:`Checked ${r.checked} · ${r.booked} booked${r.booked?" — label ready":", still processing with the carrier"}`}); };
   const PendingBar=()=> (pendingShips&&pendingShips.length)?(
     <div className="border border-amber-200 bg-amber-50 rounded-lg px-3 py-2.5 flex items-center gap-3">
       <Clock className="w-4 h-4 text-amber-600 shrink-0"/>
-      <div className="flex-1 text-[13px] text-amber-800">{pendingShips.length} order{pendingShips.length===1?"":"s"} staged in England, waiting to book in Webship. Once you ship {pendingShips.length===1?"it":"them"} there (or auto-ship books {pendingShips.length===1?"it":"them"}), pull the label + tracking here.</div>
+      <div className="flex-1 text-[13px] text-amber-800">{pendingShips.length} order{pendingShips.length===1?"":"s"} waiting on the carrier to finish the label. Click “Check for labels” to pull tracking as soon as {pendingShips.length===1?"it's":"they're"} ready.</div>
       <button onClick={check} disabled={checking} className="text-sm bg-amber-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-amber-700 disabled:opacity-50 flex items-center gap-1.5 shrink-0">{checking?<><Loader2 className="w-4 h-4 animate-spin"/>Checking…</>:<><RotateCcw className="w-4 h-4"/>Check for labels</>}</button>
     </div>
   ):null;
@@ -8478,7 +8481,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
       {chkMsg&&<div className={`text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${chkMsg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{chkMsg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{chkMsg.err||chkMsg.ok}</div>}
       <div className="flex items-center gap-2">
       <div className="relative flex-1"><Search className="w-4 h-4 absolute left-3 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by name, tracking, order, reference or PO #" className="w-full bg-white border border-stone-200 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:border-[#0099FF]"/></div>
-      <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude"))} title="e.g. ‘how many delivered this week?’ or ‘anything stuck in transit?’" className="flex items-center gap-1.5 text-sm bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-3 py-2 font-medium hover:bg-[#CCEAFF] shrink-0"><Sparkles className="w-4 h-4"/><span className="hidden sm:inline">Ask ShipHub AI about shipments</span><span className="sm:hidden">Ask ShipHub AI</span></button>
+      <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude"))} title="e.g. ‘how many delivered this week?’ or ‘anything stuck in transit?’" className="flex items-center gap-1.5 text-sm bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-3 py-2 font-medium hover:bg-[#CCEAFF] shrink-0"><Sparkles className="w-4 h-4"/><span className="hidden sm:inline">Ask {AI_NAME} about shipments</span><span className="sm:hidden">Ask {AI_NAME}</span></button>
       </div>
       <div className="border border-stone-200 rounded-lg overflow-hidden bg-white divide-y divide-stone-100">
         <div className="flex items-center gap-3 px-4 py-2 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50"><div className="w-4"/><div className="w-24">Created</div><div className="flex-1">Recipient</div><div className="w-52 hidden lg:block">Ship-to address</div><div className="w-24 hidden xl:block">Reference</div><div className="w-40 hidden md:block">Tracking</div><div className="w-24 text-right">Status</div></div>
@@ -8502,7 +8505,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                 <Info k="To" v={`${s.recipient?.name||""}${s.recipient?.company?" · "+s.recipient.company:""} — ${s.recipient?.address1||""}, ${s.recipient?.city||""}, ${s.recipient?.state||""} ${s.recipient?.zip||""}`}/>
                 <Info k="Reference" v={s.reference||"—"}/>
                 <div className="flex items-end gap-2"><button onClick={(e)=>{e.stopPropagation();printPackingSlips([slipFromShipment(s)]);}} className="text-xs bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing slip</button>
-                {s.status!=="Voided"&&s.status!=="Delivered"&&<button onClick={(e)=>{e.stopPropagation();if(!window.confirm("Void this label?\n\nIt will be marked Voided here and excluded from audits and duplicate checks. Until England void is wired, also void it in Webship to trigger the carrier refund."))return;setShipments(list=>list.map(x=>x.id===s.id?{...x,status:"Voided",voidedAt:new Date().toLocaleString()}:x));window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Voided label",detail:(s.reference||"")+" · "+(s.tracking||"")}}));}} className="text-xs bg-rose-50 border border-rose-200 text-rose-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-rose-100 flex items-center gap-1.5"><Ban className="w-3.5 h-3.5"/>Void label</button>}</div>
+                {s.status!=="Voided"&&s.status!=="Delivered"&&<button onClick={(e)=>{e.stopPropagation();if(!window.confirm("Void this label?\n\nIt will be marked Voided here and excluded from audits and duplicate checks. The carrier refund is processed automatically — contact support if you don't see it within a few days."))return;setShipments(list=>list.map(x=>x.id===s.id?{...x,status:"Voided",voidedAt:new Date().toLocaleString()}:x));window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Voided label",detail:(s.reference||"")+" · "+(s.tracking||"")}}));}} className="text-xs bg-rose-50 border border-rose-200 text-rose-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-rose-100 flex items-center gap-1.5"><Ban className="w-3.5 h-3.5"/>Void label</button>}</div>
                 <Info k="Created" v={`${s.date}${s.time?" · "+s.time:""}`}/>
                 <Info k="From ZIP" v={s.fromZip}/>
                 <Info k="Packages" v={`${s.pieces?.length||1} pkg · ${s.weight} lb total`}/>
@@ -8534,7 +8537,6 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                     </div>);
                   })()}
                 </div>
-                {false&&isAdmin&&s.cost!=null&&<Info k="Cost → margin" v={money(s.cost)+" → +"+money(Math.max(0,(s.sell||0)-(s.cost||0)))}/>}
               </div>
               <div className="flex flex-wrap gap-2">
                 <button onClick={()=>reship(s)} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-800 flex items-center gap-1.5"><RotateCcw className="w-3.5 h-3.5"/>Edit &amp; reship</button>
@@ -8552,7 +8554,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
 }
 
 /* ════════ PICKUPS ════════ */
-function Pickups({pickups,setPickups,settings,client=null,showCosts=true}){
+function Pickups({pickups,setPickups,settings,client=null,showCosts=true,isAdmin=false}){
   const [f,setF]=useState({carrierCode:"FDXE",date:"",ready:"10:00",close:"17:00",count:1,weight:5,location:"FRONT"});
   const [busy,setBusy]=useState(false);
   const [canceling,setCanceling]=useState(null);
@@ -8596,8 +8598,8 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true}){
         <div className="grid grid-cols-2 gap-3"><Field label="Ready time"><Input type="time" value={f.ready} onChange={e=>setF({...f,ready:e.target.value})}/></Field><Field label="Close time"><Input type="time" value={f.close} onChange={e=>setF({...f,close:e.target.value})}/></Field></div>
         <div className="grid grid-cols-2 gap-3"><Field label="Total weight (lb)"><Input type="number" value={f.weight} onChange={e=>setF({...f,weight:+e.target.value})}/></Field><Field label="Package location"><Select value={f.location} onChange={e=>setF({...f,location:e.target.value})}>{PKG_LOC.map(([v,l])=><option key={v} value={v}>{l}</option>)}</Select></Field></div>
         <div className="text-[11px] text-stone-400 flex items-center gap-1"><MapPin className="w-3.5 h-3.5"/>{addrReady?`${s.address1}, ${s.city} ${s.state} ${s.zip}`:"Set your pickup address in Settings → Company"}</div>
-        {showCosts&&<div className="flex items-center justify-between text-sm bg-stone-50 border border-stone-200 rounded-lg px-3 py-2"><span className="text-stone-600">On-call pickup fee ({f.carrierCode==="FDXG"?"Ground":"Express"})<span className="block text-[10px] text-stone-400">{_pf.ruleDesc} — edit it on the Rates tab accessorials (Pickup &amp; returns)</span></span><span className="font-mono font-semibold text-stone-900">{money(pickupFee)}</span></div>}
-        {showCosts&&<div className="text-[10px] text-stone-400 -mt-1">Billed by FedEx per on-call pickup. Regular scheduled pickup routes bill weekly instead. Priced from your account's accessorial rules.</div>}
+        {showCosts&&<div className="flex items-center justify-between text-sm bg-stone-50 border border-stone-200 rounded-lg px-3 py-2"><span className="text-stone-600">On-call pickup fee ({f.carrierCode==="FDXG"?"Ground":"Express"}){isAdmin&&<span className="block text-[10px] text-stone-400">{_pf.ruleDesc} — edit it on the Rates tab accessorials (Pickup &amp; returns)</span>}</span><span className="font-mono font-semibold text-stone-900">{money(pickupFee)}</span></div>}
+        {showCosts&&<div className="text-[10px] text-stone-400 -mt-1">Billed per on-call pickup. Regular scheduled pickup routes bill weekly instead.</div>}
         {err&&<div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1.5 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>{err}</div>}
         <button onClick={add} disabled={busy||!addrReady} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Scheduling with FedEx…</>:<><Calendar className="w-4 h-4"/>Schedule pickup</>}</button>
       </Panel>
@@ -8620,7 +8622,7 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true}){
 
 /* ════════ QUICK QUOTE ════════ */
 const QQ_BLANK={toZip:"",residential:true,pieces:[{weight:"",L:"",W:"",H:"",oz:""}],sigOption:"none",saturday:false,insurance:""};
-function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",setPriceAsShared=null,england,settings=null,senderZip}){
+function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",setPriceAsShared=null,england,settings=null,senderZip,demo=false}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 rate database
   /* "Price as" is the SESSION-WIDE admin choice (shared with the Ship tab) — the client prop
      already arrives resolved to that customer, so pricing here just uses it. */
@@ -8731,7 +8733,7 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
             <Field label="Insurance $"><Input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0"/></Field>
             {hasExpress&&<label className="flex items-center gap-1.5 text-sm text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSaturday(e.target.checked)} className="accent-[#0086E0]"/>Saturday delivery <span className="text-stone-400 text-xs">(Express only)</span></label>}
             <div className="grid grid-cols-2 gap-px bg-stone-200 border border-stone-200 rounded overflow-hidden font-mono text-center"><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">zone</div><div className="font-semibold">{ready?zoneEst(fromZip,toZip):"—"}</div></div><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">billable</div><div className="font-semibold">{ready?billable(pieces[0].L,pieces[0].W,pieces[0].H,totalWeight)+" lb":"—"}</div></div></div>
-            {ready&&<div className={`text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700":"bg-[#E6F4FF] text-[#006FBF]"}`}>{rateSrc.loading?<><Loader2 className="w-3 h-3 animate-spin"/>Fetching…</>:rateSrc.live?<><Wifi className="w-3 h-3"/>Live rates</>:<><Calculator className="w-3 h-3"/>Estimated</>}</div>}
+            {demo?<div className="text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 bg-amber-50 text-amber-800 border border-amber-200"><Eye className="w-3 h-3"/>Demo — example rates only; labels can't be created</div>:ready&&<div className={`text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700":"bg-[#E6F4FF] text-[#006FBF]"}`}>{rateSrc.loading?<><Loader2 className="w-3 h-3 animate-spin"/>Fetching…</>:rateSrc.live?<><Wifi className="w-3 h-3"/>Live rates</>:<><Calculator className="w-3 h-3"/>Estimated</>}</div>}
           </Panel></div>
           <div className="flex-1 min-w-0"><ServiceList quotes={quotes} ready={ready} live={rateSrc.live} loading={rateSrc.loading} resetKey={`${fromZip}|${toZip}|${residential}|${pieces.length}|${((effClient&&effClient.blockedServices)||[]).join(",")}`}/></div>
         </div>
@@ -8926,7 +8928,7 @@ function Dashboard({shipments,orders,returns,goTab}){
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <button onClick={()=>goTab("orders")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><ShoppingBag className="w-4 h-4"/><span className="font-semibold">{unful} orders to ship</span></div><div className="text-[11px] text-stone-400 mt-1">Open the queue →</div></button>
         <button onClick={()=>goTab("rules")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><Zap className="w-4 h-4"/><span className="font-semibold">Run Autopilot</span></div><div className="text-[11px] text-stone-400 mt-1">Rules → labels, one click →</div></button>
-        <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude"))} className="border border-[#99D6FF] rounded-2xl bg-[#E6F4FF] p-4 text-left hover:border-[#0086E0] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#006FBF]"><Sparkles className="w-4 h-4"/><span className="font-semibold">Ask ShipHub AI</span></div><div className="text-[11px] text-[#006FBF]/70 mt-1">Batch, rule &amp; route by chat →</div></button>
+        <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude"))} className="border border-[#99D6FF] rounded-2xl bg-[#E6F4FF] p-4 text-left hover:border-[#0086E0] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#006FBF]"><Sparkles className="w-4 h-4"/><span className="font-semibold">Ask {AI_NAME}</span></div><div className="text-[11px] text-[#006FBF]/70 mt-1">Batch, rule &amp; route by chat →</div></button>
         <button onClick={()=>goTab("returns")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><Undo2 className="w-4 h-4"/><span className="font-semibold">{returns.length} open returns</span></div><div className="text-[11px] text-stone-400 mt-1">Manage RMAs →</div></button>
       </div>
     </div>
@@ -9159,9 +9161,9 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
       setSel(new Set(hit.filter(o=>!holds[o.id]).map(o=>o.id)));
       if(f.service){
         setSvcOv(v=>{const n={...v};hit.forEach(o=>{n[o.id]=f.service;});return n;});
-        setOvWhy(w=>{const n={...w};hit.forEach(o=>{n[o.id]="ShipHub AI";});return n;});
+        setOvWhy(w=>{const n={...w};hit.forEach(o=>{n[o.id]=AI_NAME;});return n;});
       }
-      setMsg(hit.length?`ShipHub AI selected ${hit.length} order${hit.length!==1?"s":""}${f.service?` · service: ${f.service}`:""} — review below, then hit Create labels.`:"ShipHub AI’s filter matched no open orders — nothing was selected.");
+      setMsg(hit.length?`${AI_NAME} selected ${hit.length} order${hit.length!==1?"s":""}${f.service?` · service: ${f.service}`:""} — review below, then hit Create labels.`:"${AI_NAME}’s filter matched no open orders — nothing was selected.");
       setTimeout(()=>setMsg(""),9000);
     }
     onBatchCmdDone&&onBatchCmdDone();
@@ -9394,7 +9396,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
           <div className="flex-1"/>
           <button onClick={applyAutopilot} disabled={!(ruleset||[]).some(r=>r.enabled)||!visible.length} title="Run your Autopilot rules on the orders below: routes services, applies holds" className="text-sm bg-violet-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-violet-700 disabled:opacity-40 flex items-center gap-1.5"><Zap className="w-4 h-4"/>Apply Autopilot rules</button>
           <button onClick={()=>setQrOpen(v=>!v)} className={`text-sm rounded-lg px-3 py-1.5 font-medium border flex items-center gap-1.5 ${qrOpen?"bg-violet-50 border-violet-300 text-violet-700":"bg-white border-stone-200 text-stone-600 hover:bg-stone-100"}`}><Plus className="w-3.5 h-3.5"/>Quick rule</button>
-          <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Batch "}}))} title="Tell ShipHub AI what to batch in plain English — e.g. ‘batch the camp mugs to Texas as cheapest ground’" className="text-sm rounded-lg px-3 py-1.5 font-medium border bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF] hover:bg-[#CCEAFF] flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/>Ask ShipHub AI to batch</button>
+          <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Batch "}}))} title={"Tell "+AI_NAME+" what to batch in plain English — e.g. ‘batch the camp mugs to Texas as cheapest ground’"} className="text-sm rounded-lg px-3 py-1.5 font-medium border bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF] hover:bg-[#CCEAFF] flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/>Ask {AI_NAME} to batch</button>
           {(Object.keys(svcOv).length>0||Object.keys(holds).length>0)&&<button onClick={clearAutopilot} className="text-xs text-stone-400 hover:text-stone-600 underline">reset routing</button>}
         </div>
         {qrOpen&&<div className="border-t border-stone-100 pt-3 flex flex-wrap items-center gap-2 text-sm">
@@ -9751,6 +9753,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
      whole page out read-only. Admins are never restricted. */
   const polFor=(id)=>{ if(isAdmin)return "on";
     if(currentUser&&currentUser.demo&&(id==="billing"||id==="subscription"))return "off";   // demo: no plans/pricing/card surfaces
+    if(id==="carriers"&&!byoCarrier)return "off";   // platform carrier plumbing is not the customer's to touch — only shown to accounts connecting their OWN carrier account
     return String((secPolicy&&secPolicy[id])||"on"); };
   const visibleSecs=secs.filter(([id])=>polFor(id)!=="off");
   const secLocked=polFor(sec)==="locked";
@@ -9774,7 +9777,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
       <div className="flex-1 min-w-0">
         {secLocked&&<div className="mb-3 flex items-center gap-2 text-[13px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"><Ban className="w-4 h-4 shrink-0"/>This page is locked by your administrator — you can look, but changes are disabled.</div>}
         <div className={secLocked?"pointer-events-none opacity-60 select-none":""} aria-disabled={secLocked||undefined}>
-        {sec==="carriers"&&<CarrierAccounts accounts={accounts} setAccounts={setAccounts} settings={settings} setSettings={setSettings} clients={clients} byoCarrier={byoCarrier}/>}
+        {sec==="carriers"&&<CarrierAccounts accounts={accounts} setAccounts={setAccounts} settings={settings} setSettings={setSettings} clients={clients} byoCarrier={byoCarrier} isAdmin={isAdmin}/>}
         {sec==="warehouses"&&<Warehouses settings={settings} setSettings={setSettings}/>}
         {sec==="catalog"&&<ProductCatalog settings={settings} setSettings={setSettings}/>}
         {sec==="boxes"&&<BoxesSettings settings={settings} setSettings={setSettings}/>}
@@ -10108,7 +10111,7 @@ function BoxLogic({settings,setSettings}){
   </div>);
 }
 // Fields that can be bound onto a doc tab zone or receipt line, resolved from shipment data at print time
-const DOCTAB_FIELDS=[["reference","Reference / PO"],["invoiceNo","Invoice #"],["orderNo","Order #"],["shipDate","Ship date"],["service","Service"],["weight","Weight"],["pieces","Piece count"],["declaredValue","Declared value"],["recipientName","Recipient name"],["recipientCompany","Recipient company"],["recipientZip","Recipient ZIP"],["senderName","Sender name"],["senderCompany","Sender company"],["cost","Your cost"],["tracking","Tracking number"],["custom","Custom text…"]];
+const DOCTAB_FIELDS=[["reference","Reference / PO"],["invoiceNo","Invoice #"],["orderNo","Order #"],["shipDate","Ship date"],["service","Service"],["weight","Weight"],["pieces","Piece count"],["declaredValue","Declared value"],["recipientName","Recipient name"],["recipientCompany","Recipient company"],["recipientZip","Recipient ZIP"],["senderName","Sender name"],["senderCompany","Sender company"],["cost","Total charged"],["tracking","Tracking number"],["custom","Custom text…"]];
 const DOCTAB_LABEL={};DOCTAB_FIELDS.forEach(([k,l])=>{DOCTAB_LABEL[k]=l;});
 const DEFAULT_DOCTABS=[{id:"dt1",zone:"01",field:"reference",label:"REF",custom:"",size:9},{id:"dt2",zone:"02",field:"shipDate",label:"SHIP DATE",custom:"",size:9},{id:"dt3",zone:"03",field:"weight",label:"WEIGHT",custom:"",size:9}];
 const DEFAULT_RECEIPT_LINES=[{id:"rl1",field:"recipientName",label:"To",custom:""},{id:"rl2",field:"reference",label:"Ref",custom:""},{id:"rl3",field:"service",label:"Service",custom:""},{id:"rl4",field:"weight",label:"Weight",custom:""},{id:"rl5",field:"cost",label:"Cost",custom:""}];
@@ -11113,7 +11116,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
         <button onClick={applyToOrders} disabled={run.summary.touched===0} title="Write rule outcomes onto matching orders without creating labels" className="text-sm bg-white border border-stone-200 text-stone-600 rounded-lg px-3 py-2 font-medium hover:bg-stone-100 disabled:opacity-40 flex items-center gap-1.5"><Check className="w-4 h-4"/>Apply only</button>
         <button onClick={()=>setFbOpen(v=>!v)} title="Batch by criteria — the Batch tab's filters, right here" className={`text-sm rounded-lg px-3 py-2 font-medium border flex items-center gap-1.5 ${fbOpen?"bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF]":"bg-white border-stone-200 text-stone-700 hover:bg-stone-100"}`}><ClipboardList className="w-4 h-4"/>Filter &amp; batch</button>
         <button onClick={newRule} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium flex items-center gap-1.5 hover:bg-stone-100"><Plus className="w-4 h-4"/>New rule</button>
-        <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Make a rule: "}}))} title="Describe a rule in plain English — ShipHub AI writes it into the pipeline" className="text-sm rounded-lg px-3 py-2 font-medium border bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF] hover:bg-[#CCEAFF] flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/>Ask ShipHub AI to write a rule</button>
+        <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Make a rule: "}}))} title={"Describe a rule in plain English — "+AI_NAME+" writes it into the pipeline"} className="text-sm rounded-lg px-3 py-2 font-medium border bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF] hover:bg-[#CCEAFF] flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/>Ask {AI_NAME} to write a rule</button>
         <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Fallback</span><select value={cz(settings).fallbackService||""} onChange={e=>setSettings&&setSettings(s=>({...s,custom:{...(s.custom||{}),fallbackService:e.target.value}}))} title="Service used for orders that match no rule" className="text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-emerald-500"><option value="">No fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx Ground Economy">FedEx Ground Economy</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
         <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Ship date</span><input type="date" value={apShipDate} onChange={e=>setApShipDate(e.target.value)} className="text-sm font-mono text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-emerald-500"/></label>
         <button onClick={runAutopilot} disabled={apRunning||ords.filter(o=>o.status!=="fulfilled").length===0} title="Apply your rules and create labels for every unfulfilled order (held orders are skipped)" className="text-sm bg-emerald-600 text-white rounded-lg px-4 py-2.5 font-semibold hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-2 shadow-sm">{apRunning?<Loader2 className="w-4 h-4 animate-spin"/>:<Zap className="w-4 h-4"/>}Run Autopilot{!apRunning&&run?` — label ${run.results.filter(r=>r.order.status!=="fulfilled"&&!r.view.hold).length} orders`:""}</button>
@@ -11297,7 +11300,7 @@ function AddressBook({settings,setSettings}){
   return (<div className="max-w-3xl space-y-3">
     <div className="flex flex-wrap items-center gap-3">
       <p className="text-sm text-stone-500 flex-1">Saved contacts for fast ship-to / ship-from. Import your whole list from a CSV.</p>
-      <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Save this address: "}}))} title="Dictate a contact and ShipHub AI saves it" className="flex items-center gap-1.5 text-sm bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-3 py-2 font-medium hover:bg-[#CCEAFF]"><Sparkles className="w-4 h-4"/>Ask ShipHub AI to add one</button>
+      <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Save this address: "}}))} title={"Dictate a contact and "+AI_NAME+" saves it"} className="flex items-center gap-1.5 text-sm bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-3 py-2 font-medium hover:bg-[#CCEAFF]"><Sparkles className="w-4 h-4"/>Ask {AI_NAME} to add one</button>
       <label className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
     </div>
     {msg&&<div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{msg}</div>}
@@ -11734,7 +11737,7 @@ function CIEditor({settings,setSettings,shipments}){
         <In v={r.qty} on={v=>setRow(i,{qty:v})} ph="1" cls="w-14"/>
         <In v={r.unit} on={v=>setRow(i,{unit:v})} ph="0.00" cls="w-20"/>
         <input value={r.hs} onChange={e=>setRow(i,{hs:e.target.value})} list="sc-hts-list-ci" placeholder="HS" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-        <button onClick={()=>suggestHS(i)} disabled={!r.name||hsBusy===i} title="ShipHub AI reads the item description and suggests an HTS code" className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap">{hsBusy===i?"Searching…":"✨ Search HTS"}</button>
+        <button onClick={()=>suggestHS(i)} disabled={!r.name||hsBusy===i} title={AI_NAME+" reads the item description and suggests an HTS code"} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap">{hsBusy===i?"Searching…":"✨ Search HTS"}</button>
         <select value={r.origin} onChange={e=>setRow(i,{origin:e.target.value})} className="w-32 bg-white border border-stone-200 rounded-lg px-1 py-1.5 text-sm outline-none focus:border-[#0099FF]">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
         <button onClick={()=>setDoc(d=>({...d,rows:d.rows.filter((_,j)=>j!==i)}))} className="text-stone-300 hover:text-rose-500">×</button>
       </div>))}
@@ -12322,8 +12325,8 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
 
 
 /* ════════ CARRIER ACCOUNTS (platform + own) ════════ */
-const PROVIDERS=[{id:"england",name:"England Logistics API"},{id:"fedex",name:"FedEx · direct"}];
-function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoCarrier=false}){
+const PROVIDERS=[{id:"england",name:"Managed FedEx (platform)"},{id:"fedex",name:"FedEx · direct"}];
+function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoCarrier=false,isAdmin=false}){
   const [adding,setAdding]=useState(false);
   const [d,setD]=useState({label:"",provider:"england",account:"",apiKey:"",secret:"",customerId:""});
   const plat=settings.platforms||PLATFORM_DEFAULTS;
@@ -12346,9 +12349,9 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
       if(pa.ok){
         setDiag({ok:hasFedex,carrier:hasFedex,msg:hasFedex
           ?`FedEx account is provisioned ✓${fedexAcct&&fedexAcct.accountNumber?" (#"+fedexAcct.accountNumber+")":""}${fedexAcct&&fedexAcct.id?" · saved for booking":""}. Booking should be permitted.`
-          :`No FedEx provider account on your customer. Providers found: ${providers.length?providers.join(", "):"none"}. Add your FedEx account in Webship → Admin Settings → Carrier/Provider Accounts, or ask England to provision it.`});
+          :(isAdmin?`No FedEx provider account on your customer. Providers found: ${providers.length?providers.join(", "):"none"}.`:"This account isn't enabled for booking yet — contact support and we'll switch it on.")});
       } else {
-        setDiag({ok:false,msg:`Provider-accounts check returned HTTP ${pa.status}. ${pa.status===403?"Your API key isn't permitted to list/book — England must enable booking on your key.":(pa.raw||"")}`});
+        setDiag({ok:false,msg:isAdmin?`Provider-accounts check returned HTTP ${pa.status}. ${pa.status===403?"The API key isn't permitted to list/book yet.":(pa.raw||"")}`:"Booking isn't enabled for this account yet — contact support."});
       }
     } else setDiag({ok:false,msg:(res&&res.error)||"Diagnostic failed."});
   };
@@ -12358,9 +12361,9 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
     if(res&&res.live&&res.rates&&res.rates.length){
       const listOnly=res.rates.every(r=>r._rateType&&!/ACCOUNT|INCENTIVE|PREFERRED/.test(String(r._rateType)));
       const lines=res.rates.map(r=>`${r.label} — ${money(r.cost)}${r.list!=null?` (list ${money(r.list)})`:""}${r.minDays?` · ${r.minDays}d`:""}${r.surcharges&&r.surcharges.length?` · ${r.surcharges.length} surcharge${r.surcharges.length>1?"s":""}`:""}`).join("\n");
-      setTest({ok:true,msg:`Connected — ${res.rates.length} live services returned (cheapest ${money(res.rates[0].cost)}).${listOnly?" ⚠ These look like LIST rates, not your account rates — the account may not carry discounts.":""}`,detail:"Everything the carrier returned for a 3 lb test (your ZIP → 90210, residential):\n"+lines});
+      setTest(isAdmin?{ok:true,msg:`Connected — ${res.rates.length} live services returned (cheapest ${money(res.rates[0].cost)}).${listOnly?" ⚠ These look like LIST rates, not your account rates — the account may not carry discounts.":""}`,detail:"Everything the carrier returned for a 3 lb test (your ZIP → 90210, residential):\n"+lines}:{ok:true,msg:"Connected — live rates are working on this account."});
     }
-    else setTest({ok:false,msg:(res&&res.error)||"No live rates returned.",detail:res&&(res.england_response||res.detail)});
+    else setTest({ok:false,msg:(res&&res.error)||"No live rates returned.",detail:isAdmin?(res&&(res.england_response||res.detail)):null});
   };
   const [flush,setFlush]=useState(null); // {loading} | {ok,msg}
   const runFlush=async()=>{
@@ -12405,24 +12408,24 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
           <button onClick={()=>setEng({enabled:!eng.enabled})}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${eng.enabled?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full"/></span></button>
         </label>
         <div className="grid sm:grid-cols-2 gap-3">
-          {SHOW_ENGLAND&&<><Field label="England API key"><Input type="password" value={eng.apiKey} onChange={e=>setEng({apiKey:e.target.value})} placeholder="paste your key"/></Field>
+          {SHOW_ENGLAND&&isAdmin&&<><Field label="England API key"><Input type="password" value={eng.apiKey} onChange={e=>setEng({apiKey:e.target.value})} placeholder="paste your key"/></Field>
           <Field label="England customer ID"><Input value={eng.customerId} onChange={e=>setEng({customerId:e.target.value})} placeholder="e.g. 20602362"/></Field>
           <Field label="Integration ID (for printing labels)"><Input value={eng.integrationId||""} onChange={e=>setEng({integrationId:e.target.value})} placeholder="e.g. 3214"/></Field>
           <Field label="Provider account ID (for booking)"><Input value={eng.providerAccountId||""} onChange={e=>setEng({providerAccountId:e.target.value})} placeholder="auto-filled by Check booking access"/></Field>
           <Field label="API base URL"><Input value={eng.base} onChange={e=>setEng({base:e.target.value})}/></Field></>}
           <Field label="FedEx account # (optional override)"><Input value={eng.fedexAccount||""} onChange={e=>setEng({fedexAccount:e.target.value.replace(/[^0-9]/g,"")})} placeholder="Optional"/></Field>
         </div>
-        {SHOW_ENGLAND&&<p className="text-[11px] text-stone-400 -mt-1">The Integration ID enables real label printing. In Webship: gear/settings → eCommerce Integrations → Add → Rest API → Save New Integration → copy the ID. Turn on auto-ship for that integration so labels book automatically. The Provider account ID tells England which carrier account to ship on — click <b>Check booking access</b> to auto-fill it, or paste it manually if England hasn't opened that endpoint on your key.</p>}
+        {SHOW_ENGLAND&&isAdmin&&<p className="text-[11px] text-stone-400 -mt-1">The Integration ID enables real label printing. In Webship: gear/settings → eCommerce Integrations → Add → Rest API → Save New Integration → copy the ID. Turn on auto-ship for that integration so labels book automatically. The Provider account ID tells England which carrier account to ship on — click <b>Check booking access</b> to auto-fill it, or paste it manually if England hasn't opened that endpoint on your key.</p>}
         <div className="flex flex-wrap items-center gap-3">
           <button onClick={runTest} disabled={false} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{test&&test.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Testing…</>:<><ShieldCheck className="w-4 h-4"/>Test connection</>}</button>
           <button onClick={runDiag} disabled={false} className="text-sm border border-stone-300 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5">{diag&&diag.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Checking…</>:<><Truck className="w-4 h-4"/>Check booking access</>}</button>
-          {SHOW_ENGLAND&&<button onClick={runFlush} disabled={flush&&flush.loading} className="text-sm border border-stone-300 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5" title="Clear saved quotes so every rate pulls fresh from England — use after changing pricing in England's backend">{flush&&flush.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Refreshing…</>:<><RefreshCw className="w-4 h-4"/>Refresh rates</>}</button>}
+          {SHOW_ENGLAND&&isAdmin&&<button onClick={runFlush} disabled={flush&&flush.loading} className="text-sm border border-stone-300 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5" title="Clear saved quotes so every rate pulls fresh from England — use after changing pricing in England's backend">{flush&&flush.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Refreshing…</>:<><RefreshCw className="w-4 h-4"/>Refresh rates</>}</button>}
           {test&&!test.loading&&<span className={`text-xs flex items-center gap-1.5 ${test.ok?"text-emerald-700":"text-[#0086E0]"}`}>{test.ok?<CheckCircle2 className="w-4 h-4"/>:<AlertTriangle className="w-4 h-4"/>}{test.msg}</span>}
         </div>
         {flush&&!flush.loading&&<div className={`text-xs rounded px-3 py-2 flex items-start gap-1.5 ${flush.ok?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-amber-50 text-amber-800 border border-amber-200"}`}>{flush.ok?<CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5"/>:<AlertTriangle className="w-4 h-4 shrink-0 mt-0.5"/>}<span>{flush.msg}</span></div>}
         {diag&&!diag.loading&&<div className={`text-xs rounded px-3 py-2 flex items-start gap-1.5 ${diag.ok?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-amber-50 text-amber-800 border border-amber-200"}`}>{diag.ok?<CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5"/>:<AlertTriangle className="w-4 h-4 shrink-0 mt-0.5"/>}<span>{diag.msg}</span></div>}
-        {test&&!test.loading&&test.detail&&<div className="text-[11px] text-stone-500 font-mono bg-stone-100 border border-stone-200 rounded p-2 break-words whitespace-pre-wrap">England said: {typeof test.detail==="string"?test.detail:JSON.stringify(test.detail)}</div>}
-        {SHOW_ENGLAND&&<p className="text-[11px] text-stone-400">For production, store the API key as a Netlify env var (<span className="font-mono">ENGLAND_API_KEY</span>, <span className="font-mono">ENGLAND_CUSTOMER_ID</span>) instead of here, so it never ships to the browser. England authenticates with the API key + customer ID; if you only have the FedEx account number, try it as the customer ID or confirm the key with your England rep.</p>}
+        {isAdmin&&test&&!test.loading&&test.detail&&<div className="text-[11px] text-stone-500 font-mono bg-stone-100 border border-stone-200 rounded p-2 break-words whitespace-pre-wrap">Carrier response: {typeof test.detail==="string"?test.detail:JSON.stringify(test.detail)}</div>}
+        {SHOW_ENGLAND&&isAdmin&&<p className="text-[11px] text-stone-400">For production, store the API key as a Netlify env var (<span className="font-mono">ENGLAND_API_KEY</span>, <span className="font-mono">ENGLAND_CUSTOMER_ID</span>) instead of here, so it never ships to the browser. England authenticates with the API key + customer ID; if you only have the FedEx account number, try it as the customer ID or confirm the key with your England rep.</p>}
       </div>
     </div>
     {byoCarrier&&<>

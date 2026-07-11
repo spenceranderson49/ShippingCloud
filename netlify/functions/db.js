@@ -224,7 +224,7 @@ exports.handler = async (event) => {
     const action = body.action || "";
 
     if (action === "ping") return J({ ok: true, configured: configured() });
-    if (!configured()) return J({ ok: false, notConfigured: true, error: "Cloud database isn't configured yet (SUPABASE_URL / SUPABASE_SERVICE_KEY env vars)." });
+    if (!configured()) return J({ ok: false, notConfigured: true, error: "We're having trouble reaching the server — try again in a moment." });
 
     /* ── login (+ first-ever bootstrap) ── */
     /* Every customer login must resolve to a real client record. Minted HERE (server-side)
@@ -246,7 +246,7 @@ exports.handler = async (event) => {
       const password = String(body.password || "");
       if (!email || !password) return J({ ok: false, error: "Enter your email and password." });
       const cur = await getStore("users");
-      if (!cur.ok) return J({ ok: false, error: "Database error: " + ((cur.err && cur.err.text) || cur.err && cur.err.status || "unreachable") + ". Check the SQL setup step and env vars." });
+      if (!cur.ok) return J({ ok: false, error: "We're having trouble reaching the server — try again in a moment." });
       let users = Array.isArray(cur.value) ? cur.value : [];
       if (!users.length) {
         // BOOTSTRAP: very first login creates the admin account with this email + password.

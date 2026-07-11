@@ -151,7 +151,7 @@ exports.handler = async (event) => {
   if ((process.env.CARRIER_BACKEND || "fedex").toLowerCase() === "england") {
     try { return await require("./ship-england.js").handler(event); }
     catch (e) {
-      const msg = "CARRIER_BACKEND=england is set but ship-england.js isn't deployed or failed: " + ((e && e.message) || e);
+      const msg = "Booking is temporarily unavailable — try again in a moment.";
       return respond(200, {ok:false,error:msg});
     }
   }
@@ -161,7 +161,7 @@ exports.handler = async (event) => {
   const action = body.action || "ship";
 
   if (!CLIENT_ID || !CLIENT_SECRET || !ACCOUNT) {
-    const err = "FedEx isn't configured: set FEDEX_CLIENT_ID, FEDEX_CLIENT_SECRET and FEDEX_ACCOUNT in Netlify (normal vars, then redeploy).";
+    const err = "Booking isn't available on this site yet.";
     if (action === "diag") return respond(200, { ok: true, diag: { providerAccounts: { ok: false, status: 0, raw: err, providers: [], accounts: [] } } });
     return respond(200, { ok: false, error: err });
   }
@@ -255,7 +255,7 @@ exports.handler = async (event) => {
      rates on it, but booking without it is a guaranteed FedEx rejection. Single-package only. */
   if (serviceType === "SMART_POST") {
     const hub = String(o.smartPostHub || process.env.FEDEX_SMARTPOST_HUB || "").trim();
-    if (!hub) return respond(200, { ok: false, error: "Ground Economy needs your FedEx SmartPost hub id — set FEDEX_SMARTPOST_HUB in the site's environment (the hub FedEx assigned to your account), or pick another service." });
+    if (!hub) return respond(200, { ok: false, error: "Ground Economy isn't enabled on this account yet — pick another service or contact support." });
     if (pieces.length > 1) return respond(200, { ok: false, error: "Ground Economy is single-package only — ship the boxes as separate shipments, or pick Ground/Home Delivery for the multipiece." });
     requestedShipment.smartPostInfoDetail = { indicia: "PARCEL_SELECT", hubId: hub };
   }

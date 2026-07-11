@@ -113,7 +113,7 @@ exports.handler = async (event) => {
     if (!scAllow("ship:" + gateAuth.uid, 120)) return J({ ok: false, error: "Too many booking requests at once \u2014 give it a few seconds." });
 
     const c = creds(body.account || {});
-    if (!c.apiKey || !c.customerId) return J({ ok: false, error: "Missing England API key or customer ID." });
+    if (!c.apiKey || !c.customerId) return J({ ok: false, error: "Booking isn't set up on this site yet — contact support." });
 
     /* ---- action: diag — what can this key actually access? ---- */
     if (body.action === "diag") {
@@ -167,11 +167,11 @@ exports.handler = async (event) => {
         if (match && match.id != null) providerAccountId = String(match.id);
         if (!providerAccountId) {
           return J({ ok: false, error: accts.length
-            ? ("No England carrier account matches '" + S(o.carrierCode) + "'. England has: " + accts.map((a) => a.providerCode).join(", ") + ". Enter the provider account ID in Settings → England.")
-            : ("England returned no carrier accounts to ship on (HTTP " + pr.status + "). Ask England to enable booking/provider-accounts on your key, or enter your provider account ID in Settings → England.") });
+            ? ("This account isn't set up to book '" + S(o.carrierCode) + "' labels yet — contact support.")
+            : ("Booking isn't enabled on this account yet (HTTP " + pr.status + ") — contact support.") });
         }
       } catch (e) {
-        return J({ ok: false, error: "Couldn't look up your England carrier account: " + (e.name === "AbortError" ? "timeout" : e.message) + ". Enter your provider account ID in Settings → England." });
+        return J({ ok: false, error: "Couldn't reach the booking service (" + (e.name === "AbortError" ? "timeout" : e.message) + ") — try again or contact support." });
       }
     }
 
@@ -221,7 +221,7 @@ exports.handler = async (event) => {
     try { r = await req(url, { method: "POST", headers: authHeaders(c.apiKey), body: JSON.stringify(shipBody) }); t = await r.text(); }
     catch (e) { return J({ ok: false, error: "Book Shipment failed: " + (e.name === "AbortError" ? "timeout" : e.message) }); }
     let d = null; try { d = JSON.parse(t); } catch {}
-    if (!r.ok) return J({ ok: false, error: "England HTTP " + r.status + ((d && (d.error || d.message)) ? ": " + (d.error || d.message) : (t ? ": " + t.slice(0, 300) : "")) });
+    if (!r.ok) return J({ ok: false, error: "Booking failed (HTTP " + r.status + ")" + ((d && (d.error || d.message)) ? ": " + String(d.error || d.message).slice(0, 200) : "") });
     const bookNumber = S(d && d.bookNumber);
     const tracking = S(d && d.trackingNumber);
     if (!bookNumber) return J({ ok: false, error: "Booked but no bookNumber returned: " + (t ? t.slice(0, 200) : "") });

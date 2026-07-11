@@ -343,7 +343,7 @@ exports.handler = async (event) => {
     if (!scAllow("fedex:" + gateAuth.uid, 240)) return J({ ok: false, error: "Too many requests at once \u2014 give it a few seconds." });
 
     const c = creds(body);
-    if (!c.key || !c.secret) return J({ ok: false, error: "Missing FedEx API key/secret (set FEDEX_API_KEY and FEDEX_SECRET_KEY env vars)." });
+    if (!c.key || !c.secret) return J({ ok: false, error: "This tool isn't available right now — contact support." });
 
     let tk;
     try { tk = await token(c); } catch (e) { return J({ ok: false, error: e.message }); }
@@ -368,7 +368,7 @@ exports.handler = async (event) => {
       return J(out);
     }
     // default: transit
-    if (!c.account) return J({ ok: false, error: "Missing FedEx account number (set FEDEX_ACCOUNT env var)." });
+    if (!c.account) return J({ ok: false, error: "Pickups aren't available on this account yet — contact support." });
     const out = await transit(c, body, tk);
     return J(out);
   } catch (e) {

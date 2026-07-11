@@ -62,5 +62,8 @@ ok(api.validHookUrl("http://example.com/hook")===false,"webhook url: plain http 
 ok(api.validHookUrl("https://localhost/x")===false,"webhook url: localhost rejected");
 const r4=await call("POST","/api/v1/webhooks");ok(r4.statusCode===503,"webhooks route exists (fails closed unconfigured)");
 const r5=await call("GET","/api/v1/labels/123");ok(r5.statusCode===503,"label re-download route exists (fails closed)");
+const r6=await call("GET","/api/v1/shipments?page=2&limit=10");ok(r6.statusCode===503,"shipments pagination route exists");
+const r7=await call("POST","/api/v1/returns");ok(r7.statusCode===503,"returns route exists");
+const r8=await call("POST","/api/v1/labels/batch");ok(r8.statusCode===503,"batch route exists");
 console.log(p+" passed, "+f+" failed");
 process.exit(f?1:0);

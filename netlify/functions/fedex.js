@@ -352,6 +352,22 @@ exports.handler = async (event) => {
       const out = await address(c, body, tk);
       return J(out);
     }
+    if (body.action === "track") {
+      try {
+        const tn = String(body.trackingNumber || "").replace(/\s/g, "");
+        if (!tn) return J({ ok: false, error: "trackingNumber required" });
+        const r = await fetch(c.base + "/track/v1/trackingnumbers", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + tk, "x-locale": "en_US" }, body: JSON.stringify({ includeDetailedScans: true, trackingInfo: [{ trackingNumberInfo: { trackingNumber: tn } }] }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) return J({ ok: false, error: "FedEx track error " + r.status });
+        const t = j.output && j.output.completeTrackResults && j.output.completeTrackResults[0] && j.output.completeTrackResults[0].trackResults && j.output.completeTrackResults[0].trackResults[0];
+        if (!t) return J({ ok: false, error: "No tracking detail returned." });
+        const st = (t.latestStatusDetail && (t.latestStatusDetail.statusByLocale || t.latestStatusDetail.description)) || "";
+        const code = (t.latestStatusDetail && t.latestStatusDetail.code) || "";
+        const events = (t.scanEvents || []).map((e) => ({ time: e.date, status: e.eventDescription, location: [e.scanLocation && e.scanLocation.city, e.scanLocation && e.scanLocation.stateOrProvinceCode].filter(Boolean).join(", ") }));
+        const est = (t.estimatedDeliveryTimeWindow && t.estimatedDeliveryTimeWindow.window && t.estimatedDeliveryTimeWindow.window.ends) || (t.standardTransitTimeWindow && t.standardTransitTimeWindow.window && t.standardTransitTimeWindow.window.ends) || null;
+        return J({ ok: true, status: st, code, events, estDelivery: est });
+      } catch (e) { return J({ ok: false, error: (e && e.message) || "track failed" }); }
+    }
     if (body.action === "pickup") {
       if (!c.account) return J({ ok: false, error: "Missing FedEx account number." });
       const out = await schedulePickup(c, body, tk);

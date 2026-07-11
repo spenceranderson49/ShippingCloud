@@ -86,6 +86,17 @@ function priceRates(liveRates, world, client, fromZip, toZip, pieces) {
     }).filter(Boolean).sort((a, b) => a.amount - b.amount);
 }
 
+/* normalize any carrier/internal status string → a stable set integrators can switch on */
+function normStatus(raw, fedexCode) {
+  const s = String(raw || "").toLowerCase();
+  if (fedexCode === "DL" || /delivered/.test(s)) return "delivered";
+  if (fedexCode === "RS" || /return/.test(s)) return "returned";
+  if (/void/.test(s)) return "voided";
+  if (fedexCode === "DE" || /exception|delay|held|clearance/.test(s)) return "exception";
+  if (fedexCode === "OD" || fedexCode === "IT" || /transit|out for delivery|departed|arrived|picked up|in fedex possession/.test(s)) return "in_transit";
+  if (fedexCode === "PU" || /label created|shipment information|order processed/.test(s)) return "pre_transit";
+  return "unknown";
+}
 const shipStoreKey = (client, isTest) => "u/api_" + client.id + (isTest ? "/testShipments" : "/shipments");   /* testShipments doesn't match the dashboard's (shipments|orders) scan — test traffic is invisible to ops/billing */
 const labelStoreKey = (client, id) => "u/api_" + client.id + "/label_" + id;
 const pickupStoreKey = (client) => "u/api_" + client.id + "/pickups";
@@ -300,7 +311,10 @@ exports.handler = async (event) => {
       const arr = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
       if (method === "GET" && seg.length === 1) {
         const lim = Math.min(200, Math.max(1, num(qs.limit, 50)));
-        return J(200, { shipments: arr.slice(0, lim).map((x) => ({ label_id: String(x.id), created: x.date, tracking_number: x.tracking, service: x.service, status: x.status, charge: { amount: x.sell, currency: "USD" }, reference: x.reference || null, to: { name: (x.recipient || {}).name, city: (x.recipient || {}).city, state: (x.recipient || {}).state, zip: x.toZip } })), count: arr.length });
+        const page = Math.max(1, num(qs.page, 1));
+        const start = (page - 1) * lim;
+        const slice = arr.slice(start, start + lim);
+        return J(200, { shipments: slice.map((x) => ({ label_id: String(x.id), created: x.date, tracking_number: x.tracking, service: x.service, status: normStatus(x.status, x.trackCode), status_detail: x.status, charge: { amount: x.sell, currency: "USD" }, reference: x.reference || null, to: { name: (x.recipient || {}).name, city: (x.recipient || {}).city, state: (x.recipient || {}).state, zip: x.toZip } })), page, limit: lim, total: arr.length, has_more: start + lim < arr.length });
       }
       if (method === "POST" && seg.length === 3 && seg[2] === "void") {
         const id = seg[1];
@@ -318,7 +332,11 @@ exports.handler = async (event) => {
       const n = S(seg[1]);
       const cur = await getStore(shipStoreKey(client, isTest));
       const hit = ((cur.ok && cur.value) || []).find((x) => S(x.tracking) === n);
-      return J(200, { tracking_number: n, status: hit ? hit.status : "unknown", last_scan: hit ? (hit.lastScan || null) : null, tracking_url: "https://www.fedex.com/fedextrack/?trknbr=" + encodeURIComponent(n) });
+      let live = null;
+      if (!isTest) { try { live = await callFn("./fedex.js", { action: "track", trackingNumber: n }); } catch (e) {} }
+      const rawStatus = (live && live.ok && live.status) || (hit && hit.status) || "unknown";
+      const code = (live && live.ok && live.code) || (hit && hit.trackCode) || "";
+      return J(200, { tracking_number: n, status: normStatus(rawStatus, code), status_detail: rawStatus, estimated_delivery: (live && live.ok && live.estDelivery) || null, events: (live && live.ok && live.events) || (hit && hit.lastScan ? [{ status: hit.lastScan }] : []), tracking_url: "https://www.fedex.com/fedextrack/?trknbr=" + encodeURIComponent(n) });
     }
 
     /* ── GET /v1/pickups · POST /v1/pickups/{confirmation}/cancel ── */

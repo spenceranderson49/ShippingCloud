@@ -58,5 +58,16 @@ const p6={};
 ok(rateSellFor(15,"FedEx Home Delivery®",{rules:R6,surcharges:[{label:"Residential Surcharge",amount:5.55}],_parts:p6})===9.45,"flat $0 fee: total = base only (15 - 5.55 billed fee + 0 charged)");
 ok(p6.fees&&p6.fees.length===1&&p6.fees[0].amount===0,"breakdown shows the fee line at exactly $0.00");
 ok(p6.base===9.45,"breakdown base = the unmarked base");
+// THE $25-fuel blunder: amount saved with NO type (editor displayed "% over cost") must price as PERCENT
+const R7={profiles:[{id:"default",name:"D",services:{},surcharges:{"FUEL-G":{amount:25}}}],assign:{},baseCosts:{}};
+ok(rateSellFor(20,"FedEx Home Delivery®",{rules:R7,surcharges:[{label:"Fuel Surcharge",amount:1.33}]})===20.33,"typeless rule = percent: fuel $1.33 +25% → $1.66, NEVER $25 flat");
+// every explicit mode on the same $2 fee (base 18 passes through, no service rule / markup)
+const mk7=(t,amt)=>({profiles:[{id:"default",name:"D",services:{},surcharges:{"FUEL-G":{type:t,amount:amt}}}],assign:{},baseCosts:{}});
+const l7=[{label:"Fuel Surcharge",amount:2,list:2.5}];
+ok(rateSellFor(20,"FedEx Home Delivery®",{rules:mk7("percent",25),surcharges:l7})===20.5,"percent 25 → fee $2.50");
+ok(rateSellFor(20,"FedEx Home Delivery®",{rules:mk7("percent",-50),surcharges:l7})===19,"percent -50 → fee $1.00 (discount)");
+ok(rateSellFor(20,"FedEx Home Delivery®",{rules:mk7("add",0.75),surcharges:l7})===20.75,"$ over cost 0.75 → fee $2.75");
+ok(rateSellFor(20,"FedEx Home Delivery®",{rules:mk7("listpct",10),surcharges:l7})===20.25,"% off list 10 → fee $2.25 (list 2.50)");
+ok(rateSellFor(20,"FedEx Home Delivery®",{rules:mk7("fixed",5),surcharges:l7})===23,"flat $5 → fee exactly $5");
 console.log(p+" passed, "+f+" failed");
 process.exit(f?1:0);

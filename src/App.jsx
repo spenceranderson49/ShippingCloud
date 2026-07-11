@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v460";
+const BUILD_TAG="addr-v461";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3469,7 +3469,12 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
   const A=(obj,fn)=>(k)=>({value:(obj&&obj[k])||"",onChange:(e)=>fn({[k]:e.target.value})});
   const fa=A(c.address||{},upAddr);
   const pf=c.prefs||{};
-  const createLogin=()=>{if(!lf.name||!lf.email||!lf.password)return;setUsers(p=>[...p,{id:"u"+Date.now(),name:lf.name,email:lf.email,role:"customer",clientId:cid,status:"active",password:lf.password,lastLogin:"—"}]);setLf({name:"",email:"",password:""});say("Login created.");};
+  const createLogin=()=>{if(!lf.name||!lf.email||!lf.password)return;const _em=lf.email;setUsers(p=>[...p,{id:"u"+Date.now(),name:lf.name,email:_em,role:"customer",clientId:cid,status:"active",password:lf.password,lastLogin:"—",createdAt:new Date().toISOString()}]);setLf({name:"",email:"",password:""});
+    if(CLOUD.mode==="cloud"){ /* welcome email rides the reset-link flow; wait out the debounced cloud write so the server can find the new login */
+      setTimeout(()=>{cloudCall({action:"requestReset",welcome:true,token:CLOUD.token,email:_em});},4000);
+      say("Login created — welcome email with a set-password link is on its way.");
+    } else say("Login created.");};
+  const sendReset=async(u)=>{const r=await cloudCall({action:"requestReset",email:u.email,token:CLOUD.token});window.alert(r&&r.configured===false?"Email sending isn't set up on this site yet (RESEND_API_KEY).":"Password reset link sent to "+u.email+" (valid 1 hour).");};
   const setPw=async(u)=>{const np=window.prompt("New password for "+u.email+":");if(!np)return;if(CLOUD.mode==="cloud"){const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});window.alert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update."));}else{setUsers(us=>us.map(x=>x.id===u.id?{...x,password:np}:x));window.alert("Password updated (local).");}};
   const dedicated=()=>{const id="p"+Date.now();upRules({profiles:[...profiles,{id,name:c.name,services:JSON.parse(JSON.stringify(prof.services||{})),surcharges:JSON.parse(JSON.stringify(prof.surcharges||{}))}],assign:{...assign,[cid]:id}});say("Dedicated profile created.");};
   const companyFeatureState=(fid)=>{if(!lg.length)return "none";const on=lg.filter(u=>featureOn(fid,u,featureFlags[u.id])).length;return on===0?"off":on===lg.length?"on":"mixed";};
@@ -3518,6 +3523,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
           <button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,status:x.status==="disabled"?"active":"disabled"}:x))} className={`text-[11px] rounded px-2 py-1 ${u.status==="disabled"?"bg-rose-100 text-rose-600":"bg-emerald-50 text-emerald-700"}`}>{u.status==="disabled"?"disabled":"active"}</button>
           <button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))} className={`text-[11px] rounded px-2 py-1 ${u.companyAdmin?"bg-violet-600 text-white":"bg-stone-100 text-stone-600"}`}>{u.companyAdmin?"Co. admin ✓":"Co. admin"}</button>
           <button onClick={()=>setPw(u)} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Password</button>
+          {CLOUD.mode==="cloud"&&<button onClick={()=>sendReset(u)} title="Email them a choose-a-new-password link (valid 1 hour)" className="text-[11px] rounded px-2 py-1 bg-[#E6F4FF] text-[#006FBF] hover:bg-[#CCEAFF]">Reset email</button>}
           <button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Log in as</button>
           {u.id!==currentUser.id&&<button onClick={()=>{if(window.confirm("Delete "+u.email+"?"))setUsers(us=>us.filter(x=>x.id!==u.id));}} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button>}
         </div>)):<div className="px-3 py-4 text-sm text-stone-400">No logins yet — new logins inherit this customer's rates, credentials, and features automatically.</div>}
@@ -4677,6 +4683,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
             {u.role!=="admin"&&<button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))} title={u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins"} className={`text-[11px] rounded px-2 py-1 ${u.companyAdmin?"bg-violet-600 text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>{u.companyAdmin?"Company admin ✓":"Company admin"}</button>}
             {u.role!=="admin"&&<button onClick={()=>setFeatOpen(featOpen===u.id?null:u.id)} title="Features for this login" className={`text-[11px] rounded px-2 py-1 ${featOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>Tabs &amp; logo</button>}
             {CLOUD.mode==="cloud"&&(u.role!=="admin"||fullAdmin)&&<button onClick={async()=>{const np=window.prompt("New password for "+u.email+" (min 4 characters):");if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});window.alert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}} title="Reset password" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Password</button>}
+            {CLOUD.mode==="cloud"&&u.role!=="admin"&&<button onClick={async()=>{const r=await cloudCall({action:"requestReset",email:u.email,token:CLOUD.token});window.alert(r&&r.configured===false?"Email sending isn't set up on this site yet (RESEND_API_KEY).":"Password reset link sent to "+u.email+" (valid 1 hour).");}} title="Email them a choose-a-new-password link (valid 1 hour)" className="text-[11px] rounded px-2 py-1 bg-[#E6F4FF] text-[#006FBF] hover:bg-[#CCEAFF]">Reset email</button>}
             {CLOUD.mode==="cloud"&&u.totp&&u.totp.enabled&&<button onClick={async()=>{if(!window.confirm("Turn OFF two-factor for "+u.email+"? Use this only if they lost their authenticator — they'll sign in with just their password afterward."))return;const r=await cloudCall({action:"clearTotp",token:CLOUD.token,email:u.email});window.alert(r&&r.ok?"2FA turned off for "+u.email+".":((r&&r.error)||"Could not reset 2FA."));}} title="Lost-phone recovery: turn off this user's 2FA" className="text-[11px] rounded px-2 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100">Reset 2FA</button>}
             <button onClick={()=>toggle(u.id)} title={u.status==="active"?"Deactivate":"Activate"} className={`text-[11px] rounded px-2 py-1 ${u.status==="active"?"bg-emerald-50 text-emerald-700":"bg-stone-100 text-stone-500"}`}>{u.status==="active"?"Active":"Deactivated"}</button>
             {u.id!==currentUser.id&&!isBuiltInAdmin(u.email)&&(u.role!=="admin"||(fullAdmin&&u.id!=="u1"))&&<button onClick={()=>del(u.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}

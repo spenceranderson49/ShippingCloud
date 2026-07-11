@@ -374,7 +374,12 @@ exports.handler = async (event) => {
       const users = Array.isArray(curU.value) ? curU.value : [];
       const u = users.find((x) => x && String(x.email || "").toLowerCase() === email && x.status !== "disabled");
       if (!u) return J(generic); // never reveal which emails exist
-      const payload = b64u(JSON.stringify({ uid: String(u.id), kind: "pwreset", exp: Date.now() + 60 * 60 * 1000 }));
+      /* welcome variant: only an authenticated ADMIN can request it (it says "an account was
+         created for you", so it must never be triggerable by an anonymous visitor). 72h link —
+         a brand-new user may not check email within the reset flow's 1 hour. */
+      const _wAuth = verifyToken(body.token);
+      const isWelcome = !!(body.welcome && _wAuth && _wAuth.role === "admin");
+      const payload = b64u(JSON.stringify({ uid: String(u.id), kind: "pwreset", exp: Date.now() + (isWelcome ? 72 : 1) * 60 * 60 * 1000 }));
       const rtoken = payload + "." + sign(payload);
       /* Send the person back to the site they asked from, with that site's branding.
          Origin is whitelisted — never trusted raw — so a reset email can't be pointed
@@ -396,8 +401,8 @@ exports.handler = async (event) => {
       const from = (process.env.EMAIL_FROM || "ShippingCloud <notify@shippingcloud.net>").trim();
       try {
         const rr = await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
-          body: JSON.stringify({ from, to: [email], subject: "Reset your " + product + " password",
-            html: `<body style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;"><div style="max-width:480px;margin:0 auto;padding:28px 20px;"><div style="font-size:20px;font-weight:800;color:#0c4a6e;">${wordmark}</div><p style="font-size:14px;color:#57534e;">Someone (hopefully you) asked to reset the password for this account. This link works for 1 hour.</p><a href="${link}" style="display:inline-block;background:#0086E0;color:#fff;text-decoration:none;font-weight:600;border-radius:8px;padding:10px 18px;font-size:14px;">Choose a new password</a><p style="font-size:11px;color:#a8a29e;margin-top:16px;">Didn\u2019t ask for this? Ignore this email \u2014 nothing changes.</p></div></body>` }) });
+          body: JSON.stringify({ from, to: [email], subject: isWelcome ? ("Welcome to " + product + " — set your password") : ("Reset your " + product + " password"),
+            html: `<body style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;"><div style="max-width:480px;margin:0 auto;padding:28px 20px;"><div style="font-size:20px;font-weight:800;color:#0c4a6e;">${wordmark}</div>${isWelcome?`<p style="font-size:14px;color:#57534e;">An account was created for you. Click below to choose your password and sign in. This link works for 72 hours.</p>`:`<p style="font-size:14px;color:#57534e;">Someone (hopefully you) asked to reset the password for this account. This link works for 1 hour.</p>`}<a href="${link}" style="display:inline-block;background:#0086E0;color:#fff;text-decoration:none;font-weight:600;border-radius:8px;padding:10px 18px;font-size:14px;">${isWelcome?"Set my password":"Choose a new password"}</a>${isWelcome?"":`<p style="font-size:11px;color:#a8a29e;margin-top:16px;">Didn\u2019t ask for this? Ignore this email \u2014 nothing changes.</p>`}</div></body>` }) });
         const rt = await rr.text().catch(() => "");
         if (rr.ok) console.log("[requestReset] sent OK via Resend from <" + from + "> (origin " + (reqOrigin || "none") + ")");
         else console.log("[requestReset] Resend REJECTED the send (" + rr.status + "): " + rt.slice(0, 300) + " — common causes: wrong API key, or the EMAIL_FROM domain isn't verified in the Resend dashboard.");

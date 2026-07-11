@@ -6,3 +6,5 @@ dist/
 
 # Lockfile (not tracked in this repo)
 package-lock.json
+dist-admin/
+dist-shiphub/

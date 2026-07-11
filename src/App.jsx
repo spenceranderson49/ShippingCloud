@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v443";
+const BUILD_TAG="addr-v444";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3220,42 +3220,118 @@ function FedexCertLab({settings}){
 /* ════════ ADMIN → CUSTOMERS (v202) — every customer, every login, everything editable ════════ */
 /* ════════ ADMIN → DASHBOARD (extracted for the tab workspace) ════════ */
 function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection}){
+  /* Operations home — every customer's shipments in one live feed (time · customer · carrier ·
+     tracking · est. margin · quote), hourly/daily/weekly margin+count charts, and a by-customer
+     rollup, all switchable Today / Week / Month / All. */
+  const [period,setPeriod]=useState("today");
+  const ships=platform.ships||[];
+  const tsOf=(x)=>(typeof x.id==="number"&&x.id>1e12)?x.id:(new Date(x.date).getTime()||0);
+  const now=Date.now();
+  const dayStart=(()=>{const d=new Date();d.setHours(0,0,0,0);return d.getTime();})();
+  const cut=period==="today"?dayStart:period==="7d"?now-7*864e5:period==="30d"?now-30*864e5:0;
+  const inP=useMemo(()=>ships.filter(x=>tsOf(x)>=cut).sort((a,b)=>tsOf(b)-tsOf(a)),[ships,period,cut]);
+  const custOf=(x)=>x.client||uEmail(x._uid)||"—";
+  const marginOf=(x)=>Math.round(((+x.sell||0)-(+x.cost||0))*100)/100;
+  const live=inP.filter(x=>x.status!=="Voided");
+  const voided=inP.length-live.length;
+  const totM=Math.round(live.reduce((a,x)=>a+marginOf(x),0)*100)/100;
+  const totQ=Math.round(live.reduce((a,x)=>a+(+x.sell||0),0)*100)/100;
+  const custN=new Set(live.map(custOf)).size;
+  const byCust=useMemo(()=>{const m={};inP.forEach(x=>{const k=custOf(x);const e=m[k]||(m[k]={name:k,n:0,voided:0,q:0,mg:0});if(x.status==="Voided"){e.voided++;return;}e.n++;e.q+=(+x.sell||0);e.mg+=marginOf(x);});return Object.values(m).map(e=>({...e,q:Math.round(e.q*100)/100,mg:Math.round(e.mg*100)/100})).sort((a,b)=>b.mg-a.mg);},[inP]);
+  /* chart buckets (fixed scopes, independent of the period picker) */
+  const buckets=useMemo(()=>{
+    const liveAll=ships.filter(x=>x.status!=="Voided");
+    const hourly=[];for(let h=6;h<=20;h++)hourly.push({lb:h%3===0?String(h):"",m:0,c:0,_h:h});
+    liveAll.forEach(x=>{const t=tsOf(x);if(t<dayStart)return;const h=new Date(t).getHours();const b=hourly.find(b2=>b2._h===h);if(b){b.m+=marginOf(x);b.c++;}});
+    const daily=[];for(let i=13;i>=0;i--){const d0=dayStart-i*864e5;daily.push({lb:i%3===0?new Date(d0).toLocaleDateString([],{month:"numeric",day:"numeric"}):"",m:0,c:0,_d:d0});}
+    liveAll.forEach(x=>{const t=tsOf(x);const b=daily.find(b2=>t>=b2._d&&t<b2._d+864e5);if(b){b.m+=marginOf(x);b.c++;}});
+    const weekly=[];for(let i=11;i>=0;i--){const w0=dayStart-((i+1)*7-1)*864e5;weekly.push({lb:i%3===0?new Date(w0).toLocaleDateString([],{month:"numeric",day:"numeric"}):"",m:0,c:0,_d:w0});}
+    liveAll.forEach(x=>{const t=tsOf(x);const b=weekly.find(b2=>t>=b2._d&&t<b2._d+7*864e5);if(b){b.m+=marginOf(x);b.c++;}});
+    return {hourly,daily,weekly};
+  },[ships,dayStart]);
+  const Combo=({title,data})=>{const W=340,H=104,P=14;const mMax=Math.max(1,...data.map(d=>d.m));const cMax=Math.max(1,...data.map(d=>d.c));const bw=(W-P*2)/data.length;
+    return (<div className="border border-stone-200 rounded-lg bg-white p-3">
+      <div className="text-xs font-semibold text-stone-600 mb-1">{title}</div>
+      <svg viewBox={"0 0 "+W+" "+H} className="w-full">
+        {data.map((d,i)=>{const h=(H-32)*(d.m/mMax);return <rect key={i} x={P+i*bw+1.5} y={H-18-h} width={Math.max(1,bw-3)} height={Math.max(0,h)} rx="1" fill="#fdba74"/>;})}
+        <polyline fill="none" stroke="#44403c" strokeWidth="1.5" points={data.map((d,i)=>(P+i*bw+bw/2)+","+(H-18-(H-32)*(d.c/cMax))).join(" ")}/>
+        {data.map((d,i)=>d.c>0&&<circle key={"c"+i} cx={P+i*bw+bw/2} cy={H-18-(H-32)*(d.c/cMax)} r="1.8" fill="#44403c"/>)}
+        {data.map((d,i)=>(d.lb?<text key={"t"+i} x={P+i*bw+bw/2} y={H-5} fontSize="8" textAnchor="middle" fill="#a8a29e">{d.lb}</text>:null))}
+      </svg>
+      <div className="flex items-center gap-3 text-[10px] text-stone-400 mt-0.5"><span className="flex items-center gap-1"><span className="w-2 h-2 bg-orange-300 inline-block rounded-[2px]"/>Margin $</span><span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-stone-700 inline-block"/>Shipments</span></div>
+    </div>);};
+  const timeOf=(x)=>{const t=tsOf(x);const d=t?new Date(t):null;const sameDay=d&&d.getTime()>=dayStart;return d?(sameDay?d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}):d.toLocaleDateString([],{month:"numeric",day:"numeric"})+" "+d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})):(x.time||x.date||"—");};
+  const PERIODS=[["today","Today"],["7d","Week"],["30d","Month"],["all","All"]];
   return (<div className="space-y-4">
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-      <Stat2 label="Shipments created" v={platform.total}/>
-      <Stat2 label="Shipments · last 30 days" v={platform.t30}/>
-      <Stat2 label="Revenue billed" v={money(platform.rev)}/>
-      <Stat2 label="Margin" v={money(platform.margin)} tone={platform.margin>=0?"text-emerald-600":"text-rose-600"}/>
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex bg-stone-100 rounded-lg p-0.5 text-sm">{PERIODS.map(([v,l])=><button key={v} onClick={()=>setPeriod(v)} className={"px-3 py-1.5 rounded-lg "+(period===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500")}>{l}</button>)}</div>
+      <span className="flex-1"/>
+      <button onClick={()=>openSection("customers")} className="text-[12px] text-[#0086E0] hover:underline">Customers →</button>
+    </div>
+    <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <Stat2 label="Shipments" v={live.length+(voided?" (−"+voided+" void)":"")}/>
+      <Stat2 label="Active customers" v={custN}/>
+      <Stat2 label="Est. margin" v={money(totM)} tone={totM>=0?"text-emerald-600":"text-rose-600"}/>
+      <Stat2 label="Quoted" v={money(totQ)}/>
+      <Stat2 label="Open orders (all logins)" v={platform.openOrders}/>
+    </div>
+    <div className="grid lg:grid-cols-[340px,1fr] gap-3 items-start">
+      <div className="space-y-3">
+        <Combo title="Today — hourly" data={buckets.hourly}/>
+        <Combo title="Last 14 days" data={buckets.daily}/>
+        <Combo title="Last 12 weeks" data={buckets.weekly}/>
+      </div>
+      <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-stone-100 flex items-center justify-between"><span className="text-sm font-semibold text-stone-700">Shipments — {PERIODS.find(p=>p[0]===period)[1].toLowerCase()}, all customers</span><span className="text-[11px] text-stone-400">{inP.length>400?"newest 400 shown":""}</span></div>
+        <div className="overflow-x-auto max-h-[560px] overflow-y-auto">
+          <table className="w-full text-[13px] min-w-[760px]">
+            <thead className="sticky top-0 bg-stone-50 z-10"><tr className="text-[10px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal px-3 py-2">Time</th><th className="text-left font-normal px-3 py-2">Customer</th><th className="text-left font-normal px-3 py-2">Carrier</th><th className="text-left font-normal px-3 py-2">Tracking #</th><th className="text-left font-normal px-3 py-2">Service</th><th className="text-right font-normal px-3 py-2">Est. Margin</th><th className="text-right font-normal px-3 py-2">Quote</th></tr></thead>
+            <tbody>
+              {inP.length===0&&<tr><td colSpan={7} className="px-3 py-10 text-center text-stone-400">No shipments in this period yet.</td></tr>}
+              {inP.slice(0,400).map((x,i)=>(<tr key={i} className={"border-t border-stone-100 "+(x.status==="Voided"?"opacity-45":"")}>
+                <td className="px-3 py-1.5 whitespace-nowrap text-stone-500">{timeOf(x)}</td>
+                <td className="px-3 py-1.5 max-w-[220px]"><div className="truncate font-medium text-stone-800">{custOf(x)}</div><div className="text-[10px] text-stone-400 truncate">{uEmail(x._uid)}</div></td>
+                <td className="px-3 py-1.5 whitespace-nowrap text-stone-600">{x.carrier||"—"}</td>
+                <td className="px-3 py-1.5 whitespace-nowrap font-mono text-[12px] text-stone-600">{x.tracking||"—"}{x.status==="Voided"&&<span className="ml-1 text-[9px] uppercase text-rose-400">void</span>}</td>
+                <td className="px-3 py-1.5 whitespace-nowrap text-stone-500 max-w-[160px] truncate">{(x.service||"").replace("FedEx ","")}</td>
+                <td className="px-3 py-1.5 text-right font-mono">{x.status==="Voided"?"—":money(marginOf(x))}</td>
+                <td className="px-3 py-1.5 text-right font-mono font-medium">{x.status==="Voided"?"—":money(+x.sell||0)}</td>
+              </tr>))}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-4 py-2.5 border-t border-stone-200 bg-stone-50 flex flex-wrap items-center gap-4 text-[13px] font-medium text-stone-700">
+          <span>Totals — ({custN} customer{custN===1?"":"s"})</span>
+          <span>({live.length} shipped{voided?" − "+voided+" voided":""})</span>
+          <span className="flex-1"/>
+          <span className="font-mono">{money(totM)}</span>
+          <span className="font-mono">{money(totQ)}</span>
+        </div>
+      </div>
+    </div>
+    <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-stone-100 text-sm font-semibold text-stone-700">By customer — {PERIODS.find(p=>p[0]===period)[1].toLowerCase()}</div>
+      <div className="overflow-x-auto"><table className="w-full text-[13px] min-w-[680px]">
+        <thead className="bg-stone-50"><tr className="text-[10px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal px-3 py-2">Customer</th><th className="text-right font-normal px-3 py-2">Shipments</th><th className="text-right font-normal px-3 py-2">Voided</th><th className="text-right font-normal px-3 py-2">Quoted</th><th className="text-right font-normal px-3 py-2">Est. margin</th><th className="text-right font-normal px-3 py-2">Margin / label</th><th className="text-right font-normal px-3 py-2">Margin %</th></tr></thead>
+        <tbody>
+          {byCust.length===0&&<tr><td colSpan={7} className="px-3 py-8 text-center text-stone-400">Nothing in this period yet.</td></tr>}
+          {byCust.map((e,i)=>(<tr key={i} className="border-t border-stone-100">
+            <td className="px-3 py-2 font-medium text-stone-800">{e.name}</td>
+            <td className="px-3 py-2 text-right font-mono">{e.n}</td>
+            <td className="px-3 py-2 text-right font-mono text-stone-400">{e.voided||""}</td>
+            <td className="px-3 py-2 text-right font-mono">{money(e.q)}</td>
+            <td className={"px-3 py-2 text-right font-mono "+(e.mg>=0?"text-emerald-700":"text-rose-600")}>{money(e.mg)}</td>
+            <td className="px-3 py-2 text-right font-mono text-stone-500">{e.n?money(e.mg/e.n):"—"}</td>
+            <td className="px-3 py-2 text-right font-mono text-stone-500">{e.q?Math.round(e.mg/e.q*100)+"%":"—"}</td>
+          </tr>))}
+        </tbody>
+      </table></div>
     </div>
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
       <Stat2 label="Logins created" v={loginStats.total}/>
       <Stat2 label="Active logins" v={loginStats.active}/>
       <Stat2 label="Signed in · last 7 days" v={loginStats.week}/>
-      <Stat2 label="Open orders (all logins)" v={platform.openOrders}/>
-    </div>
-    <div className="grid lg:grid-cols-2 gap-3">
-      <div className="border border-stone-200 rounded-lg bg-white p-4">
-        <div className="flex items-center justify-between mb-2"><div className="text-sm font-semibold text-stone-700">Latest shipments — all logins</div><button onClick={()=>openSection("customers")} className="text-[11px] text-[#0086E0] hover:underline">Customers →</button></div>
-        {platform.latest.length===0&&<div className="text-sm text-stone-400 py-4 text-center">No shipments yet.</div>}
-        <div className="divide-y divide-stone-100">{platform.latest.map((x,i2)=>(
-          <div key={i2} className="flex items-center gap-3 py-2 text-sm">
-            <div className="flex-1 min-w-0"><div className="text-stone-800 truncate">{(x.recipient&&x.recipient.name)||"—"} · {(x.recipient&&x.recipient.city)||""} {(x.recipient&&x.recipient.state)||""}</div><div className="text-[11px] text-stone-400 truncate">{x.date} · {x.service||x.carrier||""} · by {uEmail(x._uid)}</div></div>
-            <div className="font-mono text-sm w-20 text-right">{money(x.sell||0)}</div>
-            <Badge tone={x.status==="Delivered"?"green":(x.status==="Voided"?"stone":"blue")}>{x.status||"—"}</Badge>
-          </div>))}
-        </div>
-      </div>
-      <div className="border border-stone-200 rounded-lg bg-white p-4">
-        <div className="text-sm font-semibold text-stone-700 mb-2">Recent logins</div>
-        {(!loginStats.recent||!loginStats.recent.length)&&<div className="text-sm text-stone-400 py-4 text-center">No logins yet.</div>}
-        <div className="divide-y divide-stone-100">{(loginStats.recent||[]).map((u,i2)=>(
-          <div key={i2} className="flex items-center gap-3 py-2 text-sm">
-            <div className="flex-1 min-w-0"><div className="text-stone-800 truncate">{u.name||u.email}</div><div className="text-[11px] text-stone-400 truncate">{u.email}</div></div>
-            <Badge tone={u.role==="admin"?"blue":"stone"}>{u.role}</Badge>
-            <span className="text-[11px] text-stone-400 w-20 text-right">{u.lastLogin||"—"}</span>
-          </div>))}
-        </div>
-      </div>
+      <Stat2 label="All-time margin" v={money(platform.margin)} tone={platform.margin>=0?"text-emerald-600":"text-rose-600"}/>
     </div>
   </div>);
 }
@@ -3580,15 +3656,6 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
             <Field label="Grace / bill period"><Input value={fx.billPeriod||""} onChange={e=>upFx({billPeriod:e.target.value})} placeholder="e.g. weekly"/></Field>
             <div className="col-span-2 flex items-end"><label className="flex items-center gap-2 text-sm cursor-pointer pb-2"><input type="checkbox" checked={!!fx.oneRate} onChange={e=>upFx({oneRate:e.target.checked})} className="accent-[#0086E0]"/>Eligible for FedEx One Rate</label></div>
           </div>
-        </div>
-        <div>
-          <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Per-service list discount % (optional — overrides the overall discount)</div>
-          <div className="border border-stone-200 rounded-lg bg-white overflow-x-auto"><table className="w-full text-sm min-w-[420px]"><tbody>
-            {svcQuick.map(sv=>(<tr key={sv.k} className="border-t border-stone-100 first:border-t-0">
-              <td className="py-1.5 pl-3 pr-2 font-medium text-stone-800 whitespace-nowrap">{sv.l}</td>
-              <td className="py-1.5 pr-3 text-right"><Input type="number" value={svcDisc[sv.k]==null?"":svcDisc[sv.k]} onChange={e=>upSvcDisc(sv.k,e.target.value)} className="w-24 text-right" placeholder="list −%"/> <span className="text-stone-400 text-xs">%</span></td>
-            </tr>))}
-          </tbody></table></div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button onClick={applyTierToRates} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8]">Apply this tier to {c.name}'s rate pricing</button>
@@ -4275,7 +4342,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
     const rev=ships.reduce((a,x)=>a+(+x.sell||0),0);
     const cost=ships.reduce((a,x)=>a+(+x.cost||0),0);
     const latest=[...ships].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,8);
-    return {total:ships.length,t30,rev,margin:rev-cost,openOrders,shippers:shippers.size,latest};
+    return {total:ships.length,t30,rev,margin:rev-cost,openOrders,shippers:shippers.size,latest,ships};
   },[shipments,orders,users]);
   const loginStats=useMemo(()=>{
     const real=users.filter(u=>u&&u.id!=="demo");

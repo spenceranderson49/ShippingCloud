@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v461";
+const BUILD_TAG="addr-v462";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10304,7 +10304,14 @@ function PrinterSettings({settings,setSettings}){
             </Box>
           </>);
         })()}
-        <p className="text-xs text-stone-500">Browsers can't skip the print dialog on their own — a tiny agent on the label computer does it. One-time setup: install the free <a href="https://www.printnode.com/en/download" target="_blank" rel="noreferrer" className="text-[#0086E0] hover:underline">PrintNode client</a> on the computer the printer is plugged into, sign in, then paste your API key (PrintNode dashboard → API Keys) here. After that, every label prints itself.</p>
+        <p className="text-xs text-stone-500">Browsers can't skip the print dialog on their own — a tiny free agent called PrintNode does it. Five-minute, one-time setup:</p>
+        <ol className="text-xs text-stone-600 space-y-1.5 list-none">
+          <li className="flex gap-2"><span className="shrink-0 w-4 h-4 rounded-full bg-[#E6F4FF] text-[#006FBF] text-[10px] font-bold flex items-center justify-center">1</span><span>Create a free account at <a href="https://www.printnode.com" target="_blank" rel="noreferrer" className="text-[#0086E0] hover:underline font-medium">printnode.com</a> (the free tier covers a normal label printer).</span></li>
+          <li className="flex gap-2"><span className="shrink-0 w-4 h-4 rounded-full bg-[#E6F4FF] text-[#006FBF] text-[10px] font-bold flex items-center justify-center">2</span><span><a href="https://www.printnode.com/en/download" target="_blank" rel="noreferrer" className="text-[#0086E0] hover:underline font-medium">Download the PrintNode client</a> onto the computer your label printer is plugged into, install it, and sign in. Leave it running — it must show <b>Connected</b> whenever you print.</span></li>
+          <li className="flex gap-2"><span className="shrink-0 w-4 h-4 rounded-full bg-[#E6F4FF] text-[#006FBF] text-[10px] font-bold flex items-center justify-center">3</span><span>Get your API key: <a href="https://app.printnode.com/app/apikeys" target="_blank" rel="noreferrer" className="text-[#0086E0] hover:underline font-medium">PrintNode dashboard → API Keys</a> → create one (any description) → copy it.</span></li>
+          <li className="flex gap-2"><span className="shrink-0 w-4 h-4 rounded-full bg-[#E6F4FF] text-[#006FBF] text-[10px] font-bold flex items-center justify-center">4</span><span>Paste the key below, click <b>Find my printers</b>, and pick your label printer. Done — every label prints itself from then on.</span></li>
+        </ol>
+        <p className="text-[11px] text-stone-400">Tip: if labels ever stop printing, the PrintNode app on the label computer is almost always closed or signed out — open it and check it says Connected.</p>
         <div className="flex flex-wrap items-end gap-2">
           <label className="block text-sm text-stone-700 flex-1 min-w-[220px]">PrintNode API key
             <input type="password" value={pnc.apiKey||""} onChange={e=>setPnCfg({apiKey:e.target.value})} placeholder="paste your key" className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/>

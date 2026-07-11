@@ -69,6 +69,17 @@ ok(rateSellFor(20,"FedEx Home Delivery®",{rules:mk7("percent",-50),surcharges:l
 ok(rateSellFor(20,"FedEx Home Delivery®",{rules:mk7("add",0.75),surcharges:l7})===20.75,"$ over cost 0.75 → fee $2.75");
 ok(rateSellFor(20,"FedEx Home Delivery®",{rules:mk7("listpct",10),surcharges:l7})===20.25,"% off list 10 → fee $2.25 (list 2.50)");
 ok(rateSellFor(20,"FedEx Home Delivery®",{rules:mk7("fixed",5),surcharges:l7})===23,"flat $5 → fee exactly $5");
+// ── audit F21/F22: profit floor + list-base pricing hold when FedEx itemizes NO fees ──
+const R8={profiles:[{id:"default",name:"D",services:{"ground":{basis:"percent",pct:3},"or_2day_small_box":{basis:"flat",pct:15.30}},surcharges:{}}],assign:{},baseCosts:{}};
+ok(rateSellFor(20,"FedEx Ground",{rules:R8,client:{id:"c2",markupMin:5}})===25,"profit floor holds on a rule path with NO fee lines (was skipped: $20.60)");
+ok(rateSellFor(20,"FedEx Ground",{rules:R8,client:{id:"c2",markupMin:5},surcharges:[]})===25,"profit floor holds on a LIVE quote with zero itemized fees");
+ok(rateSellFor(200,"FedEx Ground",{rules:R8,client:{id:"c2",markupMin:5}})===206,"above the floor the rule % stands (200\u00d71.03)");
+ok(rateSellFor(14,"FedEx One Rate\u00ae 2Day - Small Box",{rules:R8,client:{id:"c2",markupMin:5},surcharges:[]})===15.3,"flat is EXEMPT from the profit floor: displays exactly $15.30 (live)");
+ok(rateSellFor(14,"FedEx One Rate\u00ae 2Day - Small Box",{rules:R8,client:{id:"c2",markupMin:5}})===15.3,"flat exempt from the floor on the estimate path too");
+// F22: empty account fee list + LIST fees present \u2192 base prices off LIST BASE, never list-total
+const R9={profiles:[{id:"default",name:"D",services:{"ground":{basis:"list",pct:20}},surcharges:{}}],assign:{},baseCosts:{}};
+ok(rateSellFor(18,"FedEx Ground",{rules:R9,list:25,listBase:22,surcharges:[]})===17.6,"list \u221220% prices off LIST BASE 22 \u2192 17.60 (not list-total 25 \u2192 20.00)");
+ok(rateSellFor(18,"FedEx Ground",{rules:R9,list:25,surcharges:[]})===20,"no listBase on the quote \u2192 falls back to list-total");
 // ── Pickup fee follows the Rates-tab accessorial rules ──
 const pfCode=[cn("DEFAULT_RATE_RULES"),'const money=(v)=>"$"+(+v).toFixed(2);',fn("rateProfileFor"),fn("pickupFeeFor"),"return {pickupFeeFor};"].join("\n");
 const {pickupFeeFor}=new Function(pfCode)();

@@ -22,6 +22,9 @@ const crypto = require("crypto");
 const J = (code, obj) => ({ statusCode: code, headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) });
 
 const keyFor = (uid) => crypto.createHmac("sha256", process.env.SESSION_SECRET || "").update("carrier:" + uid).digest("hex").slice(0, 32);
+/* internal auth for our own /quote call below — quote.js is session-gated (audit F1) */
+const scSecret = () => { const s = (process.env.SESSION_SECRET || "").trim(); if (s) return s; const k = (process.env.SUPABASE_SERVICE_KEY || "").trim(); return k ? crypto.createHash("sha256").update("sc1|" + k).digest("hex") : ""; };
+const scInternalKey = () => { const s = scSecret(); return s ? crypto.createHmac("sha256", s).update("internal:carrier").digest("hex") : ""; };
 
 /* ── settings loader (Supabase REST, service key) ── */
 async function loadSettings(uid) {
@@ -160,7 +163,7 @@ async function liveQuotes(fromZip, dest, pieces) {
   try {
     const r = await fetch(base + "/.netlify/functions/quote", {
       method: "POST", headers: { "Content-Type": "application/json" }, signal: ctrl.signal,
-      body: JSON.stringify({ carriers: "fedex", fromZip, toZip: dest.zip, toCity: dest.city, toState: dest.state, toCountry: dest.country || "US", residential: true, pieces })
+      body: JSON.stringify({ internalKey: scInternalKey(), carriers: "fedex", fromZip, toZip: dest.zip, toCity: dest.city, toState: dest.state, toCountry: dest.country || "US", residential: true, pieces })
     });
     const d = await r.json().catch(() => null);
     if (d && d.live && Array.isArray(d.rates) && d.rates.length) {

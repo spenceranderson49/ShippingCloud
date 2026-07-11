@@ -72,11 +72,45 @@ async function fetchLabel(c, bookNumber) {
   return { pdf: buf.toString("base64") };
 }
 
+/* ── session gate (see claude/audit-security.md F1) ──────────────────────
+   This endpoint spends real money or exposes the account's rate card, so the
+   caller must present a valid ShippingCloud session token (body.token — the
+   same HMAC token db.js issues at login). Server-to-server callers
+   (warm-rates, shopify-rates) send body.internalKey instead — an HMAC only
+   computable with this site's env secrets. With no SESSION_SECRET and no
+   Supabase key configured there is no auth system at all (bare local dev),
+   so the gate stands down rather than lock everything out. */
+const scCrypto = require("crypto");
+const scSecret = () => { const s = (process.env.SESSION_SECRET || "").trim(); if (s) return s; const k = (process.env.SUPABASE_SERVICE_KEY || "").trim(); return k ? scCrypto.createHash("sha256").update("sc1|" + k).digest("hex") : ""; };
+const scInternalKey = () => { const s = scSecret(); return s ? scCrypto.createHmac("sha256", s).update("internal:carrier").digest("hex") : ""; };
+function scAuth(body) {
+  const sec = scSecret();
+  if (!sec) return { uid: "local", local: true };
+  const ik = String((body && body.internalKey) || "");
+  if (ik) { const want = scInternalKey(); try { if (want && ik.length === want.length && scCrypto.timingSafeEqual(Buffer.from(ik), Buffer.from(want))) return { uid: "internal", internal: true }; } catch (e) {} }
+  try {
+    const [p, sig] = String((body && body.token) || "").split(".");
+    if (!p || !sig) return null;
+    const want = Buffer.from(scCrypto.createHmac("sha256", sec).update(p).digest("hex"), "hex");
+    const got = Buffer.from(sig, "hex");
+    if (want.length !== got.length || !scCrypto.timingSafeEqual(want, got)) return null;
+    const d = JSON.parse(Buffer.from(String(p).replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
+    if (!d || !d.uid || !d.exp || Date.now() > d.exp) return null;
+    return d;
+  } catch (e) { return null; }
+}
+/* best-effort per-container burst limit (the auth gate above is the real control) */
+const scHits = {};
+function scAllow(k, max) { const w = Math.floor(Date.now() / 60000), kk = k + ":" + w; scHits[kk] = (scHits[kk] || 0) + 1; if (Object.keys(scHits).length > 4000) { for (const x in scHits) { if (!x.endsWith(":" + w)) delete scHits[x]; } } return scHits[kk] <= max; }
+
 exports.handler = async (event) => {
   try {
     if (event.httpMethod === "OPTIONS") return { statusCode: 204, body: "" };
     if (event.httpMethod !== "POST") return J({ ok: false, error: "Use POST" });
     let body = {}; try { body = JSON.parse(event.body || "{}"); } catch { return J({ ok: false, error: "Bad JSON body" }); }
+    const gateAuth = scAuth(body);
+    if (!gateAuth) return J({ ok: false, authFailed: true, error: "Sign in to book labels." });
+    if (!scAllow("ship:" + gateAuth.uid, 120)) return J({ ok: false, error: "Too many booking requests at once \u2014 give it a few seconds." });
 
     const c = creds(body.account || {});
     if (!c.apiKey || !c.customerId) return J({ ok: false, error: "Missing England API key or customer ID." });

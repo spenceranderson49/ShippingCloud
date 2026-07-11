@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v448";
+const BUILD_TAG="addr-v449";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -319,7 +319,7 @@ const newTracking=carrier=>carrier==="UPS"?"1Z"+Math.random().toString(36).slice
 const RATES_ENDPOINT="/.netlify/functions/quote";
 async function getLiveRates(s,england){
   if(!england||!england.enabled) return null;
-  const body={carriers:s.carriers||"fedex",fromZip:s.fromZip,toZip:s.toZip,fromCountry:s.fromCountry||"US",toCountry:s.toCountry||"US",residential:!!s.residential,signature:!!s.signature,signatureOption:s.signatureOption||(s.signature?"direct":"none"),saturdayDelivery:!!s.saturdayDelivery,insuranceAmount:s.insuranceAmount||null,packageTypeCode:s.packageTypeCode||"",fedexAccount:(england.fedexAccount||null),pieces:(s.pieces||[]).map(p=>({weight:Math.ceil(+p.weight||1),length:+p.L||12,width:+p.W||9,height:+p.H||4,declaredValue:(+p.declaredValue||0)||undefined})),account:{base:england.base,apiKey:england.apiKey,customerId:england.customerId}};   /* FedEx bills every fractional pound as the next full pound (3 lb 3 oz rates as 4 lb) — round up here so the quote is the invoice price */
+  const body={token:CLOUD.token||undefined,carriers:s.carriers||"fedex",fromZip:s.fromZip,toZip:s.toZip,fromCountry:s.fromCountry||"US",toCountry:s.toCountry||"US",residential:!!s.residential,signature:!!s.signature,signatureOption:s.signatureOption||(s.signature?"direct":"none"),saturdayDelivery:!!s.saturdayDelivery,insuranceAmount:s.insuranceAmount||null,packageTypeCode:s.packageTypeCode||"",fedexAccount:(england.fedexAccount||null),pieces:(s.pieces||[]).map(p=>({weight:Math.ceil(+p.weight||1),length:+p.L||12,width:+p.W||9,height:+p.H||4,declaredValue:(+p.declaredValue||0)||undefined})),account:{base:england.base,apiKey:england.apiKey,customerId:england.customerId}};   /* FedEx bills every fractional pound as the next full pound (3 lb 3 oz rates as 4 lb) — round up here so the quote is the invoice price */
   const attempt=async(ms)=>{
     const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),ms);
     try{
@@ -374,6 +374,8 @@ function orderToEngland(o,opts,sender,eng){
     packageTypeCode:(/one\s*rate/i.test(String(q.label||""))?(q.packageTypeCode||opts.packageTypeCode||""):""),
     shippingService:q.label,contentDescription:o.items||"Merchandise",
     residential:!!opts.residential,signatureOption:opts.signatureOption||"none",
+    saturdayDelivery:!!opts.saturdayDelivery,
+    insuranceAmount:(opts.insuranceAmount!=null&&opts.insuranceAmount!==""&&+opts.insuranceAmount>0)?+opts.insuranceAmount:null,
     sender:{...(sender||{}),country:(sender&&sender.country)||"US"},
     receiver:{name:o.customer,company:o.company,address1:o.address1,address2:o.address2,city:o.city,state:o.state,zip:o.zip,country:o.country||"US",phone:o.phone,email:o.email},
     pieces:[{weight:Math.ceil(+wt||1),length:box.L,width:box.W,height:box.H}],   // book at the same rounded-up billing weight the quote priced
@@ -414,7 +416,7 @@ function orFillMerge(target,fill){
 async function shipCall(payload){
   const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),20000);
   try{
-    const r=await fetch(SHIP_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload),signal:ctrl.signal});
+    const r=await fetch(SHIP_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:CLOUD.token||undefined,...payload}),signal:ctrl.signal});
     clearTimeout(t);
     let data=null; try{data=await r.json();}catch(e){ try{data={ok:false,error:await r.text()};}catch(e2){data={ok:false,error:"Bad response"};} }
     return data||{ok:false,error:"Empty response"};
@@ -1374,7 +1376,7 @@ async function connectorPushTracking(c,creds,o){ return connectorCall(fn(c.endpo
 async function placesCall(payload,timeout=8000){
   const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),timeout);
   try{
-    const r=await fetch(PLACES_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload),signal:ctrl.signal});
+    const r=await fetch(PLACES_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:CLOUD.token||undefined,...payload}),signal:ctrl.signal});
     let d=null;try{d=await r.json();}catch(e){d={ok:false,error:"Bad response"};}
     return d||{ok:false,error:"Empty"};
   }catch(e){return {ok:false,error:(e&&e.message)||"Network error"};}
@@ -1383,7 +1385,7 @@ async function placesCall(payload,timeout=8000){
 async function fedexCall(payload,timeout=15000){
   const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),timeout);
   try{
-    const r=await fetch(FEDEX_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload),signal:ctrl.signal});
+    const r=await fetch(FEDEX_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:CLOUD.token||undefined,...payload}),signal:ctrl.signal});
     let d=null;try{d=await r.json();}catch(e){try{d={ok:false,error:await r.text()};}catch(e2){d={ok:false,error:"Bad response"};}}
     return d||{ok:false,error:"Empty response"};
   }catch(e){return {ok:false,error:(e&&e.message)||"Network error"};}
@@ -2477,7 +2479,7 @@ function rateSellFor(cost,label,ctx){
      with no rule takes the account-wide markup if one is set, else passes through at the billed
      amount. Total = priced base + priced fees. Min $ = a floor on the BASE. The account
      "Min $ profit / label" still floors profit against the TRUE total carrier cost. */
-  if(cost!=null&&c.rules&&Array.isArray(c.surcharges)&&c.surcharges.length&&!c._noSurAdj){
+  if(cost!=null&&c.rules&&Array.isArray(c.surcharges)&&!c._noSurAdj){
     const prof=c.prof||rateProfileFor(c.rules,c.client&&c.client.id);
     const sc=(prof&&prof.surcharges)||{};
     const aPctF=(c.client&&c.client.markup!=null&&c.client.markup!==""&&!isNaN(+c.client.markup)&&+c.client.markup!==0)?+c.client.markup:null;
@@ -2503,11 +2505,15 @@ function rateSellFor(cost,label,ctx){
     }
     const baseCost=Math.max(0,Math.round((cost-feeCost)*100)/100);
     /* the base prices off the LIST BASE when the quote provides it — never list-total */
-    const baseSell=rateSellFor(baseCost,label,{...c,prof,list:(c.listBase!=null?c.listBase:null),_noSurAdj:true});
+    const baseSell=rateSellFor(baseCost,label,{...c,prof,list:(c.listBase!=null?c.listBase:(c.list!=null?c.list:null)),_noSurAdj:true});
     if(baseSell==null)return null;
     let out=Math.round((baseSell+feeSell)*100)/100;
     const aMin2=(c.client&&c.client.markupMin!=null&&c.client.markupMin!==""&&!isNaN(+c.client.markupMin)&&+c.client.markupMin>0)?+c.client.markupMin:null;
-    if(aMin2!=null&&out<cost+aMin2)out=Math.round((cost+aMin2)*100)/100;
+    /* Flat-priced services are EXEMPT from the account profit floor: "flat $15.30" must sell
+       and display exactly $15.30 — flat means the sell never moves, whatever the margin. */
+    const svcRule2=prof&&prof.services&&prof.services[rateSvcKey(label)];
+    const isFlat2=!!(svcRule2&&svcRule2.basis==="flat"&&svcRule2.pct!=null&&svcRule2.pct!==""&&!isNaN(+svcRule2.pct));
+    if(!isFlat2&&aMin2!=null&&out<cost+aMin2)out=Math.round((cost+aMin2)*100)/100;
     if(c._parts){c._parts.base=Math.round(baseSell*100)/100;c._parts.fees=feeParts;}
     return out;
   }
@@ -2546,6 +2552,7 @@ function rateSellFor(cost,label,ctx){
   if(!rules)return fallback();
   if(!rule)return fallback();
   let sell=null;
+  let skipSvcMin=false;   // a break-range Min $ overrides the service Min $ (floor below still applies)
   if(rule.basis==="list"){
     const dom=c.fromZip&&c.toZip&&/^\d/.test(String(c.toZip));
     const zone=dom?String(zoneEst(c.fromZip,c.toZip)):null;
@@ -2569,7 +2576,7 @@ function rateSellFor(cost,label,ctx){
     if(list==null||disc==null)return fallback();          // no live list and no table → honest fallback
     sell=list*(1-disc/100);
     const bmnL=brkL?num(brkL.min):null;
-    if(bmnL!=null){ if(sell<bmnL)sell=bmnL; return Math.round(sell*100)/100; }   // per-range Min $ overrides the service Min $
+    if(bmnL!=null){ if(sell<bmnL)sell=bmnL; skipSvcMin=true; }   // per-range Min $ overrides the service Min $
   } else if(rule.basis==="fixed"){
     const amt=num(rule.pct); if(amt==null)return fallback();
     sell=cost+amt;
@@ -2597,10 +2604,16 @@ function rateSellFor(cost,label,ctx){
     if(pct==null)return fallback();
     sell=cost*(1+pct/100);
     const bmn=brk?num(brk.min):null;
-    if(bmn!=null){ if(sell<bmn)sell=bmn; return Math.round(sell*100)/100; }   // per-range Min $ overrides the service Min $
+    if(bmn!=null){ if(sell<bmn)sell=bmn; skipSvcMin=true; }   // per-range Min $ overrides the service Min $
   }
   const min=num(rule.min);
-  if(min!=null&&sell<min)sell=min;
+  if(!skipSvcMin&&min!=null&&sell<min)sell=min;
+  /* Account "Min $ profit / label" floors EVERY rule path (it used to vanish whenever a rule
+     priced a quote with no itemized fee lines — One Rate rows, local estimates — so the same
+     account got the floor or not depending on whether FedEx happened to itemize a fee).
+     Skipped on inner base-only calls: the wrapper floors the TOTAL against full carrier cost,
+     and flooring the base separately would stack the floor on top of fee margin. */
+  if(!c._noSurAdj&&aMin!=null&&sell<cost+aMin)sell=cost+aMin;
   return Math.round(sell*100)/100;
 }
 /* Accessorial fee schedule from the customer's profile — replaces the hardcoded constants when rules exist. */
@@ -3127,14 +3140,14 @@ function FedexCertLab({settings}){
   const [busy,setBusy]=useState(false);
   const [runAll,setRunAll]=useState(null);   // {i,total,current} while the set runs
   const [lastErr,setLastErr]=useState(null);
-  useEffect(()=>{let c=false;(async()=>{try{const r=await fetch("/.netlify/functions/fedex-ship",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"status"})});const j=await r.json();if(!c)setSt({loading:false,...j});}catch(e){if(!c)setSt({loading:false,ok:false,error:"The fedex-ship function isn't deployed yet."});}})();return()=>{c=true;};},[]);
+  useEffect(()=>{let c=false;(async()=>{try{const r=await fetch("/.netlify/functions/fedex-ship",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"status",token:CLOUD.token||undefined})});const j=await r.json();if(!c)setSt({loading:false,...j});}catch(e){if(!c)setSt({loading:false,ok:false,error:"The fedex-ship function isn't deployed yet."});}})();return()=>{c=true;};},[]);
   const setF2=(k,v)=>setF(p=>({...p,[k]:v}));
   const A=(o,set)=>(k)=>({value:o[k]||"",onChange:(e)=>set(p=>({...p,[k]:e.target.value}))});
   const fa=A(from,setFrom),ta=A(to,setTo);
   const shipOne=async(over)=>{
     const s={...f,...(over||{}),from,to};
     if(s.service==="home")s.residential=true;
-    const r=await fetch("/.netlify/functions/fedex-ship",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"ship",shipment:s})});
+    const r=await fetch("/.netlify/functions/fedex-ship",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"ship",shipment:s,token:CLOUD.token||undefined})});
     return await r.json();
   };
   const record=(res,svcLabel)=>setLog(l=>[{id:Date.now()+Math.random(),ts:new Date().toLocaleString(),service:res.serviceName||svcLabel,tracking:res.tracking,labelBase64:res.labelBase64,labelType:res.labelType,env:res.env},...l].slice(0,12));
@@ -5649,7 +5662,7 @@ function AssistantChat({who,getContext,onAction}){
     const next=[...msgs,{role:"user",content:q}];
     setMsgs(next);setInput("");setBusy(true);
     try{
-      const r=await fetch("/.netlify/functions/assistant",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:next.filter(m=>!m.act).slice(-16),context:who,appContext:getContext?getContext():undefined,brand:BRAND.product})});
+      const r=await fetch("/.netlify/functions/assistant",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:CLOUD.token||undefined,messages:next.filter(m=>!m.act).slice(-16),context:who,appContext:getContext?getContext():undefined,brand:BRAND.product})});
       const d=await r.json().catch(()=>null);
       setMsgs(m=>[...m,{role:"assistant",content:(d&&d.ok&&d.text)||(d&&d.error)||"Couldn’t reach the assistant just now — try again in a moment."}]);
       if(d&&d.ok&&Array.isArray(d.actions)&&d.actions.length&&onAction){
@@ -6496,7 +6509,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const [shipHsMsg,setShipHsMsg]=useState(null);
   const shipSuggestHS=async(i)=>{ const l0=customs.lines[i]; if(!l0||!l0.desc)return;
     setShipHsBusy(i); setShipHsMsg(null);
-    try{ const rs=await fetch("/.netlify/functions/hs-lookup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({description:l0.desc,destination:receiver.country||""})});
+    try{ const rs=await fetch("/.netlify/functions/hs-lookup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:CLOUD.token||undefined,description:l0.desc,destination:receiver.country||""})});
       if(rs.status===404){setShipHsMsg({err:"The AI lookup isn't deployed yet: commit netlify/functions/hs-lookup.js to the repo, then add ANTHROPIC_API_KEY on Netlify and redeploy."});setShipHsBusy(-1);return;}
       const d=await rs.json();
       if(d&&d.ok&&(d.options||d.code)){ const opts=(d.options&&d.options.length)?d.options:[{code:d.code,reason:d.reason||""}]; setShipHsOpts({line:i,opts}); setShipHsMsg({ok:"ShipHub AI suggests — pick the code that fits best (verify before filing; classification is the shipper's responsibility):"}); }
@@ -8001,7 +8014,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
     if(!ready){setRateSrc({rates:[],live:false,loading:false});return;}
     if(canBook){
       setRateSrc(s=>({...s,loading:true}));
-      ratesForOrder(o,{residential,box,weightLb:+weight,fromZip,sender:settings.sender,packageTypeCode:orBox?orBox.code:""},eng).then(res=>{ if(cancel)return;
+      ratesForOrder(o,{residential,box,weightLb:+weight,fromZip,sender:settings.sender,signatureOption:o.signatureOption||"none",saturdayDelivery:!!o.saturday,insuranceAmount:(o.insurance!=null&&+o.insurance>0)?o.insurance:null,packageTypeCode:orBox?orBox.code:""},eng).then(res=>{ if(cancel)return;
         if(res&&res.live&&res.rates&&res.rates.length)setRateSrc({rates:res.rates,live:true,loading:false});
         else setRateSrc({rates:localOrderQuotes(),live:false,loading:false});
       });
@@ -8023,7 +8036,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
     if(need.length){ setStatus({state:"error",msg:"FedEx needs the receiver's "+need.join(", ")+". Edit the order or open in Ship tab."}); return; }
     setBought(qq.key); setStatus({state:"booking",msg:"Booking with FedEx…"});
     const _orFD=orBoxRefFill({...qq,packageTypeCode:qq.packageTypeCode||(orBox?orBox.code:"")},settings.orBoxField,o.name);
-    const res=await bookOrderLabel(o,{quote:qq,box,weightLb:+weight,residential,packageTypeCode:orBox?orBox.code:(qq.packageTypeCode||""),sender:settings.sender,..._orFD},eng,settings.sender);
+    const res=await bookOrderLabel(o,{quote:qq,box,weightLb:+weight,residential,signatureOption:o.signatureOption||"none",saturdayDelivery:!!o.saturday,insuranceAmount:(o.insurance!=null&&+o.insurance>0)?o.insurance:null,packageTypeCode:orBox?orBox.code:(qq.packageTypeCode||""),sender:settings.sender,..._orFD},eng,settings.sender);
     if(!res||!res.ok){ setStatus({state:"error",msg:(res&&res.error)||"Booking failed"}); setBought(null); return; }
     const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:qq.label,recipient:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings?.sender||{})},fromZip,toZip:o.zip,weight:+weight,pieces:[{weight:+weight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference:o.name,bookNumber:res.bookNumber};
     onShipped(rec,o.id);
@@ -8213,7 +8226,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   const baseQuotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>{const _p={};const _sell=rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,listBase:qq.listBase,surcharges:qq.surcharges,fromZip,toZip:rcv.zip,weight:totalWeight,_parts:_p});return {...qq,sell:_sell,_sellParts:_p.fees?_p:undefined};});},[rateSrc,residential,client,addrClassified,rateRules,settings]);
   const quotes=useMemo(()=>{
     const withTransit=(list)=>list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};});
-    return cleanServiceList(withTransit([...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday:sat,insurance,fees:surchargeFees(rateRules,client)}))),{intl:_intl,residential:addrClassified?residential:null}).sort((a,b)=>(a.sell||0)-(b.sell||0));
+    return cleanServiceList(withTransit([...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:rateSrc.live?"none":sigOption,saturday:sat,insurance,fees:surchargeFees(rateRules,client)}))),{intl:_intl,residential:addrClassified?residential:null}).sort((a,b)=>(a.sell||0)-(b.sell||0));
   },[baseQuotes,orRates,fxTransit,sigOption,sat,insurance,rateRules,_intl,addrClassified,residential]);
   const best=null;
   /* Autopilot preselect — parity with the Ship tab: when "apply rules on the Ship screen" is ON,
@@ -8248,7 +8261,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
     if(need.length){ setStatus({state:"error",msg:"FedEx needs the receiver's "+need.join(", ")+"."}); return; }
     setBought(qq.key); setStatus({state:"booking",msg:"Booking with FedEx…"});
     const _orFM=orFillMerge({reference:reference||o.name,invoiceNo,poNo},orBoxRefFill(qq,settings.orBoxField,o.name));
-    const res=await bookOrderLabel(dest,{quote:qq,box,weightLb:totalWeight,residential,packageTypeCode:qq.packageTypeCode||"",sender:settings.sender,reference:_orFM.reference,invoiceNo:_orFM.invoiceNo,poNo:_orFM.poNo},eng,settings.sender);
+    const res=await bookOrderLabel(dest,{quote:qq,box,weightLb:totalWeight,residential,signatureOption:sigOption,saturdayDelivery:sat,insuranceAmount:insurance||null,packageTypeCode:qq.packageTypeCode||"",sender:settings.sender,reference:_orFM.reference,invoiceNo:_orFM.invoiceNo,poNo:_orFM.poNo},eng,settings.sender);
     if(!res||!res.ok){ setStatus({state:"error",msg:(res&&res.error)||"Booking failed"}); setBought(null); return; }
     const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,...baseRec,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,bookNumber:res.bookNumber};
     onShipped(rec,o.id);
@@ -8664,7 +8677,7 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
   const QQ_SKELETON=[["fedex_ground","FedEx Ground®"],["fedex_home","FedEx Home Delivery®"],["fedex_saver","FedEx Express Saver®"],["fedex_2day","FedEx 2Day®"],["fedex_std","FedEx Standard Overnight®"],["fedex_prio","FedEx Priority Overnight®"]].map(([k,l])=>({key:k,carrier:"FedEx",label:l,cost:null}));
   const _qqHs=new Set(cz(settings||{}).hiddenServices||[]);
   const _qqBs=new Set((effClient&&effClient.blockedServices)||[]);
-  const quotes=useMemo(()=>[...(rateSrc.rates.length?rateSrc.rates:QQ_SKELETON).filter(q=>q.carrier==="FedEx"&&!_qqHs.has(canonSvc(q.label))&&!_qqBs.has(canonSvc(q.label))).map(q=>{const _p={};const _sell=rateSellFor(q.cost,q.label,{rules:rateRules,client:effClient,list:q.list,listBase:q.listBase,surcharges:q.surcharges,fromZip,toZip,weight:pieces.reduce((a,p)=>a+(+p.weight||0),0),_parts:_p});return {...q,sell:_sell,_sellParts:_p.fees?_p:undefined};}),...qqOrRates.filter(q=>!_qqHs.has(canonSvc(q.label))&&!_qqBs.has(canonSvc(q.label)))].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:sigOption,saturday,insurance,fees:surchargeFees(rateRules,effClient)})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,effClient,rateRules,fxTransit,qqOrRates,sigOption,saturday,insurance,fromZip,toZip,JSON.stringify(pieces)]);
+  const quotes=useMemo(()=>[...(rateSrc.rates.length?rateSrc.rates:QQ_SKELETON).filter(q=>q.carrier==="FedEx"&&!_qqHs.has(canonSvc(q.label))&&!_qqBs.has(canonSvc(q.label))).map(q=>{const _p={};const _sell=rateSellFor(q.cost,q.label,{rules:rateRules,client:effClient,list:q.list,listBase:q.listBase,surcharges:q.surcharges,fromZip,toZip,weight:totalWeight,_parts:_p});return {...q,sell:_sell,_sellParts:_p.fees?_p:undefined};}),...qqOrRates.filter(q=>!_qqHs.has(canonSvc(q.label))&&!_qqBs.has(canonSvc(q.label)))].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:rateSrc.live?"none":sigOption,saturday,insurance,fees:surchargeFees(rateRules,effClient)})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,effClient,rateRules,fxTransit,qqOrRates,sigOption,saturday,insurance,fromZip,toZip,JSON.stringify(pieces)]);
   const hasExpress=quotes.some(q=>{const l=String(q.label||"").toLowerCase();return /(overnight|2\s?day|express saver)/.test(l);});
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-8 bg-stone-900/40 backdrop-blur-sm overflow-auto" onClick={onClose}>
@@ -8991,7 +9004,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
     const P=String(groundFamilySwap(pref,residential));
     if(/^ANY/i.test(P)){
       if(/ground/i.test(P))return qs.filter(q=>/ground|home/i.test(q.label||"")).sort((a,b)=>(a.cost||0)-(b.cost||0))[0]||cheap;
-      if(/2\s*day/i.test(P))return qs.filter(q=>/^(or_)?2day/.test(rateSvcKey(q.label))).sort((a,b)=>(a.cost||0)-(b.cost||0))[0]||cheap;
+      if(/2\s*day/i.test(P))return qs.filter(q=>/^(or_)?2day(?!_am)/.test(rateSvcKey(q.label))).sort((a,b)=>(a.cost||0)-(b.cost||0))[0]||cheap;
       if(/fastest/i.test(P))return qs.slice().sort((a,b)=>speedRank(a.label)-speedRank(b.label)||(a.cost||0)-(b.cost||0))[0];
       return cheap;
     }
@@ -9172,7 +9185,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         const _orBox0=oneRateBoxFor(_box0.L,_box0.W,_box0.H,_wt0);   // same live-One-Rate detection the Ship tab uses — Batch never asked for this before
         _resKnownB=await classifyOrderAddress(o,originZip);   // ground↔home follows the FedEx classification, same as Autopilot
         _resFlagB=_resKnownB==null?true:_resKnownB;
-        const res=await ratesForOrder(o,{residential:_resFlagB,weightLb:_wt0,box:pk0&&pk0.pieces[0]?_box0:undefined,fromZip:originZip,sender:settings.sender,packageTypeCode:_orBox0?_orBox0.code:""},eng);
+        const res=await ratesForOrder(o,{residential:_resFlagB,weightLb:_wt0,box:pk0&&pk0.pieces[0]?_box0:undefined,fromZip:originZip,sender:settings.sender,signatureOption:o.signatureOption||"none",saturdayDelivery:!!o.saturday,insuranceAmount:(o.insurance!=null&&+o.insurance>0)?o.insurance:null,packageTypeCode:_orBox0?_orBox0.code:""},eng);
         const _hs=new Set(cz(settings).hiddenServices||[]);const _bs=new Set((client&&client.blockedServices)||[]);let qs=((res&&res.rates)||[]).filter(q=>!_hs.has(canonSvc(q.label))&&!_bs.has(canonSvc(q.label))).filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk([{weight:_wt0,L:_box0.L,W:_box0.W,H:_box0.H}])).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,listBase:q.listBase,surcharges:q.surcharges,fromZip:originZip,toZip:o.zip,weight:(pk0&&pk0.totalWt)||o.weight||1})}));   // GE filter checks the SAME single piece the rate call priced
         picked=pickByPref(qs,svcOv[o.id],_resKnownB);
         if(!picked){
@@ -9192,7 +9205,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
       if(need.length){ out.push({o,name:o.name,orderId:o.id,ok:false,error:"Missing "+need.join(", ")}); setResults([...out]); continue; }
       const pkB=packs[o.id];
       const _orFill=orBoxRefFill(picked,settings.orBoxField,o.name);
-      const res=await bookOrderLabel(o,{quote:picked,weightLb:(pkB&&pkB.totalWt)||o.weight,box:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:undefined,residential:_resFlagB,shipDate:batchShipDate,sender:settings.sender,..._orFill},eng,settings.sender);
+      const res=await bookOrderLabel(o,{quote:picked,weightLb:(pkB&&pkB.totalWt)||o.weight,box:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:undefined,residential:_resFlagB,signatureOption:o.signatureOption||"none",saturdayDelivery:!!o.saturday,insuranceAmount:(o.insurance!=null&&+o.insurance>0)?o.insurance:null,shipDate:batchShipDate,sender:settings.sender,..._orFill},eng,settings.sender);
       if(res&&res.ok){
         const carrier=carrierOf(picked.label);
         const _rec={id:Date.now()+o.id,date:batchShipDate?new Date(batchShipDate+"T12:00:00").toLocaleDateString():new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:originZip,toZip:o.zip,weight:(pkB&&pkB.totalWt)||o.weight,pieces:pkB?pkB.pieces:undefined,dims:pkB&&pkB.pieces[0]?{L:pkB.pieces[0].L,W:pkB.pieces[0].W,H:pkB.pieces[0].H}:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,items:o.items||"",note:o.note||"",bookNumber:res.bookNumber,..._orFill};
@@ -11012,7 +11025,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
       /* "ANY - Cheapest 2 Day" and "ANY - Fastest" are in RULE_SERVICES but had no handler
          here — both silently returned the cheapest service overall, so a Cheapest-2Day rule
          booked Home Delivery. */
-      if(/2\s*day/i.test(P)){const d=qs.filter(q=>/^(or_)?2day/.test(rateSvcKey(q.label))).sort(byCost)[0]; return d||cheap;}
+      if(/2\s*day/i.test(P)){const d=qs.filter(q=>/^(or_)?2day(?!_am)/.test(rateSvcKey(q.label))).sort(byCost)[0]; return d||cheap;}
       if(/fastest/i.test(P))return qs.slice().sort((a,b)=>speedRank(a.label)-speedRank(b.label)||byCost(a,b))[0];
       return cheap;
     }
@@ -11053,7 +11066,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
            rule swaps to the ground-family service that matches the address. */
         const _resKnown=await classifyOrderAddress(o,senderZip);
         _resFlag=_resKnown==null?true:_resKnown;
-        const res=await ratesForOrder(o,{residential:_resFlag,weightLb:wt,fromZip:senderZip,sender:settings.sender,box:_box0,packageTypeCode:_orBox0?_orBox0.code:""},eng);
+        const res=await ratesForOrder(o,{residential:_resFlag,weightLb:wt,fromZip:senderZip,sender:settings.sender,box:_box0,signatureOption:o.signatureOption||"none",saturdayDelivery:!!o.saturday,insuranceAmount:(o.insurance!=null&&+o.insurance>0)?o.insurance:null,packageTypeCode:_orBox0?_orBox0.code:""},eng);
         const _apHs=new Set(cz(settings).hiddenServices||[]);const _apBs=new Set((client&&client.blockedServices)||[]);
         const qs=((res&&res.rates)||[]).filter(q=>!_apHs.has(canonSvc(q.label))&&!_apBs.has(canonSvc(q.label))).map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,listBase:q.listBase,surcharges:q.surcharges,fromZip:senderZip,toZip:o.zip,weight:wt})}));
         picked=pickRate(qs,pref,_resKnown);
@@ -11062,7 +11075,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
       const need=[];if(!o.customer&&!o.company)need.push("name");if(String(o.phone||"").replace(/\D/g,"").length<10)need.push("phone");if(!o.email)need.push("email");
       if(need.length){rows.push({name:o.name,orderId:o.id,ok:false,error:"Missing "+need.join(", ")});setApResults({rows:[...rows],heldN});continue;}
       const _orFill=orBoxRefFill(picked,settings.orBoxField,o.name);
-      const res=await bookOrderLabel(o,{quote:picked,weightLb:wt,residential:_resFlag,shipDate:apShipDate,sender:settings.sender,..._orFill},eng,settings.sender);
+      const res=await bookOrderLabel(o,{quote:picked,weightLb:wt,residential:_resFlag,signatureOption:o.signatureOption||"none",saturdayDelivery:!!o.saturday,insuranceAmount:(o.insurance!=null&&+o.insurance>0)?o.insurance:null,shipDate:apShipDate,sender:settings.sender,..._orFill},eng,settings.sender);
       if(res&&res.ok){
         const carrier=/dhl/i.test(picked.label)?"DHL":"FedEx";
         const _apRec={id:Date.now()+o.id,date:apShipDate?new Date(apShipDate+"T12:00:00").toLocaleDateString():new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,service:picked.label,recipient:{name:o.customer,company:o.company,city:o.city,state:o.state,zip:o.zip,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings.sender||{})},fromZip:senderZip,toZip:o.zip,weight:wt,dims:{L:12,W:9,H:4},cost:picked.cost,sell:picked.sell,billTo:"sender",status:"Label created",reference:o.name,items:o.items||"",note:o.note||"",bookNumber:res.bookNumber,..._orFill};
@@ -11636,7 +11649,7 @@ function CIEditor({settings,setSettings,shipments}){
   const [hsMsg,setHsMsg]=useState(null);
   const suggestHS=async(i)=>{ const r0=doc.rows[i]; if(!r0||!r0.name)return;
     setHsBusy(i); setHsMsg(null);
-    try{ const rs=await fetch("/.netlify/functions/hs-lookup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({description:r0.name,destination:doc.consignee.country||""})});
+    try{ const rs=await fetch("/.netlify/functions/hs-lookup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:CLOUD.token||undefined,description:r0.name,destination:doc.consignee.country||""})});
       const d=await rs.json();
       if(d&&d.ok&&d.code){ setRow(i,{hs:d.code}); setHsMsg({ok:`${d.code} — ${d.reason||"suggested"} (verify before filing; classification is the shipper's responsibility)`}); }
       else setHsMsg({err:(d&&d.error)||"Lookup failed — is ANTHROPIC_API_KEY set on Netlify?"});
@@ -12382,7 +12395,7 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
     for(const cid of ids){
       try{
         const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),12000);
-        const r=await fetch(RATES_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"flushCache",account:{customerId:cid}}),signal:ctrl.signal});
+        const r=await fetch(RATES_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"flushCache",token:CLOUD.token||undefined,account:{customerId:cid}}),signal:ctrl.signal});
         clearTimeout(t);
         const res=await r.json().catch(()=>null);
         if(res&&res.ok) done++; else failed.push(cid);
@@ -12399,7 +12412,7 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
   const runUpsTest=async()=>{
     setUpsTest({loading:true});
     try{
-      const r=await fetch("/.netlify/functions/ups",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"test",account:{clientId:ups.clientId,clientSecret:ups.clientSecret,account:ups.account,env:ups.env}})});
+      const r=await fetch("/.netlify/functions/ups",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"test",token:CLOUD.token||undefined,account:{clientId:ups.clientId,clientSecret:ups.clientSecret,account:ups.account,env:ups.env}})});
       const res=await r.json();
       if(res&&res.ok) setUpsTest({ok:true,msg:res.msg||"UPS connected"});
       else setUpsTest({ok:false,msg:(res&&res.error)||"Could not connect to UPS."});

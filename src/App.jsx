@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v441";
+const BUILD_TAG="addr-v442";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -5717,7 +5717,7 @@ function AppInner(){
   const [qq,setQQ]=useState(false);
   const [navOpen,setNavOpen]=useState(false);
   const [prefill,setPrefill]=useState(null);
-  const [settingsRaw,setSettingsRaw]=usePersist("settings",{company:"Freightwire",sender:{name:"",company:"",zip:"",state:"",city:"",address1:"",phone:"",email:""},defaultBillTo:"sender",thirdPartyAccts:[{id:"tp1",carrier:"FedEx",account:"20601652",label:"England FedEx"}],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,products:SEED_PRODUCTS,checkout:CHECKOUT_DEFAULTS,platforms:PLATFORM_DEFAULTS,plan:"starter",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:"20601652"},addresses:[],warehouses:[],autoRunRules:false,brand:DEFAULT_BRAND,domains:[],companyLogo:""});
+  const [settingsRaw,setSettingsRaw]=usePersist("settings",{company:"",sender:{name:"",company:"",zip:"",state:"",city:"",address1:"",phone:"",email:""},defaultBillTo:"sender",thirdPartyAccts:[{id:"tp1",carrier:"FedEx",account:"20601652",label:"England FedEx"}],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,products:SEED_PRODUCTS,checkout:CHECKOUT_DEFAULTS,platforms:PLATFORM_DEFAULTS,plan:"starter",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:"20601652"},addresses:[],warehouses:[],autoRunRules:false,brand:DEFAULT_BRAND,domains:[],companyLogo:""});
   const deployedCustom=useMemo(()=>{ const uid=currentUser&&currentUser.id;
     const fl=(uid&&featureFlags&&featureFlags[uid])||(CLOUD.mode==="cloud"?(myFeatures||{}):{});
     return (fl&&fl._custom)||{};
@@ -5938,7 +5938,7 @@ function AppInner(){
         }
       }
     }
-    if(settings.notify?.shipped&&rec.recipient?.name) logEmail({to:(rec.recipient?.email)||"customer@example.com",subject:`Your ${settings.company} order has shipped ☁️`,type:"Shipped"});
+    if(settings.notify?.shipped&&rec.recipient?.name) logEmail({to:(rec.recipient?.email)||"customer@example.com",subject:`Your ${settings.company||BRAND.product} order has shipped ☁️`,type:"Shipped"});
     addLedger({type:"Shipping charge",ref:rec.reference||rec.tracking,amount:-(rec.sell||0)});
   };
   // record an order that pushed to England but hasn't booked yet, so we can pull its label later
@@ -6784,8 +6784,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     return {t:"info",m:"booking now…"};
   },[handsFree,custom.autoRulesOnShip,custom.hideShipOrders,selectedOrder,hfArmed,ready,rateSrc.live,rateSrc.loading,addrClassified,matched,quotes,bought,shipStatus,client,settings,liveRuleMatch,JSON.stringify(pieces)]);
 
-  const sendEmail=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Tracking for your ${settings.company} shipment ☁️`,type:"Shipped",body:emailMsg});setSent("email");setTimeout(()=>setSent(""),1800);};
-  const sendLabel=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Your shipping label from ${settings.company}`,type:"Label",body:emailMsg});setSent("label");setTimeout(()=>setSent(""),1800);};
+  const sendEmail=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Tracking for your ${settings.company||BRAND.product} shipment ☁️`,type:"Shipped",body:emailMsg});setSent("email");setTimeout(()=>setSent(""),1800);};
+  const sendLabel=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Your shipping label from ${settings.company||BRAND.product}`,type:"Label",body:emailMsg});setSent("label");setTimeout(()=>setSent(""),1800);};
   const saveMsgDefault=()=>{setSettings&&setSettings(s=>({...s,emailMessage:emailMsg}));setMsgSaved(true);setTimeout(()=>setMsgSaved(false),1600);};
 
   const ordersToShow=useMemo(()=>{const list=orders.filter(o=>o.status==="unfulfilled");return [...list].sort((a,b)=>{
@@ -11650,17 +11650,20 @@ function GeneralSettings({settings,setSettings,goSec,audit=[],currentUser,setCur
   const set=(k,v)=>setSettings(p=>({...p,[k]:v}));
   const sn=settings.sender||{};
   const setSn=(k,v)=>setSettings(p=>({...p,sender:{...(p.sender||{}),[k]:v}}));
-  const F=({k,label,ph,hint,type})=>(<label className="block text-sm text-stone-700">{label}
+  /* plain function, NOT a component: a component type defined inside render remounts its input
+     on every keystroke (one letter at a time, cursor gone). Called as {F({...})} there's no
+     component boundary, so the input keeps focus. */
+  const F=({k,label,ph,hint,type})=>(<label key={k} className="block text-sm text-stone-700">{label}
     <input type={type||"text"} value={settings[k]||""} onChange={e=>set(k,e.target.value)} placeholder={ph} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
     {hint&&<span className="block text-[11px] text-stone-400 mt-0.5">{hint}</span>}</label>);
   const links=[["shipscreen","Ship screen","Scan mode, hidden fields & Ship-tab options"],["customize","Customizations","Services, appearance, tabs & packing slips"],["reference","Reference Fields","Dropdown values, required & locked fields"],["carriers",BRAND.fw?"FedEx Account":"Carrier accounts",BRAND.fw?"Your FedEx connection":"FedEx & DHL connections"],["boxes","Package sizes","Your box library"],["printer","Print settings","Labels, printing, doc tabs & automation"],["notifications","Email automation","Customer notifications"],["integrations","Integrations","Stores & order sources"]];
   return (<div className="max-w-2xl space-y-4">
     <Panel title="Your company">
       <div className="grid sm:grid-cols-2 gap-3">
-        <F k="company" label="Company name" ph="Acme Outfitters" hint="Shown in the header and on packing slips."/>
-        <F k="taxId" label="Tax ID / EIN" ph="12-3456789" hint="Prints automatically on commercial invoices for international shipments."/>
-        <F k="supportEmail" label="Support email" ph="support@yourstore.com" type="email"/>
-        <F k="supportPhone" label="Support phone" ph="(801) 555-0100" type="tel"/>
+        {F({k:"company",label:"Company name",ph:"Acme Outfitters",hint:"Shown in the header and on packing slips."})}
+        {F({k:"taxId",label:"Tax ID / EIN",ph:"12-3456789",hint:"Prints automatically on commercial invoices for international shipments."})}
+        {F({k:"supportEmail",label:"Support email",ph:"support@yourstore.com",type:"email"})}
+        {F({k:"supportPhone",label:"Support phone",ph:"(801) 555-0100",type:"tel"})}
       </div>
     </Panel>
     <Panel title="Default sender (ship-from)">
@@ -11898,7 +11901,8 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
     <span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span></label>);
   const Sel=({k,label,opts})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>{label}</span>
     <select value={c[k]} onChange={e=>set(k,e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]">{opts.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>);
-  const Num=({k,label,hint,step,suffix,prefix})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span>
+  /* called as {Num({...})}, not <Num/> — an inline component type remounts its input every render (focus loss) */
+  const Num=({k,label,hint,step,suffix,prefix})=>(<label key={k} className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span>
     <span className="flex items-center gap-1">{prefix&&<span className="text-stone-400 text-sm">{prefix}</span>}<input type="number" min="0" step={step||1} value={c[k]||""} placeholder="0" onChange={e=>set(k,+e.target.value||0)} className="w-20 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF] text-right"/>{suffix&&<span className="text-xs text-stone-400">{suffix}</span>}</span></label>);
   const SVC=[
     ["ground","FedEx Ground®"],["home","FedEx Home Delivery®"],["ground_economy","FedEx Ground Economy®"],
@@ -11956,9 +11960,9 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
         <Tog k="phoneRequired" label="Require receiver phone to book" hint="Uncheck to make phone optional"/>
         <Tog k="emailRequired" label="Require receiver email to book" hint="Uncheck to make email optional"/>
         <Sel k="defaultSignature" label="Default signature on new shipments" opts={[["none","None"],["indirect","Indirect"],["direct","Direct"],["adult","Adult"]]}/>
-        <Num k="autoInsureValue" label="Auto-insure orders over" hint="When you load an order worth this much or more, insurance is set to the full order value. 0 = off. Takes priority over the % below." prefix="$"/>
-        <Num k="autoInsurePct" label="Auto-insure orders (% of value)" hint="Legacy: insures this % of order value on load. Ignored if the $ threshold above is set. 0 = off" suffix="%"/>
-        <Num k="autoSigValue" label="Auto-add signature over" hint="When you load an order worth this much or more, a signature is added automatically. 0 = off. Uses the signature type below." prefix="$"/>
+        {Num({k:"autoInsureValue",label:"Auto-insure orders over",hint:"When you load an order worth this much or more, insurance is set to the full order value. 0 = off. Takes priority over the % below.",prefix:"$"})}
+        {Num({k:"autoInsurePct",label:"Auto-insure orders (% of value)",hint:"Legacy: insures this % of order value on load. Ignored if the $ threshold above is set. 0 = off",suffix:"%"})}
+        {Num({k:"autoSigValue",label:"Auto-add signature over",hint:"When you load an order worth this much or more, a signature is added automatically. 0 = off. Uses the signature type below.",prefix:"$"})}
         <Sel k="autoSigType" label="Signature type to auto-add" opts={[["indirect","Indirect"],["direct","Direct"],["adult","Adult"]]}/>
         <label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>Ship-date cutoff time<span className="block text-[11px] text-stone-400">After this local time, new shipments default to the NEXT day's ship date. Leave blank to always use today.</span></span>
           <span className="flex items-center gap-1"><input type="time" value={c.shipDateCutoff||""} onChange={e=>set("shipDateCutoff",e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"/>{c.shipDateCutoff&&<button onClick={()=>set("shipDateCutoff","")} className="text-[11px] text-stone-400 hover:text-rose-500">clear</button>}</span></label>
@@ -11972,7 +11976,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
         <Sel k="defaultView" label="Default rate view" opts={[["cheapest","Cheapest first"],["carrier","Grouped by carrier"]]}/>
         {(isAdmin||deployMode)&&<div className="rounded-lg border border-blue-100 bg-blue-50/40 p-2.5"><div className="text-[10px] uppercase tracking-widest text-blue-400 mb-1.5 flex items-center gap-1"><ShieldCheck className="w-3 h-3"/>Admin only</div><Tog k="showRateViewToggle" label="Show the Cheapest / By carrier switch on Ship" hint="Off = the rate list just uses the default view above, with no toggle or 'enter ZIP & weight' hint shown. Only you (admin) can turn this on."/></div>}
         <Sel k="transitStyle" label="Transit display" opts={[["date","Days + arrival date"],["days","Day count only"]]}/>
-        <Num k="priceWarn" label="Price alert" hint="Flag any rate above this amount. 0 = off" step="1" suffix="$"/>
+        {Num({k:"priceWarn",label:"Price alert",hint:"Flag any rate above this amount. 0 = off",step:"1",suffix:"$"})}
       </div>
       <div className="border-t border-stone-100 mt-3 pt-3">
         <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Services — hide ones you never use, rename the rest{(isAdmin||deployMode)&&locked.size>0&&<span className="normal-case tracking-normal text-stone-400"> · greyed-out ones you've turned off for this customer</span>}</div>
@@ -11999,9 +12003,9 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
       <div className="border-t border-stone-100 mt-3 pt-3 grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         <Tog k="autopilotPreview" label="Show an Autopilot preview column" hint="Adds a column showing what your Autopilot rules would pick for each order — the service, a hold, or 'no rule matches' — before you ship. Runs your real rules, updates live."/>
         <Sel k="density" label="List density" opts={[["comfortable","Comfortable"],["compact","Compact — more rows per screen"]]}/>
-        <Num k="spendCap" label="Spending cap" hint="Hard-blocks booking any label above this. 0 = off" suffix="$"/>
+        {Num({k:"spendCap",label:"Spending cap",hint:"Hard-blocks booking any label above this. 0 = off",suffix:"$"})}
         <Tog k="hotkeys" label="Keyboard shortcuts" hint="Press ? anywhere for the list — g then o jumps to Orders, etc."/>
-        <Num k="stuckDays" label="Stuck-shipment flag" hint="Highlight in-transit shipments older than this many days. 0 = off" suffix="days"/>
+        {Num({k:"stuckDays",label:"Stuck-shipment flag",hint:"Highlight in-transit shipments older than this many days. 0 = off",suffix:"days"})}
       </div>
     </Panel>}
 

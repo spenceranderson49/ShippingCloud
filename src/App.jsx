@@ -88,7 +88,7 @@ const FEATURE_CATALOG=[
   {id:"seeCosts",label:"See costs & spend",desc:"Rates, order totals, batch totals and Reports dollars. Turn OFF to hide all money from this customer's logins",default:true},
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own carrier accounts on the Connections page (England always shows; admins always have this)",default:false},
 ];
-const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All logins"],["rates","Rates & dim divisors"],["labelcert","FedEx labels"],["customizations","Features & access"],["branding","Branding"],["platforms","Carrier accounts"],["domains","Domains"]];
+const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All logins"],["rates","Rates & dim divisors"],["labelcert","FedEx labels"],["customizations","Features & access"],["branding","Branding"],["domains","Domains"]];
 const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,labelcert:Printer,customizations:Sliders,branding:Sparkles,platforms:Truck,domains:ExternalLink};
 /* A restricted admin ALWAYS keeps access to "users" — without it there is no self-service way
    to ever fix a permission set that’s missing something, for yourself or anyone else. A wrong
@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v458";
+const BUILD_TAG="addr-v459";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3251,7 +3251,7 @@ function FedexCertLab({settings}){
 
 /* ════════ ADMIN → CUSTOMERS (v202) — every customer, every login, everything editable ════════ */
 /* ════════ ADMIN → DASHBOARD (extracted for the tab workspace) ════════ */
-function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection}){
+function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection,clients=[]}){
   /* Operations home — every customer's shipments in one live feed (time · customer · carrier ·
      tracking · est. margin · quote), hourly/daily/weekly margin+count charts, and a by-customer
      rollup, all switchable Today / Week / Month / All. */
@@ -3262,7 +3262,15 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection}){
   const now=Date.now();
   const dayStart=(()=>{const d=new Date();d.setHours(0,0,0,0);return d.getTime();})();
   const cut=period==="today"?dayStart:period==="7d"?now-7*864e5:period==="30d"?now-30*864e5:0;
-  const inP=useMemo(()=>ships.filter(x=>tsOf(x)>=cut).sort((a,b)=>tsOf(b)-tsOf(a)),[ships,period,cut]);
+  const [feedQ,setFeedQ]=useState("");
+  const inP=useMemo(()=>{
+    let l=ships.filter(x=>tsOf(x)>=cut).sort((a,b)=>tsOf(b)-tsOf(a));
+    const q=feedQ.trim().toLowerCase();
+    if(q)l=l.filter(x=>[x.tracking,x.client,x.service,x.reference,uEmail(x._uid),(x.recipient&&x.recipient.name)].some(v=>String(v||"").toLowerCase().includes(q)));
+    return l;
+  },[ships,period,cut,feedQ]);
+  /* customer name → record: resolve the feed's display name back to a client id */
+  const cidOf=(x)=>{ const n=String(x.client||"").toLowerCase(); const hit=n&&clients.find(c=>String(c.name||"").toLowerCase()===n); return hit?hit.id:null; };
   const custOf=(x)=>x.client||uEmail(x._uid)||"—";
   const marginOf=(x)=>Math.round(((+x.sell||0)-(+x.cost||0))*100)/100;
   const live=inP.filter(x=>x.status!=="Voided");
@@ -3303,6 +3311,7 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection}){
   return (<div className="space-y-4">
     <div className="flex flex-wrap items-center gap-2">
       <div className="flex bg-stone-100 rounded-lg p-0.5 text-sm">{PERIODS.map(([v,l])=><button key={v} onClick={()=>setPeriod(v)} className={"px-3 py-1.5 rounded-lg "+(period===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500")}>{l}</button>)}</div>
+      <div className="relative"><Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2"/><input value={feedQ} onChange={e=>setFeedQ(e.target.value)} placeholder="Search tracking, customer, service…" className="bg-white border border-stone-200 rounded-lg pl-8 pr-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 w-64"/></div>
       <span className="flex-1"/>
       <button onClick={()=>openSection("customers")} className="text-[12px] text-[#0086E0] hover:underline">Customers →</button>
     </div>
@@ -3355,10 +3364,10 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection}){
           <table className="w-full text-[13px] min-w-[760px]">
             <thead className="sticky top-0 bg-stone-50 z-10"><tr className="text-[10px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal px-3 py-2">Time</th><th className="text-left font-normal px-3 py-2">Customer</th><th className="text-left font-normal px-3 py-2">Carrier</th><th className="text-left font-normal px-3 py-2">Tracking #</th><th className="text-left font-normal px-3 py-2">Service</th><th className="text-right font-normal px-3 py-2">Est. Margin</th><th className="text-right font-normal px-3 py-2">Quote</th></tr></thead>
             <tbody>
-              {inP.length===0&&<tr><td colSpan={7} className="px-3 py-10 text-center text-stone-400">No shipments in this period yet.</td></tr>}
+              {inP.length===0&&<tr><td colSpan={7} className="px-3 py-10 text-center text-stone-400">{feedQ?"Nothing matches your search in this period.":"No shipments in this period yet."}</td></tr>}
               {inP.slice(0,400).map((x,i)=>(<tr key={i} className={"border-t border-stone-100 "+(x.status==="Voided"?"opacity-45":"")}>
                 <td className="px-3 py-1.5 whitespace-nowrap text-stone-500">{timeOf(x)}</td>
-                <td className="px-3 py-1.5 max-w-[220px]"><div className="truncate font-medium text-stone-800">{custOf(x)}</div><div className="text-[10px] text-stone-400 truncate">{uEmail(x._uid)}</div></td>
+                <td className="px-3 py-1.5 max-w-[220px]">{(()=>{const _cid=cidOf(x);return _cid&&openCustomer?<button onClick={()=>openCustomer(_cid)} className="truncate font-medium text-[#0086E0] hover:underline text-left block max-w-full">{custOf(x)}</button>:<div className="truncate font-medium text-stone-800">{custOf(x)}</div>;})()}<div className="text-[10px] text-stone-400 truncate">{uEmail(x._uid)}</div></td>
                 <td className="px-3 py-1.5 whitespace-nowrap text-stone-600">{x.carrier||"—"}</td>
                 <td className="px-3 py-1.5 whitespace-nowrap font-mono text-[12px] text-stone-600">{x.tracking||"—"}{x.status==="Voided"&&<span className="ml-1 text-[9px] uppercase text-rose-400">void</span>}</td>
                 <td className="px-3 py-1.5 whitespace-nowrap text-stone-500 max-w-[160px] truncate">{(x.service||"").replace("FedEx ","")}</td>
@@ -3424,7 +3433,6 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
   const upClient=(patch)=>setClients(cs=>cs.map(x=>x.id===cid?{...x,...patch}:x));
   const upAddr=(patch)=>setClients(cs=>cs.map(x=>x.id===cid?{...x,address:{...(x.address||{}),...patch}}:x));
   const upPrefs=(patch)=>setClients(cs=>cs.map(x=>x.id===cid?{...x,prefs:{...(x.prefs||{}),...patch}}:x));
-  const upEng=(patch)=>setClients(cs=>cs.map(x=>x.id===cid?{...x,england:{...(x.england||{}),...patch}}:x));
   const upRules=(patch)=>setRules(r=>({...DEFAULT_RATE_RULES,...r,...patch}));
   const [mk,setMk]=useState({markup:c&&c.markup!=null?c.markup:"",markupMin:c&&c.markupMin!=null?c.markupMin:""});
   useEffect(()=>{setMk({markup:c&&c.markup!=null?c.markup:"",markupMin:c&&c.markupMin!=null?c.markupMin:""});setLf({name:"",email:"",password:""});},[cid]);   /* lf too: a half-typed login for customer A must not attach to customer B */
@@ -3714,7 +3722,8 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         const svcs={...(prof.services||{})};
         svcQuick.forEach(sv=>{const per=+svcDisc[sv.k];const use=(per>0)?per:d;svcs[sv.k]={...(svcs[sv.k]||{}),basis:"list",pct:use};});
         upRules({profiles:profiles.map(p=>p.id===prof.id?{...p,services:svcs}:p)});
-        say("Applied FedEx list − discount to "+c.name+"'s rate profile.");
+        setTab("rates");   /* the change is STAGED in the rates draft — land where the Save bar is visible */
+        say("Staged — press Save rates to make it live.");
       };
       return (<div className="space-y-4">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
@@ -3723,7 +3732,6 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         </div>
         <p className="text-[11px] text-stone-500">Record this customer's FedEx-earned pricing tier so you always know their real cost basis. The overall list discount can drive their sell pricing in one click; per-service discounts below override it. This is reference + a pricing shortcut — it doesn't change what England bills.</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Field label="FedEx account #"><Input value={fx.acctNo||""} onChange={e=>upFx({acctNo:e.target.value.trim()})} placeholder="9 digits"/></Field>
           <Field label="Tier / program"><Select value={fx.tier||""} onChange={e=>upFx({tier:e.target.value})}><option value="">— none —</option><option>Standard list</option><option>Earned Discount</option><option>Tier 1</option><option>Tier 2</option><option>Tier 3</option><option>Tier 4</option><option>Tier 5</option><option>Custom / negotiated</option><option>FedEx Advantage</option></Select></Field>
           <Field label="Overall FedEx list discount %"><Input type="number" value={fx.listDiscount==null?"":fx.listDiscount} onChange={e=>upFx({listDiscount:e.target.value})} placeholder="e.g. 35"/></Field>
           <Field label="Earned discount tier"><Input value={fx.earnedTier||""} onChange={e=>upFx({earnedTier:e.target.value})} placeholder="e.g. 25% band"/></Field>
@@ -3975,7 +3983,6 @@ function RatesAdmin({clients=[],brand}){
     else if(v==="clearmin"&&window.confirm("Clear every Min $ on this carrier?"))apply(()=>({min:""}));
     else if(v==="clearzones"&&window.confirm("Remove every zone override on this carrier?"))apply(()=>({zones:null}));
   };
-  const num2=(v)=>v==null||v===""||isNaN(+v)?"—":"$"+(+v).toFixed(2);
   /* sheet pricing with an explicit zone (the live resolver derives zone from zips) */
   const sheetSell=(rule,cost,weight,zone,key)=>{
     const gFall=()=>null;   // no platform-wide default — a rate sheet cell with no rule shows "—", never an invented price
@@ -4438,7 +4445,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
     {label:"Overview",items:[["overview","Dashboard",BarChart3]]},
     {label:"Accounts",items:[["customers","Customers",Building2],["users","All logins",Users]]},
     {label:"Pricing",items:[["rates","Rates & dim divisors",DollarSign],["labelcert","FedEx labels",Printer]]},
-    {label:"Experience",items:[["customizations","Features & access",Sliders],["branding","Branding",Sparkles],["platforms","Carrier accounts",Truck],["domains","Domains",ExternalLink]]},
+    {label:"Experience",items:[["customizations","Features & access",Sliders],["branding","Branding",Sparkles],["domains","Domains",ExternalLink]]},
   ];
   const SECTION_META={};NAV_GROUPS.forEach(g=>g.items.forEach(([v,l,Icon])=>{SECTION_META[v]={label:l,Icon};}));
   SECTION_META.rates={label:"Advanced rates — tables & sheets",Icon:DollarSign};   // off the sidebar (customers each have a Rates tab now); reachable from a customer record for shared imports, zones, weight breaks, and printable rate sheets
@@ -4465,7 +4472,6 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
   const closeTab=(i)=>{setTabs(ts=>{if(ts.length===1)return ts;const n=ts.filter((_,j)=>j!==i);setActive(a=>{const na=i<a?a-1:(a>=n.length?n.length-1:a);return Math.max(0,na);});return n;});};
   const cur=tabs[active]||tabs[0];
   const tabTitle=(t)=>t.kind==="section"?(SECTION_META[t.key]||{label:"Admin"}).label:((clients.find(c=>c.id===t.id)||{}).name||"Customer");
-  const [launch,setLaunch]=useState(false);
   /* plain function, NOT a component type: <SectionBody/> was a new type every render, so any
      AdminPortal re-render (20s cloud poll, 120s order sync, any global write) fully REMOUNTED the
      active section — wiping unsaved rate/branding drafts and snapping open panels shut. */
@@ -4475,10 +4481,9 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
       {k==="labelcert"&&<FedexCertLab settings={settings}/>}
       {k==="branding"&&<Branding settings={settings} setSettings={setSettings} brand={brand} publicBrand={publicBrand} setPublicBrand={setPublicBrand}/>}
       {k==="domains"&&<Domains settings={settings} setSettings={setSettings} clients={clients}/>}
-      {k==="platforms"&&<PlatformAccountsAdmin settings={settings} setSettings={setSettings}/>}
       {k==="users"&&<UsersAdmin users={users} setUsers={setUsers} clients={clients} currentUser={currentUser} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
       {k==="customizations"&&<CustomizationsAdmin users={users} clients={clients} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures}/>}
-      {k==="overview"&&<AdminDashboard platform={platform} loginStats={loginStats} uEmail={uEmail} openCustomer={openCustomer} openSection={openSection}/>}
+      {k==="overview"&&<AdminDashboard platform={platform} loginStats={loginStats} uEmail={uEmail} openCustomer={openCustomer} openSection={openSection} clients={clients}/>}
   </>);
   return (
     <div className="-mt-2">
@@ -4524,60 +4529,6 @@ function PlatformAccountsAdmin({settings,setSettings}){
           <button onClick={()=>togglePlat(c.id)}><span className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${plat[c.id]?"bg-[#0086E0] justify-end":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></span></button>
         </div>
       ))}
-    </div>
-  </div>);
-}
-function CustomersAdmin({clients,setClients,statsFor,openC,setOpenC}){
-  const [adding,setAdding]=useState(false);
-  const [f,setF]=useState({name:"",contact:"",email:"",phone:"",origin:"",markup:15});
-  const create=()=>{if(!f.name)return;setClients(p=>[...p,{id:"c"+Date.now(),name:f.name,contact:f.contact,email:f.email,phone:f.phone,origin:f.origin,markup:+f.markup||0,status:"active",since:new Date().toISOString().slice(0,7),plan:"Standard",blockedServices:[...DEFAULT_BLOCKED_SERVICES]}]);setF({name:"",contact:"",email:"",phone:"",origin:"",markup:15});setAdding(false);};
-  const setMarkup=(id,v)=>setClients(cs=>cs.map(c=>c.id===id?{...c,markup:+v||0}:c));
-  const setClientEng=(id,patch)=>setClients(cs=>cs.map(c=>c.id===id?{...c,england:{...(c.england||{}),...patch}}:c));
-  const setStatus=(id,v)=>setClients(cs=>cs.map(c=>c.id===id?{...c,status:v}:c));
-  return (<div className="space-y-3">
-    <div className="flex justify-between items-center"><div className="text-sm text-stone-500">Your shipping customers — markup, origin, and activity.</div><button onClick={()=>setAdding(a=>!a)} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800"><Plus className="w-4 h-4"/>New customer</button></div>
-    {adding&&<div className="border border-stone-200 rounded-lg bg-white p-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
-      <Field label="Company"><Input value={f.name} onChange={e=>setF({...f,name:e.target.value})}/></Field>
-      <Field label="Contact"><Input value={f.contact} onChange={e=>setF({...f,contact:e.target.value})}/></Field>
-      <Field label="Email"><Input value={f.email} onChange={e=>setF({...f,email:e.target.value})}/></Field>
-      <Field label="Phone"><Input value={f.phone} onChange={e=>setF({...f,phone:e.target.value})}/></Field>
-      <Field label="Origin ZIP"><Input value={f.origin} onChange={e=>setF({...f,origin:e.target.value})}/></Field>
-      <Field label="Markup %"><Input type="number" value={f.markup} onChange={e=>setF({...f,markup:e.target.value})}/></Field>
-      <div className="col-span-2 sm:col-span-3"><button onClick={create} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Create customer</button></div>
-    </div>}
-    <div className="border border-stone-200 rounded-lg bg-white overflow-hidden divide-y divide-stone-100">
-      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="flex-1">Customer</div><div className="w-24 text-right">Shipments</div><div className="w-24 text-right">Billed</div><div className="w-24 text-right">Markup</div><div className="w-20 text-right">Status</div></div>
-      {clients.map(c=>{const st=statsFor(c.name);const open=openC===c.id;return (
-        <div key={c.id}>
-          <div className="flex items-center gap-3 px-4 py-3 hover:bg-stone-50 cursor-pointer" onClick={()=>setOpenC(open?null:c.id)}>
-            <ChevronRight className={`w-4 h-4 text-stone-400 transition-transform ${open?"rotate-90":""}`}/>
-            <div className="flex-1 min-w-0"><div className="font-medium text-sm truncate">{c.name}</div><div className="text-[11px] text-stone-400 truncate">{c.contact||"—"}{c.email?` · ${c.email}`:""}</div></div>
-            <div className="w-24 text-right text-sm text-stone-600">{st.count}</div>
-            <div className="w-24 text-right font-mono text-sm">{money(st.spend)}</div>
-            <div className="w-24 text-right font-mono text-sm">{c.markup}%</div>
-            <div className="w-20 text-right"><Badge tone={c.status==="inactive"?"stone":"green"}>{c.status||"active"}</Badge></div>
-          </div>
-          {open&&<div className="px-4 sm:px-11 pb-4 pt-1 bg-stone-50/60 grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Origin</div><div className="text-sm">{c.origin||"—"}</div></div>
-            <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Phone</div><div className="text-sm">{c.phone||"—"}</div></div>
-            <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Customer since</div><div className="text-sm">{c.since||"—"}</div></div>
-            <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Plan</div><div className="text-sm">{c.plan||"Standard"}</div></div>
-            <Field label="Markup %"><Input type="number" value={c.markup} onChange={e=>setMarkup(c.id,e.target.value)}/></Field>
-            <Field label="Status"><Select value={c.status||"active"} onChange={e=>setStatus(c.id,e.target.value)}><option value="active">active</option><option value="inactive">inactive</option></Select></Field>
-            <div className="col-span-2 sm:col-span-4 border-t border-stone-200 pt-3 mt-1">
-              <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2 flex items-center gap-2">England account — this client's own rates{(c.england&&c.england.customerId&&c.england.apiKey)?<Badge tone="green">own account</Badge>:<Badge tone="stone">using main account</Badge>}</div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <Field label="England customer ID"><Input value={(c.england&&c.england.customerId)||""} onChange={e=>setClientEng(c.id,{customerId:e.target.value.trim()})} placeholder="e.g. 20605511"/></Field>
-                <Field label="England API key"><Input type="password" value={(c.england&&c.england.apiKey)||""} onChange={e=>setClientEng(c.id,{apiKey:e.target.value.trim()})} placeholder="this client's key"/></Field>
-                <Field label="Integration ID (labels)"><Input value={(c.england&&c.england.integrationId)||""} onChange={e=>setClientEng(c.id,{integrationId:e.target.value.trim()})} placeholder="optional"/></Field>
-                <Field label="Provider account ID"><Input value={(c.england&&c.england.providerAccountId)||""} onChange={e=>setClientEng(c.id,{providerAccountId:e.target.value.trim()})} placeholder="optional · auto-resolves"/></Field>
-              </div>
-              {c.england&&c.england.customerId&&c.england.apiKey&&(+c.markup||0)>0&&<div className="mt-2 text-xs rounded px-3 py-2 flex items-start gap-1.5 bg-amber-50 text-amber-800 border border-amber-200"><AlertTriangle className="w-4 h-4 shrink-0 mt-0.5"/><span><b>Double-markup warning:</b> this client's England account already returns marked-up rates, and the app is adding another {c.markup}% on top. If England's markup is the whole markup, set Markup % to 0 for this client.</span></div>}
-              <p className="mt-2 text-[11px] text-stone-400">With their own customer ID + API key, this client's quotes and labels run on their England account (their rate table, their markup baked in by England). Leave blank to use the main account with app-side markup. Both empty fields = main account.</p>
-            </div>
-          </div>}
-        </div>
-      );})}
     </div>
   </div>);
 }
@@ -4765,9 +4716,9 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
           {rpOpen===u.id&&u.role!=="admin"&&u.clientId&&<div className="w-full mt-2 border-t border-stone-100 pt-3">
             <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Rate profile for {(clients.find(c=>c.id===u.clientId)||{}).name||"this company"} — every login of the company prices from it</div>
             <div className="flex flex-wrap items-center gap-2">
-              <Select value={(rateRules.assign||{})[u.clientId]||"default"} onChange={e=>setRateRules(r=>({...DEFAULT_RATE_RULES,...r,assign:{...(r.assign||{}),[u.clientId]:e.target.value}}))}>
-                {((rateRules.profiles&&rateRules.profiles.length)?rateRules.profiles:DEFAULT_RATE_RULES.profiles).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-              </Select>
+              {/* read-only here on purpose: rate assignment is press-to-save on the customer record — this select used to write the global store instantly */}
+              <span className="text-xs bg-stone-100 border border-stone-200 rounded px-2 py-1 font-medium text-stone-700">{(((rateRules.profiles&&rateRules.profiles.length)?rateRules.profiles:DEFAULT_RATE_RULES.profiles).find(p=>p.id===((rateRules.assign||{})[u.clientId]||"default"))||{}).name||"Default"}</span>
+              <span className="text-[11px] text-stone-400">Change it on the customer record → Rates tab (press-to-save).</span>
               <span className="text-[11px] text-stone-400">Edit the profile's services, zones, and surcharges under Admin → Rates. If no rule answers, their legacy flat markup ({(clients.find(c=>c.id===u.clientId)||{}).markup!=null?(clients.find(c=>c.id===u.clientId)||{}).markup+"%":"—"}) still applies.</span>
             </div>
           </div>}

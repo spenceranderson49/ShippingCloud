@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v452";
+const BUILD_TAG="addr-v453";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7674,16 +7674,30 @@ function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=t
               const N=perBox.length;
               const split=(amount,byWeight)=>{ const out=perBox.map(b=>byWeight?Math.round(amount*((+b.weight||0)/totW)*100)/100:Math.round(amount/N*100)/100);
                 const drift=Math.round((amount-out.reduce((a2,x2)=>a2+x2,0))*100)/100; out[N-1]=Math.round((out[N-1]+drift)*100)/100; return out; };
-              const carrier=comps.slice(0,comps.length-acc.length);   // Base rate + every carrier surcharge (fuel, DAS, residential…), already sell-scaled
+              const carrierAll=comps.slice(0,comps.length-acc.length);   // Base rate + every carrier surcharge (fuel, DAS, residential…), already sell-scaled
+              /* LIVE quotes carry FedEx's real Declared Value surcharge as one of the carrier fee
+                 lines. That line must NOT be split evenly like DAS/peak AND ALSO shown again as the
+                 local per-box estimate — that double-listed DV and made the box sums overshoot the
+                 total. Instead: pull the DV line out of the even split and distribute the REAL
+                 charged amount across boxes in proportion to each box's coverage (the local per-box
+                 fee mirrors FedEx's per-$100 formula), last box absorbing the rounding pennies. */
+              const _dvRe=/declared value|insured value/i;
+              const dvTotal=Math.round(carrierAll.filter(c=>_dvRe.test(c.label||"")).reduce((a2,c)=>a2+(c.amount||0),0)*100)/100;
+              const carrier=dvTotal>0?carrierAll.filter(c=>!_dvRe.test(c.label||"")):carrierAll;
+              const dvShares=(()=>{ if(!(dvTotal>0))return null;
+                const dvSum=perBox.reduce((a2,b)=>a2+(+b.dv||0),0);
+                const basis=insTotal>0?perBox.map(b=>(b.ins||0)/insTotal):(dvSum>0?perBox.map(b=>(+b.dv||0)/dvSum):perBox.map(()=>1/N));
+                const out=perBox.map((b,i2)=>Math.round(dvTotal*basis[i2]*100)/100);
+                const drift=Math.round((dvTotal-out.reduce((a2,x2)=>a2+x2,0))*100)/100; out[N-1]=Math.round((out[N-1]+drift)*100)/100; return out; })();
               const lines=carrier.length
                 ?carrier.map(c=>({label:c.label,shares:split(c.amount,/base|rate|fuel|freight/i.test(c.label||""))}))
                 :[{label:"Freight",shares:split(Math.max(0,Math.round((sell-insTotal-sharedTotal)*100)/100),true)}];
               return <div className="space-y-1.5">
-                {perBox.map((b,bi)=>{const bt=Math.round((lines.reduce((a2,l2)=>a2+(l2.shares[bi]||0),0)+(b.ins||0))*100)/100;
+                {perBox.map((b,bi)=>{const bIns=dvShares?dvShares[bi]:(b.ins||0);const bt=Math.round((lines.reduce((a2,l2)=>a2+(l2.shares[bi]||0),0)+bIns)*100)/100;
                   return <div key={bi} className="border border-stone-100 rounded-lg px-2.5 py-1.5 bg-stone-50/50">
                     <div className="flex justify-between text-[12px] font-medium text-stone-700 mb-0.5"><span>Box #{b.n} · {b.weight} lb{b.L&&b.W&&b.H?` · ${b.L}×${b.W}×${b.H}"`:""}</span><span className="font-mono">{money(bt)}</span></div>
                     {lines.map((l2,li)=>l2.shares[bi]?<div key={li} className="flex justify-between text-[11px] text-stone-500"><span>{l2.label}</span><span className="font-mono">{money(l2.shares[bi])}</span></div>:null)}
-                    {b.dv>0&&<div className="flex justify-between text-[11px] text-stone-500"><span>Declared value ${b.dv}{!b.ins?" — first $100 is free":""}</span><span className="font-mono">{money(b.ins||0)}</span></div>}
+                    {(b.dv>0||bIns>0)&&<div className="flex justify-between text-[11px] text-stone-500"><span>{dvShares?"Declared Value Surcharge / Insured Value":"Declared value"}{b.dv>0?` $${b.dv}`:""}{!bIns?" — first $100 is free":""}</span><span className="font-mono">{money(bIns)}</span></div>}
                   </div>;})}
                 {shared.map((s,i2)=><div key={"sh"+i2} className="flex justify-between text-[11px] text-stone-500 px-2.5"><span>{s.label} (whole shipment)</span><span className="font-mono">{money(s.amount)}</span></div>)}
                 <div className="flex justify-between text-[13px] border-t border-stone-200 pt-1 mt-1 font-semibold"><span>Total</span><span className="font-mono">{money(sell)}</span></div>

@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v449";
+const BUILD_TAG="addr-v450";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3070,7 +3070,8 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
   const save=()=>{setSettings(s=>({...s,brand:b}));setSaved(true);setTimeout(()=>setSaved(false),1600);};
   const reset=()=>{setB(DEFAULT_BRAND);setSettings(s=>({...s,brand:DEFAULT_BRAND}));};
   const upload=(e)=>{const f=e.target.files&&e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>set("logo",String(r.result));r.readAsDataURL(f);e.target.value="";};
-  const ColorRow=({label,k})=>(
+  /* called as {colorRow(...)} — an inline component type remounts the inputs per keystroke */
+  const colorRow=(label,k)=>(
     <div className="flex items-center gap-3">
       <input type="color" value={b[k]} onChange={e=>set(k,e.target.value)} className="w-10 h-9 rounded border border-stone-200 bg-white cursor-pointer p-0.5"/>
       <div className="flex-1"><div className="text-[11px] text-stone-500">{label}</div><input value={b[k]} onChange={e=>set(k,e.target.value)} className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF]"/></div>
@@ -3098,8 +3099,8 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
 
     <Panel title="Brand colors">
       <div className="grid sm:grid-cols-2 gap-3">
-        <ColorRow label="Primary / accent" k="primary"/>
-        <ColorRow label="Text / dark" k="dark"/>
+        {colorRow("Primary / accent","primary")}
+        {colorRow("Text / dark","dark")}
       </div>
       <div className="text-[11px] text-stone-400">The accent recolors the cloud mark and the highlighted part of the name.</div>
     </Panel>
@@ -3431,7 +3432,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
   const upEng=(patch)=>setClients(cs=>cs.map(x=>x.id===cid?{...x,england:{...(x.england||{}),...patch}}:x));
   const upRules=(patch)=>setRules(r=>({...DEFAULT_RATE_RULES,...r,...patch}));
   const [mk,setMk]=useState({markup:c&&c.markup!=null?c.markup:"",markupMin:c&&c.markupMin!=null?c.markupMin:""});
-  useEffect(()=>{setMk({markup:c&&c.markup!=null?c.markup:"",markupMin:c&&c.markupMin!=null?c.markupMin:""});},[cid]);
+  useEffect(()=>{setMk({markup:c&&c.markup!=null?c.markup:"",markupMin:c&&c.markupMin!=null?c.markupMin:""});setLf({name:"",email:"",password:""});},[cid]);   /* lf too: a half-typed login for customer A must not attach to customer B */
   const mkDirty=!!c&&(String(mk.markup??"")!==String(c.markup??"")||String(mk.markupMin??"")!==String(c.markupMin??""));
   const cDraft=c?{...c,markup:mk.markup,markupMin:mk.markupMin}:c;
   const ratesDirty=_rd.dirty||mkDirty;
@@ -4017,20 +4018,21 @@ function RatesAdmin({clients=[],brand}){
   const [shSvcs,setShSvcs]=useState({});
   const [shAccs,setShAccs]=useState({});
   const _sheetStyles="body{font-family:system-ui,Segoe UI,Arial;padding:28px;color:#1c1917}table{border-collapse:collapse;width:100%;font-size:12px;margin:10px 0 22px}th,td{border:1px solid #e5e5e5;padding:6px 8px;text-align:right}th{background:#f5f5f4}h1{font-size:16px;margin:18px 0 2px}.sub{color:#78716c;font-size:12px}td:first-child,th:first-child{text-align:left}";
-  const _sheetLogo=()=>BRAND.fw?('<img src="'+FW_LOGO+'" style="height:42px"/>'):('<div style="font:800 22px system-ui;letter-spacing:.02em">'+brandWordmark()+'</div>');
+  const escS=(s)=>String(s==null?"":s).replace(/[&<>"]/g,(ch)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));   /* names on printable sheets are markup-inert */
+  const _sheetLogo=()=>BRAND.fw?('<img src="'+FW_LOGO+'" style="height:42px"/>'):('<div style="font:800 22px system-ui;letter-spacing:.02em">'+escS(brandWordmark())+'</div>');
   const printSheetsMulti=()=>{
     const keys=RATE_SERVICES.fedex.filter(sv=>!sv.or&&shSvcs[sv.k]).map(sv=>sv.k);
     if(!keys.length)return;
     let html="";
     keys.forEach(k=>{
       const sv=RATE_SERVICES.fedex.find(x=>x.k===k);const d=buildSheet(k);
-      html+="<h1>"+sv.l+"</h1>";
+      html+="<h1>"+escS(sv.l)+"</h1>";
       if(!d||d.empty){html+="<div class='sub'>No cost / list table imported for this service yet — add one under Base costs and reprint.</div>";return;}
       html+="<table><tr><th>Weight (lb)</th>"+d.zones.map(z=>"<th>Zone "+z+"</th>").join("")+"</tr>"
         +d.rows.map(r=>"<tr><td style='font-weight:600'>"+r.w+"</td>"+r.cells.map(c=>c.c==null?"<td>—</td>":"<td>$"+c.c.toFixed(2)+(c.star?"*":"")+"</td>").join("")+"</tr>").join("")+"</table>";
     });
     const w=window.open("","_blank");if(!w)return window.alert("Allow pop-ups to print the rate sheets.");
-    w.document.write("<html><head><title>Rate sheets — "+prof.name+"</title><style>"+_sheetStyles+"</style></head><body>"+_sheetLogo()+"<div class='sub'>Customer rate sheets · Profile: "+prof.name+" · Generated "+new Date().toLocaleDateString()+" · * = Min $ floor applied. Rates include base transportation; fees per the accessorials sheet.</div>"+html+"<script>window.print()</scr"+"ipt></body></html>");
+    w.document.write("<html><head><title>Rate sheets — "+escS(prof.name)+"</title><style>"+_sheetStyles+"</style></head><body>"+_sheetLogo()+"<div class='sub'>Customer rate sheets · Profile: "+escS(prof.name)+" · Generated "+new Date().toLocaleDateString()+" · * = Min $ floor applied. Rates include base transportation; fees per the accessorials sheet.</div>"+html+"<script>window.print()</scr"+"ipt></body></html>");
     w.document.close();
   };
   const printAccSheet=()=>{
@@ -4049,12 +4051,12 @@ function RatesAdmin({clients=[],brand}){
     let html="<table><tr><th>Fee</th><th>Applies to</th><th>Charge basis</th><th>Your price</th></tr>";
     let lastG=null;
     rows.forEach(su=>{
-      if(su.g!==lastG){lastG=su.g;html+="<tr><td colspan='4' style='background:#fafaf9;font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:.08em'>"+su.g+"</td></tr>";}
-      html+="<tr><td>"+(su.aka||su.desc)+"</td><td>"+(su.seg||"All")+"</td><td>"+(su.charge||"")+"</td><td style='font-weight:600'>"+priceDesc(su)+"</td></tr>";
+      if(su.g!==lastG){lastG=su.g;html+="<tr><td colspan='4' style='background:#fafaf9;font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:.08em'>"+escS(su.g)+"</td></tr>";}
+      html+="<tr><td>"+escS(su.aka||su.desc)+"</td><td>"+escS(su.seg||"All")+"</td><td>"+escS(su.charge||"")+"</td><td style='font-weight:600'>"+escS(priceDesc(su))+"</td></tr>";
     });
     html+="</table>";
     const w=window.open("","_blank");if(!w)return window.alert("Allow pop-ups to print the accessorials sheet.");
-    w.document.write("<html><head><title>Accessorials — "+prof.name+"</title><style>"+_sheetStyles+"</style></head><body>"+_sheetLogo()+"<h1>Accessorial charges</h1><div class='sub'>Profile: "+prof.name+" · Generated "+new Date().toLocaleDateString()+" · Fee names as they appear on FedEx quotes. Charges subject to FedEx Service Guide terms.</div>"+html+"<script>window.print()</scr"+"ipt></body></html>");
+    w.document.write("<html><head><title>Accessorials — "+escS(prof.name)+"</title><style>"+_sheetStyles+"</style></head><body>"+_sheetLogo()+"<h1>Accessorial charges</h1><div class='sub'>Profile: "+escS(prof.name)+" · Generated "+new Date().toLocaleDateString()+" · Fee names as they appear on FedEx quotes. Charges subject to FedEx Service Guide terms.</div>"+html+"<script>window.print()</scr"+"ipt></body></html>");
     w.document.close();
   };
   const brandWordmark=()=>((brand&&brand.name1)||"SHIPPING")+((brand&&brand.name2)||"CLOUD");
@@ -4067,7 +4069,7 @@ function RatesAdmin({clients=[],brand}){
   };
   const printSheet=()=>{
     if(!sheetData||sheetData.empty||!sheet)return;
-    const logo=BRAND.fw?('<img src="'+FW_LOGO+'" style="height:42px"/>'):('<div style="font:800 22px system-ui;letter-spacing:.02em">'+brandWordmark()+'</div>');
+    const logo=BRAND.fw?('<img src="'+FW_LOGO+'" style="height:42px"/>'):('<div style="font:800 22px system-ui;letter-spacing:.02em">'+escS(brandWordmark())+'</div>');
     const head="<tr><th style='text-align:left'>Weight (lb)</th>"+sheetData.zones.map(z=>"<th>Zone "+z+"</th>").join("")+"</tr>";
     const body=sheetData.rows.map(r=>"<tr><td style='text-align:left;font-weight:600'>"+r.w+"</td>"+r.cells.map(c=>{
       if(c.c==null)return "<td>—</td>";
@@ -4075,7 +4077,7 @@ function RatesAdmin({clients=[],brand}){
       return "<td>$"+c.c.toFixed(2)+(c.star?"*":"")+"</td>";
     }).join("")+"</tr>").join("");
     const w=window.open("","_blank");if(!w)return window.alert("Allow pop-ups to print the rate sheet.");
-    w.document.write("<html><head><title>"+sheet.l+" — rate sheet</title><style>body{font-family:system-ui,Segoe UI,Arial;padding:28px;color:#1c1917}table{border-collapse:collapse;width:100%;font-size:12px;margin-top:16px}th,td{border:1px solid #e5e5e5;padding:6px 8px;text-align:right}th{background:#f5f5f4}h1{font-size:17px;margin:14px 0 2px}.sub{color:#78716c;font-size:12px}</style></head><body>"+logo+"<h1>"+sheet.l+" — customer rate sheet</h1><div class='sub'>Profile: "+prof.name+" · Generated "+new Date().toLocaleDateString()+" · * = Min $ floor applied"+(sheetMargin?" · C=customer price, F=cost, M=margin":"")+"</div><table>"+head+body+"</table><div class='sub' style='margin-top:14px'>Rates include base transportation and automatic fuel/residential surcharges. Optional accessorials (signature, Saturday, declared value) are additional. Rates subject to change.</div><script>window.print()</scr"+"ipt></body></html>");
+    w.document.write("<html><head><title>"+escS(sheet.l)+" — rate sheet</title><style>body{font-family:system-ui,Segoe UI,Arial;padding:28px;color:#1c1917}table{border-collapse:collapse;width:100%;font-size:12px;margin-top:16px}th,td{border:1px solid #e5e5e5;padding:6px 8px;text-align:right}th{background:#f5f5f4}h1{font-size:17px;margin:14px 0 2px}.sub{color:#78716c;font-size:12px}</style></head><body>"+logo+"<h1>"+escS(sheet.l)+" — customer rate sheet</h1><div class='sub'>Profile: "+escS(prof.name)+" · Generated "+new Date().toLocaleDateString()+" · * = Min $ floor applied"+(sheetMargin?" · C=customer price, F=cost, M=margin":"")+"</div><table>"+head+body+"</table><div class='sub' style='margin-top:14px'>Rates include base transportation and automatic fuel/residential surcharges. Optional accessorials (signature, Saturday, declared value) are additional. Rates subject to change.</div><script>window.print()</scr"+"ipt></body></html>");
     w.document.close();
   };
   const doImport=()=>{
@@ -4469,7 +4471,10 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
   const cur=tabs[active]||tabs[0];
   const tabTitle=(t)=>t.kind==="section"?(SECTION_META[t.key]||{label:"Admin"}).label:((clients.find(c=>c.id===t.id)||{}).name||"Customer");
   const [launch,setLaunch]=useState(false);
-  const SectionBody=({k})=>(<>
+  /* plain function, NOT a component type: <SectionBody/> was a new type every render, so any
+     AdminPortal re-render (20s cloud poll, 120s order sync, any global write) fully REMOUNTED the
+     active section — wiping unsaved rate/branding drafts and snapping open panels shut. */
+  const sectionBody=(k)=>(<>
       {k==="customers"&&<CustomersMaster clients={clients} setClients={setClients} users={users} setUsers={setUsers} currentUser={currentUser} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} onOpenCustomer={openCustomer}/>}
       {k==="rates"&&<RatesAdmin clients={clients} brand={brand}/>}
       {k==="labelcert"&&<FedexCertLab settings={settings}/>}
@@ -4501,7 +4506,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
           </div>);})}
       </div>}
       <div className="min-w-0">
-        {cur.kind==="section"?<SectionBody k={cur.key}/>
+        {cur.kind==="section"?sectionBody(cur.key)
           :<CustomerDetail cid={cur.id} clients={clients} setClients={setClients} users={users} setUsers={setUsers} currentUser={currentUser} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} settings={settings} onClose={()=>closeTab(active)} openSection={openSection}/>}
       </div>
       </div>
@@ -11638,6 +11643,9 @@ function CIHistory({settings,setSettings}){
     </div>))}</div>
   </div>);
 }
+/* CIEditor's text input at MODULE scope: defined inside the component it was a new type every
+   render, so every keystroke remounted the input and dropped the cursor (one-letter-at-a-time). */
+const CIn=({v,on,ph,cls})=>(<input value={v} onChange={e=>on(e.target.value)} placeholder={ph} className={`bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 ${cls||"w-full"}`}/>);
 function CIEditor({settings,setSettings,shipments}){
   const intl=(shipments||[]).filter(sh=>sh.recipient&&sh.recipient.country&&!["US","United States"].includes(sh.recipient.country));
   const blank=()=>({exporter:{name:(settings.sender&&settings.sender.name)||"",company:(settings.sender&&settings.sender.company)||settings.company||"",address1:(settings.sender&&settings.sender.address1)||"",city:(settings.sender&&settings.sender.city)||"",state:(settings.sender&&settings.sender.state)||"",zip:(settings.sender&&settings.sender.zip)||"",phone:(settings.sender&&settings.sender.phone)||""},
@@ -11679,7 +11687,7 @@ function CIEditor({settings,setSettings,shipments}){
     const o={name:doc.invoiceNo||"CI-"+Date.now(),customer:doc.consignee.name,company:doc.consignee.company,address1:doc.consignee.address1,city:doc.consignee.city,state:doc.consignee.state,zip:doc.consignee.zip,country:doc.consignee.country,phone:doc.consignee.phone,email:doc.consignee.email,weight:doc.weight,lineItems:doc.rows.map(r=>({name:r.name,quantity:+r.qty||1,price:String(r.unit||0)}))};
     printCommercialInvoice(o,[],{...doc.exporter},{reason:doc.reason,incoterm:doc.incoterm,samples:doc.samples,notes:doc.notes,currency:doc.currency,packages:doc.packages,freight:doc.freight,insurance:doc.insuranceAmt,marks:doc.marks,broker:doc.broker,signature:doc.signature||defaultSig(settings),letterhead:doc.letterhead,preview:!!preview,attachImgs:resolveAttach(doc),proforma:doc.proforma,rows:doc.rows.map(r=>({name:r.name,qty:+r.qty||1,unit:+r.unit||0,hs:r.hs,origin:r.origin}))});
   };
-  const In=({v,on,ph,cls})=>(<input value={v} onChange={e=>on(e.target.value)} placeholder={ph} className={`bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 ${cls||"w-full"}`}/>);
+  const In=CIn;   // stable module-scope type — see CIn above
   return (<div className="max-w-3xl space-y-4">
     <div className="text-sm text-stone-500">Rebuild, edit, and reprint a commercial invoice — start from a past international shipment or from scratch. (There's no way to reliably parse an uploaded PDF back into editable fields, so editing starts from your shipment data instead.)</div>
     <Panel title="Start from">
@@ -12016,38 +12024,42 @@ function CompanyCustomDeploy({companyUsers,companyFlags,setCompanyFlags,adminSet
   </div>);
 }
 
+/* FieldLists helpers at MODULE scope: Ed holds its own input state, and defining these inside
+   the component made every settings write remount all four panels — wiping half-typed values. */
+function FieldListOpts({req,lock,c,setC}){
+  return (<div className="flex flex-wrap gap-4 mt-2 pt-2 border-t border-stone-100 text-sm text-stone-700">
+    <label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" checked={!!c[req]} onChange={e=>setC(req,e.target.checked)} className="accent-[#0086E0]"/>Required — can't ship until filled</label>
+    <label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" checked={!!c[lock]} onChange={e=>setC(lock,e.target.checked)} className="accent-[#0086E0]"/>Lock to dropdown — no free typing</label>
+  </div>);
+}
+function FieldListEd({k,title,hint,ph,extra,fl,setList}){
+  const [v,setV]=React.useState("");
+  const add=()=>{const t=v.trim();if(!t)return;if(!fl[k].includes(t))setList(k,[...fl[k],t]);setV("");};
+  return (<Panel title={title}>
+    <div className="flex flex-wrap gap-1.5 mb-2">
+      {fl[k].length===0&&<span className="text-[11px] text-stone-300">Nothing here yet.</span>}
+      {fl[k].map(x=>(<span key={x} className="inline-flex items-center gap-1 bg-stone-100 border border-stone-200 text-stone-700 rounded-full pl-2.5 pr-1.5 py-1 text-xs font-medium">{x}
+        <button onClick={()=>setList(k,fl[k].filter(y=>y!==x))} className="text-stone-300 hover:text-rose-500 leading-none px-0.5">×</button></span>))}
+    </div>
+    <div className="flex gap-2">
+      <input value={v} onChange={e=>setV(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")add();}} placeholder={ph} className="flex-1 bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+      <button onClick={add} className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200">Add</button>
+    </div>
+    {hint&&<div className="text-[11px] text-stone-400 mt-1.5">{hint}</div>}
+    {extra||null}
+  </Panel>);
+}
 function FieldLists({settings,setSettings}){
   const fl={department:[],reference:[],invoice:[],po:[],...(settings.fieldLists||{})};
   const setList=(k,arr)=>setSettings(p=>({...p,fieldLists:{...(p.fieldLists||{}),[k]:arr}}));
   const c=cz(settings);
   const setC=(k,v)=>setSettings(p=>({...p,custom:{...(p.custom||{}),[k]:v}}));
-  const Opts=({req,lock})=>(<div className="flex flex-wrap gap-4 mt-2 pt-2 border-t border-stone-100 text-sm text-stone-700">
-    <label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" checked={!!c[req]} onChange={e=>setC(req,e.target.checked)} className="accent-[#0086E0]"/>Required — can't ship until filled</label>
-    <label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" checked={!!c[lock]} onChange={e=>setC(lock,e.target.checked)} className="accent-[#0086E0]"/>Lock to dropdown — no free typing</label>
-  </div>);
-  const Ed=({k,title,hint,ph,extra})=>{
-    const [v,setV]=React.useState("");
-    const add=()=>{const t=v.trim();if(!t)return;if(!fl[k].includes(t))setList(k,[...fl[k],t]);setV("");};
-    return (<Panel title={title}>
-      <div className="flex flex-wrap gap-1.5 mb-2">
-        {fl[k].length===0&&<span className="text-[11px] text-stone-300">Nothing here yet.</span>}
-        {fl[k].map(x=>(<span key={x} className="inline-flex items-center gap-1 bg-stone-100 border border-stone-200 text-stone-700 rounded-full pl-2.5 pr-1.5 py-1 text-xs font-medium">{x}
-          <button onClick={()=>setList(k,fl[k].filter(y=>y!==x))} className="text-stone-300 hover:text-rose-500 leading-none px-0.5">×</button></span>))}
-      </div>
-      <div className="flex gap-2">
-        <input value={v} onChange={e=>setV(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")add();}} placeholder={ph} className="flex-1 bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-        <button onClick={add} className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200">Add</button>
-      </div>
-      {hint&&<div className="text-[11px] text-stone-400 mt-1.5">{hint}</div>}
-      {extra||null}
-    </Panel>);
-  };
   return (<div className="max-w-2xl space-y-4">
     <div className="text-sm text-stone-500">Build pick-lists for the Ship screen. Once a list has values, the matching field becomes a type-ahead: start typing on the Ship tab and your saved values appear to click, or open the dropdown arrow to pick one. Free typing still works.</div>
-    <Ed k="department" title="Departments" ph="e.g. Warehouse, Sales, Returns…" hint="Departments appear in the Ref # suggestions — a common way to tag who a shipment belongs to."/>
-    <Ed k="reference" title="Reference values" ph="e.g. WHOLESALE, SAMPLE, RUSH…" hint="Shown in the Ref # field suggestions along with departments." extra={<Opts req="refRequired" lock="refLocked"/>}/>
-    <Ed k="invoice" title="Invoice # values" ph="e.g. INV-2026-…" extra={<Opts req="invRequired" lock="invLocked"/>}/>
-    <Ed k="po" title="PO # values" ph="e.g. PO-GILLETTE-…" extra={<Opts req="poRequired" lock="poLocked"/>}/>
+    <FieldListEd fl={fl} setList={setList} k="department" title="Departments" ph="e.g. Warehouse, Sales, Returns…" hint="Departments appear in the Ref # suggestions — a common way to tag who a shipment belongs to."/>
+    <FieldListEd fl={fl} setList={setList} k="reference" title="Reference values" ph="e.g. WHOLESALE, SAMPLE, RUSH…" hint="Shown in the Ref # field suggestions along with departments." extra={<FieldListOpts c={c} setC={setC} req="refRequired" lock="refLocked"/>}/>
+    <FieldListEd fl={fl} setList={setList} k="invoice" title="Invoice # values" ph="e.g. INV-2026-…" extra={<FieldListOpts c={c} setC={setC} req="invRequired" lock="invLocked"/>}/>
+    <FieldListEd fl={fl} setList={setList} k="po" title="PO # values" ph="e.g. PO-GILLETTE-…" extra={<FieldListOpts c={c} setC={setC} req="poRequired" lock="poLocked"/>}/>
   </div>);
 }
 function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,only}){
@@ -12078,6 +12090,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
   const Tog=({k,label,hint,invert})=>(<label className="flex items-start gap-2 text-sm text-stone-700 cursor-pointer">
     <input type="checkbox" checked={invert?c[k]===false:!!c[k]} onChange={e=>set(k,invert?!e.target.checked:e.target.checked)} className="accent-[#0086E0] mt-0.5"/>
     <span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span></label>);
+  /* called as {Sel({...})} like Num below — a <select> remounting per change breaks keyboard use */
   const Sel=({k,label,opts})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>{label}</span>
     <select value={c[k]} onChange={e=>set(k,e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]">{opts.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>);
   /* called as {Num({...})}, not <Num/> — an inline component type remounts its input every render (focus loss) */
@@ -12138,11 +12151,11 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
       <div className="border-t border-stone-100 mt-3 pt-3 grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         <Tog k="phoneRequired" label="Require receiver phone to book" hint="Uncheck to make phone optional"/>
         <Tog k="emailRequired" label="Require receiver email to book" hint="Uncheck to make email optional"/>
-        <Sel k="defaultSignature" label="Default signature on new shipments" opts={[["none","None"],["indirect","Indirect"],["direct","Direct"],["adult","Adult"]]}/>
+        {Sel({k:"defaultSignature",label:"Default signature on new shipments",opts:[["none","None"],["indirect","Indirect"],["direct","Direct"],["adult","Adult"]]})}
         {Num({k:"autoInsureValue",label:"Auto-insure orders over",hint:"When you load an order worth this much or more, insurance is set to the full order value. 0 = off. Takes priority over the % below.",prefix:"$"})}
         {Num({k:"autoInsurePct",label:"Auto-insure orders (% of value)",hint:"Legacy: insures this % of order value on load. Ignored if the $ threshold above is set. 0 = off",suffix:"%"})}
         {Num({k:"autoSigValue",label:"Auto-add signature over",hint:"When you load an order worth this much or more, a signature is added automatically. 0 = off. Uses the signature type below.",prefix:"$"})}
-        <Sel k="autoSigType" label="Signature type to auto-add" opts={[["indirect","Indirect"],["direct","Direct"],["adult","Adult"]]}/>
+        {Sel({k:"autoSigType",label:"Signature type to auto-add",opts:[["indirect","Indirect"],["direct","Direct"],["adult","Adult"]]})}
         <label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>Ship-date cutoff time<span className="block text-[11px] text-stone-400">After this local time, new shipments default to the NEXT day's ship date. Leave blank to always use today.</span></span>
           <span className="flex items-center gap-1"><input type="time" value={c.shipDateCutoff||""} onChange={e=>set("shipDateCutoff",e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"/>{c.shipDateCutoff&&<button onClick={()=>set("shipDateCutoff","")} className="text-[11px] text-stone-400 hover:text-rose-500">clear</button>}</span></label>
         <label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>Fallback service when no rule matches<span className="block text-[11px] text-stone-400">In Batch &amp; Autopilot, orders that don't match any of your rules use this service instead of being left unset. Blank = leave unset (no fallback).</span></span>
@@ -12152,9 +12165,9 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
 
     {cs==="services"&&<Panel title="Rates & services">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
-        <Sel k="defaultView" label="Default rate view" opts={[["cheapest","Cheapest first"],["carrier","Grouped by carrier"]]}/>
+        {Sel({k:"defaultView",label:"Default rate view",opts:[["cheapest","Cheapest first"],["carrier","Grouped by carrier"]]})}
         {(isAdmin||deployMode)&&<div className="rounded-lg border border-blue-100 bg-blue-50/40 p-2.5"><div className="text-[10px] uppercase tracking-widest text-blue-400 mb-1.5 flex items-center gap-1"><ShieldCheck className="w-3 h-3"/>Admin only</div><Tog k="showRateViewToggle" label="Show the Cheapest / By carrier switch on Ship" hint="Off = the rate list just uses the default view above, with no toggle or 'enter ZIP & weight' hint shown. Only you (admin) can turn this on."/></div>}
-        <Sel k="transitStyle" label="Transit display" opts={[["date","Days + arrival date"],["days","Day count only"]]}/>
+        {Sel({k:"transitStyle",label:"Transit display",opts:[["date","Days + arrival date"],["days","Day count only"]]})}
         {Num({k:"priceWarn",label:"Price alert",hint:"Flag any rate above this amount. 0 = off",step:"1",suffix:"$"})}
       </div>
       <div className="border-t border-stone-100 mt-3 pt-3">
@@ -12181,7 +12194,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
       <div className="text-[11px] text-stone-400 mt-1.5">Order # and actions always show. Shipped orders never show Autopilot or Est. Rate — those only mean something before the label is booked.</div>
       <div className="border-t border-stone-100 mt-3 pt-3 grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         <Tog k="autopilotPreview" label="Show an Autopilot preview column" hint="Adds a column showing what your Autopilot rules would pick for each order — the service, a hold, or 'no rule matches' — before you ship. Runs your real rules, updates live."/>
-        <Sel k="density" label="List density" opts={[["comfortable","Comfortable"],["compact","Compact — more rows per screen"]]}/>
+        {Sel({k:"density",label:"List density",opts:[["comfortable","Comfortable"],["compact","Compact — more rows per screen"]]})}
         {Num({k:"spendCap",label:"Spending cap",hint:"Hard-blocks booking any label above this. 0 = off",suffix:"$"})}
         <Tog k="hotkeys" label="Keyboard shortcuts" hint="Press ? anywhere for the list — g then o jumps to Orders, etc."/>
         {Num({k:"stuckDays",label:"Stuck-shipment flag",hint:"Highlight in-transit shipments older than this many days. 0 = off",suffix:"days"})}
@@ -12219,11 +12232,11 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
 
     <Panel title="Appearance & navigation">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
-        <Sel k="fontScale" label="Text size" opts={[[94,"Small"],[100,"Normal"],[107,"Large"]]}/>
-        <Sel k="theme" label="Theme" opts={[["light","Light"],["grey","Grey"],["dark","Dark"]]}/>
-        <Sel k="confetti" label="Booking confetti 🎉" opts={[["page","Everywhere — full-page drop"],["button","Just around the button"],["off","Off"]]}/>
+        {Sel({k:"fontScale",label:"Text size",opts:[[94,"Small"],[100,"Normal"],[107,"Large"]]})}
+        {Sel({k:"theme",label:"Theme",opts:[["light","Light"],["grey","Grey"],["dark","Dark"]]})}
+        {Sel({k:"confetti",label:"Booking confetti 🎉",opts:[["page","Everywhere — full-page drop"],["button","Just around the button"],["off","Off"]]})}
         {(isAdmin||deployMode)&&<Tog k="seasonal" label="Seasonal touches (admin)" hint="A little 🎅 🎃 ❤️ on the logo around the holidays. Off unless you, the admin, turn it on."/>}
-        <Sel k="startTab" label="Start page after login" opts={tabChoices.map(x=>[x[0],x[1]])}/>
+        {Sel({k:"startTab",label:"Start page after login",opts:tabChoices.map(x=>[x[0],x[1]])})}
       </div>
       <div className="mt-3 rounded-xl border border-stone-200 bg-white p-3">
         <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Live preview — updates as you click & drag; hit Save to keep it</div>

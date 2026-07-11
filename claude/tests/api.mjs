@@ -65,5 +65,7 @@ const r5=await call("GET","/api/v1/labels/123");ok(r5.statusCode===503,"label re
 const r6=await call("GET","/api/v1/shipments?page=2&limit=10");ok(r6.statusCode===503,"shipments pagination route exists");
 const r7=await call("POST","/api/v1/returns");ok(r7.statusCode===503,"returns route exists");
 const r8=await call("POST","/api/v1/labels/batch");ok(r8.statusCode===503,"batch route exists");
+const r9=await call("POST","/api/v1/labels",{ "idempotency-key":"test-1","content-type":"application/json" });ok(r9.statusCode===503,"idempotent booking path reachable (no insertNew ReferenceError → 503 not 500)");
+ok(typeof api.validHookUrl==="function"&&api.validHookUrl("https://169.254.169.254")===false&&api.validHookUrl("https://10.1.2.3")===false&&api.validHookUrl("https://[::1]")===false&&api.validHookUrl("https://hooks.example.com")===true,"SSRF guard blocks metadata/private/IPv6-loopback, allows public");
 console.log(p+" passed, "+f+" failed");
 process.exit(f?1:0);

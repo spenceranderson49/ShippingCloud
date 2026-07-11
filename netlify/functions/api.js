@@ -36,6 +36,15 @@ async function putStore(key, value) {
   const r = await pg("app_stores", { method: "POST", body: JSON.stringify([{ tenant: TENANT, key, value }]) });
   return { ok: r.ok };
 }
+/* insert-or-conflict: plain POST WITHOUT resolution=merge-duplicates → a duplicate (tenant,key)
+   returns 409 instead of upserting. {inserted:true} = we won the row, {conflict:true} = it
+   already existed. This is the real cross-container mutex the idempotency guard relies on. */
+async function insertNew(key, value) {
+  const c = CFG();
+  const r = await fetch(c.url + "/rest/v1/app_stores", { method: "POST", headers: { apikey: c.key, Authorization: "Bearer " + c.key, "Content-Type": "application/json", Prefer: "return=minimal" }, body: JSON.stringify([{ tenant: TENANT, key, value }]) });
+  if (r.status === 409) return { conflict: true };
+  return { inserted: r.ok };
+}
 
 /* ── internal auth for in-process calls into quote.js / ship.js / fedex.js ── */
 const scSecret = () => { const s = (process.env.SESSION_SECRET || "").trim(); if (s) return s; const k = (process.env.SUPABASE_SERVICE_KEY || "").trim(); return k ? crypto.createHash("sha256").update("sc1|" + k).digest("hex") : ""; };
@@ -58,7 +67,7 @@ const num = (v, d) => { const n = +v; return isFinite(n) ? n : d; };
 const S = (v) => (v == null ? "" : String(v));
 
 /* normalize an API package → engine/quote piece */
-const pieceOf = (p) => ({ weight: Math.max(0.1, num(p.weight, 1)), length: Math.max(1, Math.round(num(p.length, 12))), width: Math.max(1, Math.round(num(p.width, 9))), height: Math.max(1, Math.round(num(p.height, 4))), declaredValue: num(p.declared_value, 0) || undefined });
+const pieceOf = (p0) => { const p = (p0 && typeof p0 === "object") ? p0 : {}; return { weight: Math.max(0.1, num(p.weight, 1)), length: Math.max(1, Math.round(num(p.length, 12))), width: Math.max(1, Math.round(num(p.width, 9))), height: Math.max(1, Math.round(num(p.height, 4))), declaredValue: num(p.declared_value, 0) || undefined }; };
 const ctxPieces = (pieces) => pieces.map((p) => ({ weight: p.weight, L: p.length, W: p.width, H: p.height }));
 
 async function loadWorld() {
@@ -98,11 +107,19 @@ function normStatus(raw, fedexCode) {
   return "unknown";
 }
 const shipStoreKey = (client, isTest) => "u/api_" + client.id + (isTest ? "/testShipments" : "/shipments");   /* testShipments doesn't match the dashboard's (shipments|orders) scan — test traffic is invisible to ops/billing */
-const labelStoreKey = (client, id) => "u/api_" + client.id + "/label_" + id;
+const labelPdfKey = (client) => "u/api_" + client.id + "/labelPdfs";   /* one capped store, not unbounded per-label rows (F7) */
 const pickupStoreKey = (client) => "u/api_" + client.id + "/pickups";
 const hookStoreKey = (client) => "u/api_" + client.id + "/webhooks";
 const idemStoreKey = (client) => "u/api_" + client.id + "/idem";
-const validHookUrl = (u) => { try { const x = new URL(String(u)); return x.protocol === "https:" && !/localhost|127\.|\.local$/i.test(x.hostname); } catch (e) { return false; } };
+const isPrivateHost = (host) => {
+  const h = String(host || "").toLowerCase().replace(/^\[|\]$/g, "");
+  if (h === "localhost" || h.endsWith(".local") || h.endsWith(".internal")) return true;
+  if (h === "::1" || h === "::" || h.startsWith("fc") || h.startsWith("fd") || h.startsWith("fe80")) return true;   // IPv6 loopback/ULA/link-local
+  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) { const o = m.slice(1).map(Number); if (o[0] === 10 || o[0] === 127 || o[0] === 0 || (o[0] === 192 && o[1] === 168) || (o[0] === 172 && o[1] >= 16 && o[1] <= 31) || (o[0] === 169 && o[1] === 254) || (o[0] === 100 && o[1] >= 64 && o[1] <= 127)) return true; }
+  return false;
+};
+const validHookUrl = (u) => { try { const x = new URL(String(u)); return x.protocol === "https:" && !isPrivateHost(x.hostname); } catch (e) { return false; } };
 /* fire-and-forget signed webhooks: X-SC-Signature = hex hmac-sha256(secret, rawBody) */
 async function fireHooks(client, eventName, payload) {
   try {
@@ -111,8 +128,9 @@ async function fireHooks(client, eventName, payload) {
     const body = JSON.stringify({ event: eventName, created: new Date().toISOString(), data: payload });
     await Promise.all(hooks.slice(0, 5).map(async (h) => {
       try {
+        if (!validHookUrl(h.url)) return;   // re-validate at delivery (registration check isn't enough vs DNS rebinding)
         const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 5000);
-        await fetch(h.url, { method: "POST", headers: { "Content-Type": "application/json", "X-SC-Event": eventName, "X-SC-Signature": crypto.createHmac("sha256", String(h.secret || "")).update(body).digest("hex") }, body, signal: ctrl.signal });
+        await fetch(h.url, { method: "POST", redirect: "manual", headers: { "Content-Type": "application/json", "X-SC-Event": eventName, "X-SC-Signature": crypto.createHmac("sha256", String(h.secret || "")).update(body).digest("hex") }, body, signal: ctrl.signal });
         clearTimeout(t);
       } catch (e) { /* best-effort — receivers poll /v1/shipments as the source of truth */ }
     }));
@@ -220,7 +238,7 @@ exports.handler = async (event) => {
       /* durable per-record billing row — its own key, so NO concurrent booking can clobber it.
          /v1/billing + /v1/invoices reconcile from these so a booked label is ALWAYS billable (F2). */
       if (!isTest) { putStore("u/api_" + client.id + "/rec_" + rec.id, { id: rec.id, date: rec.date, tracking: rec.tracking, service: rec.service, reference: rec.reference || "", sell: rec.sell, status: "Label created" }).catch(() => {}); }
-      if (res.labelPdfBase64) { putStore(labelStoreKey(client, rec.id), { pdf: res.labelPdfBase64, tracking: rec.tracking, created: new Date().toISOString() }).catch(() => {}); }
+      if (res.labelPdfBase64) { (async () => { try { const cur = await getStore(labelPdfKey(client)); const arr = (cur.ok && Array.isArray(cur.value)) ? cur.value : []; await putStore(labelPdfKey(client), [{ id: String(rec.id), pdf: res.labelPdfBase64, tracking: rec.tracking, created: new Date().toISOString() }, ...arr].slice(0, 200)); } catch (e) {} })(); }
       const resp = { test: isTest || undefined, label_id: String(rec.id), tracking_number: rec.tracking, tracking_url: "https://www.fedex.com/fedextrack/?trknbr=" + encodeURIComponent(rec.tracking), service_code: sc, service: hit.label, charge: { amount: priced.amount, currency: "USD" }, label_pdf_base64: res.labelPdfBase64 || null };
       fireHooks(client, "label.created", { label_id: resp.label_id, tracking_number: resp.tracking_number, service_code: sc, charge: resp.charge, reference: order.reference || null, test: isTest || undefined });
       return { code: 201, resp };
@@ -249,7 +267,7 @@ exports.handler = async (event) => {
         packageTypeCode: S(body.package_type || ""),
         fedexAccount, pieces: pkgs,
       });
-      if (!q || !q.live) return ERR(502, "rates_unavailable", (q && q.error) || "Live rates are temporarily unavailable.");
+      if (!q || !q.live) return ERR(502, "rates_unavailable", "Live rates are temporarily unavailable — try again shortly.");
       let rates = priceRates(q.rates, world, client, from_zip, to_zip, pkgs);
       /* other carriers — ONLY when the admin enabled them on this account */
       try {
@@ -262,9 +280,10 @@ exports.handler = async (event) => {
 
     /* ── GET /v1/labels/{id} — re-download a label PDF ── */
     if (seg[0] === "labels" && method === "GET" && seg[1]) {
-      const cur = await getStore(labelStoreKey(client, seg[1]));
-      if (!cur.ok || !cur.value) return ERR(404, "not_found", "No stored label PDF for that label_id (PDFs are retained for recent labels).");
-      return J(200, { label_id: seg[1], tracking_number: cur.value.tracking || null, label_pdf_base64: cur.value.pdf || null, created: cur.value.created || null });
+      const cur = await getStore(labelPdfKey(client));
+      const rowp = ((cur.ok && cur.value) || []).find((x) => x && x.id === seg[1]);
+      if (!rowp) return ERR(404, "not_found", "No stored label PDF for that label_id (the last 200 labels are retained).");
+      return J(200, { label_id: seg[1], tracking_number: rowp.tracking || null, label_pdf_base64: rowp.pdf || null, created: rowp.created || null });
     }
 
     /* ── POST /v1/labels ── */

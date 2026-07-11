@@ -4478,18 +4478,22 @@ function BillingAdmin({clients=[],platform={},openCustomer}){
   const inMonth=(x,ym)=>{const t=(typeof x.id==="number"&&x.id>1e12)?new Date(x.id):new Date(x.date);return !isNaN(t)&&t.toISOString().slice(0,7)===ym;};
   const shipsForClient=(cid,ym)=>{const c=cById(cid);const nm=String(c.name||"").toLowerCase();
     return (platform.ships||[]).filter(x=>x.status!=="Voided"&&inMonth(x,ym)&&String(x.client||"").toLowerCase()===nm);};
-  const nextNumber=()=>{const yr=genMonth.slice(0,4);const n=(invoices.filter(i=>i.number&&i.number.includes("-"+yr+"-")).length)+1;return "INV-"+yr+"-"+String(n).padStart(4,"0");};
+  const nextNumber=()=>{const yr=genMonth.slice(0,4);const used=new Set((invoices||[]).map(i=>i.number));let n=(invoices.filter(i=>i.number&&i.number.includes("-"+yr+"-")).length)+1;let num;do{num="INV-"+yr+"-"+String(n).padStart(4,"0");n++;}while(used.has(num));return num;};   /* skip any number already taken → no collision */
   const buildPreview=()=>{ if(!genClient)return;
     const rows=shipsForClient(genClient,genMonth);
     if(!rows.length)return window.alert("No billable shipments for "+(cById(genClient).name||"that customer")+" in "+genMonth+".");
     if(invoices.some(i=>i.clientId===genClient&&i.month===genMonth&&i.status!=="void"))if(!window.confirm("An invoice for this customer + month already exists. Create another?"))return;
-    const items=rows.map(x=>({date:x.date,tracking:x.tracking,service:(x.service||"").replace("FedEx ",""),reference:x.reference||"",amount:Math.round((+x.sell||0)*100)/100}));
+    const alreadyBilled=rows.filter(x=>invoicedTrackings.has(x.tracking)).length;
+    const items=rows.filter(x=>!invoicedTrackings.has(x.tracking)).map(x=>({date:x.date,tracking:x.tracking,service:(x.service||"").replace("FedEx ",""),reference:x.reference||"",amount:Math.round((+x.sell||0)*100)/100}));
+    if(!items.length)return window.alert("Every shipment for "+(cById(genClient).name||"that customer")+" in "+genMonth+" is already on an invoice.");
     const subtotal=Math.round(items.reduce((a,i)=>a+i.amount,0)*100)/100;
-    setPreview({clientId:genClient,month:genMonth,number:nextNumber(),items,subtotal,total:subtotal,terms:bSettings.terms});
+    setPreview({clientId:genClient,month:genMonth,number:nextNumber(),items,subtotal,total:subtotal,terms:bSettings.terms,skipped:alreadyBilled});
   };
   const issue=()=>{ if(!preview)return;
     const inv={id:"inv"+Date.now(),...preview,status:"open",issuedAt:new Date().toISOString(),payments:[]};
     setInvoices(p=>[inv,...(p||[])]); setPreview(null); };
+  /* trackings already on a non-void invoice — excluded from new previews so a shipment can't be billed twice */
+  const invoicedTrackings=(()=>{const set=new Set();(invoices||[]).forEach(i=>{if(i.status!=="void")(i.items||[]).forEach(it=>it.tracking&&set.add(it.tracking));});return set;})();
   const recordPayment=(inv)=>{ const amt=window.prompt("Payment amount for "+inv.number+" (balance "+money(balanceOf(inv))+"):",String(balanceOf(inv)));
     if(amt==null)return; const n=+amt; if(!(n>0))return;
     setInvoices(p=>(p||[]).map(i=>i.id===inv.id?(()=>{const pays=[...(i.payments||[]),{amount:Math.round(n*100)/100,when:new Date().toISOString(),method:"manual"}];const paid=pays.reduce((a,x)=>a+x.amount,0);return {...i,payments:pays,status:paid>=i.total-0.005?"paid":"open",paidAt:paid>=i.total-0.005?new Date().toISOString():null};})():i)); };
@@ -4514,7 +4518,7 @@ function BillingAdmin({clients=[],platform={},openCustomer}){
         <button onClick={buildPreview} disabled={!genClient} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium disabled:opacity-40 flex items-center gap-1.5"><Receipt className="w-4 h-4"/>Preview</button>
       </div>
       {preview&&<div className="mt-3 border border-stone-200 rounded-lg overflow-hidden">
-        <div className="bg-stone-50 px-3 py-2 flex items-center justify-between"><div className="text-sm font-medium">{preview.number} · {cById(preview.clientId).name} · {preview.month}</div><div className="font-mono font-semibold">{money(preview.total)}</div></div>
+        <div className="bg-stone-50 px-3 py-2 flex items-center justify-between"><div className="text-sm font-medium">{preview.number} · {cById(preview.clientId).name} · {preview.month}{preview.skipped?<span className="text-[11px] text-stone-400 ml-1">({preview.skipped} already invoiced, excluded)</span>:""}</div><div className="font-mono font-semibold">{money(preview.total)}</div></div>
         <table className="w-full text-[12.5px]"><thead><tr className="text-left text-[10px] uppercase tracking-widest text-stone-400"><th className="px-3 py-1.5">Date</th><th>Tracking</th><th>Service</th><th className="text-right px-3">Amount</th></tr></thead>
           <tbody>{preview.items.slice(0,50).map((i,x)=>(<tr key={x} className="border-t border-stone-100"><td className="px-3 py-1">{i.date}</td><td className="font-mono">{i.tracking}</td><td>{i.service}</td><td className="text-right px-3 font-mono">{money(i.amount)}</td></tr>))}</tbody></table>
         {preview.items.length>50&&<div className="px-3 py-1 text-[11px] text-stone-400">+{preview.items.length-50} more line items</div>}

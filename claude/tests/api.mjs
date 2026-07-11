@@ -47,6 +47,14 @@ const r1=await call("GET","/api/v1");ok(r1.statusCode===503&&JSON.parse(r1.body)
 const r2=await call("OPTIONS","/api/v1/rates");ok(r2.statusCode===204,"CORS preflight 204");
 const r3=await call("GET","/api/v2/rates");ok(r3.statusCode===503||r3.statusCode===404,"unknown version rejected");
 
+/* 2b) custom-carrier quoting */
+{
+  const rules={profiles:[{id:"default",name:"D",services:{uniuni_standard:{basis:"percent",pct:20}},surcharges:{}}],assign:{},baseCosts:{"cc:uniuni_standard":{zones:["2","3","4","5","6","7","8"],rows:[[1,3.1,3.2,3.3,3.4,3.5,3.6,3.7],[5,4.1,4.2,4.3,4.4,4.5,4.6,4.7]]}}};
+  const q=E.customCarrierQuotes(rules,{id:"c1",enabledCarriers:["uniuni"]},{fromZip:"84101",toZip:"30301",pieces:[{weight:4,L:10,W:8,H:4}]});
+  ok(q.length===1&&q[0].sell===5.64&&q[0].carrier==="UniUni","custom carrier prices through the rule engine (4.70 +20% = 5.64)");
+  ok(E.customCarrierQuotes(rules,{id:"c1"},{fromZip:"84101",toZip:"30301",pieces:[{weight:4}]}).length===0,"custom carriers invisible unless enabled on the client");
+  ok(E.customCarrierQuotes(rules,{id:"c1",enabledCarriers:["usps"]},{fromZip:"84101",toZip:"30301",pieces:[{weight:4}]}).length===0,"no rate card loaded → no quote");
+}
 /* 3) v1.1 helpers + routes */
 const api=require2("../../netlify/functions/api.js");
 ok(api.validHookUrl("https://example.com/hook")===true,"webhook url: https ok");

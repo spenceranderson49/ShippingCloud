@@ -81,7 +81,7 @@ async function cachePut(key, rates) {
 }
 async function cacheFlush(customerId) {
   const ctx = blobsCtx();
-  if (!ctx) return { ok: false, error: "Netlify Blobs isn't available on this site, so there's no cache to clear — all quotes are already pulling live from England." };
+  if (!ctx) return { ok: false, error: "No rate cache on this site — every quote already pulls live pricing." };
   try {
     const ts = Date.now();
     const r = await blobFetch(ctx, flushKeyFor(customerId), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ts }) });
@@ -217,7 +217,7 @@ exports.handler = async (event) => {
     // ── "Refresh rates" button: invalidate every cached quote for this England account ──
     if (body.action === "flushCache") {
       const custId = (body.account && body.account.customerId) || process.env.ENGLAND_CUSTOMER_ID || "";
-      if (!custId) return J({ ok: false, error: "No England customer ID configured." });
+      if (!custId) return J({ ok: false, error: "Live rates aren't set up on this site yet." });
       const res = await cacheFlush(custId);
       return J(res);
     }
@@ -237,7 +237,7 @@ exports.handler = async (event) => {
     const base = (acct.base || process.env.ENGLAND_API_BASE || "https://englandship.rocksolidinternet.com").replace(/\/+$/, "");
     const apiKey = (acct.apiKey || process.env.ENGLAND_API_KEY || "").trim();
     const customerId = (acct.customerId || process.env.ENGLAND_CUSTOMER_ID || "").trim();
-    if (!apiKey || !customerId) return J({ live: false, error: "Missing England API key or customer ID.", rates: [] });
+    if (!apiKey || !customerId) return J({ live: false, error: "Live rates aren't set up on this site yet.", rates: [] });
 
     const pieces = (Array.isArray(body.pieces) && body.pieces.length ? body.pieces : [{ weight: body.weight || 1, L: body.L || 12, W: body.W || 9, H: body.H || 4 }])
       .map((p) => ({
@@ -321,8 +321,8 @@ exports.handler = async (event) => {
     const rates = Object.values(seen).sort((a, b) => a.cost - b.cost);
 
     if (rates.length) { await cachePut(cacheKey, rates); return J({ live: true, rates, raw, tried }); }
-    if (firstErr) return J({ live: false, error: "England HTTP " + firstErr.status + (firstErr.detail ? (": " + firstErr.detail) : ""), england_status: firstErr.status, england_response: firstErr.detail, tried, rates: [] });
-    return J({ live: false, error: "England returned no rates for this shipment.", tried, rates: [] });
+    if (firstErr) return J({ live: false, error: "Live rates are temporarily unavailable (HTTP " + firstErr.status + ").", england_status: firstErr.status, england_response: firstErr.detail, tried, rates: [] });
+    return J({ live: false, error: "No live rates came back for this shipment.", tried, rates: [] });
   } catch (e) {
     return J({ live: false, error: "Function error: " + (e && e.message ? e.message : String(e)), rates: [] });
   }

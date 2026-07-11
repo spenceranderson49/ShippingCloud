@@ -139,7 +139,7 @@ exports.handler = async (event) => {
   if ((process.env.CARRIER_BACKEND || "fedex").toLowerCase() === "england") {
     try { return await require("./quote-england.js").handler(event); }
     catch (e) {
-      const msg = "CARRIER_BACKEND=england is set but quote-england.js isn't deployed or failed: " + ((e && e.message) || e);
+      const msg = "Live rates are temporarily unavailable — showing estimates.";
       return respond(200, {live:false,error:msg,rates:[]});
     }
   }
@@ -150,7 +150,7 @@ exports.handler = async (event) => {
   if (body.action === "flushCache") return respond(200, { ok: true, flushed: true });
 
   if (!CLIENT_ID || !CLIENT_SECRET || !ACCOUNT) {
-    return respond(200, { live: false, error: "FedEx isn't configured: set FEDEX_CLIENT_ID, FEDEX_CLIENT_SECRET and FEDEX_ACCOUNT in Netlify (normal vars, then redeploy).", rates: [] });
+    return respond(200, { live: false, error: "Live rates aren't available on this site yet.", rates: [] });
   }
 
   const fromZip = String(body.fromZip || "").trim();

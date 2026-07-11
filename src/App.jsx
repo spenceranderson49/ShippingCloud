@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v453";
+const BUILD_TAG="addr-v454";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -362,7 +362,7 @@ function englandFor(client,settings){
 /* ── shared per-order shipping helpers (used by Orders individual ship + Batch) ── */
 async function ratesForOrder(o,opts,eng){
   const box=opts.box||{L:12,W:9,H:4};
-  return getLiveRates({carriers:"fedex",fromZip:(opts.sender&&opts.sender.zip)||opts.fromZip,toZip:o.zip,toCountry:o.country||"US",residential:!!opts.residential,signature:opts.signatureOption?opts.signatureOption!=="none":!!opts.signature,signatureOption:opts.signatureOption||"none",saturdayDelivery:!!opts.saturdayDelivery,insuranceAmount:opts.insuranceAmount||null,packageTypeCode:opts.packageTypeCode||"",pieces:[{weight:opts.weightLb||o.weight||1,L:box.L,W:box.W,H:box.H}]},eng);
+  return getLiveRates({carriers:"fedex",fromZip:(opts.sender&&opts.sender.zip)||opts.fromZip,toZip:o.zip,toCountry:o.country||"US",residential:!!opts.residential,signature:opts.signatureOption?opts.signatureOption!=="none":!!opts.signature,signatureOption:opts.signatureOption||"none",saturdayDelivery:!!opts.saturdayDelivery,insuranceAmount:opts.insuranceAmount||null,packageTypeCode:opts.packageTypeCode||"",pieces:[{weight:opts.weightLb||o.weight||1,L:box.L,W:box.W,H:box.H,declaredValue:(+opts.insuranceAmount||0)||undefined}]},eng);
 }
 function orderToEngland(o,opts,sender,eng){
   const box=opts.box||{L:12,W:9,H:4};
@@ -8182,7 +8182,8 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   const totalWeight=Math.round(((+weight||0)+(+oz||0)/16)*100)/100;
   const ready=postalOkFor(rcv.zip,rcv.country)&&totalWeight>0;
   const orBox=oneRateBoxFor(box.L,box.W,box.H,totalWeight);
-  const selectedOrBox=orPkg?FEDEX_ONERATE.find(b=>b.code===orPkg):orBox;
+  const _selOr=orPkg?FEDEX_ONERATE.find(b=>b.code===orPkg):orBox;
+  const selectedOrBox=(_selOr&&totalWeight<=(_selOr.maxLbs||50))?_selOr:null;   /* One Rate caps: Envelope 10 lb, everything else 50 lb — overweight never rides the request */
   const dest={...o,customer:rcv.name,company:rcv.company,address1:rcv.address1,address2:rcv.address2,city:rcv.city,state:rcv.state,zip:rcv.zip,country:rcv.country,phone:rcv.phone,email:rcv.email};
   const _intl=!!(rcv.country&&rcv.country!=="United States"&&rcv.country!=="US");
   const localOrderQuotes=()=>quoteRates({fromZip,toZip:rcv.zip,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],residential,intl:_intl}).filter(qq=>qq.carrier==="FedEx");
@@ -8235,7 +8236,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   const baseQuotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>{const _p={};const _sell=rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,listBase:qq.listBase,surcharges:qq.surcharges,fromZip,toZip:rcv.zip,weight:ruleWeightFor([{weight:totalWeight,L:box.L,W:box.W,H:box.H}],qq.label),_parts:_p});return {...qq,sell:_sell,_sellParts:_p.fees?_p:undefined};});},[rateSrc,residential,client,addrClassified,rateRules,settings]);
   const quotes=useMemo(()=>{
     const withTransit=(list)=>list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};});
-    return cleanServiceList(withTransit([...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:rateSrc.live?"none":sigOption,saturday:sat,insurance,fees:surchargeFees(rateRules,client)}))),{intl:_intl,residential:addrClassified?residential:null}).sort((a,b)=>(a.sell||0)-(b.sell||0));
+    return cleanServiceList(withTransit([...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:rateSrc.live?"none":sigOption,saturday:sat,insurance:rateSrc.live?"":insurance,fees:surchargeFees(rateRules,client)}))),{intl:_intl,residential:addrClassified?residential:null}).sort((a,b)=>(a.sell||0)-(b.sell||0));
   },[baseQuotes,orRates,fxTransit,sigOption,sat,insurance,rateRules,_intl,addrClassified,residential]);
   const best=null;
   /* Autopilot preselect — parity with the Ship tab: when "apply rules on the Ship screen" is ON,
@@ -8253,7 +8254,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
     if(apLive){ const rc=canonSvc(groundFamilySwap(apLive,res)); const hit=quotes.find(q=>canonSvc(q.label)===rc&&(q.sell??q.cost)!=null); if(hit)return {key:hit.key,src:"autopilot"}; }
     return matchServiceForOrder(quotes,o,res);
   },[quotes,apLive,o&&o.shippingService,o&&o.ruleService,residential,addrClassified]);
-  const applyORBox=(code)=>{const b=FEDEX_ONERATE.find(x=>x.code===code);if(!b)return;if(b.dims){setDims({L:b.dims.L,W:b.dims.W,H:b.dims.H});}setBoxIdx(-1);setOrPkg(code);const val="FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,"");const f=settings?.orBoxField||"invoice";const fill=(set)=>set(prev=>prev&&prev.trim()?prev:val);if(f==="invoice")fill(setInvoiceNo);else if(f==="po")fill(setPoNo);else if(f==="reference")fill(setReference);};
+  const applyORBox=(code)=>{const b=FEDEX_ONERATE.find(x=>x.code===code);if(!b)return;if(totalWeight>(b.maxLbs||50)){setStatus({state:"error",msg:b.name.replace(/®/g,"")+" maxes out at "+(b.maxLbs||50)+" lb — this shipment is "+totalWeight+" lb. Pick a regular service instead."});return;}if(b.dims){setDims({L:b.dims.L,W:b.dims.W,H:b.dims.H});}setBoxIdx(-1);setOrPkg(code);const val="FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,"");const f=settings?.orBoxField||"invoice";const fill=(set)=>set(prev=>prev&&prev.trim()?prev:val);if(f==="invoice")fill(setInvoiceNo);else if(f==="po")fill(setPoNo);else if(f==="reference")fill(setReference);};
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
   const saveOrderInfo=()=>{ upd({name:reference||o.name,customer:rcv.name,company:rcv.company,address1:rcv.address1,address2:rcv.address2,city:rcv.city,state:rcv.state,zip:rcv.zip,country:rcv.country,phone:rcv.phone,email:rcv.email,note:oNote,tags:oTags.split(",").map(s=>s.trim()).filter(Boolean)}); setSavedInfo(true); setTimeout(()=>setSavedInfo(false),2500); };
   const pickBox=(j)=>{ setBoxIdx(j); if(j>=0){const b=boxes[j];setDims({L:b.L,W:b.W,H:b.H});} };
@@ -8660,7 +8661,7 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
   const totalWeight=Math.round(pieces.reduce((a,p)=>a+pw(p),0)*100)/100;
   const ready=/^\d{5}/.test(toZip||"")&&/^\d{5}/.test(fromZip||"")&&pieces.every(p=>pw(p)>0&&+p.L>0&&+p.W>0&&+p.H>0);
   const [rateSrc,setRateSrc]=useState({rates:[],live:false,loading:false,error:null});
-  const shipPieces=pieces.map(p=>({weight:pw(p),L:+p.L||12,W:+p.W||9,H:+p.H||4}));
+  const shipPieces=pieces.map(p=>({weight:pw(p),L:+p.L||12,W:+p.W||9,H:+p.H||4,declaredValue:(+insurance||0)||undefined}));   /* DV rides the rate request per box — FedEx prices coverage for real */
   const [fxTransit,setFxTransit]=useState({});
   useEffect(()=>{
     let cancel=false;
@@ -8668,10 +8669,13 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
     fedexTransit({fromZip,toZip,pieces:shipPieces,residential}).then(m=>{if(!cancel)setFxTransit(m||{});});
     return ()=>{cancel=true;};
   },[fromZip,toZip,residential,JSON.stringify(pieces)]);
+  const qqOrBox=oneRateBoxFor(pieces[0]&&pieces[0].L,pieces[0]&&pieces[0].W,pieces[0]&&pieces[0].H,totalWeight);
   useEffect(()=>{
     let cancel=false;
     if(!ready){setRateSrc({rates:[],live:false,loading:false,error:null});return;}
-    const ship={fromZip,toZip,pieces:shipPieces,residential,signature:sigOption!=="none",signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null};
+    /* packageTypeCode = the detected One Rate box — without it quote.js never makes its One Rate
+       call and the One Rate row sat unpriced unless a flat rule / imported table existed */
+    const ship={fromZip,toZip,pieces:shipPieces,residential,signature:sigOption!=="none",signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null,packageTypeCode:qqOrBox?qqOrBox.code:""};
     if(england&&england.enabled){
       setRateSrc(p=>({...p,loading:true}));
       getLiveRates(ship,england).then(res=>{ if(cancel)return;
@@ -8681,12 +8685,11 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
     } else setRateSrc({rates:quoteRates(ship),live:false,loading:false,error:null});
     return ()=>{cancel=true;};
   },[fromZip,toZip,residential,JSON.stringify(pieces),sigOption,saturday,insurance,england]);
-  const qqOrBox=oneRateBoxFor(pieces[0]&&pieces[0].L,pieces[0]&&pieces[0].W,pieces[0]&&pieces[0].H,totalWeight);
   const qqOrRates=useMemo(()=>qqOrBox?oneRateQuotes(qqOrBox,{rules:rateRules,client:effClient}):[],[qqOrBox&&qqOrBox.code,rateRules,effClient]);
   const QQ_SKELETON=[["fedex_ground","FedEx Ground®"],["fedex_home","FedEx Home Delivery®"],["fedex_saver","FedEx Express Saver®"],["fedex_2day","FedEx 2Day®"],["fedex_std","FedEx Standard Overnight®"],["fedex_prio","FedEx Priority Overnight®"]].map(([k,l])=>({key:k,carrier:"FedEx",label:l,cost:null}));
   const _qqHs=new Set(cz(settings||{}).hiddenServices||[]);
   const _qqBs=new Set((effClient&&effClient.blockedServices)||[]);
-  const quotes=useMemo(()=>[...(rateSrc.rates.length?rateSrc.rates:QQ_SKELETON).filter(q=>q.carrier==="FedEx"&&!_qqHs.has(canonSvc(q.label))&&!_qqBs.has(canonSvc(q.label))).map(q=>{const _p={};const _sell=rateSellFor(q.cost,q.label,{rules:rateRules,client:effClient,list:q.list,listBase:q.listBase,surcharges:q.surcharges,fromZip,toZip,weight:ruleWeightFor(shipPieces,q.label),_parts:_p});return {...q,sell:_sell,_sellParts:_p.fees?_p:undefined};}),...qqOrRates.filter(q=>!_qqHs.has(canonSvc(q.label))&&!_qqBs.has(canonSvc(q.label)))].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:rateSrc.live?"none":sigOption,saturday,insurance,fees:surchargeFees(rateRules,effClient)})).sort((a,b)=>(a.sell||0)-(b.sell||0)),[rateSrc,effClient,rateRules,fxTransit,qqOrRates,sigOption,saturday,insurance,fromZip,toZip,JSON.stringify(pieces)]);
+  const quotes=useMemo(()=>{const liveOR=rateSrc.live&&rateSrc.rates.some(q=>q._oneRate||/^or_/.test(String(q.key||"")));return [...(rateSrc.rates.length?rateSrc.rates:QQ_SKELETON).filter(q=>q.carrier==="FedEx"&&!_qqHs.has(canonSvc(q.label))&&!_qqBs.has(canonSvc(q.label))).map(q=>{const _p={};const _sell=rateSellFor(q.cost,q.label,{rules:rateRules,client:effClient,list:q.list,listBase:q.listBase,surcharges:q.surcharges,fromZip,toZip,weight:ruleWeightFor(shipPieces,q.label),_parts:_p});return {...q,sell:_sell,_sellParts:_p.fees?_p:undefined};}),...(liveOR?[]:qqOrRates).filter(q=>!_qqHs.has(canonSvc(q.label))&&!_qqBs.has(canonSvc(q.label)))].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:rateSrc.live?"none":sigOption,saturday,insurance:rateSrc.live?"":insurance,fees:surchargeFees(rateRules,effClient)})).sort((a,b)=>(a.sell||0)-(b.sell||0));},[rateSrc,effClient,rateRules,fxTransit,qqOrRates,sigOption,saturday,insurance,fromZip,toZip,JSON.stringify(pieces)]);
   const hasExpress=quotes.some(q=>{const l=String(q.label||"").toLowerCase();return /(overnight|2\s?day|express saver)/.test(l);});
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-8 bg-stone-900/40 backdrop-blur-sm overflow-auto" onClick={onClose}>

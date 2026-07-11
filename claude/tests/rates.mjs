@@ -106,5 +106,26 @@ for(const su of CAT){
   rt++;
 }
 ok(rt>=30,"round-tripped "+rt+" named fees");
+// ── billable (dim) weight for rule lookups + Ground/Home exclusivity ──
+{
+  const ln=(name)=>{const m=new RegExp("const "+name+"=.*").exec(src);if(!m)throw new Error("ln "+name);return m[0];};
+  const wcode=['const DIM=139;','let DIM_CFG={express:DIM,ground:DIM,ground_economy:DIM};',ln("dimFor"),ln("billable"),ln("ruleWeightFor"),"return {ruleWeightFor,billable};"].join("\n");
+  const {ruleWeightFor,billable}=new Function(wcode)();
+  ok(ruleWeightFor([{weight:5,L:20,W:20,H:20}],"FedEx Ground")===58,"5 lb 20x20x20 rates as 58 lb dim (8000/139)");
+  ok(ruleWeightFor([{weight:4.75,L:1,W:1,H:1}],"FedEx 2Day")===5,"4 lb 12 oz bills as the next full pound");
+  ok(ruleWeightFor([{weight:3}],"FedEx Ground")===3,"no dims → ceil(actual)");
+  ok(ruleWeightFor([{weight:2,L:12,W:9,H:4},{weight:2,L:12,W:9,H:4}],"FedEx Ground")===8,"multi-piece sums per-piece billable (432/139→4 each)");
+  ok(billable(12,12,12,2)===13,"12x12x12 light box → 13 lb dim");
+}
+{
+  const ccode=[fn("canonSvc"),fn("svcFamilyKey"),fn("isIntlService"),fn("cleanServiceList"),"return {cleanServiceList};"].join("\n");
+  const {cleanServiceList}=new Function("rateSvcKey",ccode)(rateSvcKey);
+  const rows=[{label:"FedEx Ground",cost:10},{label:"FedEx Home Delivery",cost:11},{label:"FedEx 2Day",cost:20}];
+  ok(cleanServiceList(rows,{residential:true}).every(q=>q.label!=="FedEx Ground"),"residential → Ground hidden");
+  ok(cleanServiceList(rows,{residential:false}).every(q=>q.label!=="FedEx Home Delivery"),"commercial → Home Delivery hidden");
+  ok(cleanServiceList(rows,{residential:null}).length===3,"unknown classification → both shown");
+  const dup=[{label:"FedEx Ground®",cost:null},{label:"FedEx Ground",cost:12}];
+  ok(cleanServiceList(dup,{residential:false}).length===1&&cleanServiceList(dup,{residential:false})[0].cost===12,"family dedupe keeps the priced row");
+}
 console.log(p+" passed, "+f+" failed");
 process.exit(f?1:0);

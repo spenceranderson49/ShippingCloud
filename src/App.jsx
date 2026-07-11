@@ -81,13 +81,14 @@ const FEATURE_CATALOG=[
   {id:"pickups",label:"Pickups",desc:"Schedule carrier pickups",default:true},
   {id:"batch",label:"Batch",desc:"Rate & print in bulk",default:true},
   {id:"invoices",label:"Invoice Audit",desc:"Carrier invoice auditing",default:false},   /* off unless the admin grants it per login */
+  {id:"pickupCosts",label:"Pickup fee display",desc:"Show pickup fee estimates on the Pickups tab",default:true},
   {id:"rules",label:"Autopilot",desc:"Autopilot Mode — automation rules",default:true},
   {id:"scan",label:"Scan",desc:"Barcode scan station",default:true},
   {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:true},
   {id:"seeCosts",label:"See costs & spend",desc:"Rates, order totals, batch totals and Reports dollars. Turn OFF to hide all money from this customer's logins",default:true},
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own carrier accounts on the Connections page (England always shows; admins always have this)",default:false},
 ];
-const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All logins"],["labelcert","FedEx labels"],["customizations","Features & access"],["branding","Branding"],["platforms","Carrier accounts"],["domains","Domains"]];
+const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All logins"],["rates","Rates & dim divisors"],["labelcert","FedEx labels"],["customizations","Features & access"],["branding","Branding"],["platforms","Carrier accounts"],["domains","Domains"]];
 const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,labelcert:Printer,customizations:Sliders,branding:Sparkles,platforms:Truck,domains:ExternalLink};
 /* A restricted admin ALWAYS keeps access to "users" — without it there is no self-service way
    to ever fix a permission set that’s missing something, for yourself or anyone else. A wrong
@@ -106,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v444";
+const BUILD_TAG="addr-v448";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -1453,6 +1454,30 @@ async function fedexSchedulePickup(p){
     date:p.date,readyTime:p.readyTime,closeTime:p.closeTime,packageCount:p.packageCount,totalWeight:p.totalWeight,carrierCode:p.carrierCode,packageLocation:p.packageLocation,residential:p.residential,remarks:p.remarks},25000);
 }
 
+/* Pickup fee for a customer: the profile's accessorial rule on the on-call pickup row
+   (PU-EXP express / PU-GRD-OC ground) applied to the Service Guide default — identical
+   semantics to every other accessorial (percent / $ over cost / % off list / flat), with the
+   account-wide markup as the no-rule fallback. Returns {fee, ruleDesc}. */
+function pickupFeeFor(rules,client,carrierCode){
+  const id=carrierCode==="FDXG"?"PU-GRD-OC":"PU-EXP";
+  const su=(typeof FEDEX_SURCHARGES!=="undefined")?FEDEX_SURCHARGES.find(x=>x&&x.id===id):null;
+  const def=(su&&su.def)||16.25;
+  const prof=rules?rateProfileFor(rules,client&&client.id):null;
+  const r=((prof&&prof.surcharges)||{})[id];
+  const a=(r&&r.amount!=null&&r.amount!==""&&!isNaN(+r.amount))?+r.amount:null;
+  const aPct=(client&&client.markup!=null&&client.markup!==""&&!isNaN(+client.markup)&&+client.markup!==0)?+client.markup:null;
+  if(a==null){
+    const fee=Math.round((aPct!=null?def*(1+aPct/100):def)*100)/100;
+    return {fee,ruleDesc:aPct!=null?("account markup "+(aPct>0?"+":"")+aPct+"%"):"FedEx default"};
+  }
+  const t=(r&&r.type)||"percent";
+  const fee=Math.round((t==="percent"?def*(1+a/100):t==="add"?def+a:t==="listpct"?def*(1-a/100):a)*100)/100;
+  const ruleDesc=t==="fixed"?("flat "+money(a)):t==="add"?("fee + "+money(a)):t==="listpct"?("list − "+a+"%"):(a>=0?("fee + "+a+"%"):("fee − "+Math.abs(a)+"%"));
+  return {fee,ruleDesc:"your rule: "+ruleDesc};
+}
+async function fedexCancelPickup(p){
+  return await fedexCall({action:"pickupCancel",confirmationCode:p.confirmationCode,carrierCode:p.carrierCode||"FDXE",date:p.date,location:p.location||""},25000);
+}
 /* ════════ SEED ════════ */
 const SEED_CLIENTS=[
     {id:"c2",name:"House accounts",markup:"",origin:"84057",contact:"—",email:"",phone:"",status:"active",since:"2025-06",plan:"Standard"},
@@ -2155,9 +2180,9 @@ const FEDEX_SURCHARGES=[
   {id:"PEAK-GE",desc:"Demand Surcharge — Ground Economy (peak)",seg:"Ground Economy",charge:"fixed",g:"Peak / demand",aka:"Demand Surcharge"},
   {id:"PEAK-INTL",desc:"Demand Surcharge — International (per lane, peak)",seg:"Express",charge:"fixed",g:"Peak / demand",aka:"Demand Surcharge - International"},
   /* Pickup & returns */
-  {id:"PU-EXP",desc:"On-Call Pickup (per package)",seg:"Express",charge:"fixed",g:"Pickup & returns"},
-  {id:"PU-GRD-OC",desc:"On-Call Pickup (per package)",seg:"Ground",charge:"fixed",g:"Pickup & returns"},
-  {id:"PU-GRD",desc:"Scheduled / Alternate-Day Pickup (weekly)",seg:"Ground",charge:"fixed",g:"Pickup & returns"},
+  {id:"PU-EXP",desc:"On-Call Pickup (per package)",seg:"Express",charge:"fixed",def:16.25,g:"Pickup & returns"},
+  {id:"PU-GRD-OC",desc:"On-Call Pickup (per package)",seg:"Ground",charge:"fixed",def:16.25,g:"Pickup & returns"},
+  {id:"PU-GRD",desc:"Scheduled / Alternate-Day Pickup (weekly)",seg:"Ground",charge:"fixed",def:35.50,g:"Pickup & returns"},
   {id:"RTN",desc:"Print Return Label",seg:"Express & Ground",charge:"fixed",g:"Pickup & returns"},
   {id:"RTN-E",desc:"Email Return Label",seg:"Express & Ground",charge:"fixed",g:"Pickup & returns"},
   {id:"RETAG",desc:"Ground Call Tag / Express Tag (pickup return)",seg:"Express & Ground",charge:"fixed",g:"Pickup & returns"},
@@ -3241,19 +3266,23 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection}){
   /* chart buckets (fixed scopes, independent of the period picker) */
   const buckets=useMemo(()=>{
     const liveAll=ships.filter(x=>x.status!=="Voided");
-    const hourly=[];for(let h=6;h<=20;h++)hourly.push({lb:h%3===0?String(h):"",m:0,c:0,_h:h});
+    const hourly=[];for(let h=6;h<=20;h++)hourly.push({lb:h%3===0?String(h):"",m:0,c:0,_h:h,_from:dayStart+h*3600e3,_to:dayStart+(h+1)*3600e3,_t:"Today "+((h%12)||12)+(h<12?"am":"pm")});
     liveAll.forEach(x=>{const t=tsOf(x);if(t<dayStart)return;const h=new Date(t).getHours();const b=hourly.find(b2=>b2._h===h);if(b){b.m+=marginOf(x);b.c++;}});
-    const daily=[];for(let i=13;i>=0;i--){const d0=dayStart-i*864e5;daily.push({lb:i%3===0?new Date(d0).toLocaleDateString([],{month:"numeric",day:"numeric"}):"",m:0,c:0,_d:d0});}
+    const daily=[];for(let i=13;i>=0;i--){const d0=dayStart-i*864e5;daily.push({lb:i%3===0?new Date(d0).toLocaleDateString([],{month:"numeric",day:"numeric"}):"",m:0,c:0,_d:d0,_from:d0,_to:d0+864e5,_t:new Date(d0).toLocaleDateString([],{weekday:"short",month:"numeric",day:"numeric"})});}
     liveAll.forEach(x=>{const t=tsOf(x);const b=daily.find(b2=>t>=b2._d&&t<b2._d+864e5);if(b){b.m+=marginOf(x);b.c++;}});
-    const weekly=[];for(let i=11;i>=0;i--){const w0=dayStart-((i+1)*7-1)*864e5;weekly.push({lb:i%3===0?new Date(w0).toLocaleDateString([],{month:"numeric",day:"numeric"}):"",m:0,c:0,_d:w0});}
+    const weekly=[];for(let i=11;i>=0;i--){const w0=dayStart-((i+1)*7-1)*864e5;weekly.push({lb:i%3===0?new Date(w0).toLocaleDateString([],{month:"numeric",day:"numeric"}):"",m:0,c:0,_d:w0,_from:w0,_to:w0+7*864e5,_t:"Week of "+new Date(w0).toLocaleDateString([],{month:"numeric",day:"numeric"})});}
     liveAll.forEach(x=>{const t=tsOf(x);const b=weekly.find(b2=>t>=b2._d&&t<b2._d+7*864e5);if(b){b.m+=marginOf(x);b.c++;}});
     return {hourly,daily,weekly};
   },[ships,dayStart]);
+  const [drill,setDrill]=useState(null);   // {_from,_to,_t} — a clicked chart bucket
   const Combo=({title,data})=>{const W=340,H=104,P=14;const mMax=Math.max(1,...data.map(d=>d.m));const cMax=Math.max(1,...data.map(d=>d.c));const bw=(W-P*2)/data.length;
     return (<div className="border border-stone-200 rounded-lg bg-white p-3">
-      <div className="text-xs font-semibold text-stone-600 mb-1">{title}</div>
+      <div className="text-xs font-semibold text-stone-600 mb-1">{title} <span className="font-normal text-stone-400">— click a bar for the breakdown</span></div>
       <svg viewBox={"0 0 "+W+" "+H} className="w-full">
-        {data.map((d,i)=>{const h=(H-32)*(d.m/mMax);return <rect key={i} x={P+i*bw+1.5} y={H-18-h} width={Math.max(1,bw-3)} height={Math.max(0,h)} rx="1" fill="#fdba74"/>;})}
+        {data.map((d,i)=>{const h=(H-32)*(d.m/mMax);const sel=drill&&drill._from===d._from&&drill._to===d._to;return <g key={i} className="cursor-pointer" onClick={()=>setDrill(sel?null:d)}>
+          <rect x={P+i*bw} y={12} width={Math.max(1,bw)} height={H-30} fill={sel?"#0086E0":"transparent"} opacity={sel?0.08:0}/>
+          <rect x={P+i*bw+1.5} y={H-18-h} width={Math.max(1,bw-3)} height={Math.max(0,h)} rx="1" fill={sel?"#fb923c":"#fdba74"}/>
+        </g>;})}
         <polyline fill="none" stroke="#44403c" strokeWidth="1.5" points={data.map((d,i)=>(P+i*bw+bw/2)+","+(H-18-(H-32)*(d.c/cMax))).join(" ")}/>
         {data.map((d,i)=>d.c>0&&<circle key={"c"+i} cx={P+i*bw+bw/2} cy={H-18-(H-32)*(d.c/cMax)} r="1.8" fill="#44403c"/>)}
         {data.map((d,i)=>(d.lb?<text key={"t"+i} x={P+i*bw+bw/2} y={H-5} fontSize="8" textAnchor="middle" fill="#a8a29e">{d.lb}</text>:null))}
@@ -3275,6 +3304,36 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection}){
       <Stat2 label="Quoted" v={money(totQ)}/>
       <Stat2 label="Open orders (all logins)" v={platform.openOrders}/>
     </div>
+    {drill&&(()=>{
+      const rows=ships.filter(x=>{const t=tsOf(x);return t>=drill._from&&t<drill._to;}).sort((a,b)=>tsOf(b)-tsOf(a));
+      const rl=rows.filter(x=>x.status!=="Voided");
+      const dm=Math.round(rl.reduce((a,x)=>a+marginOf(x),0)*100)/100;
+      const dq=Math.round(rl.reduce((a,x)=>a+(+x.sell||0),0)*100)/100;
+      const byC={};rows.forEach(x=>{const k=custOf(x);const e=byC[k]||(byC[k]={name:k,n:0,voided:0,q:0,mg:0});if(x.status==="Voided"){e.voided++;return;}e.n++;e.q+=(+x.sell||0);e.mg+=marginOf(x);});
+      const bc=Object.values(byC).sort((a,b)=>b.mg-a.mg);
+      return (<div className="border-2 border-[#0086E0]/40 rounded-lg bg-[#F0F9FF]/50 overflow-hidden">
+        <div className="px-4 py-2.5 flex items-center gap-3 border-b border-[#BAE6FD]">
+          <span className="text-sm font-semibold text-stone-800">{drill._t}</span>
+          <span className="text-[12px] text-stone-500">{rl.length} shipped{rows.length-rl.length?" − "+(rows.length-rl.length)+" voided":""} · margin <b className="font-mono">{money(dm)}</b> · quoted <b className="font-mono">{money(dq)}</b></span>
+          <span className="flex-1"/>
+          <button onClick={()=>setDrill(null)} className="text-stone-400 hover:text-stone-700"><X className="w-4 h-4"/></button>
+        </div>
+        <div className="grid lg:grid-cols-2 gap-0">
+          <div className="overflow-x-auto max-h-[300px] overflow-y-auto border-r border-[#BAE6FD]/60">
+            <table className="w-full text-[12px] min-w-[380px]">
+              <thead className="sticky top-0 bg-[#E6F4FF]"><tr className="text-[9px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal px-3 py-1.5">Customer</th><th className="text-right font-normal px-3 py-1.5">Ships</th><th className="text-right font-normal px-3 py-1.5">Quoted</th><th className="text-right font-normal px-3 py-1.5">Margin</th></tr></thead>
+              <tbody>{bc.map((e,i)=>(<tr key={i} className="border-t border-[#BAE6FD]/40"><td className="px-3 py-1.5 font-medium text-stone-800 truncate max-w-[180px]">{e.name}</td><td className="px-3 py-1.5 text-right font-mono">{e.n}{e.voided?" (−"+e.voided+")":""}</td><td className="px-3 py-1.5 text-right font-mono">{money(Math.round(e.q*100)/100)}</td><td className={"px-3 py-1.5 text-right font-mono "+(e.mg>=0?"text-emerald-700":"text-rose-600")}>{money(Math.round(e.mg*100)/100)}</td></tr>))}</tbody>
+            </table>
+          </div>
+          <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
+            <table className="w-full text-[12px] min-w-[420px]">
+              <thead className="sticky top-0 bg-[#E6F4FF]"><tr className="text-[9px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal px-3 py-1.5">Time</th><th className="text-left font-normal px-3 py-1.5">Customer</th><th className="text-left font-normal px-3 py-1.5">Tracking</th><th className="text-right font-normal px-3 py-1.5">Margin</th><th className="text-right font-normal px-3 py-1.5">Quote</th></tr></thead>
+              <tbody>{rows.slice(0,150).map((x,i)=>(<tr key={i} className={"border-t border-[#BAE6FD]/40 "+(x.status==="Voided"?"opacity-45":"")}><td className="px-3 py-1.5 whitespace-nowrap text-stone-500">{timeOf(x)}</td><td className="px-3 py-1.5 truncate max-w-[150px] text-stone-800">{custOf(x)}</td><td className="px-3 py-1.5 font-mono text-[11px] text-stone-600">{x.tracking||"—"}</td><td className="px-3 py-1.5 text-right font-mono">{x.status==="Voided"?"—":money(marginOf(x))}</td><td className="px-3 py-1.5 text-right font-mono">{x.status==="Voided"?"—":money(+x.sell||0)}</td></tr>))}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>);
+    })()}
     <div className="grid lg:grid-cols-[340px,1fr] gap-3 items-start">
       <div className="space-y-3">
         <Combo title="Today — hourly" data={buckets.hourly}/>
@@ -3495,6 +3554,18 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         {["FedEx Ground","FedEx Home Delivery","FedEx 2Day","FedEx Priority Overnight"].map((l,i)=><span key={l}>{i>0&&" · "}{l.replace("FedEx ","")} <b className="font-mono">{money(rateSellFor(10,l,{rules,client:cDraft}))}</b></span>)}
         &nbsp;— same engine that prices every quote for {c.name}; type a markup above or below and watch these move instantly.
         <div className="mt-1 text-stone-500">How every live quote prices: the fee lines FedEx itemizes (fuel, residential, DAS, peak…) are split off and priced by their <b>accessorial rules</b> (no rule = account markup, else billed as-is). The <b>BASE freight</b> alone goes through the service rule — weight-break / zone % → %, Fixed $, Flat $, or List−% — then this account-wide markup, with the service <b>Min $ as a floor on the BASE</b>. Total = priced base + priced fees; Min $ profit still floors against total raw cost.</div>
+      </div>
+      <div className="border border-stone-200 rounded-lg bg-white p-3">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="text-sm font-semibold text-stone-800">Dim divisors <span className="font-normal text-[11px] text-stone-400">(platform-wide — every customer)</span></div>
+          {[["express","Express"],["ground","Ground & HD"],["ground_economy","Ground Economy"]].map(([k,l])=>(
+            <label key={k} className="text-xs text-stone-600 flex items-center gap-1.5">{l}
+              <input type="number" min="50" max="300" value={(rules.dimDivisors&&rules.dimDivisors[k])||139}
+                onChange={e=>{const v=Math.max(50,Math.min(300,+e.target.value||139));setRules(r=>({...DEFAULT_RATE_RULES,...r,dimDivisors:{express:139,ground:139,ground_economy:139,...(r.dimDivisors||{}),[k]:v}}));}}
+                className="w-20 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF]"/>
+            </label>))}
+          <span className="text-[10px] text-stone-400">Dim weight = L×W×H ÷ divisor; FedEx bills the higher of dim and actual. Saves with the green Save rates button.</span>
+        </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-stone-600">{c.name} prices from</span>
@@ -3780,7 +3851,8 @@ function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureF
       <div className="divide-y divide-stone-100">
         {list.length===0&&<div className="px-4 py-8 text-sm text-stone-400 text-center">No customers match "{q}".</div>}
         {list.map(c=>{const lg=loginsOf(c.id);const prof=profOf(c.id);return (
-          <div key={c.id} onClick={()=>onOpenCustomer&&onOpenCustomer(c.id)} className="flex items-center gap-3 px-4 py-3 hover:bg-stone-50 cursor-pointer">
+          <div key={c.id} onClick={()=>onOpenCustomer&&onOpenCustomer(c.id)} className="group flex items-center gap-3 px-4 py-3 hover:bg-stone-50 cursor-pointer">
+            <button onClick={(e)=>{e.stopPropagation();if(!window.confirm('Delete customer "'+c.name+'"? Their logins stay but lose the link (they re-heal into a fresh blank customer on next login). Rates/rules assigned to them are kept but unassigned.'))return;setUsers(us=>us.map(x=>x.clientId===c.id?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==c.id));}} title="Delete customer" className="opacity-0 group-hover:opacity-100 text-stone-300 hover:text-rose-500 shrink-0 order-last"><Trash2 className="w-4 h-4"/></button>
             <div className="w-7 h-7 rounded-lg bg-[#0086E0]/10 text-[#0086E0] flex items-center justify-center font-bold text-xs shrink-0">{String(c.name||"?").slice(0,1).toUpperCase()}</div>
             <div className="flex-1 min-w-0"><div className="font-medium text-sm truncate">{c.name}</div><div className="text-[11px] text-stone-400 truncate">{c.contact||"—"}{c.email?` · ${c.email}`:""}</div></div>
             <div className="w-20 text-center"><Badge tone="blue">{lg.length}</Badge></div>
@@ -4355,7 +4427,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
   const NAV_GROUPS=[
     {label:"Overview",items:[["overview","Dashboard",BarChart3]]},
     {label:"Accounts",items:[["customers","Customers",Building2],["users","All logins",Users]]},
-    {label:"Pricing",items:[["labelcert","FedEx labels",Printer]]},
+    {label:"Pricing",items:[["rates","Rates & dim divisors",DollarSign],["labelcert","FedEx labels",Printer]]},
     {label:"Experience",items:[["customizations","Features & access",Sliders],["branding","Branding",Sparkles],["platforms","Carrier accounts",Truck],["domains","Domains",ExternalLink]]},
   ];
   const SECTION_META={};NAV_GROUPS.forEach(g=>g.items.forEach(([v,l,Icon])=>{SECTION_META[v]={label:l,Icon};}));
@@ -6253,7 +6325,7 @@ function AppInner(){
           </div>}
           {tab==="drafts"&&<Drafts drafts={drafts} setDrafts={setDrafts} goShip={goShip}/>}
           {tab==="returns"&&<Returns returns={returns} setReturns={setReturns} orders={orders} settings={settings} logEmail={logEmail}/>}
-          {tab==="pickups"&&<Pickups pickups={pickups} setPickups={setPickups} settings={settings}/>}
+          {tab==="pickups"&&<Pickups pickups={pickups} setPickups={setPickups} settings={settings} client={client} showCosts={featureOn("pickupCosts",currentUser,myFlags)}/>}
           {tab==="invoices"&&<Invoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>}
           {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings} client={client} onShipped={onShipped}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
@@ -7112,7 +7184,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <Printer className="w-3.5 h-3.5 shrink-0"/>
           <span><b>Hands-free:</b> {hfWait.m}</span>
         </div>}
-        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${orBox?orBox.code:""}|${pieces.length}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
+        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${orBox?orBox.code:""}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
         {intl&&(
           <div className="border border-[#99D6FF] bg-[#E6F4FF]/40 rounded-lg p-3 space-y-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-[#006FBF]"><FileText className="w-4 h-4"/>Customs · Commercial invoice</div>
@@ -8347,7 +8419,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
               </div>
             </div>
             {!shipped&&<div className="bg-white border border-stone-200 rounded-lg p-4">
-              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyORBox} custom={cz(settings||{})} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} resetKey={`${rcv.zip}|${rcv.country||"US"}|${orPkg||""}`} billing={weighInfo([{weight:totalWeight,L:box.L,W:box.W,H:box.H}])}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
+              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyORBox} custom={cz(settings||{})} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} resetKey={`${rcv.zip}|${rcv.country||"US"}|${orPkg||""}|${((client&&client.blockedServices)||[]).join(",")}`} billing={weighInfo([{weight:totalWeight,L:box.L,W:box.W,H:box.H}])}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
               {ready&&rateSrc.loading&&<div className="text-xs text-stone-400 flex items-center gap-1.5 mt-2"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Loading rates…</div>}
               {status&&<div className={`mt-2 text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${status.state==="error"?"text-rose-600 bg-rose-50 border border-rose-200":status.state==="booking"?"text-stone-600 bg-stone-50 border border-stone-200":"text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF]"}`}>{status.state==="error"?<AlertTriangle className="w-3.5 h-3.5"/>:status.state==="booking"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{status.msg}</div>}
             </div>}
@@ -8470,11 +8542,26 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
 }
 
 /* ════════ PICKUPS ════════ */
-function Pickups({pickups,setPickups,settings}){
+function Pickups({pickups,setPickups,settings,client=null,showCosts=true}){
   const [f,setF]=useState({carrierCode:"FDXE",date:"",ready:"10:00",close:"17:00",count:1,weight:5,location:"FRONT"});
   const [busy,setBusy]=useState(false);
+  const [canceling,setCanceling]=useState(null);
   const [err,setErr]=useState(null);
   const s=settings.sender||{};
+  /* Pickup fee, priced exactly like any accessorial: the customer's profile rule on the on-call
+     pickup row (percent / $ over cost / % off list / flat) applied to the Service Guide default,
+     account markup as the fallback. Admin can hide this per login (Pickup fee display feature). */
+  const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
+  const _pf=useMemo(()=>pickupFeeFor(rateRules,client,f.carrierCode),[rateRules,client,f.carrierCode]);
+  const pickupFee=_pf.fee;
+  const cancelLive=async(p)=>{
+    if(!window.confirm("Cancel this FedEx pickup ("+p.conf+")? The driver will not come."))return;
+    setCanceling(p.id);
+    const res=await fedexCancelPickup({confirmationCode:p.conf,carrierCode:p.carrierCode||"FDXE",date:p.date,location:p.fxLocation||""});
+    setCanceling(null);
+    if(res&&res.ok)setPickups(x=>x.map(y=>y.id===p.id?{...y,canceled:true,live:false}:y));
+    else setErr((res&&res.error)||"FedEx couldn't cancel this pickup — call FedEx with the confirmation code.");
+  };
   const PKG_LOC=[["FRONT","Front"],["NONE","None"],["REAR","Rear"],["SIDE","Side"]];
   const add=async()=>{
     if(!f.date){setErr("Pick a date");return;}
@@ -8485,7 +8572,7 @@ function Pickups({pickups,setPickups,settings}){
     });
     setBusy(false);
     if(res&&res.ok){
-      setPickups(p=>[{id:Date.now(),conf:res.confirmationCode||"PENDING",carrier:"FedEx",carrierCode:f.carrierCode,date:f.date,count:f.count,ready:f.ready,close:f.close,location:f.location,live:!!res.confirmationCode},...p]);
+      setPickups(p=>[{id:Date.now(),conf:res.confirmationCode||"PENDING",carrier:"FedEx",carrierCode:f.carrierCode,date:f.date,count:f.count,ready:f.ready,close:f.close,location:f.location,fxLocation:res.location||"",fee:showCosts?pickupFee:null,live:!!res.confirmationCode},...p]);
     } else {
       setErr((res&&res.error)||"FedEx pickup failed");
     }
@@ -8499,6 +8586,8 @@ function Pickups({pickups,setPickups,settings}){
         <div className="grid grid-cols-2 gap-3"><Field label="Ready time"><Input type="time" value={f.ready} onChange={e=>setF({...f,ready:e.target.value})}/></Field><Field label="Close time"><Input type="time" value={f.close} onChange={e=>setF({...f,close:e.target.value})}/></Field></div>
         <div className="grid grid-cols-2 gap-3"><Field label="Total weight (lb)"><Input type="number" value={f.weight} onChange={e=>setF({...f,weight:+e.target.value})}/></Field><Field label="Package location"><Select value={f.location} onChange={e=>setF({...f,location:e.target.value})}>{PKG_LOC.map(([v,l])=><option key={v} value={v}>{l}</option>)}</Select></Field></div>
         <div className="text-[11px] text-stone-400 flex items-center gap-1"><MapPin className="w-3.5 h-3.5"/>{addrReady?`${s.address1}, ${s.city} ${s.state} ${s.zip}`:"Set your pickup address in Settings → Company"}</div>
+        {showCosts&&<div className="flex items-center justify-between text-sm bg-stone-50 border border-stone-200 rounded-lg px-3 py-2"><span className="text-stone-600">On-call pickup fee ({f.carrierCode==="FDXG"?"Ground":"Express"})<span className="block text-[10px] text-stone-400">{_pf.ruleDesc} — edit it on the Rates tab accessorials (Pickup &amp; returns)</span></span><span className="font-mono font-semibold text-stone-900">{money(pickupFee)}</span></div>}
+        {showCosts&&<div className="text-[10px] text-stone-400 -mt-1">Billed by FedEx per on-call pickup. Regular scheduled pickup routes bill weekly instead. Priced from your account's accessorial rules.</div>}
         {err&&<div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1.5 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>{err}</div>}
         <button onClick={add} disabled={busy||!addrReady} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Scheduling with FedEx…</>:<><Calendar className="w-4 h-4"/>Schedule pickup</>}</button>
       </Panel>
@@ -8508,8 +8597,10 @@ function Pickups({pickups,setPickups,settings}){
           <div key={p.id} className="border border-stone-200 rounded-lg bg-white p-3 flex items-center gap-3">
             <div className={`text-xs font-bold ${CARRIER_TINT[p.carrier]||"text-[#0086E0]"}`}>{p.carrier}</div>
             <div className="flex-1"><div className="text-sm text-stone-800">{p.date} · {p.count} pkg{p.carrierCode==="FDXG"?" · Ground":" · Express"}</div><div className="text-[11px] text-stone-400">{p.ready}–{p.close} · {p.location}</div></div>
-            <div className="text-right"><div className="font-mono text-[11px] text-stone-600">{p.conf}</div>{p.live&&<div className="text-[10px] uppercase tracking-wide text-emerald-600">confirmed</div>}</div>
-            <button onClick={()=>setPickups(x=>x.filter(y=>y.id!==p.id))} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>
+            <div className="text-right"><div className="font-mono text-[11px] text-stone-600">{p.conf}</div>{p.canceled?<div className="text-[10px] uppercase tracking-wide text-stone-400">canceled</div>:p.live?<div className="text-[10px] uppercase tracking-wide text-emerald-600">confirmed</div>:null}{showCosts&&p.fee!=null&&!p.canceled&&<div className="text-[10px] text-stone-400 font-mono">{money(p.fee)}</div>}</div>
+            {p.live&&!p.canceled
+              ?<button onClick={()=>cancelLive(p)} disabled={canceling===p.id} title="Cancel this pickup with FedEx" className="text-[11px] text-rose-600 bg-rose-50 border border-rose-200 rounded px-2 py-1 hover:bg-rose-100 disabled:opacity-50">{canceling===p.id?"Canceling…":"Cancel"}</button>
+              :<button onClick={()=>setPickups(x=>x.filter(y=>y.id!==p.id))} title="Remove from this list" className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
           </div>
         ))}
       </div>
@@ -8615,7 +8706,7 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
             <div className="grid grid-cols-2 gap-px bg-stone-200 border border-stone-200 rounded overflow-hidden font-mono text-center"><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">zone</div><div className="font-semibold">{ready?zoneEst(fromZip,toZip):"—"}</div></div><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">billable</div><div className="font-semibold">{ready?billable(pieces[0].L,pieces[0].W,pieces[0].H,totalWeight)+" lb":"—"}</div></div></div>
             {ready&&<div className={`text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700":"bg-[#E6F4FF] text-[#006FBF]"}`}>{rateSrc.loading?<><Loader2 className="w-3 h-3 animate-spin"/>Fetching…</>:rateSrc.live?<><Wifi className="w-3 h-3"/>Live rates</>:<><Calculator className="w-3 h-3"/>Estimated</>}</div>}
           </Panel></div>
-          <div className="flex-1 min-w-0"><ServiceList quotes={quotes} ready={ready} live={rateSrc.live} loading={rateSrc.loading} resetKey={`${fromZip}|${toZip}|${residential}|${pieces.length}`}/></div>
+          <div className="flex-1 min-w-0"><ServiceList quotes={quotes} ready={ready} live={rateSrc.live} loading={rateSrc.loading} resetKey={`${fromZip}|${toZip}|${residential}|${pieces.length}|${((effClient&&effClient.blockedServices)||[]).join(",")}`}/></div>
         </div>
       </div>
     </div>

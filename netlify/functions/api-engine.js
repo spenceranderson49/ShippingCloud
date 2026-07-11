@@ -311,7 +311,7 @@ function rateSellFor(cost,label,ctx){
     const aMin2=(c.client&&c.client.markupMin!=null&&c.client.markupMin!==""&&!isNaN(+c.client.markupMin)&&+c.client.markupMin>0)?+c.client.markupMin:null;
     /* Flat-priced services are EXEMPT from the account profit floor: "flat $15.30" must sell
        and display exactly $15.30 — flat means the sell never moves, whatever the margin. */
-    const svcRule2=prof&&prof.services&&prof.services[rateSvcKey(label)];
+    const svcRule2=prof&&prof.services&&prof.services[c._key||rateSvcKey(label)];
     const isFlat2=!!(svcRule2&&svcRule2.basis==="flat"&&svcRule2.pct!=null&&svcRule2.pct!==""&&!isNaN(+svcRule2.pct));
     if(!isFlat2&&aMin2!=null&&out<cost+aMin2)out=Math.round((cost+aMin2)*100)/100;
     if(c._parts){c._parts.base=Math.round(baseSell*100)/100;c._parts.fees=feeParts;}
@@ -323,7 +323,7 @@ function rateSellFor(cost,label,ctx){
        sell never depends on cost. Everything else still needs a cost to price. */
     if(c.rules){
       const prof0=c.prof||rateProfileFor(c.rules,c.client&&c.client.id);
-      const r0=prof0&&prof0.services&&prof0.services[rateSvcKey(label)];
+      const r0=prof0&&prof0.services&&prof0.services[c._key||rateSvcKey(label)];
       if(r0&&r0.basis==="flat"&&r0.pct!=null&&r0.pct!==""&&!isNaN(+r0.pct))return Math.round(+r0.pct*100)/100;
     }
     return null;
@@ -336,7 +336,7 @@ function rateSellFor(cost,label,ctx){
   const num=(v)=>(v==null||v==="")?null:+v;
   const rules=c.rules;
   const prof=rules?(c.prof||rateProfileFor(rules,c.client&&c.client.id)):null;
-  const key=rateSvcKey(label);
+  const key=c._key||rateSvcKey(label);   /* _key: custom-carrier quotes carry their key explicitly */
   const rule=prof&&prof.services&&prof.services[key];
   /* The rule's Min $ floor applies to EVERY path out of this function — including the fallbacks
      (blank %, missing list table, no zone). It used to vanish on fallback, so "Min $ 15 and no
@@ -385,7 +385,7 @@ function rateSellFor(cost,label,ctx){
     const amt=num(rule.pct); if(amt==null)return fallback();
     return Math.round(amt*100)/100;
   } else {
-    /* Weight-break × zone matrix. Resolution, most specific wins:
+    /* Weight-break × zone matrix (matrix-style). Resolution, most specific wins:
        break's zone cell → rule-level zone % → break % → service %.
        Rule-level zones still beat a break's plain % (pre-existing behavior, unchanged). */
     let pct=num(rule.pct);
@@ -416,4 +416,32 @@ function rateSellFor(cost,label,ctx){
   if(!c._noSurAdj&&aMin!=null&&sell<cost+aMin)sell=cost+aMin;
   return Math.round(sell*100)/100;
 }
-module.exports={zoneEst,RATE_ZONES,setDimCfg,dimFor,billable,ruleWeightFor,DEFAULT_RATE_RULES,FEDEX_SURCHARGES,RATE_SERVICES,canonSvc,rateSvcKey,fedexSurchargeIdFor,rateProfileFor,baseCostLookup,rateSellFor};
+const CUSTOM_CARRIERS=[
+  {id:"uniuni",name:"UniUni",services:[["uniuni_standard","UniUni Standard"],["uniuni_expedited","UniUni Expedited"]]},
+  {id:"usps",name:"USPS",services:[["usps_ground_adv","USPS Ground Advantage"],["usps_priority","USPS Priority Mail"],["usps_express","USPS Priority Mail Express"]]},
+  {id:"ups_dap",name:"UPS (DAP)",services:[["ups_ground","UPS Ground"],["ups_3ds","UPS 3 Day Select"],["ups_2da","UPS 2nd Day Air"],["ups_nda","UPS Next Day Air"]]},
+  {id:"dhl_ecom",name:"DHL eCommerce",services:[["dhlec_smartmail","DHL SmartMail Parcel"],["dhlec_expedited","DHL Parcel Expedited"],["dhlec_max","DHL Parcel Expedited Max"]]},
+];
+const customCarrierOf=(key)=>CUSTOM_CARRIERS.find(cc=>cc.services.some(([k])=>k===key));
+function customCarrierQuotes(rules,client,ctx){
+  const enabled=(client&&client.enabledCarriers)||[];
+  if(!enabled.length||!rules||!rules.baseCosts)return [];
+  const zone=(ctx.fromZip&&ctx.toZip&&/^\d/.test(String(ctx.toZip)))?String(zoneEst(ctx.fromZip,ctx.toZip)):null;
+  if(zone==null)return [];
+  const out=[];
+  for(const cc of CUSTOM_CARRIERS){
+    if(!enabled.includes(cc.id))continue;
+    for(const [k,l] of cc.services){
+      const w=ruleWeightFor(ctx.pieces||[],l);
+      const cost=baseCostLookup(rules,"cc:"+k,w,zone);
+      if(cost==null)continue;
+      const blocked=(client&&client.blockedServices)||[];
+      if(blocked.includes(k))continue;
+      const sell=rateSellFor(cost,l,{rules,client,_key:k,fromZip:ctx.fromZip,toZip:ctx.toZip,weight:w});
+      if(sell==null)continue;
+      out.push({key:k,carrier:cc.name,label:l,cost,sell,_custom:cc.id});
+    }
+  }
+  return out;
+}
+module.exports={CUSTOM_CARRIERS,customCarrierQuotes,zoneEst,RATE_ZONES,setDimCfg,dimFor,billable,ruleWeightFor,DEFAULT_RATE_RULES,FEDEX_SURCHARGES,RATE_SERVICES,canonSvc,rateSvcKey,fedexSurchargeIdFor,rateProfileFor,baseCostLookup,rateSellFor};

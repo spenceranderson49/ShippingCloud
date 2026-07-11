@@ -160,7 +160,8 @@ exports.handler = async (event) => {
     /* ── GET /v1/services ── */
     if (seg[0] === "services" && method === "GET") {
       const blocked = new Set(client.blockedServices || []);
-      const services = E.RATE_SERVICES.fedex.filter((sv) => !blocked.has(sv.k)).map((sv) => ({ service_code: sv.k, service: sv.l, group: sv.g || "FedEx", one_rate: !!sv.or }));
+      let services = E.RATE_SERVICES.fedex.filter((sv) => !blocked.has(sv.k)).map((sv) => ({ service_code: sv.k, service: sv.l, group: sv.g || "FedEx", one_rate: !!sv.or }));
+      for (const cc of E.CUSTOM_CARRIERS) { if ((client.enabledCarriers || []).includes(cc.id)) services = services.concat(cc.services.filter(([k]) => !blocked.has(k)).map(([k, l]) => ({ service_code: k, service: l, group: cc.name, quote_only: true }))); }
       return J(200, { services });
     }
 
@@ -180,7 +181,13 @@ exports.handler = async (event) => {
         fedexAccount, pieces: pkgs,
       });
       if (!q || !q.live) return ERR(502, "rates_unavailable", (q && q.error) || "Live rates are temporarily unavailable.");
-      const rates = priceRates(q.rates, world, client, from_zip, to_zip, pkgs);
+      let rates = priceRates(q.rates, world, client, from_zip, to_zip, pkgs);
+      /* other carriers — ONLY when the admin enabled them on this account */
+      try {
+        const extra = E.customCarrierQuotes(world.rules, client, { fromZip: from_zip, toZip: to_zip, pieces: ctxPieces(pkgs) })
+          .map((r) => ({ service_code: r.key, service: r.label, carrier: r.carrier.toLowerCase().replace(/[^a-z0-9]+/g, "_"), amount: Math.round(r.sell * 100) / 100, currency: "USD", delivery_days: null, quote_only: true }));
+        rates = rates.concat(extra).sort((a, b) => a.amount - b.amount);
+      } catch (e) {}
       return J(200, { rates, rate_count: rates.length });
     }
 
@@ -208,6 +215,7 @@ exports.handler = async (event) => {
       const pkgs = Array.isArray(body.packages) && body.packages.length ? body.packages.map(pieceOf) : null;
       if (!sc || !pkgs || !S(to.zip).trim() || !S(from.zip).trim()) return ERR(422, "invalid_request", "service_code, from{...zip}, to{...zip} and packages[] are required.");
       if ((client.blockedServices || []).includes(E.canonSvc(sc))) return ERR(403, "service_not_enabled", "That service isn't enabled on this account.");
+      if (E.CUSTOM_CARRIERS.some((cc) => cc.services.some(([k]) => k === sc))) return ERR(422, "quote_only_carrier", "That carrier is quote-only on this account — labels aren't issued through this API for it yet.");
       /* 1) live-quote the lane so the charge is the customer's real sell price */
       const q = await callFn("./quote.js", { carriers: "fedex", fromZip: S(from.zip), toZip: S(to.zip), fromCountry: S(from.country || "US"), toCountry: S(to.country || "US"), residential: body.residential !== false, signature: !!body.signature && body.signature !== "none", signatureOption: S(body.signature || "none"), saturdayDelivery: !!body.saturday_delivery, packageTypeCode: S(body.package_type || ""), fedexAccount, pieces: pkgs });
       const live = (q && q.live && q.rates) || [];

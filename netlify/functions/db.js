@@ -38,6 +38,8 @@ const CFG = () => ({
 const configured = () => { const c = CFG(); return !!(c.url && c.key); };
 /* Tenant wall: every store read/write below is scoped to this tenant. "main" = production. */
 const TENANT = (process.env.DB_TENANT || "main").trim() || "main";
+/* Default service set for a NEW customer — mirrors DEFAULT_BLOCKED_SERVICES in the app. */
+const DEFAULT_BLOCKED_SERVICES = ["2day_am","intl_priority_express","intl_first","first_overnight_freight","1day_freight","2day_freight","3day_freight","intl_priority_freight","intl_economy_freight","or_first_overnight","or_priority_overnight","or_standard_overnight","or_2day_am","or_express_saver"];
 const secret = () => (process.env.SESSION_SECRET || "").trim() || crypto.createHash("sha256").update("sc1|" + CFG().key).digest("hex");
 
 /* ── Supabase PostgREST (service role) ── */
@@ -230,7 +232,7 @@ exports.handler = async (event) => {
       if (!u || (u.role || "customer") !== "customer" || u.demo) return null;
       if (u.clientId && clients.some((c) => c && c.id === u.clientId)) return null;
       const id = "c" + Date.now() + Math.floor(Math.random() * 1000);
-      const nc = { id, name: u.company || u.name || u.email || "New customer", contact: u.name || "", email: u.email || "", phone: "", origin: "", markup: "", status: "active", since: new Date().toISOString().slice(0, 7), plan: "Standard", selfSignup: true, createdAt: new Date().toISOString() };
+      const nc = { id, name: u.company || u.name || u.email || "New customer", contact: u.name || "", email: u.email || "", phone: "", origin: "", markup: "", status: "active", since: new Date().toISOString().slice(0, 7), plan: "Standard", selfSignup: true, createdAt: new Date().toISOString(), blockedServices: [...DEFAULT_BLOCKED_SERVICES] };
       const w = await putStores({ clients: [...clients, nc], users: users.map((x) => x && x.id === u.id ? { ...x, clientId: id } : x) });
       if (!w || !w.ok) return null;
       return { clientId: id, client: nc };
@@ -315,7 +317,7 @@ exports.handler = async (event) => {
          customer + attach the login" step, and the app never runs unassigned (at raw cost). */
       const clients = (curC.ok && Array.isArray(curC.value)) ? curC.value : [];
       const newClientId = "c" + Date.now() + Math.floor(Math.random() * 1000);
-      const newClient = { id: newClientId, name: company || name, contact: name, email, phone: "", origin: "", markup: "", status: "active", since: new Date().toISOString().slice(0, 7), plan: "Standard", selfSignup: true, createdAt: new Date().toISOString() };
+      const newClient = { id: newClientId, name: company || name, contact: name, email, phone: "", origin: "", markup: "", status: "active", since: new Date().toISOString().slice(0, 7), plan: "Standard", selfSignup: true, createdAt: new Date().toISOString(), blockedServices: [...DEFAULT_BLOCKED_SERVICES] };
       const newUser = { id: "u" + Date.now() + Math.floor(Math.random() * 1000), name, company, email, role: "customer", clientId: newClientId, status: "active", password: "", passHash: hashPw(password), volume, carrier, createdAt: new Date().toISOString(), lastLogin: new Date().toLocaleDateString() };
       const writes = { users: [...users, newUser], clients: [...clients, newClient] };
       const reqs = (curR.ok && Array.isArray(curR.value)) ? curR.value : [];

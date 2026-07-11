@@ -164,7 +164,9 @@ exports.handler = async (event) => {
       const a = body.address || body;
       const res = await callFn("./fedex.js", { action: "address", address1: S(a.address1), address2: S(a.address2), city: S(a.city), state: S(a.state), zip: S(a.zip), country: S(a.country || "US") });
       if (!res || !res.ok) return ERR(502, "validation_unavailable", (res && res.error) || "Address validation is temporarily unavailable.");
-      return J(200, { valid: res.deliverable !== false, classification: res.classification || null, normalized: res.normalized || null, messages: res.issues || [] });
+      const norm = res.normalized || null;
+      const status = res.deliverable === false ? "error" : (res.issues && res.issues.length ? "warning" : (norm ? "verified" : "unverified"));
+      return J(200, { status, valid: res.deliverable !== false, classification: res.classification || null, residential: res.classification ? (res.classification === "RESIDENTIAL") : null, matched_address: norm, messages: res.issues || [] });
     }
 
   async function bookLabel(b) {
@@ -192,6 +194,7 @@ exports.handler = async (event) => {
         residential: b.residential !== false, signatureOption: S(b.signature || "none"),
         saturdayDelivery: !!b.saturday_delivery, insuranceAmount: num(b.declared_value_total, 0) || (b.customs && num(b.customs.value_total, 0)) || null,
         contentDescription2: undefined,
+        commodities: (body.customs && Array.isArray(body.customs.items)) ? body.customs.items.map((it) => ({ description: S(it.description), quantity: num(it.quantity, 1), unitPrice: num(it.value, 0), value: num(it.value, 0), hsCode: S(it.hs_code), countryOfOrigin: S(it.country_of_origin || "US"), weight: num(it.weight, 0) })) : undefined,
         sender: { name: S(from.name), company: S(from.company), address1: S(from.address1), address2: S(from.address2), city: S(from.city), state: S(from.state), zip: S(from.zip), country: S(from.country || "US"), phone: S(from.phone), email: S(from.email) },
         receiver: { name: S(to.name), company: S(to.company), address1: S(to.address1), address2: S(to.address2), city: S(to.city), state: S(to.state), zip: S(to.zip), country: S(to.country || "US"), phone: S(to.phone), email: S(to.email) },
         pieces: pkgs.map((p) => ({ weight: Math.ceil(p.weight), length: p.length, width: p.width, height: p.height, declaredValue: p.declaredValue })),

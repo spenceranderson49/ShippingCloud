@@ -97,7 +97,7 @@ X-API-Key: sck_live_xxxxxxxxxxxxxxxx</code></pre>
   <p>When your account manager has <b>issued</b> invoices, <code>GET /v1/invoices</code> lists them (id, number, status, balance) and <code>GET /v1/invoices/{id}</code> returns one with full line items and paid/balance — your system can reconcile payments automatically.</p>
 
   <h2><span class="pill post">POST</span>/v1/addresses/validate</h2>
-  <p>FedEx-backed validation + residential/commercial classification: send <code>{"address1","city","state","zip"}</code>, get <code>valid</code>, <code>classification</code>, and a <code>normalized</code> address to correct typos before you buy a label.</p>
+  <p>Send <code>{"address1","city","state","zip"}</code>. Returns a ShipEngine-style <code>status</code> (<code>verified · warning · unverified · error</code>), a <code>residential</code> flag, a <code>matched_address</code> (corrected/normalized), and <code>messages[]</code> — validate before you buy a label.</p>
 
   <h2><span class="pill get">GET</span>/v1/labels/{label_id} — re-download</h2>
   <p>Lost the response? Recent label PDFs are stored and re-downloadable by <code>label_id</code>.</p>
@@ -111,7 +111,7 @@ X-API-Key: sck_live_xxxxxxxxxxxxxxxx</code></pre>
   <p>Registration returns a <code>whsec_…</code> secret (shown once). Every delivery is signed — verify <code>X-SC-Signature</code> as hex HMAC-SHA256 of the raw body with your secret. <code>GET /v1/webhooks</code> lists, <code>DELETE /v1/webhooks/{id}</code> removes. Max 5 per account; deliveries are best-effort — poll <code>/v1/shipments</code> as the source of truth.</p>
 
   <h2>International shipments</h2>
-  <p>Set <code>to.country</code> (ISO-2 or full name) and include <code>customs: { "contents": "Cotton t-shirts", "value_total": 240 }</code> on <code>POST /v1/labels</code> — the customs value is required for a truthful declaration; per-package <code>declared_value</code> works too.</p>
+  <p>Set <code>to.country</code> (ISO-2 or full name) and include a <code>customs</code> block on <code>POST /v1/labels</code>. For a single line: <code>{ "contents": "Cotton t-shirts", "value_total": 240 }</code>. For itemized customs, send <code>customs.items[]</code> — each <code>{ description, quantity, value, hs_code, country_of_origin, weight }</code> becomes a commodity on the declaration. A truthful customs value is required.</p>
 
   <h2><span class="pill get">GET</span>/v1/pickups · cancel · <span class="pill get">GET</span>/v1/account</h2>
   <p><code>GET /v1/pickups</code> lists scheduled pickups; <code>POST /v1/pickups/{confirmation}/cancel</code> cancels one. <code>GET /v1/account</code> returns your account name, key prefix, enabled-service count and limits — handy as a connectivity check.</p>

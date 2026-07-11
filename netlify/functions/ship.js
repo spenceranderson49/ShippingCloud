@@ -271,14 +271,24 @@ exports.handler = async (event) => {
     requestedShipment.customsClearanceDetail = {
       dutiesPayment: { paymentType: "SENDER" },
       isDocumentOnly: false,
-      commodities: [{
-        description: String(o.contentDescription || "Merchandise").slice(0, 450),
-        countryOfManufacture: toISO(sender.country || "US"),
-        quantity: 1, quantityUnits: "PCS",
-        unitPrice: { amount: customsVal, currency: "USD" },
-        customsValue: { amount: customsVal, currency: "USD" },
-        weight: { units: "LB", value: totalWeight }
-      }]
+      commodities: (Array.isArray(o.commodities) && o.commodities.length
+        ? o.commodities.map((ci) => { const qty = Math.max(1, Math.round(+ci.quantity || 1)); const unit = Math.max(0, +ci.unitPrice || +ci.value || 0); return {
+            description: String(ci.description || "Merchandise").slice(0, 450),
+            countryOfManufacture: toISO(ci.countryOfOrigin || sender.country || "US"),
+            quantity: qty, quantityUnits: "PCS",
+            harmonizedCode: ci.hsCode ? String(ci.hsCode).replace(/[^0-9]/g, "").slice(0, 14) : undefined,
+            unitPrice: { amount: Math.round(unit * 100) / 100, currency: "USD" },
+            customsValue: { amount: Math.round(unit * qty * 100) / 100, currency: "USD" },
+            weight: { units: "LB", value: Math.max(0.1, +ci.weight || (totalWeight / (o.commodities.length || 1))) }
+          }; })
+        : [{
+            description: String(o.contentDescription || "Merchandise").slice(0, 450),
+            countryOfManufacture: toISO(sender.country || "US"),
+            quantity: 1, quantityUnits: "PCS",
+            unitPrice: { amount: customsVal, currency: "USD" },
+            customsValue: { amount: customsVal, currency: "USD" },
+            weight: { units: "LB", value: totalWeight }
+          }])
     };
   }
 

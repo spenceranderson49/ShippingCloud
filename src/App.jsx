@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v450";
+const BUILD_TAG="addr-v451";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7761,7 +7761,7 @@ function AutopilotCell({o,ruleset,fromZip}){
   return <span className="inline-flex items-center gap-1 text-[11px] text-violet-600" title={"Autopilot rule: "+pred.rule}><Zap className="w-3 h-3"/>rule fires</span>;
 }
 function LiveEstRate({o,client,settings,rateRules,ruleset}){
-  const fromZip=(client&&client.origin)||(settings&&settings.sender&&settings.sender.zip)||"";
+  const fromZip=(settings&&settings.sender&&settings.sender.zip)||(client&&client.origin)||"";   /* same precedence as the modal/Batch/Autopilot — zone rules must not flip per screen */
   const key=o.id+"|"+(o.zip||"")+"|"+(o.weight||1)+"|"+fromZip;
   const [v,setV]=useState(EST_CACHE[key]||null);
   useEffect(()=>{
@@ -8027,7 +8027,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
     return ()=>{cancel=true;};
   },[rateNonce,o.zip,weight,box.L,box.W,box.H,residential,oneRate,orBox&&orBox.code,eng.enabled,eng.apiKey,eng.customerId,eng.base,eng.fedexAccount]);   /* eng is a fresh object every render (englandFor) — depend on its primitives or this effect loops forever */
   const localOrderQuotes=()=>quoteRates({fromZip,toZip:o.zip,pieces:[{weight:+weight||0,L:box.L,W:box.W,H:box.H}],residential,intl:false}).filter(qq=>qq.carrier==="FedEx");
-  const quotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,listBase:qq.listBase,surcharges:qq.surcharges,fromZip:(settings&&settings.sender&&settings.sender.zip)||"",toZip:o.zip,weight:+weight||o.weight||1})})).sort((a,b)=>(a.sell||1e9)-(b.sell||1e9));},[rateSrc,residential,client,settings,rateRules,weight]);
+  const quotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,listBase:qq.listBase,surcharges:qq.surcharges,fromZip,toZip:o.zip,weight:+weight||o.weight||1})})).sort((a,b)=>(a.sell||1e9)-(b.sell||1e9));},[rateSrc,residential,client,settings,rateRules,weight]);
   const best=(rateSrc.live&&quotes[0])?quotes[0].key:null;
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
   const printHere=async(qq)=>{
@@ -9029,11 +9029,11 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
     const bs=new Set((client&&client.blockedServices)||[]);
     const _gePcs=pk&&pk.pieces&&pk.pieces.length?pk.pieces:[{weight:o.weight,L:12,W:9,H:4}];
     const qs=quoteRates(pk&&pk.pieces&&pk.pieces.length
-      ?{fromZip:client.origin,toZip:o.zip,pieces:pk.pieces,residential:true}
-      :{fromZip:client.origin,toZip:o.zip,L:12,W:9,H:4,weight:o.weight,residential:true})
+      ?{fromZip:originZip,toZip:o.zip,pieces:pk.pieces,residential:true}
+      :{fromZip:originZip,toZip:o.zip,L:12,W:9,H:4,weight:o.weight,residential:true})   /* preview from the SAME origin run() books from — zone rules must not diverge */
       .filter(q=>!hs.has(canonSvc(q.label))&&!bs.has(canonSvc(q.label)))
       .filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk(_gePcs))
-      .map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,listBase:q.listBase,surcharges:q.surcharges,fromZip:client.origin,toZip:o.zip,weight:(pk&&pk.totalWt)||o.weight||1})}));
+      .map(q=>({...q,sell:rateSellFor(q.cost,q.label,{rules:rateRules,client,list:q.list,listBase:q.listBase,surcharges:q.surcharges,fromZip:originZip,toZip:o.zip,weight:(pk&&pk.totalWt)||o.weight||1})}));
     let pick=pickByPref(qs,svcOv[o.id]);
     if(!pick){
       if(rule==="ground") pick=qs.filter(q=>/Ground|Home/.test(q.label)).sort((a,b)=>a.cost-b.cost)[0];

@@ -88,7 +88,7 @@ const FEATURE_CATALOG=[
   {id:"seeCosts",label:"See costs & spend",desc:"Rates, order totals, batch totals and Reports dollars. Turn OFF to hide all money from this customer's logins",default:true},
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own carrier accounts on the Connections page (England always shows; admins always have this)",default:false},
 ];
-const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All logins"],["rates","Rates & dim divisors"],["labelcert","FedEx labels"],["customizations","Features & access"],["branding","Branding"],["apiadmin","API"],["domains","Domains"]];
+const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All logins"],["rates","Rates & dim divisors"],["labelcert","FedEx labels"],["customizations","Features & access"],["branding","Branding"],["apiadmin","API"],["billing","Billing & invoices"],["domains","Domains"]];
 const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,labelcert:Printer,customizations:Sliders,branding:Sparkles,platforms:Truck,domains:ExternalLink};
 /* A restricted admin ALWAYS keeps access to "users" — without it there is no self-service way
    to ever fix a permission set that’s missing something, for yourself or anyone else. A wrong
@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v470";
+const BUILD_TAG="addr-v471";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -4464,6 +4464,88 @@ function RatesAdmin({clients=[],brand}){
 }
 
 
+/* ════════ Admin → Billing & invoices: generate invoices from recorded shipments,
+   track paid/unpaid, record payments. Admin-only; a customer sees nothing until the
+   'invoicePortal' flag is turned on for their login. ════════ */
+function BillingAdmin({clients=[],platform={},openCustomer}){
+  const [invoices,setInvoices]=usePersist("invoicesIssued",[]);
+  const [bSettings,setBSettings]=usePersist("billingSettings",{terms:"Net 15",note:"",payUrl:""});
+  const [genClient,setGenClient]=useState("");
+  const [genMonth,setGenMonth]=useState(new Date().toISOString().slice(0,7));
+  const [preview,setPreview]=useState(null);
+  const [tab,setTab]=useState("open");
+  const cById=(id)=>clients.find(c=>c.id===id)||{};
+  const inMonth=(x,ym)=>{const t=(typeof x.id==="number"&&x.id>1e12)?new Date(x.id):new Date(x.date);return !isNaN(t)&&t.toISOString().slice(0,7)===ym;};
+  const shipsForClient=(cid,ym)=>{const c=cById(cid);const nm=String(c.name||"").toLowerCase();
+    return (platform.ships||[]).filter(x=>x.status!=="Voided"&&inMonth(x,ym)&&String(x.client||"").toLowerCase()===nm);};
+  const nextNumber=()=>{const yr=genMonth.slice(0,4);const n=(invoices.filter(i=>i.number&&i.number.includes("-"+yr+"-")).length)+1;return "INV-"+yr+"-"+String(n).padStart(4,"0");};
+  const buildPreview=()=>{ if(!genClient)return;
+    const rows=shipsForClient(genClient,genMonth);
+    if(!rows.length)return window.alert("No billable shipments for "+(cById(genClient).name||"that customer")+" in "+genMonth+".");
+    if(invoices.some(i=>i.clientId===genClient&&i.month===genMonth&&i.status!=="void"))if(!window.confirm("An invoice for this customer + month already exists. Create another?"))return;
+    const items=rows.map(x=>({date:x.date,tracking:x.tracking,service:(x.service||"").replace("FedEx ",""),reference:x.reference||"",amount:Math.round((+x.sell||0)*100)/100}));
+    const subtotal=Math.round(items.reduce((a,i)=>a+i.amount,0)*100)/100;
+    setPreview({clientId:genClient,month:genMonth,number:nextNumber(),items,subtotal,total:subtotal,terms:bSettings.terms});
+  };
+  const issue=()=>{ if(!preview)return;
+    const inv={id:"inv"+Date.now(),...preview,status:"open",issuedAt:new Date().toISOString(),payments:[]};
+    setInvoices(p=>[inv,...(p||[])]); setPreview(null); };
+  const recordPayment=(inv)=>{ const amt=window.prompt("Payment amount for "+inv.number+" (balance "+money(balanceOf(inv))+"):",String(balanceOf(inv)));
+    if(amt==null)return; const n=+amt; if(!(n>0))return;
+    setInvoices(p=>(p||[]).map(i=>i.id===inv.id?(()=>{const pays=[...(i.payments||[]),{amount:Math.round(n*100)/100,when:new Date().toISOString(),method:"manual"}];const paid=pays.reduce((a,x)=>a+x.amount,0);return {...i,payments:pays,status:paid>=i.total-0.005?"paid":"open",paidAt:paid>=i.total-0.005?new Date().toISOString():null};})():i)); };
+  const voidInv=(inv)=>{ if(!window.confirm("Void invoice "+inv.number+"?"))return; setInvoices(p=>(p||[]).map(i=>i.id===inv.id?{...i,status:"void"}:i)); };
+  const balanceOf=(inv)=>Math.round((inv.total-(inv.payments||[]).reduce((a,x)=>a+x.amount,0))*100)/100;
+  const printInv=(inv)=>{ const c=cById(inv.clientId);
+    const esc=(x)=>String(x==null?"":x).replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]));
+    const rows=inv.items.map(i=>"<tr><td>"+esc(i.date)+"</td><td>"+esc(i.tracking)+"</td><td>"+esc(i.service)+"</td><td>"+esc(i.reference)+"</td><td style='text-align:right'>"+money(i.amount)+"</td></tr>").join("");
+    const w=window.open("","_blank"); if(!w)return window.alert("Allow pop-ups to print.");
+    w.document.write("<html><head><title>"+esc(inv.number)+"</title><style>body{font-family:system-ui,Arial;padding:34px;color:#1c1917}h1{font-size:22px;margin:0}table{border-collapse:collapse;width:100%;font-size:13px;margin-top:16px}th,td{border:1px solid #e5e5e5;padding:7px 9px;text-align:left}th{background:#f5f5f4}.r{text-align:right}.tot{font-size:16px;font-weight:700;margin-top:14px;text-align:right}.sub{color:#78716c;font-size:13px}</style></head><body><div style='display:flex;justify-content:space-between;align-items:flex-start'><div><h1>"+esc(brandWordmark0())+"</h1><div class='sub'>Invoice "+esc(inv.number)+"</div></div><div class='sub' style='text-align:right'>Issued "+esc((inv.issuedAt||'').slice(0,10))+"<br/>Terms: "+esc(inv.terms||bSettings.terms)+"<br/>Period: "+esc(inv.month)+"</div></div><div class='sub' style='margin-top:14px'>Bill to: <b>"+esc(c.name||'')+"</b>"+(c.email?" · "+esc(c.email):"")+"</div><table><tr><th>Date</th><th>Tracking</th><th>Service</th><th>Reference</th><th class='r'>Amount</th></tr>"+rows+"</table><div class='tot'>Total due: "+money(inv.total)+(balanceOf(inv)!==inv.total?" · Balance: "+money(balanceOf(inv)):"")+"</div>"+(bSettings.note?"<p class='sub' style='margin-top:16px'>"+esc(bSettings.note)+"</p>":"")+(bSettings.payUrl?"<p class='sub'>Pay online: "+esc(bSettings.payUrl)+"</p>":"")+"<script>window.print()</scr"+"ipt></body></html>");
+    w.document.close(); };
+  const brandWordmark0=()=>((BRAND&&BRAND.product)||"ShippingCloud");
+  const list=(invoices||[]).filter(i=>tab==="all"?true:tab==="paid"?i.status==="paid":tab==="void"?i.status==="void":i.status==="open");
+  const openTotal=Math.round((invoices||[]).filter(i=>i.status==="open").reduce((a,i)=>a+balanceOf(i),0)*100)/100;
+  return (<div className="max-w-4xl space-y-5">
+    <div><h2 className="text-base font-semibold text-stone-800">Billing &amp; invoices</h2>
+      <p className="text-sm text-stone-500 mt-1">Generate invoices from what each customer actually shipped (portal + API), track paid/unpaid, and record payments. Your own invoicing — no third party. <b>{money(openTotal)}</b> outstanding across open invoices.</p></div>
+    <Panel title="Generate an invoice">
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label="Customer"><Select value={genClient} onChange={e=>setGenClient(e.target.value)}><option value="">— pick —</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
+        <Field label="Month"><Input type="month" value={genMonth} onChange={e=>setGenMonth(e.target.value)}/></Field>
+        <button onClick={buildPreview} disabled={!genClient} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium disabled:opacity-40 flex items-center gap-1.5"><Receipt className="w-4 h-4"/>Preview</button>
+      </div>
+      {preview&&<div className="mt-3 border border-stone-200 rounded-lg overflow-hidden">
+        <div className="bg-stone-50 px-3 py-2 flex items-center justify-between"><div className="text-sm font-medium">{preview.number} · {cById(preview.clientId).name} · {preview.month}</div><div className="font-mono font-semibold">{money(preview.total)}</div></div>
+        <table className="w-full text-[12.5px]"><thead><tr className="text-left text-[10px] uppercase tracking-widest text-stone-400"><th className="px-3 py-1.5">Date</th><th>Tracking</th><th>Service</th><th className="text-right px-3">Amount</th></tr></thead>
+          <tbody>{preview.items.slice(0,50).map((i,x)=>(<tr key={x} className="border-t border-stone-100"><td className="px-3 py-1">{i.date}</td><td className="font-mono">{i.tracking}</td><td>{i.service}</td><td className="text-right px-3 font-mono">{money(i.amount)}</td></tr>))}</tbody></table>
+        {preview.items.length>50&&<div className="px-3 py-1 text-[11px] text-stone-400">+{preview.items.length-50} more line items</div>}
+        <div className="px-3 py-2 flex justify-end gap-2 bg-stone-50"><button onClick={()=>setPreview(null)} className="text-sm text-stone-500 px-3 py-1.5 hover:bg-stone-100 rounded-lg">Discard</button><button onClick={issue} className="text-sm bg-emerald-600 text-white rounded-lg px-3.5 py-1.5 font-medium">Issue invoice</button></div>
+      </div>}
+    </Panel>
+    <Panel title="Invoices">
+      <div className="flex gap-1 mb-2 text-sm">{[["open","Open"],["paid","Paid"],["void","Void"],["all","All"]].map(([v,l])=><button key={v} onClick={()=>setTab(v)} className={`px-3 py-1 rounded-lg ${tab===v?"bg-stone-100 font-medium text-stone-900":"text-stone-500 hover:bg-stone-50"}`}>{l}</button>)}</div>
+      {!list.length?<div className="text-sm text-stone-400">No {tab==="all"?"":tab+" "}invoices.</div>
+       :<div className="space-y-1.5">{list.map(inv=>(<div key={inv.id} className="flex flex-wrap items-center gap-3 border border-stone-200 rounded-lg bg-white px-3 py-2 text-sm">
+          <span className="font-mono text-[12px] text-stone-600">{inv.number}</span>
+          <button onClick={()=>openCustomer&&openCustomer(inv.clientId)} className="font-medium text-[#0086E0] hover:underline">{cById(inv.clientId).name}</button>
+          <span className="text-stone-400 text-xs">{inv.month}</span>
+          <span className="flex-1"/>
+          <span className="font-mono">{money(inv.total)}</span>
+          {inv.status==="paid"?<Badge tone="green">paid</Badge>:inv.status==="void"?<Badge tone="stone">void</Badge>:<Badge tone={balanceOf(inv)<inv.total?"amber":"blue"}>{balanceOf(inv)<inv.total?"partial "+money(balanceOf(inv)):"open"}</Badge>}
+          <button onClick={()=>printInv(inv)} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Print / PDF</button>
+          {inv.status!=="paid"&&inv.status!=="void"&&<button onClick={()=>recordPayment(inv)} className="text-[11px] rounded px-2 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100">Record payment</button>}
+          {inv.status!=="void"&&<button onClick={()=>voidInv(inv)} className="text-[11px] text-rose-500 hover:underline">Void</button>}
+        </div>))}</div>}
+    </Panel>
+    <Panel title="Invoice settings">
+      <div className="grid sm:grid-cols-3 gap-3">
+        <Field label="Default terms"><Input value={bSettings.terms} onChange={e=>setBSettings(v=>({...v,terms:e.target.value}))} placeholder="Net 15"/></Field>
+        <Field label="Pay-online link (optional)"><Input value={bSettings.payUrl} onChange={e=>setBSettings(v=>({...v,payUrl:e.target.value}))} placeholder="https://…"/></Field>
+        <Field label="Footer note"><Input value={bSettings.note} onChange={e=>setBSettings(v=>({...v,note:e.target.value}))} placeholder="Thank you for your business"/></Field>
+      </div>
+      <p className="text-[11px] text-stone-400 mt-2">The pay-online link prints on invoices and (when you turn on the customer Invoices view later) becomes their Pay button. Payments you record here mark the invoice paid.</p>
+    </Panel>
+  </div>);
+}
 /* ════════ Admin → API: the platform's own public API (ShippingCloud API / ShipHub API) ════════ */
 function ApiAdmin({clients=[],platform={},openCustomer}){
   const apiName=BRAND.fw?"ShipHub API":"ShippingCloud API";
@@ -4631,7 +4713,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
     {label:"Overview",items:[["overview","Dashboard",BarChart3]]},
     {label:"Accounts",items:[["customers","Customers",Building2],["users","All logins",Users]]},
     {label:"Pricing",items:[["rates","Rates & dim divisors",DollarSign],["labelcert","FedEx labels",Printer]]},
-    {label:"Experience",items:[["customizations","Features & access",Sliders],["branding","Branding",Sparkles],["apiadmin","API",Plug],["domains","Domains",ExternalLink]]},
+    {label:"Experience",items:[["customizations","Features & access",Sliders],["branding","Branding",Sparkles],["apiadmin","API",Plug],["billing","Billing & invoices",Receipt],["domains","Domains",ExternalLink]]},
   ];
   const SECTION_META={};NAV_GROUPS.forEach(g=>g.items.forEach(([v,l,Icon])=>{SECTION_META[v]={label:l,Icon};}));
   SECTION_META.rates={label:"Advanced rates — tables & sheets",Icon:DollarSign};   // off the sidebar (customers each have a Rates tab now); reachable from a customer record for shared imports, zones, weight breaks, and printable rate sheets
@@ -4671,6 +4753,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
       {k==="customizations"&&<CustomizationsAdmin users={users} clients={clients} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures}/>}
       {k==="overview"&&<AdminDashboard platform={platform} loginStats={loginStats} uEmail={uEmail} openCustomer={openCustomer} openSection={openSection} clients={clients}/>}
       {k==="apiadmin"&&<ApiAdmin clients={clients} platform={platform} openCustomer={openCustomer}/>}
+      {k==="billing"&&<BillingAdmin clients={clients} platform={platform} openCustomer={openCustomer}/>}
   </>);
   return (
     <div className="-mt-2">
@@ -4971,7 +5054,7 @@ const lsDel=(k)=>{ if(!LS_OK)return; try{window.localStorage.removeItem("sc_"+k)
 // Which login is active. Every non-global key is stored under this account so each login keeps its OWN settings/data.
 const activeUid=()=>{ try{const s=lsGet("session",null); const id=s&&(s.id||s.email); return id?String(id):"guest"; }catch(e){return "guest";} };
 // Shared across all logins (never namespaced): the accounts list + who is signed in.
-const GLOBAL_KEYS={session:1,salesReps:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1,customFeatures:1,fedexRequests:1,publicBrand:1,myAccess:1,companyUsers:1,companyFlags:1,companyAdminRequests:1,rateRules:1,clients:1};
+const GLOBAL_KEYS={session:1,salesReps:1,invoicesIssued:1,billingSettings:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1,customFeatures:1,fedexRequests:1,publicBrand:1,myAccess:1,companyUsers:1,companyFlags:1,companyAdminRequests:1,rateRules:1,clients:1};
 // Scratch = the in-progress shipment. Per-login, but starts blank on each login (never migrated/inherited).
 const isScratch=(key)=>String(key).indexOf("ship.")===0;
 // Scratch keys wiped on login so the receiver + package dims are always blank for a fresh session.

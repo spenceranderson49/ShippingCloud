@@ -344,7 +344,22 @@ exports.handler = async (event) => {
       return J(200, { account: client.name, currency: "USD", services, surcharge_overrides: surcharges, note: "Rates quote live per shipment — POST /v1/rates for exact prices." });
     }
 
-    /* ── GET /v1/billing/summary · GET /v1/invoices?month=YYYY-MM ── */
+    /* ── issued invoices (admin-generated) take precedence over the on-the-fly month rollup ── */
+    if (seg[0] === "invoices") {
+      const iCur = await getStore("invoicesIssued");
+      const issued = ((iCur.ok && iCur.value) || []).filter((v) => v && v.clientId === client.id && v.status !== "void");
+      if (method === "GET" && seg[1]) {   /* GET /v1/invoices/{id} */
+        const inv = issued.find((v) => v.id === seg[1] || v.number === seg[1]);
+        if (!inv) return ERR(404, "not_found", "No invoice with that id/number on this account.");
+        const paid = (inv.payments || []).reduce((a, p) => a + (+p.amount || 0), 0);
+        return J(200, { id: inv.id, number: inv.number, period: inv.month, status: inv.status, terms: inv.terms || null, issued: inv.issuedAt || null, total: inv.total, paid: Math.round(paid * 100) / 100, balance: Math.round((inv.total - paid) * 100) / 100, currency: "USD", line_items: inv.items });
+      }
+      if (method === "GET" && !seg[1] && issued.length) {   /* GET /v1/invoices — list issued */
+        return J(200, { invoices: issued.map((inv) => { const paid = (inv.payments || []).reduce((a, p) => a + (+p.amount || 0), 0); return { id: inv.id, number: inv.number, period: inv.month, status: inv.status, total: inv.total, balance: Math.round((inv.total - paid) * 100) / 100, currency: "USD" }; }), count: issued.length });
+      }
+    }
+
+    /* ── GET /v1/billing/summary · GET /v1/invoices?month=YYYY-MM (on-the-fly, when none issued) ── */
     if ((seg[0] === "billing" || seg[0] === "invoices") && method === "GET") {
       const cur = await getStore(shipStoreKey(client, isTest));
       const arr = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];

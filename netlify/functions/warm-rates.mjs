@@ -14,6 +14,10 @@
    except that the next user quote on that lane is a normal live call.
    ════════════════════════════════════════════════════════════════════════ */
 import quoteFn from "./quote.js";
+import crypto from "node:crypto";
+/* internal auth for the quote.js handler — it is session-gated now (audit F1) */
+const scSecret = () => { const s = (process.env.SESSION_SECRET || "").trim(); if (s) return s; const k = (process.env.SUPABASE_SERVICE_KEY || "").trim(); return k ? crypto.createHash("sha256").update("sc1|" + k).digest("hex") : ""; };
+const scInternalKey = () => { const s = scSecret(); return s ? crypto.createHmac("sha256", s).update("internal:carrier").digest("hex") : ""; };
 
 const CACHE_STORE = "rate-cache";
 const CACHE_VERSION = "v1";                      // must match quote.js
@@ -142,7 +146,7 @@ export default async () => {
     if (Date.now() - started > TIME_BUDGET_MS) return;                 // stay inside the time limit
     if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) return;       // England down → back off
     try {
-      const warmBody = { ...l.data.body, noCache: true, _warm: true };
+      const warmBody = { ...l.data.body, noCache: true, _warm: true, internalKey: scInternalKey() };
       if (l.apiKey) warmBody.account = { ...(warmBody.account || {}), apiKey: l.apiKey };
       const res = await quoteFn.handler({ httpMethod: "POST", body: JSON.stringify(warmBody) });
       const out = JSON.parse((res && res.body) || "{}");

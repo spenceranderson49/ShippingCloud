@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v463";
+const BUILD_TAG="addr-v464";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6322,8 +6322,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const [dvEach,setDvEach]=useState(false);   // multipiece declared value: false = same $ on every box, true = per-box amount (piece.dv)
   const [residential,setRes]=usePersist("ship.residential",true);
   const [resTouched,setResTouched]=useState(false);
-  const [signature,setSig]=usePersist("ship.signature",false);
-  const [sigOption,setSigOption]=usePersist("ship.sigOption","none");
+  /* Signature starts FRESH on every page open — it used to persist the last choice, so one
+     Direct-signature label quietly made every later shipment signature-required. The
+     Customizations default (defaultSignature) still seeds it; New shipment resets it too. */
+  const [signature,setSig]=useState(!!(cz(settings).defaultSignature&&cz(settings).defaultSignature!=="none"));
+  const [sigOption,setSigOption]=useState(cz(settings).defaultSignature||"none");
   const [saturday,setSat]=usePersist("ship.saturday",false);
   const [orderSort,setOrderSort]=useState("date");
   const [ordersOpen,setOrdersOpen]=usePersist("ship.ordersOpen",false);

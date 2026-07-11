@@ -71,6 +71,13 @@ X-API-Key: sck_live_xxxxxxxxxxxxxxxx</code></pre>
   <p>Extra fields: <code>invoice_number</code>, <code>po_number</code>, <code>department</code> (print on the label as FedEx references), <code>signature</code>, <code>saturday_delivery</code>, <code>declared_value_total</code>, <code>ship_date</code> (YYYY-MM-DD), <code>label_stock</code> (<code>4x6</code> default).</p>
   <p>Response <code>201</code>: <code>label_id</code>, <code>tracking_number</code>, <code>tracking_url</code>, <code>charge.amount</code> (what you're billed), and <code>label_pdf_base64</code> — decode and print. The service is re-quoted at booking so the charge always matches a live rate.</p>
 
+  <h2><span class="pill post">POST</span>/v1/labels/batch — up to 100 labels at once</h2>
+  <pre><code>{ "shipments": [ { /* a normal /v1/labels body */ }, { … } ] }</code></pre>
+  <p>Returns <code>207</code> with a <code>results[]</code> array in the same order — each entry is either a booked label (<code>status:"success"</code>) or <code>status:"error"</code> with its index, so one bad shipment never fails the rest.</p>
+
+  <h2><span class="pill post">POST</span>/v1/returns — prepaid return label</h2>
+  <p>Same body as <code>/v1/labels</code>. By default <code>from</code>/<code>to</code> are swapped (the parcel ships from the buyer back to you); pass <code>"swap": false</code> if you already set them return-direction. Response adds <code>is_return: true</code>.</p>
+
   <h2><span class="pill get">GET</span>/v1/shipments · <span class="pill post">POST</span>/v1/shipments/{label_id}/void</h2>
   <p><code>GET /v1/shipments?limit=50</code> lists your labels newest-first with status and charge. Void marks the label refunded-in-progress; unshipped labels refund automatically.</p>
 
@@ -87,6 +94,7 @@ X-API-Key: sck_live_xxxxxxxxxxxxxxxx</code></pre>
 
   <h2><span class="pill get">GET</span>/v1/billing/summary · <span class="pill get">GET</span>/v1/invoices</h2>
   <p><code>/v1/billing/summary?month=2026-07</code> → shipment count + total charges for the month. <code>/v1/invoices?month=2026-07</code> → full line items (add <code>&amp;format=csv</code> for a spreadsheet-ready download).</p>
+  <p>When your account manager has <b>issued</b> invoices, <code>GET /v1/invoices</code> lists them (id, number, status, balance) and <code>GET /v1/invoices/{id}</code> returns one with full line items and paid/balance — your system can reconcile payments automatically.</p>
 
   <h2><span class="pill post">POST</span>/v1/addresses/validate</h2>
   <p>FedEx-backed validation + residential/commercial classification: send <code>{"address1","city","state","zip"}</code>, get <code>valid</code>, <code>classification</code>, and a <code>normalized</code> address to correct typos before you buy a label.</p>

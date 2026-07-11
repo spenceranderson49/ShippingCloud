@@ -157,6 +157,58 @@ exports.handler = async (event) => {
       return J(200, { valid: res.deliverable !== false, classification: res.classification || null, normalized: res.normalized || null, messages: res.issues || [] });
     }
 
+  async function bookLabel(b) {
+      const sc = S(b.service_code).trim();
+      const to = b.to || {}, from = b.from || {};
+      const pkgs = Array.isArray(b.packages) && b.packages.length ? b.packages.map(pieceOf) : null;
+      if (!sc || !pkgs || !S(to.zip).trim() || !S(from.zip).trim()) return { code: 422, resp: { error: { code: "invalid_request", message: "service_code, from{...zip}, to{...zip} and packages[] are required." } } };
+      if ((client.blockedServices || []).includes(E.canonSvc(sc))) return { code: 403, resp: { error: { code: "service_not_enabled", message: "That service isn't enabled on this account." } } };
+      if (E.CUSTOM_CARRIERS.some((cc) => cc.services.some(([k]) => k === sc))) return { code: 422, resp: { error: { code: "quote_only_carrier", message: "That carrier is quote-only on this account — labels aren't issued through this API for it yet." } } };
+      /* 1) live-quote the lane so the charge is the customer's real sell price */
+      const q = await callFn("./quote.js", { carriers: "fedex", fromZip: S(from.zip), toZip: S(to.zip), fromCountry: S(from.country || "US"), toCountry: S(to.country || "US"), residential: b.residential !== false, signature: !!b.signature && b.signature !== "none", signatureOption: S(b.signature || "none"), saturdayDelivery: !!b.saturday_delivery, packageTypeCode: S(b.package_type || ""), fedexAccount, pieces: pkgs });
+      const live = (q && q.live && q.rates) || [];
+      const hit = live.find((r) => r.key === sc) || live.find((r) => E.canonSvc(r.label) === E.canonSvc(sc));
+      if (!hit) return { code: 422, resp: { error: { code: "service_unavailable", message: "FedEx isn't offering '" + sc + "' for this shipment. GET /v1/rates to see what's available." } } };
+      const priced = priceRates([hit], world, client, S(from.zip), S(to.zip), pkgs)[0];
+      if (!priced) return { code: 422, resp: { error: { code: "service_unavailable", message: "That service can't be priced for this account." } } };
+      /* 2) book */
+      const order = {
+        reference: S(b.reference).slice(0, 40), orderNumber: S(b.reference).slice(0, 40),
+        invoiceNo: S(b.invoice_number).slice(0, 40), poNo: S(b.po_number).slice(0, 40), department: S(b.department).slice(0, 40),
+        shipmentDate: S(b.ship_date) || new Date().toISOString().slice(0, 10),
+        labelStock: S(b.label_stock || "4x6"),
+        carrierCode: "fedex", serviceCode: hit.serviceCode, packageTypeCode: hit._oneRate ? (hit.packageTypeCode || S(b.package_type || "")) : "",
+        shippingService: hit.label, contentDescription: S((b.customs && b.customs.contents) || b.contents || "Merchandise"),
+        residential: b.residential !== false, signatureOption: S(b.signature || "none"),
+        saturdayDelivery: !!b.saturday_delivery, insuranceAmount: num(b.declared_value_total, 0) || (b.customs && num(b.customs.value_total, 0)) || null,
+        contentDescription2: undefined,
+        sender: { name: S(from.name), company: S(from.company), address1: S(from.address1), address2: S(from.address2), city: S(from.city), state: S(from.state), zip: S(from.zip), country: S(from.country || "US"), phone: S(from.phone), email: S(from.email) },
+        receiver: { name: S(to.name), company: S(to.company), address1: S(to.address1), address2: S(to.address2), city: S(to.city), state: S(to.state), zip: S(to.zip), country: S(to.country || "US"), phone: S(to.phone), email: S(to.email) },
+        pieces: pkgs.map((p) => ({ weight: Math.ceil(p.weight), length: p.length, width: p.width, height: p.height, declaredValue: p.declaredValue })),
+        fedexAccount,
+      };
+      const res = isTest
+        ? { ok: true, tracking: "TEST" + String(Date.now()).slice(-10), labelPdfBase64: null }
+        : await callFn("./ship.js", { action: "ship", order });
+      if (!res || !res.ok) return { code: 502, resp: { error: { code: "booking_failed", message: (res && res.error) || "Booking failed." } } };
+      /* 3) record the shipment on the account (shows in the admin dashboard + billing) */
+      const rec = {
+        id: Date.now(), date: new Date().toLocaleDateString(), time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        tracking: S(res.tracking), carrier: "FedEx", service: hit.label,
+        recipient: order.receiver, sender: order.sender, fromZip: order.sender.zip, toZip: order.receiver.zip,
+        weight: pkgs.reduce((a, p) => a + p.weight, 0), pieces: order.pieces, dims: { L: pkgs[0].length, W: pkgs[0].width, H: pkgs[0].height },
+        cost: hit.cost, sell: priced.amount, billTo: "sender", status: "Label created", lastScan: "Label created",
+        reference: order.reference, invoiceNo: order.invoiceNo, poNo: order.poNo, department: order.department,
+        client: client.name, _src: "api", _test: isTest || undefined,
+      };
+      if (isTest) rec.status = "Test label";
+      try { const cur = await getStore(shipStoreKey(client, isTest)); const arr = (cur.ok && Array.isArray(cur.value)) ? cur.value : []; await putStore(shipStoreKey(client, isTest), [rec, ...arr].slice(0, 5000)); } catch (e) {}
+      if (res.labelPdfBase64) { putStore(labelStoreKey(client, rec.id), { pdf: res.labelPdfBase64, tracking: rec.tracking, created: new Date().toISOString() }).catch(() => {}); }
+      const resp = { test: isTest || undefined, label_id: String(rec.id), tracking_number: rec.tracking, tracking_url: "https://www.fedex.com/fedextrack/?trknbr=" + encodeURIComponent(rec.tracking), service_code: sc, service: hit.label, charge: { amount: priced.amount, currency: "USD" }, label_pdf_base64: res.labelPdfBase64 || null };
+      fireHooks(client, "label.created", { label_id: resp.label_id, tracking_number: resp.tracking_number, service_code: sc, charge: resp.charge, reference: order.reference || null, test: isTest || undefined });
+      return { code: 201, resp };
+  }
+
     /* ── GET /v1/services ── */
     if (seg[0] === "services" && method === "GET") {
       const blocked = new Set(client.blockedServices || []);
@@ -210,56 +262,36 @@ exports.handler = async (event) => {
         const hit = idem.find((x) => x && x.k === idemKey);
         if (hit) return { ...J(hit.code, hit.resp), headers: { ...J(200, {}).headers, "Idempotency-Replayed": "true" } };
       }
-      const sc = S(body.service_code).trim();
-      const to = body.to || {}, from = body.from || {};
-      const pkgs = Array.isArray(body.packages) && body.packages.length ? body.packages.map(pieceOf) : null;
-      if (!sc || !pkgs || !S(to.zip).trim() || !S(from.zip).trim()) return ERR(422, "invalid_request", "service_code, from{...zip}, to{...zip} and packages[] are required.");
-      if ((client.blockedServices || []).includes(E.canonSvc(sc))) return ERR(403, "service_not_enabled", "That service isn't enabled on this account.");
-      if (E.CUSTOM_CARRIERS.some((cc) => cc.services.some(([k]) => k === sc))) return ERR(422, "quote_only_carrier", "That carrier is quote-only on this account — labels aren't issued through this API for it yet.");
-      /* 1) live-quote the lane so the charge is the customer's real sell price */
-      const q = await callFn("./quote.js", { carriers: "fedex", fromZip: S(from.zip), toZip: S(to.zip), fromCountry: S(from.country || "US"), toCountry: S(to.country || "US"), residential: body.residential !== false, signature: !!body.signature && body.signature !== "none", signatureOption: S(body.signature || "none"), saturdayDelivery: !!body.saturday_delivery, packageTypeCode: S(body.package_type || ""), fedexAccount, pieces: pkgs });
-      const live = (q && q.live && q.rates) || [];
-      const hit = live.find((r) => r.key === sc) || live.find((r) => E.canonSvc(r.label) === E.canonSvc(sc));
-      if (!hit) return ERR(422, "service_unavailable", "FedEx isn't offering '" + sc + "' for this shipment. GET /v1/rates to see what's available.");
-      const priced = priceRates([hit], world, client, S(from.zip), S(to.zip), pkgs)[0];
-      if (!priced) return ERR(422, "service_unavailable", "That service can't be priced for this account.");
-      /* 2) book */
-      const order = {
-        reference: S(body.reference).slice(0, 40), orderNumber: S(body.reference).slice(0, 40),
-        invoiceNo: S(body.invoice_number).slice(0, 40), poNo: S(body.po_number).slice(0, 40), department: S(body.department).slice(0, 40),
-        shipmentDate: S(body.ship_date) || new Date().toISOString().slice(0, 10),
-        labelStock: S(body.label_stock || "4x6"),
-        carrierCode: "fedex", serviceCode: hit.serviceCode, packageTypeCode: hit._oneRate ? (hit.packageTypeCode || S(body.package_type || "")) : "",
-        shippingService: hit.label, contentDescription: S((body.customs && body.customs.contents) || body.contents || "Merchandise"),
-        residential: body.residential !== false, signatureOption: S(body.signature || "none"),
-        saturdayDelivery: !!body.saturday_delivery, insuranceAmount: num(body.declared_value_total, 0) || (body.customs && num(body.customs.value_total, 0)) || null,
-        contentDescription2: undefined,
-        sender: { name: S(from.name), company: S(from.company), address1: S(from.address1), address2: S(from.address2), city: S(from.city), state: S(from.state), zip: S(from.zip), country: S(from.country || "US"), phone: S(from.phone), email: S(from.email) },
-        receiver: { name: S(to.name), company: S(to.company), address1: S(to.address1), address2: S(to.address2), city: S(to.city), state: S(to.state), zip: S(to.zip), country: S(to.country || "US"), phone: S(to.phone), email: S(to.email) },
-        pieces: pkgs.map((p) => ({ weight: Math.ceil(p.weight), length: p.length, width: p.width, height: p.height, declaredValue: p.declaredValue })),
-        fedexAccount,
-      };
-      const res = isTest
-        ? { ok: true, tracking: "TEST" + String(Date.now()).slice(-10), labelPdfBase64: null }
-        : await callFn("./ship.js", { action: "ship", order });
-      if (!res || !res.ok) return ERR(502, "booking_failed", (res && res.error) || "Booking failed.");
-      /* 3) record the shipment on the account (shows in the admin dashboard + billing) */
-      const rec = {
-        id: Date.now(), date: new Date().toLocaleDateString(), time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        tracking: S(res.tracking), carrier: "FedEx", service: hit.label,
-        recipient: order.receiver, sender: order.sender, fromZip: order.sender.zip, toZip: order.receiver.zip,
-        weight: pkgs.reduce((a, p) => a + p.weight, 0), pieces: order.pieces, dims: { L: pkgs[0].length, W: pkgs[0].width, H: pkgs[0].height },
-        cost: hit.cost, sell: priced.amount, billTo: "sender", status: "Label created", lastScan: "Label created",
-        reference: order.reference, invoiceNo: order.invoiceNo, poNo: order.poNo, department: order.department,
-        client: client.name, _src: "api", _test: isTest || undefined,
-      };
-      if (isTest) rec.status = "Test label";
-      try { const cur = await getStore(shipStoreKey(client, isTest)); const arr = (cur.ok && Array.isArray(cur.value)) ? cur.value : []; await putStore(shipStoreKey(client, isTest), [rec, ...arr].slice(0, 5000)); } catch (e) {}
-      if (res.labelPdfBase64) { putStore(labelStoreKey(client, rec.id), { pdf: res.labelPdfBase64, tracking: rec.tracking, created: new Date().toISOString() }).catch(() => {}); }
-      const resp = { test: isTest || undefined, label_id: String(rec.id), tracking_number: rec.tracking, tracking_url: "https://www.fedex.com/fedextrack/?trknbr=" + encodeURIComponent(rec.tracking), service_code: sc, service: hit.label, charge: { amount: priced.amount, currency: "USD" }, label_pdf_base64: res.labelPdfBase64 || null };
-      if (idemKey && idem) { putStore(idemStoreKey(client), [{ k: idemKey, code: 201, resp: { ...resp, label_pdf_base64: null } }, ...idem].slice(0, 50)).catch(() => {}); }
-      fireHooks(client, "label.created", { label_id: resp.label_id, tracking_number: resp.tracking_number, service_code: sc, charge: resp.charge, reference: order.reference || null, test: isTest || undefined });
-      return J(201, resp);
+      const sc0 = S(body.service_code).trim();
+      const r = await bookLabel(body);
+      if (r.code === 201 && idemKey && idem) { putStore(idemStoreKey(client), [{ k: idemKey, code: 201, resp: { ...r.resp, label_pdf_base64: null } }, ...idem].slice(0, 50)).catch(() => {}); }
+      return J(r.code, r.resp);
+    }
+
+    /* ── POST /v1/labels/batch — up to 100 labels in one call ── */
+    if (seg[0] === "labels" && seg[1] === "batch" && method === "POST") {
+      const items = Array.isArray(body.shipments) ? body.shipments : [];
+      if (!items.length) return ERR(422, "invalid_request", "shipments[] is required (each item is a normal /v1/labels body).");
+      if (items.length > 100) return ERR(422, "too_many", "Batch is capped at 100 shipments per call.");
+      const out = [];
+      for (let i = 0; i < items.length; i++) {
+        try { const r = await bookLabel(items[i] || {}); out.push(r.code === 201 ? { status: "success", ...r.resp } : { status: "error", index: i, ...r.resp }); }
+        catch (e) { out.push({ status: "error", index: i, error: { code: "internal_error", message: "Failed to process this shipment." } }); }
+      }
+      const ok = out.filter((x) => x.status === "success").length;
+      return J(207, { batch: true, total: items.length, succeeded: ok, failed: items.length - ok, results: out });
+    }
+
+    /* ── POST /v1/returns — a prepaid return label (from ↔ to swapped by default) ── */
+    if (seg[0] === "returns" && method === "POST") {
+      const b = { ...body };
+      if (!b.from || !b.to) return ERR(422, "invalid_request", "from{...} (the return recipient — usually you) and to{...} (the customer returning) are required.");
+      /* a return ships FROM the buyer TO the merchant: swap unless the caller set them explicitly */
+      if (b.swap !== false) { const t = b.from; b.from = b.to; b.to = t; }
+      b.reference = b.reference || "RETURN";
+      const r = await bookLabel(b);
+      if (r.code === 201) r.resp.is_return = true;
+      return J(r.code, r.resp);
     }
 
     /* ── GET /v1/shipments · POST /v1/shipments/{id}/void ── */

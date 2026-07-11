@@ -14,6 +14,8 @@ echo "== rates engine =="
 NODE_PATH="$PWD/node_modules" node claude/tests/rates.mjs
 echo "== regression (logic) =="
 NODE_PATH="$PWD/node_modules" node claude/tests/regression.mjs
+echo "== API (engine parity + handler) =="
+NODE_PATH="$PWD/node_modules" node claude/tests/api.mjs
 echo "== 2FA =="
 NODE_PATH="$PWD/node_modules" node claude/tests/totp.mjs
 echo "== brand boots (shiphub + admin) =="

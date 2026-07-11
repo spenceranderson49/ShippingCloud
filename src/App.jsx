@@ -88,7 +88,7 @@ const FEATURE_CATALOG=[
   {id:"seeCosts",label:"See costs & spend",desc:"Rates, order totals, batch totals and Reports dollars. Turn OFF to hide all money from this customer's logins",default:true},
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own carrier accounts on the Connections page (England always shows; admins always have this)",default:false},
 ];
-const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All logins"],["rates","Rates & dim divisors"],["labelcert","FedEx labels"],["customizations","Features & access"],["branding","Branding"],["domains","Domains"]];
+const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All logins"],["rates","Rates & dim divisors"],["labelcert","FedEx labels"],["customizations","Features & access"],["branding","Branding"],["apiadmin","API"],["domains","Domains"]];
 const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,labelcert:Printer,customizations:Sliders,branding:Sparkles,platforms:Truck,domains:ExternalLink};
 /* A restricted admin ALWAYS keeps access to "users" — without it there is no self-service way
    to ever fix a permission set that’s missing something, for yourself or anyone else. A wrong
@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v465";
+const BUILD_TAG="addr-v466";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -4383,6 +4383,93 @@ function RatesAdmin({clients=[],brand}){
 }
 
 
+/* ════════ Admin → API: the platform's own public API (ShippingCloud API / ShipHub API) ════════ */
+function ApiAdmin({clients=[],platform={},openCustomer}){
+  const apiName=BRAND.fw?"ShipHub API":"ShippingCloud API";
+  const base=(typeof window!=="undefined"?window.location.origin:"")+"/api/v1";
+  const [keys,setKeys]=useState(null);
+  const [kBusy,setKBusy]=useState(false);
+  const [nk,setNk]=useState({clientId:"",label:""});
+  const [minted,setMinted]=useState(null);   // {key,prefix} — shown ONCE
+  const loadKeys=async()=>{const r=await cloudCall({action:"apiKeys",token:CLOUD.token});setKeys((r&&r.ok&&r.keys)||[]);};
+  useEffect(()=>{loadKeys();},[]);
+  const createKey=async()=>{ if(!nk.clientId)return; setKBusy(true);
+    const r=await cloudCall({action:"apiKeyCreate",token:CLOUD.token,clientId:nk.clientId,label:nk.label});
+    setKBusy(false);
+    if(r&&r.ok){setMinted({key:r.key,prefix:r.prefix});setNk({clientId:"",label:""});loadKeys();}
+    else window.alert((r&&r.error)||"Couldn't create the key.");
+  };
+  const revoke=async(id)=>{ if(!window.confirm("Revoke this key? Integrations using it stop working immediately."))return;
+    await cloudCall({action:"apiKeyRevoke",token:CLOUD.token,id}); loadKeys(); };
+  const cName=(id)=>(clients.find(c=>c.id===id)||{}).name||id;
+  const apiShips=(platform.ships||[]).filter(x=>String(x._uid||"").startsWith("api_")).slice(0,25);
+  /* ── commissions ── */
+  const [reps,setReps]=usePersist("salesReps",[]);
+  const [nr,setNr]=useState({name:"",pct:"",clientIds:[]});
+  const monthStart=(()=>{const d=new Date();d.setDate(1);d.setHours(0,0,0,0);return d.getTime();})();
+  const tsOf=(x)=>(typeof x.id==="number"&&x.id>1e12)?x.id:(new Date(x.date).getTime()||0);
+  const repRows=(reps||[]).map(rp=>{ const names=new Set((rp.clientIds||[]).map(cName).map(n=>String(n).toLowerCase()));
+    const ships=(platform.ships||[]).filter(x=>x.status!=="Voided"&&tsOf(x)>=monthStart&&names.has(String(x.client||"").toLowerCase()));
+    const margin=ships.reduce((a,x)=>a+((+x.sell||0)-(+x.cost||0)),0);
+    return {...rp,shipN:ships.length,margin:Math.round(margin*100)/100,commission:Math.round(margin*(+rp.pct||0))/100};
+  });
+  return (<div className="max-w-4xl space-y-5">
+    <div>
+      <h2 className="text-base font-semibold text-stone-800">{apiName}</h2>
+      <p className="text-sm text-stone-500 mt-1">Your own public API — partners integrate their systems directly: live rates priced through <b>their</b> rate card, label booking, shipments, pickups, and billing. It replaces the wholesaler API end-to-end for anyone connecting to you.</p>
+      <div className="flex flex-wrap items-center gap-3 mt-2 text-sm">
+        <span className="font-mono text-[12px] bg-stone-100 border border-stone-200 rounded px-2 py-1">{base}</span>
+        <a href="/api-docs.html" target="_blank" rel="noreferrer" className="text-[#0086E0] hover:underline flex items-center gap-1"><FileText className="w-3.5 h-3.5"/>Full API docs</a>
+      </div>
+    </div>
+    {minted&&<div className="bg-emerald-50 border border-emerald-300 rounded-lg p-4 space-y-2">
+      <div className="text-sm font-semibold text-emerald-800 flex items-center gap-1.5"><ShieldCheck className="w-4 h-4"/>Key created — copy it NOW, it will never be shown again</div>
+      <div className="flex items-center gap-2"><code className="flex-1 font-mono text-[12px] bg-white border border-emerald-200 rounded px-2 py-1.5 break-all">{minted.key}</code>
+        <button onClick={()=>{try{navigator.clipboard.writeText(minted.key);}catch(e){}}} className="text-xs bg-emerald-600 text-white rounded px-2.5 py-1.5 font-medium">Copy</button>
+        <button onClick={()=>setMinted(null)} className="text-xs text-emerald-700 underline">Done</button></div>
+    </div>}
+    <Panel title="API keys">
+      <div className="flex flex-wrap items-end gap-2 mb-3">
+        <Field label="Customer"><Select value={nk.clientId} onChange={e=>setNk({...nk,clientId:e.target.value})}><option value="">— pick —</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
+        <Field label="Label (optional)"><Input value={nk.label} onChange={e=>setNk({...nk,label:e.target.value})} placeholder="e.g. Their WMS"/></Field>
+        <button onClick={createKey} disabled={!nk.clientId||kBusy} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium disabled:opacity-40 flex items-center gap-1.5">{kBusy?<Loader2 className="w-4 h-4 animate-spin"/>:<Plus className="w-4 h-4"/>}Create key</button>
+      </div>
+      {keys==null?<div className="text-sm text-stone-400">Loading…</div>
+       :!keys.length?<div className="text-sm text-stone-400">No keys yet — create one above and hand it to the customer (it authenticates every call).</div>
+       :<div className="space-y-1.5">{keys.map(k=>(<div key={k.id} className={`flex flex-wrap items-center gap-3 border rounded-lg px-3 py-2 text-sm ${k.revoked?"opacity-45 border-stone-100":"border-stone-200 bg-white"}`}>
+          <code className="font-mono text-[12px] text-stone-600">{k.prefix}</code>
+          <button onClick={()=>openCustomer&&openCustomer(k.clientId)} className="font-medium text-[#0086E0] hover:underline">{cName(k.clientId)}</button>
+          {k.label&&<span className="text-stone-400 text-xs">{k.label}</span>}
+          <span className="flex-1"/>
+          <span className="text-[11px] text-stone-400">{k.lastUsed?("used "+new Date(k.lastUsed).toLocaleDateString()):"never used"}</span>
+          {k.revoked?<Badge tone="stone">revoked</Badge>:<button onClick={()=>revoke(k.id)} className="text-[11px] text-rose-500 hover:underline">Revoke</button>}
+        </div>))}</div>}
+    </Panel>
+    <Panel title="Recent API shipments">
+      {!apiShips.length?<div className="text-sm text-stone-400">Nothing yet — labels booked through the API land here (and on the main dashboard, under the customer's name).</div>
+       :<div className="space-y-1">{apiShips.map((x,i)=>(<div key={i} className="flex items-center gap-3 text-[12.5px] border-t border-stone-100 py-1 first:border-t-0">
+          <span className="text-stone-400 w-20 shrink-0">{x.date}</span><span className="font-medium w-40 truncate">{x.client||"—"}</span>
+          <span className="font-mono text-stone-500">{x.tracking}</span><span className="flex-1 truncate text-stone-500">{(x.service||"").replace("FedEx ","")}</span>
+          <span className="font-mono">{money(+x.sell||0)}</span></div>))}</div>}
+    </Panel>
+    <Panel title="Sales-rep commissions">
+      <p className="text-[11px] text-stone-500 mb-2">Commission = the rep's % of your est. margin on their customers' shipments (this month, all channels — portal and API).</p>
+      <div className="flex flex-wrap items-end gap-2 mb-3">
+        <Field label="Rep name"><Input value={nr.name} onChange={e=>setNr({...nr,name:e.target.value})}/></Field>
+        <Field label="% of margin"><Input type="number" value={nr.pct} onChange={e=>setNr({...nr,pct:e.target.value})} placeholder="10"/></Field>
+        <button onClick={()=>{if(!nr.name||!(+nr.pct>0))return;setReps(p=>[...(p||[]),{id:"r"+Date.now(),name:nr.name,pct:+nr.pct,clientIds:[]}]);setNr({name:"",pct:"",clientIds:[]});}} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5"><Plus className="w-4 h-4"/>Add rep</button>
+      </div>
+      {!repRows.length?<div className="text-sm text-stone-400">No reps yet.</div>
+       :<div className="space-y-2">{repRows.map(rp=>(<div key={rp.id} className="border border-stone-200 rounded-lg bg-white p-3 space-y-2">
+          <div className="flex items-center gap-3"><span className="font-medium">{rp.name}</span><Badge tone="blue">{rp.pct}% of margin</Badge><span className="flex-1"/>
+            <span className="text-[12px] text-stone-500">{rp.shipN} shipments · margin {money(rp.margin)} · <b className="text-emerald-700">commission {money(rp.commission)}</b> this month</span>
+            <button onClick={()=>{if(window.confirm("Remove "+rp.name+"?"))setReps(p=>(p||[]).filter(x=>x.id!==rp.id));}} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button></div>
+          <div className="flex flex-wrap gap-1.5">{clients.map(c=>{const on=(rp.clientIds||[]).includes(c.id);return (
+            <button key={c.id} onClick={()=>setReps(p=>(p||[]).map(x=>x.id===rp.id?{...x,clientIds:on?(x.clientIds||[]).filter(i=>i!==c.id):[...(x.clientIds||[]),c.id]}:x))} className={`text-[11px] rounded-full px-2.5 py-1 border ${on?"bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF] font-medium":"bg-white border-stone-200 text-stone-400 hover:border-stone-300"}`}>{c.name}</button>);})}</div>
+        </div>))}</div>}
+    </Panel>
+  </div>);
+}
 function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,currentUser,settings,setSettings,brand,signupRequests,setSignupRequests,featureFlags,setFeatureFlags,customFeatures,setCustomFeatures,fedexRequests=[],setFedexRequests,publicBrand,setPublicBrand,companyAdminRequests=[],setCompanyAdminRequests,activeSection=null}){
   const sidebarDriven=!!activeSection;   // BRAND.admin: the left sidebar picks the section directly, so the internal top-tab bar/launcher is redundant and hidden
   const [sec,setSec]=useState(activeSection||(BRAND.admin?"customers":"overview"));
@@ -4422,7 +4509,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
     {label:"Overview",items:[["overview","Dashboard",BarChart3]]},
     {label:"Accounts",items:[["customers","Customers",Building2],["users","All logins",Users]]},
     {label:"Pricing",items:[["rates","Rates & dim divisors",DollarSign],["labelcert","FedEx labels",Printer]]},
-    {label:"Experience",items:[["customizations","Features & access",Sliders],["branding","Branding",Sparkles],["domains","Domains",ExternalLink]]},
+    {label:"Experience",items:[["customizations","Features & access",Sliders],["branding","Branding",Sparkles],["apiadmin","API",Plug],["domains","Domains",ExternalLink]]},
   ];
   const SECTION_META={};NAV_GROUPS.forEach(g=>g.items.forEach(([v,l,Icon])=>{SECTION_META[v]={label:l,Icon};}));
   SECTION_META.rates={label:"Advanced rates — tables & sheets",Icon:DollarSign};   // off the sidebar (customers each have a Rates tab now); reachable from a customer record for shared imports, zones, weight breaks, and printable rate sheets
@@ -4461,6 +4548,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
       {k==="users"&&<UsersAdmin users={users} setUsers={setUsers} clients={clients} currentUser={currentUser} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
       {k==="customizations"&&<CustomizationsAdmin users={users} clients={clients} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures}/>}
       {k==="overview"&&<AdminDashboard platform={platform} loginStats={loginStats} uEmail={uEmail} openCustomer={openCustomer} openSection={openSection} clients={clients}/>}
+      {k==="apiadmin"&&<ApiAdmin clients={clients} platform={platform} openCustomer={openCustomer}/>}
   </>);
   return (
     <div className="-mt-2">
@@ -4761,7 +4849,7 @@ const lsDel=(k)=>{ if(!LS_OK)return; try{window.localStorage.removeItem("sc_"+k)
 // Which login is active. Every non-global key is stored under this account so each login keeps its OWN settings/data.
 const activeUid=()=>{ try{const s=lsGet("session",null); const id=s&&(s.id||s.email); return id?String(id):"guest"; }catch(e){return "guest";} };
 // Shared across all logins (never namespaced): the accounts list + who is signed in.
-const GLOBAL_KEYS={session:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1,customFeatures:1,fedexRequests:1,publicBrand:1,myAccess:1,companyUsers:1,companyFlags:1,companyAdminRequests:1,rateRules:1,clients:1};
+const GLOBAL_KEYS={session:1,salesReps:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1,customFeatures:1,fedexRequests:1,publicBrand:1,myAccess:1,companyUsers:1,companyFlags:1,companyAdminRequests:1,rateRules:1,clients:1};
 // Scratch = the in-progress shipment. Per-login, but starts blank on each login (never migrated/inherited).
 const isScratch=(key)=>String(key).indexOf("ship.")===0;
 // Scratch keys wiped on login so the receiver + package dims are always blank for a fresh session.

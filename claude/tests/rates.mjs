@@ -5,8 +5,8 @@ import fs from "fs";
 const src=fs.readFileSync("src/App.jsx","utf8");
 function fn(name){const re=new RegExp("function "+name+"\\s*\\(");const m=re.exec(src);if(!m)throw new Error("fn "+name);let i=src.indexOf("){",m.index)+1,d=0;const st=m.index;for(;i<src.length;i++){if(src[i]==="{")d++;else if(src[i]==="}"){d--;if(d===0){i++;break;}}}return src.slice(st,i);}
 function cn(name){const re=new RegExp("const "+name+"=[^;]*;");const m=re.exec(src);if(!m)throw new Error("const "+name);return m[0];}
-const code=[cn("DEFAULT_RATE_RULES"),fn("rateSvcKey"),fn("fedexSurchargeIdFor"),fn("surchargeAdjust"),fn("rateProfileFor"),fn("rateSellFor"),"return {rateSellFor,fedexSurchargeIdFor};"].join("\n");
-const {rateSellFor,fedexSurchargeIdFor}=new Function("zoneEst","baseCostLookup","list2025Lookup",code)(()=>4,()=>null,()=>null);
+const code=[cn("DEFAULT_RATE_RULES"),fn("rateSvcKey"),fn("fedexSurchargeIdFor"),fn("surchargeAdjust"),fn("rateProfileFor"),fn("rateSellFor"),"return {rateSellFor,fedexSurchargeIdFor,rateSvcKey};"].join("\n");
+const {rateSellFor,fedexSurchargeIdFor,rateSvcKey}=new Function("zoneEst","baseCostLookup","list2025Lookup",code)(()=>4,()=>null,()=>null);
 let p=0,f=0;const ok=(c,l)=>{c?p++:(f++,console.log("  ✗ FAIL:",l));};
 ok(fedexSurchargeIdFor("Fuel Surcharge","FedEx Home Delivery®")==="FUEL-G","fuel ground variant");
 ok(fedexSurchargeIdFor("Fuel Surcharge","FedEx 2Day®")==="FUEL","fuel express variant");
@@ -69,5 +69,23 @@ ok(rateSellFor(20,"FedEx Home Delivery®",{rules:mk7("percent",-50),surcharges:l
 ok(rateSellFor(20,"FedEx Home Delivery®",{rules:mk7("add",0.75),surcharges:l7})===20.75,"$ over cost 0.75 → fee $2.75");
 ok(rateSellFor(20,"FedEx Home Delivery®",{rules:mk7("listpct",10),surcharges:l7})===20.25,"% off list 10 → fee $2.25 (list 2.50)");
 ok(rateSellFor(20,"FedEx Home Delivery®",{rules:mk7("fixed",5),surcharges:l7})===23,"flat $5 → fee exactly $5");
+// ── NAME WIRING: every FedEx API service label keys to the exact Rates-tab service key ──
+const qsrc=fs.readFileSync("netlify/functions/quote.js","utf8");
+const svcMap=[...qsrc.matchAll(/([A-Z0-9_]+):\s*\{ key: "([a-z0-9_]+)",\s*label: "([^"]+)" \}/g)].map(m=>({api:m[1],key:m[2],label:m[3]}));
+ok(svcMap.length>=22,"parsed the quote.js service map ("+svcMap.length+" services)");
+for(const sv of svcMap) ok(rateSvcKey(sv.label)===sv.key,"service label → key: "+sv.label+" → "+sv.key);
+// ── FEE NAME ROUND-TRIP: each row's on-quote name must match back to a row with the SAME name ──
+function xconst(name){const i=src.indexOf("const "+name+"=");const j=src.indexOf("];",i);return src.slice(i,j+2);}
+const CAT=new Function(xconst("FEDEX_SURCHARGES")+";return FEDEX_SURCHARGES;")();
+const segSvc=(seg)=>seg==="Ground"||seg==="Ground & Home Delivery"?"FedEx Ground":seg==="Home Delivery"?"FedEx Home Delivery":seg==="Ground Economy"?"FedEx Ground Economy":"FedEx 2Day";
+let rt=0;
+for(const su of CAT){
+  if(!su.aka)continue;
+  const id=fedexSurchargeIdFor(su.aka,segSvc(su.seg||""));
+  const hit=id&&CAT.find(x=>x.id===id);
+  ok(hit&&(hit.aka===su.aka||hit.id===su.id),"fee name round-trip: "+su.id+" (“"+su.aka+"” on "+(su.seg||"All")+")");
+  rt++;
+}
+ok(rt>=30,"round-tripped "+rt+" named fees");
 console.log(p+" passed, "+f+" failed");
 process.exit(f?1:0);

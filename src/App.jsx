@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v445";
+const BUILD_TAG="addr-v446";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -1454,6 +1454,27 @@ async function fedexSchedulePickup(p){
     date:p.date,readyTime:p.readyTime,closeTime:p.closeTime,packageCount:p.packageCount,totalWeight:p.totalWeight,carrierCode:p.carrierCode,packageLocation:p.packageLocation,residential:p.residential,remarks:p.remarks},25000);
 }
 
+/* Pickup fee for a customer: the profile's accessorial rule on the on-call pickup row
+   (PU-EXP express / PU-GRD-OC ground) applied to the Service Guide default — identical
+   semantics to every other accessorial (percent / $ over cost / % off list / flat), with the
+   account-wide markup as the no-rule fallback. Returns {fee, ruleDesc}. */
+function pickupFeeFor(rules,client,carrierCode){
+  const id=carrierCode==="FDXG"?"PU-GRD-OC":"PU-EXP";
+  const su=(typeof FEDEX_SURCHARGES!=="undefined")?FEDEX_SURCHARGES.find(x=>x&&x.id===id):null;
+  const def=(su&&su.def)||16.25;
+  const prof=rules?rateProfileFor(rules,client&&client.id):null;
+  const r=((prof&&prof.surcharges)||{})[id];
+  const a=(r&&r.amount!=null&&r.amount!==""&&!isNaN(+r.amount))?+r.amount:null;
+  const aPct=(client&&client.markup!=null&&client.markup!==""&&!isNaN(+client.markup)&&+client.markup!==0)?+client.markup:null;
+  if(a==null){
+    const fee=Math.round((aPct!=null?def*(1+aPct/100):def)*100)/100;
+    return {fee,ruleDesc:aPct!=null?("account markup "+(aPct>0?"+":"")+aPct+"%"):"FedEx default"};
+  }
+  const t=(r&&r.type)||"percent";
+  const fee=Math.round((t==="percent"?def*(1+a/100):t==="add"?def+a:t==="listpct"?def*(1-a/100):a)*100)/100;
+  const ruleDesc=t==="fixed"?("flat "+money(a)):t==="add"?("fee + "+money(a)):t==="listpct"?("list − "+a+"%"):(a>=0?("fee + "+a+"%"):("fee − "+Math.abs(a)+"%"));
+  return {fee,ruleDesc:"your rule: "+ruleDesc};
+}
 async function fedexCancelPickup(p){
   return await fedexCall({action:"pickupCancel",confirmationCode:p.confirmationCode,carrierCode:p.carrierCode||"FDXE",date:p.date,location:p.location||""},25000);
 }
@@ -3245,19 +3266,23 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection}){
   /* chart buckets (fixed scopes, independent of the period picker) */
   const buckets=useMemo(()=>{
     const liveAll=ships.filter(x=>x.status!=="Voided");
-    const hourly=[];for(let h=6;h<=20;h++)hourly.push({lb:h%3===0?String(h):"",m:0,c:0,_h:h});
+    const hourly=[];for(let h=6;h<=20;h++)hourly.push({lb:h%3===0?String(h):"",m:0,c:0,_h:h,_from:dayStart+h*3600e3,_to:dayStart+(h+1)*3600e3,_t:"Today "+((h%12)||12)+(h<12?"am":"pm")});
     liveAll.forEach(x=>{const t=tsOf(x);if(t<dayStart)return;const h=new Date(t).getHours();const b=hourly.find(b2=>b2._h===h);if(b){b.m+=marginOf(x);b.c++;}});
-    const daily=[];for(let i=13;i>=0;i--){const d0=dayStart-i*864e5;daily.push({lb:i%3===0?new Date(d0).toLocaleDateString([],{month:"numeric",day:"numeric"}):"",m:0,c:0,_d:d0});}
+    const daily=[];for(let i=13;i>=0;i--){const d0=dayStart-i*864e5;daily.push({lb:i%3===0?new Date(d0).toLocaleDateString([],{month:"numeric",day:"numeric"}):"",m:0,c:0,_d:d0,_from:d0,_to:d0+864e5,_t:new Date(d0).toLocaleDateString([],{weekday:"short",month:"numeric",day:"numeric"})});}
     liveAll.forEach(x=>{const t=tsOf(x);const b=daily.find(b2=>t>=b2._d&&t<b2._d+864e5);if(b){b.m+=marginOf(x);b.c++;}});
-    const weekly=[];for(let i=11;i>=0;i--){const w0=dayStart-((i+1)*7-1)*864e5;weekly.push({lb:i%3===0?new Date(w0).toLocaleDateString([],{month:"numeric",day:"numeric"}):"",m:0,c:0,_d:w0});}
+    const weekly=[];for(let i=11;i>=0;i--){const w0=dayStart-((i+1)*7-1)*864e5;weekly.push({lb:i%3===0?new Date(w0).toLocaleDateString([],{month:"numeric",day:"numeric"}):"",m:0,c:0,_d:w0,_from:w0,_to:w0+7*864e5,_t:"Week of "+new Date(w0).toLocaleDateString([],{month:"numeric",day:"numeric"})});}
     liveAll.forEach(x=>{const t=tsOf(x);const b=weekly.find(b2=>t>=b2._d&&t<b2._d+7*864e5);if(b){b.m+=marginOf(x);b.c++;}});
     return {hourly,daily,weekly};
   },[ships,dayStart]);
+  const [drill,setDrill]=useState(null);   // {_from,_to,_t} — a clicked chart bucket
   const Combo=({title,data})=>{const W=340,H=104,P=14;const mMax=Math.max(1,...data.map(d=>d.m));const cMax=Math.max(1,...data.map(d=>d.c));const bw=(W-P*2)/data.length;
     return (<div className="border border-stone-200 rounded-lg bg-white p-3">
-      <div className="text-xs font-semibold text-stone-600 mb-1">{title}</div>
+      <div className="text-xs font-semibold text-stone-600 mb-1">{title} <span className="font-normal text-stone-400">— click a bar for the breakdown</span></div>
       <svg viewBox={"0 0 "+W+" "+H} className="w-full">
-        {data.map((d,i)=>{const h=(H-32)*(d.m/mMax);return <rect key={i} x={P+i*bw+1.5} y={H-18-h} width={Math.max(1,bw-3)} height={Math.max(0,h)} rx="1" fill="#fdba74"/>;})}
+        {data.map((d,i)=>{const h=(H-32)*(d.m/mMax);const sel=drill&&drill._from===d._from&&drill._to===d._to;return <g key={i} className="cursor-pointer" onClick={()=>setDrill(sel?null:d)}>
+          <rect x={P+i*bw} y={12} width={Math.max(1,bw)} height={H-30} fill={sel?"#0086E0":"transparent"} opacity={sel?0.08:0}/>
+          <rect x={P+i*bw+1.5} y={H-18-h} width={Math.max(1,bw-3)} height={Math.max(0,h)} rx="1" fill={sel?"#fb923c":"#fdba74"}/>
+        </g>;})}
         <polyline fill="none" stroke="#44403c" strokeWidth="1.5" points={data.map((d,i)=>(P+i*bw+bw/2)+","+(H-18-(H-32)*(d.c/cMax))).join(" ")}/>
         {data.map((d,i)=>d.c>0&&<circle key={"c"+i} cx={P+i*bw+bw/2} cy={H-18-(H-32)*(d.c/cMax)} r="1.8" fill="#44403c"/>)}
         {data.map((d,i)=>(d.lb?<text key={"t"+i} x={P+i*bw+bw/2} y={H-5} fontSize="8" textAnchor="middle" fill="#a8a29e">{d.lb}</text>:null))}
@@ -3279,6 +3304,36 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection}){
       <Stat2 label="Quoted" v={money(totQ)}/>
       <Stat2 label="Open orders (all logins)" v={platform.openOrders}/>
     </div>
+    {drill&&(()=>{
+      const rows=ships.filter(x=>{const t=tsOf(x);return t>=drill._from&&t<drill._to;}).sort((a,b)=>tsOf(b)-tsOf(a));
+      const rl=rows.filter(x=>x.status!=="Voided");
+      const dm=Math.round(rl.reduce((a,x)=>a+marginOf(x),0)*100)/100;
+      const dq=Math.round(rl.reduce((a,x)=>a+(+x.sell||0),0)*100)/100;
+      const byC={};rows.forEach(x=>{const k=custOf(x);const e=byC[k]||(byC[k]={name:k,n:0,voided:0,q:0,mg:0});if(x.status==="Voided"){e.voided++;return;}e.n++;e.q+=(+x.sell||0);e.mg+=marginOf(x);});
+      const bc=Object.values(byC).sort((a,b)=>b.mg-a.mg);
+      return (<div className="border-2 border-[#0086E0]/40 rounded-lg bg-[#F0F9FF]/50 overflow-hidden">
+        <div className="px-4 py-2.5 flex items-center gap-3 border-b border-[#BAE6FD]">
+          <span className="text-sm font-semibold text-stone-800">{drill._t}</span>
+          <span className="text-[12px] text-stone-500">{rl.length} shipped{rows.length-rl.length?" − "+(rows.length-rl.length)+" voided":""} · margin <b className="font-mono">{money(dm)}</b> · quoted <b className="font-mono">{money(dq)}</b></span>
+          <span className="flex-1"/>
+          <button onClick={()=>setDrill(null)} className="text-stone-400 hover:text-stone-700"><X className="w-4 h-4"/></button>
+        </div>
+        <div className="grid lg:grid-cols-2 gap-0">
+          <div className="overflow-x-auto max-h-[300px] overflow-y-auto border-r border-[#BAE6FD]/60">
+            <table className="w-full text-[12px] min-w-[380px]">
+              <thead className="sticky top-0 bg-[#E6F4FF]"><tr className="text-[9px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal px-3 py-1.5">Customer</th><th className="text-right font-normal px-3 py-1.5">Ships</th><th className="text-right font-normal px-3 py-1.5">Quoted</th><th className="text-right font-normal px-3 py-1.5">Margin</th></tr></thead>
+              <tbody>{bc.map((e,i)=>(<tr key={i} className="border-t border-[#BAE6FD]/40"><td className="px-3 py-1.5 font-medium text-stone-800 truncate max-w-[180px]">{e.name}</td><td className="px-3 py-1.5 text-right font-mono">{e.n}{e.voided?" (−"+e.voided+")":""}</td><td className="px-3 py-1.5 text-right font-mono">{money(Math.round(e.q*100)/100)}</td><td className={"px-3 py-1.5 text-right font-mono "+(e.mg>=0?"text-emerald-700":"text-rose-600")}>{money(Math.round(e.mg*100)/100)}</td></tr>))}</tbody>
+            </table>
+          </div>
+          <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
+            <table className="w-full text-[12px] min-w-[420px]">
+              <thead className="sticky top-0 bg-[#E6F4FF]"><tr className="text-[9px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal px-3 py-1.5">Time</th><th className="text-left font-normal px-3 py-1.5">Customer</th><th className="text-left font-normal px-3 py-1.5">Tracking</th><th className="text-right font-normal px-3 py-1.5">Margin</th><th className="text-right font-normal px-3 py-1.5">Quote</th></tr></thead>
+              <tbody>{rows.slice(0,150).map((x,i)=>(<tr key={i} className={"border-t border-[#BAE6FD]/40 "+(x.status==="Voided"?"opacity-45":"")}><td className="px-3 py-1.5 whitespace-nowrap text-stone-500">{timeOf(x)}</td><td className="px-3 py-1.5 truncate max-w-[150px] text-stone-800">{custOf(x)}</td><td className="px-3 py-1.5 font-mono text-[11px] text-stone-600">{x.tracking||"—"}</td><td className="px-3 py-1.5 text-right font-mono">{x.status==="Voided"?"—":money(marginOf(x))}</td><td className="px-3 py-1.5 text-right font-mono">{x.status==="Voided"?"—":money(+x.sell||0)}</td></tr>))}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>);
+    })()}
     <div className="grid lg:grid-cols-[340px,1fr] gap-3 items-start">
       <div className="space-y-3">
         <Combo title="Today — hourly" data={buckets.hourly}/>
@@ -3784,7 +3839,8 @@ function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureF
       <div className="divide-y divide-stone-100">
         {list.length===0&&<div className="px-4 py-8 text-sm text-stone-400 text-center">No customers match "{q}".</div>}
         {list.map(c=>{const lg=loginsOf(c.id);const prof=profOf(c.id);return (
-          <div key={c.id} onClick={()=>onOpenCustomer&&onOpenCustomer(c.id)} className="flex items-center gap-3 px-4 py-3 hover:bg-stone-50 cursor-pointer">
+          <div key={c.id} onClick={()=>onOpenCustomer&&onOpenCustomer(c.id)} className="group flex items-center gap-3 px-4 py-3 hover:bg-stone-50 cursor-pointer">
+            <button onClick={(e)=>{e.stopPropagation();if(!window.confirm('Delete customer "'+c.name+'"? Their logins stay but lose the link (they re-heal into a fresh blank customer on next login). Rates/rules assigned to them are kept but unassigned.'))return;setUsers(us=>us.map(x=>x.clientId===c.id?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==c.id));}} title="Delete customer" className="opacity-0 group-hover:opacity-100 text-stone-300 hover:text-rose-500 shrink-0 order-last"><Trash2 className="w-4 h-4"/></button>
             <div className="w-7 h-7 rounded-lg bg-[#0086E0]/10 text-[#0086E0] flex items-center justify-center font-bold text-xs shrink-0">{String(c.name||"?").slice(0,1).toUpperCase()}</div>
             <div className="flex-1 min-w-0"><div className="font-medium text-sm truncate">{c.name}</div><div className="text-[11px] text-stone-400 truncate">{c.contact||"—"}{c.email?` · ${c.email}`:""}</div></div>
             <div className="w-20 text-center"><Badge tone="blue">{lg.length}</Badge></div>
@@ -8484,17 +8540,8 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true}){
      pickup row (percent / $ over cost / % off list / flat) applied to the Service Guide default,
      account markup as the fallback. Admin can hide this per login (Pickup fee display feature). */
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
-  const pickupFee=useMemo(()=>{
-    const id=f.carrierCode==="FDXG"?"PU-GRD-OC":"PU-EXP";
-    const su=FEDEX_SURCHARGES.find(x=>x.id===id);const def=(su&&su.def)||16.25;
-    const prof=rateProfileFor(rateRules,client&&client.id);
-    const r=((prof&&prof.surcharges)||{})[id];
-    const a=(r&&r.amount!=null&&r.amount!==""&&!isNaN(+r.amount))?+r.amount:null;
-    const aPct=(client&&client.markup!=null&&client.markup!==""&&!isNaN(+client.markup)&&+client.markup!==0)?+client.markup:null;
-    if(a==null)return Math.round((aPct!=null?def*(1+aPct/100):def)*100)/100;
-    const t=(r&&r.type)||"percent";
-    return Math.round((t==="percent"?def*(1+a/100):t==="add"?def+a:t==="listpct"?def*(1-a/100):a)*100)/100;
-  },[rateRules,client,f.carrierCode]);
+  const _pf=useMemo(()=>pickupFeeFor(rateRules,client,f.carrierCode),[rateRules,client,f.carrierCode]);
+  const pickupFee=_pf.fee;
   const cancelLive=async(p)=>{
     if(!window.confirm("Cancel this FedEx pickup ("+p.conf+")? The driver will not come."))return;
     setCanceling(p.id);
@@ -8527,7 +8574,7 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true}){
         <div className="grid grid-cols-2 gap-3"><Field label="Ready time"><Input type="time" value={f.ready} onChange={e=>setF({...f,ready:e.target.value})}/></Field><Field label="Close time"><Input type="time" value={f.close} onChange={e=>setF({...f,close:e.target.value})}/></Field></div>
         <div className="grid grid-cols-2 gap-3"><Field label="Total weight (lb)"><Input type="number" value={f.weight} onChange={e=>setF({...f,weight:+e.target.value})}/></Field><Field label="Package location"><Select value={f.location} onChange={e=>setF({...f,location:e.target.value})}>{PKG_LOC.map(([v,l])=><option key={v} value={v}>{l}</option>)}</Select></Field></div>
         <div className="text-[11px] text-stone-400 flex items-center gap-1"><MapPin className="w-3.5 h-3.5"/>{addrReady?`${s.address1}, ${s.city} ${s.state} ${s.zip}`:"Set your pickup address in Settings → Company"}</div>
-        {showCosts&&<div className="flex items-center justify-between text-sm bg-stone-50 border border-stone-200 rounded-lg px-3 py-2"><span className="text-stone-600">On-call pickup fee ({f.carrierCode==="FDXG"?"Ground":"Express"})</span><span className="font-mono font-semibold text-stone-900">{money(pickupFee)}</span></div>}
+        {showCosts&&<div className="flex items-center justify-between text-sm bg-stone-50 border border-stone-200 rounded-lg px-3 py-2"><span className="text-stone-600">On-call pickup fee ({f.carrierCode==="FDXG"?"Ground":"Express"})<span className="block text-[10px] text-stone-400">{_pf.ruleDesc} — edit it on the Rates tab accessorials (Pickup &amp; returns)</span></span><span className="font-mono font-semibold text-stone-900">{money(pickupFee)}</span></div>}
         {showCosts&&<div className="text-[10px] text-stone-400 -mt-1">Billed by FedEx per on-call pickup. Regular scheduled pickup routes bill weekly instead. Priced from your account's accessorial rules.</div>}
         {err&&<div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1.5 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>{err}</div>}
         <button onClick={add} disabled={busy||!addrReady} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Scheduling with FedEx…</>:<><Calendar className="w-4 h-4"/>Schedule pickup</>}</button>

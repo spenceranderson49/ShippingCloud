@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v459";
+const BUILD_TAG="addr-v460";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3415,7 +3415,7 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection,cli
 
 /* ════════ ADMIN → CUSTOMER DETAIL (opens as its own tab) ════════ */
 const SUPPLY_ITEMS=["Thermal 4×6 labels","Laser label sheets","Poly mailers","Boxes — small","Boxes — medium","Boxes — large","Packing tape","Bubble mailers","Dunnage / void fill","Thermal printer ribbon"];
-function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featureFlags={},setFeatureFlags,customFeatures=[],settings,onClose,openSection}){
+function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featureFlags={},setFeatureFlags,customFeatures=[],settings,onClose,openSection,ships=[]}){
   const CATALOG=[...FEATURE_CATALOG,...(customFeatures||[]).map(c=>({...c,custom:true}))];
   /* RATES ARE DRAFTED: every edit on the Rates tab (rules, breaks, accessorials, markup, mins)
      lands in a local draft — NOTHING reprices live quotes until the green Save button is pressed.
@@ -3478,7 +3478,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
   const secPolicyState=(sid)=>{ if(!lg.length)return "on"; const vals=lg.map(u=>String(((featureFlags[u.id]||{})._secPolicy||{})[sid]||"on")); return vals.every(v=>v===vals[0])?vals[0]:"mixed"; };
   const setCompanySecPolicy=(sid,val)=>{ setFeatureFlags&&setFeatureFlags(ff=>{ const next={...ff}; lg.forEach(u=>{ const cur=next[u.id]||{}; next[u.id]={...cur,_secPolicy:{...(cur._secPolicy||{}),[sid]:val}}; }); return next; }); say("Settings pages updated for all logins."); };
   const supplies=pf.supplies||{};
-  const TABS=[["profile","Profile"],["address","Address"],["logins","Logins ("+lg.length+")"],["rates","Rates"],["services","Services"],["fedex","FedEx tier"],["labels","Label preferences"],["supplies","Supplies"],["features","Features"],["creds","Credentials"],["notes","Notes"]];
+  const TABS=[["profile","Profile"],["logins","Logins ("+lg.length+")"],["rates","Rates"],["services","Services"],["fedex","FedEx tier"],["shipments","Shipments"],["features","Features"],["notes","Notes"]];   /* write-only tabs (Address/Label prefs/Supplies/Credentials) removed — nothing read them (audit-admin-portal §2) */
   const svcQuick=RATE_SERVICES.fedex.filter(s=>!s.or);
   return (<div className="space-y-4">
     <div className="flex flex-wrap items-center gap-3">
@@ -3508,28 +3508,6 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       <Field label="Website"><Input value={c.website||""} onChange={e=>upClient({website:e.target.value})} placeholder="acme.com"/></Field>
       <Field label="Customer since"><Input value={c.since||""} onChange={e=>upClient({since:e.target.value})} placeholder="2025-06"/></Field>
       <Field label="Monthly volume (est.)"><Input value={c.volume||""} onChange={e=>upClient({volume:e.target.value})} placeholder="e.g. 400 pkgs"/></Field>
-    </div>}
-
-    {tab==="address"&&<div className="space-y-4">
-      <div><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Business address</div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="col-span-2 sm:col-span-2"><Field label="Street"><Input {...fa("street")}/></Field></div>
-          <Field label="Suite / unit"><Input {...fa("suite")}/></Field>
-          <Field label="City"><Input {...fa("city")}/></Field>
-          <Field label="State"><Input {...fa("state")}/></Field>
-          <Field label="ZIP"><Input {...fa("zip")}/></Field>
-          <Field label="Country"><Input {...fa("country")} placeholder="US"/></Field>
-        </div>
-      </div>
-      <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={!!pf.shipFromBusiness} onChange={e=>upPrefs({shipFromBusiness:e.target.checked})} className="accent-[#0086E0]"/>Use this address as their default ship-from</label>
-      <div><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Billing address (if different)</div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="col-span-2"><Field label="Street"><Input value={(c.billing&&c.billing.street)||""} onChange={e=>setClients(cs=>cs.map(x=>x.id===cid?{...x,billing:{...(x.billing||{}),street:e.target.value}}:x))}/></Field></div>
-          <Field label="City"><Input value={(c.billing&&c.billing.city)||""} onChange={e=>setClients(cs=>cs.map(x=>x.id===cid?{...x,billing:{...(x.billing||{}),city:e.target.value}}:x))}/></Field>
-          <Field label="State"><Input value={(c.billing&&c.billing.state)||""} onChange={e=>setClients(cs=>cs.map(x=>x.id===cid?{...x,billing:{...(x.billing||{}),state:e.target.value}}:x))}/></Field>
-          <Field label="ZIP"><Input value={(c.billing&&c.billing.zip)||""} onChange={e=>setClients(cs=>cs.map(x=>x.id===cid?{...x,billing:{...(x.billing||{}),zip:e.target.value}}:x))}/></Field>
-        </div>
-      </div>
     </div>}
 
     {tab==="logins"&&<div className="space-y-2">
@@ -3752,32 +3730,6 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         <Field label="Tier notes"><Input value={fx.notes||""} onChange={e=>upFx({notes:e.target.value})} placeholder="e.g. volume commitment, GRI protection, contract #…"/></Field>
       </div>);
     })()}
-    {tab==="labels"&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-      <Field label="Default label size"><Select value={pf.labelSize||"4x6"} onChange={e=>upPrefs({labelSize:e.target.value})}><option value="4x6">4×6 thermal</option><option value="85x11">8.5×11 laser (top-half)</option></Select></Field>
-      <Field label="Label format"><Select value={pf.labelFormat||"PDF"} onChange={e=>upPrefs({labelFormat:e.target.value})}><option value="PDF">PDF</option><option value="ZPL">ZPL (thermal printer)</option></Select></Field>
-      <Field label="Default service"><Select value={pf.defaultService||""} onChange={e=>upPrefs({defaultService:e.target.value})}><option value="">— none —</option>{svcQuick.map(s=><option key={s.k} value={s.k}>{s.l}</option>)}</Select></Field>
-      <Field label="Default signature"><Select value={pf.signature||"none"} onChange={e=>upPrefs({signature:e.target.value})}><option value="none">None</option><option value="indirect">Indirect</option><option value="direct">Direct</option><option value="adult">Adult</option></Select></Field>
-      <Field label="Packing slip"><Select value={pf.packingSlip||"none"} onChange={e=>upPrefs({packingSlip:e.target.value})}><option value="none">Don't include</option><option value="46">4×6</option><option value="letter">Letter</option></Select></Field>
-      <Field label="Default package"><Select value={pf.packaging||"YOUR_PACKAGING"} onChange={e=>upPrefs({packaging:e.target.value})}>{CERT_PACKAGING.map(([k,l])=><option key={k} value={k}>{l}</option>)}</Select></Field>
-      <div className="col-span-2 sm:col-span-3 flex flex-wrap gap-4 pt-1">
-        <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={!!pf.residentialDefault} onChange={e=>upPrefs({residentialDefault:e.target.checked})} className="accent-[#0086E0]"/>Default to residential</label>
-        <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={!!pf.saturdayOk} onChange={e=>upPrefs({saturdayOk:e.target.checked})} className="accent-[#0086E0]"/>Allow Saturday delivery</label>
-        <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={!!pf.emailLabels} onChange={e=>upPrefs({emailLabels:e.target.checked})} className="accent-[#0086E0]"/>Email label to customer on booking</label>
-      </div>
-    </div>}
-
-    {tab==="supplies"&&<div className="space-y-3">
-      <p className="text-[11px] text-stone-500">Track what this customer orders so reorders and packouts are quick. Check what they use and note quantities.</p>
-      <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
-        {SUPPLY_ITEMS.map(item=>{const s=supplies[item]||{};return (
-          <div key={item} className="flex items-center gap-3 px-3 py-2 text-sm">
-            <label className="flex-1 flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={!!s.on} onChange={e=>upPrefs({supplies:{...supplies,[item]:{...s,on:e.target.checked}}})} className="accent-[#0086E0]"/>{item}</label>
-            <Input value={s.qty||""} onChange={e=>upPrefs({supplies:{...supplies,[item]:{...s,qty:e.target.value}}})} placeholder="qty / cadence" className="w-40"/>
-          </div>);})}
-      </div>
-      <Field label="Other supplies / notes"><Input value={pf.suppliesNotes||""} onChange={e=>upPrefs({suppliesNotes:e.target.value})} placeholder="e.g. custom-printed tape, branded boxes…"/></Field>
-    </div>}
-
     {tab==="features"&&<div className="space-y-3">
       {lg.length===0?<div className="text-sm text-stone-400">Add a login first — features apply to a company's logins.</div>
       :<><p className="text-[11px] text-stone-500">Turn features on/off for <b>every login</b> under {c.name} at once. Amber = mixed; click to make them match.</p>
@@ -3804,13 +3756,29 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         </div></>}
     </div>}
 
-    {tab==="creds"&&<div className="space-y-3">
-      <div className="text-[10px] uppercase tracking-widest text-stone-400">England account</div>
-      <div className="border border-stone-200 rounded-lg bg-stone-50 p-4 flex items-start gap-3">
-        <Wifi className="w-4 h-4 text-[#0086E0] shrink-0 mt-0.5"/>
-        <div className="text-sm text-stone-600">All shipping runs on your one England account, entered in <b>Settings → Carrier accounts</b>. There's nothing to enter per-customer — every quote and label uses that account automatically.</div>
-      </div>
-    </div>}
+    {tab==="shipments"&&(()=>{
+      const uidSet=new Set(lg.map(u=>u.id));
+      const rows=(ships||[]).filter(x=>uidSet.has(x._uid)||(c&&String(x.client||"").toLowerCase()===String(c.name||"").toLowerCase())).slice(0,300);
+      return (<div className="space-y-2">
+        <div className="text-[11px] text-stone-500">Everything this customer's logins have shipped (newest first). Prices are what THEY paid; margin is yours.</div>
+        <div className="border border-stone-200 rounded-lg overflow-x-auto">
+          <table className="w-full text-[12.5px]">
+            <thead><tr className="text-left text-[10px] uppercase tracking-widest text-stone-400"><th className="px-3 py-2">Date</th><th className="px-3 py-2">Tracking</th><th className="px-3 py-2">Service</th><th className="px-3 py-2 text-right">They paid</th><th className="px-3 py-2 text-right">Est. margin</th><th className="px-3 py-2">Status</th></tr></thead>
+            <tbody>
+              {rows.length===0&&<tr><td colSpan={6} className="px-3 py-8 text-center text-stone-400">No shipments from this customer yet.</td></tr>}
+              {rows.map((x,i)=>(<tr key={i} className={"border-t border-stone-100 "+(x.status==="Voided"?"opacity-45":"")}>
+                <td className="px-3 py-1.5 whitespace-nowrap text-stone-500">{x.date||"—"}</td>
+                <td className="px-3 py-1.5 font-mono text-[12px]">{x.tracking||"—"}</td>
+                <td className="px-3 py-1.5 max-w-[180px] truncate">{(x.service||"—").replace("FedEx ","")}</td>
+                <td className="px-3 py-1.5 text-right font-mono font-medium">{x.sell!=null?money(x.sell):"—"}</td>
+                <td className="px-3 py-1.5 text-right font-mono text-stone-500">{(x.sell!=null&&x.cost!=null)?money((+x.sell||0)-(+x.cost||0)):"—"}</td>
+                <td className="px-3 py-1.5 whitespace-nowrap text-stone-500">{x.status||"—"}</td>
+              </tr>))}
+            </tbody>
+          </table>
+        </div>
+      </div>);
+    })()}
 
     {tab==="notes"&&<div className="space-y-2">
       <Field label="Internal notes (admins only)"><textarea value={c.notes||""} onChange={e=>upClient({notes:e.target.value})} placeholder="Anything worth remembering — contacts, quirks, promises, follow-ups…" className="w-full border border-stone-300 rounded-lg p-2.5 text-sm min-h-[160px]"/></Field>
@@ -4507,7 +4475,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
       </div>}
       <div className="min-w-0">
         {cur.kind==="section"?sectionBody(cur.key)
-          :<CustomerDetail cid={cur.id} clients={clients} setClients={setClients} users={users} setUsers={setUsers} currentUser={currentUser} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} settings={settings} onClose={()=>closeTab(active)} openSection={openSection}/>}
+          :<CustomerDetail cid={cur.id} ships={platform.ships||[]} clients={clients} setClients={setClients} users={users} setUsers={setUsers} currentUser={currentUser} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} settings={settings} onClose={()=>closeTab(active)} openSection={openSection}/>}
       </div>
       </div>
     </div>

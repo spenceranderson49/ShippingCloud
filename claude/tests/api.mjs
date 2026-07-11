@@ -47,5 +47,12 @@ const r1=await call("GET","/api/v1");ok(r1.statusCode===503&&JSON.parse(r1.body)
 const r2=await call("OPTIONS","/api/v1/rates");ok(r2.statusCode===204,"CORS preflight 204");
 const r3=await call("GET","/api/v2/rates");ok(r3.statusCode===503||r3.statusCode===404,"unknown version rejected");
 
+/* 3) v1.1 helpers + routes */
+const api=require2("../../netlify/functions/api.js");
+ok(api.validHookUrl("https://example.com/hook")===true,"webhook url: https ok");
+ok(api.validHookUrl("http://example.com/hook")===false,"webhook url: plain http rejected");
+ok(api.validHookUrl("https://localhost/x")===false,"webhook url: localhost rejected");
+const r4=await call("POST","/api/v1/webhooks");ok(r4.statusCode===503,"webhooks route exists (fails closed unconfigured)");
+const r5=await call("GET","/api/v1/labels/123");ok(r5.statusCode===503,"label re-download route exists (fails closed)");
 console.log(p+" passed, "+f+" failed");
 process.exit(f?1:0);

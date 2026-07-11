@@ -46,7 +46,7 @@ async function callFn(mod, body) {
 }
 
 /* ── responses (ShipEngine-style envelope) ── */
-const J = (code, obj) => ({ statusCode: code, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Authorization, X-API-Key, Content-Type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" }, body: JSON.stringify(obj) });
+const J = (code, obj) => ({ statusCode: code, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Authorization, X-API-Key, Content-Type", "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS" }, body: JSON.stringify(obj) });
 const ERR = (code, ecode, msg) => J(code, { error: { code: ecode, message: msg } });
 
 /* ── per-key burst limit (per warm container — the auth gate is the hard control) ── */
@@ -87,6 +87,27 @@ function priceRates(liveRates, world, client, fromZip, toZip, pieces) {
 }
 
 const shipStoreKey = (client) => "u/api_" + client.id + "/shipments";
+const labelStoreKey = (client, id) => "u/api_" + client.id + "/label_" + id;
+const pickupStoreKey = (client) => "u/api_" + client.id + "/pickups";
+const hookStoreKey = (client) => "u/api_" + client.id + "/webhooks";
+const idemStoreKey = (client) => "u/api_" + client.id + "/idem";
+const validHookUrl = (u) => { try { const x = new URL(String(u)); return x.protocol === "https:" && !/localhost|127\.|\.local$/i.test(x.hostname); } catch (e) { return false; } };
+/* fire-and-forget signed webhooks: X-SC-Signature = hex hmac-sha256(secret, rawBody) */
+async function fireHooks(client, eventName, payload) {
+  try {
+    const cur = await getStore(hookStoreKey(client));
+    const hooks = ((cur.ok && cur.value) || []).filter((h) => h && !h.disabled && (!h.events || !h.events.length || h.events.includes(eventName)));
+    const body = JSON.stringify({ event: eventName, created: new Date().toISOString(), data: payload });
+    await Promise.all(hooks.slice(0, 5).map(async (h) => {
+      try {
+        const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 5000);
+        await fetch(h.url, { method: "POST", headers: { "Content-Type": "application/json", "X-SC-Event": eventName, "X-SC-Signature": crypto.createHmac("sha256", String(h.secret || "")).update(body).digest("hex") }, body, signal: ctrl.signal });
+        clearTimeout(t);
+      } catch (e) { /* best-effort — receivers poll /v1/shipments as the source of truth */ }
+    }));
+  } catch (e) {}
+}
+module.exports.validHookUrl = validHookUrl;
 
 exports.handler = async (event) => {
   try {
@@ -122,6 +143,19 @@ exports.handler = async (event) => {
     }
     const fedexAccount = (client.fedex && S(client.fedex.accountNumber).trim()) || undefined;
 
+    /* ── GET /v1/account — who am I ── */
+    if (seg[0] === "account" && method === "GET") {
+      return J(200, { account: client.name, key_prefix: keyRow.prefix, services_enabled: E.RATE_SERVICES.fedex.filter((sv) => !(client.blockedServices || []).includes(sv.k)).length, rate_limit_per_minute: 240, docs: "/api-docs.html" });
+    }
+
+    /* ── POST /v1/addresses/validate ── */
+    if (seg[0] === "addresses" && seg[1] === "validate" && method === "POST") {
+      const a = body.address || body;
+      const res = await callFn("./fedex.js", { action: "address", address1: S(a.address1), address2: S(a.address2), city: S(a.city), state: S(a.state), zip: S(a.zip), country: S(a.country || "US") });
+      if (!res || !res.ok) return ERR(502, "validation_unavailable", (res && res.error) || "Address validation is temporarily unavailable.");
+      return J(200, { valid: res.deliverable !== false, classification: res.classification || null, normalized: res.normalized || null, messages: res.issues || [] });
+    }
+
     /* ── GET /v1/services ── */
     if (seg[0] === "services" && method === "GET") {
       const blocked = new Set(client.blockedServices || []);
@@ -149,8 +183,25 @@ exports.handler = async (event) => {
       return J(200, { rates, rate_count: rates.length });
     }
 
+    /* ── GET /v1/labels/{id} — re-download a label PDF ── */
+    if (seg[0] === "labels" && method === "GET" && seg[1]) {
+      const cur = await getStore(labelStoreKey(client, seg[1]));
+      if (!cur.ok || !cur.value) return ERR(404, "not_found", "No stored label PDF for that label_id (PDFs are retained for recent labels).");
+      return J(200, { label_id: seg[1], tracking_number: cur.value.tracking || null, label_pdf_base64: cur.value.pdf || null, created: cur.value.created || null });
+    }
+
     /* ── POST /v1/labels ── */
     if (seg[0] === "labels" && method === "POST" && seg.length === 1) {
+      /* Idempotency-Key: replaying the same key returns the ORIGINAL response — a network
+         retry can never double-book a label. */
+      const idemKey = S((event.headers && (event.headers["idempotency-key"] || event.headers["Idempotency-Key"])) || "").slice(0, 80);
+      let idem = null;
+      if (idemKey) {
+        const cur = await getStore(idemStoreKey(client));
+        idem = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+        const hit = idem.find((x) => x && x.k === idemKey);
+        if (hit) return { ...J(hit.code, hit.resp), headers: { ...J(200, {}).headers, "Idempotency-Replayed": "true" } };
+      }
       const sc = S(body.service_code).trim();
       const to = body.to || {}, from = body.from || {};
       const pkgs = Array.isArray(body.packages) && body.packages.length ? body.packages.map(pieceOf) : null;
@@ -170,9 +221,10 @@ exports.handler = async (event) => {
         shipmentDate: S(body.ship_date) || new Date().toISOString().slice(0, 10),
         labelStock: S(body.label_stock || "4x6"),
         carrierCode: "fedex", serviceCode: hit.serviceCode, packageTypeCode: hit._oneRate ? (hit.packageTypeCode || S(body.package_type || "")) : "",
-        shippingService: hit.label, contentDescription: S(body.contents || "Merchandise"),
+        shippingService: hit.label, contentDescription: S((body.customs && body.customs.contents) || body.contents || "Merchandise"),
         residential: body.residential !== false, signatureOption: S(body.signature || "none"),
-        saturdayDelivery: !!body.saturday_delivery, insuranceAmount: num(body.declared_value_total, 0) || null,
+        saturdayDelivery: !!body.saturday_delivery, insuranceAmount: num(body.declared_value_total, 0) || (body.customs && num(body.customs.value_total, 0)) || null,
+        contentDescription2: undefined,
         sender: { name: S(from.name), company: S(from.company), address1: S(from.address1), address2: S(from.address2), city: S(from.city), state: S(from.state), zip: S(from.zip), country: S(from.country || "US"), phone: S(from.phone), email: S(from.email) },
         receiver: { name: S(to.name), company: S(to.company), address1: S(to.address1), address2: S(to.address2), city: S(to.city), state: S(to.state), zip: S(to.zip), country: S(to.country || "US"), phone: S(to.phone), email: S(to.email) },
         pieces: pkgs.map((p) => ({ weight: Math.ceil(p.weight), length: p.length, width: p.width, height: p.height, declaredValue: p.declaredValue })),
@@ -191,7 +243,11 @@ exports.handler = async (event) => {
         client: client.name, _src: "api",
       };
       try { const cur = await getStore(shipStoreKey(client)); const arr = (cur.ok && Array.isArray(cur.value)) ? cur.value : []; await putStore(shipStoreKey(client), [rec, ...arr].slice(0, 5000)); } catch (e) {}
-      return J(201, { label_id: String(rec.id), tracking_number: rec.tracking, tracking_url: "https://www.fedex.com/fedextrack/?trknbr=" + encodeURIComponent(rec.tracking), service_code: sc, service: hit.label, charge: { amount: priced.amount, currency: "USD" }, label_pdf_base64: res.labelPdfBase64 || null });
+      if (res.labelPdfBase64) { putStore(labelStoreKey(client, rec.id), { pdf: res.labelPdfBase64, tracking: rec.tracking, created: new Date().toISOString() }).catch(() => {}); }
+      const resp = { label_id: String(rec.id), tracking_number: rec.tracking, tracking_url: "https://www.fedex.com/fedextrack/?trknbr=" + encodeURIComponent(rec.tracking), service_code: sc, service: hit.label, charge: { amount: priced.amount, currency: "USD" }, label_pdf_base64: res.labelPdfBase64 || null };
+      if (idemKey && idem) { putStore(idemStoreKey(client), [{ k: idemKey, code: 201, resp: { ...resp, label_pdf_base64: null } }, ...idem].slice(0, 50)).catch(() => {}); }
+      fireHooks(client, "label.created", { label_id: resp.label_id, tracking_number: resp.tracking_number, service_code: sc, charge: resp.charge, reference: order.reference || null });
+      return J(201, resp);
     }
 
     /* ── GET /v1/shipments · POST /v1/shipments/{id}/void ── */
@@ -208,6 +264,7 @@ exports.handler = async (event) => {
         if (!hit) return ERR(404, "not_found", "No shipment with label_id " + id + " on this account.");
         if (hit.status === "Voided") return J(200, { label_id: id, status: "Voided", note: "Already voided." });
         await putStore(shipStoreKey(client), arr.map((x) => String(x.id) === id ? { ...x, status: "Voided", voidedAt: new Date().toLocaleString() } : x));
+        fireHooks(client, "label.voided", { label_id: id, tracking_number: hit.tracking || null });
         return J(200, { label_id: id, status: "Voided", note: "Marked void; the carrier refund is processed automatically." });
       }
     }
@@ -220,11 +277,48 @@ exports.handler = async (event) => {
       return J(200, { tracking_number: n, status: hit ? hit.status : "unknown", last_scan: hit ? (hit.lastScan || null) : null, tracking_url: "https://www.fedex.com/fedextrack/?trknbr=" + encodeURIComponent(n) });
     }
 
+    /* ── GET /v1/pickups · POST /v1/pickups/{confirmation}/cancel ── */
+    if (seg[0] === "pickups" && method === "GET") {
+      const cur = await getStore(pickupStoreKey(client));
+      return J(200, { pickups: ((cur.ok && cur.value) || []).slice(0, 100) });
+    }
+    if (seg[0] === "pickups" && method === "POST" && seg.length === 3 && seg[2] === "cancel") {
+      const conf = seg[1];
+      const cur = await getStore(pickupStoreKey(client));
+      const arr = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+      const hit = arr.find((p) => S(p.confirmation) === conf);
+      const res = await callFn("./fedex.js", { action: "pickupCancel", confirmationCode: conf, carrierCode: "FDXE", date: hit ? hit.date : S(body.date), location: hit ? hit.location : S(body.location), account: fedexAccount });
+      if (!res || !res.ok) return ERR(502, "cancel_failed", (res && res.error) || "Pickup cancel failed.");
+      await putStore(pickupStoreKey(client), arr.map((p) => S(p.confirmation) === conf ? { ...p, status: "canceled" } : p));
+      return J(200, { confirmation: conf, status: "canceled" });
+    }
+
+    /* ── GET/POST/DELETE /v1/webhooks — signed event delivery ── */
+    if (seg[0] === "webhooks") {
+      const cur = await getStore(hookStoreKey(client));
+      const hooks = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+      if (method === "GET") return J(200, { webhooks: hooks.map((h) => ({ id: h.id, url: h.url, events: h.events || ["label.created", "label.voided"], created: h.created })) });
+      if (method === "POST" && seg.length === 1) {
+        if (!validHookUrl(body.url)) return ERR(422, "invalid_url", "Webhook URLs must be public https:// endpoints.");
+        if (hooks.length >= 5) return ERR(422, "too_many", "Maximum 5 webhooks per account — delete one first.");
+        const secret = "whsec_" + crypto.randomBytes(24).toString("hex");
+        const row = { id: "wh" + Date.now(), url: S(body.url), events: Array.isArray(body.events) && body.events.length ? body.events.map(S) : ["label.created", "label.voided"], secret, created: new Date().toISOString() };
+        await putStore(hookStoreKey(client), [...hooks, row]);
+        return J(201, { id: row.id, url: row.url, events: row.events, secret, note: "Store the secret now — every delivery is signed: X-SC-Signature = hex HMAC-SHA256(secret, raw body)." });
+      }
+      if (method === "DELETE" && seg[1]) {
+        await putStore(hookStoreKey(client), hooks.filter((h) => h.id !== seg[1]));
+        return J(200, { deleted: seg[1] });
+      }
+    }
+
     /* ── POST /v1/pickups ── */
     if (seg[0] === "pickups" && method === "POST") {
       const res = await callFn("./fedex.js", { action: "pickup", date: S(body.date), readyTime: S(body.ready_time || "09:00"), closeTime: S(body.close_time || "17:00"), totalWeight: num(body.total_weight, 1), packageLocation: S(body.package_location || "FRONT"), residential: !!body.residential, address: body.address || {}, account: fedexAccount });
       if (!res || !res.ok) return ERR(502, "pickup_failed", (res && res.error) || "Pickup scheduling failed.");
-      return J(201, { confirmation: res.confirmationCode || res.confirmation || "PENDING", location: res.location || null });
+      const pk = { confirmation: res.confirmationCode || res.confirmation || "PENDING", location: res.location || null, date: S(body.date), status: "scheduled", created: new Date().toISOString() };
+      try { const cur = await getStore(pickupStoreKey(client)); await putStore(pickupStoreKey(client), [pk, ...((cur.ok && cur.value) || [])].slice(0, 200)); } catch (e) {}
+      return J(201, pk);
     }
 
     /* ── GET /v1/rate-card — the account's pricing configuration, machine-readable ── */

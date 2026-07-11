@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v467";
+const BUILD_TAG="addr-v469";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -4397,19 +4397,45 @@ function ApiAdmin({clients=[],platform={},openCustomer}){
   const base=(typeof window!=="undefined"?window.location.origin:"")+"/api/v1";
   const [keys,setKeys]=useState(null);
   const [kBusy,setKBusy]=useState(false);
-  const [nk,setNk]=useState({clientId:"",label:""});
+  const [nk,setNk]=useState({clientId:"",label:"",mode:"test"});
   const [minted,setMinted]=useState(null);   // {key,prefix} — shown ONCE
   const loadKeys=async()=>{const r=await cloudCall({action:"apiKeys",token:CLOUD.token});setKeys((r&&r.ok&&r.keys)||[]);};
   useEffect(()=>{loadKeys();},[]);
   const createKey=async()=>{ if(!nk.clientId)return; setKBusy(true);
-    const r=await cloudCall({action:"apiKeyCreate",token:CLOUD.token,clientId:nk.clientId,label:nk.label});
+    const r=await cloudCall({action:"apiKeyCreate",token:CLOUD.token,clientId:nk.clientId,label:nk.label,mode:nk.mode});
     setKBusy(false);
-    if(r&&r.ok){setMinted({key:r.key,prefix:r.prefix});setNk({clientId:"",label:""});loadKeys();}
+    if(r&&r.ok){setMinted({key:r.key,prefix:r.prefix});setPgKey(r.key);setNk({clientId:"",label:"",mode:"test"});loadKeys();}
     else window.alert((r&&r.error)||"Couldn't create the key.");
   };
   const revoke=async(id)=>{ if(!window.confirm("Revoke this key? Integrations using it stop working immediately."))return;
     await cloudCall({action:"apiKeyRevoke",token:CLOUD.token,id}); loadKeys(); };
   const cName=(id)=>(clients.find(c=>c.id===id)||{}).name||id;
+  /* ── Playground ── */
+  const PG_PRESETS=[
+    {id:"account",name:"GET /v1/account — connectivity check",method:"GET",path:"/v1/account"},
+    {id:"services",name:"GET /v1/services — enabled services",method:"GET",path:"/v1/services"},
+    {id:"rates",name:"POST /v1/rates — quote a shipment",method:"POST",path:"/v1/rates",body:{from_zip:"84101",to_zip:"30301",residential:true,packages:[{weight:3,length:12,width:9,height:4}]}},
+    {id:"validate",name:"POST /v1/addresses/validate",method:"POST",path:"/v1/addresses/validate",body:{address1:"215 S State St",city:"Salt Lake City",state:"UT",zip:"84101"}},
+    {id:"label",name:"POST /v1/labels — book (use a TEST key!)",method:"POST",path:"/v1/labels",body:{service_code:"ground",reference:"TEST-1",from:{name:"Warehouse",address1:"215 S State St",city:"Salt Lake City",state:"UT",zip:"84101",phone:"8015550100"},to:{name:"Jane Doe",address1:"127 Market St",city:"Atlanta",state:"GA",zip:"30301",phone:"4045550142"},packages:[{weight:3,length:12,width:9,height:4}]}},
+    {id:"shipments",name:"GET /v1/shipments — recent labels",method:"GET",path:"/v1/shipments"},
+    {id:"ratecard",name:"GET /v1/rate-card — pricing config",method:"GET",path:"/v1/rate-card"},
+    {id:"billing",name:"GET /v1/billing/summary — this month",method:"GET",path:"/v1/billing/summary"},
+  ];
+  const [pgKey,setPgKey]=useState("");
+  const [pgSel,setPgSel]=useState("account");
+  const [pgBody,setPgBody]=useState("");
+  const [pgBusy,setPgBusy]=useState(false);
+  const [pgRes,setPgRes]=useState(null);
+  const pgSend=async()=>{ const p=PG_PRESETS.find(x=>x.id===pgSel); if(!p||!pgKey)return; setPgBusy(true);setPgRes(null);
+    const t0=Date.now();
+    try{
+      const r=await fetch("/api"+p.path,{method:p.method,headers:{Authorization:"Bearer "+pgKey.trim(),...(p.method==="POST"?{"Content-Type":"application/json"}:{})},body:p.method==="POST"?(pgBody||"{}"):undefined});
+      let text=await r.text(); try{text=JSON.stringify(JSON.parse(text),null,2);}catch(e){}
+      if(text.length>6000)text=text.slice(0,6000)+"\n… (truncated for display)";
+      setPgRes({status:r.status,ms:Date.now()-t0,text});
+    }catch(e){setPgRes({status:0,ms:Date.now()-t0,text:String(e&&e.message||e)});}
+    setPgBusy(false);
+  };
   const apiShips=(platform.ships||[]).filter(x=>String(x._uid||"").startsWith("api_")).slice(0,25);
   /* ── commissions ── */
   const [reps,setReps]=usePersist("salesReps",[]);
@@ -4440,12 +4466,14 @@ function ApiAdmin({clients=[],platform={},openCustomer}){
       <div className="flex flex-wrap items-end gap-2 mb-3">
         <Field label="Customer"><Select value={nk.clientId} onChange={e=>setNk({...nk,clientId:e.target.value})}><option value="">— pick —</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
         <Field label="Label (optional)"><Input value={nk.label} onChange={e=>setNk({...nk,label:e.target.value})} placeholder="e.g. Their WMS"/></Field>
+        <Field label="Mode"><Select value={nk.mode} onChange={e=>setNk({...nk,mode:e.target.value})}><option value="test">Test — real quotes, can NEVER book a real label</option><option value="live">Live — books real FedEx labels</option></Select></Field>
         <button onClick={createKey} disabled={!nk.clientId||kBusy} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium disabled:opacity-40 flex items-center gap-1.5">{kBusy?<Loader2 className="w-4 h-4 animate-spin"/>:<Plus className="w-4 h-4"/>}Create key</button>
       </div>
       {keys==null?<div className="text-sm text-stone-400">Loading…</div>
        :!keys.length?<div className="text-sm text-stone-400">No keys yet — create one above and hand it to the customer (it authenticates every call).</div>
        :<div className="space-y-1.5">{keys.map(k=>(<div key={k.id} className={`flex flex-wrap items-center gap-3 border rounded-lg px-3 py-2 text-sm ${k.revoked?"opacity-45 border-stone-100":"border-stone-200 bg-white"}`}>
           <code className="font-mono text-[12px] text-stone-600">{k.prefix}</code>
+          {(k.mode||"live")==="test"?<Badge tone="amber">test</Badge>:<Badge tone="green">live</Badge>}
           <button onClick={()=>openCustomer&&openCustomer(k.clientId)} className="font-medium text-[#0086E0] hover:underline">{cName(k.clientId)}</button>
           {k.label&&<span className="text-stone-400 text-xs">{k.label}</span>}
           <span className="flex-1"/>
@@ -4459,6 +4487,19 @@ function ApiAdmin({clients=[],platform={},openCustomer}){
           <span className="text-stone-400 w-20 shrink-0">{x.date}</span><span className="font-medium w-40 truncate">{x.client||"—"}</span>
           <span className="font-mono text-stone-500">{x.tracking}</span><span className="flex-1 truncate text-stone-500">{(x.service||"").replace("FedEx ","")}</span>
           <span className="font-mono">{money(+x.sell||0)}</span></div>))}</div>}
+    </Panel>
+    <Panel title="Playground — try the API right here">
+      <p className="text-[11px] text-stone-500 mb-2">Paste a key (a freshly created one auto-fills), pick a call, hit Send. Use a <b>test</b> key to try label booking safely — test keys quote real prices but never book, never bill, and never appear on the dashboard.</p>
+      <div className="flex flex-wrap items-end gap-2 mb-2">
+        <Field label="API key"><Input value={pgKey} onChange={e=>setPgKey(e.target.value)} placeholder="sck_test_…" className="w-72 font-mono text-[12px]"/></Field>
+        <Field label="Call"><Select value={pgSel} onChange={e=>{setPgSel(e.target.value);const p=PG_PRESETS.find(x=>x.id===e.target.value);setPgBody(p&&p.body?JSON.stringify(p.body,null,2):"");}}>{PG_PRESETS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field>
+        <button onClick={pgSend} disabled={!pgKey||pgBusy} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium disabled:opacity-40 flex items-center gap-1.5">{pgBusy?<Loader2 className="w-4 h-4 animate-spin"/>:<Zap className="w-4 h-4"/>}Send</button>
+      </div>
+      {(PG_PRESETS.find(x=>x.id===pgSel)||{}).body&&<textarea value={pgBody} onChange={e=>setPgBody(e.target.value)} rows={8} spellCheck={false} className="w-full bg-stone-900 text-stone-100 font-mono text-[12px] rounded-lg p-3 outline-none resize-y mb-2"/>}
+      {pgRes&&<div className="space-y-1">
+        <div className={`text-[11px] font-mono font-semibold ${pgRes.status<400?"text-emerald-700":"text-rose-600"}`}>{pgRes.status} {pgRes.ms}ms</div>
+        <pre className="bg-stone-50 border border-stone-200 rounded-lg p-3 text-[11.5px] font-mono whitespace-pre-wrap break-all max-h-80 overflow-y-auto">{pgRes.text}</pre>
+      </div>}
     </Panel>
     <Panel title="Sales-rep commissions">
       <p className="text-[11px] text-stone-500 mb-2">Commission = the rep's % of your est. margin on their customers' shipments (this month, all channels — portal and API).</p>

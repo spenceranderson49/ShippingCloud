@@ -117,8 +117,8 @@ X-API-Key: sck_live_xxxxxxxxxxxxxxxx</code></pre>
     <tr><td>5xx</td><td><code>rates_unavailable / booking_failed</code></td><td>Transient carrier issue — retry with backoff.</td></tr>
   </table>
 
-  <h2>Migrating from the England/Rock Solid REST API</h2>
-  <p>This API replaces third-party wholesale APIs one-for-one for rating and booking: <code>POST /v1/rates</code> ↔ rate quotes, <code>POST /v1/labels</code> ↔ order booking + label retrieval (no polling — the label PDF returns in the booking response), <code>/v1/shipments</code> ↔ shipment lookup, plus billing endpoints those APIs never had. Field names are plain snake_case; nothing about the upstream provider leaks into your integration.</p>
+  <h2>Migrating from another shipping API</h2>
+  <p>This API replaces legacy shipping APIs one-for-one for rating and booking: <code>POST /v1/rates</code> ↔ rate quotes, <code>POST /v1/labels</code> ↔ order booking + label retrieval (no polling — the label PDF returns in the booking response), <code>/v1/shipments</code> ↔ shipment lookup, plus billing endpoints those APIs never had. Field names are plain snake_case; nothing about the upstream provider leaks into your integration.</p>
 </main>
 </body>
 </html>

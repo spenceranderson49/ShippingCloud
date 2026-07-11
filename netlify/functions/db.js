@@ -733,7 +733,7 @@ exports.handler = async (event) => {
       if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
       const cur = await getStore("apiKeys");
       const keys = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
-      return J({ ok: true, keys: keys.map((k) => ({ id: k.id, prefix: k.prefix, label: k.label, clientId: k.clientId, createdAt: k.createdAt, lastUsed: k.lastUsed || null, revoked: !!k.revoked })) });
+      return J({ ok: true, keys: keys.map((k) => ({ id: k.id, mode: k.mode || "live", prefix: k.prefix, label: k.label, clientId: k.clientId, createdAt: k.createdAt, lastUsed: k.lastUsed || null, revoked: !!k.revoked })) });
     }
     if (action === "apiKeyCreate") {
       if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
@@ -742,8 +742,9 @@ exports.handler = async (event) => {
       const cur = await getStore("apiKeys");
       const keys = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
       if (keys.filter((k) => !k.revoked).length >= 500) return J({ ok: false, error: "Key limit reached." });
-      const raw = "sck_live_" + crypto.randomBytes(24).toString("hex");
-      const row = { id: "k" + Date.now(), prefix: raw.slice(0, 14) + "…", label: String(body.label || "").slice(0, 60), clientId, hash: crypto.createHash("sha256").update(raw).digest("hex"), createdAt: new Date().toISOString() };
+      const mode = String(body.mode || "live") === "test" ? "test" : "live";
+      const raw = "sck_" + mode + "_" + crypto.randomBytes(24).toString("hex");
+      const row = { id: "k" + Date.now(), mode, prefix: raw.slice(0, 14) + "…", label: String(body.label || "").slice(0, 60), clientId, hash: crypto.createHash("sha256").update(raw).digest("hex"), createdAt: new Date().toISOString() };
       const w = await putStores({ apiKeys: [...keys, row] });
       if (!w.ok) return J({ ok: false, error: "Save failed." });
       return J({ ok: true, key: raw, id: row.id, prefix: row.prefix });

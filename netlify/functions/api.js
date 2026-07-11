@@ -86,7 +86,7 @@ function priceRates(liveRates, world, client, fromZip, toZip, pieces) {
     }).filter(Boolean).sort((a, b) => a.amount - b.amount);
 }
 
-const shipStoreKey = (client) => "u/api_" + client.id + "/shipments";
+const shipStoreKey = (client, isTest) => "u/api_" + client.id + (isTest ? "/testShipments" : "/shipments");   /* testShipments doesn't match the dashboard's (shipments|orders) scan — test traffic is invisible to ops/billing */
 const labelStoreKey = (client, id) => "u/api_" + client.id + "/label_" + id;
 const pickupStoreKey = (client) => "u/api_" + client.id + "/pickups";
 const hookStoreKey = (client) => "u/api_" + client.id + "/webhooks";
@@ -142,10 +142,11 @@ exports.handler = async (event) => {
       putStore("apiKeys", world.keys).catch(() => {});
     }
     const fedexAccount = (client.fedex && S(client.fedex.accountNumber).trim()) || undefined;
+    const isTest = (keyRow.mode || "live") === "test";   /* test keys: real quotes, ZERO real bookings/pickups */
 
     /* ── GET /v1/account — who am I ── */
     if (seg[0] === "account" && method === "GET") {
-      return J(200, { account: client.name, key_prefix: keyRow.prefix, services_enabled: E.RATE_SERVICES.fedex.filter((sv) => !(client.blockedServices || []).includes(sv.k)).length, rate_limit_per_minute: 240, docs: "/api-docs.html" });
+      return J(200, { account: client.name, mode: keyRow.mode || "live", key_prefix: keyRow.prefix, services_enabled: E.RATE_SERVICES.fedex.filter((sv) => !(client.blockedServices || []).includes(sv.k)).length, rate_limit_per_minute: 240, docs: "/api-docs.html" });
     }
 
     /* ── POST /v1/addresses/validate ── */
@@ -230,7 +231,9 @@ exports.handler = async (event) => {
         pieces: pkgs.map((p) => ({ weight: Math.ceil(p.weight), length: p.length, width: p.width, height: p.height, declaredValue: p.declaredValue })),
         fedexAccount,
       };
-      const res = await callFn("./ship.js", { action: "ship", order });
+      const res = isTest
+        ? { ok: true, tracking: "TEST" + String(Date.now()).slice(-10), labelPdfBase64: null }
+        : await callFn("./ship.js", { action: "ship", order });
       if (!res || !res.ok) return ERR(502, "booking_failed", (res && res.error) || "Booking failed.");
       /* 3) record the shipment on the account (shows in the admin dashboard + billing) */
       const rec = {
@@ -240,19 +243,20 @@ exports.handler = async (event) => {
         weight: pkgs.reduce((a, p) => a + p.weight, 0), pieces: order.pieces, dims: { L: pkgs[0].length, W: pkgs[0].width, H: pkgs[0].height },
         cost: hit.cost, sell: priced.amount, billTo: "sender", status: "Label created", lastScan: "Label created",
         reference: order.reference, invoiceNo: order.invoiceNo, poNo: order.poNo, department: order.department,
-        client: client.name, _src: "api",
+        client: client.name, _src: "api", _test: isTest || undefined,
       };
-      try { const cur = await getStore(shipStoreKey(client)); const arr = (cur.ok && Array.isArray(cur.value)) ? cur.value : []; await putStore(shipStoreKey(client), [rec, ...arr].slice(0, 5000)); } catch (e) {}
+      if (isTest) rec.status = "Test label";
+      try { const cur = await getStore(shipStoreKey(client, isTest)); const arr = (cur.ok && Array.isArray(cur.value)) ? cur.value : []; await putStore(shipStoreKey(client, isTest), [rec, ...arr].slice(0, 5000)); } catch (e) {}
       if (res.labelPdfBase64) { putStore(labelStoreKey(client, rec.id), { pdf: res.labelPdfBase64, tracking: rec.tracking, created: new Date().toISOString() }).catch(() => {}); }
-      const resp = { label_id: String(rec.id), tracking_number: rec.tracking, tracking_url: "https://www.fedex.com/fedextrack/?trknbr=" + encodeURIComponent(rec.tracking), service_code: sc, service: hit.label, charge: { amount: priced.amount, currency: "USD" }, label_pdf_base64: res.labelPdfBase64 || null };
+      const resp = { test: isTest || undefined, label_id: String(rec.id), tracking_number: rec.tracking, tracking_url: "https://www.fedex.com/fedextrack/?trknbr=" + encodeURIComponent(rec.tracking), service_code: sc, service: hit.label, charge: { amount: priced.amount, currency: "USD" }, label_pdf_base64: res.labelPdfBase64 || null };
       if (idemKey && idem) { putStore(idemStoreKey(client), [{ k: idemKey, code: 201, resp: { ...resp, label_pdf_base64: null } }, ...idem].slice(0, 50)).catch(() => {}); }
-      fireHooks(client, "label.created", { label_id: resp.label_id, tracking_number: resp.tracking_number, service_code: sc, charge: resp.charge, reference: order.reference || null });
+      fireHooks(client, "label.created", { label_id: resp.label_id, tracking_number: resp.tracking_number, service_code: sc, charge: resp.charge, reference: order.reference || null, test: isTest || undefined });
       return J(201, resp);
     }
 
     /* ── GET /v1/shipments · POST /v1/shipments/{id}/void ── */
     if (seg[0] === "shipments") {
-      const cur = await getStore(shipStoreKey(client));
+      const cur = await getStore(shipStoreKey(client, isTest));
       const arr = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
       if (method === "GET" && seg.length === 1) {
         const lim = Math.min(200, Math.max(1, num(qs.limit, 50)));
@@ -263,7 +267,7 @@ exports.handler = async (event) => {
         const hit = arr.find((x) => String(x.id) === id);
         if (!hit) return ERR(404, "not_found", "No shipment with label_id " + id + " on this account.");
         if (hit.status === "Voided") return J(200, { label_id: id, status: "Voided", note: "Already voided." });
-        await putStore(shipStoreKey(client), arr.map((x) => String(x.id) === id ? { ...x, status: "Voided", voidedAt: new Date().toLocaleString() } : x));
+        await putStore(shipStoreKey(client, isTest), arr.map((x) => String(x.id) === id ? { ...x, status: "Voided", voidedAt: new Date().toLocaleString() } : x));
         fireHooks(client, "label.voided", { label_id: id, tracking_number: hit.tracking || null });
         return J(200, { label_id: id, status: "Voided", note: "Marked void; the carrier refund is processed automatically." });
       }
@@ -272,7 +276,7 @@ exports.handler = async (event) => {
     /* ── GET /v1/tracking/{number} ── */
     if (seg[0] === "tracking" && method === "GET" && seg[1]) {
       const n = S(seg[1]);
-      const cur = await getStore(shipStoreKey(client));
+      const cur = await getStore(shipStoreKey(client, isTest));
       const hit = ((cur.ok && cur.value) || []).find((x) => S(x.tracking) === n);
       return J(200, { tracking_number: n, status: hit ? hit.status : "unknown", last_scan: hit ? (hit.lastScan || null) : null, tracking_url: "https://www.fedex.com/fedextrack/?trknbr=" + encodeURIComponent(n) });
     }
@@ -287,6 +291,7 @@ exports.handler = async (event) => {
       const cur = await getStore(pickupStoreKey(client));
       const arr = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
       const hit = arr.find((p) => S(p.confirmation) === conf);
+      if (isTest || /^TESTPICKUP/.test(conf)) { await putStore(pickupStoreKey(client), arr.map((p) => S(p.confirmation) === conf ? { ...p, status: "canceled" } : p)); return J(200, { confirmation: conf, status: "canceled", test: true }); }
       const res = await callFn("./fedex.js", { action: "pickupCancel", confirmationCode: conf, carrierCode: "FDXE", date: hit ? hit.date : S(body.date), location: hit ? hit.location : S(body.location), account: fedexAccount });
       if (!res || !res.ok) return ERR(502, "cancel_failed", (res && res.error) || "Pickup cancel failed.");
       await putStore(pickupStoreKey(client), arr.map((p) => S(p.confirmation) === conf ? { ...p, status: "canceled" } : p));
@@ -314,6 +319,7 @@ exports.handler = async (event) => {
 
     /* ── POST /v1/pickups ── */
     if (seg[0] === "pickups" && method === "POST") {
+      if (isTest) { const pk = { confirmation: "TESTPICKUP" + String(Date.now()).slice(-6), location: null, date: S(body.date), status: "scheduled", test: true, created: new Date().toISOString() }; try { const cur = await getStore(pickupStoreKey(client)); await putStore(pickupStoreKey(client), [pk, ...((cur.ok && cur.value) || [])].slice(0, 200)); } catch (e) {} return J(201, pk); }
       const res = await callFn("./fedex.js", { action: "pickup", date: S(body.date), readyTime: S(body.ready_time || "09:00"), closeTime: S(body.close_time || "17:00"), totalWeight: num(body.total_weight, 1), packageLocation: S(body.package_location || "FRONT"), residential: !!body.residential, address: body.address || {}, account: fedexAccount });
       if (!res || !res.ok) return ERR(502, "pickup_failed", (res && res.error) || "Pickup scheduling failed.");
       const pk = { confirmation: res.confirmationCode || res.confirmation || "PENDING", location: res.location || null, date: S(body.date), status: "scheduled", created: new Date().toISOString() };
@@ -332,7 +338,7 @@ exports.handler = async (event) => {
 
     /* ── GET /v1/billing/summary · GET /v1/invoices?month=YYYY-MM ── */
     if ((seg[0] === "billing" || seg[0] === "invoices") && method === "GET") {
-      const cur = await getStore(shipStoreKey(client));
+      const cur = await getStore(shipStoreKey(client, isTest));
       const arr = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
       const inMonth = (x, ym) => { const t = (typeof x.id === "number" && x.id > 1e12) ? new Date(x.id) : new Date(x.date); return !isNaN(t) && t.toISOString().slice(0, 7) === ym; };
       const month = S(qs.month || new Date().toISOString().slice(0, 7));

@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v438";
+const BUILD_TAG="addr-v439";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2186,6 +2186,22 @@ const surMatches=(su,query)=>{
   const hay=[su.desc,su.id,su.g,su.seg,su.aka].filter(Boolean).join(" ").toLowerCase();
   return q.split(/\s+/).every(tok=>hay.includes(tok));
 };
+/* Accessorial category tabs — quick filters over the ~70 Service Guide rows. */
+const SUR_CATS=[["all","All"],["resi","Residential"],["fuel","Fuel"],["das","DAS & EDAS"],["peak","Peak / Demand"],["ah","Addl Handling"],["ovr","Oversize"],["sig","Signature & Delivery"],["ge","Ground Economy"],["intl","International"],["misc","Misc"]];
+const surCat=(su)=>{const i=String(su.id||"");
+  if(/^FUEL/.test(i))return "fuel";
+  if(/^DAS/.test(i))return "das";
+  if(/^PEAK/.test(i))return "peak";
+  if(/^AH-/.test(i))return "ah";
+  if(/^OVR|^UNAUTH/.test(i))return "ovr";
+  if(/^RES|^HD-/.test(i))return "resi";
+  if(/^SIG|^SAT|^HAL|^REATT|^REROUTE/.test(i))return "sig";
+  if(/^GE-/.test(i)||su.seg==="Ground Economy")return "ge";
+  if(su.g==="International & clearance")return "intl";
+  return "misc";};
+const SurCatChips=({val,set})=>(<div className="flex flex-wrap gap-1">
+  {SUR_CATS.map(([k,l])=><button key={k} onClick={()=>set(k)} className={`text-[11px] rounded-full px-2.5 py-1 border ${val===k?"bg-stone-900 text-white border-stone-900":"bg-white text-stone-600 border-stone-200 hover:bg-stone-50"}`}>{l}</button>)}
+</div>);
 const RATE_ZONES=["2","3","4","5","6","7","8"];
 /* Finer-grained than canonSvc — rate rules need 2Day ≠ 2Day A.M., intl economy ≠ priority, One Rate per packaging. */
 function rateSvcKey(label){
@@ -2406,15 +2422,19 @@ function rateSellFor(cost,label,ctx){
       const amt=+(ln&&ln.amount)||0; if(!amt)continue;
       feeCost+=amt;
       const id=fedexSurchargeIdFor(ln.label,label);
+      const row=(id&&typeof FEDEX_SURCHARGES!=="undefined")?FEDEX_SURCHARGES.find(x=>x&&x.id===id):null;
       const r=id?sc[id]:null;
       const a=(r&&r.amount!=null&&r.amount!==""&&!isNaN(+r.amount))?+r.amount:null;
+      /* a rule saved WITHOUT a type takes the same default the editor DISPLAYS — percent for
+         normal fees, flat for app-priced ones. Falling through to flat here turned "25% over
+         cost" into a $25 fuel charge when only the amount box was touched. */
+      const rtype=(r&&r.type)||((row&&row.app)?"fixed":"percent");
       const priced=a==null
         ?(aPctF!=null?amt*(1+aPctF/100):amt)
-        :(r.type==="percent"?amt*(1+a/100):r.type==="add"?amt+a:r.type==="listpct"?((+ln.list||amt)*(1-a/100)):a);
+        :(rtype==="percent"?amt*(1+a/100):rtype==="add"?amt+a:rtype==="listpct"?((+ln.list||amt)*(1-a/100)):a);
       feeSell+=priced;
       /* display the ADMIN ROW's exact name for matched fees so the portal breakdown and the
          Rates tab always show the identical string — no two wordings for one fee */
-      const row=(id&&typeof FEDEX_SURCHARGES!=="undefined")?FEDEX_SURCHARGES.find(x=>x&&x.id===id):null;
       feeParts.push({label:row?(row.aka||row.desc):ln.label,amount:Math.round(priced*100)/100});
     }
     const baseCost=Math.max(0,Math.round((cost-feeCost)*100)/100);
@@ -3248,6 +3268,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
     upRules({profiles:profiles.map(p=>p.id===pid?{...p,surcharges:{...(p.surcharges||{}),[id]:{...((p.surcharges||{})[id]||{}),...patch}}}:p)});
   };
   const [surQ,setSurQ]=useState("");
+  const [surTab,setSurTab]=useState("all");
   const [showHiddenSvc,setShowHiddenSvc]=useState(false);   // reveal service rows hidden from the rates grid
   const [svcFilter,setSvcFilter]=useState("");               // quick find across 60+ service rows — matches hidden rows too
   const [openBrk,setOpenBrk]=useState({});                  // which service rows have the weight-break editor expanded
@@ -3452,11 +3473,12 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
           <div className="text-[10px] uppercase tracking-widest text-stone-400">Accessorial markups — {prof.name} profile</div>
           <Input value={surQ} onChange={e=>setSurQ(e.target.value)} placeholder="Search accessorials…" className="w-44"/>
         </div>
+        <div className="mb-2"><SurCatChips val={surTab} set={setSurTab}/></div>
         <p className="text-[11px] text-stone-500 mb-2">Every FedEx surcharge — rules here reprice the matching fee line on LIVE quotes for this profile. <b>% off LIST</b> = FedEx list rate −X% · <b>% over cost</b> = England/FedEx fee ±X% (negative = discount) · <b>$ over cost</b> = fee + $X · <b>Flat $</b> = exactly $X. Blank amount = the fee stays inside the service-level markup. Search by the exact name you see on a quote (“Residential Surcharge”, “Fuel Surcharge”…) — it finds the row.</p>
         <div className="border border-stone-200 rounded-lg bg-white overflow-x-auto max-h-[420px] overflow-y-auto"><table className="w-full text-sm min-w-[560px]"><tbody>
           {(()=>{
             const q=(surQ||"").trim().toLowerCase();
-            const listS=FEDEX_SURCHARGES.filter(su=>!q||surMatches(su,q));
+            const listS=FEDEX_SURCHARGES.filter(su=>(!q||surMatches(su,q))&&(surTab==="all"||surCat(su)===surTab));
             if(!listS.length)return <tr><td className="py-4 text-center text-stone-400">No accessorials match "{surQ}".</td></tr>;
             const out=[];let lastG=null;const sr=prof.surcharges||{};
             listS.forEach(su=>{
@@ -3465,7 +3487,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
               out.push(<tr key={su.id} className="border-t border-stone-100 hover:bg-stone-50">
                 <td className="py-1.5 pl-3 pr-2"><span className="text-stone-800">{su.aka||su.desc}</span> <span className="text-[10px] text-stone-400">{su.seg}</span>{su.aka&&su.aka.toLowerCase()!==su.desc.toLowerCase()&&<span className="block text-[10px] text-stone-400">{su.desc}</span>}</td>
                 <td className="py-1.5 pr-2"><Select value={r.type||(su.app?"fixed":"percent")} onChange={e=>upProfSur(prof.id,su.id,{type:e.target.value})}><option value="listpct">% off LIST</option><option value="percent">% over cost</option><option value="add">$ over cost</option><option value="fixed">Flat $</option></Select></td>
-                <td className="py-1.5 pr-3 whitespace-nowrap text-right"><Input type="number" value={r.amount==null?"":r.amount} onChange={e=>upProfSur(prof.id,su.id,{amount:e.target.value})} placeholder={su.def!=null?String(su.def):"default"} className="w-24 text-right"/></td>
+                <td className="py-1.5 pr-3 whitespace-nowrap text-right"><Input type="number" value={r.amount==null?"":r.amount} onChange={e=>upProfSur(prof.id,su.id,{amount:e.target.value,type:r.type||(su.app?"fixed":"percent")})} placeholder={su.def!=null?String(su.def):"default"} className="w-24 text-right"/></td>
                 <td className="py-1.5 pr-3 text-[11px] text-stone-400 whitespace-nowrap">{su.charge}</td>
               </tr>);
             });
@@ -3725,6 +3747,7 @@ function RatesAdmin({clients=[],brand}){
   const [showHidden,setShowHidden]=useState(false);   // reveal rows hidden from the services table (cosmetic hide — pricing untouched)
   const [surEdit,setSurEdit]=useState(null);
   const [surQ,setSurQ]=useState("");
+  const [surTab,setSurTab]=useState("all");
   const [sheet,setSheet]=useState(null);
   const [sheetMargin,setSheetMargin]=useState(false);
   const [assignOpen,setAssignOpen]=useState(false);
@@ -3980,13 +4003,14 @@ function RatesAdmin({clients=[],brand}){
       </div>}
 
       {tab==="surcharges"&&<div className="space-y-4">
+        <SurCatChips val={surTab} set={setSurTab}/>
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-[11px] text-stone-500 flex-1 min-w-[260px]">All {FEDEX_SURCHARGES.length} Service Guide surcharges in their own boxes — Express, Ground, and Home Delivery each carry their own rates. Double-click a row to set your price on that fee: <b>% off LIST</b> prices it off FedEx's list rate, <b>% over cost</b> marks the England/FedEx fee up or down, <b>$ over cost</b> adds $X on top, <b>Flat $</b> sells it at exactly $X. Rules apply to live quotes line-by-line — fuel, peak/demand, DAS, residential, additional handling, declared value, all of it. Rows with no rule stay inside your service-level markup.</p>
           <Input value={surQ} onChange={e=>setSurQ(e.target.value)} placeholder="Search surcharges…" className="w-52"/>
         </div>
         {(()=>{
           const q=surQ.trim().toLowerCase();
-          const match=(su)=>!q||surMatches(su,q);
+          const match=(su)=>(!q||surMatches(su,q))&&(surTab==="all"||surCat(su)===surTab);
           const boxesOf=(su)=>{
             const sg=su.seg||"All";
             if(sg==="Express"||sg==="Express Freight")return ["express"];
@@ -4011,7 +4035,7 @@ function RatesAdmin({clients=[],brand}){
                     out.push(<tr key={su.id} onDoubleClick={()=>setSurEdit({...su,type:r.type||(su.app?"fixed":"percent"),amount:r.amount!=null?r.amount:(su.def!=null?su.def:"")})} className="border-t border-stone-100 hover:bg-stone-50 cursor-pointer">
                       <td className="py-2 pr-2">{su.aka||su.desc}{su.aka&&su.aka.toLowerCase()!==su.desc.toLowerCase()&&<span className="block text-[10px] text-stone-400">{su.desc}</span>}{su.seg==="Ground & Home Delivery"&&<span className="text-[10px] text-stone-400 ml-1.5">(one rate covers Ground &amp; HD)</span>}{su.seg==="Express Freight"&&<span className="text-[10px] text-stone-400 ml-1.5">(Express Freight)</span>}{su.seg==="Ground Economy"&&<span className="text-[10px] text-stone-400 ml-1.5">(Ground Economy)</span>}</td>
                       <td className="pr-2 font-mono text-xs text-stone-500">{su.id}</td><td className="pr-2 text-stone-500">{su.charge}</td>
-                      <td className="pr-2 text-stone-500">{({listpct:"% off list",percent:"±% over cost",add:"$ over cost",fixed:"flat $"})[r.type]||(su.app?"flat $":"—")}</td>
+                      <td className="pr-2 text-stone-500">{({listpct:"% off list",percent:"±% over cost",add:"$ over cost",fixed:"flat $"})[r.type]||(r.amount!=null&&r.amount!==""?(su.app?"flat $":"±% over cost"):(su.app?"flat $":"—"))}</td>
                       <td className="pr-2 text-right font-mono">{r.amount!=null&&r.amount!==""?(+r.amount).toFixed(2):(su.def!=null?su.def.toFixed(2):"—")}</td>
                       <td>{su.app?<Badge tone="blue">app-applied</Badge>:<Badge tone="green">live-adjustable</Badge>}</td>
                     </tr>);

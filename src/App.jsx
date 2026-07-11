@@ -2388,21 +2388,6 @@ function fedexSurchargeIdFor(lineLabel,svcLabel){
   if(/on.?call pickup/.test(t))return G("PU-EXP","PU-GRD-OC");
   return null;
 }
-/* Per-surcharge price adjustments for a live quote's itemized fee lines. For every line whose
-   FEDEX_SURCHARGES row has a saved rule: percent = sell that fee at FedEx's amount ±X%;
-   fixed = sell that fee at exactly $X. Returns the cost carved out and the price added back. */
-function surchargeAdjust(lines,svcLabel,prof){
-  const sc=(prof&&prof.surcharges)||{}; let removed=0,add=0,hit=false;
-  for(const ln of (lines||[])){
-    const amt=+(ln&&ln.amount)||0; if(!amt)continue;
-    const id=fedexSurchargeIdFor(ln.label,svcLabel); if(!id)continue;
-    const r=sc[id]; if(!r||r.amount==null||r.amount==="")continue;
-    const a=+r.amount; if(isNaN(a))continue;
-    hit=true; removed+=amt;
-    add+=r.type==="percent"?amt*(1+a/100):r.type==="add"?amt+a:r.type==="listpct"?((+ln.list||amt)*(1-a/100)):a;
-  }
-  return hit?{removed:Math.round(removed*100)/100,add:Math.round(add*100)/100}:null;
-}
 /* Does a live quote row satisfy a "Set Service" preference string ("FedEx - 2Day",
    "FedEx - 2Day OneRate", "DHL - Express Worldwide")? Exact rateSvcKey equality —
    the old substring matching let a plain "2Day" preference grab a OneRate row and a

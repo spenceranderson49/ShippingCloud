@@ -5,7 +5,7 @@ import fs from "fs";
 const src=fs.readFileSync("src/App.jsx","utf8");
 function fn(name){const re=new RegExp("function "+name+"\\s*\\(");const m=re.exec(src);if(!m)throw new Error("fn "+name);let i=src.indexOf("){",m.index)+1,d=0;const st=m.index;for(;i<src.length;i++){if(src[i]==="{")d++;else if(src[i]==="}"){d--;if(d===0){i++;break;}}}return src.slice(st,i);}
 function cn(name){const re=new RegExp("const "+name+"=[^;]*;");const m=re.exec(src);if(!m)throw new Error("const "+name);return m[0];}
-const code=[cn("DEFAULT_RATE_RULES"),fn("rateSvcKey"),fn("fedexSurchargeIdFor"),fn("surchargeAdjust"),fn("rateProfileFor"),fn("rateSellFor"),"return {rateSellFor,fedexSurchargeIdFor,rateSvcKey};"].join("\n");
+const code=[cn("DEFAULT_RATE_RULES"),fn("rateSvcKey"),fn("fedexSurchargeIdFor"),fn("rateProfileFor"),fn("rateSellFor"),"return {rateSellFor,fedexSurchargeIdFor,rateSvcKey};"].join("\n");
 const {rateSellFor,fedexSurchargeIdFor,rateSvcKey}=new Function("zoneEst","baseCostLookup","list2025Lookup",code)(()=>4,()=>null,()=>null);
 let p=0,f=0;const ok=(c,l)=>{c?p++:(f++,console.log("  ✗ FAIL:",l));};
 ok(fedexSurchargeIdFor("Fuel Surcharge","FedEx Home Delivery®")==="FUEL-G","fuel ground variant");

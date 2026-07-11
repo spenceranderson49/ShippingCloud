@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v464";
+const BUILD_TAG="addr-v465";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -369,7 +369,7 @@ function orderToEngland(o,opts,sender,eng){
   const wt=opts.weightLb||o.weight||1;
   const q=opts.quote||{};
   return {
-    reference:opts.reference||o.name||"",orderNumber:o.name||"",invoiceNo:opts.invoiceNo||"",poNo:opts.poNo||"",shipmentDate:opts.shipDate||new Date().toISOString().slice(0,10),
+    reference:opts.reference||o.name||"",orderNumber:o.name||"",invoiceNo:opts.invoiceNo||"",poNo:opts.poNo||"",department:opts.department||"",shipmentDate:opts.shipDate||new Date().toISOString().slice(0,10),
     labelStock:(typeof window!=="undefined"&&window.__scLabelStock&&(window.__scLabelStock.carrierStock||window.__scLabelStock.size))||"4x6",
     carrierCode:q.carrierCode,serviceCode:q.serviceCode,
     /* FedEx criteria: FedEx packaging (envelope/pak/boxes/tube) is only valid on Express services and
@@ -405,6 +405,7 @@ function orBoxRefFill(q,orBoxField,orderName){
   if(!nm)return {};
   const val=/^fedex/i.test(nm)?nm:"FedEx "+nm;
   if(f==="po")return {poNo:val};
+  if(f==="department")return {department:val};
   if(f==="reference")return {reference:(orderName?orderName+" \u00b7 ":"")+val};
   return {invoiceNo:val};
 }
@@ -416,6 +417,7 @@ function orFillMerge(target,fill){
   if(f.invoiceNo&&!String(o.invoiceNo||"").trim())o.invoiceNo=f.invoiceNo;
   if(f.poNo&&!String(o.poNo||"").trim())o.poNo=f.poNo;
   if(f.reference&&!String(o.reference||"").trim())o.reference=f.reference;
+  if(f.department&&!String(o.department||"").trim())o.department=f.department;
   return o;
 }
 async function shipCall(payload){
@@ -1775,6 +1777,7 @@ function recToDocCtx(rec){
   return {
     reference:r.reference||r.shipmentReference||"",
     invoiceNo:r.invoiceNo||"",
+    department:r.department||"",
     orderNo:r.orderNo||r.orderName||r.orderNumber||r.invoiceNo||"",
     shipDate:r.date||r.shipDate||new Date().toLocaleDateString(),
     service:r.service||"",
@@ -2829,7 +2832,7 @@ const CUSTOM_DEFAULTS={
   density:"comfortable",stuckDays:0,
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
   logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,skipBookedSummary:false,autoRulesOnShip:true,autoRulesInBatch:false,autoBookBatch:false,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],theme:"light",accent:"",
-  refRequired:false,invRequired:false,poRequired:false,refLocked:false,invLocked:false,poLocked:false,
+  refRequired:false,invRequired:false,poRequired:false,deptRequired:false,refLocked:false,invLocked:false,poLocked:false,deptLocked:false,hideDept:false,
   confetti:"page",seasonal:false,loginBg:"",appBg:"",headerBg:"",pageBg:"",navBg:"",
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
@@ -6316,6 +6319,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const [receiver,setReceiver]=usePersist("ship.receiver",empty);
   const [reference,setReference]=usePersist("ship.reference","");
   const [invoiceNo,setInvoiceNo]=usePersist("ship.invoiceNo","");
+  const [department,setDepartment]=usePersist("ship.department","");   /* FedEx DEPARTMENT_NUMBER reference — same pick-list/required/lock treatment as Invoice/PO */
   const [poNo,setPoNo]=usePersist("ship.poNo","");
   const [pieces,setPieces]=usePersist("ship.pieces",[{weight:"",L:"",W:"",H:""}]);
   const [insurance,setInsurance]=usePersist("ship.insurance","");
@@ -6468,7 +6472,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     setPieces(next);
   };
   // When a One Rate service is chosen, set package #1 to the matching FedEx One Rate box size.
-  const applyOneRateBox=(code)=>{ const b=FEDEX_ONERATE.find(x=>x.code===code); if(!b||!b.dims)return; setPieces(ps=>ps.map((p,j)=>j===0?{...p,L:b.dims.L,W:b.dims.W,H:b.dims.H,boxIdx:-1,orBox:b.name.replace(/FedEx\s*One Rate®?\s*/i,"")}:p)); const val="FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,""); const f=settings?.orBoxField||"invoice"; const fill=(set)=>set(prev=>prev&&prev.trim()?prev:val); if(f==="invoice")fill(setInvoiceNo); else if(f==="po")fill(setPoNo); else if(f==="reference")fill(setReference); };
+  const applyOneRateBox=(code)=>{ const b=FEDEX_ONERATE.find(x=>x.code===code); if(!b||!b.dims)return; setPieces(ps=>ps.map((p,j)=>j===0?{...p,L:b.dims.L,W:b.dims.W,H:b.dims.H,boxIdx:-1,orBox:b.name.replace(/FedEx\s*One Rate®?\s*/i,"")}:p)); const val="FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,""); const f=settings?.orBoxField||"invoice"; const fill=(set)=>set(prev=>prev&&prev.trim()?prev:val); if(f==="invoice")fill(setInvoiceNo); else if(f==="po")fill(setPoNo); else if(f==="reference")fill(setReference); else if(f==="department")fill(setDepartment); };
   const pw=(p)=>Math.round(((+p.weight||0)+(+p.oz||0)/16)*1000)/1000;
   const totalWeight=Math.round(pieces.reduce((a,p)=>a+pw(p),0)*100)/100;
   const setLine=(i,patch)=>setCustoms(c=>({...c,lines:c.lines.map((l,j)=>j===i?{...l,...patch}:l)}));
@@ -6777,6 +6781,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(custom.refRequired&&!reference.trim())need.push("ref");
     if(custom.invRequired&&!custom.hideInvoice&&!invoiceNo.trim())need.push("invoice");
     if(custom.poRequired&&!custom.hidePO&&!poNo.trim())need.push("po");
+    if(custom.deptRequired&&!custom.hideDept&&!String(department||"").trim())need.push("department");
     if(need.length){
       setRecErrors(need);
       const labelMap={name:"name",address1:"address",zip:"ZIP",city:"city",state:"state",phone:"a 10-digit phone",email:"email",ref:"a Ref #",invoice:"an Invoice #",po:"a PO #"};
@@ -6806,8 +6811,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     }
     setBought(q.key);setShipStatus({state:"booking",key:q.key});
     if(!q.serviceCode||!q.carrierCode){setShipStatus({state:"error",key:q.key,msg:"Enter the shipment details so live rates load, then print (need the carrier/service from the rate)."});setBought(null);return;}
-    const _orF=orFillMerge({reference:reference||invoiceNo||"",invoiceNo,poNo},orBoxRefFill({...q,packageTypeCode:q.packageTypeCode||(orBox?orBox.code:"")},settings.orBoxField,invoiceNo||reference||""));
-    const order={reference:_orF.reference||"",orderNumber:invoiceNo||reference||"",invoiceNo:_orF.invoiceNo,poNo:_orF.poNo,shipmentDate:shipDate,
+    const _orF=orFillMerge({reference:reference||invoiceNo||"",invoiceNo,poNo,department},orBoxRefFill({...q,packageTypeCode:q.packageTypeCode||(orBox?orBox.code:"")},settings.orBoxField,invoiceNo||reference||""));
+    const order={reference:_orF.reference||"",orderNumber:invoiceNo||reference||"",invoiceNo:_orF.invoiceNo,poNo:_orF.poNo,department:_orF.department||"",shipmentDate:shipDate,
       carrierCode:q.carrierCode,serviceCode:q.serviceCode,packageTypeCode:(/one\s*rate/i.test(String(q.label||""))?(q.packageTypeCode||(orBox?orBox.code:"")):""),
       shippingService:q.label,shippingTotal:String(q.sell??q.cost??"0.00"),contentDescription:"Merchandise",
       signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null,residential,
@@ -6919,7 +6924,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   },[custom.autoRulesOnShip,ordersFiltered,rules,originZip]);
   const [naming,setNaming]=useState(false);
   const [draftName,setDraftName]=useState("");
-  const commitDraft=(title)=>{const d={id:Date.now(),label:title||reference||receiver.name||receiver.city||"Untitled",when:new Date().toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}),to:`${receiver.city||""}${receiver.state?", "+receiver.state:""}`,snap:{sender,receiver,reference,invoiceNo,poNo,pieces,residential,signature,billTo,thirdAcct,insurance,selectedOrder,customs}};setDrafts(p=>[d,...p]);setNaming(false);setDraftName("");setSaved(true);setTimeout(()=>setSaved(false),1600);};
+  const commitDraft=(title)=>{const d={id:Date.now(),label:title||reference||receiver.name||receiver.city||"Untitled",when:new Date().toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}),to:`${receiver.city||""}${receiver.state?", "+receiver.state:""}`,snap:{sender,receiver,reference,invoiceNo,poNo,department,pieces,residential,signature,billTo,thirdAcct,insurance,selectedOrder,customs}};setDrafts(p=>[d,...p]);setNaming(false);setDraftName("");setSaved(true);setTimeout(()=>setSaved(false),1600);};
   const saveDraft=()=>{setDraftName(reference||receiver.name||receiver.city||"");setNaming(true);};
   /* box-logic explanation banner shown while a packed order is loaded */
   const PackNote=()=>packNote?(<div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800 flex items-center gap-2"><Boxes className="w-3.5 h-3.5 shrink-0"/><span className="flex-1">Box logic packed this order: <b>{packNote.boxNames}</b> · {packNote.totalWt} lb billable{packNote.unresolved.length?` · ${packNote.unresolved.length} item${packNote.unresolved.length===1?"":"s"} not in your catalog (weight may be low)`:""} — dims are editable below.</span><button onClick={()=>setPackNote(null)} className="text-emerald-500 hover:text-emerald-700"><X className="w-3.5 h-3.5"/></button></div>):null;
@@ -7018,6 +7023,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             <datalist id="sc-ref-list">{[...((settings.fieldLists||{}).department||[]),...((settings.fieldLists||{}).reference||[])].map(v=><option key={v} value={v}/>)}</datalist>
             <datalist id="sc-inv-list">{(((settings.fieldLists||{}).invoice)||[]).map(v=><option key={v} value={v}/>)}</datalist>
             <datalist id="sc-po-list">{(((settings.fieldLists||{}).po)||[]).map(v=><option key={v} value={v}/>)}</datalist>
+            <datalist id="sc-dept-list">{(((settings.fieldLists||{}).department)||[]).map(v=><option key={v} value={v}/>)}</datalist>
             <div className="flex flex-wrap items-center gap-3">
               <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">Packages · {pieces.length}</div>
               <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Ship date</span><input type="date" value={shipDate} onChange={e=>setShipDate(e.target.value)} className="text-sm font-mono text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-[#0099FF]"/></div>
@@ -7030,6 +7036,9 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               {!custom.hidePO&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">PO #</span>{(custom.poLocked&&(((settings.fieldLists||{}).po)||[]).length>0)
                 ?<select value={poNo} onChange={e=>setPoNo(e.target.value)} className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] ${custom.poRequired&&!poNo?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}><option value="">— select —</option>{(((settings.fieldLists||{}).po)||[]).map(v=><option key={v} value={v}>{v}</option>)}</select>
                 :<input value={poNo} onChange={e=>setPoNo(e.target.value)} list="sc-po-list" placeholder="PO-…" className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 ${custom.poRequired&&!poNo?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}/>}</div>}
+              {!custom.hideDept&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Dept</span>{(custom.deptLocked&&(((settings.fieldLists||{}).department)||[]).length>0)
+                ?<select value={department} onChange={e=>setDepartment(e.target.value)} className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] ${custom.deptRequired&&!department?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}><option value="">— select —</option>{(((settings.fieldLists||{}).department)||[]).map(v=><option key={v} value={v}>{v}</option>)}</select>
+                :<input value={department} onChange={e=>setDepartment(e.target.value)} list="sc-dept-list" placeholder="Dept…" className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 ${custom.deptRequired&&!department?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}/>}</div>}
             </div>
             <div className="flex flex-wrap items-center gap-4">
               <span className="text-[11px] text-stone-400 font-mono">total {totalWeight} lb</span>
@@ -8374,6 +8383,18 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
 }
 
 function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,settings,labels={},isAdmin=false,openShipTracking=null,onOpenedShip,showMoney=true}){
+  /* Packing-slip composer for MANUAL shipments (no store integration → no line items):
+     type the items, print, and they're saved onto the shipment so reprints match. */
+  const [slipEdit,setSlipEdit]=useState(null);   // {id,rows:[{name,qty}],note}
+  const openSlipEdit=(sh)=>{const rows=parseItemsList({items:sh.items||"",lineItems:sh.lineItems});setSlipEdit({id:sh.id,note:sh.note||"",rows:rows.length?rows:[{name:"",qty:1}]});};
+  const slipEditPrint=()=>{ if(!slipEdit)return;
+    const rows=slipEdit.rows.map(r=>({name:String(r.name||"").trim(),qty:Math.max(1,+r.qty||1)})).filter(r=>r.name);
+    const itemsStr=rows.map(r=>r.qty>1?r.qty+" × "+r.name:r.name).join(", ");
+    const sh=shipments.find(x=>x.id===slipEdit.id); if(!sh)return;
+    setShipments(list=>list.map(x=>x.id===slipEdit.id?{...x,items:itemsStr,note:slipEdit.note}:x));   /* reprints keep them */
+    printPackingSlips([slipFromShipment({...sh,items:itemsStr,note:slipEdit.note})]);
+    setSlipEdit(null);
+  };
   const [reprintLp,setReprintLp]=useState(null);
   const doReprint=(sh)=>{ const e=labels&&labels[sh.id]; if(e&&e.pdf){ setReprintLp({pdf:e.pdf,tracking:sh.tracking,service:sh.service,carrier:sh.carrier,rec:sh}); } else { window.alert("No stored label for this shipment on this account (labels are kept for the 60 most recent bookings). Use Edit & reship to book a fresh one."); } };
   const custom=cz(settings||{});
@@ -8407,6 +8428,26 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
   return (
     <div className="space-y-3">
       <PendingBar/>
+      {slipEdit&&createPortal(<div className="fixed inset-0 z-[9998] bg-black/40 flex items-center justify-center p-4" onClick={()=>setSlipEdit(null)}>
+        <div onClick={e=>e.stopPropagation()} className="bg-white rounded-xl border border-stone-200 shadow-xl w-full max-w-md p-5 space-y-3">
+          <div className="flex items-center justify-between"><div className="font-semibold text-stone-800 flex items-center gap-2"><ClipboardList className="w-4 h-4 text-[#0086E0]"/>Packing slip items</div><button onClick={()=>setSlipEdit(null)} className="text-stone-400 hover:text-stone-700"><X className="w-4 h-4"/></button></div>
+          <div className="text-[11px] text-stone-500">Type what's in the box — quantities and names print on the slip and are saved to this shipment for reprints.</div>
+          <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+            {slipEdit.rows.map((r,i)=>(<div key={i} className="flex items-center gap-2">
+              <input type="number" min="1" value={r.qty} onChange={e=>setSlipEdit(p=>({...p,rows:p.rows.map((x,j)=>j===i?{...x,qty:e.target.value}:x)}))} className="w-14 bg-white border border-stone-300 rounded px-2 py-1.5 text-sm text-center outline-none focus:border-[#0099FF]"/>
+              <span className="text-stone-300 text-xs">×</span>
+              <input value={r.name} onChange={e=>setSlipEdit(p=>({...p,rows:p.rows.map((x,j)=>j===i?{...x,name:e.target.value}:x)}))} placeholder="Item name" className="flex-1 bg-white border border-stone-300 rounded px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+              {slipEdit.rows.length>1&&<button onClick={()=>setSlipEdit(p=>({...p,rows:p.rows.filter((_,j)=>j!==i)}))} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
+            </div>))}
+          </div>
+          <button onClick={()=>setSlipEdit(p=>({...p,rows:[...p.rows,{name:"",qty:1}]}))} className="text-xs bg-stone-100 border border-stone-200 rounded-lg px-2.5 py-1.5 font-medium text-stone-600 hover:bg-stone-200 flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add item</button>
+          <textarea value={slipEdit.note} onChange={e=>setSlipEdit(p=>({...p,note:e.target.value}))} rows={2} placeholder="Note to print on the slip (optional)" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 resize-y"/>
+          <div className="flex justify-end gap-2 pt-1">
+            <button onClick={()=>setSlipEdit(null)} className="text-sm rounded-lg px-3 py-2 text-stone-500 hover:bg-stone-100">Cancel</button>
+            <button onClick={slipEditPrint} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Printer className="w-4 h-4"/>Print slip</button>
+          </div>
+        </div>
+      </div>,document.body)}
       {chkMsg&&<div className={`text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${chkMsg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{chkMsg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{chkMsg.err||chkMsg.ok}</div>}
       <div className="flex items-center gap-2">
       <div className="relative flex-1"><Search className="w-4 h-4 absolute left-3 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by name, tracking, order, reference or PO #" className="w-full bg-white border border-stone-200 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:border-[#0099FF]"/></div>
@@ -8433,7 +8474,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                 <Info k="Tracking" v={<a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" className="text-[#0086E0] underline">{s.tracking} ↗</a>}/>
                 <Info k="To" v={`${s.recipient?.name||""}${s.recipient?.company?" · "+s.recipient.company:""} — ${s.recipient?.address1||""}, ${s.recipient?.city||""}, ${s.recipient?.state||""} ${s.recipient?.zip||""}`}/>
                 <Info k="Reference" v={s.reference||"—"}/>
-                <div className="flex items-end gap-2"><button onClick={(e)=>{e.stopPropagation();printPackingSlips([slipFromShipment(s)]);}} className="text-xs bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing slip</button>
+                <div className="flex items-end gap-2"><button onClick={(e)=>{e.stopPropagation();printPackingSlips([slipFromShipment(s)]);}} className="text-xs bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing slip</button><button onClick={(e)=>{e.stopPropagation();openSlipEdit(s);}} title="Type the items for this slip — perfect for manual shipments with no store connected. Items are saved for reprints." className="text-xs bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF] flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5"/>Slip with items</button>
                 {s.status!=="Voided"&&s.status!=="Delivered"&&<button onClick={(e)=>{e.stopPropagation();if(!window.confirm("Void this label?\n\nIt will be marked Voided here and excluded from audits and duplicate checks. The carrier refund is processed automatically — contact support if you don't see it within a few days."))return;setShipments(list=>list.map(x=>x.id===s.id?{...x,status:"Voided",voidedAt:new Date().toLocaleString()}:x));window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Voided label",detail:(s.reference||"")+" · "+(s.tracking||"")}}));}} className="text-xs bg-rose-50 border border-rose-200 text-rose-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-rose-100 flex items-center gap-1.5"><Ban className="w-3.5 h-3.5"/>Void label</button>}</div>
                 <Info k="Created" v={`${s.date}${s.time?" · "+s.time:""}`}/>
                 <Info k="From ZIP" v={s.fromZip}/>
@@ -9736,11 +9777,12 @@ function ReferenceFields({settings,setSettings}){
   const field=settings.orBoxField||"invoice";
   const set=(v)=>setSettings({...settings,orBoxField:v});
   const on=field!=="off";
-  const fieldName=field==="po"?"PO #":field==="reference"?"Reference":"Invoice #";
+  const fieldName=field==="po"?"PO #":field==="reference"?"Reference":field==="department"?"Department":"Invoice #";
   const opts=[
     ["invoice","Invoice # field","Writes the FedEx box (e.g. “FedEx Medium Box”) into the Invoice # field."],
     ["po","PO # field","Writes the FedEx box into the PO # field instead."],
     ["reference","Reference field","Writes the FedEx box into the Reference field instead."],
+    ["department","Department field","Writes the FedEx box into the Department field instead."],
     ["off","Don’t auto-fill","Never auto-fills the box — you’ll enter your own references."],
   ];
   return (<div className="max-w-2xl space-y-4">
@@ -10040,7 +10082,7 @@ function BoxLogic({settings,setSettings}){
   </div>);
 }
 // Fields that can be bound onto a doc tab zone or receipt line, resolved from shipment data at print time
-const DOCTAB_FIELDS=[["reference","Reference / PO"],["invoiceNo","Invoice #"],["orderNo","Order #"],["shipDate","Ship date"],["service","Service"],["weight","Weight"],["pieces","Piece count"],["declaredValue","Declared value"],["recipientName","Recipient name"],["recipientCompany","Recipient company"],["recipientZip","Recipient ZIP"],["senderName","Sender name"],["senderCompany","Sender company"],["cost","Total charged"],["tracking","Tracking number"],["custom","Custom text…"]];
+const DOCTAB_FIELDS=[["reference","Reference / PO"],["invoiceNo","Invoice #"],["department","Department"],["orderNo","Order #"],["shipDate","Ship date"],["service","Service"],["weight","Weight"],["pieces","Piece count"],["declaredValue","Declared value"],["recipientName","Recipient name"],["recipientCompany","Recipient company"],["recipientZip","Recipient ZIP"],["senderName","Sender name"],["senderCompany","Sender company"],["cost","Total charged"],["tracking","Tracking number"],["custom","Custom text…"]];
 const DOCTAB_LABEL={};DOCTAB_FIELDS.forEach(([k,l])=>{DOCTAB_LABEL[k]=l;});
 const DEFAULT_DOCTABS=[{id:"dt1",zone:"01",field:"reference",label:"REF",custom:"",size:9},{id:"dt2",zone:"02",field:"shipDate",label:"SHIP DATE",custom:"",size:9},{id:"dt3",zone:"03",field:"weight",label:"WEIGHT",custom:"",size:9}];
 const DEFAULT_RECEIPT_LINES=[{id:"rl1",field:"recipientName",label:"To",custom:""},{id:"rl2",field:"reference",label:"Ref",custom:""},{id:"rl3",field:"service",label:"Service",custom:""},{id:"rl4",field:"weight",label:"Weight",custom:""},{id:"rl5",field:"cost",label:"Cost",custom:""}];
@@ -11981,7 +12023,7 @@ function FieldLists({settings,setSettings}){
   const setC=(k,v)=>setSettings(p=>({...p,custom:{...(p.custom||{}),[k]:v}}));
   return (<div className="max-w-2xl space-y-4">
     <div className="text-sm text-stone-500">Build pick-lists for the Ship screen. Once a list has values, the matching field becomes a type-ahead: start typing on the Ship tab and your saved values appear to click, or open the dropdown arrow to pick one. Free typing still works.</div>
-    <FieldListEd fl={fl} setList={setList} k="department" title="Departments" ph="e.g. Warehouse, Sales, Returns…" hint="Departments appear in the Ref # suggestions — a common way to tag who a shipment belongs to."/>
+    <FieldListEd fl={fl} setList={setList} k="department" title="Departments" ph="e.g. Warehouse, Sales, Returns…" hint="Fills the Department field on the Ship screen (prints on the FedEx label) and appears in the Ref # suggestions." extra={<FieldListOpts c={c} setC={setC} req="deptRequired" lock="deptLocked"/>}/>
     <FieldListEd fl={fl} setList={setList} k="reference" title="Reference values" ph="e.g. WHOLESALE, SAMPLE, RUSH…" hint="Shown in the Ref # field suggestions along with departments." extra={<FieldListOpts c={c} setC={setC} req="refRequired" lock="refLocked"/>}/>
     <FieldListEd fl={fl} setList={setList} k="invoice" title="Invoice # values" ph="e.g. INV-2026-…" extra={<FieldListOpts c={c} setC={setC} req="invRequired" lock="invLocked"/>}/>
     <FieldListEd fl={fl} setList={setList} k="po" title="PO # values" ph="e.g. PO-GILLETTE-…" extra={<FieldListOpts c={c} setC={setC} req="poRequired" lock="poLocked"/>}/>
@@ -12066,6 +12108,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
         {Tog({k:"scanAutoFocus",label:"Scan mode — keep the scan box ready",hint:"The cursor lives in the scan box: it's focused when the Ship tab opens, re-arms after every scan and booking, and returns after you click orders, services or buttons. It only steps aside while you're typing in another field (like editing the shipping information), then comes back on your next click."})}
         {Tog({k:"hideInvoice",label:"Hide Invoice # field"})}
         {Tog({k:"hidePO",label:"Hide PO # field"})}
+        {Tog({k:"hideDept",label:"Hide Department field"})}
         {Tog({k:"hideAddr23",label:"Hide Address 2 & 3",hint:"On both sender and receiver cards"})}
         {Tog({k:"hideOz",label:"Hide the oz box",hint:"Whole pounds are enough for most shops"})}
         {Tog({k:"hideInsure",label:"Hide the Insure $ field"})}

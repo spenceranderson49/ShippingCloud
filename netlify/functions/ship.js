@@ -198,6 +198,7 @@ exports.handler = async (event) => {
   if (o.reference) refs.push({ customerReferenceType: "CUSTOMER_REFERENCE", value: String(o.reference).slice(0, 40) });
   if (o.invoiceNo) refs.push({ customerReferenceType: "INVOICE_NUMBER", value: String(o.invoiceNo).slice(0, 40) });
   if (o.poNo) refs.push({ customerReferenceType: "P_O_NUMBER", value: String(o.poNo).slice(0, 40) });
+  if (o.department) refs.push({ customerReferenceType: "DEPARTMENT_NUMBER", value: String(o.department).slice(0, 40) });
 
   const lineItems = pieces.map((p, i) => {
     const it = {

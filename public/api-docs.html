@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ShippingCloud API — v1 Reference</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#1c1917;background:#fafaf9;margin:0}
+  main{max-width:880px;margin:0 auto;padding:44px 24px 90px}
+  h1{font-size:30px;margin:0 0 4px}
+  h2{font-size:19px;margin:40px 0 8px;padding-top:14px;border-top:1px solid #e7e5e4}
+  h3{font-size:15px;margin:22px 0 6px}
+  p,li{font-size:14px;line-height:1.65;color:#57534e}
+  .sub{color:#a8a29e;font-size:13px;margin-bottom:26px}
+  code{background:#f5f5f4;border:1px solid #e7e5e4;border-radius:5px;padding:1px 5px;font-size:12.5px}
+  pre{background:#1c1917;color:#e7e5e4;border-radius:10px;padding:14px 16px;font-size:12.5px;overflow-x:auto;line-height:1.55}
+  pre code{background:none;border:none;color:inherit;padding:0}
+  .brand{font-weight:800;letter-spacing:.01em;font-size:18px}
+  .pill{display:inline-block;font-size:11px;font-weight:700;border-radius:6px;padding:2px 8px;margin-right:8px;vertical-align:1px}
+  .get{background:#dcfce7;color:#15803d}.post{background:#dbeafe;color:#1d4ed8}
+  table{border-collapse:collapse;width:100%;font-size:13px;margin:8px 0 4px}
+  th,td{border:1px solid #e7e5e4;padding:6px 9px;text-align:left;color:#57534e}
+  th{background:#f5f5f4;color:#1c1917}
+  a{color:#0086E0}
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">Shipping<span style="color:#0086E0">Cloud</span> <span style="color:#a8a29e;font-weight:600">API</span></div>
+  <h1>API Reference — v1</h1>
+  <p class="sub">Integrate your systems directly: live discounted FedEx rates on your own pricing, label booking, shipments, pickups, and billing. On ShipHub sites this same API is the <b>ShipHub API</b> — identical endpoints. Support: <a href="mailto:support@shippingcloud.net">support@shippingcloud.net</a></p>
+
+  <h2>Base URL &amp; authentication</h2>
+  <pre><code>https://&lt;your-platform-domain&gt;/api/v1</code></pre>
+  <p>Every request needs your API key (issued by your account manager — keys start with <code>sck_live_</code>). Send it either way:</p>
+  <pre><code>Authorization: Bearer sck_live_xxxxxxxxxxxxxxxx
+# or
+X-API-Key: sck_live_xxxxxxxxxxxxxxxx</code></pre>
+  <p>All requests and responses are JSON. Errors return a proper HTTP status and <code>{"error":{"code","message"}}</code>. Rate limit: 240 requests/min per key (<code>429</code> beyond that). Prices are quoted <b>live from FedEx on your account's contracted pricing</b> — what the API quotes is what you're billed.</p>
+
+  <h2><span class="pill post">POST</span>/v1/rates — quote a shipment</h2>
+  <pre><code>curl -s https://&lt;domain&gt;/api/v1/rates \
+  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{
+    "from_zip": "84101",
+    "to_zip": "30301",
+    "residential": true,
+    "signature": "none",
+    "packages": [{ "weight": 3, "length": 12, "width": 9, "height": 4, "declared_value": 250 }]
+  }'</code></pre>
+  <table><tr><th>Field</th><th>Notes</th></tr>
+    <tr><td><code>from_zip</code>, <code>to_zip</code></td><td>Required. 5-digit US ZIPs (international: add <code>to_country</code>).</td></tr>
+    <tr><td><code>packages[]</code></td><td>Required. <code>weight</code> (lb), <code>length/width/height</code> (in), optional <code>declared_value</code> ($ per package — coverage is priced into the quote).</td></tr>
+    <tr><td><code>residential</code></td><td>Default <code>true</code>. Controls Home Delivery vs Ground.</td></tr>
+    <tr><td><code>signature</code></td><td><code>none | indirect | direct | adult</code> — priced into the quote.</td></tr>
+    <tr><td><code>saturday_delivery</code></td><td>Boolean, Express services only.</td></tr>
+    <tr><td><code>package_type</code></td><td>Optional FedEx packaging (e.g. <code>fedex_small_box</code>) — unlocks One Rate flat pricing where the shipment qualifies.</td></tr>
+  </table>
+  <p>Response: <code>rates[]</code> sorted cheapest-first, each with <code>service_code</code>, <code>service</code>, <code>amount</code>, <code>delivery_days</code>. Quote the exact shipment you'll book — dimensional weight and accessorials are priced per request.</p>
+
+  <h2><span class="pill post">POST</span>/v1/labels — book a label</h2>
+  <pre><code>curl -s https://&lt;domain&gt;/api/v1/labels \
+  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{
+    "service_code": "ground",
+    "from": { "name": "Warehouse A", "address1": "215 S State St", "city": "Salt Lake City", "state": "UT", "zip": "84101", "phone": "8015550100" },
+    "to":   { "name": "Jane Doe", "address1": "127 Market St", "city": "Atlanta", "state": "GA", "zip": "30301", "phone": "4045550142" },
+    "packages": [{ "weight": 3, "length": 12, "width": 9, "height": 4 }],
+    "reference": "SO-1042"
+  }'</code></pre>
+  <p>Extra fields: <code>invoice_number</code>, <code>po_number</code>, <code>department</code> (print on the label as FedEx references), <code>signature</code>, <code>saturday_delivery</code>, <code>declared_value_total</code>, <code>ship_date</code> (YYYY-MM-DD), <code>label_stock</code> (<code>4x6</code> default).</p>
+  <p>Response <code>201</code>: <code>label_id</code>, <code>tracking_number</code>, <code>tracking_url</code>, <code>charge.amount</code> (what you're billed), and <code>label_pdf_base64</code> — decode and print. The service is re-quoted at booking so the charge always matches a live rate.</p>
+
+  <h2><span class="pill get">GET</span>/v1/shipments · <span class="pill post">POST</span>/v1/shipments/{label_id}/void</h2>
+  <p><code>GET /v1/shipments?limit=50</code> lists your labels newest-first with status and charge. Void marks the label refunded-in-progress; unshipped labels refund automatically.</p>
+
+  <h2><span class="pill get">GET</span>/v1/tracking/{tracking_number}</h2>
+  <p>Returns the label's current platform status plus a carrier <code>tracking_url</code> for full scan history.</p>
+
+  <h2><span class="pill post">POST</span>/v1/pickups — schedule a carrier pickup</h2>
+  <pre><code>{ "date": "2026-07-14", "ready_time": "09:00", "close_time": "17:00",
+  "total_weight": 12, "package_location": "FRONT",
+  "address": { "address1": "215 S State St", "city": "Salt Lake City", "state": "UT", "zip": "84101" } }</code></pre>
+
+  <h2><span class="pill get">GET</span>/v1/services · <span class="pill get">GET</span>/v1/rate-card</h2>
+  <p><code>/v1/services</code> lists every service enabled on your account (the <code>service_code</code> values for booking). <code>/v1/rate-card</code> returns your account's pricing configuration machine-readably — how each service and accessorial is priced for you.</p>
+
+  <h2><span class="pill get">GET</span>/v1/billing/summary · <span class="pill get">GET</span>/v1/invoices</h2>
+  <p><code>/v1/billing/summary?month=2026-07</code> → shipment count + total charges for the month. <code>/v1/invoices?month=2026-07</code> → full line items (add <code>&amp;format=csv</code> for a spreadsheet-ready download).</p>
+
+  <h2>Errors</h2>
+  <table><tr><th>Status</th><th>code</th><th>Meaning</th></tr>
+    <tr><td>401</td><td><code>missing_key / invalid_key</code></td><td>No key, or a bad/revoked one.</td></tr>
+    <tr><td>403</td><td><code>service_not_enabled / account_inactive</code></td><td>Ask your account manager.</td></tr>
+    <tr><td>422</td><td><code>invalid_request / service_unavailable</code></td><td>Fix the request; re-check /v1/rates.</td></tr>
+    <tr><td>429</td><td><code>rate_limited</code></td><td>240 req/min per key.</td></tr>
+    <tr><td>5xx</td><td><code>rates_unavailable / booking_failed</code></td><td>Transient carrier issue — retry with backoff.</td></tr>
+  </table>
+
+  <h2>Migrating from the England/Rock Solid REST API</h2>
+  <p>This API replaces third-party wholesale APIs one-for-one for rating and booking: <code>POST /v1/rates</code> ↔ rate quotes, <code>POST /v1/labels</code> ↔ order booking + label retrieval (no polling — the label PDF returns in the booking response), <code>/v1/shipments</code> ↔ shipment lookup, plus billing endpoints those APIs never had. Field names are plain snake_case; nothing about the upstream provider leaks into your integration.</p>
+</main>
+</body>
+</html>

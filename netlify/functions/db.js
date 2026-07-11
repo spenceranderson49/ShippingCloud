@@ -727,6 +727,34 @@ exports.handler = async (event) => {
       return J({ ok: true, saved: Object.keys(toWrite), rejected });
     }
 
+    /* ── ShippingCloud API keys (Admin → API): hashed at rest, full key returned ONCE ── */
+    if (action === "apiKeys") {
+      if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
+      const cur = await getStore("apiKeys");
+      const keys = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+      return J({ ok: true, keys: keys.map((k) => ({ id: k.id, prefix: k.prefix, label: k.label, clientId: k.clientId, createdAt: k.createdAt, lastUsed: k.lastUsed || null, revoked: !!k.revoked })) });
+    }
+    if (action === "apiKeyCreate") {
+      if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
+      const clientId = String(body.clientId || "");
+      if (!clientId) return J({ ok: false, error: "Pick the customer this key belongs to." });
+      const cur = await getStore("apiKeys");
+      const keys = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+      if (keys.filter((k) => !k.revoked).length >= 500) return J({ ok: false, error: "Key limit reached." });
+      const raw = "sck_live_" + crypto.randomBytes(24).toString("hex");
+      const row = { id: "k" + Date.now(), prefix: raw.slice(0, 14) + "…", label: String(body.label || "").slice(0, 60), clientId, hash: crypto.createHash("sha256").update(raw).digest("hex"), createdAt: new Date().toISOString() };
+      const w = await putStores({ apiKeys: [...keys, row] });
+      if (!w.ok) return J({ ok: false, error: "Save failed." });
+      return J({ ok: true, key: raw, id: row.id, prefix: row.prefix });
+    }
+    if (action === "apiKeyRevoke") {
+      if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
+      const cur = await getStore("apiKeys");
+      const keys = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+      const w = await putStores({ apiKeys: keys.map((k) => k.id === String(body.id) ? { ...k, revoked: true } : k) });
+      return J(w.ok ? { ok: true } : { ok: false, error: "Save failed." });
+    }
+
     /* ── snapshot management (F17): bak:<key>:<ts> rows are written by the wipe-guards above.
        listBackups shows what exists; restoreBackup puts one back — after snapshotting the
        CURRENT value first, so a restore is itself reversible. Admin only. ── */

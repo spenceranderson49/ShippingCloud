@@ -8,6 +8,12 @@
 [functions]
   directory = "netlify/functions"
 
+# ShippingCloud API pretty URLs — must come before the SPA catch-all.
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
 # SPA fallback — serve index.html for all app routes.
 # (Function paths under /.netlify/functions/ are routed natively by Netlify
 #  before redirects run, so no rule is needed for them.)

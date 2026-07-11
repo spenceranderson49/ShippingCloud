@@ -82,7 +82,7 @@ X-API-Key: sck_live_xxxxxxxxxxxxxxxx</code></pre>
   <p><code>GET /v1/shipments?limit=50</code> lists your labels newest-first with status and charge. Void marks the label refunded-in-progress; unshipped labels refund automatically.</p>
 
   <h2><span class="pill get">GET</span>/v1/tracking/{tracking_number}</h2>
-  <p>Returns the label's current platform status plus a carrier <code>tracking_url</code> for full scan history.</p>
+  <p>Returns live FedEx scan events, an <code>estimated_delivery</code>, and a <b>normalized</b> <code>status</code> — one of <code>pre_transit · in_transit · delivered · returned · exception · voided · unknown</code> — plus <code>status_detail</code> (the raw carrier text) and a carrier <code>tracking_url</code>. <code>GET /v1/shipments</code> paginates with <code>?page=&amp;limit=</code> and returns <code>total</code>/<code>has_more</code>.</p>
 
   <h2><span class="pill post">POST</span>/v1/pickups — schedule a carrier pickup</h2>
   <pre><code>{ "date": "2026-07-14", "ready_time": "09:00", "close_time": "17:00",

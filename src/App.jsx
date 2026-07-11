@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v455";
+const BUILD_TAG="addr-v456";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -4589,6 +4589,7 @@ function CustomizationsAdmin({users,clients,featureFlags={},setFeatureFlags,cust
     setDraft(null);
   };
   const removeCustom=(id)=>{ if(!window.confirm("Remove this customization from the registry? (Any code behind it stays; user toggles for it are simply ignored.)"))return; setCustomFeatures(cf=>cf.filter(c=>c.id!==id)); };
+  /* called as {FeatureRow({...})} — an inline component type remounts its chips per click */
   const FeatureRow=({f,custom})=>(
     <div className="border border-stone-200 rounded-lg bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -4631,11 +4632,11 @@ function CustomizationsAdmin({users,clients,featureFlags={},setFeatureFlags,cust
     <div>
       <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Custom built</div>
       {customCat.length===0?<div className="border border-dashed border-stone-300 rounded-lg p-5 text-sm text-stone-400 bg-white">Nothing registered yet. When we build something for a specific client — a report, a rule, an integration, a workflow tweak — it gets registered here with its own switch, off for everyone by default. Then rolling it out to any other login is one click on their chip.</div>:
-      <div className="space-y-3">{customCat.map(f=><FeatureRow key={f.id} f={f} custom={true}/>)}</div>}
+      <div className="space-y-3">{customCat.map(f=><div key={f.id}>{FeatureRow({f,custom:true})}</div>)}</div>}
     </div>
     <div>
       <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Platform features</div>
-      <div className="space-y-3">{FEATURE_CATALOG.map(f=><FeatureRow key={f.id} f={f} custom={false}/>)}</div>
+      <div className="space-y-3">{FEATURE_CATALOG.map(f=><div key={f.id}>{FeatureRow({f,custom:false})}</div>)}</div>
     </div>
   </div>);
 }
@@ -6771,7 +6772,6 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     return list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));const days=m?m.days:null;const cost=q.cost;const _p={};const _sell=q.sell!=null?q.sell:rateSellFor(cost,q.label,{rules:rateRules,client,list:q.list,listBase:q.listBase,surcharges:q.surcharges,fromZip:sender.zip,toZip:receiver.zip,weight:ruleWeightFor(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})),q.label),_parts:_p});return applyAccessorials({...q,sell:_sell,_sellParts:_p.fees?_p:undefined,fxDays:days,fxDate:real?m.date:undefined,fxLive:real},{signatureOption:_live?"none":sigOption,saturday,insuranceList:_dvList,fees:surchargeFees(rateRules,client)});})
       .sort((a,b)=>{if(a.sell==null&&b.sell==null)return 0;if(a.sell==null)return 1;if(b.sell==null)return -1;return a.sell-b.sell;});
   },[rateSrc,orRates,client,JSON.stringify(custom.hiddenServices||[]),JSON.stringify(client&&client.blockedServices||[]),rateRules,fxTransit,residential,addrClassified,sigOption,saturday,insurance,intl,dvEach,JSON.stringify(pieces)]);
-  const best=null;
   /* Per-box facts for the "Per box" breakdown toggle: each box's declared value and its exact
      per-package coverage fee (FedEx prices declared value per box — first $100 free per box). */
   const perBox=useMemo(()=>{ if(pieces.length<2)return null; const _f=surchargeFees(rateRules,client);
@@ -7196,7 +7196,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <Printer className="w-3.5 h-3.5 shrink-0"/>
           <span><b>Hands-free:</b> {hfWait.m}</span>
         </div>}
-        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${orBox?orBox.code:""}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
+        <ServiceList quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${orBox?orBox.code:""}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
         {intl&&(
           <div className="border border-[#99D6FF] bg-[#E6F4FF]/40 rounded-lg p-3 space-y-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-[#006FBF]"><FileText className="w-4 h-4"/>Customs · Commercial invoice</div>
@@ -7331,33 +7331,6 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   );
 }
 
-function CommercialInvoice({sender,receiver,customs,total,reference,pieces,totalWeight}){
-  return (
-    <div className="overflow-x-auto"><div className="bg-white border border-stone-300 rounded-lg p-5 text-xs text-stone-700 min-w-[520px]" style={{fontFamily:"ui-sans-serif,system-ui"}}>
-      <div className="flex items-start justify-between border-b border-stone-300 pb-3 mb-3">
-        <div><div className="text-lg font-bold tracking-tight text-stone-900">COMMERCIAL INVOICE</div><div className="text-stone-400">{BRAND.product} · for customs clearance</div></div>
-        <div className="text-right"><div>Invoice # <span className="font-mono">{customs.ci||"CI-PREVIEW"}</span></div><div>Date {new Date().toLocaleDateString()}</div><div>Ref {reference||"—"}</div></div>
-      </div>
-      <div className="grid grid-cols-2 gap-4 mb-3">
-        <div><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-0.5">Exporter / Shipper</div><div className="font-medium text-stone-900">{sender.company||sender.name}</div><div>{sender.address1}</div><div>{sender.city}, {sender.state} {sender.zip}</div><div>{sender.country}</div></div>
-        <div><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-0.5">Importer / Consignee</div><div className="font-medium text-stone-900">{receiver.name}{receiver.company?` · ${receiver.company}`:""}</div><div>{receiver.address1}</div><div>{receiver.city}, {receiver.state} {receiver.zip}</div><div>{receiver.country}</div></div>
-      </div>
-      <div className="grid grid-cols-3 gap-3 mb-3 text-[11px]">
-        <div><span className="text-stone-400">Reason for export:</span> {customs.reason}</div>
-        <div><span className="text-stone-400">Incoterms:</span> {(customs.incoterm||"").split(" — ")[0]}</div>
-        <div><span className="text-stone-400">Duties/taxes:</span> {customs.dutiesBill==="sender"?"Prepaid (DDP)":"Collect (DAP)"}</div>
-      </div>
-      <table className="w-full border-collapse">
-        <thead><tr className="border-y border-stone-300 text-[10px] uppercase tracking-wide text-stone-400 text-left"><th className="py-1.5 font-normal">Description</th><th className="font-normal">HTS code</th><th className="font-normal">Origin</th><th className="font-normal text-right">Qty</th><th className="font-normal text-right">Unit</th><th className="font-normal text-right">Total</th></tr></thead>
-        <tbody>{customs.lines.map((l,i)=>(<tr key={i} className="border-b border-stone-100"><td className="py-1.5">{l.desc||<span className="text-stone-300">—</span>}</td><td className="font-mono">{l.hts||"—"}</td><td>{l.origin}</td><td className="text-right">{l.qty}</td><td className="text-right font-mono">{money(+l.value||0)}</td><td className="text-right font-mono">{money((+l.qty||0)*(+l.value||0))}</td></tr>))}</tbody>
-        <tfoot><tr className="font-semibold text-stone-900"><td colSpan={5} className="text-right py-2 pr-2">Total declared value</td><td className="text-right font-mono">{money(total)}</td></tr></tfoot>
-      </table>
-      <div className="flex justify-between text-[11px] text-stone-500 mt-2"><span>{pieces.length} package(s) · {totalWeight} lb total</span><span>Currency: USD</span></div>
-      <div className="mt-4 pt-3 border-t border-stone-200 text-[11px] text-stone-500">I declare the information on this invoice to be true and correct to the best of my knowledge.</div>
-      <div className="mt-6 flex justify-between text-[11px]"><div className="border-t border-stone-400 w-48 pt-1 text-stone-400">Signature</div><div className="border-t border-stone-400 w-32 pt-1 text-stone-400">Date</div></div>
-    </div></div>
-  );
-}
 
 
 const addBizDays=(n)=>{const d=new Date();let added=0;let guard=0;while(added<n&&guard<60){d.setDate(d.getDate()+1);const day=d.getDay();if(day!==0&&day!==6)added++;guard++;}return d;};
@@ -7560,7 +7533,7 @@ function matchRequestedService(quotes,requested,res=null){
   const hit=quotes.find(q=>canonSvc(q.label)===c&&(q.sell??q.cost)!=null);
   return hit?hit.key:null;
 }
-function ServiceList({quotes,best,bought,action,label,doneLabel,showCost,ready=true,onOneRate,custom=CUSTOM_DEFAULTS,matched=null,matchedSrc=null,collapsible=false,oneRateWarning=null,billing=null,live=false,loading=false,addrClassified=true,perBox=null,resetKey=""}){
+function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,custom=CUSTOM_DEFAULTS,matched=null,matchedSrc=null,collapsible=false,oneRateWarning=null,billing=null,live=false,loading=false,addrClassified=true,perBox=null,resetKey=""}){
   const [showAll,setShowAll]=useState(false);
   /* "Hide other services" mode shows ONE service box. It must stay a single box at all times —
      switching orders and the Ground<->Home Delivery swap (FedEx address classification, which also
@@ -8036,7 +8009,6 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
   },[rateNonce,o.zip,weight,box.L,box.W,box.H,residential,oneRate,orBox&&orBox.code,eng.enabled,eng.apiKey,eng.customerId,eng.base,eng.fedexAccount]);   /* eng is a fresh object every render (englandFor) — depend on its primitives or this effect loops forever */
   const localOrderQuotes=()=>quoteRates({fromZip,toZip:o.zip,pieces:[{weight:+weight||0,L:box.L,W:box.W,H:box.H}],residential,intl:false}).filter(qq=>qq.carrier==="FedEx");
   const quotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,listBase:qq.listBase,surcharges:qq.surcharges,fromZip,toZip:o.zip,weight:ruleWeightFor([{weight:+weight||o.weight||1,L:box.L,W:box.W,H:box.H}],qq.label)})})).sort((a,b)=>(a.sell||1e9)-(b.sell||1e9));},[rateSrc,residential,client,settings,rateRules,weight]);
-  const best=(rateSrc.live&&quotes[0])?quotes[0].key:null;
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
   const printHere=async(qq)=>{
     if(canBook&&(!qq.carrierCode||!qq.serviceCode)){ setRateNonce(n=>n+1); setStatus({state:"error",msg:"That rate was stale — refreshing live rates now. Pick the service again in a moment."}); return; }
@@ -8103,7 +8075,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
         </div>}
         {oneRate&&<div className={`text-xs rounded px-3 py-2 flex items-center gap-2 ${orBox?"bg-[#E6F4FF] text-[#0072BE] border border-[#99D6FF]":"bg-amber-50 text-amber-700 border border-amber-200"}`}><Boxes className="w-4 h-4 shrink-0"/>{orBox?<span>Qualifies for <b>{orBox.name}</b> — pricing this box only.</span>:<span>Set a box size within One Rate limits (≤2,200 cu in, ≤50 lb).</span>}</div>}
         {(o.shippingService||o.source)&&<div className="text-xs text-stone-500 flex items-center gap-1.5 -mt-1"><Truck className="w-3.5 h-3.5 text-stone-400"/>Buyer selected <b className="text-stone-700">{o.shippingService||"Standard"}</b>{o.source?` from ${o.source}`:""} — match it or pick the best rate below.</div>}
-        <ServiceList quotes={quotes} best={best} bought={bought} action={ready?printHere:null} label="Buy & print" doneLabel="Printed" ready={ready} custom={cz(settings||{})}/>
+        <ServiceList quotes={quotes} bought={bought} action={ready?printHere:null} label="Buy & print" doneLabel="Printed" ready={ready} custom={cz(settings||{})}/>
         {status&&<div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2 ${status.state==="error"?"text-rose-600 bg-rose-50 border border-rose-200":status.state==="booking"?"text-stone-600 bg-stone-50 border border-stone-200":"text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF]"}`}>{status.state==="booking"?<Loader2 className="w-4 h-4 animate-spin"/>:status.state==="error"?<AlertTriangle className="w-4 h-4"/>:<CheckCircle2 className="w-4 h-4"/>}{status.msg}</div>}
       </>)}
       {labelPreview&&<LabelPreviewModal data={labelPreview} settings={settings} onClose={()=>setLabelPreview(null)}/>}
@@ -8242,7 +8214,6 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
     const withTransit=(list)=>list.map(q=>{const _k=canonSvc(q.label);const m=fxTransit[_k]||fxTransit[_k.replace(/^or_/,"")];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};});
     return cleanServiceList(withTransit([...baseQuotes,...(orRates||[])].map(q=>applyAccessorials(q,{signatureOption:rateSrc.live?"none":sigOption,saturday:sat,insurance:rateSrc.live?"":insurance,fees:surchargeFees(rateRules,client)}))),{intl:_intl,residential:addrClassified?residential:null}).sort((a,b)=>(a.sell||0)-(b.sell||0));
   },[baseQuotes,orRates,fxTransit,sigOption,sat,insurance,rateRules,_intl,addrClassified,residential]);
-  const best=null;
   /* Autopilot preselect — parity with the Ship tab: when "apply rules on the Ship screen" is ON,
      run the LIVE rule engine on this order and select that service; otherwise fall back to the
      stored o.ruleService / the store's requested service via matchServiceForOrder. */
@@ -8446,7 +8417,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
               </div>
             </div>
             {!shipped&&<div className="bg-white border border-stone-200 rounded-lg p-4">
-              {ready?<ServiceList quotes={quotes} best={best} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyORBox} custom={cz(settings||{})} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} resetKey={`${rcv.zip}|${rcv.country||"US"}|${orPkg||""}|${((client&&client.blockedServices)||[]).join(",")}`} billing={weighInfo([{weight:totalWeight,L:box.L,W:box.W,H:box.H}])}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
+              {ready?<ServiceList quotes={quotes} bought={bought} action={printHere} label="Print" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyORBox} custom={cz(settings||{})} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} resetKey={`${rcv.zip}|${rcv.country||"US"}|${orPkg||""}|${((client&&client.blockedServices)||[]).join(",")}`} billing={weighInfo([{weight:totalWeight,L:box.L,W:box.W,H:box.H}])}/>:<div className="text-sm text-stone-400 py-6 text-center">Enter a valid destination ZIP and weight to see live services, transit times and rates.</div>}
               {ready&&rateSrc.loading&&<div className="text-xs text-stone-400 flex items-center gap-1.5 mt-2"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Loading rates…</div>}
               {status&&<div className={`mt-2 text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${status.state==="error"?"text-rose-600 bg-rose-50 border border-rose-200":status.state==="booking"?"text-stone-600 bg-stone-50 border border-stone-200":"text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF]"}`}>{status.state==="error"?<AlertTriangle className="w-3.5 h-3.5"/>:status.state==="booking"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{status.msg}</div>}
             </div>}
@@ -9956,7 +9927,6 @@ function ProductCatalog({settings,setSettings}){
 
   const exportCSV=()=>downloadCSV("shippingcloud-products.csv",[["SKU","Name","Length","Width","Height","Weight","Value","Origin","HS Code","Barcode","Ships Alone"],...products.map(p=>[p.sku,p.name,p.l,p.w,p.h,p.wt,p.value,p.origin,p.hs,p.barcode||"",p.shipsAlone?"yes":""])]);
 
-  const Cell=({v,ph,on,w})=>(<input value={v} onChange={on} placeholder={ph} className={`${w||"w-14"} bg-white border border-stone-200 rounded px-1.5 py-1 text-xs text-center outline-none focus:border-[#0099FF]`}/>);
   return (<div className="max-w-4xl space-y-3">
     <div>
       <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Boxes className="w-4 h-4"/>Product catalog</h2>
@@ -10238,6 +10208,16 @@ function DocTabDesigner({zones,setZone,onClearLayout,showLabels,tabHIn}){
     </div>
   </div>);
 }
+/* PrinterSettings' radio/card helpers at MODULE scope — defined inside the render IIFE they
+   were a new type every render, remounting the radio groups on every pick (keyboard radio
+   navigation broke). They close over nothing, so hoisting is a pure identity fix. */
+const PSOpt=({on,pick,title,desc,group})=>(<label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${on?"border-emerald-300 bg-emerald-50/60":"border-stone-200 bg-white hover:bg-stone-50"}`}>
+  <input type="radio" name={group} checked={on} onChange={pick} className="mt-0.5 accent-emerald-600"/>
+  <span><span className="text-sm font-semibold text-stone-800">{title}</span><span className="block text-[11px] font-normal text-stone-500 mt-0.5">{desc}</span></span>
+</label>);
+const PSBox=({n,title,children})=>(<div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2">
+  <div className="text-[10px] uppercase tracking-widest text-stone-400">{n} · {title}</div>{children}
+</div>);
 function PrinterSettings({settings,setSettings}){
   const pr=settings.printer||{labelSize:"4x6",format:"PDF",printer:"",packingSlip:true,autoPrint:false,slipSize:"letter",rotate:false};
   /* FUNCTIONAL update only — a replacement built from the render-scope `settings` silently
@@ -10248,7 +10228,6 @@ function PrinterSettings({settings,setSettings}){
   const cust=cz(settings);
   const setCust=(k,v)=>setSettings(p=>({...p,custom:{...(p.custom||{}),[k]:v}}));
   const c=cust;
-  const ApTog=({k,label,hint})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span><button onClick={()=>setCust(k,!c[k])}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${c[k]?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button></label>);
   // Doc tabs + receipt config (per-login settings)
   const dt=settings.docTab||{enabled:false,stock:"trailing",zones:DEFAULT_DOCTABS,showLabels:true};
   const setDt=(patch)=>setSettings(p=>({...p,docTab:{...(p.docTab||{enabled:false,stock:"trailing",zones:DEFAULT_DOCTABS,showLabels:true}),...patch}}));
@@ -10362,13 +10341,7 @@ function PrinterSettings({settings,setSettings}){
             if(!cust.printFlowV2){ setCust("autoBookOnShip",handsOn); setCust("previewBeforePrint",previewOn); setCust("resetAfterPrint",resetOn); }
             setCust("printFlowV2",true); set({autoPrint:false}); setPnCfg({enabled:ready});
           };
-          const Opt=({on,pick,title,desc,group})=>(<label className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${on?"border-emerald-300 bg-emerald-50/60":"border-stone-200 bg-white hover:bg-stone-50"}`}>
-            <input type="radio" name={group} checked={on} onChange={pick} className="mt-0.5 accent-emerald-600"/>
-            <span><span className="text-sm font-semibold text-stone-800">{title}</span><span className="block text-[11px] font-normal text-stone-500 mt-0.5">{desc}</span></span>
-          </label>);
-          const Box=({n,title,children})=>(<div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2">
-            <div className="text-[10px] uppercase tracking-widest text-stone-400">{n} · {title}</div>{children}
-          </div>);
+          const Opt=PSOpt,Box=PSBox;   // stable module-scope types — see PSOpt/PSBox above
           return (<>
             <Box n="2" title="When a label is created — who books">
               <Opt group="pf-book" on={handsOn} pick={()=>{stamp();setCust("autoBookOnShip",true);setCust("autoRulesOnShip",true);}} title="Hands-free — it books itself" desc="A matching order fires the Ship button on its own the moment its live rate is ready. Needs an Autopilot rule (or fallback service) that covers the order — anything unmatched still waits for you."/>
@@ -10653,32 +10626,6 @@ function Notifications({settings,setSettings,emails}){
 }
 
 /* ════════ SETTINGS-SUB ════════ */
-function AutomationRules({rules,setRules}){
-  const [f,setF]=useState({name:"",field:"weight",op:">",value:"",action:"service",actionValue:""});
-  const add=()=>{if(!f.name)return;setRules(r=>[...r,{id:"r"+Date.now(),enabled:true,...f}]);setF({name:"",field:"weight",op:">",value:"",action:"service",actionValue:""});};
-  const labelFor=r=>`If ${r.field} ${r.op} ${r.value} → ${r.action}${r.actionValue?`: ${r.actionValue}`:""}`;
-  return (<div className="max-w-2xl space-y-3">
-    <p className="text-sm text-stone-500">Rules run automatically on imported orders and in Batch — auto-pick services, force signature, flag oversize, and more.</p>
-    {rules.map(r=>(<div key={r.id} className="border border-stone-200 rounded-lg bg-white p-3 flex items-center gap-3">
-      <button onClick={()=>setRules(rs=>rs.map(x=>x.id===r.id?{...x,enabled:!x.enabled}:x))}><span className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${r.enabled?"bg-[#0086E0] justify-end":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></span></button>
-      <div className="flex-1"><div className="font-medium text-sm flex items-center gap-1.5"><Zap className="w-3.5 h-3.5 text-[#0086E0]"/>{r.name}</div><div className="text-[11px] text-stone-400 font-mono">{labelFor(r)}</div></div>
-      <button onClick={()=>setRules(rs=>rs.filter(x=>x.id!==r.id))} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>
-    </div>))}
-    <Panel title="New rule">
-      <Field label="Rule name"><Input value={f.name} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. West coast → Ground"/></Field>
-      <div className="grid grid-cols-3 gap-2 items-end">
-        <Field label="When"><Select value={f.field} onChange={e=>setF({...f,field:e.target.value})}><option value="weight">Weight (lb)</option><option value="value">Order value ($)</option><option value="state">Dest. state</option><option value="zip">Dest. ZIP</option></Select></Field>
-        <Field label="Is"><Select value={f.op} onChange={e=>setF({...f,op:e.target.value})}><option>{">"}</option><option>{"<"}</option><option>{"="}</option></Select></Field>
-        <Field label="Value"><Input value={f.value} onChange={e=>setF({...f,value:e.target.value})}/></Field>
-      </div>
-      <div className="grid grid-cols-2 gap-2 items-end">
-        <Field label="Then"><Select value={f.action} onChange={e=>setF({...f,action:e.target.value})}><option value="service">Set service</option><option value="signature">Require signature</option><option value="insure">Auto-insure</option><option value="flag">Flag for review</option></Select></Field>
-        <Field label="Detail"><Input value={f.actionValue} onChange={e=>setF({...f,actionValue:e.target.value})} placeholder="e.g. Cheapest Ground"/></Field>
-      </div>
-      <button onClick={add} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Add rule</button>
-    </Panel>
-  </div>);
-}
 /* ════════════════════════════════════════════════════════════════════
    RULES ENGINE — conditions + actions pipeline, run-order, stop, live sim
    Ported to run against real ShippingCloud orders.
@@ -11617,9 +11564,9 @@ function AssetLibrary({settings,setSettings}){
   return (<Panel title="Signatures, letterhead & attachments">
     <div className="flex flex-wrap gap-2">
       <button onClick={()=>setPad(v=>!v)} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">✍️ Draw a signature</button>
-      <Up type="signature" label="Upload signature image" maxW={500}/>
-      <Up type="letterhead" label="Upload letterhead" maxW={1400}/>
-      <Up type="image" label="Upload attachment image" maxW={1200}/>
+      {Up({type:"signature",label:"Upload signature image",maxW:500})}
+      {Up({type:"letterhead",label:"Upload letterhead",maxW:1400})}
+      {Up({type:"image",label:"Upload attachment image",maxW:1200})}
     </div>
     {pad&&<div className="mt-2"><SignaturePad onSave={(b64)=>{add("signature","Signature "+new Date().toLocaleDateString(),b64);setPad(false);}} onClose={()=>setPad(false)}/></div>}
     {assets.length>0&&<div className="grid sm:grid-cols-2 gap-2 mt-3">
@@ -12113,6 +12060,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
      deploy editor or the trimmed Ship-screen section. Cleared on unmount so nothing sticks. */
   useEffect(()=>{ if(only||deployMode)return; try{ window.dispatchEvent(new CustomEvent("sc-look-preview",{detail:{headerBg:c.headerBg||"",navBg:c.navBg||"",pageBg:c.pageBg||"",appBg:c.appBg||"",accent:c.accent||""}})); }catch(e){} },[only,deployMode,c&&c.headerBg,c&&c.navBg,c&&c.pageBg,c&&c.appBg,c&&c.accent]);
   useEffect(()=>()=>{ if(only||deployMode)return; try{ window.dispatchEvent(new CustomEvent("sc-look-preview",{detail:null})); }catch(e){} },[]);
+  /* called as {Tog({...})} like Num/Sel — an inline component type remounts per toggle */
   const Tog=({k,label,hint,invert})=>(<label className="flex items-start gap-2 text-sm text-stone-700 cursor-pointer">
     <input type="checkbox" checked={invert?c[k]===false:!!c[k]} onChange={e=>set(k,invert?!e.target.checked:e.target.checked)} className="accent-[#0086E0] mt-0.5"/>
     <span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span></label>);
@@ -12148,10 +12096,6 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
      deployMode so the admin team-deploy screen keeps every option in one place. `only` renders a
      single panel with no tab bar — used by Settings → Ship screen. */
   const CTABS=[["services","Services"],...(deployMode?[["ship","Ship screen"],["orders","Orders & lists"]]:[]),["appearance","Appearance"]];   // Ship screen + Orders are their own top-level Settings sections now (still tabs in deployMode so team-deploy keeps every option in one place). Packing-slip message/footer moved to Settings → Print settings → Packing slip (v393). Autopilot toggles → Print settings (v355). Labels & printing → Printer settings (v281).
-  const Toggle=({k,label,hint})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700">
-    <span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span>
-    <button onClick={()=>set(k,!c[k])}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${c[k]?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full shadow"/></span></button>
-  </label>);
   return (<div className="max-w-2xl space-y-4">
     <DraftBar dirty={_cd.dirty} onSave={_cd.save} onUndo={_cd.undo} onReset={()=>{ if(window.confirm("Reset all customizations to their defaults? You'll still need to click Save to keep it.")) _cd.reset(); }} resetLabel="Reset to defaults" savedNote="Customizations saved"/>
     {!deployMode&&!only&&<div className="text-sm text-stone-500">Make {BRAND.product} yours. Every option here changes the app immediately for <b>your login only</b>.</div>}
@@ -12163,20 +12107,20 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
 
     {cs==="ship"&&<Panel title="Ship screen">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
-        <Tog k="hideRateSrcBar" label="Hide the rate-source banner" hint="Removes the ‘Live rates from your FedEx account / Estimated rates’ strip above the service list."/>
-        <Tog k="hideAutopilotBox" label="Hide the Autopilot match banner" hint="Removes the ‘Autopilot rule matched…’ box above Select service. Rules still run and still pre-highlight the service."/>
-        <Tog k="hideNotifyBox" label="Hide the Send label & notify box" hint="Removes the email panel at the bottom of the Ship tab. Automated notifications in Settings → Email automation still send."/>
-        <Tog k="hideShipOrders" label="Hide the orders list on the Ship screen" hint="Removes the orders sidebar (and its collapsed tab) from the Ship screen completely — ship by scanning or typing shipments in manually. Orders still live on the Orders tab."/>
-        <Tog k="scanAutoFocus" label="Scan mode — keep the scan box ready" hint="The cursor lives in the scan box: it's focused when the Ship tab opens, re-arms after every scan and booking, and returns after you click orders, services or buttons. It only steps aside while you're typing in another field (like editing the shipping information), then comes back on your next click."/>
-        <Tog k="hideInvoice" label="Hide Invoice # field"/>
-        <Tog k="hidePO" label="Hide PO # field"/>
-        <Tog k="hideAddr23" label="Hide Address 2 & 3" hint="On both sender and receiver cards"/>
-        <Tog k="hideOz" label="Hide the oz box" hint="Whole pounds are enough for most shops"/>
-        <Tog k="hideInsure" label="Hide the Insure $ field"/>
+        {Tog({k:"hideRateSrcBar",label:"Hide the rate-source banner",hint:"Removes the ‘Live rates from your FedEx account / Estimated rates’ strip above the service list."})}
+        {Tog({k:"hideAutopilotBox",label:"Hide the Autopilot match banner",hint:"Removes the ‘Autopilot rule matched…’ box above Select service. Rules still run and still pre-highlight the service."})}
+        {Tog({k:"hideNotifyBox",label:"Hide the Send label & notify box",hint:"Removes the email panel at the bottom of the Ship tab. Automated notifications in Settings → Email automation still send."})}
+        {Tog({k:"hideShipOrders",label:"Hide the orders list on the Ship screen",hint:"Removes the orders sidebar (and its collapsed tab) from the Ship screen completely — ship by scanning or typing shipments in manually. Orders still live on the Orders tab."})}
+        {Tog({k:"scanAutoFocus",label:"Scan mode — keep the scan box ready",hint:"The cursor lives in the scan box: it's focused when the Ship tab opens, re-arms after every scan and booking, and returns after you click orders, services or buttons. It only steps aside while you're typing in another field (like editing the shipping information), then comes back on your next click."})}
+        {Tog({k:"hideInvoice",label:"Hide Invoice # field"})}
+        {Tog({k:"hidePO",label:"Hide PO # field"})}
+        {Tog({k:"hideAddr23",label:"Hide Address 2 & 3",hint:"On both sender and receiver cards"})}
+        {Tog({k:"hideOz",label:"Hide the oz box",hint:"Whole pounds are enough for most shops"})}
+        {Tog({k:"hideInsure",label:"Hide the Insure $ field"})}
       </div>
       <div className="border-t border-stone-100 mt-3 pt-3 grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
-        <Tog k="phoneRequired" label="Require receiver phone to book" hint="Uncheck to make phone optional"/>
-        <Tog k="emailRequired" label="Require receiver email to book" hint="Uncheck to make email optional"/>
+        {Tog({k:"phoneRequired",label:"Require receiver phone to book",hint:"Uncheck to make phone optional"})}
+        {Tog({k:"emailRequired",label:"Require receiver email to book",hint:"Uncheck to make email optional"})}
         {Sel({k:"defaultSignature",label:"Default signature on new shipments",opts:[["none","None"],["indirect","Indirect"],["direct","Direct"],["adult","Adult"]]})}
         {Num({k:"autoInsureValue",label:"Auto-insure orders over",hint:"When you load an order worth this much or more, insurance is set to the full order value. 0 = off. Takes priority over the % below.",prefix:"$"})}
         {Num({k:"autoInsurePct",label:"Auto-insure orders (% of value)",hint:"Legacy: insures this % of order value on load. Ignored if the $ threshold above is set. 0 = off",suffix:"%"})}
@@ -12192,7 +12136,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
     {cs==="services"&&<Panel title="Rates & services">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         {Sel({k:"defaultView",label:"Default rate view",opts:[["cheapest","Cheapest first"],["carrier","Grouped by carrier"]]})}
-        {(isAdmin||deployMode)&&<div className="rounded-lg border border-blue-100 bg-blue-50/40 p-2.5"><div className="text-[10px] uppercase tracking-widest text-blue-400 mb-1.5 flex items-center gap-1"><ShieldCheck className="w-3 h-3"/>Admin only</div><Tog k="showRateViewToggle" label="Show the Cheapest / By carrier switch on Ship" hint="Off = the rate list just uses the default view above, with no toggle or 'enter ZIP & weight' hint shown. Only you (admin) can turn this on."/></div>}
+        {(isAdmin||deployMode)&&<div className="rounded-lg border border-blue-100 bg-blue-50/40 p-2.5"><div className="text-[10px] uppercase tracking-widest text-blue-400 mb-1.5 flex items-center gap-1"><ShieldCheck className="w-3 h-3"/>Admin only</div>{Tog({k:"showRateViewToggle",label:"Show the Cheapest / By carrier switch on Ship",hint:"Off = the rate list just uses the default view above, with no toggle or 'enter ZIP & weight' hint shown. Only you (admin) can turn this on."})}</div>}
         {Sel({k:"transitStyle",label:"Transit display",opts:[["date","Days + arrival date"],["days","Day count only"]]})}
         {Num({k:"priceWarn",label:"Price alert",hint:"Flag any rate above this amount. 0 = off",step:"1",suffix:"$"})}
       </div>
@@ -12219,10 +12163,10 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
       </div>
       <div className="text-[11px] text-stone-400 mt-1.5">Order # and actions always show. Shipped orders never show Autopilot or Est. Rate — those only mean something before the label is booked.</div>
       <div className="border-t border-stone-100 mt-3 pt-3 grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
-        <Tog k="autopilotPreview" label="Show an Autopilot preview column" hint="Adds a column showing what your Autopilot rules would pick for each order — the service, a hold, or 'no rule matches' — before you ship. Runs your real rules, updates live."/>
+        {Tog({k:"autopilotPreview",label:"Show an Autopilot preview column",hint:"Adds a column showing what your Autopilot rules would pick for each order — the service, a hold, or 'no rule matches' — before you ship. Runs your real rules, updates live."})}
         {Sel({k:"density",label:"List density",opts:[["comfortable","Comfortable"],["compact","Compact — more rows per screen"]]})}
         {Num({k:"spendCap",label:"Spending cap",hint:"Hard-blocks booking any label above this. 0 = off",suffix:"$"})}
-        <Tog k="hotkeys" label="Keyboard shortcuts" hint="Press ? anywhere for the list — g then o jumps to Orders, etc."/>
+        {Tog({k:"hotkeys",label:"Keyboard shortcuts",hint:"Press ? anywhere for the list — g then o jumps to Orders, etc."})}
         {Num({k:"stuckDays",label:"Stuck-shipment flag",hint:"Highlight in-transit shipments older than this many days. 0 = off",suffix:"days"})}
       </div>
     </Panel>}
@@ -12261,7 +12205,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
         {Sel({k:"fontScale",label:"Text size",opts:[[94,"Small"],[100,"Normal"],[107,"Large"]]})}
         {Sel({k:"theme",label:"Theme",opts:[["light","Light"],["grey","Grey"],["dark","Dark"]]})}
         {Sel({k:"confetti",label:"Booking confetti 🎉",opts:[["page","Everywhere — full-page drop"],["button","Just around the button"],["off","Off"]]})}
-        {(isAdmin||deployMode)&&<Tog k="seasonal" label="Seasonal touches (admin)" hint="A little 🎅 🎃 ❤️ on the logo around the holidays. Off unless you, the admin, turn it on."/>}
+        {(isAdmin||deployMode)&&Tog({k:"seasonal",label:"Seasonal touches (admin)",hint:"A little 🎅 🎃 ❤️ on the logo around the holidays. Off unless you, the admin, turn it on."})}
         {Sel({k:"startTab",label:"Start page after login",opts:tabChoices.map(x=>[x[0],x[1]])})}
       </div>
       <div className="mt-3 rounded-xl border border-stone-200 bg-white p-3">
@@ -12364,24 +12308,6 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
   </div>);
 }
 
-function Company({settings,setSettings}){
-  const sn=settings.sender; const set=(k,v)=>setSettings({...settings,sender:{...sn,[k]:v}});
-  return (<div className="max-w-xl space-y-4">
-    <Panel title="Company"><Field label="Company name"><Input value={settings.company} onChange={e=>setSettings({...settings,company:e.target.value})}/></Field></Panel>
-    <Panel title="Default sender (ship-from)">
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="Name"><Input value={sn.name} onChange={e=>set("name",e.target.value)}/></Field>
-        <Field label="Company"><Input value={sn.company} onChange={e=>set("company",e.target.value)}/></Field>
-        <Field label="Address"><Input value={sn.address1} onChange={e=>set("address1",e.target.value)}/></Field>
-        <Field label="City"><Input value={sn.city} onChange={e=>set("city",e.target.value)}/></Field>
-        <Field label="State"><Input value={sn.state} onChange={e=>set("state",e.target.value)}/></Field>
-        <Field label="ZIP"><Input value={sn.zip} onChange={e=>set("zip",e.target.value)}/></Field>
-        <Field label="Phone"><Input value={sn.phone} onChange={e=>set("phone",e.target.value)}/></Field>
-        <Field label="Email"><Input value={sn.email} onChange={e=>set("email",e.target.value)}/></Field>
-      </div>
-    </Panel>
-  </div>);
-}
 
 /* ════════ CARRIER ACCOUNTS (platform + own) ════════ */
 const PROVIDERS=[{id:"england",name:"England Logistics API"},{id:"fedex",name:"FedEx · direct"}];
@@ -12616,39 +12542,6 @@ function TransitAudit({shipments}){
       {rep.unmatched.length>0&&<div className="border border-stone-200 rounded-lg bg-white p-3 text-xs text-stone-500">{rep.unmatched.length} tracking number{rep.unmatched.length===1?"":"s"} on the invoice {rep.unmatched.length===1?"doesn’t":"don’t"} match any shipment here (other accounts, or older than your history): <span className="font-mono text-stone-400">{rep.unmatched.slice(0,6).join(", ")}{rep.unmatched.length>6?"…":""}</span></div>}
     </>}
     {!rep&&!err&&!busy&&<div className="border border-dashed border-stone-300 rounded-lg bg-white p-8 text-center text-sm text-stone-400">Upload an invoice to see on-time %, late deliveries, and exceptions at a glance.</div>}
-  </div>);
-}
-function ClientInvoices({invoices,setInvoices,shipments,client}){
-  const live=shipments.filter(s=>s.status!=="Voided");
-  const uninvoicedTotal=live.reduce((a,s)=>a+s.sell,0);
-  const generate=()=>{if(!live.length)return;const num="INV-"+(1003+invoices.length);setInvoices(p=>[{id:"inv"+Date.now(),number:num,client:client.name,date:new Date().toLocaleDateString(),labels:live.length,amount:Math.round(uninvoicedTotal*100)/100,status:"Open"},...p]);};
-  const markPaid=(id)=>setInvoices(p=>p.map(i=>i.id===id?{...i,status:"Paid"}:i));
-  const open=invoices.filter(i=>i.status==="Open").reduce((a,i)=>a+i.amount,0);
-  const exportCSV=()=>downloadCSV("shippingcloud-invoices.csv",[["Invoice","Client","Date","Labels","Amount","Status"],...invoices.map(i=>[i.number,i.client,i.date,i.labels,i.amount,i.status])]);
-  return (<div className="max-w-3xl space-y-4">
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-      <Stat2 label="Invoices" v={invoices.length}/>
-      <Stat2 label="Open balance" v={money(open)} tone={open?"text-[#0086E0]":""}/>
-      <Stat2 label="Billed all-time" v={money(invoices.reduce((a,i)=>a+i.amount,0))}/>
-    </div>
-    <div className="flex flex-wrap items-center gap-3">
-      <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Receipt className="w-4 h-4"/>Invoices</h2>
-      <div className="flex-1"/>
-      <button onClick={exportCSV} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300"><Download className="w-4 h-4"/>Export</button>
-      <button onClick={generate} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-800"><Plus className="w-4 h-4"/>Generate from shipments</button>
-    </div>
-    <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
-      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="w-24">Invoice</div><div className="flex-1">Client</div><div className="w-16 text-right">Labels</div><div className="w-24 text-right">Amount</div><div className="w-20 text-right">Status</div><div className="w-16"/></div>
-      {invoices.length===0&&<div className="p-8 text-center text-sm text-stone-400">No invoices yet.</div>}
-      {invoices.map(i=>(<div key={i.id} className="flex items-center gap-3 px-4 py-3">
-        <div className="w-24 font-mono text-sm font-semibold">{i.number}</div>
-        <div className="flex-1 min-w-0"><div className="text-sm truncate">{i.client}</div><div className="text-[11px] text-stone-400">{i.date}</div></div>
-        <div className="w-16 text-right font-mono text-sm text-stone-500">{i.labels}</div>
-        <div className="w-24 text-right font-mono text-sm font-semibold">{money(i.amount)}</div>
-        <div className="w-20 text-right"><Badge tone={i.status==="Paid"?"green":"amber"}>{i.status}</Badge></div>
-        <div className="w-16 text-right">{i.status==="Open"&&<button onClick={()=>markPaid(i.id)} className="text-xs text-[#0086E0] hover:underline">Mark paid</button>}</div>
-      </div>))}
-    </div>
   </div>);
 }
 // Minimal RFC-4180 CSV parser (handles quotes, embedded commas/newlines)
@@ -12898,41 +12791,8 @@ function CarrierAudit({shipments}){
 }
 
 /* ════════ LEDGER ════════ */
-function Ledger({ledger,addLedger}){
-  const [funds,setFunds]=useState("");
-  const [adj,setAdj]=useState({amount:"",note:""});
-  const balance=ledger.reduce((a,e)=>a+e.amount,0);
-  const addFunds=()=>{const amt=+funds;if(!amt)return;addLedger({type:"Funds added",ref:"Manual deposit",amount:Math.abs(amt)});setFunds("");};
-  const addAdj=()=>{const amt=+adj.amount;if(!amt)return;addLedger({type:"Adjustment",ref:adj.note||"Adjustment",amount:amt});setAdj({amount:"",note:""});};
-  // running balance (oldest first), display newest first
-  let run=0; const withRun=[...ledger].reverse().map(e=>{run+=e.amount;return {...e,run};}).reverse();
-  return (<div className="max-w-3xl space-y-4">
-    <div className="grid sm:grid-cols-3 gap-3">
-      <div className="border border-stone-200 rounded-xl bg-white p-4 sm:col-span-1"><div className="text-[10px] uppercase tracking-widest text-stone-400">Account balance</div><div className={`text-3xl font-bold mt-1 ${balance<0?"text-rose-600":"text-stone-900"}`}>{money(balance)}</div></div>
-      <div className="border border-stone-200 rounded-xl bg-white p-4"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Add funds</div><div className="flex gap-2"><div className="relative flex-1"><DollarSign className="w-4 h-4 absolute left-2 top-2.5 text-stone-400"/><input type="number" value={funds} onChange={e=>setFunds(e.target.value)} placeholder="100.00" className="w-full bg-white border border-stone-200 rounded pl-7 pr-2 py-2 text-sm font-mono outline-none focus:border-[#0099FF]"/></div><button onClick={addFunds} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800">Add</button></div></div>
-      <div className="border border-stone-200 rounded-xl bg-white p-4"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Adjustment</div><div className="flex gap-2"><input type="number" value={adj.amount} onChange={e=>setAdj({...adj,amount:e.target.value})} placeholder="±0.00" className="w-20 bg-white border border-stone-200 rounded-lg px-2 py-2 text-sm font-mono outline-none focus:border-[#0099FF]"/><input value={adj.note} onChange={e=>setAdj({...adj,note:e.target.value})} placeholder="note" className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2 py-2 text-sm outline-none focus:border-[#0099FF]"/><button onClick={addAdj} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-300">Post</button></div></div>
-    </div>
-    <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
-      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="w-24">Date</div><div className="w-36">Type</div><div className="flex-1">Reference</div><div className="w-24 text-right">Amount</div><div className="w-24 text-right">Balance</div></div>
-      {withRun.length===0&&<div className="p-8 text-center text-sm text-stone-400">No transactions yet.</div>}
-      {withRun.map(e=>(<div key={e.id} className="flex items-center gap-3 px-4 py-2.5">
-        <div className="w-24 text-sm font-mono text-stone-500">{e.date}</div>
-        <div className="w-36 text-sm">{e.type}</div>
-        <div className="flex-1 min-w-0 text-sm text-stone-500 truncate">{e.ref}</div>
-        <div className={`w-24 text-right font-mono text-sm ${e.amount<0?"text-rose-600":"text-emerald-600"}`}>{e.amount<0?"−":"+"}{money(Math.abs(e.amount))}</div>
-        <div className="w-24 text-right font-mono text-sm text-stone-700">{money(e.run)}</div>
-      </div>))}
-    </div>
-  </div>);
-}
 
 
-function Clients({clients,setClients}){
-  const set=(id,v)=>setClients(cs=>cs.map(c=>c.id===id?{...c,markup:Math.max(0,v)}:c));
-  return (<div className="space-y-3 max-w-2xl"><p className="text-sm text-stone-500">Markup is your cut on every label this client ships. Customers never see it.</p>
-    {clients.map(c=>(<div key={c.id} className="border border-stone-200 rounded-lg bg-white p-4 flex items-center gap-4"><div className="w-9 h-9 rounded bg-stone-100 flex items-center justify-center text-[#0086E0] font-semibold">{c.name[0]}</div><div className="flex-1"><div className="font-medium">{c.name}</div><div className="text-[11px] text-stone-400 font-mono">origin {c.origin}</div></div><button onClick={()=>set(c.id,c.markup-1)} className="w-7 h-7 rounded bg-stone-200 hover:bg-stone-300">–</button><div className="w-14 text-center font-mono text-[#0086E0] font-semibold">{c.markup}%</div><button onClick={()=>set(c.id,c.markup+1)} className="w-7 h-7 rounded bg-stone-200 hover:bg-stone-300">+</button></div>))}
-  </div>);
-}
 
 /* ════════ PRIMITIVES ════════ */
 // Smart paste: turn a pasted contact/address blob into structured fields.
@@ -13134,5 +12994,4 @@ function Select({children,...p}){return <select {...p} className="w-full bg-whit
 function Toggle({on,set,label}){return <button onClick={()=>set(!on)} className={`flex items-center gap-1.5 text-xs rounded px-2.5 py-1.5 border ${on?"bg-[#E6F4FF] border-[#99D6FF] text-[#0086E0]":"bg-white border-stone-200 text-stone-400"}`}><span className={`w-2 h-2 rounded-full ${on?"bg-[#0086E0]":"bg-stone-300"}`}/>{label}</button>;}
 function Badge({children,tone="stone"}){const t={stone:"bg-stone-100 text-stone-500 border-stone-200",green:"bg-emerald-50 text-emerald-700 border-emerald-200",amber:"bg-amber-50 text-amber-700 border-amber-200",blue:"bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]",rose:"bg-rose-50 text-rose-600 border-rose-200"}[tone];return <span className={`text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 border ${t}`}>{children}</span>;}
 function Empty({icon:Icon,title,body}){return <div className="border border-dashed border-stone-300 rounded-lg p-12 text-center"><Icon className="w-8 h-8 text-stone-300 mx-auto mb-3"/><div className="text-stone-700 font-medium">{title}</div><div className="text-sm text-stone-400 mt-1 max-w-sm mx-auto">{body}</div></div>;}
-function EditField({label,v,on}){return <label className="block"><span className="text-[10px] uppercase tracking-wide text-stone-400">{label}</span><input value={v} onChange={e=>on(e.target.value)} className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm mt-0.5 outline-none focus:border-[#0099FF]"/></label>;}
 function Info({k,v}){return <div className="flex justify-between gap-4 py-0.5 border-b border-stone-100"><span className="text-stone-400">{k}</span><span className="text-stone-800 text-right">{v}</span></div>;}

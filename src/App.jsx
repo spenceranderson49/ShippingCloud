@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v454";
+const BUILD_TAG="addr-v455";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6698,6 +6698,10 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     {key:"fedex_prio",carrier:"FedEx",label:"FedEx Priority Overnight®",cost:null},
   ];
   const localQuotes=()=>quoteRates(shipment).filter(q=>q.carrier==="FedEx");
+  /* Quick quote pre-fill: whatever is already typed here (boxes, ZIPs, signature, insurance,
+     Saturday) rides along when Quick quote opens. Published on content change only — the ts
+     lets Quick quote tell "Ship was edited since my last pre-fill" from "nothing new". */
+  useEffect(()=>{ try{ window.__scShipSnap={ts:Date.now(),fromZip:originZip||"",toZip:String(receiver.zip||"").trim(),residential:!!residential,sigOption:sigOption||"none",saturday:!!saturday,insurance:insurance||"",pieces:pieces.map(p=>({weight:p.weight,oz:p.oz,L:p.L,W:p.W,H:p.H}))}; }catch(e){} },[JSON.stringify(pieces.map(p=>[p.weight,p.oz,p.L,p.W,p.H])),receiver.zip,residential,sigOption,saturday,insurance,originZip]);
   const [rateSrc,setRateSrc]=useState({rates:[],live:false,loading:false,error:null});
   // FedEx transit times (committed days/dates) via the FedEx API
   const [fxTransit,setFxTransit]=useState({});
@@ -8654,6 +8658,21 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
   const saturday=!!F.saturday;const setSaturday=(v)=>upF({saturday:v});
   const insurance=F.insurance||"";const setInsurance=(v)=>upF({insurance:v});
   const clearQuote=()=>setQqForm({...QQ_BLANK,pieces:[{weight:"",L:"",W:"",H:"",oz:""}]});
+  /* Pre-fill from the Ship tab: if anything is typed there (a box weight/dims or a destination
+     ZIP), pull it in on open. A snapshot is only applied ONCE per Ship edit (_seedFrom ts), so
+     reopening Quick quote without touching Ship keeps whatever you changed here; an untouched
+     Ship form leaves Quick quote exactly as it was (blank or your last quote). */
+  useEffect(()=>{ try{
+    const s=typeof window!=="undefined"?window.__scShipSnap:null;
+    if(!s||!s.ts)return;
+    if(qqForm&&qqForm._seedFrom===s.ts)return;   // this Ship edit already pulled in
+    const hasPiece=(s.pieces||[]).some(p=>p&&((+p.weight||0)>0||(+p.oz||0)>0||(+p.L||0)>0||(+p.W||0)>0||(+p.H||0)>0));
+    const hasZip=/^\d{5}/.test(String(s.toZip||""));
+    if(!hasPiece&&!hasZip)return;   // nothing typed on Ship — leave Quick quote alone
+    setQqForm({...QQ_BLANK,_seedFrom:s.ts,toZip:s.toZip||"",residential:s.residential!==false,sigOption:s.sigOption||"none",saturday:!!s.saturday,insurance:s.insurance||"",
+      pieces:(s.pieces&&s.pieces.length?s.pieces:[{}]).map(p=>({weight:p.weight??"",oz:p.oz??"",L:p.L??"",W:p.W??"",H:p.H??""}))});
+    if(s.fromZip)setFromZip(s.fromZip);
+  }catch(e){} },[]);
   const pw=(p)=>Math.round(((+p.weight||0)+(+p.oz||0)/16)*1000)/1000;
   const setPiece=(i,patch)=>setPieces(ps=>ps.map((p,j)=>j===i?{...p,...patch}:p));
   const addPiece=()=>setPieces(ps=>[...ps,{weight:"",L:"",W:"",H:"",oz:""}]);
@@ -8689,7 +8708,7 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
   const QQ_SKELETON=[["fedex_ground","FedEx Ground®"],["fedex_home","FedEx Home Delivery®"],["fedex_saver","FedEx Express Saver®"],["fedex_2day","FedEx 2Day®"],["fedex_std","FedEx Standard Overnight®"],["fedex_prio","FedEx Priority Overnight®"]].map(([k,l])=>({key:k,carrier:"FedEx",label:l,cost:null}));
   const _qqHs=new Set(cz(settings||{}).hiddenServices||[]);
   const _qqBs=new Set((effClient&&effClient.blockedServices)||[]);
-  const quotes=useMemo(()=>{const liveOR=rateSrc.live&&rateSrc.rates.some(q=>q._oneRate||/^or_/.test(String(q.key||"")));return [...(rateSrc.rates.length?rateSrc.rates:QQ_SKELETON).filter(q=>q.carrier==="FedEx"&&!_qqHs.has(canonSvc(q.label))&&!_qqBs.has(canonSvc(q.label))).map(q=>{const _p={};const _sell=rateSellFor(q.cost,q.label,{rules:rateRules,client:effClient,list:q.list,listBase:q.listBase,surcharges:q.surcharges,fromZip,toZip,weight:ruleWeightFor(shipPieces,q.label),_parts:_p});return {...q,sell:_sell,_sellParts:_p.fees?_p:undefined};}),...(liveOR?[]:qqOrRates).filter(q=>!_qqHs.has(canonSvc(q.label))&&!_qqBs.has(canonSvc(q.label)))].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:rateSrc.live?"none":sigOption,saturday,insurance:rateSrc.live?"":insurance,fees:surchargeFees(rateRules,effClient)})).sort((a,b)=>(a.sell||0)-(b.sell||0));},[rateSrc,effClient,rateRules,fxTransit,qqOrRates,sigOption,saturday,insurance,fromZip,toZip,JSON.stringify(pieces)]);
+  const quotes=useMemo(()=>{const liveOR=rateSrc.live&&rateSrc.rates.some(q=>q._oneRate||/^or_/.test(String(q.key||"")));const _rows=[...(rateSrc.rates.length?rateSrc.rates:QQ_SKELETON).filter(q=>q.carrier==="FedEx"&&!_qqHs.has(canonSvc(q.label))&&!_qqBs.has(canonSvc(q.label))).map(q=>{const _p={};const _sell=rateSellFor(q.cost,q.label,{rules:rateRules,client:effClient,list:q.list,listBase:q.listBase,surcharges:q.surcharges,fromZip,toZip,weight:ruleWeightFor(shipPieces,q.label),_parts:_p});return {...q,sell:_sell,_sellParts:_p.fees?_p:undefined};}),...(liveOR?[]:qqOrRates).filter(q=>!_qqHs.has(canonSvc(q.label))&&!_qqBs.has(canonSvc(q.label)))].map(q=>{const m=fxTransit[canonSvc(q.label)];const real=!!(m&&(m.days!=null||m.date));return {...q,fxDays:m?m.days:null,fxDate:real?m.date:undefined,fxLive:real};}).map(q=>applyAccessorials(q,{signatureOption:rateSrc.live?"none":sigOption,saturday,insurance:rateSrc.live?"":insurance,fees:surchargeFees(rateRules,effClient)}));return cleanServiceList(_rows,{intl:false,residential}).sort((a,b)=>(a.sell||0)-(b.sell||0));},[residential,rateSrc,effClient,rateRules,fxTransit,qqOrRates,sigOption,saturday,insurance,fromZip,toZip,JSON.stringify(pieces)]);
   const hasExpress=quotes.some(q=>{const l=String(q.label||"").toLowerCase();return /(overnight|2\s?day|express saver)/.test(l);});
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-8 bg-stone-900/40 backdrop-blur-sm overflow-auto" onClick={onClose}>

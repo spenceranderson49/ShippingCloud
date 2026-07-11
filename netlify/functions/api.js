@@ -215,7 +215,11 @@ exports.handler = async (event) => {
         client: client.name, _src: "api", _test: isTest || undefined,
       };
       if (isTest) rec.status = "Test label";
+      /* live dashboard array (best-effort; can lose a record under a concurrent write) */
       try { const cur = await getStore(shipStoreKey(client, isTest)); const arr = (cur.ok && Array.isArray(cur.value)) ? cur.value : []; await putStore(shipStoreKey(client, isTest), [rec, ...arr].slice(0, 5000)); } catch (e) {}
+      /* durable per-record billing row — its own key, so NO concurrent booking can clobber it.
+         /v1/billing + /v1/invoices reconcile from these so a booked label is ALWAYS billable (F2). */
+      if (!isTest) { putStore("u/api_" + client.id + "/rec_" + rec.id, { id: rec.id, date: rec.date, tracking: rec.tracking, service: rec.service, reference: rec.reference || "", sell: rec.sell, status: "Label created" }).catch(() => {}); }
       if (res.labelPdfBase64) { putStore(labelStoreKey(client, rec.id), { pdf: res.labelPdfBase64, tracking: rec.tracking, created: new Date().toISOString() }).catch(() => {}); }
       const resp = { test: isTest || undefined, label_id: String(rec.id), tracking_number: rec.tracking, tracking_url: "https://www.fedex.com/fedextrack/?trknbr=" + encodeURIComponent(rec.tracking), service_code: sc, service: hit.label, charge: { amount: priced.amount, currency: "USD" }, label_pdf_base64: res.labelPdfBase64 || null };
       fireHooks(client, "label.created", { label_id: resp.label_id, tracking_number: resp.tracking_number, service_code: sc, charge: resp.charge, reference: order.reference || null, test: isTest || undefined });
@@ -421,8 +425,13 @@ exports.handler = async (event) => {
 
     /* ── GET /v1/billing/summary · GET /v1/invoices?month=YYYY-MM (on-the-fly, when none issued) ── */
     if ((seg[0] === "billing" || seg[0] === "invoices") && method === "GET") {
-      const cur = await getStore(shipStoreKey(client, isTest));
-      const arr = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+      let arr = [];
+      if (!isTest) {
+        /* reconcile from the durable per-record rows so a label lost from the array is still billed */
+        const rr = await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=like." + encodeURIComponent("u/api_" + client.id + "/rec_") + "*&select=value");
+        if (rr.ok && Array.isArray(rr.data)) arr = rr.data.map((x) => x.value).filter((v) => v && v.status !== "Voided");
+      }
+      if (!arr.length) { const cur = await getStore(shipStoreKey(client, isTest)); arr = (cur.ok && Array.isArray(cur.value)) ? cur.value : []; }
       const inMonth = (x, ym) => { const t = (typeof x.id === "number" && x.id > 1e12) ? new Date(x.id) : new Date(x.date); return !isNaN(t) && t.toISOString().slice(0, 7) === ym; };
       const month = S(qs.month || new Date().toISOString().slice(0, 7));
       const rows = arr.filter((x) => x.status !== "Voided" && inMonth(x, month));

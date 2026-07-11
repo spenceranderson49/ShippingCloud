@@ -80,7 +80,7 @@ const FEATURE_CATALOG=[
   {id:"addresses",label:"Address Book",desc:"Saved contacts",default:true},
   {id:"pickups",label:"Pickups",desc:"Schedule carrier pickups",default:true},
   {id:"batch",label:"Batch",desc:"Rate & print in bulk",default:true},
-  {id:"invoices",label:"Invoice Audit",desc:"Carrier invoice auditing",default:true},
+  {id:"invoices",label:"Invoice Audit",desc:"Carrier invoice auditing",default:false},   /* off unless the admin grants it per login */
   {id:"rules",label:"Autopilot",desc:"Autopilot Mode — automation rules",default:true},
   {id:"scan",label:"Scan",desc:"Barcode scan station",default:true},
   {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:true},
@@ -106,7 +106,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v442";
+const BUILD_TAG="addr-v443";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2049,6 +2049,9 @@ function applyAccessorials(q, opts){
    legacy flat markup. Min $ is a floor on the final sell price. Rules attach to the
    CUSTOMER (clientId), so every login a company creates inherits them automatically. */
 const DEFAULT_RATE_RULES={profiles:[{id:"default",name:"Default",services:{},surcharges:{}}],assign:{},baseCosts:{}};
+/* Default service set for a NEW customer (Spencer's spec): everything on EXCEPT 2Day A.M.,
+   Intl Priority Express, Intl First, all freight, and all OneRate variants but 2Day OneRate. */
+const DEFAULT_BLOCKED_SERVICES=["2day_am","intl_priority_express","intl_first","first_overnight_freight","1day_freight","2day_freight","3day_freight","intl_priority_freight","intl_economy_freight","or_first_overnight","or_priority_overnight","or_standard_overnight","or_2day_am","or_express_saver"];
 const OR_RATE_SVCS=[["first_overnight","First Overnight"],["priority_overnight","Priority Overnight"],["standard_overnight","Standard Overnight"],["2day_am","2Day A.M."],["2day","2Day"],["express_saver","Express Saver"]];
 const ONE_RATE_LOCK_SVCS=[["or_first_overnight","FedEx First Overnight® OneRate"],["or_priority_overnight","FedEx Priority Overnight® OneRate"],["or_standard_overnight","FedEx Standard Overnight® OneRate"],["or_2day_am","FedEx 2Day® A.M. OneRate"],["or_2day","FedEx 2Day® OneRate"],["or_express_saver","FedEx Express Saver® OneRate"]].map(([k,l])=>({k,l}));   // same shape as svcQuick (RATE_SERVICES.fedex items)
 const OR_RATE_PKGS=[["envelope","Envelope"],["pak","Pak"],["xs_box","Extra Small Box"],["small_box","Small Box"],["medium_box","Medium Box"],["large_box","Large Box"],["xl_box","Extra Large Box"],["tube","Tube"]];
@@ -3323,7 +3326,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
   const secPolicyState=(sid)=>{ if(!lg.length)return "on"; const vals=lg.map(u=>String(((featureFlags[u.id]||{})._secPolicy||{})[sid]||"on")); return vals.every(v=>v===vals[0])?vals[0]:"mixed"; };
   const setCompanySecPolicy=(sid,val)=>{ setFeatureFlags&&setFeatureFlags(ff=>{ const next={...ff}; lg.forEach(u=>{ const cur=next[u.id]||{}; next[u.id]={...cur,_secPolicy:{...(cur._secPolicy||{}),[sid]:val}}; }); return next; }); say("Settings pages updated for all logins."); };
   const supplies=pf.supplies||{};
-  const TABS=[["profile","Profile"],["address","Address"],["logins","Logins ("+lg.length+")"],["rates","Rates"],["fedex","FedEx tier"],["labels","Label preferences"],["supplies","Supplies"],["features","Features"],["creds","Credentials"],["notes","Notes"]];
+  const TABS=[["profile","Profile"],["address","Address"],["logins","Logins ("+lg.length+")"],["rates","Rates"],["services","Services"],["fedex","FedEx tier"],["labels","Label preferences"],["supplies","Supplies"],["features","Features"],["creds","Credentials"],["notes","Notes"]];
   const svcQuick=RATE_SERVICES.fedex.filter(s=>!s.or);
   return (<div className="space-y-4">
     <div className="flex flex-wrap items-center gap-3">
@@ -3494,16 +3497,6 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       </div>
       <p className="text-[11px] text-stone-400">Every login under {c.name} inherits this automatically.{openSection&&<> Advanced (shared across all customers): <button onClick={()=>openSection("rates")} className="text-[#0086E0] hover:underline">imported cost &amp; FedEx list tables, zone overrides, weight breaks, printable rate sheets →</button></>}</p>
       <div className="pt-1">
-        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Services {c.name}'s logins are allowed to turn on themselves</div>
-        <p className="text-[11px] text-stone-500 mb-2">Uncheck a service to lock it off platform-wide for this customer — it disappears as a real quote option and greys out (can’t be re-enabled) on their own Settings → Customize → Services screen, no matter what they try to toggle. Checked = the customer’s own toggle controls it. One Rate variants are listed separately from their base service — locking Priority Overnight doesn’t touch Priority Overnight OneRate, and vice versa.</p>
-        <div className="border border-stone-200 rounded-lg bg-white p-3 grid sm:grid-cols-2 lg:grid-cols-3 gap-1.5 max-h-64 overflow-y-auto">
-          {svcQuick.concat(ONE_RATE_LOCK_SVCS).map(sv=>{const blocked=(c.blockedServices||[]).includes(sv.k);return (<label key={sv.k} className="flex items-center gap-1.5 text-sm text-stone-700 cursor-pointer">
-            <input type="checkbox" checked={!blocked} onChange={e=>{const cur=new Set(c.blockedServices||[]);e.target.checked?cur.delete(sv.k):cur.add(sv.k);upClient({blockedServices:[...cur]});}} className="accent-[#0086E0]"/>
-            <span className={blocked?"line-through text-stone-400":""}>{sv.l}</span>
-          </label>);})}
-        </div>
-      </div>
-      <div className="pt-1">
         <div className="flex items-center justify-between mb-1.5">
           <div className="text-[10px] uppercase tracking-widest text-stone-400">Accessorial markups — {prof.name} profile</div>
           <Input value={surQ} onChange={e=>setSurQ(e.target.value)} placeholder="Search accessorials…" className="w-44"/>
@@ -3535,6 +3528,21 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         <div className="flex-1"/>
         <button onClick={undoRates} disabled={!ratesDirty} className="text-[13px] text-stone-600 disabled:opacity-40 px-3 py-2 rounded-lg border border-stone-200 hover:bg-stone-50">Undo changes</button>
         <button onClick={saveRates} className="text-[15px] font-bold text-white bg-emerald-600 px-10 py-3 rounded-lg hover:bg-emerald-700 flex items-center gap-2 shadow-md"><Check className="w-5 h-5"/>Save rates</button>
+      </div>
+    </div>}
+
+    {tab==="services"&&<div className="space-y-3">
+      <div className="text-sm font-semibold text-stone-800">Services — {c.name}</div>
+      <p className="text-[11px] text-stone-500">Checked = offered to this customer. Uncheck to lock a service off platform-wide for them — it disappears as a quote option and greys out on their own Settings screen. New customers start with the standard set (2Day A.M., Intl Priority Express/First, freight, and all OneRate except 2Day OneRate off).</p>
+      <div className="flex items-center gap-3">
+        <button onClick={()=>upClient({blockedServices:[...DEFAULT_BLOCKED_SERVICES]})} className="text-[11px] text-[#0086E0] hover:underline">Reset to standard set</button>
+        <button onClick={()=>upClient({blockedServices:[]})} className="text-[11px] text-stone-400 hover:underline">Enable everything</button>
+      </div>
+      <div className="border border-stone-200 rounded-lg bg-white p-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+        {svcQuick.concat(ONE_RATE_LOCK_SVCS).map(sv=>{const blocked=(c.blockedServices||[]).includes(sv.k);return (<label key={sv.k} className="flex items-center gap-1.5 text-sm text-stone-700 cursor-pointer">
+          <input type="checkbox" checked={!blocked} onChange={e=>{const cur=new Set(c.blockedServices||[]);e.target.checked?cur.delete(sv.k):cur.add(sv.k);upClient({blockedServices:[...cur]});}} className="accent-[#0086E0]"/>
+          <span className={blocked?"line-through text-stone-400":""}>{sv.l}</span>
+        </label>);})}
       </div>
     </div>}
 
@@ -3682,7 +3690,7 @@ function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureF
       status:(a,b)=>String(a.status||"active").localeCompare(String(b.status||"active"))}[sort];
     return [...cs].sort(cmp||(()=>0));
   },[clients,users,q,sort,rules]);
-  const createCustomer=()=>{if(!nf.name)return;const id="c"+Date.now();setClients(p=>[...p,{id,name:nf.name,contact:nf.contact,email:nf.email,phone:nf.phone,origin:nf.origin,markup:+nf.markup||0,status:"active",since:new Date().toISOString().slice(0,7),plan:"Standard"}]);setNf({name:"",contact:"",email:"",phone:"",origin:"",markup:15});setAdding(false);onOpenCustomer&&onOpenCustomer(id);};
+  const createCustomer=()=>{if(!nf.name)return;const id="c"+Date.now();setClients(p=>[...p,{id,name:nf.name,contact:nf.contact,email:nf.email,phone:nf.phone,origin:nf.origin,markup:+nf.markup||0,status:"active",since:new Date().toISOString().slice(0,7),plan:"Standard",blockedServices:[...DEFAULT_BLOCKED_SERVICES]}]);setNf({name:"",contact:"",email:"",phone:"",origin:"",markup:15});setAdding(false);onOpenCustomer&&onOpenCustomer(id);};
   const moveLogin=(uid,cid)=>setUsers(us=>us.map(x=>x.id===uid?{...x,clientId:cid||null}:x));
   return (<div className="space-y-3">
     <div className="flex flex-wrap items-end gap-3">
@@ -4370,7 +4378,7 @@ function PlatformAccountsAdmin({settings,setSettings}){
 function CustomersAdmin({clients,setClients,statsFor,openC,setOpenC}){
   const [adding,setAdding]=useState(false);
   const [f,setF]=useState({name:"",contact:"",email:"",phone:"",origin:"",markup:15});
-  const create=()=>{if(!f.name)return;setClients(p=>[...p,{id:"c"+Date.now(),name:f.name,contact:f.contact,email:f.email,phone:f.phone,origin:f.origin,markup:+f.markup||0,status:"active",since:new Date().toISOString().slice(0,7),plan:"Standard"}]);setF({name:"",contact:"",email:"",phone:"",origin:"",markup:15});setAdding(false);};
+  const create=()=>{if(!f.name)return;setClients(p=>[...p,{id:"c"+Date.now(),name:f.name,contact:f.contact,email:f.email,phone:f.phone,origin:f.origin,markup:+f.markup||0,status:"active",since:new Date().toISOString().slice(0,7),plan:"Standard",blockedServices:[...DEFAULT_BLOCKED_SERVICES]}]);setF({name:"",contact:"",email:"",phone:"",origin:"",markup:15});setAdding(false);};
   const setMarkup=(id,v)=>setClients(cs=>cs.map(c=>c.id===id?{...c,markup:+v||0}:c));
   const setClientEng=(id,patch)=>setClients(cs=>cs.map(c=>c.id===id?{...c,england:{...(c.england||{}),...patch}}:c));
   const setStatus=(id,v)=>setClients(cs=>cs.map(c=>c.id===id?{...c,status:v}:c));

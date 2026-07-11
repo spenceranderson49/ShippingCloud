@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v466";
+const BUILD_TAG="addr-v467";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -1634,7 +1634,7 @@ function slipFromShipment(sh){
   const r=sh.recipient||{};
   return {company:(sh.sender&&(sh.sender.company||sh.sender.name))||BRAND.product+" shipper",orderName:sh.reference||"",date:sh.date||"",
     to:{name:r.name||"",company:r.company||"",address1:r.address1||"",city:r.city||"",state:r.state||"",zip:r.zip||""},
-    items:parseItemsList({items:sh.items||""}),note:sh.note||"",tracking:sh.tracking||"",service:sh.service||""};
+    items:parseItemsList({items:sh.items||"",lineItems:sh.lineItems}),note:sh.note||"",tracking:sh.tracking||"",service:sh.service||""};
 }
 function packingSlipHTML(slips){
   /* custom thank-you + footer come from Settings → Customizations via SLIP_OPTS */
@@ -2968,7 +2968,7 @@ function Login({users,onLogin,brand}){
   };
   const signup=()=>{
     if(!name||!email||!pw){setErr("Fill in your name, email, and a password.");return;}
-    setNote("Request received — you'll get an email as soon as your account is approved.");
+    setNote("Request received. You can explore with a demo login below while it's reviewed.");
     setMode("signin");
   };
   return (
@@ -3473,11 +3473,17 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
   const fa=A(c.address||{},upAddr);
   const pf=c.prefs||{};
   const createLogin=()=>{if(!lf.name||!lf.email||!lf.password)return;const _em=lf.email;setUsers(p=>[...p,{id:"u"+Date.now(),name:lf.name,email:_em,role:"customer",clientId:cid,status:"active",password:lf.password,lastLogin:"—",createdAt:new Date().toISOString()}]);setLf({name:"",email:"",password:""});
-    if(CLOUD.mode==="cloud"){ /* welcome email rides the reset-link flow; wait out the debounced cloud write so the server can find the new login */
-      setTimeout(()=>{cloudCall({action:"requestReset",welcome:true,token:CLOUD.token,email:_em});},4000);
+    if(CLOUD.mode==="cloud"){ /* fire the welcome AFTER the debounced cloud write is CONFIRMED (sc-saved carries the keys) — a fixed delay lost the race when a save retried */
+      let _fired=false;
+      const _fire=async()=>{ if(_fired)return; _fired=true; try{window.removeEventListener("sc-saved",_onSaved);}catch(e){}
+        const r=await cloudCall({action:"requestReset",welcome:true,token:CLOUD.token,email:_em});
+        if(r&&r.found===false)say("Login saved, but the welcome email couldn't find it yet — use the Reset email button in a minute."); };
+      const _onSaved=(e)=>{ if(((e.detail&&e.detail.keys)||[]).includes("users"))setTimeout(_fire,600); };
+      window.addEventListener("sc-saved",_onSaved);
+      setTimeout(_fire,12000);
       say("Login created — welcome email with a set-password link is on its way.");
     } else say("Login created.");};
-  const sendReset=async(u)=>{const r=await cloudCall({action:"requestReset",email:u.email,token:CLOUD.token});window.alert(r&&r.configured===false?"Email sending isn't set up on this site yet (RESEND_API_KEY).":"Password reset link sent to "+u.email+" (valid 1 hour).");};
+  const sendReset=async(u)=>{const r=await cloudCall({action:"requestReset",email:u.email,token:CLOUD.token});window.alert(r&&r.configured===false?"Email sending isn't set up on this site yet (RESEND_API_KEY).":(r&&r.found===false)?"That login isn't in the cloud yet (or is disabled) — no email was sent.":"Password reset link sent to "+u.email+" (valid 1 hour).");};
   const setPw=async(u)=>{const np=window.prompt("New password for "+u.email+":");if(!np)return;if(CLOUD.mode==="cloud"){const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});window.alert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update."));}else{setUsers(us=>us.map(x=>x.id===u.id?{...x,password:np}:x));window.alert("Password updated (local).");}};
   const dedicated=()=>{const id="p"+Date.now();upRules({profiles:[...profiles,{id,name:c.name,services:JSON.parse(JSON.stringify(prof.services||{})),surcharges:JSON.parse(JSON.stringify(prof.surcharges||{}))}],assign:{...assign,[cid]:id}});say("Dedicated profile created.");};
   const companyFeatureState=(fid)=>{if(!lg.length)return "none";const on=lg.filter(u=>featureOn(fid,u,featureFlags[u.id])).length;return on===0?"off":on===lg.length?"on":"mixed";};
@@ -3705,6 +3711,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       const applyTierToRates=()=>{
         const d=+fx.listDiscount;
         if(!(d>0))return window.alert("Set an overall FedEx list discount % first — that's what gets applied.");
+        if(prof.id==="default")return window.alert("This customer prices from the SHARED Default profile — applying the tier here would reprice every Default customer. Open the Rates tab and give them their own profile first.");
         if(!window.confirm("Set every FedEx service on "+c.name+"'s profile to FedEx list − "+d+"%? (Per-service overrides below win where set.)"))return;
         const svcs={...(prof.services||{})};
         svcQuick.forEach(sv=>{const per=+svcDisc[sv.k];const use=(per>0)?per:d;svcs[sv.k]={...(svcs[sv.k]||{}),basis:"list",pct:use};});
@@ -3767,7 +3774,8 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
 
     {tab==="shipments"&&(()=>{
       const uidSet=new Set(lg.map(u=>u.id));
-      const rows=(ships||[]).filter(x=>uidSet.has(x._uid)||(c&&String(x.client||"").toLowerCase()===String(c.name||"").toLowerCase())).slice(0,300);
+      const _ts=(x)=>(typeof x.id==="number"&&x.id>1e12)?x.id:(new Date(x.date).getTime()||0);
+      const rows=(ships||[]).filter(x=>uidSet.has(x._uid)||(c&&String(x.client||"").toLowerCase()===String(c.name||"").toLowerCase())).sort((a,b)=>_ts(b)-_ts(a)).slice(0,300);
       return (<div className="space-y-2">
         <div className="text-[11px] text-stone-500">Everything this customer's logins have shipped (newest first). Prices are what THEY paid; margin is yours.</div>
         <div className="border border-stone-200 rounded-lg overflow-x-auto">
@@ -4662,7 +4670,7 @@ function CustomizationsAdmin({users,clients,featureFlags={},setFeatureFlags,cust
   </div>);
 }
 function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSignupRequests,featureFlags={},setFeatureFlags,customFeatures=[],fedexRequests=[],setFedexRequests,companyAdminRequests=[],setCompanyAdminRequests}){
-  const [rateRules,setRateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 — show each customer's rate profile here
+  const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 — show each customer's rate profile here (read-only since v459)
   const [rpOpen,setRpOpen]=useState(null);
   const CATALOG=[...FEATURE_CATALOG,...customFeatures.map(c=>({...c,custom:true}))];
   const fullAdmin=!(currentUser&&currentUser.adminPerms&&Array.isArray(currentUser.adminPerms.sections));
@@ -4974,6 +4982,7 @@ function enterDemo(){
 /* v135: the old seed shipped with a hardcoded sender (Matt Goeckeritz / Riley Blake Designs).
    Accounts that persisted it still carry it — scrub it from every read and write. */
 function scrubLegacyDefaults(s){
+  try{ if(s&&Array.isArray(s.thirdPartyAccts)&&s.thirdPartyAccts.some(a=>a&&a.label==="England FedEx"&&String(a.account)==="20601652")){ s={...s,thirdPartyAccts:s.thirdPartyAccts.filter(a=>!(a&&a.label==="England FedEx"&&String(a.account)==="20601652"))}; } }catch(e){}
   if(!s)return s;
   let next=s,changed=false;
   const sn=s.sender||{};
@@ -6417,8 +6426,12 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   /* Signature starts FRESH on every page open — it used to persist the last choice, so one
      Direct-signature label quietly made every later shipment signature-required. The
      Customizations default (defaultSignature) still seeds it; New shipment resets it too. */
-  const [signature,setSig]=useState(!!(cz(settings).defaultSignature&&cz(settings).defaultSignature!=="none"));
-  const [sigOption,setSigOption]=useState(cz(settings).defaultSignature||"none");
+  const [signature,setSig]=usePersist("ship.signature",false);
+  const [sigOption,setSigOption]=usePersist("ship.sigOption","none");
+  /* Signature starts at the default (usually None) once per real PAGE LOAD — but survives tab
+     hops. A plain useState reset it on every tab switch (Ship remounts per tab), so checking an
+     order on Orders and coming back silently dropped a chosen Direct signature. */
+  useEffect(()=>{ if(window.__scSigBooted)return; window.__scSigBooted=true; const d=cz(settings).defaultSignature||"none"; setSigOption(d); setSig(d!=="none"); },[]);
   const [saturday,setSat]=usePersist("ship.saturday",false);
   const [orderSort,setOrderSort]=useState("date");
   const [ordersOpen,setOrdersOpen]=usePersist("ship.ordersOpen",false);
@@ -6611,7 +6624,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const setOverride=(on)=>{ setResTouched(on); if(!on) setVerifyNonce(x=>x+1); };  // turning override off re-asks FedEx
 
   const [packNote,setPackNote]=useState(null);
-  const applyOrder=(o)=>{setHfArmed(o.id);setSelectedOrder(o.id);setReference(o.name);setInvoiceNo("");setPoNo("");setPieces(ps=>ps.map((p,j)=>j===0?{...p,orBox:undefined}:p));setReceiver({...empty,name:o.customer||"",company:o.company||"",zip:o.zip||"",state:o.state||"",city:o.city||"",address1:o.address1||"",phone:o.phone||"",email:o.email||""});
+  const applyOrder=(o)=>{setHfArmed(o.id);setSelectedOrder(o.id);setReference(o.name);setInvoiceNo("");setPoNo("");setDepartment("");setPieces(ps=>ps.map((p,j)=>j===0?{...p,orBox:undefined}:p));setReceiver({...empty,name:o.customer||"",company:o.company||"",zip:o.zip||"",state:o.state||"",city:o.city||"",address1:o.address1||"",phone:o.phone||"",email:o.email||""});
     /* RESET the per-shipment extras BEFORE the auto rules run — otherwise the previous order's
        declared value / signature silently carry into this order (and hands-free would book it
        with the wrong coverage, no click, no warning). */
@@ -6626,7 +6639,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(custom.autoSigValue>0&&o.total&&(+o.total||0)>=custom.autoSigValue){ const t=custom.autoSigType||"indirect"; setSigOption(t); setSig(t!=="none"); }   // auto-add signature when the order value meets the $ threshold
   };
   useEffect(()=>{ if(!prefill)return;
-    if(prefill.draft){const s=prefill.draft;setSender(s.sender);setReceiver(s.receiver);setReference(s.reference||"");setInvoiceNo(s.invoiceNo||"");setPoNo(s.poNo||"");setPieces(s.pieces||[{weight:3,L:12,W:9,H:4}]);setRes(s.residential);setSig(s.signature);setBillTo(s.billTo);setThirdAcct(s.thirdAcct||"");setInsurance(s.insurance||"");setSelectedOrder(s.selectedOrder||null);if(s.customs)setCustoms(s.customs);clearPrefill();return;}
+    if(prefill.draft){const s=prefill.draft;setSender(s.sender);setReceiver(s.receiver);setReference(s.reference||"");setInvoiceNo(s.invoiceNo||"");setPoNo(s.poNo||"");setPieces(s.pieces||[{weight:3,L:12,W:9,H:4}]);setRes(s.residential);setSigOption(s.sigOption||"none");setSig((s.sigOption||"none")!=="none");setDepartment(s.department||"");setBillTo(s.billTo);setThirdAcct(s.thirdAcct||"");setInsurance(s.insurance||"");setSelectedOrder(s.selectedOrder||null);if(s.customs)setCustoms(s.customs);clearPrefill();return;}
     if(prefill.receiver)setReceiver({...empty,...prefill.receiver}); if(prefill.weight)setPieces([{weight:prefill.weight,L:12,W:9,H:4}]); if(prefill.reference)setReference(prefill.reference); setSelectedOrder(prefill.fromOrderId||null); if(prefill.fromOrderId&&!prefill.refulfill)setHfArmed(prefill.fromOrderId); /* a RE-label opens un-armed so hands-free can't book it before you've made your changes */ clearPrefill();
   },[prefill]);
 
@@ -6732,7 +6745,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   /* Quick quote pre-fill: whatever is already typed here (boxes, ZIPs, signature, insurance,
      Saturday) rides along when Quick quote opens. Published on content change only — the ts
      lets Quick quote tell "Ship was edited since my last pre-fill" from "nothing new". */
-  useEffect(()=>{ try{ window.__scShipSnap={ts:Date.now(),fromZip:originZip||"",toZip:String(receiver.zip||"").trim(),residential:!!residential,sigOption:sigOption||"none",saturday:!!saturday,insurance:insurance||"",pieces:pieces.map(p=>({weight:p.weight,oz:p.oz,L:p.L,W:p.W,H:p.H}))}; }catch(e){} },[JSON.stringify(pieces.map(p=>[p.weight,p.oz,p.L,p.W,p.H])),receiver.zip,residential,sigOption,saturday,insurance,originZip]);
+  useEffect(()=>{ try{ const snap={fromZip:originZip||"",toZip:String(receiver.zip||"").trim(),residential:!!residential,sigOption:sigOption||"none",saturday:!!saturday,insurance:insurance||"",pieces:pieces.map(p=>({weight:p.weight,oz:p.oz,L:p.L,W:p.W,H:p.H}))}; window.__scShipSnap={...snap,ts:JSON.stringify(snap)}; }catch(e){} },[JSON.stringify(pieces.map(p=>[p.weight,p.oz,p.L,p.W,p.H])),receiver.zip,residential,sigOption,saturday,insurance,originZip]);
   const [rateSrc,setRateSrc]=useState({rates:[],live:false,loading:false,error:null});
   // FedEx transit times (committed days/dates) via the FedEx API
   const [fxTransit,setFxTransit]=useState({});
@@ -6840,7 +6853,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(mq&&mq._oneRate&&mq.packageTypeCode){ try{ applyOneRateBox(mq.packageTypeCode); }catch(e){} }
   },[matched,quotes]);
 
-  const buildRec=(q,carrier,extra)=>({id:Date.now(),date:new Date().toLocaleDateString(),tracking:(extra&&extra.tracking)||newTracking(carrier),carrier,service:q.label,recipient:{...receiver},sender:{...sender},fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,pieces:pieces.map(p=>({...p})),dims:pieces[0],insurance,cost:q.cost,sell:q.sell,rateBase:q.base,rateSurcharges:q.surcharges||[],rateAccessorials:q.accessorials||[],oneRate:!!q._oneRate,billTo,thirdAcct,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference,invoiceNo,poNo,residential,intl,bookNumber:extra&&extra.bookNumber,customs:intl?{...customs,total:customsTotal,ci:"CI-"+rnd(5)}:null});
+  const _orFRec=()=>{try{return orFillMerge({reference:reference||invoiceNo||"",invoiceNo,poNo,department},{}).department||department||"";}catch(e){return department||"";}};
+  const buildRec=(q,carrier,extra)=>({id:Date.now(),date:new Date().toLocaleDateString(),tracking:(extra&&extra.tracking)||newTracking(carrier),carrier,service:q.label,recipient:{...receiver},sender:{...sender},fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,pieces:pieces.map(p=>({...p})),dims:pieces[0],insurance,cost:q.cost,sell:q.sell,rateBase:q.base,rateSurcharges:q.surcharges||[],rateAccessorials:q.accessorials||[],oneRate:!!q._oneRate,billTo,thirdAcct,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference,invoiceNo,poNo,department:_orFRec(),residential,intl,bookNumber:extra&&extra.bookNumber,customs:intl?{...customs,total:customsTotal,ci:"CI-"+rnd(5)}:null});
   const print=async(q,force)=>{
     /* Re-label guard: an order that already has a label must be explicitly confirmed before a new
        one books — the new tracking OVERRIDES what's on Shopify/the store. Preview re-entry
@@ -6872,7 +6886,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(custom.deptRequired&&!custom.hideDept&&!String(department||"").trim())need.push("department");
     if(need.length){
       setRecErrors(need);
-      const labelMap={name:"name",address1:"address",zip:"ZIP",city:"city",state:"state",phone:"a 10-digit phone",email:"email",ref:"a Ref #",invoice:"an Invoice #",po:"a PO #"};
+      const labelMap={name:"name",address1:"address",zip:"ZIP",city:"city",state:"state",phone:"a 10-digit phone",email:"email",ref:"a Ref #",invoice:"an Invoice #",po:"a PO #",department:"a Department"};
       setShipStatus({state:"error",key:q.key,msg:"Receiver needs: "+need.map(k=>labelMap[k]).join(", ")});
       setTimeout(()=>setShipStatus(null),4000);return;
     }
@@ -7012,11 +7026,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   },[custom.autoRulesOnShip,ordersFiltered,rules,originZip]);
   const [naming,setNaming]=useState(false);
   const [draftName,setDraftName]=useState("");
-  const commitDraft=(title)=>{const d={id:Date.now(),label:title||reference||receiver.name||receiver.city||"Untitled",when:new Date().toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}),to:`${receiver.city||""}${receiver.state?", "+receiver.state:""}`,snap:{sender,receiver,reference,invoiceNo,poNo,department,pieces,residential,signature,billTo,thirdAcct,insurance,selectedOrder,customs}};setDrafts(p=>[d,...p]);setNaming(false);setDraftName("");setSaved(true);setTimeout(()=>setSaved(false),1600);};
+  const commitDraft=(title)=>{const d={id:Date.now(),label:title||reference||receiver.name||receiver.city||"Untitled",when:new Date().toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}),to:`${receiver.city||""}${receiver.state?", "+receiver.state:""}`,snap:{sender,receiver,reference,invoiceNo,poNo,department,pieces,residential,signature,sigOption,billTo,thirdAcct,insurance,selectedOrder,customs}};setDrafts(p=>[d,...p]);setNaming(false);setDraftName("");setSaved(true);setTimeout(()=>setSaved(false),1600);};
   const saveDraft=()=>{setDraftName(reference||receiver.name||receiver.city||"");setNaming(true);};
   /* box-logic explanation banner shown while a packed order is loaded */
   const PackNote=()=>packNote?(<div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800 flex items-center gap-2"><Boxes className="w-3.5 h-3.5 shrink-0"/><span className="flex-1">Box logic packed this order: <b>{packNote.boxNames}</b> · {packNote.totalWt} lb billable{packNote.unresolved.length?` · ${packNote.unresolved.length} item${packNote.unresolved.length===1?"":"s"} not in your catalog (weight may be low)`:""} — dims are editable below.</span><button onClick={()=>setPackNote(null)} className="text-emerald-500 hover:text-emerald-700"><X className="w-3.5 h-3.5"/></button></div>):null;
-  const newShipment=()=>{justBookedRef.current=null;setHfArmed(null);setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setDvEach(false);setRes(true);setResTouched(false);setSig(custom.defaultSignature&&custom.defaultSignature!=="none");setSigOption(custom.defaultSignature||"none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");setShipDate(shipDateDefault(settings));};
+  const newShipment=()=>{justBookedRef.current=null;setHfArmed(null);setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setDepartment("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setDvEach(false);setRes(true);setResTouched(false);setSig(custom.defaultSignature&&custom.defaultSignature!=="none");setSigOption(custom.defaultSignature||"none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");setShipDate(shipDateDefault(settings));};
   const addressCheck=(
     <div className="text-xs space-y-2">
       <div className="text-[10px] uppercase tracking-widest text-stone-500 font-semibold flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5"/>Address check</div>
@@ -7184,7 +7198,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           :!ready?<><Calculator className="w-3.5 h-3.5"/>Enter a destination ZIP and weight — rates price automatically</>
           :rateSrc.loading?<><Loader2 className="w-3.5 h-3.5 animate-spin"/>Fetching live rates…</>
           :rateSrc.live?<><Wifi className="w-3.5 h-3.5"/>Live rates from your FedEx account</>
-          :<><Calculator className="w-3.5 h-3.5"/>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""} — turn on live rates in Settings → Carrier accounts to price with your real account</>}
+          :<><Calculator className="w-3.5 h-3.5"/>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""}{currentUser&&currentUser.role==="admin"?" — turn on live rates in Settings → Carrier accounts":" — live pricing isn't connected right now"}</>}
         </div>}
         {/* Rate-plumbing diagnostic — ADMIN ONLY: it names the cost source and credential state,
             which no customer (or demo visitor) should ever see. */}
@@ -7792,7 +7806,7 @@ function LiveEstRate({o,client,settings,rateRules,ruleset}){
     let pref=null;
     try{ const enabled=(ruleset||[]).filter(r=>r&&r.enabled); if(enabled.length){ const rr=runRuleEngine(enabled,[o],fromZip); const r0=rr.results&&rr.results[0]; if(r0&&r0.fires&&r0.fires.length&&r0.view&&r0.view.selectedService)pref=r0.view.selectedService; } }catch(e){}
     const wt=+o.weight||1;
-    const sellCtx=(list,sur,lb)=>({rules:rateRules,client,list,listBase:lb,surcharges:sur,fromZip,toZip:o.zip,weight:Math.max(1,Math.ceil(wt))});   /* FedEx bills the next full pound */
+    const sellCtx=(list,sur,lb,label)=>({rules:rateRules,client,list,listBase:lb,surcharges:sur,fromZip,toZip:o.zip,weight:ruleWeightFor([{weight:wt,L:12,W:9,H:4}],label||"FedEx Ground")});   /* billable weight on the same default box the quote priced */
     const pickFrom=(qs,live)=>{
       if(!qs||!qs.length)return {none:true};
       const hit=pref?qs.filter(q=>svcPrefHit(pref,q.label)).sort((a,b)=>(a.cost||0)-(b.cost||0))[0]:null;
@@ -7801,7 +7815,7 @@ function LiveEstRate({o,client,settings,rateRules,ruleset}){
     };
     const finish=(val)=>{ const ks=Object.keys(EST_CACHE); if(ks.length>2000)delete EST_CACHE[ks[0]]; EST_CACHE[key]=val; if(!cancel)setV(val); };
     const offline=()=>{ try{
-      const qs=quoteRates({fromZip,toZip:o.zip,pieces:[{weight:wt,L:12,W:9,H:4}],residential:true}).filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:rateSellFor(q.cost,q.label,sellCtx(undefined))}));
+      const qs=quoteRates({fromZip,toZip:o.zip,pieces:[{weight:wt,L:12,W:9,H:4}],residential:true}).filter(q=>q.carrier==="FedEx").map(q=>({...q,sell:rateSellFor(q.cost,q.label,sellCtx(undefined,undefined,undefined,q.label))}));
       finish(pickFrom(qs,false));
     }catch(e){ finish({none:true}); } };
     const eng=englandFor(client,settings);
@@ -7810,7 +7824,7 @@ function LiveEstRate({o,client,settings,rateRules,ruleset}){
         try{
           const res=await ratesForOrder(o,{residential:true,weightLb:wt,fromZip,sender:settings&&settings.sender},eng);
           const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);
-          const qs=((res&&res.rates)||[]).filter(q=>!hs.has(canonSvc(q.label))&&!bs.has(canonSvc(q.label))).filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk([{weight:wt}])).map(q=>({...q,sell:rateSellFor(q.cost,q.label,sellCtx(q.list,q.surcharges,q.listBase))}));
+          const qs=((res&&res.rates)||[]).filter(q=>!hs.has(canonSvc(q.label))&&!bs.has(canonSvc(q.label))).filter(q=>canonSvc(q.label)!=="ground_economy"||groundEconOk([{weight:wt}])).map(q=>({...q,sell:rateSellFor(q.cost,q.label,sellCtx(q.list,q.surcharges,q.listBase,q.label))}));
           if(qs.length)finish(pickFrom(qs,true)); else finish({none:true});   // live account: no rate = show "—", never an offline guess
         }catch(e){ finish({none:true}); }
         finally{ estDone(); }
@@ -8056,7 +8070,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
     const carrier=carrierOf(qq.label);
     if(!canBook){ // demo mode: record locally
       const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:newTracking(carrier),carrier,service:qq.label,recipient:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings?.sender||{})},fromZip,toZip:o.zip,weight:+weight,pieces:[{weight:+weight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference:o.name};
-      onShipped(rec,o.id); setBought(qq.key); setStatus({state:"demo",msg:"Demo only — no real label was created."}); return;
+      onShipped(rec,o.id); setBought(qq.key); setStatus({state:"demo",msg:(CLOUD.user&&CLOUD.user.demo)||(typeof window!=="undefined"&&(lsGet("session",{})||{}).demo)?"Demo only — no real label was created.":"Live booking isn't connected right now — no label was created. Contact support."}); return;
     }
     const need=[]; if(!o.customer&&!o.company)need.push("name"); if(String(o.phone||"").replace(/\D/g,"").length<10)need.push("10-digit phone"); if(!o.email)need.push("email");
     if(need.length){ setStatus({state:"error",msg:"FedEx needs the receiver's "+need.join(", ")+". Edit the order or open in Ship tab."}); return; }
@@ -8278,16 +8292,16 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
     if(!qq)return;
     if(canBook&&(!qq.carrierCode||!qq.serviceCode)){ setRateNonce(n=>n+1); setStatus({state:"error",msg:"That rate was stale — refreshing live rates now. Pick the service again in a moment."}); return; }
     const carrier=carrierOf(qq.label);
-    const baseRec={service:qq.label,recipient:{name:rcv.name,company:rcv.company,zip:rcv.zip,state:rcv.state,city:rcv.city,address1:rcv.address1,phone:rcv.phone,email:rcv.email},sender:{...(settings?.sender||{})},fromZip,toZip:rcv.zip,weight:totalWeight,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",insurance:insurance||null,signature:sigOption!=="none",signatureOption:sigOption,saturdayDelivery:sat,reference:reference||o.name,poNo,invoiceNo};
+    const baseRec={service:qq.label,recipient:{name:rcv.name,company:rcv.company,zip:rcv.zip,state:rcv.state,city:rcv.city,address1:rcv.address1,phone:rcv.phone,email:rcv.email},sender:{...(settings?.sender||{})},fromZip,toZip:rcv.zip,weight:totalWeight,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",insurance:insurance||null,signature:sigOption!=="none",signatureOption:sigOption,saturdayDelivery:sat,reference:reference||o.name,poNo,invoiceNo,department:""};
     if(!canBook){
       const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:newTracking(carrier),carrier,...baseRec,status:"Label created",lastScan:"Label created",eta:"—",onTime:true};
-      onShipped(rec,o.id); setBought(qq.key); setStatus({state:"demo",msg:"Demo only — no real label was created."}); return;
+      onShipped(rec,o.id); setBought(qq.key); setStatus({state:"demo",msg:(CLOUD.user&&CLOUD.user.demo)||(typeof window!=="undefined"&&(lsGet("session",{})||{}).demo)?"Demo only — no real label was created.":"Live booking isn't connected right now — no label was created. Contact support."}); return;
     }
     const need=[]; if(!rcv.name&&!rcv.company)need.push("name"); if(String(rcv.phone||"").replace(/\D/g,"").length<10)need.push("10-digit phone"); if(!rcv.email)need.push("email");
     if(need.length){ setStatus({state:"error",msg:"FedEx needs the receiver's "+need.join(", ")+"."}); return; }
     setBought(qq.key); setStatus({state:"booking",msg:"Booking with FedEx…"});
     const _orFM=orFillMerge({reference:reference||o.name,invoiceNo,poNo},orBoxRefFill(qq,settings.orBoxField,o.name));
-    const res=await bookOrderLabel(dest,{quote:qq,box,weightLb:totalWeight,residential,signatureOption:sigOption,saturdayDelivery:sat,insuranceAmount:insurance||null,packageTypeCode:qq.packageTypeCode||"",sender:settings.sender,reference:_orFM.reference,invoiceNo:_orFM.invoiceNo,poNo:_orFM.poNo},eng,settings.sender);
+    const res=await bookOrderLabel(dest,{quote:qq,box,weightLb:totalWeight,residential,signatureOption:sigOption,saturdayDelivery:sat,insuranceAmount:insurance||null,packageTypeCode:qq.packageTypeCode||"",sender:settings.sender,reference:_orFM.reference,invoiceNo:_orFM.invoiceNo,poNo:_orFM.poNo,department:_orFM.department||""},eng,settings.sender);
     if(!res||!res.ok){ setStatus({state:"error",msg:(res&&res.error)||"Booking failed"}); setBought(null); return; }
     const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,...baseRec,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,bookNumber:res.bookNumber};
     onShipped(rec,o.id);
@@ -8477,10 +8491,10 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
   const openSlipEdit=(sh)=>{const rows=parseItemsList({items:sh.items||"",lineItems:sh.lineItems});setSlipEdit({id:sh.id,note:sh.note||"",rows:rows.length?rows:[{name:"",qty:1}]});};
   const slipEditPrint=()=>{ if(!slipEdit)return;
     const rows=slipEdit.rows.map(r=>({name:String(r.name||"").trim(),qty:Math.max(1,+r.qty||1)})).filter(r=>r.name);
-    const itemsStr=rows.map(r=>r.qty>1?r.qty+" × "+r.name:r.name).join(", ");
+    const itemsStr=rows.map(r=>r.qty>1?r.name+" x "+r.qty:r.name).join(", ");   /* trailing xN — the ONLY form parseItemsList reads back */
     const sh=shipments.find(x=>x.id===slipEdit.id); if(!sh)return;
-    setShipments(list=>list.map(x=>x.id===slipEdit.id?{...x,items:itemsStr,note:slipEdit.note}:x));   /* reprints keep them */
-    printPackingSlips([slipFromShipment({...sh,items:itemsStr,note:slipEdit.note})]);
+    setShipments(list=>list.map(x=>x.id===slipEdit.id?{...x,items:itemsStr,lineItems:rows,note:slipEdit.note}:x));   /* reprints keep them (structured rows beat string parsing) */
+    printPackingSlips([slipFromShipment({...sh,items:itemsStr,lineItems:rows,note:slipEdit.note})]);
     setSlipEdit(null);
   };
   const [reprintLp,setReprintLp]=useState(null);
@@ -8700,7 +8714,7 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
   const sigOption=F.sigOption||"none";const setSigOption=(v)=>upF({sigOption:v});
   const saturday=!!F.saturday;const setSaturday=(v)=>upF({saturday:v});
   const insurance=F.insurance||"";const setInsurance=(v)=>upF({insurance:v});
-  const clearQuote=()=>setQqForm({...QQ_BLANK,pieces:[{weight:"",L:"",W:"",H:"",oz:""}]});
+  const clearQuote=()=>setQqForm(f=>({...QQ_BLANK,_seedFrom:(f&&f._seedFrom)||undefined,pieces:[{weight:"",L:"",W:"",H:"",oz:""}]}));   /* keep the seed marker or the next open re-fills from Ship */
   /* Pre-fill from the Ship tab: if anything is typed there (a box weight/dims or a destination
      ZIP), pull it in on open. A snapshot is only applied ONCE per Ship edit (_seedFrom ts), so
      reopening Quick quote without touching Ship keeps whatever you changed here; an untouched
@@ -8741,7 +8755,7 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
     if(england&&england.enabled){
       setRateSrc(p=>({...p,loading:true}));
       getLiveRates(ship,england).then(res=>{ if(cancel)return;
-        if(res&&res.live&&res.rates&&res.rates.length) setRateSrc({rates:res.rates,live:true,loading:false,error:null});
+        if(res&&res.live&&res.rates&&res.rates.length) setRateSrc({rates:res.rates,live:true,loading:false,error:null,dvPriced:res.dvPriced});
         else setRateSrc({rates:quoteRates(ship),live:false,loading:false,error:(res&&res.error)||null});
       });
     } else setRateSrc({rates:quoteRates(ship),live:false,loading:false,error:null});
@@ -8788,10 +8802,10 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
               <button onClick={addPiece} className="flex items-center gap-1 text-xs bg-stone-200 hover:bg-stone-300 rounded-lg px-2.5 py-1.5 font-medium text-stone-700"><Plus className="w-3.5 h-3.5"/>Add package</button>
             </div>
             <Field label="Signature"><Select value={sigOption} onChange={e=>setSigOption(e.target.value)}><option value="none">None</option><option value="direct">Direct signature</option><option value="indirect">Indirect signature</option><option value="adult">Adult signature</option></Select></Field>
-            <Field label="Insurance $"><Input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0"/></Field>
+            <Field label={pieces.length>1?"Insure $/box":"Insurance $"}><Input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0"/></Field>
             {hasExpress&&<label className="flex items-center gap-1.5 text-sm text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSaturday(e.target.checked)} className="accent-[#0086E0]"/>Saturday delivery <span className="text-stone-400 text-xs">(Express only)</span></label>}
             <div className="grid grid-cols-2 gap-px bg-stone-200 border border-stone-200 rounded overflow-hidden font-mono text-center"><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">zone</div><div className="font-semibold">{ready?zoneEst(fromZip,toZip):"—"}</div></div><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">billable</div><div className="font-semibold">{ready?billable(pieces[0].L,pieces[0].W,pieces[0].H,totalWeight)+" lb":"—"}</div></div></div>
-            {demo?<div className="text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 bg-amber-50 text-amber-800 border border-amber-200"><Eye className="w-3 h-3"/>Demo — example rates only; labels can't be created</div>:ready&&<div className={`text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700":"bg-[#E6F4FF] text-[#006FBF]"}`}>{rateSrc.loading?<><Loader2 className="w-3 h-3 animate-spin"/>Fetching…</>:rateSrc.live?<><Wifi className="w-3 h-3"/>Live rates</>:<><Calculator className="w-3 h-3"/>Estimated</>}</div>}
+            {rateSrc.live&&rateSrc.dvPriced===false&&<div className="text-[11px] rounded px-2 py-1.5 mb-1 bg-rose-50 text-rose-700 border border-rose-200">Coverage fee missing from FedEx's response — totals may exclude declared value.</div>}{demo?<div className="text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 bg-amber-50 text-amber-800 border border-amber-200"><Eye className="w-3 h-3"/>Demo — example rates only; labels can't be created</div>:ready&&<div className={`text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700":"bg-[#E6F4FF] text-[#006FBF]"}`}>{rateSrc.loading?<><Loader2 className="w-3 h-3 animate-spin"/>Fetching…</>:rateSrc.live?<><Wifi className="w-3 h-3"/>Live rates</>:<><Calculator className="w-3 h-3"/>Estimated</>}</div>}
           </Panel></div>
           <div className="flex-1 min-w-0"><ServiceList quotes={quotes} ready={ready} live={rateSrc.live} loading={rateSrc.loading} resetKey={`${fromZip}|${toZip}|${residential}|${pieces.length}|${((effClient&&effClient.blockedServices)||[]).join(",")}`}/></div>
         </div>
@@ -9221,7 +9235,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         setSvcOv(v=>{const n={...v};hit.forEach(o=>{n[o.id]=f.service;});return n;});
         setOvWhy(w=>{const n={...w};hit.forEach(o=>{n[o.id]=AI_NAME;});return n;});
       }
-      setMsg(hit.length?`${AI_NAME} selected ${hit.length} order${hit.length!==1?"s":""}${f.service?` · service: ${f.service}`:""} — review below, then hit Create labels.`:"${AI_NAME}’s filter matched no open orders — nothing was selected.");
+      setMsg(hit.length?`${AI_NAME} selected ${hit.length} order${hit.length!==1?"s":""}${f.service?` · service: ${f.service}`:""} — review below, then hit Create labels.`:`${AI_NAME}’s filter matched no open orders — nothing was selected.`);
       setTimeout(()=>setMsg(""),9000);
     }
     onBatchCmdDone&&onBatchCmdDone();
@@ -12468,11 +12482,11 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
   };
   return (<div className="max-w-2xl space-y-5">
     <div>
-      <h3 className="text-sm font-semibold text-stone-700 mb-1 flex items-center gap-2"><Wifi className="w-4 h-4 text-emerald-600"/>{SHOW_ENGLAND?"England Logistics — live rates":"Live FedEx rates"}</h3>
+      <h3 className="text-sm font-semibold text-stone-700 mb-1 flex items-center gap-2"><Wifi className="w-4 h-4 text-emerald-600"/>{SHOW_ENGLAND&&isAdmin?"England Logistics — live rates":"Live FedEx rates"}</h3>
       <p className="text-sm text-stone-500 mb-3">Turn this on to pull your real negotiated rates on the Ship tab and Quick quote. Until it's on, the app shows estimates.</p>
       <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
         <label className="flex items-center justify-between gap-3">
-          <span className="text-sm font-medium flex items-center gap-2">Use live {SHOW_ENGLAND?"England":"FedEx"} rates {eng.enabled&&<Badge tone="green">on</Badge>}</span>
+          <span className="text-sm font-medium flex items-center gap-2">Use live {SHOW_ENGLAND&&isAdmin?"England":"FedEx"} rates {eng.enabled&&<Badge tone="green">on</Badge>}</span>
           <button onClick={()=>setEng({enabled:!eng.enabled})}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${eng.enabled?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full"/></span></button>
         </label>
         <div className="grid sm:grid-cols-2 gap-3">

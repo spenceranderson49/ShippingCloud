@@ -121,7 +121,7 @@ function scAuth(body) {
     const got = Buffer.from(sig, "hex");
     if (want.length !== got.length || !scCrypto.timingSafeEqual(want, got)) return null;
     const d = JSON.parse(Buffer.from(String(p).replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
-    if (!d || !d.uid || !d.exp || Date.now() > d.exp) return null;
+    if (!d || d.kind || !d.uid || !d.exp || Date.now() > d.exp) return null;   /* d.kind = special-purpose token (password reset) — never a session */
     return d;
   } catch (e) { return null; }
 }
@@ -320,6 +320,12 @@ exports.handler = async (event) => {
       if (listBase != null) {
         const acctOnly = Object.keys(merged).filter((lb) => listSur[lb] == null).reduce((a, lb) => a + merged[lb], 0);
         if (acctOnly > 0) listBase = Math.round((listBase - acctOnly) * 100) / 100;
+        /* CLAMP: a fee worded differently between the two details would be subtracted twice
+           (once per wording), and account-only fees can exceed a cheap lane's remaining base —
+           list base must never fall below the ACCOUNT base (list ≥ account always) or 0. */
+        const _acctFees = Object.values(merged).reduce((a, v) => a + v, 0);
+        const _acctBase = cost != null ? Math.max(0, Math.round((cost - _acctFees) * 100) / 100) : 0;
+        listBase = Math.max(_acctBase, Math.max(0, listBase));
       }
       if (!surch.length && acctD && acctD.shipmentRateDetail && +acctD.shipmentRateDetail.totalSurcharges > 0) {
         surch = [{ label: "Carrier surcharges", amount: Math.round(+acctD.shipmentRateDetail.totalSurcharges * 100) / 100 }];

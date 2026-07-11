@@ -88,7 +88,7 @@ function verifyToken(token) {
     const want = Buffer.from(sign(p), "hex"); const got = Buffer.from(sig, "hex");
     if (want.length !== got.length || !crypto.timingSafeEqual(want, got)) return null;
     const payload = JSON.parse(unb64u(p));
-    if (!payload || !payload.uid || !payload.exp || Date.now() > payload.exp) return null;
+    if (!payload || payload.kind || !payload.uid || !payload.exp || Date.now() > payload.exp) return null;   /* kind = pwreset — only resetPassword may consume it */
     return payload;
   } catch { return null; }
 }
@@ -373,7 +373,8 @@ exports.handler = async (event) => {
       const curU = await getStore("users");
       const users = Array.isArray(curU.value) ? curU.value : [];
       const u = users.find((x) => x && String(x.email || "").toLowerCase() === email && x.status !== "disabled");
-      if (!u) return J(generic); // never reveal which emails exist
+      const _adm = verifyToken(body.token);
+      if (!u) return J(_adm && _adm.role === "admin" ? { ...generic, found: false } : generic); // never reveal which emails exist to anonymous callers
       /* welcome variant: only an authenticated ADMIN can request it (it says "an account was
          created for you", so it must never be triggerable by an anonymous visitor). 72h link —
          a brand-new user may not check email within the reset flow's 1 hour. */

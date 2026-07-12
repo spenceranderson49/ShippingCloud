@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v482";
+const BUILD_TAG="addr-v483";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3459,11 +3459,12 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection,cli
    those snapshots with a date + entry count + a sample of what's inside, and restores any
    one in a click. Restore snapshots the CURRENT value first, so it's reversible. After a
    restore we reload immediately so this tab can't overwrite the recovered data. Admin only. */
-function BackupsAdmin(){
+function BackupsAdmin({clients=[],setClients}){
   const cloud=CLOUD.mode==="cloud";
   const [rows,setRows]=useState(null);   // null = loading
   const [busy,setBusy]=useState("");
   const [msg,setMsg]=useState("");
+  const [pick,setPick]=useState(null);   // {key,ts,list:[client],chosen:Set(id)} — individual-customer picker
   const load=async()=>{
     if(!cloud){setRows([]);return;}
     const r=await cloudCall({action:"listBackups",token:CLOUD.token});
@@ -3472,20 +3473,40 @@ function BackupsAdmin(){
   useEffect(()=>{load();},[]);
   const LABEL={clients:"Customers",rateRules:"Rates & profiles",users:"Logins",featureFlags:"Feature settings"};
   const parseTs=(ts)=>{const m=/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/.exec(String(ts||""));if(!m)return ts||"—";const d=new Date(`${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z`);return isNaN(d)?ts:d.toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});};
+  const curIds=new Set((clients||[]).map(c=>c&&c.id));
   const restore=async(bk)=>{
-    if(!window.confirm("Restore "+(LABEL[bk.orig]||bk.orig)+" to the version from "+parseTs(bk.ts)+" ("+bk.count+" "+(bk.count===1?"entry":"entries")+")?\n\nYour current version is backed up first, so this is reversible. The page reloads afterward to load the restored data.\n\nTip: close any other admin tabs first so they don't overwrite it."))return;
+    if(!window.confirm("Restore ALL of "+(LABEL[bk.orig]||bk.orig)+" to the version from "+parseTs(bk.ts)+" ("+bk.count+" "+(bk.count===1?"entry":"entries")+")?\n\nThis replaces the whole list with that snapshot. Your current version is backed up first, so it's reversible. The page reloads afterward.\n\nTip: close any other admin tabs first so they don't overwrite it."))return;
     setBusy(bk.key);setMsg("");
     const r=await cloudCall({action:"restoreBackup",token:CLOUD.token,key:bk.key});
     setBusy("");
     if(r&&r.ok){setMsg("Restored "+(LABEL[bk.orig]||bk.orig)+". Reloading to load your data…");setTimeout(()=>window.location.reload(),1200);}
     else setMsg((r&&r.error)||"Restore failed — try again.");
   };
+  /* individual-customer restore: open a snapshot, pick which customers to merge back in */
+  const openPick=async(bk)=>{
+    setBusy(bk.key);setMsg("");
+    const r=await cloudCall({action:"getBackup",token:CLOUD.token,key:bk.key});
+    setBusy("");
+    if(!r||!r.ok||!Array.isArray(r.value)){setMsg((r&&r.error)||"Couldn't open that backup.");return;}
+    const list=r.value.filter(c=>c&&c.id);
+    const missing=new Set(list.filter(c=>!curIds.has(c.id)).map(c=>c.id));   // pre-check the ones that are gone
+    setPick({key:bk.key,ts:bk.ts,list,chosen:missing});
+  };
+  const toggle=(id)=>setPick(p=>{const s=new Set(p.chosen);s.has(id)?s.delete(id):s.add(id);return {...p,chosen:s};});
+  const doRestoreSelected=()=>{
+    const chosen=pick.list.filter(c=>pick.chosen.has(c.id));
+    if(!chosen.length){return;}
+    if(!setClients){setMsg("Can't merge here — use Restore all instead.");return;}
+    setClients(cur=>{const map=new Map((cur||[]).map(c=>[c.id,c]));chosen.forEach(c=>map.set(c.id,c));return Array.from(map.values());});   // upsert selected snapshot customers into the current list (add missing, refresh chosen)
+    const n=chosen.length;setPick(null);
+    setMsg("Restored "+n+" customer"+(n===1?"":"s")+" into your list — they'll appear under Customers. (This is saved; your list before was snapshotted too.)");
+  };
   const groups={};(rows||[]).forEach(b=>{(groups[b.orig]=groups[b.orig]||[]).push(b);});
   const order=["clients","rateRules","users","featureFlags"];
   return (<div className="space-y-4 max-w-4xl">
     <div className="border border-[#99D6FF] bg-[#F0F9FF] rounded-lg p-4">
       <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><RotateCcw className="w-4 h-4 text-[#0086E0]"/>Backups &amp; restore</div>
-      <p className="text-[13px] text-stone-600 mt-1">Every time your customers, rates, or logins are saved, the previous version is snapshotted automatically (the newest 10 are kept). If something looks missing, find the version below that has all your data and press <b>Restore</b>. Restoring backs up the current version first, so it's always reversible.</p>
+      <p className="text-[13px] text-stone-600 mt-1">Every time your customers, rates, or logins are saved, the previous version is snapshotted automatically (the newest 10 are kept). If something looks missing, find the version below and either <b>Restore all</b> (swap the whole list to that snapshot) or, for customers, <b>Pick customers…</b> to merge just the missing accounts back in without touching the rest. Everything is reversible — the current version is snapshotted first.</p>
       <p className="text-[12px] text-amber-700 mt-2">Close any other admin tabs before restoring, so they don't overwrite the recovered data.</p>
     </div>
     {msg&&<div className="text-sm rounded-lg px-3 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700">{msg}</div>}
@@ -3501,12 +3522,39 @@ function BackupsAdmin(){
               <td className="py-2 whitespace-nowrap text-stone-700">{parseTs(b.ts)}{i===0&&<span className="ml-2 text-[10px] text-stone-400">newest</span>}</td>
               <td className="py-2 text-right font-mono font-medium">{b.count}</td>
               <td className="py-2 pl-4 text-stone-500 truncate max-w-[340px]">{(b.sample||[]).join(", ")||"—"}</td>
-              <td className="py-2 text-right"><button disabled={!!busy} onClick={()=>restore(b)} className="text-xs border border-[#0086E0]/50 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 disabled:opacity-40 inline-flex items-center gap-1.5">{busy===b.key?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<RotateCcw className="w-3.5 h-3.5"/>}Restore</button></td>
+              <td className="py-2 text-right whitespace-nowrap">
+                {k==="clients"&&<button disabled={!!busy} onClick={()=>openPick(b)} className="text-xs border border-stone-300 text-stone-600 rounded px-2.5 py-1.5 hover:bg-stone-50 disabled:opacity-40 inline-flex items-center gap-1.5 mr-1.5">{busy===b.key?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<Users className="w-3.5 h-3.5"/>}Pick customers…</button>}
+                <button disabled={!!busy} onClick={()=>restore(b)} className="text-xs border border-[#0086E0]/50 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 disabled:opacity-40 inline-flex items-center gap-1.5"><RotateCcw className="w-3.5 h-3.5"/>{k==="clients"?"Restore all":"Restore"}</button>
+              </td>
             </tr>))}
           </tbody>
         </table></div>
       </Panel>
     ))}
+    {pick&&createPortal(<div className="fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center p-4" onClick={()=>setPick(null)}>
+      <div onClick={e=>e.stopPropagation()} className="bg-white rounded-2xl max-w-lg w-full max-h-[82vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-stone-100">
+          <div className="text-sm font-semibold text-stone-800">Restore customers — snapshot from {parseTs(pick.ts)}</div>
+          <button onClick={()=>setPick(null)} className="text-stone-400 hover:text-stone-600"><X className="w-5 h-5"/></button>
+        </div>
+        <div className="px-5 py-2.5 text-[12px] text-stone-500 border-b border-stone-100">Missing customers are pre-checked. Checking one that still exists will overwrite it with this backup's version. Nothing else in your current list is touched.</div>
+        <div className="overflow-y-auto px-3 py-1 flex-1">
+          {pick.list.length===0&&<div className="px-2 py-6 text-center text-stone-400 text-sm">This snapshot has no customers in it.</div>}
+          {pick.list.map(c=>{const here=curIds.has(c.id);const on=pick.chosen.has(c.id);return (
+            <label key={c.id} className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-stone-50 cursor-pointer">
+              <input type="checkbox" checked={on} onChange={()=>toggle(c.id)} className="w-4 h-4 accent-[#0086E0]"/>
+              <div className="min-w-0 flex-1"><div className="text-[13px] font-medium text-stone-800 truncate">{c.name||"(no name)"}</div><div className="text-[11px] text-stone-400 truncate">{c.email||c.contact||c.id}</div></div>
+              {here?<Badge tone="stone">already here</Badge>:<Badge tone="green">missing</Badge>}
+            </label>);})}
+        </div>
+        <div className="px-5 py-3 border-t border-stone-100 flex items-center gap-3">
+          <span className="text-[12px] text-stone-500">{pick.chosen.size} selected</span>
+          <span className="flex-1"/>
+          <button onClick={()=>setPick(null)} className="text-sm text-stone-500 px-3 py-1.5 rounded-lg hover:bg-stone-100">Cancel</button>
+          <button disabled={!pick.chosen.size} onClick={doRestoreSelected} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-1.5 font-medium disabled:opacity-40">Restore selected</button>
+        </div>
+      </div>
+    </div>,document.body)}
   </div>);
 }
 
@@ -4831,7 +4879,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
       {k==="overview"&&<AdminDashboard platform={platform} loginStats={loginStats} uEmail={uEmail} openCustomer={openCustomer} openSection={openSection} clients={clients}/>}
       {k==="apiadmin"&&<ApiAdmin clients={clients} platform={platform} openCustomer={openCustomer}/>}
       {k==="billing"&&<BillingAdmin clients={clients} platform={platform} openCustomer={openCustomer}/>}
-      {k==="backups"&&<BackupsAdmin/>}
+      {k==="backups"&&<BackupsAdmin clients={clients} setClients={setClients}/>}
   </>);
   return (
     <div className="-mt-2">

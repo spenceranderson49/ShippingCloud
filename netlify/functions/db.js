@@ -756,6 +756,14 @@ exports.handler = async (event) => {
       }
       return J({ ok: true, backups: out });
     }
+    if (action === "getBackup") {   // read one snapshot's full value (admin only) — powers the individual-customer picker
+      if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
+      const bkey = String(body.key || "");
+      if (!bkey.startsWith("bak:")) return J({ ok: false, error: "Not a backup key." });
+      const bak = await getStore(bkey);
+      if (!bak.ok || bak.value === undefined) return J({ ok: false, error: "Backup not found." });
+      return J({ ok: true, value: bak.value });
+    }
     if (action === "restoreBackup") {
       if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
       const bkey = String(body.key || "");

@@ -14,7 +14,7 @@ You only need to call **one endpoint.**
 POST https://app.freightwire.com/api/v1/admin/customers
 ```
 
-(We'll give you the exact domain + a test domain to try against first.)
+(We'll give you a separate test URL to try against first, so nothing real is touched while you build.)
 
 ## 2. Authentication
 

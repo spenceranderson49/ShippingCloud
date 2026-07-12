@@ -116,6 +116,35 @@ X-API-Key: sck_live_xxxxxxxxxxxxxxxx</code></pre>
   <h2><span class="pill get">GET</span>/v1/pickups · cancel · <span class="pill get">GET</span>/v1/account</h2>
   <p><code>GET /v1/pickups</code> lists scheduled pickups; <code>POST /v1/pickups/{confirmation}/cancel</code> cancels one. <code>GET /v1/account</code> returns your account name, key prefix, enabled-service count and limits — handy as a connectivity check.</p>
 
+  <h2>Integration keys — push a rate card from your own tools</h2>
+  <p>An <b>Integration (admin) key</b> (created in Admin → API, mode "Integration") lets your own systems — e.g. a FedEx-proposal tool — create or update a customer and load their rate card straight into the Rates tab, with no manual retyping. It is NOT a customer key: it can provision any customer.</p>
+  <h3><span class="pill post">POST</span>/v1/admin/customers</h3>
+  <pre><code>curl -s https://&lt;domain&gt;/api/v1/admin/customers   -H "Authorization: Bearer $ADMIN_KEY" -H "Content-Type: application/json"   -d '{
+    "customer": { "name": "Acme Co", "email": "ap@acme.com", "external_id": "PROP-8842" },
+    "pricing": {
+      "services": {
+        "ground":  { "mode": "discount_off_list", "value": 42 },
+        "home":    { "mode": "discount_off_list", "value": 40, "min": 8.92 },
+        "2day":    { "mode": "markup_over_cost",  "value": 12 },
+        "priority":{ "mode": "none" }
+      },
+      "fees": {
+        "FUEL-G":  { "mode": "discount_off_list", "value": 10 },
+        "RES-HD":  { "mode": "flat", "value": 0 }
+      }
+    },
+    "replace": true
+  }'</code></pre>
+  <table><tr><th>Field</th><th>Notes</th></tr>
+    <tr><td><code>customer.name</code></td><td>Required. <code>external_id</code> (your proposal ID) + <code>email</code> are matched to update the same customer next time instead of duplicating.</td></tr>
+    <tr><td><code>pricing.services{}</code></td><td>Keyed by ShipHub service code (<code>ground, home, 2day, priority, standard_overnight, saver, ground_economy, …</code> — see <code>/v1/services</code>). Each: <code>mode</code> = <code>discount_off_list</code> (% off FedEx list) · <code>markup_over_cost</code> (% over your cost) · <code>dollars_over_cost</code> · <code>flat</code> · <code>none</code> (no rule). <code>value</code> is the number; optional <code>min</code> is the floor on the base rate.</td></tr>
+    <tr><td><code>pricing.fees{}</code></td><td>Keyed by fee id (fuel, residential, DAS, etc. — from <code>/v1/rate-card</code>). <code>mode</code>: <code>discount_off_list</code> · <code>markup_percent</code> · <code>dollars_over</code> · <code>flat</code>.</td></tr>
+    <tr><td><code>replace</code></td><td>Default <code>true</code> — the sent rate card becomes the whole profile. <code>false</code> merges on top of what's there.</td></tr>
+  </table>
+  <p>Response: <code>customer_id</code>, <code>profile_id</code>, <code>created</code> (true/false), and counts. The customer's rates are live in the Rates tab immediately — the shared Default profile is never touched.</p>
+  <h3><span class="pill post">POST</span>/v1/admin/reports</h3>
+  <p>Push optimization reports or any proposal artifact: <code>{ title, type, customer_external_id, data }</code>. They appear in Admin → API → Reports.</p>
+
   <h2>Errors</h2>
   <table><tr><th>Status</th><th>code</th><th>Meaning</th></tr>
     <tr><td>401</td><td><code>missing_key / invalid_key</code></td><td>No key, or a bad/revoked one.</td></tr>

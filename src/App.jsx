@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v471";
+const BUILD_TAG="addr-v480";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -4551,6 +4551,17 @@ function BillingAdmin({clients=[],platform={},openCustomer}){
   </div>);
 }
 /* ════════ Admin → API: the platform's own public API (ShippingCloud API / ShipHub API) ════════ */
+function ApiReports(){
+  const [reps]=usePersist("proposalReports",[]);
+  const list=(reps||[]).slice(0,20);
+  if(!list.length)return <div className="text-sm text-stone-400">No reports yet.</div>;
+  return (<div className="space-y-1.5">{list.map(r=>(<div key={r.id} className="flex items-center gap-3 text-[12.5px] border-t border-stone-100 py-1 first:border-t-0">
+    <span className="text-stone-400 w-24 shrink-0">{(r.received||"").slice(0,10)}</span>
+    <span className="font-medium truncate flex-1">{r.title}</span>
+    <Badge tone="stone">{r.type}</Badge>
+    {r.data&&<button onClick={()=>{try{const w=window.open("","_blank");w.document.write("<pre>"+String(JSON.stringify(r.data,null,2)).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))+"</pre>");w.document.close();}catch(e){}}} className="text-[11px] text-[#0086E0] hover:underline">View</button>}
+  </div>))}</div>);
+}
 function ApiAdmin({clients=[],platform={},openCustomer}){
   const apiName=BRAND.fw?"ShipHub API":"ShippingCloud API";
   const base=(typeof window!=="undefined"?window.location.origin:"")+"/api/v1";
@@ -4560,7 +4571,7 @@ function ApiAdmin({clients=[],platform={},openCustomer}){
   const [minted,setMinted]=useState(null);   // {key,prefix} — shown ONCE
   const loadKeys=async()=>{const r=await cloudCall({action:"apiKeys",token:CLOUD.token});setKeys((r&&r.ok&&r.keys)||[]);};
   useEffect(()=>{loadKeys();},[]);
-  const createKey=async()=>{ if(!nk.clientId)return; setKBusy(true);
+  const createKey=async()=>{ if(nk.mode!=="admin"&&!nk.clientId)return; setKBusy(true);
     const r=await cloudCall({action:"apiKeyCreate",token:CLOUD.token,clientId:nk.clientId,label:nk.label,mode:nk.mode});
     setKBusy(false);
     if(r&&r.ok){setMinted({key:r.key,prefix:r.prefix});setPgKey(r.key);setNk({clientId:"",label:"",mode:"test"});loadKeys();}
@@ -4625,14 +4636,14 @@ function ApiAdmin({clients=[],platform={},openCustomer}){
       <div className="flex flex-wrap items-end gap-2 mb-3">
         <Field label="Customer"><Select value={nk.clientId} onChange={e=>setNk({...nk,clientId:e.target.value})}><option value="">— pick —</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
         <Field label="Label (optional)"><Input value={nk.label} onChange={e=>setNk({...nk,label:e.target.value})} placeholder="e.g. Their WMS"/></Field>
-        <Field label="Mode"><Select value={nk.mode} onChange={e=>setNk({...nk,mode:e.target.value})}><option value="test">Test — real quotes, can NEVER book a real label</option><option value="live">Live — books real FedEx labels</option></Select></Field>
-        <button onClick={createKey} disabled={!nk.clientId||kBusy} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium disabled:opacity-40 flex items-center gap-1.5">{kBusy?<Loader2 className="w-4 h-4 animate-spin"/>:<Plus className="w-4 h-4"/>}Create key</button>
+        <Field label="Mode"><Select value={nk.mode} onChange={e=>setNk({...nk,mode:e.target.value})}><option value="test">Test — real quotes, can NEVER book a real label</option><option value="live">Live — books real FedEx labels</option><option value="admin">Integration (admin) — push rate cards from your proposal tool</option></Select></Field>
+        <button onClick={createKey} disabled={(nk.mode!=="admin"&&!nk.clientId)||kBusy} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium disabled:opacity-40 flex items-center gap-1.5">{kBusy?<Loader2 className="w-4 h-4 animate-spin"/>:<Plus className="w-4 h-4"/>}Create key</button>
       </div>
       {keys==null?<div className="text-sm text-stone-400">Loading…</div>
        :!keys.length?<div className="text-sm text-stone-400">No keys yet — create one above and hand it to the customer (it authenticates every call).</div>
        :<div className="space-y-1.5">{keys.map(k=>(<div key={k.id} className={`flex flex-wrap items-center gap-3 border rounded-lg px-3 py-2 text-sm ${k.revoked?"opacity-45 border-stone-100":"border-stone-200 bg-white"}`}>
           <code className="font-mono text-[12px] text-stone-600">{k.prefix}</code>
-          {(k.mode||"live")==="test"?<Badge tone="amber">test</Badge>:<Badge tone="green">live</Badge>}
+          {(k.mode||"live")==="test"?<Badge tone="amber">test</Badge>:(k.mode==="admin")?<Badge tone="violet">integration</Badge>:<Badge tone="green">live</Badge>}
           <button onClick={()=>openCustomer&&openCustomer(k.clientId)} className="font-medium text-[#0086E0] hover:underline">{cName(k.clientId)}</button>
           {k.label&&<span className="text-stone-400 text-xs">{k.label}</span>}
           <span className="flex-1"/>
@@ -4659,6 +4670,10 @@ function ApiAdmin({clients=[],platform={},openCustomer}){
         <div className={`text-[11px] font-mono font-semibold ${pgRes.status<400?"text-emerald-700":"text-rose-600"}`}>{pgRes.status} {pgRes.ms}ms</div>
         <pre className="bg-stone-50 border border-stone-200 rounded-lg p-3 text-[11.5px] font-mono whitespace-pre-wrap break-all max-h-80 overflow-y-auto">{pgRes.text}</pre>
       </div>}
+    </Panel>
+    <Panel title="Reports from your proposal tool">
+      <p className="text-[11px] text-stone-500 mb-2">Optimization reports and other data your proposal tool pushes via <code className="text-[10px]">POST /v1/admin/reports</code> land here.</p>
+      <ApiReports/>
     </Panel>
     <Panel title="Sales-rep commissions">
       <p className="text-[11px] text-stone-500 mb-2">Commission = the rep's % of your est. margin on their customers' shipments (this month, all channels — portal and API).</p>
@@ -5058,7 +5073,7 @@ const lsDel=(k)=>{ if(!LS_OK)return; try{window.localStorage.removeItem("sc_"+k)
 // Which login is active. Every non-global key is stored under this account so each login keeps its OWN settings/data.
 const activeUid=()=>{ try{const s=lsGet("session",null); const id=s&&(s.id||s.email); return id?String(id):"guest"; }catch(e){return "guest";} };
 // Shared across all logins (never namespaced): the accounts list + who is signed in.
-const GLOBAL_KEYS={session:1,salesReps:1,invoicesIssued:1,billingSettings:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1,customFeatures:1,fedexRequests:1,publicBrand:1,myAccess:1,companyUsers:1,companyFlags:1,companyAdminRequests:1,rateRules:1,clients:1};
+const GLOBAL_KEYS={session:1,salesReps:1,invoicesIssued:1,billingSettings:1,proposalReports:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1,customFeatures:1,fedexRequests:1,publicBrand:1,myAccess:1,companyUsers:1,companyFlags:1,companyAdminRequests:1,rateRules:1,clients:1};
 // Scratch = the in-progress shipment. Per-login, but starts blank on each login (never migrated/inherited).
 const isScratch=(key)=>String(key).indexOf("ship.")===0;
 // Scratch keys wiped on login so the receiver + package dims are always blank for a fresh session.

@@ -4,8 +4,7 @@
 (this automated session couldn't complete the scheduler's permission approval).
 
 ## Settings
-- **Schedule (cron):** `0 8 * * *`  → 08:00 UTC daily
-  - That's ~2:00 AM Mountain / 1:00 AM Pacific / 3:00 AM Central / 4:00 AM Eastern.
+- **Schedule (cron):** `0 8 * * *`  → 08:00 UTC daily = **2:00 AM Mountain** (MDT summer; 1:00 AM in MST winter).
   - Adjust the hour if you want a different local time.
 - **Mode:** fresh session each night (`create_new_session_on_fire: true`)
 - **Notifications:** push + email (so the morning report reaches your phone/inbox)

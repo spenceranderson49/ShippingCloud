@@ -4,9 +4,8 @@
 (from an interactive Claude Code session, or via Schedules/Automations in the web app).
 
 ## Settings
-- **Schedule (cron):** `0 13 * * 1`  → 13:00 UTC every Monday
-  - That's ~6:00 AM Mountain / 5:00 AM Pacific / 7:00 AM Central / 8:00 AM Eastern Monday.
-  - Change the hour to match your timezone; change the last digit (1 = Monday) for a different day.
+- **Schedule (cron):** `0 13 * * 1`  → 13:00 UTC every Monday = **7:00 AM Monday Mountain** (MDT).
+  - Change the hour for a different local time; change the last digit (1 = Monday) for a different day.
 - **Mode:** fresh session each run (`create_new_session_on_fire: true`)
 - **Notifications:** push + email (so the ideas list reaches your phone/inbox)
 - **Environment:** this project's environment

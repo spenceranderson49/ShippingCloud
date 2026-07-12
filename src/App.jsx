@@ -88,8 +88,8 @@ const FEATURE_CATALOG=[
   {id:"seeCosts",label:"See costs & spend",desc:"Rates, order totals, batch totals and Reports dollars. Turn OFF to hide all money from this customer's logins",default:true},
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own carrier accounts on the Connections page (England always shows; admins always have this)",default:false},
 ];
-const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All logins"],["rates","Rates & dim divisors"],["labelcert","FedEx labels"],["customizations","Features & access"],["branding","Branding"],["apiadmin","API"],["billing","Billing & invoices"],["domains","Domains"]];
-const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,labelcert:Printer,customizations:Sliders,branding:Sparkles,platforms:Truck,domains:ExternalLink};
+const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All logins"],["rates","Rates & dim divisors"],["labelcert","FedEx labels"],["customizations","Features & access"],["branding","Branding"],["apiadmin","API"],["billing","Billing & invoices"],["domains","Domains"],["backups","Backups & restore"]];
+const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,labelcert:Printer,customizations:Sliders,branding:Sparkles,platforms:Truck,domains:ExternalLink,backups:RotateCcw};
 /* A restricted admin ALWAYS keeps access to "users" — without it there is no self-service way
    to ever fix a permission set that’s missing something, for yourself or anyone else. A wrong
    restriction otherwise becomes a permanent lockout with no way back in. */
@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v481";
+const BUILD_TAG="addr-v482";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3453,6 +3453,63 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection,cli
   </div>);
 }
 
+/* ════════ ADMIN → BACKUPS & RESTORE ════════
+   Every overwrite of a critical store (customers, rates, logins, feature settings) is
+   auto-snapshotted server-side (bak:<key>:<ts>, newest 10 kept — db.js). This panel lists
+   those snapshots with a date + entry count + a sample of what's inside, and restores any
+   one in a click. Restore snapshots the CURRENT value first, so it's reversible. After a
+   restore we reload immediately so this tab can't overwrite the recovered data. Admin only. */
+function BackupsAdmin(){
+  const cloud=CLOUD.mode==="cloud";
+  const [rows,setRows]=useState(null);   // null = loading
+  const [busy,setBusy]=useState("");
+  const [msg,setMsg]=useState("");
+  const load=async()=>{
+    if(!cloud){setRows([]);return;}
+    const r=await cloudCall({action:"listBackups",token:CLOUD.token});
+    setRows((r&&r.ok&&Array.isArray(r.backups))?r.backups:[]);
+  };
+  useEffect(()=>{load();},[]);
+  const LABEL={clients:"Customers",rateRules:"Rates & profiles",users:"Logins",featureFlags:"Feature settings"};
+  const parseTs=(ts)=>{const m=/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/.exec(String(ts||""));if(!m)return ts||"—";const d=new Date(`${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z`);return isNaN(d)?ts:d.toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});};
+  const restore=async(bk)=>{
+    if(!window.confirm("Restore "+(LABEL[bk.orig]||bk.orig)+" to the version from "+parseTs(bk.ts)+" ("+bk.count+" "+(bk.count===1?"entry":"entries")+")?\n\nYour current version is backed up first, so this is reversible. The page reloads afterward to load the restored data.\n\nTip: close any other admin tabs first so they don't overwrite it."))return;
+    setBusy(bk.key);setMsg("");
+    const r=await cloudCall({action:"restoreBackup",token:CLOUD.token,key:bk.key});
+    setBusy("");
+    if(r&&r.ok){setMsg("Restored "+(LABEL[bk.orig]||bk.orig)+". Reloading to load your data…");setTimeout(()=>window.location.reload(),1200);}
+    else setMsg((r&&r.error)||"Restore failed — try again.");
+  };
+  const groups={};(rows||[]).forEach(b=>{(groups[b.orig]=groups[b.orig]||[]).push(b);});
+  const order=["clients","rateRules","users","featureFlags"];
+  return (<div className="space-y-4 max-w-4xl">
+    <div className="border border-[#99D6FF] bg-[#F0F9FF] rounded-lg p-4">
+      <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><RotateCcw className="w-4 h-4 text-[#0086E0]"/>Backups &amp; restore</div>
+      <p className="text-[13px] text-stone-600 mt-1">Every time your customers, rates, or logins are saved, the previous version is snapshotted automatically (the newest 10 are kept). If something looks missing, find the version below that has all your data and press <b>Restore</b>. Restoring backs up the current version first, so it's always reversible.</p>
+      <p className="text-[12px] text-amber-700 mt-2">Close any other admin tabs before restoring, so they don't overwrite the recovered data.</p>
+    </div>
+    {msg&&<div className="text-sm rounded-lg px-3 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700">{msg}</div>}
+    {!cloud&&<div className="text-sm text-stone-500 border border-stone-200 rounded-lg p-4">Backups live in the cloud database — this is available on the live site.</div>}
+    {rows===null&&cloud&&<div className="text-sm text-stone-400 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>Loading backups…</div>}
+    {rows&&rows.length===0&&cloud&&<div className="text-sm text-stone-500 border border-stone-200 rounded-lg p-4">No snapshots found yet. Snapshots are created automatically the next time customers, rates, or logins are overwritten.</div>}
+    {order.filter(k=>groups[k]&&groups[k].length).map(k=>(
+      <Panel key={k} title={(LABEL[k]||k)+" — "+groups[k].length+" saved version"+(groups[k].length===1?"":"s")}>
+        <div className="overflow-x-auto"><table className="w-full text-[13px]">
+          <thead><tr className="text-[10px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal py-1.5">Saved</th><th className="text-right font-normal py-1.5">Entries</th><th className="text-left font-normal py-1.5 pl-4">Includes</th><th className="text-right font-normal py-1.5"></th></tr></thead>
+          <tbody>
+            {groups[k].map((b,i)=>(<tr key={b.key} className="border-t border-stone-100">
+              <td className="py-2 whitespace-nowrap text-stone-700">{parseTs(b.ts)}{i===0&&<span className="ml-2 text-[10px] text-stone-400">newest</span>}</td>
+              <td className="py-2 text-right font-mono font-medium">{b.count}</td>
+              <td className="py-2 pl-4 text-stone-500 truncate max-w-[340px]">{(b.sample||[]).join(", ")||"—"}</td>
+              <td className="py-2 text-right"><button disabled={!!busy} onClick={()=>restore(b)} className="text-xs border border-[#0086E0]/50 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 disabled:opacity-40 inline-flex items-center gap-1.5">{busy===b.key?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<RotateCcw className="w-3.5 h-3.5"/>}Restore</button></td>
+            </tr>))}
+          </tbody>
+        </table></div>
+      </Panel>
+    ))}
+  </div>);
+}
+
 /* ════════ ADMIN → CUSTOMER DETAIL (opens as its own tab) ════════ */
 const SUPPLY_ITEMS=["Thermal 4×6 labels","Laser label sheets","Poly mailers","Boxes — small","Boxes — medium","Boxes — large","Packing tape","Bubble mailers","Dunnage / void fill","Thermal printer ribbon"];
 function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featureFlags={},setFeatureFlags,customFeatures=[],settings,onClose,openSection,ships=[]}){
@@ -4733,6 +4790,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
     {label:"Accounts",items:[["customers","Customers",Building2],["users","All logins",Users]]},
     {label:"Pricing",items:[["rates","Rates & dim divisors",DollarSign],["labelcert","FedEx labels",Printer]]},
     {label:"Experience",items:[["customizations","Features & access",Sliders],["branding","Branding",Sparkles],["apiadmin","API",Plug],["billing","Billing & invoices",Receipt],["domains","Domains",ExternalLink]]},
+    {label:"Data",items:[["backups","Backups & restore",RotateCcw]]},
   ];
   const SECTION_META={};NAV_GROUPS.forEach(g=>g.items.forEach(([v,l,Icon])=>{SECTION_META[v]={label:l,Icon};}));
   SECTION_META.rates={label:"Advanced rates — tables & sheets",Icon:DollarSign};   // off the sidebar (customers each have a Rates tab now); reachable from a customer record for shared imports, zones, weight breaks, and printable rate sheets
@@ -4773,6 +4831,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
       {k==="overview"&&<AdminDashboard platform={platform} loginStats={loginStats} uEmail={uEmail} openCustomer={openCustomer} openSection={openSection} clients={clients}/>}
       {k==="apiadmin"&&<ApiAdmin clients={clients} platform={platform} openCustomer={openCustomer}/>}
       {k==="billing"&&<BillingAdmin clients={clients} platform={platform} openCustomer={openCustomer}/>}
+      {k==="backups"&&<BackupsAdmin/>}
   </>);
   return (
     <div className="-mt-2">

@@ -762,9 +762,29 @@ exports.handler = async (event) => {
        CURRENT value first, so a restore is itself reversible. Admin only. ── */
     if (action === "listBackups") {
       if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
-      const lr = await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=like." + encodeURIComponent("bak:") + "*&select=key&order=key.desc");
-      const rows = (Array.isArray(lr.data) ? lr.data : []).map((r2) => r2.key);
-      return J({ ok: true, backups: rows.slice(0, 400) });
+      const lr = await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=like." + encodeURIComponent("bak:") + "*&select=key,value&order=key.desc");
+      const rows = (Array.isArray(lr.data) ? lr.data : []);
+      const SHOW = ["clients", "rateRules", "users", "featureFlags"];   // recovery UI focuses on the critical stores; per-customer op backups excluded here to keep the payload small
+      const out = [];
+      for (const r2 of rows) {
+        const key = String(r2.key || "");
+        const cut = key.lastIndexOf(":");
+        const orig = key.startsWith("bak:") && cut > 4 ? key.slice(4, cut) : "";
+        if (!SHOW.includes(orig)) continue;
+        const ts = cut > 4 ? key.slice(cut + 1) : "";
+        const v = r2.value;
+        let count = 0, sample = [];
+        try {
+          if (Array.isArray(v)) { count = v.length; sample = v.slice(0, 8).map((x) => x && (x.name || x.email || x.id)).filter(Boolean); }
+          else if (v && typeof v === "object") {
+            if (Array.isArray(v.profiles)) { count = v.profiles.length; sample = v.profiles.slice(0, 8).map((p) => p && p.name).filter(Boolean); }
+            else count = Object.keys(v).length;
+          }
+        } catch (e) {}
+        out.push({ key, orig, ts, count, sample });
+        if (out.length >= 200) break;
+      }
+      return J({ ok: true, backups: out });
     }
     if (action === "restoreBackup") {
       if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });

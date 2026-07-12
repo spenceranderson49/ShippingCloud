@@ -10,7 +10,7 @@ endobj
 << /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
 endobj
 4 0 obj
-<< /Length 4659 >>
+<< /Length 2233 >>
 stream
 q 0.059 0.239 0.180 rg BT /F2 20.0 Tf 54.00 712.00 Td (Freightwire ? Proposal ? Rates Connection) Tj ET Q
 q 0.330 0.330 0.330 rg BT /F1 10.5 Tf 54.00 691.00 Td (Integration spec for connecting the proposal tool to the Freightwire admin Rates tab · API v1) Tj ET Q
@@ -20,304 +20,315 @@ q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 638.00 Td (Sending again for the sam
 q 0.059 0.239 0.180 rg BT /F2 14.0 Tf 54.00 602.00 Td (1. Endpoint) Tj ET Q
 q 1.00 w 0.059 0.239 0.180 RG 54.00 597.00 m 558.00 597.00 l S Q
 q 0.965 0.973 0.969 rg 54.00 566.00 504.00 23.00 re f Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 575.00 Td (POST https://<FREIGHTWIRE-DOMAIN>/api/v1/admin/customers) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 549.00 Td (\(A live domain and a separate test domain to build against first will be provided.\)) Tj ET Q
-q 0.059 0.239 0.180 rg BT /F2 14.0 Tf 54.00 513.00 Td (2. Authentication) Tj ET Q
-q 1.00 w 0.059 0.239 0.180 RG 54.00 508.00 m 558.00 508.00 l S Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 489.00 Td (Send the admin API key \(issued to you\) as a header ? either form works:) Tj ET Q
-q 0.965 0.973 0.969 rg 54.00 446.00 504.00 34.00 re f Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 466.00 Td (Authorization: Bearer sck_admin_xxxxxxxxxxxx) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 455.00 Td (X-API-Key: sck_admin_xxxxxxxxxxxx) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 429.00 Td (The key starts with sck_admin_. Keep it server-side; do not ship it in browser code. All calls over) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 414.00 Td (HTTPS.) Tj ET Q
-q 0.059 0.239 0.180 rg BT /F2 14.0 Tf 54.00 378.00 Td (3. Request Body \(JSON\)) Tj ET Q
-q 1.00 w 0.059 0.239 0.180 RG 54.00 373.00 m 558.00 373.00 l S Q
-q 0.965 0.973 0.969 rg 54.00 67.00 504.00 298.00 re f Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 351.00 Td ({) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 340.00 Td (  "customer": {) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 329.00 Td (    "external_id": "YOUR-CUSTOMER-ID-123",) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 318.00 Td (    "name": "Acme Corp",) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 307.00 Td (    "email": "billing@acme.com",) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 296.00 Td (    "contact": "Jane Doe",) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 285.00 Td (    "phone": "555-123-4567",) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 274.00 Td (    "origin": "84101") Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 263.00 Td (  },) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 252.00 Td (  "pricing": {) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 241.00 Td (    "services": {) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 230.00 Td (      "ground":              { "mode": "discount_off_list", "value": 25 },) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 219.00 Td (      "home":                { "mode": "discount_off_list", "value": 25 },) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 208.00 Td (      "priority_overnight":  { "mode": "markup_over_cost",   "value": 10 },) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 197.00 Td (      "2day":                { "mode": "flat",               "value": 18.50 },) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 186.00 Td (      "first_overnight":     { "mode": "none" }) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 175.00 Td (    },) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 164.00 Td (    "fees": {) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 153.00 Td (      "FUEL":  { "mode": "discount_off_list", "value": 15 },) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 142.00 Td (      "RES":   { "mode": "dollars_over",      "value": 1.25 },) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 131.00 Td (      "SIG-D": { "mode": "none" }) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 120.00 Td (    },) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 109.00 Td (    "account_markup": 0) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 98.00 Td (  },) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 87.00 Td (  "replace": true) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 76.00 Td (}) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 575.00 Td (POST https://app.freightwire.com/api/v1/admin/customers) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 549.00 Td (\(A separate test URL to build against first will be provided, so nothing real is touched while you) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 534.00 Td (develop.\)) Tj ET Q
+q 0.059 0.239 0.180 rg BT /F2 14.0 Tf 54.00 498.00 Td (2. Authentication) Tj ET Q
+q 1.00 w 0.059 0.239 0.180 RG 54.00 493.00 m 558.00 493.00 l S Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 474.00 Td (Send the admin API key \(issued to you\) as a header ? either form works:) Tj ET Q
+q 0.965 0.973 0.969 rg 54.00 431.00 504.00 34.00 re f Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 451.00 Td (Authorization: Bearer sck_admin_xxxxxxxxxxxx) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 440.00 Td (X-API-Key: sck_admin_xxxxxxxxxxxx) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 414.00 Td (The key starts with sck_admin_. Keep it server-side; do not ship it in browser code. All calls over) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 399.00 Td (HTTPS.) Tj ET Q
+q 0.059 0.239 0.180 rg BT /F2 14.0 Tf 54.00 363.00 Td (3. Request Body \(JSON\)) Tj ET Q
+q 1.00 w 0.059 0.239 0.180 RG 54.00 358.00 m 558.00 358.00 l S Q
 endstream
 endobj
 5 0 obj
-<< /Length 6043 >>
+<< /Length 6073 >>
 stream
-q 0.100 0.100 0.100 rg BT /F2 11.5 Tf 54.00 714.00 Td (Field notes) Tj ET Q
-q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 697.00 Td (-  ) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 697.00 Td (customer.name is the only required field. external_id is strongly recommended ? it's how the) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 682.00 Td (same customer is matched on repeat sends \(otherwise it falls back to email\).) Tj ET Q
-q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 664.00 Td (-  ) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 664.00 Td (pricing.services and pricing.fees are objects keyed by the service/fee keys listed in the) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 649.00 Td (appendices.) Tj ET Q
-q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 631.00 Td (-  ) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 631.00 Td (Omit any service/fee you're not setting, or send { "mode": "none" } to leave it at the default \(no) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 616.00 Td (discount\).) Tj ET Q
-q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 598.00 Td (-  ) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 598.00 Td (replace: true \(default\) = this proposal replaces the customer's whole rate card. replace: false =) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 583.00 Td (merge \(only overwrite what you send, leave the rest\).) Tj ET Q
-q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 565.00 Td (-  ) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 565.00 Td (account_markup \(optional\) = a flat % markup applied across the account.) Tj ET Q
-q 0.059 0.239 0.180 rg BT /F2 14.0 Tf 54.00 527.00 Td (4. Discount ?mode? Values) Tj ET Q
-q 1.00 w 0.059 0.239 0.180 RG 54.00 522.00 m 558.00 522.00 l S Q
-q 0.100 0.100 0.100 rg BT /F2 11.5 Tf 54.00 496.00 Td (For services \(pricing.services\)) Tj ET Q
-q 0.059 0.239 0.180 rg 54.00 467.50 504.00 22.50 re f Q
-q 1.000 1.000 1.000 rg BT /F2 10.0 Tf 59.00 475.00 Td (mode) Tj ET Q
-q 1.000 1.000 1.000 rg BT /F2 10.0 Tf 190.04 475.00 Td (meaning) Tj ET Q
-q 1.000 1.000 1.000 rg BT /F2 10.0 Tf 391.64 475.00 Td (value is?) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 452.50 Td (discount_off_list) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 190.04 452.50 Td (% off the FedEx list rate) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 391.64 452.50 Td (a percent, e.g. 25 = 25% off list) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 445.00 m 558.00 445.00 l S Q
-q 0.965 0.973 0.969 rg 54.00 422.50 504.00 22.50 re f Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 430.00 Td (markup_over_cost) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 190.04 430.00 Td (% markup over our cost) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 391.64 430.00 Td (a percent, e.g. 10 = cost + 10%) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 422.50 m 558.00 422.50 l S Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 407.50 Td (dollars_over_cost) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 190.04 407.50 Td (flat dollars over our cost) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 391.64 407.50 Td (dollars, e.g. 3 = cost + $3.00) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 400.00 m 558.00 400.00 l S Q
-q 0.965 0.973 0.969 rg 54.00 377.50 504.00 22.50 re f Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 385.00 Td (flat) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 190.04 385.00 Td (a fixed price for that service) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 391.64 385.00 Td (dollars, e.g. 18.50) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 377.50 m 558.00 377.50 l S Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 362.50 Td (none) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 190.04 362.50 Td (no discount \(account default / raw\)) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 391.64 362.50 Td (? \(omit value\)) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 355.00 m 558.00 355.00 l S Q
-q 0.100 0.100 0.100 rg BT /F2 11.5 Tf 54.00 329.00 Td (For fees \(pricing.fees\)) Tj ET Q
-q 0.059 0.239 0.180 rg 54.00 300.50 504.00 22.50 re f Q
-q 1.000 1.000 1.000 rg BT /F2 10.0 Tf 59.00 308.00 Td (mode) Tj ET Q
-q 1.000 1.000 1.000 rg BT /F2 10.0 Tf 190.04 308.00 Td (meaning) Tj ET Q
-q 1.000 1.000 1.000 rg BT /F2 10.0 Tf 391.64 308.00 Td (value is?) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 285.50 Td (discount_off_list) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 190.04 285.50 Td (% off the fee's list amount) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 391.64 285.50 Td (a percent, e.g. 15 = 15% off) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 278.00 m 558.00 278.00 l S Q
-q 0.965 0.973 0.969 rg 54.00 255.50 504.00 22.50 re f Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 263.00 Td (markup_percent) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 190.04 263.00 Td (% markup on the fee) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 391.64 263.00 Td (a percent) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 255.50 m 558.00 255.50 l S Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 240.50 Td (dollars_over) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 190.04 240.50 Td (flat dollars for the fee) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 391.64 240.50 Td (dollars, e.g. 1.25) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 233.00 m 558.00 233.00 l S Q
-q 0.965 0.973 0.969 rg 54.00 210.50 504.00 22.50 re f Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 218.00 Td (flat) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 190.04 218.00 Td (fixed fee amount) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 391.64 218.00 Td (dollars) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 210.50 m 558.00 210.50 l S Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 195.50 Td (none) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 190.04 195.50 Td (leave fee at default) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 391.64 195.50 Td (? \(omit value\)) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 188.00 m 558.00 188.00 l S Q
-q 0.059 0.239 0.180 rg BT /F2 14.0 Tf 54.00 153.00 Td (5. Response) Tj ET Q
-q 1.00 w 0.059 0.239 0.180 RG 54.00 148.00 m 558.00 148.00 l S Q
+q 0.965 0.973 0.969 rg 54.00 434.00 504.00 298.00 re f Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 718.00 Td ({) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 707.00 Td (  "customer": {) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 696.00 Td (    "external_id": "YOUR-CUSTOMER-ID-123",) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 685.00 Td (    "name": "Acme Corp",) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 674.00 Td (    "email": "billing@acme.com",) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 663.00 Td (    "contact": "Jane Doe",) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 652.00 Td (    "phone": "555-123-4567",) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 641.00 Td (    "origin": "84101") Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 630.00 Td (  },) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 619.00 Td (  "pricing": {) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 608.00 Td (    "services": {) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 597.00 Td (      "ground":              { "mode": "discount_off_list", "value": 25 },) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 586.00 Td (      "home":                { "mode": "discount_off_list", "value": 25 },) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 575.00 Td (      "priority_overnight":  { "mode": "markup_over_cost",   "value": 10 },) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 564.00 Td (      "2day":                { "mode": "flat",               "value": 18.50 },) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 553.00 Td (      "first_overnight":     { "mode": "none" }) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 542.00 Td (    },) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 531.00 Td (    "fees": {) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 520.00 Td (      "FUEL":  { "mode": "discount_off_list", "value": 15 },) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 509.00 Td (      "RES":   { "mode": "dollars_over",      "value": 1.25 },) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 498.00 Td (      "SIG-D": { "mode": "none" }) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 487.00 Td (    },) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 476.00 Td (    "account_markup": 0) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 465.00 Td (  },) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 454.00 Td (  "replace": true) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 443.00 Td (}) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F2 11.5 Tf 54.00 410.00 Td (Field notes) Tj ET Q
+q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 393.00 Td (-  ) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 393.00 Td (customer.name is the only required field. external_id is strongly recommended ? it's how the) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 378.00 Td (same customer is matched on repeat sends \(otherwise it falls back to email\).) Tj ET Q
+q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 360.00 Td (-  ) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 360.00 Td (pricing.services and pricing.fees are objects keyed by the service/fee keys listed in the) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 345.00 Td (appendices.) Tj ET Q
+q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 327.00 Td (-  ) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 327.00 Td (Omit any service/fee you're not setting, or send { "mode": "none" } to leave it at the default \(no) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 312.00 Td (discount\).) Tj ET Q
+q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 294.00 Td (-  ) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 294.00 Td (replace: true \(default\) = this proposal replaces the customer's whole rate card. replace: false =) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 279.00 Td (merge \(only overwrite what you send, leave the rest\).) Tj ET Q
+q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 261.00 Td (-  ) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 261.00 Td (account_markup \(optional\) = a flat % markup applied across the account.) Tj ET Q
+q 0.059 0.239 0.180 rg BT /F2 14.0 Tf 54.00 223.00 Td (4. Discount ?mode? Values) Tj ET Q
+q 1.00 w 0.059 0.239 0.180 RG 54.00 218.00 m 558.00 218.00 l S Q
+q 0.100 0.100 0.100 rg BT /F2 11.5 Tf 54.00 192.00 Td (For services \(pricing.services\)) Tj ET Q
+q 0.059 0.239 0.180 rg 54.00 163.50 504.00 22.50 re f Q
+q 1.000 1.000 1.000 rg BT /F2 10.0 Tf 59.00 171.00 Td (mode) Tj ET Q
+q 1.000 1.000 1.000 rg BT /F2 10.0 Tf 190.04 171.00 Td (meaning) Tj ET Q
+q 1.000 1.000 1.000 rg BT /F2 10.0 Tf 391.64 171.00 Td (value is?) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 148.50 Td (discount_off_list) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 190.04 148.50 Td (% off the FedEx list rate) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 391.64 148.50 Td (a percent, e.g. 25 = 25% off list) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 141.00 m 558.00 141.00 l S Q
+q 0.965 0.973 0.969 rg 54.00 118.50 504.00 22.50 re f Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 126.00 Td (markup_over_cost) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 190.04 126.00 Td (% markup over our cost) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 391.64 126.00 Td (a percent, e.g. 10 = cost + 10%) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 118.50 m 558.00 118.50 l S Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 103.50 Td (dollars_over_cost) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 190.04 103.50 Td (flat dollars over our cost) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 391.64 103.50 Td (dollars, e.g. 3 = cost + $3.00) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 96.00 m 558.00 96.00 l S Q
+q 0.965 0.973 0.969 rg 54.00 73.50 504.00 22.50 re f Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 81.00 Td (flat) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 190.04 81.00 Td (a fixed price for that service) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 391.64 81.00 Td (dollars, e.g. 18.50) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 73.50 m 558.00 73.50 l S Q
 endstream
 endobj
 6 0 obj
-<< /Length 5756 >>
+<< /Length 5792 >>
 stream
-q 0.965 0.973 0.969 rg 54.00 621.00 504.00 111.00 re f Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 718.00 Td ({) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 707.00 Td (  "customer_id": "c1720000000123",) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 696.00 Td (  "external_id": "YOUR-CUSTOMER-ID-123",) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 685.00 Td (  "profile_id": "p1720000000456",) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 674.00 Td (  "created": true,) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 663.00 Td (  "services_set": 5,) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 652.00 Td (  "fees_set": 3,) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 641.00 Td (  "note": "Live in the Rates tab. Press nothing ? it's saved.") Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 630.00 Td (}) Tj ET Q
-q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 604.00 Td (-  ) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 604.00 Td (201 = new customer created. 200 = existing customer updated. created: true/false tells you) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 589.00 Td (which.) Tj ET Q
-q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 571.00 Td (-  ) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 571.00 Td (Errors return { "error": { "code": "...", "message": "..." } } with a 4xx/5xx status \(e.g. 401) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 556.00 Td (invalid_key, 422 invalid_request if customer.name is missing\).) Tj ET Q
-q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 538.00 Td (-  ) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 538.00 Td (Rate limit: 120 requests/minute per admin key.) Tj ET Q
-q 0.059 0.239 0.180 rg BT /F2 14.0 Tf 54.00 500.00 Td (6. Test curl) Tj ET Q
-q 1.00 w 0.059 0.239 0.180 RG 54.00 495.00 m 558.00 495.00 l S Q
-q 0.965 0.973 0.969 rg 54.00 354.00 504.00 133.00 re f Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 473.00 Td (curl -X POST https://<FREIGHTWIRE-DOMAIN>/api/v1/admin/customers \\) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 462.00 Td (  -H "Authorization: Bearer sck_admin_xxxxxxxxxxxx" \\) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 451.00 Td (  -H "Content-Type: application/json" \\) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 440.00 Td (  -d '{) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 429.00 Td (    "customer": { "external_id": "TEST-1", "name": "Test Customer", "email": "test@x.com" },) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 418.00 Td (    "pricing": {) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 407.00 Td (      "services": { "ground": { "mode": "discount_off_list", "value": 20 } },) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 396.00 Td (      "fees": { "FUEL": { "mode": "discount_off_list", "value": 10 } }) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 385.00 Td (    },) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 374.00 Td (    "replace": true) Tj ET Q
-q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 363.00 Td (  }') Tj ET Q
-q 0.059 0.239 0.180 rg BT /F2 14.0 Tf 54.00 321.00 Td (Appendix A ? Service Keys) Tj ET Q
-q 1.00 w 0.059 0.239 0.180 RG 54.00 316.00 m 558.00 316.00 l S Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 297.00 Td (Send only the ones a proposal covers. The everyday ones:) Tj ET Q
-q 0.059 0.239 0.180 rg 54.00 265.50 504.00 22.50 re f Q
-q 1.000 1.000 1.000 rg BT /F2 10.0 Tf 59.00 273.00 Td (key) Tj ET Q
-q 1.000 1.000 1.000 rg BT /F2 10.0 Tf 220.28 273.00 Td (service) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 250.50 Td (ground) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 250.50 Td (FedEx Ground) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 243.00 m 558.00 243.00 l S Q
-q 0.965 0.973 0.969 rg 54.00 220.50 504.00 22.50 re f Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 228.00 Td (home) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 228.00 Td (FedEx Home Delivery) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 220.50 m 558.00 220.50 l S Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 205.50 Td (ground_economy) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 205.50 Td (FedEx Ground Economy) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 198.00 m 558.00 198.00 l S Q
-q 0.965 0.973 0.969 rg 54.00 175.50 504.00 22.50 re f Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 183.00 Td (express_saver) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 183.00 Td (FedEx Express Saver) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 175.50 m 558.00 175.50 l S Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 160.50 Td (2day) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 160.50 Td (FedEx 2Day) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 153.00 m 558.00 153.00 l S Q
-q 0.965 0.973 0.969 rg 54.00 130.50 504.00 22.50 re f Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 138.00 Td (2day_am) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 138.00 Td (FedEx 2Day A.M.) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 130.50 m 558.00 130.50 l S Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 115.50 Td (standard_overnight) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 115.50 Td (FedEx Standard Overnight) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 108.00 m 558.00 108.00 l S Q
-q 0.965 0.973 0.969 rg 54.00 85.50 504.00 22.50 re f Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 93.00 Td (priority_overnight) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 93.00 Td (FedEx Priority Overnight) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 85.50 m 558.00 85.50 l S Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 70.50 Td (first_overnight) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 70.50 Td (FedEx First Overnight) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 63.00 m 558.00 63.00 l S Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 717.00 Td (none) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 190.04 717.00 Td (no discount \(account default / raw\)) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 391.64 717.00 Td (? \(omit value\)) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 709.50 m 558.00 709.50 l S Q
+q 0.100 0.100 0.100 rg BT /F2 11.5 Tf 54.00 683.50 Td (For fees \(pricing.fees\)) Tj ET Q
+q 0.059 0.239 0.180 rg 54.00 655.00 504.00 22.50 re f Q
+q 1.000 1.000 1.000 rg BT /F2 10.0 Tf 59.00 662.50 Td (mode) Tj ET Q
+q 1.000 1.000 1.000 rg BT /F2 10.0 Tf 190.04 662.50 Td (meaning) Tj ET Q
+q 1.000 1.000 1.000 rg BT /F2 10.0 Tf 391.64 662.50 Td (value is?) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 640.00 Td (discount_off_list) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 190.04 640.00 Td (% off the fee's list amount) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 391.64 640.00 Td (a percent, e.g. 15 = 15% off) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 632.50 m 558.00 632.50 l S Q
+q 0.965 0.973 0.969 rg 54.00 610.00 504.00 22.50 re f Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 617.50 Td (markup_percent) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 190.04 617.50 Td (% markup on the fee) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 391.64 617.50 Td (a percent) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 610.00 m 558.00 610.00 l S Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 595.00 Td (dollars_over) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 190.04 595.00 Td (flat dollars for the fee) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 391.64 595.00 Td (dollars, e.g. 1.25) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 587.50 m 558.00 587.50 l S Q
+q 0.965 0.973 0.969 rg 54.00 565.00 504.00 22.50 re f Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 572.50 Td (flat) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 190.04 572.50 Td (fixed fee amount) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 391.64 572.50 Td (dollars) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 565.00 m 558.00 565.00 l S Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 550.00 Td (none) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 190.04 550.00 Td (leave fee at default) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 391.64 550.00 Td (? \(omit value\)) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 542.50 m 558.00 542.50 l S Q
+q 0.059 0.239 0.180 rg BT /F2 14.0 Tf 54.00 507.50 Td (5. Response) Tj ET Q
+q 1.00 w 0.059 0.239 0.180 RG 54.00 502.50 m 558.00 502.50 l S Q
+q 0.965 0.973 0.969 rg 54.00 383.50 504.00 111.00 re f Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 480.50 Td ({) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 469.50 Td (  "customer_id": "c1720000000123",) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 458.50 Td (  "external_id": "YOUR-CUSTOMER-ID-123",) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 447.50 Td (  "profile_id": "p1720000000456",) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 436.50 Td (  "created": true,) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 425.50 Td (  "services_set": 5,) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 414.50 Td (  "fees_set": 3,) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 403.50 Td (  "note": "Live in the Rates tab. Press nothing ? it's saved.") Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 392.50 Td (}) Tj ET Q
+q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 366.50 Td (-  ) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 366.50 Td (201 = new customer created. 200 = existing customer updated. created: true/false tells you) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 351.50 Td (which.) Tj ET Q
+q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 333.50 Td (-  ) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 333.50 Td (Errors return { "error": { "code": "...", "message": "..." } } with a 4xx/5xx status \(e.g. 401) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 318.50 Td (invalid_key, 422 invalid_request if customer.name is missing\).) Tj ET Q
+q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 300.50 Td (-  ) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 300.50 Td (Rate limit: 120 requests/minute per admin key.) Tj ET Q
+q 0.059 0.239 0.180 rg BT /F2 14.0 Tf 54.00 262.50 Td (6. Test curl) Tj ET Q
+q 1.00 w 0.059 0.239 0.180 RG 54.00 257.50 m 558.00 257.50 l S Q
+q 0.965 0.973 0.969 rg 54.00 116.50 504.00 133.00 re f Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 235.50 Td (curl -X POST https://app.freightwire.com/api/v1/admin/customers \\) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 224.50 Td (  -H "Authorization: Bearer sck_admin_xxxxxxxxxxxx" \\) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 213.50 Td (  -H "Content-Type: application/json" \\) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 202.50 Td (  -d '{) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 191.50 Td (    "customer": { "external_id": "TEST-1", "name": "Test Customer", "email": "test@x.com" },) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 180.50 Td (    "pricing": {) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 169.50 Td (      "services": { "ground": { "mode": "discount_off_list", "value": 20 } },) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 158.50 Td (      "fees": { "FUEL": { "mode": "discount_off_list", "value": 10 } }) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 147.50 Td (    },) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 136.50 Td (    "replace": true) Tj ET Q
+q 0.120 0.160 0.130 rg BT /F3 8.0 Tf 60.00 125.50 Td (  }') Tj ET Q
+q 0.059 0.239 0.180 rg BT /F2 14.0 Tf 54.00 83.50 Td (Appendix A ? Service Keys) Tj ET Q
+q 1.00 w 0.059 0.239 0.180 RG 54.00 78.50 m 558.00 78.50 l S Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 59.50 Td (Send only the ones a proposal covers. The everyday ones:) Tj ET Q
 endstream
 endobj
 7 0 obj
-<< /Length 5736 >>
+<< /Length 6444 >>
 stream
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 721.00 Td (International: intl_ground_ca, intl_connect_plus, intl_economy, intl_priority, intl_priority_express,) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 706.00 Td (intl_first.) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 686.00 Td (Freight: first_overnight_freight, 1day_freight, 2day_freight, 3day_freight, intl_priority_freight,) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 671.00 Td (intl_economy_freight.) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 651.00 Td (One Rate \(flat-rate packaging\) keys follow the pattern or_<service>_<packaging>, e.g.) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 636.00 Td (or_2day_small_box, or_priority_overnight_envelope, or_standard_overnight_medium_box. \(All 69 keys) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 621.00 Td (available on request ? most proposals only need the everyday 9 above.\)) Tj ET Q
-q 0.059 0.239 0.180 rg BT /F2 14.0 Tf 54.00 585.00 Td (Appendix B ? Common Fee Keys) Tj ET Q
-q 1.00 w 0.059 0.239 0.180 RG 54.00 580.00 m 558.00 580.00 l S Q
-q 0.059 0.239 0.180 rg 54.00 549.50 504.00 22.50 re f Q
-q 1.000 1.000 1.000 rg BT /F2 10.0 Tf 59.00 557.00 Td (key) Tj ET Q
-q 1.000 1.000 1.000 rg BT /F2 10.0 Tf 220.28 557.00 Td (fee) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 534.50 Td (FUEL) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 534.50 Td (Fuel Surcharge \(Express\)) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 527.00 m 558.00 527.00 l S Q
-q 0.965 0.973 0.969 rg 54.00 504.50 504.00 22.50 re f Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 512.00 Td (FUEL-G) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 512.00 Td (Fuel Surcharge \(Ground\)) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 504.50 m 558.00 504.50 l S Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 489.50 Td (RES) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 489.50 Td (Residential Delivery) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 482.00 m 558.00 482.00 l S Q
-q 0.965 0.973 0.969 rg 54.00 459.50 504.00 22.50 re f Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 467.00 Td (RES-HD) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 467.00 Td (Home Delivery Charge) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 459.50 m 558.00 459.50 l S Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 444.50 Td (DAS) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 444.50 Td (Delivery Area Surcharge ? Commercial) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 437.00 m 558.00 437.00 l S Q
-q 0.965 0.973 0.969 rg 54.00 414.50 504.00 22.50 re f Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 422.00 Td (DAS-G) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 422.00 Td (Delivery Area Surcharge ? Ground) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 414.50 m 558.00 414.50 l S Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 399.50 Td (AH-D) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 399.50 Td (Additional Handling ? Dimensions) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 392.00 m 558.00 392.00 l S Q
-q 0.965 0.973 0.969 rg 54.00 369.50 504.00 22.50 re f Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 377.00 Td (SIG-D) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 377.00 Td (Direct Signature Required) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 369.50 m 558.00 369.50 l S Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 354.50 Td (INS) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 354.50 Td (Declared Value \(per $100 over $100\)) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 347.00 m 558.00 347.00 l S Q
-q 0.965 0.973 0.969 rg 54.00 324.50 504.00 22.50 re f Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 332.00 Td (ADDR) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 332.00 Td (Address Correction) Tj ET Q
-q 0.50 w 0.800 0.840 0.820 RG 54.00 324.50 m 558.00 324.50 l S Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 305.50 Td (\(79 fee keys total ? full list on request. Most proposals only touch fuel + residential.\)) Tj ET Q
-q 0.059 0.239 0.180 rg BT /F2 14.0 Tf 54.00 269.50 Td (What I Need From You) Tj ET Q
-q 1.00 w 0.059 0.239 0.180 RG 54.00 264.50 m 558.00 264.50 l S Q
-q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 245.50 Td (1. ) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 245.50 Td (Can your ?Send? button POST the JSON in section 3 to our endpoint?) Tj ET Q
-q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 227.50 Td (2. ) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 227.50 Td (Will you store OUR customer_id from the response so repeat sends update instead of duplicate?) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 212.50 Td (\(Or just always send the same external_id and we handle matching.\)) Tj ET Q
-q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 194.50 Td (3. ) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 194.50 Td (Send me one sample of your proposal output \(raw discounts/fees for one customer\) so I can) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 179.50 Td (confirm every field maps to our service and fee names before you build.) Tj ET Q
-q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 161.50 Td (4. ) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 161.50 Td (Any services/fees in your proposals that DON'T map to the keys above? Send me the list.) Tj ET Q
-q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 143.50 Td (5. ) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 143.50 Td (What should happen if a call fails ? will you retry or queue it so a proposal never silently drops?) Tj ET Q
-q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 125.50 Td (6. ) Tj ET Q
-q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 125.50 Td (Confirm you can keep the sck_admin_ key server-side \(not exposed in a browser\).) Tj ET Q
+q 0.059 0.239 0.180 rg 54.00 709.50 504.00 22.50 re f Q
+q 1.000 1.000 1.000 rg BT /F2 10.0 Tf 59.00 717.00 Td (key) Tj ET Q
+q 1.000 1.000 1.000 rg BT /F2 10.0 Tf 220.28 717.00 Td (service) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 694.50 Td (ground) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 694.50 Td (FedEx Ground) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 687.00 m 558.00 687.00 l S Q
+q 0.965 0.973 0.969 rg 54.00 664.50 504.00 22.50 re f Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 672.00 Td (home) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 672.00 Td (FedEx Home Delivery) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 664.50 m 558.00 664.50 l S Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 649.50 Td (ground_economy) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 649.50 Td (FedEx Ground Economy) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 642.00 m 558.00 642.00 l S Q
+q 0.965 0.973 0.969 rg 54.00 619.50 504.00 22.50 re f Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 627.00 Td (express_saver) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 627.00 Td (FedEx Express Saver) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 619.50 m 558.00 619.50 l S Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 604.50 Td (2day) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 604.50 Td (FedEx 2Day) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 597.00 m 558.00 597.00 l S Q
+q 0.965 0.973 0.969 rg 54.00 574.50 504.00 22.50 re f Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 582.00 Td (2day_am) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 582.00 Td (FedEx 2Day A.M.) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 574.50 m 558.00 574.50 l S Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 559.50 Td (standard_overnight) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 559.50 Td (FedEx Standard Overnight) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 552.00 m 558.00 552.00 l S Q
+q 0.965 0.973 0.969 rg 54.00 529.50 504.00 22.50 re f Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 537.00 Td (priority_overnight) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 537.00 Td (FedEx Priority Overnight) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 529.50 m 558.00 529.50 l S Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 514.50 Td (first_overnight) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 514.50 Td (FedEx First Overnight) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 507.00 m 558.00 507.00 l S Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 488.00 Td (International: intl_ground_ca, intl_connect_plus, intl_economy, intl_priority, intl_priority_express,) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 473.00 Td (intl_first.) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 453.00 Td (Freight: first_overnight_freight, 1day_freight, 2day_freight, 3day_freight, intl_priority_freight,) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 438.00 Td (intl_economy_freight.) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 418.00 Td (One Rate \(flat-rate packaging\) keys follow the pattern or_<service>_<packaging>, e.g.) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 403.00 Td (or_2day_small_box, or_priority_overnight_envelope, or_standard_overnight_medium_box. \(All 69 keys) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 388.00 Td (available on request ? most proposals only need the everyday 9 above.\)) Tj ET Q
+q 0.059 0.239 0.180 rg BT /F2 14.0 Tf 54.00 352.00 Td (Appendix B ? Common Fee Keys) Tj ET Q
+q 1.00 w 0.059 0.239 0.180 RG 54.00 347.00 m 558.00 347.00 l S Q
+q 0.059 0.239 0.180 rg 54.00 316.50 504.00 22.50 re f Q
+q 1.000 1.000 1.000 rg BT /F2 10.0 Tf 59.00 324.00 Td (key) Tj ET Q
+q 1.000 1.000 1.000 rg BT /F2 10.0 Tf 220.28 324.00 Td (fee) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 301.50 Td (FUEL) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 301.50 Td (Fuel Surcharge \(Express\)) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 294.00 m 558.00 294.00 l S Q
+q 0.965 0.973 0.969 rg 54.00 271.50 504.00 22.50 re f Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 279.00 Td (FUEL-G) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 279.00 Td (Fuel Surcharge \(Ground\)) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 271.50 m 558.00 271.50 l S Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 256.50 Td (RES) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 256.50 Td (Residential Delivery) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 249.00 m 558.00 249.00 l S Q
+q 0.965 0.973 0.969 rg 54.00 226.50 504.00 22.50 re f Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 234.00 Td (RES-HD) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 234.00 Td (Home Delivery Charge) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 226.50 m 558.00 226.50 l S Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 211.50 Td (DAS) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 211.50 Td (Delivery Area Surcharge ? Commercial) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 204.00 m 558.00 204.00 l S Q
+q 0.965 0.973 0.969 rg 54.00 181.50 504.00 22.50 re f Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 189.00 Td (DAS-G) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 189.00 Td (Delivery Area Surcharge ? Ground) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 181.50 m 558.00 181.50 l S Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 166.50 Td (AH-D) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 166.50 Td (Additional Handling ? Dimensions) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 159.00 m 558.00 159.00 l S Q
+q 0.965 0.973 0.969 rg 54.00 136.50 504.00 22.50 re f Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 144.00 Td (SIG-D) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 144.00 Td (Direct Signature Required) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 136.50 m 558.00 136.50 l S Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 121.50 Td (INS) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 121.50 Td (Declared Value \(per $100 over $100\)) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 114.00 m 558.00 114.00 l S Q
+q 0.965 0.973 0.969 rg 54.00 91.50 504.00 22.50 re f Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 59.00 99.00 Td (ADDR) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 10.0 Tf 220.28 99.00 Td (Address Correction) Tj ET Q
+q 0.50 w 0.800 0.840 0.820 RG 54.00 91.50 m 558.00 91.50 l S Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 54.00 72.50 Td (\(79 fee keys total ? full list on request. Most proposals only touch fuel + residential.\)) Tj ET Q
 endstream
 endobj
 8 0 obj
-<< /Type /Page /Parent 12 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R /F3 3 0 R >> >> /Contents 4 0 R >>
+<< /Length 1733 >>
+stream
+q 0.059 0.239 0.180 rg BT /F2 14.0 Tf 54.00 705.00 Td (What I Need From You) Tj ET Q
+q 1.00 w 0.059 0.239 0.180 RG 54.00 700.00 m 558.00 700.00 l S Q
+q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 681.00 Td (1. ) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 681.00 Td (Can your ?Send? button POST the JSON in section 3 to our endpoint?) Tj ET Q
+q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 663.00 Td (2. ) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 663.00 Td (Will you store OUR customer_id from the response so repeat sends update instead of duplicate?) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 648.00 Td (\(Or just always send the same external_id and we handle matching.\)) Tj ET Q
+q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 630.00 Td (3. ) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 630.00 Td (Send me one sample of your proposal output \(raw discounts/fees for one customer\) so I can) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 615.00 Td (confirm every field maps to our service and fee names before you build.) Tj ET Q
+q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 597.00 Td (4. ) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 597.00 Td (Any services/fees in your proposals that DON'T map to the keys above? Send me the list.) Tj ET Q
+q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 579.00 Td (5. ) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 579.00 Td (What should happen if a call fails ? will you retry or queue it so a proposal never silently drops?) Tj ET Q
+q 0.059 0.239 0.180 rg BT /F2 11.0 Tf 54.00 561.00 Td (6. ) Tj ET Q
+q 0.100 0.100 0.100 rg BT /F1 11.0 Tf 72.00 561.00 Td (Confirm you can keep the sck_admin_ key server-side \(not exposed in a browser\).) Tj ET Q
+endstream
 endobj
 9 0 obj
-<< /Type /Page /Parent 12 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R /F3 3 0 R >> >> /Contents 5 0 R >>
+<< /Type /Page /Parent 14 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R /F3 3 0 R >> >> /Contents 4 0 R >>
 endobj
 10 0 obj
-<< /Type /Page /Parent 12 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R /F3 3 0 R >> >> /Contents 6 0 R >>
+<< /Type /Page /Parent 14 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R /F3 3 0 R >> >> /Contents 5 0 R >>
 endobj
 11 0 obj
-<< /Type /Page /Parent 12 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R /F3 3 0 R >> >> /Contents 7 0 R >>
+<< /Type /Page /Parent 14 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R /F3 3 0 R >> >> /Contents 6 0 R >>
 endobj
 12 0 obj
-<< /Type /Pages /Count 4 /Kids [8 0 R 9 0 R 10 0 R 11 0 R] >>
+<< /Type /Page /Parent 14 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R /F3 3 0 R >> >> /Contents 7 0 R >>
 endobj
 13 0 obj
-<< /Type /Catalog /Pages 12 0 R >>
+<< /Type /Page /Parent 14 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R /F3 3 0 R >> >> /Contents 8 0 R >>
+endobj
+14 0 obj
+<< /Type /Pages /Count 5 /Kids [9 0 R 10 0 R 11 0 R 12 0 R 13 0 R] >>
+endobj
+15 0 obj
+<< /Type /Catalog /Pages 14 0 R >>
 endobj
 xref
-0 14
+0 16
 0000000000 65535 f 
 0000000015 00000 n 
 0000000112 00000 n 
 0000000214 00000 n 
 0000000309 00000 n 
-0000005020 00000 n 
-0000011115 00000 n 
-0000016923 00000 n 
-0000022711 00000 n 
-0000022858 00000 n 
-0000023005 00000 n 
-0000023153 00000 n 
-0000023301 00000 n 
-0000023379 00000 n 
+0000002594 00000 n 
+0000008719 00000 n 
+0000014563 00000 n 
+0000021059 00000 n 
+0000022844 00000 n 
+0000022991 00000 n 
+0000023139 00000 n 
+0000023287 00000 n 
+0000023435 00000 n 
+0000023583 00000 n 
+0000023669 00000 n 
 trailer
-<< /Size 14 /Root 13 0 R >>
+<< /Size 16 /Root 15 0 R >>
 startxref
-23430
+23720
 %%EOF

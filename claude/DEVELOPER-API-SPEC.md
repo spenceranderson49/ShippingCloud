@@ -11,7 +11,7 @@ You only need to call **one endpoint.**
 ## 1. Endpoint
 
 ```
-POST https://<FREIGHTWIRE-DOMAIN>/api/v1/admin/customers
+POST https://app.freightwire.com/api/v1/admin/customers
 ```
 
 (We'll give you the exact domain + a test domain to try against first.)
@@ -115,7 +115,7 @@ The key starts with `sck_admin_`. Keep it server-side; don't ship it in browser 
 ## 6. curl you can test with
 
 ```bash
-curl -X POST https://<FREIGHTWIRE-DOMAIN>/api/v1/admin/customers \
+curl -X POST https://app.freightwire.com/api/v1/admin/customers \
   -H "Authorization: Bearer sck_admin_xxxxxxxxxxxx" \
   -H "Content-Type: application/json" \
   -d '{

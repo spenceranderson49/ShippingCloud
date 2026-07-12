@@ -138,6 +138,71 @@ async function fireHooks(client, eventName, payload) {
 }
 module.exports.validHookUrl = validHookUrl;
 
+/* map friendly proposal modes → the engine's service-rule basis (same as the Rates tab) */
+function svcRuleFromInput(x) {
+  if (!x || typeof x !== "object") return null;
+  const mode = String(x.mode || "").toLowerCase();
+  const v = num(x.value, null);
+  const min = num(x.min, null);
+  if (mode === "none" || mode === "no_discount") return null;                 // no rule → account default / raw cost
+  if (mode === "discount_off_list" || mode === "list") return { basis: "list", pct: v, ...(min != null ? { min } : {}) };
+  if (mode === "markup_over_cost" || mode === "percent") return { basis: "percent", pct: v, ...(min != null ? { min } : {}) };
+  if (mode === "dollars_over_cost" || mode === "fixed") return { basis: "fixed", pct: v };
+  if (mode === "flat") return { basis: "flat", pct: v };
+  return null;
+}
+/* map friendly fee modes → the engine's surcharge-rule type */
+function feeRuleFromInput(x) {
+  if (!x || typeof x !== "object") return null;
+  const mode = String(x.mode || "").toLowerCase();
+  const v = num(x.value, null);
+  if (v == null && mode !== "list") return null;
+  if (mode === "discount_off_list" || mode === "listpct" || mode === "list") return { type: "listpct", amount: v || 0 };
+  if (mode === "markup_percent" || mode === "percent") return { type: "percent", amount: v };
+  if (mode === "dollars_over" || mode === "add") return { type: "add", amount: v };
+  if (mode === "flat" || mode === "fixed") return { type: "fixed", amount: v };
+  return null;
+}
+async function provisionCustomer(body) {
+  const cust = body.customer || {};
+  const name = S(cust.name || cust.company).trim();
+  if (!name) return ERR(422, "invalid_request", "customer.name is required.");
+  /* fresh read (not the auth snapshot) so we never clobber a concurrent portal edit */
+  const [cRes, rRes] = await Promise.all([getStore("clients"), getStore("rateRules")]);
+  const clients = (cRes.ok && Array.isArray(cRes.value)) ? cRes.value : [];
+  const rules = (rRes.ok && rRes.value && typeof rRes.value === "object") ? rRes.value : { profiles: [{ id: "default", name: "Default", services: {}, surcharges: {} }], assign: {}, baseCosts: {} };
+  rules.profiles = Array.isArray(rules.profiles) && rules.profiles.length ? rules.profiles : [{ id: "default", name: "Default", services: {}, surcharges: {} }];
+  rules.assign = rules.assign || {};
+  /* find existing customer by external_id or email, else create */
+  const em = S(cust.email).trim().toLowerCase();
+  let client = clients.find((c) => c && ((cust.external_id && c.externalId === cust.external_id) || (em && S(c.email).toLowerCase() === em)));
+  let created = false;
+  if (!client) {
+    client = { id: "c" + Date.now() + Math.floor(Math.random() * 1000), name, contact: S(cust.contact), email: S(cust.email), phone: S(cust.phone), origin: S(cust.origin), markup: "", status: "active", since: new Date().toISOString().slice(0, 7), plan: "Standard", createdAt: new Date().toISOString(), externalId: cust.external_id || undefined, blockedServices: [] };
+    clients.push(client); created = true;
+  } else { client.name = name; if (cust.email) client.email = S(cust.email); if (cust.contact) client.contact = S(cust.contact); }
+  /* build this customer's OWN profile from the proposal (never touches the shared Default) */
+  const svcRules = {}; const p = body.pricing || {};
+  for (const [k, v] of Object.entries(p.services || {})) { const r = svcRuleFromInput(v); if (r && r.pct != null) svcRules[k] = r; }
+  const feeRules = {}; for (const [k, v] of Object.entries(p.fees || {})) { const r = feeRuleFromInput(v); if (r) feeRules[k] = r; }
+  const assigned = rules.assign[client.id];
+  let prof = assigned && rules.profiles.find((x) => x.id === assigned && x.id !== "default");
+  if (!prof) { prof = { id: "p" + Date.now(), name: client.name, services: {}, surcharges: {} }; rules.profiles.push(prof); rules.assign[client.id] = prof.id; }
+  if (body.replace !== false) { prof.services = svcRules; prof.surcharges = feeRules; }
+  else { prof.services = { ...(prof.services || {}), ...svcRules }; prof.surcharges = { ...(prof.surcharges || {}), ...feeRules }; }
+  if (typeof p.account_markup === "number") client.markup = p.account_markup;
+  const w1 = await putStore("clients", clients);
+  const w2 = await putStore("rateRules", rules);
+  if (!w1.ok || !w2.ok) return ERR(502, "save_failed", "Couldn't save — try again.");
+  return J(created ? 201 : 200, { customer_id: client.id, external_id: client.externalId || null, profile_id: prof.id, created, services_set: Object.keys(svcRules).length, fees_set: Object.keys(feeRules).length, note: "Live in the Rates tab. Press nothing — it's saved." });
+}
+async function saveReport(body) {
+  const rep = { id: "rpt" + Date.now(), title: S(body.title || "Report"), type: S(body.type || "optimization"), customer_external_id: body.customer_external_id || null, data: body.data || null, received: new Date().toISOString() };
+  const cur = await getStore("proposalReports");
+  const arr = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+  await putStore("proposalReports", [rep, ...arr].slice(0, 1000));
+  return J(201, { report_id: rep.id, note: "Saved. Visible in Admin → API → Reports." });
+}
 exports.handler = async (event) => {
   try {
     if (event.httpMethod === "OPTIONS") return J(204, {});
@@ -161,6 +226,15 @@ exports.handler = async (event) => {
     const h = sha(rawKey);
     const keyRow = world.keys.find((k) => k && k.hash === h && !k.revoked);
     if (!keyRow) return ERR(401, "invalid_key", "That API key isn't valid (or was revoked).");
+    const isAdminKey = (keyRow.mode || "live") === "admin";
+    if (isAdminKey) {
+      /* ── admin provisioning surface (your proposal tool → the Rates tab) ── */
+      if (!allow("k:" + keyRow.id, 120)) return ERR(429, "rate_limited", "Too many requests — slow down.");
+      if (seg[0] === "admin" && seg[1] === "customers" && method === "POST") return await provisionCustomer(body);
+      if (seg[0] === "admin" && seg[1] === "reports" && method === "POST") return await saveReport(body);
+      if (seg[0] === "account" && method === "GET") return J(200, { account: "admin", mode: "admin", key_prefix: keyRow.prefix, capabilities: ["provision_customers", "save_reports"], docs: "/api-docs.html" });
+      return ERR(404, "not_found", "Admin keys can call POST /v1/admin/customers and POST /v1/admin/reports. See /api-docs.html.");
+    }
     const client = world.clients.find((x) => x && x.id === keyRow.clientId);
     if (!client) return ERR(403, "no_account", "This key isn't attached to an active account — contact support.");
     if (client.status && client.status !== "active") return ERR(403, "account_inactive", "This account is inactive — contact support.");

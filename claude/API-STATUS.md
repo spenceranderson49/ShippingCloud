@@ -1,6 +1,6 @@
 # ShippingCloud API — status & rundown (for Spencer)
 
-_All of this is on **staging only** (current build addr-v475). Production is untouched at v464._
+_All of this is on **staging only** (current build addr-v479). Production is untouched at v464._
 
 ## What it is
 Your own public REST API — the thing that replaces the England/wholesale API for anyone integrating with **you**. It sits by itself in **Admin → API** (and billing in **Admin → Billing & invoices**). It reads your rate cards and customer list but writes only to its own storage — it cannot affect the Ship tab, orders, or the portal. Nothing about it, other carriers, or internal mechanics shows on the customer end.
@@ -38,3 +38,7 @@ A full competitive + implementation audit ran. The 9 findings are all fixed: the
 1. **Customer invoice view + pay-online:** the admin invoicing works today. Turning on a *customer-facing* "your invoices / pay now" screen is a flag I left OFF (you said keep the customer end clean). Say when you want it and I'll wire the customer view + a payment link.
 2. **Real carrier label APIs** beyond FedEx (so UniUni/USPS labels *print*, not just quote) — each needs that carrier's API creds; tell me which to wire first.
 3. **Production promote** whenever you're ready — the API is one deploy from live.
+
+
+## Note on the v474→v479 repair (transparency)
+During the API hardening, one edit script aborted mid-run and silently failed to save six fixes — while a later script wrote a *call* to one of them (`insertNew`). That would have made every idempotent booking return a 500. It was caught by the round-2 audit **and** an independent verification pass **before anything went live** (the API needs keys that aren't set on staging yet, so nothing had booked). v479 genuinely applies all six (idempotency mutex, webhook SSRF hardening, capped label-PDF storage, robust package parsing, neutral errors) plus invoice de-duplication, and pins the idempotency path + SSRF guard with regression tests. Lesson logged: every edit batch is now followed by a grep-verify that the change is actually present, not just that the script printed OK.

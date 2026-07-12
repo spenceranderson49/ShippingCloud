@@ -742,7 +742,7 @@ exports.handler = async (event) => {
       const cur = await getStore("apiKeys");
       const keys = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
       if (keys.filter((k) => !k.revoked).length >= 500) return J({ ok: false, error: "Key limit reached." });
-      const mode = String(body.mode || "live") === "test" ? "test" : "live";
+      const mode = ["test","live","admin"].includes(String(body.mode || "live")) ? String(body.mode) : "live";
       const raw = "sck_" + mode + "_" + crypto.randomBytes(24).toString("hex");
       const row = { id: "k" + Date.now(), mode, prefix: raw.slice(0, 14) + "…", label: String(body.label || "").slice(0, 60), clientId, hash: crypto.createHash("sha256").update(raw).digest("hex"), createdAt: new Date().toISOString() };
       const w = await putStores({ apiKeys: [...keys, row] });

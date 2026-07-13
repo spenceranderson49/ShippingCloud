@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v464r2";
+const BUILD_TAG="addr-v464r3";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2086,7 +2086,7 @@ function applyAccessorials(q, opts){
 const DEFAULT_RATE_RULES={profiles:[{id:"default",name:"Default",services:{},surcharges:{}}],assign:{},baseCosts:{}};
 /* Default service set for a NEW customer (Spencer's spec): everything on EXCEPT 2Day A.M.,
    Intl Priority Express, Intl First, all freight, and all OneRate variants but 2Day OneRate. */
-const DEFAULT_BLOCKED_SERVICES=["2day_am","intl_priority_express","intl_first","first_overnight_freight","1day_freight","2day_freight","3day_freight","intl_priority_freight","intl_economy_freight","or_first_overnight","or_priority_overnight","or_standard_overnight","or_2day_am","or_express_saver"];
+const DEFAULT_BLOCKED_SERVICES=["2day_am","first_overnight","intl_priority_express","intl_first","first_overnight_freight","1day_freight","2day_freight","3day_freight","intl_priority_freight","intl_economy_freight","or_first_overnight","or_priority_overnight","or_standard_overnight","or_2day_am","or_express_saver"];
 const OR_RATE_SVCS=[["first_overnight","First Overnight"],["priority_overnight","Priority Overnight"],["standard_overnight","Standard Overnight"],["2day_am","2Day A.M."],["2day","2Day"],["express_saver","Express Saver"]];
 const ONE_RATE_LOCK_SVCS=[["or_first_overnight","FedEx First Overnight® OneRate"],["or_priority_overnight","FedEx Priority Overnight® OneRate"],["or_standard_overnight","FedEx Standard Overnight® OneRate"],["or_2day_am","FedEx 2Day® A.M. OneRate"],["or_2day","FedEx 2Day® OneRate"],["or_express_saver","FedEx Express Saver® OneRate"]].map(([k,l])=>({k,l}));   // same shape as svcQuick (RATE_SERVICES.fedex items)
 const OR_RATE_PKGS=[["envelope","Envelope"],["pak","Pak"],["xs_box","Extra Small Box"],["small_box","Small Box"],["medium_box","Medium Box"],["large_box","Large Box"],["xl_box","Extra Large Box"],["tube","Tube"]];
@@ -6270,7 +6270,7 @@ function AppInner(){
   const unfulfilled=orders.filter(o=>o.status==="unfulfilled").length;
 
   if(!currentUser) return <Login users={users} brand={{...DEFAULT_BRAND,...(settings.brand||{})}} onLogin={(u)=>{ const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }}/>;
-  if(BRAND.admin&&currentUser.role!=="admin") return (<div className="min-h-screen bg-stone-100 flex items-center justify-center p-4"><div className="bg-white border border-stone-200 rounded-xl p-8 text-center max-w-sm"><ShieldCheck className="w-8 h-8 text-stone-300 mx-auto mb-3"/><div className="font-semibold text-stone-800">Administrators only</div><p className="text-sm text-stone-500 mt-1">This portal is the admin HQ. Your account works on shippingcloud.net and freightwireship.com.</p><button onClick={()=>{lsDel("session");window.location.reload();}} className="mt-4 text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Sign out</button></div></div>);
+  if(BRAND.admin&&currentUser.role!=="admin"&&!lsGet("adminReturn",null)) return (<div className="min-h-screen bg-stone-100 flex items-center justify-center p-4"><div className="bg-white border border-stone-200 rounded-xl p-8 text-center max-w-sm"><ShieldCheck className="w-8 h-8 text-stone-300 mx-auto mb-3"/><div className="font-semibold text-stone-800">Administrators only</div><p className="text-sm text-stone-500 mt-1">This portal is the admin HQ. Your account works on shippingcloud.net and freightwireship.com.</p><button onClick={()=>{lsDel("session");window.location.reload();}} className="mt-4 text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Sign out</button></div></div>);
 
   const [fedexPrompt,setFedexPrompt]=usePersist("fedexPrompt",{seen:false});
   const adminReturn=lsGet("adminReturn",null);

@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v517";
+const BUILD_TAG="addr-v518";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6911,7 +6911,7 @@ function shipDateDefault(settings){
   return new Date(d.getTime()-off*60000).toISOString().slice(0,10);
 }
 /* Numbered step marker for the Ship screen — gives the dense form a clear, professional
-   1-2-3 flow (Ship from & to → Packages & options → Service & rate) without moving any
+   1-2-3 flow (Ship from & to → Package details → Service & rate) without moving any
    of the price-interdependent inputs around. */
 function StepHead({n,label}){
   return (<div className="flex items-center gap-2 pt-1">
@@ -7641,7 +7641,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         </div>}
         {intl&&<div className="flex items-center gap-2 text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2"><MapPin className="w-4 h-4"/>International shipment to <b>{receiver.country}</b> — FedEx &amp; DHL rates shown, customs info required below.</div>}
 
-        <StepHead n="2" label="Packages & options"/>
+        <StepHead n="2" label="Package details"/>
         <div className="bg-stone-100 border border-stone-200 rounded-lg p-3 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <datalist id="sc-ref-list">{[...((settings.fieldLists||{}).department||[]),...((settings.fieldLists||{}).reference||[])].map(v=><option key={v} value={v}/>)}</datalist>
@@ -7773,7 +7773,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <span><b>Hands-free:</b> {hfWait.m}</span>
         </div>}
         <StepHead n="3" label="Service & rate"/>
-        <ServiceList quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${orBox?orBox.code:""}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
+        <ServiceList quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
         {intl&&(
           <div className="border border-[#99D6FF] bg-[#E6F4FF]/40 rounded-lg p-3 space-y-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-[#006FBF]"><FileText className="w-4 h-4"/>Customs · Commercial invoice</div>
@@ -8147,7 +8147,7 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
      "Unavailable" button instead of vanishing (tombstone per family, cleared when the list
      empties for a new shipment). */
   const LADDER=["ground_economy","ground_family","express_saver","2day","2day_am","standard_overnight","priority_overnight","first_overnight"];
-  const famRank=(l)=>{const k=svcFamilyKey(l);const base=k.replace(/^or_/,"");let i=LADDER.indexOf(base);if(i<0)i=LADDER.indexOf(k);const or=/one\s*rate/i.test(String(l))?100:0;return (i<0?50:i)+or;};
+  const famRank=(l)=>{const k=svcFamilyKey(l);const base=k.replace(/^or_/,"");let i=LADDER.indexOf(base);if(i<0)i=LADDER.indexOf(k);const or=/one\s*rate/i.test(String(l))?0.5:0;return (i<0?50:i)+or;};   // One Rate sits right under its base service, not at the bottom
   const ladderSort=(a,b)=>famRank(a.label)-famRank(b.label)||String(a.label).localeCompare(String(b.label));
   const tombRef=React.useRef({});
   /* Tombstones are PER SHIPMENT. The Ship tab substitutes a skeleton list when rates are empty,

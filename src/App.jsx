@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v504";
+const BUILD_TAG="addr-v505";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -891,7 +891,7 @@ function drawFedexWordmarkMono(g,x,y,h){
   P([[310,28],[336,28],[282,100],[256,100]]);g.fill();                                               // x /
   g.restore();
 }
-function drawFedexMock(g,W,H,{to,sender,service,weight,pieceCount,refNo,residential}){
+function drawFedexMock(g,W,H,{to,sender,service,weight,pieceCount,refNo,residential,markImg}){
       const r=to||{},s=sender||{};
       let seed=0;const sk=String((r.zip||"")+(r.name||"")+(service||""));for(let i=0;i<sk.length;i++)seed=(seed*31+sk.charCodeAt(i))>>>0;
       const rnd=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
@@ -930,7 +930,8 @@ function drawFedexMock(g,W,H,{to,sender,service,weight,pieceCount,refNo,resident
       g.fillRect(48,pTop,10,300);g.fillRect(62,pTop,4,300);   // start guard
       for(let row=0;row<25;row++){let x=84;while(x<640){const bw=2+Math.floor(rnd()*7);if(rnd()>0.42)g.fillRect(x,pTop+row*12,bw,10);x+=bw+2+Math.floor(rnd()*3);}}
       g.fillRect(652,pTop,4,300);g.fillRect(662,pTop,10,300);   // end guard
-      drawFedexWordmarkMono(g,758,pTop+8,112);
+      if(markImg&&markImg.width&&markImg.height){const mh=112,mw=Math.min(400,mh*(markImg.width/markImg.height));g.drawImage(markImg,758,pTop+8,mw,mh);}
+      else drawFedexWordmarkMono(g,758,pTop+8,112);
       g.lineWidth=2;
       const svcL=String(service||"").toLowerCase();
       const fam=/overnight|2day|express saver|one rate/.test(svcL)?"Express":/economy|smartpost/.test(svcL)?"Ground Economy":/home/.test(svcL)?"Home Delivery":"Ground";
@@ -967,12 +968,17 @@ function MockLabelImg({to,sender,service,weight,pieceCount,refNo,residential}){
   useEffect(()=>{let dead=false;(async()=>{
     try{
       const W=1200,H=1800;const cv=document.createElement("canvas");cv.width=W;cv.height=H;const g=cv.getContext("2d");
-      drawFedexMock(g,W,H,{to,sender,service,weight,pieceCount,refNo,residential});
+      const xx=(typeof window!=="undefined"&&window.__scPrintExtras)||null;
+      // If the owner uploaded the carrier's own logo file, draw that exact image on the mock;
+      // otherwise fall back to the built-in approximation. Loading is best-effort (jsdom/tests skip it).
+      let markImg=null;
+      if(xx&&xx.fedexMark){ try{ markImg=await new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=xx.fedexMark;}); }catch(e){markImg=null;} }
+      drawFedexMock(g,W,H,{to,sender,service,weight,pieceCount,refNo,residential,markImg});
       let out=[cv.toDataURL("image/png")];
-      try{ const xx=(typeof window!=="undefined"&&window.__scPrintExtras)||null; if(xx&&xx.logo&&xx.logo.on&&xx.logo.src)out=await stampLogo(out,{labelLogoOn:true,labelLogoPos:xx.logo.pos,labelLogoScale:xx.logo.scale,labelLogoDX:xx.logo.dx,labelLogoDY:xx.logo.dy,labelLogoX:xx.logo.x,labelLogoY:xx.logo.y},xx.logo.src); }catch(e){}
+      try{ if(xx&&xx.logo&&xx.logo.on&&xx.logo.src)out=await stampLogo(out,{labelLogoOn:true,labelLogoPos:xx.logo.pos,labelLogoScale:xx.logo.scale,labelLogoDX:xx.logo.dx,labelLogoDY:xx.logo.dy,labelLogoX:xx.logo.x,labelLogoY:xx.logo.y},xx.logo.src); }catch(e){}
       if(!dead)setSrc(out[0]);
     }catch(e){}
-  })();return ()=>{dead=true;};},[JSON.stringify(to||{}),JSON.stringify(sender||{}),service,weight,pieceCount,refNo,residential,JSON.stringify((typeof window!=="undefined"&&window.__scPrintExtras&&window.__scPrintExtras.logo)||null)]);
+  })();return ()=>{dead=true;};},[JSON.stringify(to||{}),JSON.stringify(sender||{}),service,weight,pieceCount,refNo,residential,JSON.stringify((typeof window!=="undefined"&&window.__scPrintExtras&&window.__scPrintExtras.logo)||null),(typeof window!=="undefined"&&window.__scPrintExtras&&window.__scPrintExtras.fedexMark)||null]);
   return src?<img src={src} alt="label preview" style={{maxHeight:"46vh"}} className="w-auto max-w-full mx-auto border border-stone-300 rounded shadow bg-white"/>:<div style={{height:"46vh"}} className="w-full max-w-[320px] mx-auto border border-dashed border-stone-300 rounded"/>;
 }
 /* DRAG-to-place logo editor on a real FedEx-look label. The logo is a live overlay you drag
@@ -6456,6 +6462,7 @@ function AppInner(){
       const rc=settings&&settings.receipt;
       window.__scPrintExtras={
         logo:{on:!!cc.labelLogoOn,src:cc.labelLogo||settings.companyLogo||"",pos:cc.labelLogoPos||"bottom_left",scale:cc.labelLogoScale,dx:cc.labelLogoDX,dy:cc.labelLogoDY,x:cc.labelLogoX,y:cc.labelLogoY},
+        fedexMark:cc.fedexMarkSrc||"",
         receipt:{enabled:!!(rc&&rc.enabled&&rc.withLabel!==false),cfg:rc||null,logo:(rc&&rc.showLogo!==false?(settings.companyLogo||""):"")}
       };
     }catch(e){} },[settings&&settings.custom,settings&&settings.receipt,settings&&settings.companyLogo]);
@@ -10844,6 +10851,19 @@ function PrinterSettings({settings,setSettings}){
   const DOC_KINDS=[["packSlip","Packing slips","Auto-printed slips and every Packing slip button"],["pickList","Pick lists","The Pick list buttons in Orders & Batch"],["docs","Receipts & other documents","Shipment receipts and commercial invoices"]];
   return (<div className="max-w-2xl space-y-4">
     <p className="text-sm text-stone-500">Controls how labels are generated and printed when you buy a label or run a batch.</p>
+    <Panel title="Carrier logo on the label preview">
+      <p className="text-[13px] text-stone-500 -mt-1">Upload your carrier's official logo file to show it on the on-screen label <b>preview</b>. The real label you print always comes from the carrier with their own official logo — this only replaces the placeholder mark in the preview mock.</p>
+      <div className="mt-3 flex items-center gap-3 flex-wrap">
+        {c.fedexMarkSrc
+          ? <img src={c.fedexMarkSrc} alt="carrier logo" className="h-9 w-auto max-w-[180px] object-contain border border-stone-200 rounded bg-white px-2 py-1"/>
+          : <span className="text-xs text-stone-400 italic">No file uploaded — the preview shows a built-in placeholder.</span>}
+        <label className="text-xs bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">
+          {c.fedexMarkSrc?"Replace file":"Upload logo"}
+          <input type="file" accept="image/png,image/jpeg,image/svg+xml" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];e.target.value="";if(!f)return;if(f.size>1.5*1024*1024){uiAlert("That image is over 1.5 MB — please use a smaller PNG or SVG.");return;}const r=new FileReader();r.onload=()=>setCust("fedexMarkSrc",String(r.result||""));r.readAsDataURL(f);}}/>
+        </label>
+        {c.fedexMarkSrc&&<button onClick={()=>setCust("fedexMarkSrc","")} className="text-xs text-rose-500 hover:underline">Remove</button>}
+      </div>
+    </Panel>
     <Panel title="Ship & print automation">
       <div className="space-y-3">
         <p className="text-[11px] text-stone-500 -mt-1">Set it once, top to bottom: what the app does when an order comes in, then exactly how the label prints and what pops up.</p>

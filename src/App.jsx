@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v499";
+const BUILD_TAG="addr-v500";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3193,7 +3193,7 @@ function FedexCertLab({settings}){
     setBusy(false);
   };
   const runCertSet=async()=>{
-    if(!window.confirm("Generate one label for each of the "+CERT_SERVICES.length+" express/ground services? Stops on the first FedEx error so you can fix and resume."))return;
+    if(!await uiConfirm("Generate one label for each of the "+CERT_SERVICES.length+" express/ground services? Stops on the first FedEx error so you can fix and resume."))return;
     setBusy(true);setLastErr(null);
     for(let i=0;i<CERT_SERVICES.length;i++){
       const [k,label]=CERT_SERVICES[i];
@@ -3275,7 +3275,7 @@ function FedexCertLab({settings}){
     </div>
 
     <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
-      <div className="px-4 py-2.5 text-sm font-semibold text-stone-700 border-b border-stone-100 flex items-center justify-between"><span>Generated labels (last 12 kept)</span>{log.length>0&&<button onClick={()=>{if(window.confirm("Clear the label log?"))setLog([]);}} className="text-[11px] text-stone-400 hover:text-rose-500">Clear</button>}</div>
+      <div className="px-4 py-2.5 text-sm font-semibold text-stone-700 border-b border-stone-100 flex items-center justify-between"><span>Generated labels (last 12 kept)</span>{log.length>0&&<button onClick={async()=>{if(await uiConfirm("Clear the label log?"))setLog([]);}} className="text-[11px] text-stone-400 hover:text-rose-500">Clear</button>}</div>
       {log.length===0?<div className="px-4 py-8 text-sm text-stone-400 text-center">No labels yet — generate the certification set above, download each PDF, and submit them to FedEx.</div>
       :<div className="divide-y divide-stone-100">{log.map(e2=>(
         <div key={e2.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm">
@@ -3474,7 +3474,7 @@ function BackupsAdmin({clients=[],setClients}){
   const parseTs=(ts)=>{const m=/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/.exec(String(ts||""));if(!m)return ts||"—";const d=new Date(`${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z`);return isNaN(d)?ts:d.toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});};
   const curIds=new Set((clients||[]).map(c=>c&&c.id));
   const restore=async(bk)=>{
-    if(!window.confirm("Restore ALL of "+(LABEL[bk.orig]||bk.orig)+" to the version from "+parseTs(bk.ts)+" ("+bk.count+" "+(bk.count===1?"entry":"entries")+")?\n\nThis replaces the whole list with that snapshot. Your current version is backed up first, so it's reversible. The page reloads afterward.\n\nTip: close any other admin tabs first so they don't overwrite it."))return;
+    if(!await uiConfirm("Restore ALL of "+(LABEL[bk.orig]||bk.orig)+" to the version from "+parseTs(bk.ts)+" ("+bk.count+" "+(bk.count===1?"entry":"entries")+")?\n\nThis replaces the whole list with that snapshot. Your current version is backed up first, so it's reversible. The page reloads afterward.\n\nTip: close any other admin tabs first so they don't overwrite it."))return;
     setBusy(bk.key);setMsg("");
     const r=await cloudCall({action:"restoreBackup",token:CLOUD.token,key:bk.key});
     setBusy("");
@@ -3675,7 +3675,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
           <button onClick={()=>setPw(u)} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Password</button>
           {CLOUD.mode==="cloud"&&<button onClick={()=>sendReset(u)} title="Email them a choose-a-new-password link (valid 1 hour)" className="text-[11px] rounded px-2 py-1 bg-[#E6F4FF] text-[#006FBF] hover:bg-[#CCEAFF]">Reset email</button>}
           <button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Log in as</button>
-          {u.id!==currentUser.id&&<button onClick={()=>{if(window.confirm("Delete "+u.email+"?"))setUsers(us=>us.filter(x=>x.id!==u.id));}} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button>}
+          {u.id!==currentUser.id&&<button onClick={async()=>{if(await uiConfirm("Delete "+u.email+"?"))setUsers(us=>us.filter(x=>x.id!==u.id));}} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button>}
         </div>)):<div className="px-3 py-4 text-sm text-stone-400">No logins yet — new logins inherit this customer's rates, credentials, and features automatically.</div>}
       </div>
       <div className="border border-stone-200 rounded-lg bg-white p-3 flex flex-wrap items-end gap-2">
@@ -3744,7 +3744,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
           const brkSorted=(r.breaks||[]).map((b,_i)=>({...b,_i})).sort((a,b)=>{const A=(a.upTo==null||a.upTo==="")?1e12:+a.upTo,B=(b.upTo==null||b.upTo==="")?1e12:+b.upTo;return A-B;});
           const upBrkAt=(idx,patch)=>{const br=[...(r.breaks||[])];br[idx]={...br[idx],...patch};upProfSvc(prof.id,sv.k,{breaks:br});};
           const rmBrkAt=(idx)=>upProfSvc(prof.id,sv.k,{breaks:(r.breaks||[]).filter((_,j)=>j!==idx)});
-          const seedStd=()=>{ if(r.breaks&&r.breaks.length&&!window.confirm("Replace the existing weight breaks with the standard ranges (0–5, 6–10, 11–30, 31–75, 76+)?"))return; upProfSvc(prof.id,sv.k,{breaks:[{upTo:5},{upTo:10},{upTo:30},{upTo:75},{upTo:99999}].map(b=>({...b,pct:"",min:"",zones:{}}))}); };
+          const seedStd=async()=>{ if(r.breaks&&r.breaks.length&&!await uiConfirm("Replace the existing weight breaks with the standard ranges (0–5, 6–10, 11–30, 31–75, 76+)?"))return; upProfSvc(prof.id,sv.k,{breaks:[{upTo:5},{upTo:10},{upTo:30},{upTo:75},{upTo:99999}].map(b=>({...b,pct:"",min:"",zones:{}}))}); };
           return (<React.Fragment key={sv.k}>
           <tr className={`border-t border-stone-100 hover:bg-stone-50 ${svcHiddenMap[sv.k]?"opacity-50":""}`}>
             <td className="py-1.5 pl-3 pr-2 font-medium text-stone-800 whitespace-nowrap">{sv.l}</td>
@@ -3887,11 +3887,11 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       const upFx=(patch)=>setClients(cs=>cs.map(x=>x.id===cid?{...x,fedex:{...(x.fedex||{}),...patch}}:x));
       const svcDisc=fx.svcDisc||{};
       const upSvcDisc=(k,v)=>upFx({svcDisc:{...svcDisc,[k]:v}});
-      const applyTierToRates=()=>{
+      const applyTierToRates=async()=>{
         const d=+fx.listDiscount;
         if(!(d>0))return uiAlert("Set an overall FedEx list discount % first — that's what gets applied.");
         if(prof.id==="default")return uiAlert("This customer prices from the SHARED Default profile — applying the tier here would reprice every Default customer. Open the Rates tab and give them their own profile first.");
-        if(!window.confirm("Set every FedEx service on "+c.name+"'s profile to FedEx list − "+d+"%? (Per-service overrides below win where set.)"))return;
+        if(!await uiConfirm("Set every FedEx service on "+c.name+"'s profile to FedEx list − "+d+"%? (Per-service overrides below win where set.)"))return;
         const svcs={...(prof.services||{})};
         svcQuick.forEach(sv=>{const per=+svcDisc[sv.k];const use=(per>0)?per:d;svcs[sv.k]={...(svcs[sv.k]||{}),basis:"list",pct:use};});
         upRules({profiles:profiles.map(p=>p.id===prof.id?{...p,services:svcs}:p)});
@@ -3978,7 +3978,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
 
     {tab==="notes"&&<div className="space-y-2">
       <Field label="Internal notes (admins only)"><textarea value={c.notes||""} onChange={e=>upClient({notes:e.target.value})} placeholder="Anything worth remembering — contacts, quirks, promises, follow-ups…" className="w-full border border-stone-300 rounded-lg p-2.5 text-sm min-h-[160px]"/></Field>
-      <div className="flex justify-end"><button onClick={()=>{if(!window.confirm('Delete customer "'+c.name+'"? Logins stay but lose the link.'))return;if(CLOUD.mode==="cloud")cloudCall({action:"deleteCustomer",token:CLOUD.token,clientId:cid});setUsers(us=>us.map(x=>x.clientId===cid?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==cid));onClose&&onClose();}} className="text-[11px] text-rose-500 hover:text-rose-600">Delete customer</button></div>
+      <div className="flex justify-end"><button onClick={async()=>{if(!await uiConfirm('Delete customer "'+c.name+'"? Logins stay but lose the link.'))return;if(CLOUD.mode==="cloud")cloudCall({action:"deleteCustomer",token:CLOUD.token,clientId:cid});setUsers(us=>us.map(x=>x.clientId===cid?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==cid));onClose&&onClose();}} className="text-[11px] text-rose-500 hover:text-rose-600">Delete customer</button></div>
     </div>}
   </div>);
 }
@@ -4033,7 +4033,7 @@ function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureF
         {list.length===0&&<div className="px-4 py-8 text-sm text-stone-400 text-center">No customers match "{q}".</div>}
         {list.map(c=>{const lg=loginsOf(c.id);const prof=profOf(c.id);return (
           <div key={c.id} onClick={()=>onOpenCustomer&&onOpenCustomer(c.id)} className="group flex items-center gap-3 px-4 py-3 hover:bg-stone-50 cursor-pointer">
-            <button onClick={(e)=>{e.stopPropagation();if(!window.confirm('Delete customer "'+c.name+'"? Their logins stay but lose the link. Rates/rules assigned to them are kept but unassigned.'))return;if(CLOUD.mode==="cloud")cloudCall({action:"deleteCustomer",token:CLOUD.token,clientId:c.id});setUsers(us=>us.map(x=>x.clientId===c.id?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==c.id));}} title="Delete customer" className="opacity-0 group-hover:opacity-100 text-stone-300 hover:text-rose-500 shrink-0 order-last"><Trash2 className="w-4 h-4"/></button>
+            <button onClick={async(e)=>{e.stopPropagation();if(!await uiConfirm('Delete customer "'+c.name+'"? Their logins stay but lose the link. Rates/rules assigned to them are kept but unassigned.'))return;if(CLOUD.mode==="cloud")cloudCall({action:"deleteCustomer",token:CLOUD.token,clientId:c.id});setUsers(us=>us.map(x=>x.clientId===c.id?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==c.id));}} title="Delete customer" className="opacity-0 group-hover:opacity-100 text-stone-300 hover:text-rose-500 shrink-0 order-last"><Trash2 className="w-4 h-4"/></button>
             <div className="w-7 h-7 rounded-lg bg-[#0086E0]/10 text-[#0086E0] flex items-center justify-center font-bold text-xs shrink-0">{String(c.name||"?").slice(0,1).toUpperCase()}</div>
             <div className="flex-1 min-w-0"><div className="font-medium text-sm truncate">{c.name}</div><div className="text-[11px] text-stone-400 truncate">{c.contact||"—"}{c.email?` · ${c.email}`:""}</div></div>
             <div className="w-20 text-center"><Badge tone="blue">{lg.length}</Badge></div>
@@ -4131,12 +4131,12 @@ function RatesAdmin({clients=[],brand}){
   const upSur=(id,patch)=>upProf({surcharges:{...(prof.surcharges||{}),[id]:{...((prof.surcharges||{})[id]||{}),...patch}}});
   const newProfile=async()=>{const n=await uiPrompt("Name for the new rate profile:","",{title:"New rate profile"});if(!n)return;const id="p"+Date.now();upRules({profiles:[...profiles,{id,name:n,services:JSON.parse(JSON.stringify(prof.services||{})),surcharges:JSON.parse(JSON.stringify(prof.surcharges||{}))}]});setProfId(id);};
   const renameProfile=async()=>{const n=await uiPrompt("Rename profile:",prof.name,{title:"Rename profile"});if(!n)return;upProf({name:n});};
-  const deleteProfile=()=>{if(prof.id==="default")return uiAlert("The Default profile can't be deleted.");if(!window.confirm('Delete profile "'+prof.name+'"? Customers on it fall back to Default.'))return;const na={...assign};Object.keys(na).forEach(k=>{if(na[k]===prof.id)delete na[k];});upRules({profiles:profiles.filter(p=>p.id!==prof.id),assign:na});setProfId("default");};
+  const deleteProfile=async()=>{if(prof.id==="default")return uiAlert("The Default profile can't be deleted.");if(!await uiConfirm('Delete profile "'+prof.name+'"? Customers on it fall back to Default.'))return;const na={...assign};Object.keys(na).forEach(k=>{if(na[k]===prof.id)delete na[k];});upRules({profiles:profiles.filter(p=>p.id!==prof.id),assign:na});setProfId("default");};
   const quickSet=async(v)=>{
     if(!v)return;
     const svcs={...(prof.services||{})};
     const apply=(fn)=>{RATE_SERVICES[carrier].forEach(s=>{svcs[s.k]={...(svcs[s.k]||{}),...fn(svcs[s.k]||{})};});upProf({services:svcs});};
-    if(/^pct:/.test(v)){const p=+v.slice(4);if(window.confirm("Set every "+carrier.toUpperCase()+" service on \""+prof.name+"\" to "+p+"% markup over cost?"))apply(()=>({basis:"pct",pct:p}));}
+    if(/^pct:/.test(v)){const p=+v.slice(4);if(await uiConfirm("Set every "+carrier.toUpperCase()+" service on \""+prof.name+"\" to "+p+"% markup over cost?"))apply(()=>({basis:"pct",pct:p}));}
     else if(v==="listpct"){
       const withList=RATE_SERVICES[carrier].filter(s=>baseCosts["list:"+s.k]);
       if(!withList.length)return uiAlert("Import FedEx list rate tables first (Base costs tab) — the list basis prices live quotes as list − %, so it needs the list.");
@@ -4144,8 +4144,8 @@ function RatesAdmin({clients=[],brand}){
       if(p==null||p==="")return;
       const svcs={...(prof.services||{})};withList.forEach(s=>{svcs[s.k]={...(svcs[s.k]||{}),basis:"list",pct:+p};});upProf({services:svcs});
     }
-    else if(v==="clearmin"&&window.confirm("Clear every Min $ on this carrier?"))apply(()=>({min:""}));
-    else if(v==="clearzones"&&window.confirm("Remove every zone override on this carrier?"))apply(()=>({zones:null}));
+    else if(v==="clearmin"&&await uiConfirm("Clear every Min $ on this carrier?"))apply(()=>({min:""}));
+    else if(v==="clearzones"&&await uiConfirm("Remove every zone override on this carrier?"))apply(()=>({zones:null}));
   };
   /* sheet pricing with an explicit zone (the live resolver derives zone from zips) */
   const sheetSell=(rule,cost,weight,zone,key)=>{
@@ -4298,7 +4298,7 @@ function RatesAdmin({clients=[],brand}){
     setImpPreview(null);setImpText("");
     setImpMsg({ok:good.length+" "+(impKind==="list"?"FedEx list":"England cost")+" table"+(good.length>1?"s":"")+" imported — live quotes use them on the next rate fetch."});
   };
-  const dropTable=(key)=>{if(!window.confirm("Remove this table?"))return;const bc={...baseCosts};delete bc[key];upRules({baseCosts:bc});};
+  const dropTable=async(key)=>{if(!await uiConfirm("Remove this table?"))return;const bc={...baseCosts};delete bc[key];upRules({baseCosts:bc});};
   const svcList=RATE_SERVICES[carrier]||[];
   const groups=[];svcList.forEach(s=>{let g=groups.find(x=>x.g===s.g);if(!g){g={g:s.g,items:[]};groups.push(g);}g.items.push(s);});
   /* Cosmetic row-hiding so the services table isn't cluttered by services you never sell.
@@ -4311,7 +4311,7 @@ function RatesAdmin({clients=[],brand}){
   const assignedTo=(pid)=>clients.filter(c=>(assign[c.id]||"default")===pid);
   const surRow=(prof.surcharges||{});
   return (<div className="space-y-4">
-    <DraftBar dirty={_d.dirty} onSave={_d.save} onUndo={_d.undo} onReset={()=>{ if(window.confirm("Reset ALL rate rules to the blank default? This clears every profile, markup, and imported cost. You'll still need to click Save to make it permanent.")) _d.reset(); }} resetLabel="Reset all rates to default" savedNote="Rates saved" saveLabel="Save rates"/>
+    <DraftBar dirty={_d.dirty} onSave={_d.save} onUndo={_d.undo} onReset={async()=>{ if(await uiConfirm("Reset ALL rate rules to the blank default? This clears every profile, markup, and imported cost. You'll still need to click Save to make it permanent.")) _d.reset(); }} resetLabel="Reset all rates to default" savedNote="Rates saved" saveLabel="Save rates"/>
     <div className="border border-stone-200 rounded-lg bg-white p-3 flex flex-wrap items-center gap-3">
       <div className="text-sm font-semibold text-stone-800">England tier</div>
       <Select value={rules.englandTier||""} onChange={e=>upRules({englandTier:e.target.value})} className="w-56">
@@ -4479,7 +4479,7 @@ function RatesAdmin({clients=[],brand}){
               <span className="flex-1"/>
               {t&&t.rows&&t.rows.length?<Badge tone="green">{t.rows.length} weight rows · zones {t.zones&&t.zones.join(",")}</Badge>:<Badge tone="stone">no rate card</Badge>}
               <button onClick={()=>setCcImp({key:k,label:l,text:""})} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">{t?"Replace card":"Load rate card"}</button>
-              {t&&<button onClick={()=>{if(!window.confirm("Remove the "+l+" rate card?"))return;setRules(r=>{const bc={...(r.baseCosts||{})};delete bc["cc:"+k];return {...DEFAULT_RATE_RULES,...r,baseCosts:bc};});}} className="text-[11px] text-rose-500 hover:underline">Remove</button>}
+              {t&&<button onClick={async()=>{if(!await uiConfirm("Remove the "+l+" rate card?"))return;setRules(r=>{const bc={...(r.baseCosts||{})};delete bc["cc:"+k];return {...DEFAULT_RATE_RULES,...r,baseCosts:bc};});}} className="text-[11px] text-rose-500 hover:underline">Remove</button>}
             </div>);})}
         </div>))}
         {ccImp&&<div className="border border-[#99D6FF] bg-[#F5FAFF] rounded-xl p-4 space-y-2">
@@ -4610,10 +4610,10 @@ function BillingAdmin({clients=[],platform={},openCustomer}){
   const shipsForClient=(cid,ym)=>{const c=cById(cid);const nm=String(c.name||"").toLowerCase();
     return (platform.ships||[]).filter(x=>x.status!=="Voided"&&inMonth(x,ym)&&String(x.client||"").toLowerCase()===nm);};
   const nextNumber=()=>{const yr=genMonth.slice(0,4);const used=new Set((invoices||[]).map(i=>i.number));let n=(invoices.filter(i=>i.number&&i.number.includes("-"+yr+"-")).length)+1;let num;do{num="INV-"+yr+"-"+String(n).padStart(4,"0");n++;}while(used.has(num));return num;};   /* skip any number already taken → no collision */
-  const buildPreview=()=>{ if(!genClient)return;
+  const buildPreview=async()=>{ if(!genClient)return;
     const rows=shipsForClient(genClient,genMonth);
     if(!rows.length)return uiAlert("No billable shipments for "+(cById(genClient).name||"that customer")+" in "+genMonth+".");
-    if(invoices.some(i=>i.clientId===genClient&&i.month===genMonth&&i.status!=="void"))if(!window.confirm("An invoice for this customer + month already exists. Create another?"))return;
+    if(invoices.some(i=>i.clientId===genClient&&i.month===genMonth&&i.status!=="void"))if(!await uiConfirm("An invoice for this customer + month already exists. Create another?"))return;
     const alreadyBilled=rows.filter(x=>invoicedTrackings.has(x.tracking)).length;
     const items=rows.filter(x=>!invoicedTrackings.has(x.tracking)).map(x=>({date:x.date,tracking:x.tracking,service:(x.service||"").replace("FedEx ",""),reference:x.reference||"",amount:Math.round((+x.sell||0)*100)/100}));
     if(!items.length)return uiAlert("Every shipment for "+(cById(genClient).name||"that customer")+" in "+genMonth+" is already on an invoice.");
@@ -4628,7 +4628,7 @@ function BillingAdmin({clients=[],platform={},openCustomer}){
   const recordPayment=async(inv)=>{ const amt=await uiPrompt("Payment amount for "+inv.number+" (balance "+money(balanceOf(inv))+"):",String(balanceOf(inv)),{title:"Record a payment"});
     if(amt==null)return; const n=+amt; if(!(n>0))return;
     setInvoices(p=>(p||[]).map(i=>i.id===inv.id?(()=>{const pays=[...(i.payments||[]),{amount:Math.round(n*100)/100,when:new Date().toISOString(),method:"manual"}];const paid=pays.reduce((a,x)=>a+x.amount,0);return {...i,payments:pays,status:paid>=i.total-0.005?"paid":"open",paidAt:paid>=i.total-0.005?new Date().toISOString():null};})():i)); };
-  const voidInv=(inv)=>{ if(!window.confirm("Void invoice "+inv.number+"?"))return; setInvoices(p=>(p||[]).map(i=>i.id===inv.id?{...i,status:"void"}:i)); };
+  const voidInv=async(inv)=>{ if(!await uiConfirm("Void invoice "+inv.number+"?"))return; setInvoices(p=>(p||[]).map(i=>i.id===inv.id?{...i,status:"void"}:i)); };
   const balanceOf=(inv)=>Math.round((inv.total-(inv.payments||[]).reduce((a,x)=>a+x.amount,0))*100)/100;
   const printInv=(inv)=>{ const c=cById(inv.clientId);
     const esc=(x)=>String(x==null?"":x).replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]));
@@ -4708,7 +4708,7 @@ function ApiAdmin({clients=[],platform={},openCustomer}){
     if(r&&r.ok){setMinted({key:r.key,prefix:r.prefix});setPgKey(r.key);setNk({clientId:"",label:"",mode:"test"});loadKeys();}
     else uiAlert((r&&r.error)||"Couldn't create the key.");
   };
-  const revoke=async(id)=>{ if(!window.confirm("Revoke this key? Integrations using it stop working immediately."))return;
+  const revoke=async(id)=>{ if(!await uiConfirm("Revoke this key? Integrations using it stop working immediately."))return;
     await cloudCall({action:"apiKeyRevoke",token:CLOUD.token,id}); loadKeys(); };
   const cName=(id)=>(clients.find(c=>c.id===id)||{}).name||id;
   /* ── Playground ── */
@@ -4817,7 +4817,7 @@ function ApiAdmin({clients=[],platform={},openCustomer}){
        :<div className="space-y-2">{repRows.map(rp=>(<div key={rp.id} className="border border-stone-200 rounded-lg bg-white p-3 space-y-2">
           <div className="flex items-center gap-3"><span className="font-medium">{rp.name}</span><Badge tone="blue">{rp.pct}% of margin</Badge><span className="flex-1"/>
             <span className="text-[12px] text-stone-500">{rp.shipN} shipments · margin {money(rp.margin)} · <b className="text-emerald-700">commission {money(rp.commission)}</b> this month</span>
-            <button onClick={()=>{if(window.confirm("Remove "+rp.name+"?"))setReps(p=>(p||[]).filter(x=>x.id!==rp.id));}} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button></div>
+            <button onClick={async()=>{if(await uiConfirm("Remove "+rp.name+"?"))setReps(p=>(p||[]).filter(x=>x.id!==rp.id));}} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button></div>
           <div className="flex flex-wrap gap-1.5">{clients.map(c=>{const on=(rp.clientIds||[]).includes(c.id);return (
             <button key={c.id} onClick={()=>setReps(p=>(p||[]).map(x=>x.id===rp.id?{...x,clientIds:on?(x.clientIds||[]).filter(i=>i!==c.id):[...(x.clientIds||[]),c.id]}:x))} className={`text-[11px] rounded-full px-2.5 py-1 border ${on?"bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF] font-medium":"bg-white border-stone-200 text-stone-400 hover:border-stone-300"}`}>{c.name}</button>);})}</div>
         </div>))}</div>}
@@ -4989,7 +4989,7 @@ function CustomizationsAdmin({users,clients,featureFlags={},setFeatureFlags,cust
     setCustomFeatures(cf=>[...cf,{id,label,desc:(draft.desc||"").trim(),clientNote:(draft.clientNote||"").trim(),createdAt:new Date().toISOString(),default:false}]);
     setDraft(null);
   };
-  const removeCustom=(id)=>{ if(!window.confirm("Remove this customization from the registry? (Any code behind it stays; user toggles for it are simply ignored.)"))return; setCustomFeatures(cf=>cf.filter(c=>c.id!==id)); };
+  const removeCustom=async(id)=>{ if(!await uiConfirm("Remove this customization from the registry? (Any code behind it stays; user toggles for it are simply ignored.)"))return; setCustomFeatures(cf=>cf.filter(c=>c.id!==id)); };
   /* called as {FeatureRow({...})} — an inline component type remounts its chips per click */
   const FeatureRow=({f,custom})=>(
     <div className="border border-stone-200 rounded-lg bg-white p-4">
@@ -5085,7 +5085,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
               <option value="">Reassign to…</option>
               {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
             </Select>
-            <button onClick={()=>{if(window.confirm(`Remove ${u.name}'s customer assignment? They'll price at raw cost until reassigned.`))setUsers(us=>us.map(x=>x.id===u.id?{...x,clientId:null}:x));}} className="text-xs text-rose-500 hover:bg-rose-50 rounded px-2 py-1">Clear</button>
+            <button onClick={async()=>{if(await uiConfirm(`Remove ${u.name}'s customer assignment? They'll price at raw cost until reassigned.`))setUsers(us=>us.map(x=>x.id===u.id?{...x,clientId:null}:x));}} className="text-xs text-rose-500 hover:bg-rose-50 rounded px-2 py-1">Clear</button>
           </div>))}
         </div>
       </div>);
@@ -5155,7 +5155,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
             {u.role!=="admin"&&<button onClick={()=>setFeatOpen(featOpen===u.id?null:u.id)} title="Features for this login" className={`text-[11px] rounded px-2 py-1 ${featOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>Tabs &amp; logo</button>}
             {CLOUD.mode==="cloud"&&(u.role!=="admin"||fullAdmin)&&<button onClick={async()=>{const np=await uiPrompt("New password for "+u.email+" (min 4 characters):","",{title:"Reset password"});if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});uiAlert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}} title="Reset password" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Password</button>}
             {CLOUD.mode==="cloud"&&u.role!=="admin"&&<button onClick={async()=>{const r=await cloudCall({action:"requestReset",email:u.email,token:CLOUD.token});uiAlert(r&&r.configured===false?"Email sending isn't set up on this site yet (RESEND_API_KEY).":"Password reset link sent to "+u.email+" (valid 1 hour).");}} title="Email them a choose-a-new-password link (valid 1 hour)" className="text-[11px] rounded px-2 py-1 bg-[#E6F4FF] text-[#006FBF] hover:bg-[#CCEAFF]">Reset email</button>}
-            {CLOUD.mode==="cloud"&&u.totp&&u.totp.enabled&&<button onClick={async()=>{if(!window.confirm("Turn OFF two-factor for "+u.email+"? Use this only if they lost their authenticator — they'll sign in with just their password afterward."))return;const r=await cloudCall({action:"clearTotp",token:CLOUD.token,email:u.email});uiAlert(r&&r.ok?"2FA turned off for "+u.email+".":((r&&r.error)||"Could not reset 2FA."));}} title="Lost-phone recovery: turn off this user's 2FA" className="text-[11px] rounded px-2 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100">Reset 2FA</button>}
+            {CLOUD.mode==="cloud"&&u.totp&&u.totp.enabled&&<button onClick={async()=>{if(!await uiConfirm("Turn OFF two-factor for "+u.email+"? Use this only if they lost their authenticator — they'll sign in with just their password afterward."))return;const r=await cloudCall({action:"clearTotp",token:CLOUD.token,email:u.email});uiAlert(r&&r.ok?"2FA turned off for "+u.email+".":((r&&r.error)||"Could not reset 2FA."));}} title="Lost-phone recovery: turn off this user's 2FA" className="text-[11px] rounded px-2 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100">Reset 2FA</button>}
             <button onClick={()=>toggle(u.id)} title={u.status==="active"?"Deactivate":"Activate"} className={`text-[11px] rounded px-2 py-1 ${u.status==="active"?"bg-emerald-50 text-emerald-700":"bg-stone-100 text-stone-500"}`}>{u.status==="active"?"Active":"Deactivated"}</button>
             {u.id!==currentUser.id&&!isBuiltInAdmin(u.email)&&(u.role!=="admin"||(fullAdmin&&u.id!=="u1"))&&<button onClick={()=>del(u.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
           </div>
@@ -6003,7 +6003,7 @@ function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,set
   };
   const setActive=async(u)=>{
     const to=u.status!=="active";
-    if(!to&&!window.confirm(`Deactivate ${u.email}? They won’t be able to sign in until re-activated.`))return;
+    if(!to&&!await uiConfirm(`Deactivate ${u.email}? They won’t be able to sign in until re-activated.`))return;
     const r=await cloudCall({action:"companySetActive",token:CLOUD.token,uid:u.id,active:to});
     if(r&&r.ok)setCompanyUsers(list=>(list||[]).map(x=>x.id===u.id?{...x,status:r.status}:x));
     else flash({err:(r&&r.error)||"Could not save."});
@@ -7308,7 +7308,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       const _dup=dupShipment(reference,shipments);
       if((_so&&_so.status==="fulfilled")||_dup){
         const _old=(_so&&_so.tracking)||(_dup&&_dup.tracking)||"";
-        if(!window.confirm("This order already has a label"+(_old?" — tracking "+_old:"")+".\n\nBooking a new label will OVERRIDE the current tracking and shipping info"+((_so&&_so.source==="Shopify")?" on Shopify":"")+".\n\nAre you sure you want to proceed?"))return;
+        if(!await uiConfirm("This order already has a label"+(_old?" — tracking "+_old:"")+".\n\nBooking a new label will OVERRIDE the current tracking and shipping info"+((_so&&_so.source==="Shopify")?" on Shopify":"")+".\n\nAre you sure you want to proceed?"))return;
       }
     }
     const carrier=carrierOf(q.label);
@@ -8431,7 +8431,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
                       <td className="px-3 py-2.5 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button onClick={(e)=>{e.stopPropagation();setOpen(o);}} className={`text-sm rounded px-3 py-1.5 font-medium ${o.status==="fulfilled"?"bg-stone-100 text-stone-600 hover:bg-stone-200":"bg-stone-900 text-white hover:bg-stone-800"}`}>{o.status==="fulfilled"?"View":"Ship"}</button>
-                          <button onClick={(e)=>{e.stopPropagation();if(window.confirm(`Delete order ${o.name}? This removes it from ${BRAND.product} completely.`))setOrders(os=>os.filter(x=>x.id!==o.id));}} title="Delete order" className="text-stone-300 hover:text-rose-500 p-1"><Trash2 className="w-4 h-4"/></button>
+                          <button onClick={async(e)=>{e.stopPropagation();if(await uiConfirm(`Delete order ${o.name}? This removes it from ${BRAND.product} completely.`))setOrders(os=>os.filter(x=>x.id!==o.id));}} title="Delete order" className="text-stone-300 hover:text-rose-500 p-1"><Trash2 className="w-4 h-4"/></button>
                         </div>
                       </td>
                     </tr>
@@ -9024,7 +9024,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                 <Info k="To" v={`${s.recipient?.name||""}${s.recipient?.company?" · "+s.recipient.company:""} — ${s.recipient?.address1||""}, ${s.recipient?.city||""}, ${s.recipient?.state||""} ${s.recipient?.zip||""}`}/>
                 <Info k="Reference" v={s.reference||"—"}/>
                 <div className="flex items-end gap-2"><button onClick={(e)=>{e.stopPropagation();printPackingSlips([slipFromShipment(s)]);}} className="text-xs bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing slip</button><button onClick={(e)=>{e.stopPropagation();openSlipEdit(s);}} title="Type the items for this slip — perfect for manual shipments with no store connected. Items are saved for reprints." className="text-xs bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF] flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5"/>Slip with items</button>
-                {s.status!=="Voided"&&s.status!=="Delivered"&&<button onClick={(e)=>{e.stopPropagation();if(!window.confirm("Void this label?\n\nIt will be marked Voided here and excluded from audits and duplicate checks. The carrier refund is processed automatically — contact support if you don't see it within a few days."))return;setShipments(list=>list.map(x=>x.id===s.id?{...x,status:"Voided",voidedAt:new Date().toLocaleString()}:x));window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Voided label",detail:(s.reference||"")+" · "+(s.tracking||"")}}));}} className="text-xs bg-rose-50 border border-rose-200 text-rose-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-rose-100 flex items-center gap-1.5"><Ban className="w-3.5 h-3.5"/>Void label</button>}</div>
+                {s.status!=="Voided"&&s.status!=="Delivered"&&<button onClick={async(e)=>{e.stopPropagation();if(!await uiConfirm("Void this label?\n\nIt will be marked Voided here and excluded from audits and duplicate checks. The carrier refund is processed automatically — contact support if you don't see it within a few days."))return;setShipments(list=>list.map(x=>x.id===s.id?{...x,status:"Voided",voidedAt:new Date().toLocaleString()}:x));window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Voided label",detail:(s.reference||"")+" · "+(s.tracking||"")}}));}} className="text-xs bg-rose-50 border border-rose-200 text-rose-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-rose-100 flex items-center gap-1.5"><Ban className="w-3.5 h-3.5"/>Void label</button>}</div>
                 <Info k="Created" v={`${s.date}${s.time?" · "+s.time:""}`}/>
                 <Info k="From ZIP" v={s.fromZip}/>
                 <Info k="Packages" v={`${s.pieces?.length||1} pkg · ${s.weight} lb total`}/>
@@ -9086,7 +9086,7 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true,isAdmin
   const _pf=useMemo(()=>pickupFeeFor(rateRules,client,f.carrierCode),[rateRules,client,f.carrierCode]);
   const pickupFee=_pf.fee;
   const cancelLive=async(p)=>{
-    if(!window.confirm("Cancel this FedEx pickup ("+p.conf+")? The driver will not come."))return;
+    if(!await uiConfirm("Cancel this FedEx pickup ("+p.conf+")? The driver will not come."))return;
     setCanceling(p.id);
     const res=await fedexCancelPickup({confirmationCode:p.conf,carrierCode:p.carrierCode||"FDXE",date:p.date,location:p.fxLocation||""});
     setCanceling(null);
@@ -9613,8 +9613,8 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
     setPresets(ps=>[...(ps||[]).filter(x=>x.name.toLowerCase()!==p.name.toLowerCase()),p]); setPresetSel(p.id);
     setMsg("Saved \u201c"+p.name+"\u201d \u2014 pick it any time to restore these exact criteria.");setTimeout(()=>setMsg(""),3000);
   };
-  const deletePreset=()=>{ const p=(presets||[]).find(x=>x.id===presetSel); if(!p)return;
-    if(!window.confirm("Delete the saved batch \u201c"+p.name+"\u201d?"))return;
+  const deletePreset=async()=>{ const p=(presets||[]).find(x=>x.id===presetSel); if(!p)return;
+    if(!await uiConfirm("Delete the saved batch \u201c"+p.name+"\u201d?"))return;
     setPresets(ps=>(ps||[]).filter(x=>x.id!==presetSel)); setPresetSel("");
   };
   const dimValues=(d)=>{const m={};pool.forEach(o=>{const k=dimOf(o,d);m[k]=(m[k]||0)+1;});return Object.entries(m).sort((a,b)=>b[1]-a[1]);};
@@ -11523,10 +11523,10 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
   const run=useMemo(()=>runRuleEngine(rules||[],ords,originZip),[rules,ords,originZip]);
   const matchCount=(id)=>run.results.filter(r=>r.fires.some(f=>f.ruleId===id)).length;
   const active=rules.filter(r=>r.enabled).length;
-  const applyToOrders=()=>{
+  const applyToOrders=async()=>{
     const patchById=rulePatchesFor(run); const n=Object.keys(patchById).length;
     if(!n){ setApplied({n:0}); setTimeout(()=>setApplied(null),5000); return; }
-    if(!window.confirm(`Apply rule outcomes to ${n} order${n!==1?"s":""}? This writes service, package, tags, notes, signature, insurance, Saturday, weight, custom fields, gift, assignee, ship-from and holds onto those orders.`))return;
+    if(!await uiConfirm(`Apply rule outcomes to ${n} order${n!==1?"s":""}? This writes service, package, tags, notes, signature, insurance, Saturday, weight, custom fields, gift, assignee, ship-from and holds onto those orders.`))return;
     setOrders(os=>os.map(o=>patchById[o.id]?{...o,...patchById[o.id],_ruled:true}:o));
     setApplied({n});
     setTimeout(()=>setApplied(null),6000);
@@ -11557,7 +11557,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
     const eligible=run.results.filter(r=>r.order.status!=="fulfilled"&&!r.view.hold).map(r=>r.order);
     const heldN=run.results.filter(r=>r.order.status!=="fulfilled"&&r.view.hold).length;
     if(!eligible.length){ setApResults({rows:[],heldN,none:true}); return; }
-    if(!window.confirm(`Autopilot will apply your rules and create labels for ${eligible.length} unfulfilled order${eligible.length!==1?"s":""}${heldN?` (${heldN} held for your review — skipped)`:""}. Continue?`))return;
+    if(!await uiConfirm(`Autopilot will apply your rules and create labels for ${eligible.length} unfulfilled order${eligible.length!==1?"s":""}${heldN?` (${heldN} held for your review — skipped)`:""}. Continue?`))return;
     if(Object.keys(patchById).length)setOrders(os=>os.map(o=>patchById[o.id]?{...o,...patchById[o.id],_ruled:true}:o));
     const senderZip=(settings&&settings.sender&&settings.sender.zip)||(client&&client.origin)||"";
     const rows=[];
@@ -12650,7 +12650,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
      single panel with no tab bar — used by Settings → Ship screen. */
   const CTABS=[...(deployMode?[["services","Services"],["ship","Ship screen"],["orders","Orders & lists"]]:[]),["appearance","Appearance"]];   // Services (rate view + service on/off) moved under Settings → Ship screen; Customizations keeps Appearance/tabs/branding   // Ship screen + Orders are their own top-level Settings sections now (still tabs in deployMode so team-deploy keeps every option in one place). Packing-slip message/footer moved to Settings → Print settings → Packing slip (v393). Autopilot toggles → Print settings (v355). Labels & printing → Printer settings (v281).
   return (<div className="max-w-2xl space-y-4">
-    <DraftBar dirty={_cd.dirty} onSave={_cd.save} onUndo={_cd.undo} onReset={()=>{ if(window.confirm("Reset all customizations to their defaults? You'll still need to click Save to keep it.")) _cd.reset(); }} resetLabel="Reset to defaults" savedNote="Customizations saved"/>
+    <DraftBar dirty={_cd.dirty} onSave={_cd.save} onUndo={_cd.undo} onReset={async()=>{ if(await uiConfirm("Reset all customizations to their defaults? You'll still need to click Save to keep it.")) _cd.reset(); }} resetLabel="Reset to defaults" savedNote="Customizations saved"/>
     {!deployMode&&!only&&<div className="text-sm text-stone-500">Make {BRAND.product} yours. Every option here changes the app immediately for <b>your login only</b>.</div>}
     {only==="ship"&&<div className="text-sm text-stone-500">Tune the Ship tab. Every option here changes the app immediately for <b>your login only</b>.</div>}
     {only==="orders"&&<div className="text-sm text-stone-500">Tune the Orders page — pick which columns show and how lists behave. Changes apply immediately for <b>your login only</b>.</div>}

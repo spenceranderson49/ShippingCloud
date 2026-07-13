@@ -404,9 +404,11 @@ exports.handler = async (event) => {
       const reqOrigin = String((event.headers && (event.headers.origin || event.headers.Origin)) || "").replace(/\/+$/, "");
       const appUrl = ORIGIN_BRANDS[reqOrigin] ? reqOrigin : (process.env.APP_URL || "").replace(/\/+$/, "");
       const product = ORIGIN_BRANDS[reqOrigin] || "ShippingCloud";
-      const wordmark = product === "ShippingCloud"
-        ? 'Shipping<span style="color:#0086E0;">Cloud</span>'
-        : ('Freight<span style="color:#0086E0;">wire</span>' + (product === "Freightwire Admin" ? ' <span style="font-weight:600;color:#78716c;font-size:13px;">Admin</span>' : ''));
+      const isFw = product !== "ShippingCloud";
+      const brandName = isFw ? "Freightwire ShippingHub" : "ShippingCloud";
+      const wordmark = isFw
+        ? ('<img src="' + appUrl + '/fw-logo.png" alt="Freightwire" style="height:34px;vertical-align:middle;border:0;"> <span style="font-size:17px;font-weight:800;letter-spacing:.04em;vertical-align:middle;color:#1F1B18;">SHIPPING<span style="color:#0086E0;">HUB</span></span>' + (product === "Freightwire Admin" ? ' <span style="font-weight:600;color:#78716c;font-size:13px;">Admin</span>' : ''))
+        : 'Shipping<span style="color:#0086E0;">Cloud</span>';
       const link = appUrl + "/?reset=" + encodeURIComponent(rtoken);
       const key = (process.env.RESEND_API_KEY || "").trim();
       if (!key) { console.log("[requestReset] NOT SENT — RESEND_API_KEY is missing on this site. Set it (as a normal, non-secret var) and redeploy."); return J({ ...generic, configured: false }); }
@@ -417,7 +419,7 @@ exports.handler = async (event) => {
       const from = product.replace(" Admin", "") + " <" + _fromAddr + ">";
       try {
         const rr = await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
-          body: JSON.stringify({ from, to: [email], subject: isWelcome ? ("Welcome to " + product + " — set your password") : ("Reset your " + product + " password"),
+          body: JSON.stringify({ from, to: [email], subject: isWelcome ? ("Welcome to " + brandName + " — set your password") : ("Reset your " + brandName + " password"),
             html: `<body style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;"><div style="max-width:480px;margin:0 auto;padding:28px 20px;"><div style="font-size:20px;font-weight:800;color:#0c4a6e;">${wordmark}</div>${isWelcome?`<p style="font-size:14px;color:#57534e;">An account was created for you. Click below to choose your password and sign in. This link works for 72 hours.</p>`:`<p style="font-size:14px;color:#57534e;">Someone (hopefully you) asked to reset the password for this account. This link works for 1 hour.</p>`}<a href="${link}" style="display:inline-block;background:#0086E0;color:#fff;text-decoration:none;font-weight:600;border-radius:8px;padding:10px 18px;font-size:14px;">${isWelcome?"Set my password":"Choose a new password"}</a>${isWelcome?"":`<p style="font-size:11px;color:#a8a29e;margin-top:16px;">Didn\u2019t ask for this? Ignore this email \u2014 nothing changes.</p>`}</div></body>` }) });
         const rt = await rr.text().catch(() => "");
         if (rr.ok) console.log("[requestReset] sent OK via Resend from <" + from + "> (origin " + (reqOrigin || "none") + ")");

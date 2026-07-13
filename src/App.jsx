@@ -70,7 +70,7 @@ const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK
    ever deploys to every login by accident. */
 /* Customer Settings sections (id,label) — mirrored by the `secs` array inside Settings.
    The admin portal uses this list for the per-customer hide/lock controls (featureFlags._secPolicy). */
-const SETTINGS_SEC_LIST=[["general","General"],["customize","Customizations"],["reports","Reports"],["shipscreen","Ship screen"],["orderspage","Orders"],["carriers","Carrier accounts"],["warehouses","Warehouses"],["boxes","Package sizes"],["boxlogic","Box logic"],["catalog","Product catalog"],["reference","Reference Fields"],["printer","Print settings"],["cieditor","Commercial invoice"],["cihistory","CI history"],["otherdocs","Other documents"],["manifests","Manifests"],["integrations","Integrations"],["notifications","Email automation"],["checkout","Checkout rates"],["billing","Billing"],["subscription","Subscription"]];
+const SETTINGS_SEC_LIST=[["general","General"],["customize","Customizations"],["reports","Reports"],["shipscreen","Ship screen"],["orderspage","Orders"],["carriers","Carrier accounts"],["warehouses","Warehouses"],["boxes","Package sizes"],["boxlogic","Box logic"],["catalog","Product catalog"],["reference","Reference Fields"],["printer","Print settings"],["cieditor","Commercial invoice"],["otherdocs","Other documents"],["manifests","Manifests"],["integrations","Integrations"],["notifications","Email automation"],["checkout","Checkout rates"],["billing","Billing"],["subscription","Subscription"]];
 const FEATURE_CATALOG=[
   {id:"orders",label:"Orders",desc:"Order import & fulfillment",default:true},
   {id:"shipments",label:"Shipments",desc:"Shipment history & tracking",default:true},
@@ -89,7 +89,7 @@ const FEATURE_CATALOG=[
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own carrier accounts on the Connections page (England always shows; admins always have this)",default:false},
 ];
 const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All logins"],["rates","Rates & dim divisors"],["labelcert","FedEx labels"],["customizations","Features & access"],["branding","Branding"],["apiadmin","API"],["billing","Billing & invoices"],["domains","Domains"],["backups","Backups & restore"]];
-const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,labelcert:Printer,customizations:Sliders,branding:Sparkles,platforms:Truck,domains:ExternalLink,backups:RotateCcw};
+const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,labelcert:Printer,customizations:Sliders,branding:Sparkles,apiadmin:Plug,billing:Receipt,domains:ExternalLink,backups:RotateCcw};
 /* A restricted admin ALWAYS keeps access to "users" — without it there is no self-service way
    to ever fix a permission set that’s missing something, for yourself or anyone else. A wrong
    restriction otherwise becomes a permanent lockout with no way back in. */
@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v493";
+const BUILD_TAG="addr-v494";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -4488,7 +4488,7 @@ function RatesAdmin({clients=[],brand}){
           <div className="text-[11px] text-stone-500">Excel/CSV/TSV — first column weight (lb), one column per zone (headers = zone numbers). Same format as FedEx base-cost imports.</div>
           <textarea value={ccImp.text} onChange={e=>setCcImp(p=>({...p,text:e.target.value}))} rows={8} spellCheck={false} placeholder={"Weight\t2\t3\t4\t5\t6\t7\t8\n1\t4.10\t4.25\t…"} className="w-full bg-white border border-stone-200 rounded-lg p-2.5 font-mono text-[12px] outline-none focus:border-[#0099FF] resize-y"/>
           <div className="flex gap-2">
-            <button onClick={()=>{const r2=parseRateTable(ccImp.text);if(r2.error)return window.alert(r2.error);setRules(r=>({...DEFAULT_RATE_RULES,...r,baseCosts:{...(r.baseCosts||{}),["cc:"+ccImp.key]:r2}}));setCcImp(null);say("Rate card staged — press Save rates to make it live.");}} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium">Stage rate card</button>
+            <button onClick={()=>{const r2=parseRateTable(ccImp.text);if(r2.error)return window.alert(r2.error);setRules(r=>({...DEFAULT_RATE_RULES,...r,baseCosts:{...(r.baseCosts||{}),["cc:"+ccImp.key]:r2}}));setCcImp(null);setImpMsg({ok:"Rate card staged — press Save rates to make it live."});}} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium">Stage rate card</button>
             <button onClick={()=>setCcImp(null)} className="text-sm text-stone-500 px-3 py-2 hover:bg-stone-100 rounded-lg">Cancel</button>
           </div>
         </div>}
@@ -10243,7 +10243,6 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="notifications"&&<Notifications settings={settings} setSettings={setSettings} emails={emails}/>}
         {sec==="general"&&<GeneralSettings settings={settings} setSettings={setSettings} goSec={setSec} audit={audit} currentUser={currentUser} setCurrentUser={setCurrentUser}/>}
         {sec==="cieditor"&&<div className="space-y-6"><CIEditor settings={settings} setSettings={setSettings} shipments={shipments}/><div className="border-t border-stone-200 pt-6"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-3">Commercial invoice history</div><CIHistory settings={settings} setSettings={setSettings}/></div></div>}
-        {sec==="cihistory"&&<div className="space-y-6"><CIEditor settings={settings} setSettings={setSettings} shipments={shipments}/><div className="border-t border-stone-200 pt-6"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-3">Commercial invoice history</div><CIHistory settings={settings} setSettings={setSettings}/></div></div>}
         {sec==="otherdocs"&&<OtherDocs settings={settings} setSettings={setSettings}/>}
         {sec==="customize"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])}/>}
         {sec==="shipscreen"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="ship"/>}
@@ -10270,7 +10269,7 @@ function ReferenceFields({settings,setSettings}){
   ];
   return (<div className="max-w-2xl space-y-4">
     <div>
-      <h2 className="text-base font-semibold text-stone-800">Reference fields</h2>
+      <h2 className="text-base font-semibold text-stone-800">Reference Fields</h2>
       <p className="text-sm text-stone-500 mt-1">When you pick a <b>FedEx One Rate</b> service, {BRAND.product} can auto-fill the chosen box name into a reference field so it prints on the label and your team knows which box to grab. Pick where it goes — or turn it off.</p>
     </div>
     <div className="bg-white border border-stone-200 rounded-lg p-4 flex items-center justify-between">
@@ -10977,7 +10976,7 @@ function PrinterSettings({settings,setSettings}){
         {dt.enabled&&<label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={dt.showLabels!==false} onChange={e=>setDt({showLabels:e.target.checked})}/>Show field labels</label>}
       </div>
       {dt.enabled&&<>
-        <p className="text-[11px] text-stone-500 -mt-1">The carrier prints a plain 4×6 shipping label; ShippingHub adds <b>your</b> designed tab (below) on the taller stock. FedEx has no separate fillable tab of its own — its reference block is just part of the 4×6 label — so the tab you design here is the only tab. Turn this off to print a plain 4×6 with no tab.</p>
+        <p className="text-[11px] text-stone-500 -mt-1">The carrier prints a plain 4×6 shipping label; {BRAND.product} adds <b>your</b> designed tab (below) on the taller stock. FedEx has no separate fillable tab of its own — its reference block is just part of the 4×6 label — so the tab you design here is the only tab. Turn this off to print a plain 4×6 with no tab.</p>
         <Field label="Doc-tab position on label stock">
           <Select value={dt.stock||"trailing"} onChange={e=>setDt({stock:e.target.value})}>
             <option value="trailing">Trailing (bottom of label)</option>
@@ -11975,7 +11974,7 @@ function Integrations({settings,setSettings,orders,setOrders}){
 }
 function Billing({settings,setSettings}){
   const [n,setN]=useState({carrier:"FedEx",account:"",label:""});
-  const add=()=>{ if(!n.account)return; setSettings({...settings,thirdPartyAccts:[...settings.thirdPartyAccts,{id:"tp"+Date.now(),...n}]}); setN({carrier:"FedEx",account:"",label:""}); };
+  const add=()=>{ if(!n.account)return; setSettings({...settings,thirdPartyAccts:[...(settings.thirdPartyAccts||[]),{id:"tp"+Date.now(),...n}]}); setN({carrier:"FedEx",account:"",label:""}); };
   const prepaid=settings.prepaid||{balance:0,autoRecharge:false,rechargeAt:25,rechargeAmount:100,history:[]};
   const setPrepaid=(patch)=>setSettings({...settings,prepaid:{...prepaid,...patch}});
   const [amt,setAmt]=useState("100");
@@ -12004,7 +12003,7 @@ function Billing({settings,setSettings}){
     </Panel>
     <Panel title="Third-party carrier accounts">
       <p className="text-xs text-stone-400">Bill shipping to someone else's FedEx account number.</p>
-      {settings.thirdPartyAccts.map(t=>(<div key={t.id} className="flex items-center gap-2 text-sm border border-stone-200 rounded px-3 py-2"><span className={`text-xs font-bold ${CARRIER_TINT[t.carrier]}`}>{t.carrier}</span><span className="flex-1 font-mono">{t.account}</span><span className="text-stone-400">{t.label}</span><button onClick={()=>setSettings({...settings,thirdPartyAccts:settings.thirdPartyAccts.filter(x=>x.id!==t.id)})} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button></div>))}
+      {(settings.thirdPartyAccts||[]).map(t=>(<div key={t.id} className="flex items-center gap-2 text-sm border border-stone-200 rounded px-3 py-2"><span className={`text-xs font-bold ${CARRIER_TINT[t.carrier]}`}>{t.carrier}</span><span className="flex-1 font-mono">{t.account}</span><span className="text-stone-400">{t.label}</span><button onClick={()=>setSettings({...settings,thirdPartyAccts:settings.thirdPartyAccts.filter(x=>x.id!==t.id)})} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button></div>))}
       <div className="grid grid-cols-3 gap-2"><Select value={n.carrier} onChange={e=>setN({...n,carrier:e.target.value})}><option>FedEx</option></Select><Input placeholder="Account #" value={n.account} onChange={e=>setN({...n,account:e.target.value})}/><Input placeholder="Label" value={n.label} onChange={e=>setN({...n,label:e.target.value})}/></div>
       <button onClick={add} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Add account</button>
     </Panel>

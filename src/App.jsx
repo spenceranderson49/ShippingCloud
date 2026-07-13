@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v486";
+const BUILD_TAG="addr-v487";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -5695,7 +5695,7 @@ function Landing({onAuth}){
     <div className="absolute inset-0 pointer-events-none" style={{background:"repeating-linear-gradient(-35deg,transparent 0 70px,rgba(30,155,240,.05) 70px 72px)"}}/>
     <div className="absolute pointer-events-none" style={{width:640,height:640,borderRadius:"50%",top:-180,left:"50%",background:"radial-gradient(circle,rgba(30,155,240,.14),transparent 65%)",animation:"fwDrift 12s ease-in-out infinite"}}/>
     <div className="relative flex flex-col items-center mb-7" style={{animation:"fwRise .6s ease both"}}>
-      <FreightwireShipHub logoH={52}/>
+      <FreightwireShipHub logoH={52} sub={false}/>
     </div>
     <div className="relative w-full flex justify-center py-4" style={{animation:"fwRise .6s .14s ease both",transform:"scale(1.2)",transformOrigin:"top center"}}>
       <CloudAuth onDone={()=>window.location.reload()} initialMode="signin"/>
@@ -6077,7 +6077,7 @@ function LandingGate({onDone}){
   const [auth,setAuth]=useState(()=>{const p=lsGet("postDemo",null);if(p){lsSet("postDemo",null);return "request";}return null;}); // null | "signin" | "request" | "fedex"
   const [intake,setIntake]=useState(null);
   if(BRAND.admin)return (<div className="min-h-screen bg-stone-100 flex flex-col items-center justify-center p-4 gap-4">
-    <div className="text-center flex flex-col items-center gap-2"><FreightwireShipHub logoH={40}/><div className="text-xs text-stone-500 mt-1">Administrator portal — same accounts, same data, no customer noise.</div></div>
+    <div className="text-center flex flex-col items-center gap-2"><FreightwireShipHub logoH={40} sub={false}/></div>
     <CloudAuth initialMode="signin" onDone={onDone}/>
   </div>);
   return (<div className="relative">

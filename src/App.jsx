@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, Pause, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, EyeOff, MessageCircle, Sparkles, ClipboardList, Ban, Tag, Copy, Sliders, Save} from "lucide-react";
 const FW_BLUE="#0099FF";
@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v498";
+const BUILD_TAG="addr-v499";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3624,8 +3624,8 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       setTimeout(_fire,12000);
       say("Login created — welcome email with a set-password link is on its way.");
     } else say("Login created.");};
-  const sendReset=async(u)=>{const r=await cloudCall({action:"requestReset",email:u.email,token:CLOUD.token});window.alert(r&&r.configured===false?"Email sending isn't set up on this site yet (RESEND_API_KEY).":(r&&r.found===false)?"That login isn't in the cloud yet (or is disabled) — no email was sent.":"Password reset link sent to "+u.email+" (valid 1 hour).");};
-  const setPw=async(u)=>{const np=window.prompt("New password for "+u.email+":");if(!np)return;if(CLOUD.mode==="cloud"){const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});window.alert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update."));}else{setUsers(us=>us.map(x=>x.id===u.id?{...x,password:np}:x));window.alert("Password updated (local).");}};
+  const sendReset=async(u)=>{const r=await cloudCall({action:"requestReset",email:u.email,token:CLOUD.token});uiAlert(r&&r.configured===false?"Email sending isn't set up on this site yet (RESEND_API_KEY).":(r&&r.found===false)?"That login isn't in the cloud yet (or is disabled) — no email was sent.":"Password reset link sent to "+u.email+" (valid 1 hour).");};
+  const setPw=async(u)=>{const np=await uiPrompt("New password for "+u.email+":","",{title:"Reset password"});if(!np)return;if(CLOUD.mode==="cloud"){const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});uiAlert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update."));}else{setUsers(us=>us.map(x=>x.id===u.id?{...x,password:np}:x));uiAlert("Password updated (local).");}};
   const dedicated=()=>{const id="p"+Date.now();upRules({profiles:[...profiles,{id,name:c.name,services:JSON.parse(JSON.stringify(prof.services||{})),surcharges:JSON.parse(JSON.stringify(prof.surcharges||{}))}],assign:{...assign,[cid]:id}});say("Dedicated profile created.");};
   const companyFeatureState=(fid)=>{if(!lg.length)return "none";const on=lg.filter(u=>featureOn(fid,u,featureFlags[u.id])).length;return on===0?"off":on===lg.length?"on":"mixed";};
   const setCompanyFeature=(fid,val)=>{setFeatureFlags&&setFeatureFlags(ff=>{const next={...ff};lg.forEach(u=>{next[u.id]={...(next[u.id]||{}),[fid]:val};});return next;});say((val?"Enabled":"Disabled")+" for all logins.");};
@@ -3889,8 +3889,8 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       const upSvcDisc=(k,v)=>upFx({svcDisc:{...svcDisc,[k]:v}});
       const applyTierToRates=()=>{
         const d=+fx.listDiscount;
-        if(!(d>0))return window.alert("Set an overall FedEx list discount % first — that's what gets applied.");
-        if(prof.id==="default")return window.alert("This customer prices from the SHARED Default profile — applying the tier here would reprice every Default customer. Open the Rates tab and give them their own profile first.");
+        if(!(d>0))return uiAlert("Set an overall FedEx list discount % first — that's what gets applied.");
+        if(prof.id==="default")return uiAlert("This customer prices from the SHARED Default profile — applying the tier here would reprice every Default customer. Open the Rates tab and give them their own profile first.");
         if(!window.confirm("Set every FedEx service on "+c.name+"'s profile to FedEx list − "+d+"%? (Per-service overrides below win where set.)"))return;
         const svcs={...(prof.services||{})};
         svcQuick.forEach(sv=>{const per=+svcDisc[sv.k];const use=(per>0)?per:d;svcs[sv.k]={...(svcs[sv.k]||{}),basis:"list",pct:use};});
@@ -4129,18 +4129,18 @@ function RatesAdmin({clients=[],brand}){
   const upProf=(patch)=>upRules({profiles:profiles.map(p=>p.id===prof.id?{...p,...patch}:p)});
   const upSvc=(k,patch)=>upProf({services:{...(prof.services||{}),[k]:{...((prof.services||{})[k]||{}),...patch}}});
   const upSur=(id,patch)=>upProf({surcharges:{...(prof.surcharges||{}),[id]:{...((prof.surcharges||{})[id]||{}),...patch}}});
-  const newProfile=()=>{const n=window.prompt("Name for the new rate profile:");if(!n)return;const id="p"+Date.now();upRules({profiles:[...profiles,{id,name:n,services:JSON.parse(JSON.stringify(prof.services||{})),surcharges:JSON.parse(JSON.stringify(prof.surcharges||{}))}]});setProfId(id);};
-  const renameProfile=()=>{const n=window.prompt("Rename profile:",prof.name);if(!n)return;upProf({name:n});};
-  const deleteProfile=()=>{if(prof.id==="default")return window.alert("The Default profile can't be deleted.");if(!window.confirm('Delete profile "'+prof.name+'"? Customers on it fall back to Default.'))return;const na={...assign};Object.keys(na).forEach(k=>{if(na[k]===prof.id)delete na[k];});upRules({profiles:profiles.filter(p=>p.id!==prof.id),assign:na});setProfId("default");};
-  const quickSet=(v)=>{
+  const newProfile=async()=>{const n=await uiPrompt("Name for the new rate profile:","",{title:"New rate profile"});if(!n)return;const id="p"+Date.now();upRules({profiles:[...profiles,{id,name:n,services:JSON.parse(JSON.stringify(prof.services||{})),surcharges:JSON.parse(JSON.stringify(prof.surcharges||{}))}]});setProfId(id);};
+  const renameProfile=async()=>{const n=await uiPrompt("Rename profile:",prof.name,{title:"Rename profile"});if(!n)return;upProf({name:n});};
+  const deleteProfile=()=>{if(prof.id==="default")return uiAlert("The Default profile can't be deleted.");if(!window.confirm('Delete profile "'+prof.name+'"? Customers on it fall back to Default.'))return;const na={...assign};Object.keys(na).forEach(k=>{if(na[k]===prof.id)delete na[k];});upRules({profiles:profiles.filter(p=>p.id!==prof.id),assign:na});setProfId("default");};
+  const quickSet=async(v)=>{
     if(!v)return;
     const svcs={...(prof.services||{})};
     const apply=(fn)=>{RATE_SERVICES[carrier].forEach(s=>{svcs[s.k]={...(svcs[s.k]||{}),...fn(svcs[s.k]||{})};});upProf({services:svcs});};
     if(/^pct:/.test(v)){const p=+v.slice(4);if(window.confirm("Set every "+carrier.toUpperCase()+" service on \""+prof.name+"\" to "+p+"% markup over cost?"))apply(()=>({basis:"pct",pct:p}));}
     else if(v==="listpct"){
       const withList=RATE_SERVICES[carrier].filter(s=>baseCosts["list:"+s.k]);
-      if(!withList.length)return window.alert("Import FedEx list rate tables first (Base costs tab) — the list basis prices live quotes as list − %, so it needs the list.");
-      const p=window.prompt("FedEx list minus what percent? Applies to the "+withList.length+" service"+(withList.length>1?"s":"")+" that have list tables.","35");
+      if(!withList.length)return uiAlert("Import FedEx list rate tables first (Base costs tab) — the list basis prices live quotes as list − %, so it needs the list.");
+      const p=await uiPrompt("FedEx list minus what percent? Applies to the "+withList.length+" service"+(withList.length>1?"s":"")+" that have list tables.","35",{title:"Bulk list discount"});
       if(p==null||p==="")return;
       const svcs={...(prof.services||{})};withList.forEach(s=>{svcs[s.k]={...(svcs[s.k]||{}),basis:"list",pct:+p};});upProf({services:svcs});
     }
@@ -4198,7 +4198,7 @@ function RatesAdmin({clients=[],brand}){
       html+="<table><tr><th>Weight (lb)</th>"+d.zones.map(z=>"<th>Zone "+z+"</th>").join("")+"</tr>"
         +d.rows.map(r=>"<tr><td style='font-weight:600'>"+r.w+"</td>"+r.cells.map(c=>c.c==null?"<td>—</td>":"<td>$"+c.c.toFixed(2)+(c.star?"*":"")+"</td>").join("")+"</tr>").join("")+"</table>";
     });
-    const w=window.open("","_blank");if(!w)return window.alert("Allow pop-ups to print the rate sheets.");
+    const w=window.open("","_blank");if(!w)return uiAlert("Allow pop-ups to print the rate sheets.");
     w.document.write("<html><head><title>Rate sheets — "+escS(prof.name)+"</title><style>"+_sheetStyles+"</style></head><body>"+_sheetLogo()+"<div class='sub'>Customer rate sheets · Profile: "+escS(prof.name)+" · Generated "+new Date().toLocaleDateString()+" · * = Min $ floor applied. Rates include base transportation; fees per the accessorials sheet.</div>"+html+"<script>window.print()</scr"+"ipt></body></html>");
     w.document.close();
   };
@@ -4222,7 +4222,7 @@ function RatesAdmin({clients=[],brand}){
       html+="<tr><td>"+escS(su.aka||su.desc)+"</td><td>"+escS(su.seg||"All")+"</td><td>"+escS(su.charge||"")+"</td><td style='font-weight:600'>"+escS(priceDesc(su))+"</td></tr>";
     });
     html+="</table>";
-    const w=window.open("","_blank");if(!w)return window.alert("Allow pop-ups to print the accessorials sheet.");
+    const w=window.open("","_blank");if(!w)return uiAlert("Allow pop-ups to print the accessorials sheet.");
     w.document.write("<html><head><title>Accessorials — "+escS(prof.name)+"</title><style>"+_sheetStyles+"</style></head><body>"+_sheetLogo()+"<h1>Accessorial charges</h1><div class='sub'>Profile: "+escS(prof.name)+" · Generated "+new Date().toLocaleDateString()+" · Fee names as they appear on FedEx quotes. Charges subject to FedEx Service Guide terms.</div>"+html+"<script>window.print()</scr"+"ipt></body></html>");
     w.document.close();
   };
@@ -4243,7 +4243,7 @@ function RatesAdmin({clients=[],brand}){
       if(sheetMargin&&c.f!=null){const m=Math.round((c.c-c.f)*100)/100;const p=c.c?Math.round(m/c.c*100):0;return "<td><b>$"+c.c.toFixed(2)+(c.star?"*":"")+"</b><br/><span style='color:#888'>F:$"+c.f.toFixed(2)+"</span><br/><span style='color:#0a7'>M:$"+m.toFixed(2)+" · "+p+"%</span></td>";}
       return "<td>$"+c.c.toFixed(2)+(c.star?"*":"")+"</td>";
     }).join("")+"</tr>").join("");
-    const w=window.open("","_blank");if(!w)return window.alert("Allow pop-ups to print the rate sheet.");
+    const w=window.open("","_blank");if(!w)return uiAlert("Allow pop-ups to print the rate sheet.");
     w.document.write("<html><head><title>"+escS(sheet.l)+" — rate sheet</title><style>body{font-family:system-ui,Segoe UI,Arial;padding:28px;color:#1c1917}table{border-collapse:collapse;width:100%;font-size:12px;margin-top:16px}th,td{border:1px solid #e5e5e5;padding:6px 8px;text-align:right}th{background:#f5f5f4}h1{font-size:17px;margin:14px 0 2px}.sub{color:#78716c;font-size:12px}</style></head><body>"+logo+"<h1>"+escS(sheet.l)+" — customer rate sheet</h1><div class='sub'>Profile: "+escS(prof.name)+" · Generated "+new Date().toLocaleDateString()+" · * = Min $ floor applied"+(sheetMargin?" · C=customer price, F=cost, M=margin":"")+"</div><table>"+head+body+"</table><div class='sub' style='margin-top:14px'>Rates include base transportation and automatic fuel/residential surcharges. Optional accessorials (signature, Saturday, declared value) are additional. Rates subject to change.</div><script>window.print()</scr"+"ipt></body></html>");
     w.document.close();
   };
@@ -4487,7 +4487,7 @@ function RatesAdmin({clients=[],brand}){
           <div className="text-[11px] text-stone-500">Excel/CSV/TSV — first column weight (lb), one column per zone (headers = zone numbers). Same format as FedEx base-cost imports.</div>
           <textarea value={ccImp.text} onChange={e=>setCcImp(p=>({...p,text:e.target.value}))} rows={8} spellCheck={false} placeholder={"Weight\t2\t3\t4\t5\t6\t7\t8\n1\t4.10\t4.25\t…"} className="w-full bg-white border border-stone-200 rounded-lg p-2.5 font-mono text-[12px] outline-none focus:border-[#0099FF] resize-y"/>
           <div className="flex gap-2">
-            <button onClick={()=>{const r2=parseRateTable(ccImp.text);if(r2.error)return window.alert(r2.error);setRules(r=>({...DEFAULT_RATE_RULES,...r,baseCosts:{...(r.baseCosts||{}),["cc:"+ccImp.key]:r2}}));setCcImp(null);setImpMsg({ok:"Rate card staged — press Save rates to make it live."});}} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium">Stage rate card</button>
+            <button onClick={()=>{const r2=parseRateTable(ccImp.text);if(r2.error)return uiAlert(r2.error);setRules(r=>({...DEFAULT_RATE_RULES,...r,baseCosts:{...(r.baseCosts||{}),["cc:"+ccImp.key]:r2}}));setCcImp(null);setImpMsg({ok:"Rate card staged — press Save rates to make it live."});}} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium">Stage rate card</button>
             <button onClick={()=>setCcImp(null)} className="text-sm text-stone-500 px-3 py-2 hover:bg-stone-100 rounded-lg">Cancel</button>
           </div>
         </div>}
@@ -4612,11 +4612,11 @@ function BillingAdmin({clients=[],platform={},openCustomer}){
   const nextNumber=()=>{const yr=genMonth.slice(0,4);const used=new Set((invoices||[]).map(i=>i.number));let n=(invoices.filter(i=>i.number&&i.number.includes("-"+yr+"-")).length)+1;let num;do{num="INV-"+yr+"-"+String(n).padStart(4,"0");n++;}while(used.has(num));return num;};   /* skip any number already taken → no collision */
   const buildPreview=()=>{ if(!genClient)return;
     const rows=shipsForClient(genClient,genMonth);
-    if(!rows.length)return window.alert("No billable shipments for "+(cById(genClient).name||"that customer")+" in "+genMonth+".");
+    if(!rows.length)return uiAlert("No billable shipments for "+(cById(genClient).name||"that customer")+" in "+genMonth+".");
     if(invoices.some(i=>i.clientId===genClient&&i.month===genMonth&&i.status!=="void"))if(!window.confirm("An invoice for this customer + month already exists. Create another?"))return;
     const alreadyBilled=rows.filter(x=>invoicedTrackings.has(x.tracking)).length;
     const items=rows.filter(x=>!invoicedTrackings.has(x.tracking)).map(x=>({date:x.date,tracking:x.tracking,service:(x.service||"").replace("FedEx ",""),reference:x.reference||"",amount:Math.round((+x.sell||0)*100)/100}));
-    if(!items.length)return window.alert("Every shipment for "+(cById(genClient).name||"that customer")+" in "+genMonth+" is already on an invoice.");
+    if(!items.length)return uiAlert("Every shipment for "+(cById(genClient).name||"that customer")+" in "+genMonth+" is already on an invoice.");
     const subtotal=Math.round(items.reduce((a,i)=>a+i.amount,0)*100)/100;
     setPreview({clientId:genClient,month:genMonth,number:nextNumber(),items,subtotal,total:subtotal,terms:bSettings.terms,skipped:alreadyBilled});
   };
@@ -4625,7 +4625,7 @@ function BillingAdmin({clients=[],platform={},openCustomer}){
     setInvoices(p=>[inv,...(p||[])]); setPreview(null); };
   /* trackings already on a non-void invoice — excluded from new previews so a shipment can't be billed twice */
   const invoicedTrackings=(()=>{const set=new Set();(invoices||[]).forEach(i=>{if(i.status!=="void")(i.items||[]).forEach(it=>it.tracking&&set.add(it.tracking));});return set;})();
-  const recordPayment=(inv)=>{ const amt=window.prompt("Payment amount for "+inv.number+" (balance "+money(balanceOf(inv))+"):",String(balanceOf(inv)));
+  const recordPayment=async(inv)=>{ const amt=await uiPrompt("Payment amount for "+inv.number+" (balance "+money(balanceOf(inv))+"):",String(balanceOf(inv)),{title:"Record a payment"});
     if(amt==null)return; const n=+amt; if(!(n>0))return;
     setInvoices(p=>(p||[]).map(i=>i.id===inv.id?(()=>{const pays=[...(i.payments||[]),{amount:Math.round(n*100)/100,when:new Date().toISOString(),method:"manual"}];const paid=pays.reduce((a,x)=>a+x.amount,0);return {...i,payments:pays,status:paid>=i.total-0.005?"paid":"open",paidAt:paid>=i.total-0.005?new Date().toISOString():null};})():i)); };
   const voidInv=(inv)=>{ if(!window.confirm("Void invoice "+inv.number+"?"))return; setInvoices(p=>(p||[]).map(i=>i.id===inv.id?{...i,status:"void"}:i)); };
@@ -4633,7 +4633,7 @@ function BillingAdmin({clients=[],platform={},openCustomer}){
   const printInv=(inv)=>{ const c=cById(inv.clientId);
     const esc=(x)=>String(x==null?"":x).replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]));
     const rows=inv.items.map(i=>"<tr><td>"+esc(i.date)+"</td><td>"+esc(i.tracking)+"</td><td>"+esc(i.service)+"</td><td>"+esc(i.reference)+"</td><td style='text-align:right'>"+money(i.amount)+"</td></tr>").join("");
-    const w=window.open("","_blank"); if(!w)return window.alert("Allow pop-ups to print.");
+    const w=window.open("","_blank"); if(!w)return uiAlert("Allow pop-ups to print.");
     w.document.write("<html><head><title>"+esc(inv.number)+"</title><style>body{font-family:system-ui,Arial;padding:34px;color:#1c1917}h1{font-size:22px;margin:0}table{border-collapse:collapse;width:100%;font-size:13px;margin-top:16px}th,td{border:1px solid #e5e5e5;padding:7px 9px;text-align:left}th{background:#f5f5f4}.r{text-align:right}.tot{font-size:16px;font-weight:700;margin-top:14px;text-align:right}.sub{color:#78716c;font-size:13px}</style></head><body><div style='display:flex;justify-content:space-between;align-items:flex-start'><div><h1>"+esc(brandWordmark0())+"</h1><div class='sub'>Invoice "+esc(inv.number)+"</div></div><div class='sub' style='text-align:right'>Issued "+esc((inv.issuedAt||'').slice(0,10))+"<br/>Terms: "+esc(inv.terms||bSettings.terms)+"<br/>Period: "+esc(inv.month)+"</div></div><div class='sub' style='margin-top:14px'>Bill to: <b>"+esc(c.name||'')+"</b>"+(c.email?" · "+esc(c.email):"")+"</div><table><tr><th>Date</th><th>Tracking</th><th>Service</th><th>Reference</th><th class='r'>Amount</th></tr>"+rows+"</table><div class='tot'>Total due: "+money(inv.total)+(balanceOf(inv)!==inv.total?" · Balance: "+money(balanceOf(inv)):"")+"</div>"+(bSettings.note?"<p class='sub' style='margin-top:16px'>"+esc(bSettings.note)+"</p>":"")+(bSettings.payUrl?"<p class='sub'>Pay online: "+esc(bSettings.payUrl)+"</p>":"")+"<script>window.print()</scr"+"ipt></body></html>");
     w.document.close(); };
   const brandWordmark0=()=>((BRAND&&BRAND.product)||"ShippingCloud");
@@ -4706,7 +4706,7 @@ function ApiAdmin({clients=[],platform={},openCustomer}){
     const r=await cloudCall({action:"apiKeyCreate",token:CLOUD.token,clientId:nk.clientId,label:nk.label,mode:nk.mode});
     setKBusy(false);
     if(r&&r.ok){setMinted({key:r.key,prefix:r.prefix});setPgKey(r.key);setNk({clientId:"",label:"",mode:"test"});loadKeys();}
-    else window.alert((r&&r.error)||"Couldn't create the key.");
+    else uiAlert((r&&r.error)||"Couldn't create the key.");
   };
   const revoke=async(id)=>{ if(!window.confirm("Revoke this key? Integrations using it stop working immediately."))return;
     await cloudCall({action:"apiKeyRevoke",token:CLOUD.token,id}); loadKeys(); };
@@ -5054,7 +5054,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
     setBusyReq(email);
     const res=await cloudCall({action:approve?"approveSignup":"denySignup",token:CLOUD.token,email,clientId:clientId||null});
     setBusyReq("");
-    if(!res||!res.ok){window.alert((res&&res.error)||"Could not update the request.");return;}
+    if(!res||!res.ok){uiAlert((res&&res.error)||"Could not update the request.");return;}
     if(res.users)setUsers(res.users);
     if(res.requests&&setSignupRequests)setSignupRequests(res.requests);
   };
@@ -5104,7 +5104,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
       <div className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Truck className="w-4 h-4 text-emerald-600"/>FedEx account requests<Badge tone="green">{fedexRequests.length}</Badge></div>
       {fedexRequests.map(r=>(<div key={r.id||r.uid} className="flex flex-wrap items-center gap-3 bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm">
         <div className="flex-1 min-w-[180px]"><div className="font-medium">{r.name||r.email}</div><div className="text-[11px] text-stone-400">{r.email}{r.volume?<> · {r.volume}/mo</>:null}{r.carrier?<> · ships {r.carrier}</>:null} · {r.requestedAt?new Date(r.requestedAt).toLocaleDateString():"recently"}</div></div>
-        {r.invoiceKey&&<button onClick={async()=>{const res=await cloudCall({action:"getUpload",token:CLOUD.token,key:r.invoiceKey});if(!res||!res.ok){window.alert((res&&res.error)||"Could not fetch the file.");return;}const bytes=atob(res.data);const arr=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);const url=URL.createObjectURL(new Blob([arr],{type:res.type}));const a=document.createElement("a");a.href=url;a.download=res.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);}} className="text-xs border border-[#0086E0]/40 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>Carrier invoice</button>}
+        {r.invoiceKey&&<button onClick={async()=>{const res=await cloudCall({action:"getUpload",token:CLOUD.token,key:r.invoiceKey});if(!res||!res.ok){uiAlert((res&&res.error)||"Could not fetch the file.");return;}const bytes=atob(res.data);const arr=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);const url=URL.createObjectURL(new Blob([arr],{type:res.type}));const a=document.createElement("a");a.href=url;a.download=res.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);}} className="text-xs border border-[#0086E0]/40 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>Carrier invoice</button>}
         <button onClick={()=>setFedexRequests&&setFedexRequests(rs=>rs.filter(x=>x!==r))} className="text-xs border border-stone-300 text-stone-600 rounded px-3 py-1.5 hover:bg-stone-50">Done</button>
       </div>))}
       <p className="text-[11px] text-stone-400">These come from the welcome popup after a user’s first sign-in. Provision their England/FedEx account, drop the credentials into their customer card, then hit Done.</p>
@@ -5113,7 +5113,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
       <div className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Users className="w-4 h-4 text-[#0086E0]"/>Access requests<Badge tone="blue">{signupRequests.length}</Badge></div>
       {signupRequests.map(r=>(<div key={r.id||r.email} className="flex flex-wrap items-center gap-3 bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm">
         <div className="flex-1 min-w-[180px]"><div className="font-medium">{r.name}{r.company?<span className="text-stone-400 font-normal"> · {r.company}</span>:null}</div><div className="text-[11px] text-stone-400">{r.email} · requested {r.requestedAt?new Date(r.requestedAt).toLocaleDateString():"recently"}{r.volume?<> · {r.volume}/mo</>:null}{r.carrier?<> · ships {r.carrier}</>:null}</div></div>
-        {r.invoiceKey&&<button onClick={async()=>{const res=await cloudCall({action:"getUpload",token:CLOUD.token,key:r.invoiceKey});if(!res||!res.ok){window.alert((res&&res.error)||"Could not fetch the file.");return;}const bytes=atob(res.data);const arr=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);const url=URL.createObjectURL(new Blob([arr],{type:res.type}));const a=document.createElement("a");a.href=url;a.download=res.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);}} className="text-xs border border-[#0086E0]/40 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>Carrier invoice</button>}
+        {r.invoiceKey&&<button onClick={async()=>{const res=await cloudCall({action:"getUpload",token:CLOUD.token,key:r.invoiceKey});if(!res||!res.ok){uiAlert((res&&res.error)||"Could not fetch the file.");return;}const bytes=atob(res.data);const arr=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);const url=URL.createObjectURL(new Blob([arr],{type:res.type}));const a=document.createElement("a");a.href=url;a.download=res.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);}} className="text-xs border border-[#0086E0]/40 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>Carrier invoice</button>}
         <select id={"reqclient-"+(r.id||r.email)} defaultValue="" className="text-xs border border-stone-300 rounded px-2 py-1.5 bg-white"><option value="">No customer account yet</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
         <button disabled={busyReq===r.email} onClick={()=>{const sel=document.getElementById("reqclient-"+(r.id||r.email));decide(r.email,true,sel?sel.value:null);}} className="text-xs bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-emerald-700 disabled:opacity-50">{busyReq===r.email?"…":"Approve"}</button>
         <button disabled={busyReq===r.email} onClick={()=>decide(r.email,false)} className="text-xs border border-stone-300 text-stone-600 rounded px-3 py-1.5 hover:bg-stone-50 disabled:opacity-50">Deny</button>
@@ -5153,9 +5153,9 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
             {u.role!=="admin"&&u.clientId&&<button onClick={()=>setRpOpen(rpOpen===u.id?null:u.id)} title="Which rate profile this company prices from — applies to every login of the company" className={`text-[11px] rounded px-2 py-1 ${rpOpen===u.id?"bg-[#0086E0] text-white":"bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}>Rates: {rateProfileName(rateRules,u.clientId)}</button>}
             {u.role!=="admin"&&<button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))} title={u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins"} className={`text-[11px] rounded px-2 py-1 ${u.companyAdmin?"bg-violet-600 text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>{u.companyAdmin?"Company admin ✓":"Company admin"}</button>}
             {u.role!=="admin"&&<button onClick={()=>setFeatOpen(featOpen===u.id?null:u.id)} title="Features for this login" className={`text-[11px] rounded px-2 py-1 ${featOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>Tabs &amp; logo</button>}
-            {CLOUD.mode==="cloud"&&(u.role!=="admin"||fullAdmin)&&<button onClick={async()=>{const np=window.prompt("New password for "+u.email+" (min 4 characters):");if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});window.alert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}} title="Reset password" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Password</button>}
-            {CLOUD.mode==="cloud"&&u.role!=="admin"&&<button onClick={async()=>{const r=await cloudCall({action:"requestReset",email:u.email,token:CLOUD.token});window.alert(r&&r.configured===false?"Email sending isn't set up on this site yet (RESEND_API_KEY).":"Password reset link sent to "+u.email+" (valid 1 hour).");}} title="Email them a choose-a-new-password link (valid 1 hour)" className="text-[11px] rounded px-2 py-1 bg-[#E6F4FF] text-[#006FBF] hover:bg-[#CCEAFF]">Reset email</button>}
-            {CLOUD.mode==="cloud"&&u.totp&&u.totp.enabled&&<button onClick={async()=>{if(!window.confirm("Turn OFF two-factor for "+u.email+"? Use this only if they lost their authenticator — they'll sign in with just their password afterward."))return;const r=await cloudCall({action:"clearTotp",token:CLOUD.token,email:u.email});window.alert(r&&r.ok?"2FA turned off for "+u.email+".":((r&&r.error)||"Could not reset 2FA."));}} title="Lost-phone recovery: turn off this user's 2FA" className="text-[11px] rounded px-2 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100">Reset 2FA</button>}
+            {CLOUD.mode==="cloud"&&(u.role!=="admin"||fullAdmin)&&<button onClick={async()=>{const np=await uiPrompt("New password for "+u.email+" (min 4 characters):","",{title:"Reset password"});if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});uiAlert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}} title="Reset password" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Password</button>}
+            {CLOUD.mode==="cloud"&&u.role!=="admin"&&<button onClick={async()=>{const r=await cloudCall({action:"requestReset",email:u.email,token:CLOUD.token});uiAlert(r&&r.configured===false?"Email sending isn't set up on this site yet (RESEND_API_KEY).":"Password reset link sent to "+u.email+" (valid 1 hour).");}} title="Email them a choose-a-new-password link (valid 1 hour)" className="text-[11px] rounded px-2 py-1 bg-[#E6F4FF] text-[#006FBF] hover:bg-[#CCEAFF]">Reset email</button>}
+            {CLOUD.mode==="cloud"&&u.totp&&u.totp.enabled&&<button onClick={async()=>{if(!window.confirm("Turn OFF two-factor for "+u.email+"? Use this only if they lost their authenticator — they'll sign in with just their password afterward."))return;const r=await cloudCall({action:"clearTotp",token:CLOUD.token,email:u.email});uiAlert(r&&r.ok?"2FA turned off for "+u.email+".":((r&&r.error)||"Could not reset 2FA."));}} title="Lost-phone recovery: turn off this user's 2FA" className="text-[11px] rounded px-2 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100">Reset 2FA</button>}
             <button onClick={()=>toggle(u.id)} title={u.status==="active"?"Deactivate":"Activate"} className={`text-[11px] rounded px-2 py-1 ${u.status==="active"?"bg-emerald-50 text-emerald-700":"bg-stone-100 text-stone-500"}`}>{u.status==="active"?"Active":"Deactivated"}</button>
             {u.id!==currentUser.id&&!isBuiltInAdmin(u.email)&&(u.role!=="admin"||(fullAdmin&&u.id!=="u1"))&&<button onClick={()=>del(u.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
           </div>
@@ -5969,7 +5969,7 @@ function CompanyAdminRequestButton({currentUser}){
     const r=await cloudCall({action:"requestCompanyAdmin",token:CLOUD.token});
     setBusy(false);
     if(r&&r.ok){ setState("pending"); lsSet("u/"+uid+"/caReq","pending"); }
-    else window.alert((r&&r.error)||"Could not send the request — try again.");
+    else uiAlert((r&&r.error)||"Could not send the request — try again.");
   };
   return (<div className="mt-3 pt-3 border-t border-stone-200 px-1">
     {state==="pending"
@@ -6009,7 +6009,7 @@ function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,set
     else flash({err:(r&&r.error)||"Could not save."});
   };
   const resetPw=async(u)=>{
-    const np=window.prompt("New password for "+u.email+" (min 4 characters):");
+    const np=await uiPrompt("New password for "+u.email+" (min 4 characters):","",{title:"Reset password"});
     if(!np)return;
     const r=await cloudCall({action:"companySetPassword",token:CLOUD.token,uid:u.id,password:np});
     if(r&&r.ok)flash({ok:`Password updated for ${u.email}.`});
@@ -6146,6 +6146,46 @@ function LandingGate({onDone}){
     </div>}
   </div>);
 }
+/* ── Styled dialogs — one in-app replacement for window.confirm/prompt/alert, so the whole
+   product looks like one polished tool instead of dropping to grey OS pop-ups. Promise-based:
+   `await uiConfirm(msg)` → true/false, `await uiPrompt(msg, default)` → string|null,
+   `uiAlert(msg)` → resolves when dismissed. Falls back to the native dialog if the host isn't
+   mounted yet (boot/tests), so a call can never hang. */
+let _dlgOpen=null;
+function uiDialog(opts){
+  if(typeof _dlgOpen==="function") return _dlgOpen(opts);
+  try{
+    if(opts.kind==="confirm") return Promise.resolve(globalThis.confirm(opts.message));
+    if(opts.kind==="prompt") return Promise.resolve(globalThis.prompt(opts.message,opts.default||""));
+    globalThis.alert(opts.message); return Promise.resolve();
+  }catch(e){ return Promise.resolve(opts.kind==="confirm"?false:opts.kind==="prompt"?null:undefined); }
+}
+const uiAlert=(message,opts={})=>uiDialog({kind:"alert",message,...opts});
+const uiConfirm=(message,opts={})=>uiDialog({kind:"confirm",message,...opts});
+const uiPrompt=(message,def="",opts={})=>uiDialog({kind:"prompt",message,default:def==null?"":String(def),...opts});
+function DialogHost(){
+  const [d,setD]=useState(null);
+  const [val,setVal]=useState("");
+  const inRef=useRef(null);
+  useEffect(()=>{ _dlgOpen=(opts)=>new Promise(res=>{ setVal(opts.default||""); setD({...opts,resolve:res}); }); return ()=>{ _dlgOpen=null; }; },[]);
+  useEffect(()=>{ if(d&&d.kind==="prompt"){ const t=setTimeout(()=>{ try{ inRef.current&&inRef.current.focus(); inRef.current&&inRef.current.select(); }catch(e){} },20); return ()=>clearTimeout(t); } },[d]);
+  if(!d) return null;
+  const done=(result)=>{ const r=d.resolve; setD(null); r(result); };
+  const cancel=()=>done(d.kind==="confirm"?false:d.kind==="prompt"?null:undefined);
+  const ok=()=>done(d.kind==="confirm"?true:d.kind==="prompt"?val:undefined);
+  const okLabel=d.okLabel||(d.kind==="prompt"?"Save":d.kind==="alert"?"OK":"Confirm");
+  return (<div className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onMouseDown={cancel} onKeyDown={e=>{ if(e.key==="Escape")cancel(); }}>
+    <div className="w-full max-w-sm bg-white rounded-xl shadow-2xl p-5 space-y-4" onMouseDown={e=>e.stopPropagation()}>
+      {d.title&&<div className="text-base font-semibold text-stone-800">{d.title}</div>}
+      <div className="text-sm text-stone-600 whitespace-pre-line leading-relaxed">{d.message}</div>
+      {d.kind==="prompt"&&<input ref={inRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter")ok(); }} className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0086E0] focus:ring-2 focus:ring-[#0086E0]/20"/>}
+      <div className="flex items-center justify-end gap-2 pt-1">
+        {d.kind!=="alert"&&<button onClick={cancel} className="text-sm text-stone-500 hover:text-stone-700 rounded-lg px-3 py-2">Cancel</button>}
+        <button onClick={ok} autoFocus={d.kind!=="prompt"} className={"text-sm font-semibold rounded-lg px-4 py-2 text-white "+(d.danger?"bg-rose-600 hover:bg-rose-700":"bg-[#0086E0] hover:bg-[#0072BE]")}>{okLabel}</button>
+      </div>
+    </div>
+  </div>);
+}
 export default function App(){
   const [phase,setPhase]=useState("boot");
   const [bootMsg,setBootMsg]=useState("");
@@ -6183,6 +6223,7 @@ export default function App(){
   return (<>
     {bootMsg&&<div className="bg-amber-50 border-b border-amber-200 text-amber-800 text-xs px-4 py-2 text-center">{bootMsg}</div>}
     <AppInner/>
+    <DialogHost/>
   </>);
 }
 function AppInner(){
@@ -8252,7 +8293,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
   const ordPad=custom.density==="compact"?"px-3 py-1":"px-3 py-2.5";
   const hideCol=new Set(custom.orderCols||[]);
   const views=custom.orderViews||[];
-  const saveView=()=>{ if(!setSettings)return; let name=""; try{name=window.prompt("Name this view (current search, filters, sort & columns will be saved):","");}catch(e){} if(!name)return;
+  const saveView=async()=>{ if(!setSettings)return; let name=""; try{name=await uiPrompt("Name this view (current search, filters, sort & columns will be saved):","",{title:"Save this view"});}catch(e){} if(!name)return;
     const v={id:"v"+Date.now(),name:String(name).slice(0,24),q,filter,storeFilter,sort,cols:custom.orderCols||[]};
     setSettings(pp=>({...pp,custom:{...(pp.custom||{}),orderViews:[...((pp.custom||{}).orderViews||[]),v]}})); };
   const applyView=(v)=>{ setQ(v.q||"");setFilter(v.filter||"all");setStoreFilter(v.storeFilter||"all");setSort(v.sort||"date");
@@ -8904,7 +8945,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
     setSlipEdit(null);
   };
   const [reprintLp,setReprintLp]=useState(null);
-  const doReprint=(sh)=>{ const e=labels&&labels[sh.id]; if(e&&e.pdf){ setReprintLp({pdf:e.pdf,tracking:sh.tracking,service:sh.service,carrier:sh.carrier,rec:sh}); } else { window.alert("No stored label for this shipment on this account (labels are kept for the 60 most recent bookings). Use Edit & reship to book a fresh one."); } };
+  const doReprint=(sh)=>{ const e=labels&&labels[sh.id]; if(e&&e.pdf){ setReprintLp({pdf:e.pdf,tracking:sh.tracking,service:sh.service,carrier:sh.carrier,rec:sh}); } else { uiAlert("No stored label for this shipment on this account (labels are kept for the 60 most recent bookings). Use Edit & reship to book a fresh one."); } };
   const custom=cz(settings||{});
   const stuck=(sh)=>{ if(!custom.stuckDays)return false; if(!/in transit/i.test(sh.status||""))return false; const t=new Date(sh.date).getTime(); return t&&(Date.now()-t)>custom.stuckDays*864e5; };
   const [open,setOpen]=useState(null);
@@ -9567,7 +9608,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
     setFs({state:new Set((c.fs&&c.fs.state)||[]),zone:new Set((c.fs&&c.fs.zone)||[]),source:new Set((c.fs&&c.fs.source)||[]),sku:new Set((c.fs&&c.fs.sku)||[]),product:new Set((c.fs&&c.fs.product)||[]),service:new Set((c.fs&&c.fs.service)||[]),carrier:new Set((c.fs&&c.fs.carrier)||[])});
     setSel(new Set());
   };
-  const savePreset=()=>{ const name=window.prompt("Name this batch (e.g. \u201cYesterday \u2014 Shopify ground\u201d):"); if(!name||!name.trim())return;
+  const savePreset=async()=>{ const name=await uiPrompt("Name this batch (e.g. \u201cYesterday \u2014 Shopify ground\u201d):","",{title:"Save this batch"}); if(!name||!name.trim())return;
     const p={id:"bp"+Date.now(),name:name.trim(),crit:snapshotCriteria()};
     setPresets(ps=>[...(ps||[]).filter(x=>x.name.toLowerCase()!==p.name.toLowerCase()),p]); setPresetSel(p.id);
     setMsg("Saved \u201c"+p.name+"\u201d \u2014 pick it any time to restore these exact criteria.");setTimeout(()=>setMsg(""),3000);
@@ -12406,11 +12447,11 @@ function TwoFactorPanel(){
   useEffect(()=>{load();},[]);
   const begin=async()=>{ setBusy(true); setMsg(null); const r=await cloudCall({action:"totpBegin",token:CLOUD.token}); setBusy(false); if(r&&r.ok){setSetup({secret:r.secret,otpauth:r.otpauth});setCode("");}else setMsg({t:"err",m:(r&&r.error)||"Could not start setup."}); };
   const enable=async()=>{ setBusy(true); setMsg(null); const r=await cloudCall({action:"totpEnable",token:CLOUD.token,code:code.trim()}); setBusy(false); if(r&&r.ok){setSetup(null);setCode("");setMsg({t:"ok",m:"Two-factor authentication is now ON."});if(r.backupCodes)setCodes(r.backupCodes);load();}else setMsg({t:"err",m:(r&&r.error)||"Could not turn on 2FA."}); };
-  const disable=async()=>{ const c=window.prompt("Turn OFF two-factor. Enter a current 6-digit code from your authenticator app (or leave blank and use your password on the next prompt):",""); if(c===null)return; let pw=""; if(!String(c).trim()){ pw=window.prompt("Enter your account password to turn off 2FA:","")||""; if(!pw)return; } setBusy(true); setMsg(null); const r=await cloudCall({action:"totpDisable",token:CLOUD.token,code:String(c).trim(),password:pw}); setBusy(false); if(r&&r.ok){setMsg({t:"ok",m:"Two-factor authentication is off."});setCodes(null);load();}else setMsg({t:"err",m:(r&&r.error)||"Could not turn off 2FA."}); };
-  const regen=async()=>{ const c=window.prompt("Make a new set of backup codes? This invalidates any old ones. Enter a current 6-digit code (or leave blank to use your password):",""); if(c===null)return; let pw=""; if(!String(c).trim()){ pw=window.prompt("Enter your account password:","")||""; if(!pw)return; } setBusy(true); setMsg(null); const r=await cloudCall({action:"totpBackupRegen",token:CLOUD.token,code:String(c).trim(),password:pw}); setBusy(false); if(r&&r.ok){setCodes(r.backupCodes||[]);setMsg({t:"ok",m:"New backup codes generated — save them now."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not make new codes."}); };
+  const disable=async()=>{ const c=await uiPrompt("Turn OFF two-factor. Enter a current 6-digit code from your authenticator app (or leave blank and use your password next):","",{title:"Turn off two-factor"}); if(c===null)return; let pw=""; if(!String(c).trim()){ pw=await uiPrompt("Enter your account password to turn off 2FA:","",{title:"Confirm password"})||""; if(!pw)return; } setBusy(true); setMsg(null); const r=await cloudCall({action:"totpDisable",token:CLOUD.token,code:String(c).trim(),password:pw}); setBusy(false); if(r&&r.ok){setMsg({t:"ok",m:"Two-factor authentication is off."});setCodes(null);load();}else setMsg({t:"err",m:(r&&r.error)||"Could not turn off 2FA."}); };
+  const regen=async()=>{ const c=await uiPrompt("Make a new set of backup codes? This invalidates any old ones. Enter a current 6-digit code (or leave blank to use your password):","",{title:"New backup codes"}); if(c===null)return; let pw=""; if(!String(c).trim()){ pw=await uiPrompt("Enter your account password:","",{title:"Confirm password"})||""; if(!pw)return; } setBusy(true); setMsg(null); const r=await cloudCall({action:"totpBackupRegen",token:CLOUD.token,code:String(c).trim(),password:pw}); setBusy(false); if(r&&r.ok){setCodes(r.backupCodes||[]);setMsg({t:"ok",m:"New backup codes generated — save them now."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not make new codes."}); };
   const e2begin=async()=>{ setBusy(true);setMsg(null); const r=await cloudCall({action:"email2faBegin",token:CLOUD.token}); setBusy(false); if(r&&r.ok){setE2sent(true);setE2code("");setMsg({t:"ok",m:"We emailed a 6-digit code"+(r.sentTo?" to "+r.sentTo:"")+" — enter it below to turn it on."});}else setMsg({t:"err",m:(r&&r.error)||"Could not send the code."}); };
   const e2enable=async()=>{ setBusy(true);setMsg(null); const r=await cloudCall({action:"email2faEnable",token:CLOUD.token,code:e2code.trim()}); setBusy(false); if(r&&r.ok){setE2sent(false);setE2code("");setMsg({t:"ok",m:"Email verification is now ON for sign-in."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not enable."}); };
-  const e2disable=async()=>{ const pw=window.prompt("Enter your account password to turn off email verification:","")||""; if(!pw)return; setBusy(true);setMsg(null); const r=await cloudCall({action:"email2faDisable",token:CLOUD.token,password:pw}); setBusy(false); if(r&&r.ok){setMsg({t:"ok",m:"Email verification is off."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not disable."}); };
+  const e2disable=async()=>{ const pw=await uiPrompt("Enter your account password to turn off email verification:","",{title:"Turn off email verification"})||""; if(!pw)return; setBusy(true);setMsg(null); const r=await cloudCall({action:"email2faDisable",token:CLOUD.token,password:pw}); setBusy(false); if(r&&r.ok){setMsg({t:"ok",m:"Email verification is off."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not disable."}); };
   if(!cloud) return null;
   const codesText=(codes||[]).join("\n");
   return (<Panel title="Two-factor authentication (2FA)">

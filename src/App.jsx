@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v488";
+const BUILD_TAG="addr-v489";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6104,7 +6104,7 @@ function LandingGate({onDone}){
   const [auth,setAuth]=useState(()=>{const p=lsGet("postDemo",null);if(p){lsSet("postDemo",null);return "request";}return null;}); // null | "signin" | "request" | "fedex"
   const [intake,setIntake]=useState(null);
   if(BRAND.admin)return (<div className="min-h-screen bg-stone-100 flex flex-col items-center justify-center p-4 gap-4">
-    <div className="text-center flex flex-col items-center gap-2"><FreightwireShipHub logoH={40} sub={false}/></div>
+    <div className="text-center flex flex-col items-center gap-2"><FreightwireShipHub logoH={40} subText="Admin Portal"/></div>
     <CloudAuth initialMode="signin" onDone={onDone}/>
   </div>);
   return (<div className="relative">

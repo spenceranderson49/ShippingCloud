@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v492";
+const BUILD_TAG="addr-v493";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10187,8 +10187,8 @@ function CheckoutRates({settings,setSettings,client,uid}){
 function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,audit=[],isAdmin=false,showMoney=true,secPolicy={},currentUser=null,setCurrentUser=null}){
   /* Remember which Settings sub-section you were on, so leaving Settings and coming back returns you to
      the same panel instead of resetting to General. Persisted so it survives a full reload too. */
-  const [sec,setSecRaw]=useState(()=>lsGet("settingsSec","general"));
-  const setSec=(k)=>{ setSecRaw(k); lsSet("settingsSec",k); };
+  const [sec,setSecRaw]=useState("general");   // always open Settings on General
+  const setSec=(k)=>{ setSecRaw(k); };
   const [secSearch,setSecSearch]=useState("");
   /* Sidebar sections grouped into categories (v376) — Ship screen promoted out of Customizations
      into its own top-level section under Shipping. The flat `secs` list below feeds the
@@ -12328,12 +12328,6 @@ function GeneralSettings({settings,setSettings,goSec,audit=[],currentUser,setCur
     </Panel>
     <AccountLoginPanel currentUser={currentUser} setCurrentUser={setCurrentUser}/>
     <TwoFactorPanel/>
-    <Panel title="Jump to">
-      <div className="grid sm:grid-cols-2 gap-2">
-        {links.map(([k,l,d])=>(<button key={k} onClick={()=>goSec(k)} className="text-left border border-stone-200 rounded-lg px-3 py-2 hover:border-[#99D6FF] hover:bg-[#E6F4FF]/40">
-          <div className="text-sm font-medium text-stone-800">{l}</div><div className="text-[11px] text-stone-400">{d}</div></button>))}
-      </div>
-    </Panel>
   </div>);
 }
 /* Self-service login email change. Keeps the same password + 2FA — only the email moves.

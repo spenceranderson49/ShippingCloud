@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v494";
+const BUILD_TAG="addr-v495";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -5585,6 +5585,8 @@ function CloudAuth({onDone,initialMode,intake}){
   const [showPw,setShowPw]=useState(false);
   const [inv,setInv]=useState(null); // {name,type,data(base64)}
   const [err,setErr]=useState("");const [busy,setBusy]=useState(false);
+  const [need2fa,setNeed2fa]=useState(null);   // null | "totp" | "email"
+  const [code,setCode]=useState("");const [sentTo,setSentTo]=useState("");
   const pickFile=(e)=>{
     const file=e.target.files&&e.target.files[0]; e.target.value=""; if(!file)return;
     if(file.size>3*1024*1024){setErr("That file is over 3 MB — one recent invoice (PDF/CSV/Excel/photo) is perfect.");return;}
@@ -5594,8 +5596,10 @@ function CloudAuth({onDone,initialMode,intake}){
   };
   const signin=async()=>{
     if(busy)return; setBusy(true);setErr("");
-    let res=await cloudCall({action:"login",email:f.email,password:f.pw});
-    if(res&&res.network) res=await cloudCall({action:"login",email:f.email,password:f.pw});   // retry a network blip before blaming the password
+    let res=await cloudCall({action:"login",email:f.email,password:f.pw,code:code.trim()});
+    if(res&&res.network) res=await cloudCall({action:"login",email:f.email,password:f.pw,code:code.trim()});   // retry a network blip before blaming the password
+    if(res&&res.needsEmailCode){ setBusy(false); setNeed2fa("email"); if(res.sentTo)setSentTo(res.sentTo); setErr(code?String(res.error||"That code isn't right."):""); return; }
+    if(res&&res.needsTotp){ setBusy(false); setNeed2fa("totp"); setErr(code?String(res.error||"That code isn't right."):""); return; }
     if(!res||!res.ok){setBusy(false);setErr(res&&res.network?"Couldn't reach the sign-in server — your password was never checked. Wait a moment and try again.":((res&&res.error)||"Could not reach the server."));return;}
     CLOUD.token=res.token; lsSet("cloud.token",res.token);
     const uid=String(res.user.id||res.user.email); clearScratchFor(uid);
@@ -5646,6 +5650,10 @@ function CloudAuth({onDone,initialMode,intake}){
         </div>}</>}
         <input value={f.email} onChange={e=>setF({...f,email:e.target.value})} placeholder="Email" className={inp} autoFocus/>
         <div className="relative"><input value={f.pw} onChange={e=>setF({...f,pw:e.target.value})} onKeyDown={e=>e.key==="Enter"&&(mode==="signin"?signin():request())} placeholder={mode==="request"?"Choose a password":"Password"} type={showPw?"text":"password"} className={inp+" pr-9"}/><button type="button" onClick={()=>setShowPw(v=>!v)} tabIndex={-1} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">{showPw?<EyeOff className="w-4 h-4"/>:<Eye className="w-4 h-4"/>}</button></div>
+        {mode==="signin"&&need2fa&&<div className="space-y-1">
+          <input value={code} onChange={e=>setCode(e.target.value.replace(/[^0-9A-Za-z-]/g,"").slice(0,9))} onKeyDown={e=>e.key==="Enter"&&signin()} placeholder="6-digit code" autoFocus className={inp+" tracking-[0.3em] text-center"}/>
+          <div className="text-[11px] text-stone-400">{need2fa==="email"?("We emailed a 6-digit code"+(sentTo?" to "+sentTo:"")+" — enter it to finish signing in."):"Enter the 6-digit code from your authenticator app (or a backup code)."}</div>
+        </div>}
       </div>
       {err&&<div className="text-xs text-red-600">{err}</div>}
       <button onClick={mode==="signin"?signin:request} disabled={busy} className="w-full bg-stone-900 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"One moment…":(mode==="signin"?"Sign in":"Create account")}</button>
@@ -12374,13 +12382,18 @@ function TwoFactorPanel(){
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState(null);              // {t:"ok"|"err",m}
   const [codes,setCodes]=useState(null);          // freshly-issued backup codes to show ONCE
+  const [e2,setE2]=useState(null);                // email-2FA status {enabled} | null (loading)
+  const [e2sent,setE2sent]=useState(false);const [e2code,setE2code]=useState("");
   const cloud=CLOUD.mode==="cloud"&&!!CLOUD.token;
-  const load=async()=>{ if(!cloud){setStatus({enabled:false,pending:false,backupLeft:0});return;} const r=await cloudCall({action:"totpStatus",token:CLOUD.token}); setStatus(r&&r.ok?{enabled:!!r.enabled,pending:!!r.pending,backupLeft:r.backupLeft||0}:{enabled:false,pending:false,backupLeft:0}); };
+  const load=async()=>{ if(!cloud){setStatus({enabled:false,pending:false,backupLeft:0});setE2({enabled:false});return;} const r=await cloudCall({action:"totpStatus",token:CLOUD.token}); setStatus(r&&r.ok?{enabled:!!r.enabled,pending:!!r.pending,backupLeft:r.backupLeft||0}:{enabled:false,pending:false,backupLeft:0}); const r2=await cloudCall({action:"email2faStatus",token:CLOUD.token}); setE2(r2&&r2.ok?{enabled:!!r2.enabled}:{enabled:false}); };
   useEffect(()=>{load();},[]);
   const begin=async()=>{ setBusy(true); setMsg(null); const r=await cloudCall({action:"totpBegin",token:CLOUD.token}); setBusy(false); if(r&&r.ok){setSetup({secret:r.secret,otpauth:r.otpauth});setCode("");}else setMsg({t:"err",m:(r&&r.error)||"Could not start setup."}); };
   const enable=async()=>{ setBusy(true); setMsg(null); const r=await cloudCall({action:"totpEnable",token:CLOUD.token,code:code.trim()}); setBusy(false); if(r&&r.ok){setSetup(null);setCode("");setMsg({t:"ok",m:"Two-factor authentication is now ON."});if(r.backupCodes)setCodes(r.backupCodes);load();}else setMsg({t:"err",m:(r&&r.error)||"Could not turn on 2FA."}); };
   const disable=async()=>{ const c=window.prompt("Turn OFF two-factor. Enter a current 6-digit code from your authenticator app (or leave blank and use your password on the next prompt):",""); if(c===null)return; let pw=""; if(!String(c).trim()){ pw=window.prompt("Enter your account password to turn off 2FA:","")||""; if(!pw)return; } setBusy(true); setMsg(null); const r=await cloudCall({action:"totpDisable",token:CLOUD.token,code:String(c).trim(),password:pw}); setBusy(false); if(r&&r.ok){setMsg({t:"ok",m:"Two-factor authentication is off."});setCodes(null);load();}else setMsg({t:"err",m:(r&&r.error)||"Could not turn off 2FA."}); };
   const regen=async()=>{ const c=window.prompt("Make a new set of backup codes? This invalidates any old ones. Enter a current 6-digit code (or leave blank to use your password):",""); if(c===null)return; let pw=""; if(!String(c).trim()){ pw=window.prompt("Enter your account password:","")||""; if(!pw)return; } setBusy(true); setMsg(null); const r=await cloudCall({action:"totpBackupRegen",token:CLOUD.token,code:String(c).trim(),password:pw}); setBusy(false); if(r&&r.ok){setCodes(r.backupCodes||[]);setMsg({t:"ok",m:"New backup codes generated — save them now."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not make new codes."}); };
+  const e2begin=async()=>{ setBusy(true);setMsg(null); const r=await cloudCall({action:"email2faBegin",token:CLOUD.token}); setBusy(false); if(r&&r.ok){setE2sent(true);setE2code("");setMsg({t:"ok",m:"We emailed a 6-digit code"+(r.sentTo?" to "+r.sentTo:"")+" — enter it below to turn it on."});}else setMsg({t:"err",m:(r&&r.error)||"Could not send the code."}); };
+  const e2enable=async()=>{ setBusy(true);setMsg(null); const r=await cloudCall({action:"email2faEnable",token:CLOUD.token,code:e2code.trim()}); setBusy(false); if(r&&r.ok){setE2sent(false);setE2code("");setMsg({t:"ok",m:"Email verification is now ON for sign-in."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not enable."}); };
+  const e2disable=async()=>{ const pw=window.prompt("Enter your account password to turn off email verification:","")||""; if(!pw)return; setBusy(true);setMsg(null); const r=await cloudCall({action:"email2faDisable",token:CLOUD.token,password:pw}); setBusy(false); if(r&&r.ok){setMsg({t:"ok",m:"Email verification is off."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not disable."}); };
   if(!cloud) return null;
   const codesText=(codes||[]).join("\n");
   return (<Panel title="Two-factor authentication (2FA)">
@@ -12422,6 +12435,18 @@ function TwoFactorPanel(){
         <button onClick={()=>setCodes(null)} className="text-[11px] rounded px-2 py-1 bg-stone-800 text-white hover:bg-stone-700">I’ve saved them</button>
       </div>
     </div>}
+    <div className="mt-4 pt-4 border-t border-stone-100">
+      <div className="text-sm font-semibold text-stone-800">Or verify by email</div>
+      <p className="text-xs text-stone-500 mt-0.5 mb-2">Prefer not to use an authenticator app? Turn on email verification and we'll email you a 6-digit code each time you sign in. (If both are on, the authenticator app is used.)</p>
+      {e2===null&&<div className="text-sm text-stone-400">Checking…</div>}
+      {e2&&e2.enabled&&<div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm text-emerald-700"><Check className="w-4 h-4"/>Email verification is <b>on</b>.</div><button disabled={busy} onClick={e2disable} className="text-xs rounded px-2.5 py-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200 disabled:opacity-50">Turn off</button></div>}
+      {e2&&!e2.enabled&&!e2sent&&<button disabled={busy} onClick={e2begin} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"Sending…":"Turn on email verification"}</button>}
+      {e2&&!e2.enabled&&e2sent&&<div className="flex items-center gap-2">
+        <input value={e2code} onChange={e=>setE2code(e.target.value.replace(/\D/g,"").slice(0,6))} onKeyDown={e=>e.key==="Enter"&&e2enable()} placeholder="123456" inputMode="numeric" className="w-32 border border-stone-300 rounded-lg px-3 py-2 text-sm tracking-[0.3em] text-center outline-none focus:border-[#0099FF]"/>
+        <button disabled={busy||e2code.length!==6} onClick={e2enable} className="text-sm bg-emerald-600 text-white rounded-lg px-3 py-2 font-medium hover:bg-emerald-700 disabled:opacity-50">Confirm code</button>
+        <button disabled={busy} onClick={()=>{setE2sent(false);setE2code("");}} className="text-xs text-stone-400 hover:text-stone-600">Cancel</button>
+      </div>}
+    </div>
     {msg&&<div className={`text-sm mt-2 ${msg.t==="ok"?"text-emerald-700":"text-rose-600"}`}>{msg.m}</div>}
   </Panel>);
 }

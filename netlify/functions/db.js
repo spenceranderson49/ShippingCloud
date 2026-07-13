@@ -706,8 +706,18 @@ exports.handler = async (event) => {
         const target = allUsers.find((x) => x && x.id === uid);
         if (!sameCompany(target)) return J({ ok: false, error: "That login isn’t in your company." });
         const raw = (body.flags && typeof body.flags === "object") ? body.flags : {};
+        /* Feature toggles are booleans, but a few underscore keys carry DEPLOY PAYLOADS a company
+           admin pushes to their team (customizations, product catalog, shared address book). Those
+           must pass through as-is; every other key is coerced to a strict boolean. Unknown underscore
+           keys are dropped so a crafted request can't smuggle in platform-only flags (e.g. _secPolicy). */
+        const DEPLOY_KEYS = { _custom: 1, _products: 1, _addresses: 1 };
         const flags = {}; let n = 0;
-        for (const k of Object.keys(raw)) { if (n >= 64) break; if (typeof k === "string" && k.length <= 64) { flags[k] = raw[k] === true; n++; } }
+        for (const k of Object.keys(raw)) {
+          if (n >= 64) break;
+          if (typeof k !== "string" || k.length > 64) continue;
+          if (k.charAt(0) === "_") { if (DEPLOY_KEYS[k]) { flags[k] = raw[k]; n++; } continue; }
+          flags[k] = raw[k] === true; n++;
+        }
         const cur = await getStore("featureFlags");
         const map = (cur.ok && cur.value && typeof cur.value === "object") ? cur.value : {};
         map[uid] = flags;

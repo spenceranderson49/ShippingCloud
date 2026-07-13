@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v513";
+const BUILD_TAG="addr-v514";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6065,6 +6065,48 @@ function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,set
     </div>
     <p className="text-[11px] text-stone-500">Blue chip = the person has that tab. Company admins always have every tab your account includes.</p>
     <CompanyCustomDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings}/>
+    <CompanyAddressDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings}/>
+  </div>);
+}
+
+/* Company-admin control: push the admin's own address book out to the whole team or selected logins.
+   Rides on companySetFlags (_addresses payload) — same mechanism as customizations/products — so it
+   needs no extra server access. It only ADDS shared entries to each login's book (deduped); a login's
+   own addresses are never touched, and "Remove shared book" pulls just the shared set back out. */
+function CompanyAddressDeploy({companyUsers,companyFlags,setCompanyFlags,adminSettings}){
+  const [mode,setMode]=useState("all");
+  const [picked,setPicked]=useState({});
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState(null);
+  const users=(companyUsers||[]).filter(u=>u.status!=="deactivated");
+  const targets=mode==="all"?users:users.filter(u=>picked[u.id]);
+  const book=(adminSettings&&adminSettings.addresses)||[];
+  const deploy=async(clear)=>{
+    if(!targets.length){setMsg({err:"Pick at least one login."});return;}
+    if(!clear&&!book.length){setMsg({err:"Your own address book is empty — add addresses first, then share."});return;}
+    setBusy(true); let ok=0,fail=0;
+    for(const u of targets){
+      const cur={...((companyFlags||{})[u.id]||{})};
+      if(clear)delete cur._addresses; else cur._addresses=book;
+      const r=await cloudCall({action:"companySetFlags",token:CLOUD.token,uid:u.id,flags:cur});
+      if(r&&r.ok){ok++;setCompanyFlags(m=>({...(m||{}),[u.id]:r.flags||cur}));}else fail++;
+    }
+    setBusy(false);
+    setMsg(fail?{err:`${ok} updated, ${fail} failed — try again.`}:{ok:clear?`Removed the shared book from ${ok} login${ok!==1?"s":""}.`:`Shared ${book.length} address${book.length!==1?"es":""} to ${ok} login${ok!==1?"s":""} — they'll see them on their next page load.`});
+  };
+  return (<div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
+    <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><BookUser className="w-4 h-4 text-[#0086E0]"/>Shared address book</div>
+    <div className="text-xs text-stone-500">Push your own address book (<b>{book.length}</b> address{book.length!==1?"es":""}) out to your team. Shared entries appear in each login's Address Book next to their own — you never overwrite or remove anyone's personal addresses.</div>
+    <div className="flex flex-wrap items-center gap-3 text-sm">
+      <label className="flex items-center gap-1.5 cursor-pointer"><input type="radio" checked={mode==="all"} onChange={()=>setMode("all")} className="accent-[#0086E0]"/>Everyone ({users.length})</label>
+      <label className="flex items-center gap-1.5 cursor-pointer"><input type="radio" checked={mode==="some"} onChange={()=>setMode("some")} className="accent-[#0086E0]"/>Selected logins</label>
+      {mode==="some"&&<div className="flex flex-wrap gap-2 w-full">{users.map(u=>(<label key={u.id} className="flex items-center gap-1.5 text-xs bg-stone-50 border border-stone-200 rounded-lg px-2 py-1 cursor-pointer"><input type="checkbox" checked={!!picked[u.id]} onChange={e=>setPicked(pp=>({...pp,[u.id]:e.target.checked}))} className="accent-[#0086E0]"/>{u.name||u.email}</label>))}</div>}
+    </div>
+    {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
+    <div className="flex flex-wrap items-center gap-2">
+      <button onClick={()=>deploy(false)} disabled={busy||!book.length} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<BookUser className="w-4 h-4"/>}Share to {mode==="all"?"everyone":`${targets.length} selected`}</button>
+      <button onClick={()=>deploy(true)} disabled={busy} className="text-sm border border-stone-300 text-stone-600 rounded-lg px-3 py-2 font-medium hover:bg-stone-50 disabled:opacity-40">Remove shared book</button>
+    </div>
   </div>);
 }
 
@@ -6343,11 +6385,17 @@ function AppInner(){
     return (fl&&fl._custom)||{};
   },[currentUser,featureFlags,myFeatures]);
   const settings=useMemo(()=>{ const sc=scrubLegacyDefaults(settingsRaw);
-    const depProds=(function(){const uid=currentUser&&currentUser.id;const fl=(uid&&featureFlags&&featureFlags[uid])||(CLOUD.mode==="cloud"?(myFeatures||{}):{});return (fl&&fl._products)||null;})();
+    const depFlags=(function(){const uid=currentUser&&currentUser.id;return (uid&&featureFlags&&featureFlags[uid])||(CLOUD.mode==="cloud"?(myFeatures||{}):{});})();
+    const depProds=(depFlags&&depFlags._products)||null;
     let products=sc.products;
     if(depProds&&depProds.length){const mine=sc.products||[];const names=new Set(mine.map(x=>String(x.name).toLowerCase()));products=[...mine,...depProds.filter(x=>!names.has(String(x.name).toLowerCase()))];}
+    /* Company-admin "shared address book" (_addresses) — merge the deployed entries in alongside the
+       login's OWN entries, deduped by name+street+zip. Never removes a login's personal addresses. */
+    const depAddrs=(depFlags&&depFlags._addresses)||null;
+    let addresses=sc.addresses;
+    if(depAddrs&&depAddrs.length){const akey=(x)=>(String(x.name||"")+"|"+String(x.address1||"")+"|"+String(x.zip||"")).toLowerCase();const mine=sc.addresses||[];const seen=new Set(mine.map(akey));addresses=[...mine,...depAddrs.filter(x=>!seen.has(akey(x))).map(x=>({...x,_shared:true}))];}
     const personalCustom=Object.fromEntries(Object.entries(sc.custom||{}).filter(([k,v])=>v!==""&&v!=null));   // "" = "use default" — must not mask company-deployed values
-    return {...sc,products,custom:{...deployedCustom,...personalCustom}};   // company-deployed defaults sit under personal choices
+    return {...sc,products,addresses,custom:{...deployedCustom,...personalCustom}};   // company-deployed defaults sit under personal choices
   },[settingsRaw,deployedCustom]);
   const setSettings=(v)=>setSettingsRaw(p=>scrubLegacyDefaults(typeof v==="function"?v(scrubLegacyDefaults(p)):v));
   const custom=cz(settings);
@@ -11819,8 +11867,11 @@ function AddressBook({settings,setSettings}){
   const [q,setQ]=useState("");
   const [msg,setMsg]=useState("");
   const list=settings.addresses||[];
-  const add=()=>{if(!f.name)return;setSettings({...settings,addresses:[{id:"ab"+Date.now(),...f},...list]});setF({name:"",company:"",address1:"",city:"",state:"",zip:"",phone:"",acctCarrier:"",acctNum:""});};
-  const del=(id)=>setSettings({...settings,addresses:list.filter(x=>x.id!==id)});
+  /* add/del write to the login's OWN stored addresses only (via the function form, whose arg is the
+     raw store) — shared entries pushed by a company admin live in featureFlags, are merged in for
+     display, and must never be baked into or removed from personal storage here. */
+  const add=()=>{if(!f.name)return;setSettings(st=>({...st,addresses:[{id:"ab"+Date.now(),...f},...(st.addresses||[])]}));setF({name:"",company:"",address1:"",city:"",state:"",zip:"",phone:"",acctCarrier:"",acctNum:""});};
+  const del=(id)=>setSettings(st=>({...st,addresses:(st.addresses||[]).filter(x=>x.id!==id)}));
   const importCSV=(e)=>{
     const file=e.target.files&&e.target.files[0]; if(!file)return;
     const reader=new FileReader();
@@ -11866,13 +11917,13 @@ function AddressBook({settings,setSettings}){
       <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 flex items-center justify-between"><span>{filtered.length} address{filtered.length===1?"":"es"}</span></div>
       {filtered.length===0&&<div className="p-6 text-center text-sm text-stone-400">No addresses{q?" match your search":" yet"}.</div>}
       {filtered.map(adr=>(<div key={adr.id}>
-        <div onClick={()=>editId===adr.id?(setEditId(null),setEf(null)):startEdit(adr)} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer ${editId===adr.id?"bg-[#E6F4FF]/40":"hover:bg-stone-50"}`}>
+        <div onClick={()=>adr._shared?null:(editId===adr.id?(setEditId(null),setEf(null)):startEdit(adr))} className={`flex items-center gap-3 px-4 py-2.5 ${adr._shared?"":"cursor-pointer"} ${editId===adr.id?"bg-[#E6F4FF]/40":"hover:bg-stone-50"}`}>
           <MapPin className="w-4 h-4 text-stone-400 shrink-0"/>
-          <div className="flex-1 min-w-0"><div className="font-medium text-sm truncate flex items-center gap-2">{adr.name}{adr.company?` · ${adr.company}`:""}{adr.acctNum?<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 border bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]">{adr.acctCarrier||"Bill"} {adr.acctNum}</span>:null}</div><div className="text-[11px] text-stone-400 truncate">{adr.address1}{adr.address1?", ":""}{adr.city} {adr.state} {adr.zip}{adr.phone?` · ${adr.phone}`:""}</div></div>
-          <Edit3 className={`w-3.5 h-3.5 shrink-0 ${editId===adr.id?"text-[#0086E0]":"text-stone-300"}`}/>
-          <button onClick={e=>{e.stopPropagation();del(adr.id);}} className="text-stone-300 hover:text-rose-500 shrink-0"><Trash2 className="w-4 h-4"/></button>
+          <div className="flex-1 min-w-0"><div className="font-medium text-sm truncate flex items-center gap-2">{adr.name}{adr.company?` · ${adr.company}`:""}{adr._shared?<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 border bg-violet-50 text-violet-700 border-violet-200">Shared by admin</span>:null}{adr.acctNum?<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 border bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]">{adr.acctCarrier||"Bill"} {adr.acctNum}</span>:null}</div><div className="text-[11px] text-stone-400 truncate">{adr.address1}{adr.address1?", ":""}{adr.city} {adr.state} {adr.zip}{adr.phone?` · ${adr.phone}`:""}</div></div>
+          {adr._shared?<span className="text-[10px] text-stone-400 shrink-0">read-only</span>:<><Edit3 className={`w-3.5 h-3.5 shrink-0 ${editId===adr.id?"text-[#0086E0]":"text-stone-300"}`}/>
+          <button onClick={e=>{e.stopPropagation();del(adr.id);}} className="text-stone-300 hover:text-rose-500 shrink-0"><Trash2 className="w-4 h-4"/></button></>}
         </div>
-        {editId===adr.id&&ef&&<div className="px-4 pb-4 pt-1 bg-[#E6F4FF]/20 border-t border-stone-100">
+        {editId===adr.id&&ef&&!adr._shared&&<div className="px-4 pb-4 pt-1 bg-[#E6F4FF]/20 border-t border-stone-100">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             <Field label="Name"><Input value={ef.name} onChange={e=>setEf({...ef,name:e.target.value})}/></Field>
             <Field label="Company"><Input value={ef.company||""} onChange={e=>setEf({...ef,company:e.target.value})}/></Field>

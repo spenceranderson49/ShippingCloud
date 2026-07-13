@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v490";
+const BUILD_TAG="addr-v491";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -160,7 +160,7 @@ const APP_ORIGIN=(()=>{ try{ return (typeof window!=="undefined"&&window.locatio
    by scanning for the transparent gap before the wordmark) instead of the ShippingCloud cloud, plus
    the FreightwireShip tab title. Crop bounds verified against the shipped asset: mark = 78x78 at x5,y2. */
 if(typeof window!=="undefined"&&BRAND.fw){
-  try{ document.title=BRAND.admin?"ShippingHub Admin — Freightwire":"ShippingHub — Freightwire"; }catch(e){}
+  try{ document.title=BRAND.admin?"Admin Portal — Freightwire":"ShippingHub — Freightwire"; }catch(e){}
   try{
     const setIcon=(href)=>{ try{
       document.querySelectorAll('link[rel*="icon"]').forEach(l=>l.parentNode&&l.parentNode.removeChild(l));
@@ -4825,6 +4825,28 @@ function ApiAdmin({clients=[],platform={},openCustomer}){
     </Panel>
   </div>);
 }
+/* Warns when the admin is open in more than one browser tab — the trigger for stale-tab
+   overwrites. Each tab heartbeats a unique localStorage key; if 2+ are fresh, we warn. */
+function MultiTabBanner(){
+  const [multi,setMulti]=useState(false);
+  useEffect(()=>{
+    const id=Math.random().toString(36).slice(2)+Date.now();
+    const KEY="sc.tab."+id;
+    const tick=()=>{try{
+      localStorage.setItem(KEY,String(Date.now()));
+      const now=Date.now();const keys=[];
+      for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.indexOf("sc.tab.")===0)keys.push(k);}
+      let n=0;keys.forEach(k=>{const t=+localStorage.getItem(k)||0;if(now-t<6000)n++;else{try{localStorage.removeItem(k);}catch(e){}}});
+      setMulti(n>1);
+    }catch(e){}};
+    tick();const iv=setInterval(tick,2000);
+    const cleanup=()=>{try{localStorage.removeItem(KEY);}catch(e){}};
+    window.addEventListener("beforeunload",cleanup);
+    return ()=>{clearInterval(iv);cleanup();window.removeEventListener("beforeunload",cleanup);};
+  },[]);
+  if(!multi)return null;
+  return (<div className="bg-amber-500 text-white text-[13px] px-4 py-2.5 flex items-center justify-center gap-2 text-center rounded-lg mb-3"><AlertTriangle className="w-4 h-4 shrink-0"/><span><b>Heads up:</b> the admin is open in more than one tab. An older tab can overwrite newer data when it saves — for safety, keep just one open. (Your data is guarded either way.)</span></div>);
+}
 function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,currentUser,settings,setSettings,brand,signupRequests,setSignupRequests,featureFlags,setFeatureFlags,customFeatures,setCustomFeatures,fedexRequests=[],setFedexRequests,publicBrand,setPublicBrand,companyAdminRequests=[],setCompanyAdminRequests,activeSection=null}){
   const sidebarDriven=!!activeSection;   // BRAND.admin: the left sidebar picks the section directly, so the internal top-tab bar/launcher is redundant and hidden
   const [sec,setSec]=useState(activeSection||(BRAND.admin?"customers":"overview"));
@@ -4910,6 +4932,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
   </>);
   return (
     <div className="-mt-2">
+    <MultiTabBanner/>
     <div className={!sidebarDriven?"flex gap-5 items-start":""}>
       {!sidebarDriven&&<div className="w-48 shrink-0 sticky top-4 space-y-4 pt-1">
         {groups.map(g=>(<div key={g.label}>

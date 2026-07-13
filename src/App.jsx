@@ -77,7 +77,7 @@ const FEATURE_CATALOG=[
   {id:"drafts",label:"Drafts",desc:"Saved unfinished shipments",default:true},
   {id:"returns",label:"Returns",desc:"Return labels",default:true},
   {id:"dashboard",label:"Dashboard",desc:"Spend & volume overview",default:true},
-  {id:"addresses",label:"Address book",desc:"Saved contacts",default:true},
+  {id:"addresses",label:"Address Book",desc:"Saved contacts",default:true},
   {id:"pickups",label:"Pickups",desc:"Schedule carrier pickups",default:true},
   {id:"batch",label:"Batch",desc:"Rate & print in bulk",default:true},
   {id:"invoices",label:"Invoice Audit",desc:"Carrier invoice auditing",default:false},   /* off unless the admin grants it per login */
@@ -88,7 +88,7 @@ const FEATURE_CATALOG=[
   {id:"seeCosts",label:"See costs & spend",desc:"Rates, order totals, batch totals and Reports dollars. Turn OFF to hide all money from this customer's logins",default:true},
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own carrier accounts on the Connections page (England always shows; admins always have this)",default:false},
 ];
-const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All logins"],["rates","Rates & dim divisors"],["labelcert","FedEx labels"],["customizations","Features & access"],["branding","Branding"],["apiadmin","API"],["billing","Billing & invoices"],["domains","Domains"],["backups","Backups & restore"]];
+const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All Logins"],["rates","Rates & Dim Divisors"],["labelcert","FedEx Labels"],["customizations","Features & Access"],["branding","Branding"],["apiadmin","API"],["billing","Billing & Invoices"],["domains","Domains"],["backups","Backups & Restore"]];
 const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,labelcert:Printer,customizations:Sliders,branding:Sparkles,apiadmin:Plug,billing:Receipt,domains:ExternalLink,backups:RotateCcw};
 /* A restricted admin ALWAYS keeps access to "users" — without it there is no self-service way
    to ever fix a permission set that’s missing something, for yourself or anyone else. A wrong
@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v503";
+const BUILD_TAG="addr-v504";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2873,7 +2873,7 @@ const CUSTOM_DEFAULTS={
   confetti:"page",seasonal:false,loginBg:"",appBg:"",headerBg:"",pageBg:"",navBg:"",
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
-const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
+const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
 const SLIP_OPTS={thanks:"",footer:""};   // synced from settings by AppInner; read by packingSlipHTML
 const CI_OPTS={taxId:"",logo:""};                 // Tax ID / EIN printed on commercial invoices, from Settings → General
 const fireConfetti=()=>{try{window.dispatchEvent(new CustomEvent("sc-confetti"));}catch(e){}};
@@ -10269,9 +10269,9 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
      policy/fallback logic unchanged. */
   const SEC_GROUPS=[
     ["Workspace",[["general","General",Cog],["customize","Customizations",Sliders]]],
-    ["Shipping",[["shipscreen","Ship screen",Truck],["orderspage","Orders",ShoppingBag],["carriers",BRAND.fw?"FedEx account":"Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["catalog","Product catalog",Boxes],["reference","Reference fields",Receipt]]],
-    ["Documents & printing",[["printer","Print settings",Printer],["cieditor","Commercial invoice",Receipt],["otherdocs","Other documents",FileText],["manifests","Manifests",FileText]]],
-    ["Automation & integrations",[["integrations","Integrations",Layers],["notifications","Email automation",Mail],["checkout","Checkout rates",ShoppingBag]]],
+    ["Shipping",[["shipscreen","Ship Screen",Truck],["orderspage","Orders",ShoppingBag],["carriers",BRAND.fw?"FedEx Account":"Carrier Accounts",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package Sizes",Package],["boxlogic","Box Logic",Layers],["catalog","Product Catalog",Boxes],["reference","Reference Fields",Receipt]]],
+    ["Documents & Printing",[["printer","Print Settings",Printer],["cieditor","Commercial Invoice",Receipt],["otherdocs","Other Documents",FileText],["manifests","Manifests",FileText]]],
+    ["Automation & Integrations",[["integrations","Integrations",Layers],["notifications","Email Automation",Mail],["checkout","Checkout Rates",ShoppingBag]]],
     ["Account",[["reports","Reports",TrendingUp],["billing","Billing",CreditCard],["subscription","Subscription",Star]]],
   ];
   const secs=SEC_GROUPS.flatMap(g=>g[1]);
@@ -10343,7 +10343,7 @@ function ReferenceFields({settings,setSettings}){
   ];
   return (<div className="max-w-2xl space-y-4">
     <div>
-      <h2 className="text-base font-semibold text-stone-800">Reference fields</h2>
+      <h2 className="text-base font-semibold text-stone-800">Reference Fields</h2>
       <p className="text-sm text-stone-500 mt-1">When you pick a <b>FedEx One Rate</b> service, {BRAND.product} can auto-fill the chosen box name into a reference field so it prints on the label and your team knows which box to grab. Pick where it goes — or turn it off.</p>
     </div>
     <div className="bg-white border border-stone-200 rounded-lg p-4 flex items-center justify-between">

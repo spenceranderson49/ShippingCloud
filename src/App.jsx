@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v489";
+const BUILD_TAG="addr-v490";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3471,7 +3471,7 @@ function BackupsAdmin({clients=[],setClients}){
     setRows((r&&r.ok&&Array.isArray(r.backups))?r.backups:[]);
   };
   useEffect(()=>{load();},[]);
-  const LABEL={clients:"Customers",rateRules:"Rates & profiles",users:"Logins",featureFlags:"Feature settings"};
+  const LABEL={clients:"Customers",rateRules:"Rates & profiles",users:"Logins",featureFlags:"Feature settings",invoicesIssued:"Invoices",salesReps:"Sales reps",proposalReports:"Proposal reports"};
   const parseTs=(ts)=>{const m=/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/.exec(String(ts||""));if(!m)return ts||"—";const d=new Date(`${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z`);return isNaN(d)?ts:d.toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});};
   const curIds=new Set((clients||[]).map(c=>c&&c.id));
   const restore=async(bk)=>{
@@ -3502,7 +3502,7 @@ function BackupsAdmin({clients=[],setClients}){
     setMsg("Restored "+n+" customer"+(n===1?"":"s")+" into your list — they'll appear under Customers. (This is saved; your list before was snapshotted too.)");
   };
   const groups={};(rows||[]).forEach(b=>{(groups[b.orig]=groups[b.orig]||[]).push(b);});
-  const order=["clients","rateRules","users","featureFlags"];
+  const order=["clients","rateRules","users","featureFlags","invoicesIssued","salesReps","proposalReports"];
   return (<div className="space-y-4 max-w-4xl">
     <div className="border border-[#99D6FF] bg-[#F0F9FF] rounded-lg p-4">
       <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><RotateCcw className="w-4 h-4 text-[#0086E0]"/>Backups &amp; restore</div>

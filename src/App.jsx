@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v515";
+const BUILD_TAG="addr-v516";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2873,7 +2873,7 @@ const CUSTOM_DEFAULTS={
   slipThanks:"",slipFooter:"",
   density:"comfortable",stuckDays:0,
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
-  logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,skipBookedSummary:false,autoRulesOnShip:true,autoRulesInBatch:false,autoBookBatch:false,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],theme:"light",accent:"",
+  logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,skipBookedSummary:false,autoRulesOnShip:true,autoRulesInBatch:false,autoBookBatch:false,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],accent:"",
   refRequired:false,invRequired:false,poRequired:false,deptRequired:false,refLocked:false,invLocked:false,poLocked:false,deptLocked:false,hideDept:false,
   confetti:"page",seasonal:false,
 };
@@ -4090,7 +4090,8 @@ function DraftBar({dirty,onSave,onUndo,onReset,resetLabel,savedNote,saveLabel}){
     return ()=>{ window.removeEventListener("sc-saved",ok); window.removeEventListener("sc-save-failed",fail); };
   },[]);
   const doSave=()=>{ setCloud("saving"); onSave(); };  // cloud result arrives via the events above within ~1s
-  return (<div className={`sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 mb-3 flex items-center gap-2 border-b transition-colors ${dirty?"bg-amber-50 border-amber-200":"bg-white border-stone-100"}`}>
+  {/* pinned just BELOW the sticky app header (--sc-stickoff = header bottom) — top-0 tucked it underneath, so scrolling hid the Save button */}
+  return (<div style={{top:"var(--sc-stickoff,56px)"}} className={`sticky z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 mb-3 flex items-center gap-2 border-b transition-colors ${dirty?"bg-amber-50 border-amber-200":"bg-white border-stone-100"}`}>
     {dirty
       ? <span className="text-[13px] font-medium text-amber-800 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>Unsaved changes</span>
       : cloud==="saving" ? <span className="text-[13px] text-stone-500 flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Saving to cloud…</span>
@@ -6408,11 +6409,10 @@ function AppInner(){
   useEffect(()=>{ try{document.documentElement.style.fontSize=(custom.fontScale&&custom.fontScale!==100)?(custom.fontScale/100*16)+"px":"";}catch(e){} },[custom.fontScale]);
   useEffect(()=>{ SLIP_OPTS.thanks=custom.slipThanks||""; SLIP_OPTS.footer=custom.slipFooter||""; CI_OPTS.taxId=settings.taxId||""; },[custom.slipThanks,custom.slipFooter,settings.taxId]);
   useEffect(()=>{ try{ const el=document.documentElement;
-    el.classList.toggle("dark",custom.theme==="dark");
-    el.classList.toggle("grey",custom.theme==="grey");
+    el.classList.remove("dark","grey");   // themes retired — clears any saved dark/grey choice
     if(custom.accent){ el.setAttribute("data-accent","1"); el.style.setProperty("--acc",custom.accent); el.style.setProperty("--accD",shadeHex(custom.accent,-0.14)); el.style.setProperty("--accL",shadeHex(custom.accent,0.18)); }
     else { el.removeAttribute("data-accent"); el.style.removeProperty("--acc"); }
-  }catch(e){} },[custom.theme,custom.accent]);
+  }catch(e){} },[custom.accent]);
   /* Browser-tab icon = the same cloud as the header logo, repainted to the accent (ShippingCloud
      brands only — Freightwire keeps its own mark). Falls back to the brand blue when no accent. */
   useEffect(()=>{ try{ if(BRAND.fw)return; const link=document.querySelector('link[rel="icon"]'); if(!link)return;
@@ -6757,6 +6757,9 @@ function AppInner(){
   const isNewAccount=_acctAgeDays<=14;
   const adminReturn=lsGet("adminReturn",null);
   const exitImpersonation=()=>{ lsSet("session",adminReturn); lsDel("adminReturn"); window.location.reload(); };
+  /* Sticky-bar offset for DraftBar & friends: the app header is sticky (h-14, +36px when the
+     admin-preview/demo strip shows), so anything else sticky must pin below it, not at top-0. */
+  useEffect(()=>{ try{ document.documentElement.style.setProperty("--sc-stickoff",(adminReturn||isDemo)?"92px":"56px"); }catch(e){} },[adminReturn,isDemo]);
   /* shell */
   return (
     <div className="min-h-screen flex flex-col bg-stone-50 text-stone-800" style={{fontFamily:"Inter,system-ui,sans-serif"}}><SandboxBanner/>
@@ -6795,12 +6798,12 @@ function AppInner(){
               <FreightwireShipHub logoH={Math.round(30*((custom.logoScale||100)/100))} sub={false} accent={srf.accent||""}/>
             </button>
           </>):(
-          <button onClick={()=>setTab("ship")} title="Back to Ship" className="cursor-pointer flex items-center shrink-0">{(!brand.name1||brand.name1==="Shipping")&&(!brand.name2||brand.name2==="Cloud")?<ShipCloudLogo size={Math.round(22*((custom.logoScale||100)/100))} accent={srf.accent||custom.accent||"#0086E0"} dark={(custom.theme==="dark"||custom.theme==="grey")?"#F5F5F4":undefined}/>:<span className="font-extrabold tracking-tight text-[20px] sm:text-[26px]" style={{color:(custom.theme==="dark"||custom.theme==="grey")?"#F5F5F4":brand.dark}}>{brand.name1}<span style={{color:custom.accent||brand.primary}}>{brand.name2}</span></span>}</button>)}
+          <button onClick={()=>setTab("ship")} title="Back to Ship" className="cursor-pointer flex items-center shrink-0">{(!brand.name1||brand.name1==="Shipping")&&(!brand.name2||brand.name2==="Cloud")?<ShipCloudLogo size={Math.round(22*((custom.logoScale||100)/100))} accent={srf.accent||custom.accent||"#0086E0"}/>:<span className="font-extrabold tracking-tight text-[20px] sm:text-[26px]" style={{color:brand.dark}}>{brand.name1}<span style={{color:custom.accent||brand.primary}}>{brand.name2}</span></span>}</button>)}
           {custom.seasonal!==false&&seasonalEmoji()&&<span className="text-base select-none shrink-0 -ml-0.5" title="Seasonal touch — turn off in Customizations">{seasonalEmoji()}</span>}
           {brand.showLogo&&brand.logo&&<span className="hidden sm:flex items-center gap-1.5 text-stone-400 text-xs"><span className="w-px h-5 bg-stone-200"/>{brand.partnerLabel}<img src={brand.logo} alt="partner" className="h-3 w-auto object-contain"/></span>}
           <div className="flex-1"/>
           <div className="flex items-center gap-2 sm:gap-3">
-            {(()=>{const cl=settings.companyLogo||(myFlags&&myFlags._logoB64)||"";return cl?<span className="flex items-center min-w-0 shrink"><img src={cl} alt={settings.company||"Company logo"} style={{height:Math.round(28*((custom.companyLogoScale||100)/100))+"px"}} className={`w-auto max-w-[100px] sm:max-w-[160px] object-contain block ${(custom.theme==="dark"||custom.theme==="grey")?"bg-white rounded-md px-1.5 py-0.5 box-content":""}`} draggable={false}/><span className="w-px h-6 bg-stone-200 shrink-0 mx-2.5 sm:mx-3 hidden sm:block"/></span>:null;})()}
+            {(()=>{const cl=settings.companyLogo||(myFlags&&myFlags._logoB64)||"";return cl?<span className="flex items-center min-w-0 shrink"><img src={cl} alt={settings.company||"Company logo"} style={{height:Math.round(28*((custom.companyLogoScale||100)/100))+"px"}} className="w-auto max-w-[100px] sm:max-w-[160px] object-contain block" draggable={false}/><span className="w-px h-6 bg-stone-200 shrink-0 mx-2.5 sm:mx-3 hidden sm:block"/></span>:null;})()}
             <div className="text-right leading-tight hidden sm:block"><div className="text-sm font-medium text-stone-800">{currentUser.name}</div><div className="text-[11px] text-stone-400">{currentUser.role==="admin"?"Administrator":(clients.find(c=>c.id===currentUser.clientId)||{}).name||"Customer"}</div></div>
             <span className="w-8 h-8 rounded-full bg-[#CCEAFF] text-[#006FBF] flex items-center justify-center text-sm font-semibold shrink-0">{(currentUser.name||"?").slice(0,1).toUpperCase()}</span>
             <button onClick={()=>{ const ar=lsGet("adminReturn",null); if(ar){ lsSet("session",ar); lsDel("adminReturn"); } else { lsSet("session",null); lsDel("cloud.token"); } window.location.reload(); }} className="text-xs sm:text-sm text-stone-500 hover:text-stone-800 border border-stone-200 rounded px-2 sm:px-2.5 py-1.5">Sign out</button>
@@ -7123,7 +7126,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const setOverride=(on)=>{ setResTouched(on); if(!on) setVerifyNonce(x=>x+1); };  // turning override off re-asks FedEx
 
   const [packNote,setPackNote]=useState(null);
-  const applyOrder=(o)=>{setHfArmed(o.id);setSelectedOrder(o.id);setReference(o.name);setInvoiceNo("");setPoNo("");setDepartment("");setPieces(ps=>ps.map((p,j)=>j===0?{...p,orBox:undefined}:p));setReceiver({...empty,name:o.customer||"",company:o.company||"",zip:o.zip||"",state:o.state||"",city:o.city||"",address1:o.address1||"",phone:o.phone||"",email:o.email||""});
+  const applyOrder=(o)=>{if(justBookedRef.current!==o.id)justBookedRef.current=null;   // picking a DIFFERENT order re-arms the "already has a label" banner (it stayed suppressed all session after any booking)
+    setHfArmed(o.id);setSelectedOrder(o.id);setReference(o.name);setInvoiceNo("");setPoNo("");setDepartment("");setPieces(ps=>ps.map((p,j)=>j===0?{...p,orBox:undefined}:p));setReceiver({...empty,name:o.customer||"",company:o.company||"",zip:o.zip||"",state:o.state||"",city:o.city||"",address1:o.address1||"",phone:o.phone||"",email:o.email||""});
     /* RESET the per-shipment extras BEFORE the auto rules run — otherwise the previous order's
        declared value / signature silently carry into this order (and hands-free would book it
        with the wrong coverage, no click, no warning). */
@@ -7997,13 +8001,12 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
           </div>
           <div className="px-4 pt-3 overflow-y-auto">
             <MockLabelImg to={r} sender={data.senderInfo} service={data.service} weight={data.weight} pieceCount={data.pieceCount} refNo={data.refNo} residential={data.residential}/>
-            <div className="text-[10px] text-stone-400 text-center mt-1">Preview — the real label (with live barcode &amp; tracking) is created when you book.</div>
           </div>
           <div className="p-4 space-y-2 text-sm">
+            {/* keep this summary to the decision facts — the recipient, address, date & weight are already on the mock above */}
             <div className="flex justify-between"><span className="text-stone-500">Service</span><span className="font-medium text-stone-800">{data.service}</span></div>
             <div className="flex justify-between"><span className="text-stone-500">Price</span><span className="font-mono font-semibold text-stone-900">{data.sell!=null?money(data.sell):"—"}</span></div>
-            <div className="flex justify-between"><span className="text-stone-500">To</span><span className="text-right text-stone-800">{r.name||r.company||"—"}{r.company&&r.name?<span className="block text-[11px] text-stone-500">{r.company}</span>:null}<span className="block text-[11px] text-stone-500">{[r.address1,r.city,r.state,r.zip].filter(Boolean).join(", ")}</span></span></div>
-            <div className="flex justify-between"><span className="text-stone-500">Packages</span><span className="text-stone-800">{data.pieceCount||1} · {data.weight} lb total</span></div>
+            {(data.pieceCount||1)>1?<div className="flex justify-between"><span className="text-stone-500">Packages</span><span className="text-stone-800">{data.pieceCount} · {data.weight} lb total</span></div>:null}
             {data.signature?<div className="flex justify-between"><span className="text-stone-500">Signature</span><span className="text-stone-800">Yes</span></div>:null}
             {data.insurance>0?<div className="flex justify-between"><span className="text-stone-500">Declared value</span><span className="font-mono text-stone-800">{money(data.insurance)}</span></div>:null}
           </div>
@@ -8699,6 +8702,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   const [savedInfo,setSavedInfo]=useState(false);
   const [poNo,setPoNo]=useState("");
   const [invoiceNo,setInvoiceNo]=useState("");
+  const [department,setDepartment]=useState("");
   const [weight,setWeight]=useState(o.weight||1);
   const [oz,setOz]=useState("");
   const [boxIdx,setBoxIdx]=useState(-1);
@@ -8804,7 +8808,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
     if(!qq)return;
     if(canBook&&(!qq.carrierCode||!qq.serviceCode)){ setRateNonce(n=>n+1); setStatus({state:"error",msg:"This rate just expired — we're refreshing live prices. Pick your service again in a moment."}); return; }
     const carrier=carrierOf(qq.label);
-    const baseRec={service:qq.label,recipient:{name:rcv.name,company:rcv.company,zip:rcv.zip,state:rcv.state,city:rcv.city,address1:rcv.address1,phone:rcv.phone,email:rcv.email},sender:{...(settings?.sender||{})},fromZip,toZip:rcv.zip,weight:totalWeight,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",insurance:insurance||null,signature:sigOption!=="none",signatureOption:sigOption,saturdayDelivery:sat,reference:reference||o.name,poNo,invoiceNo,department:""};
+    const baseRec={service:qq.label,recipient:{name:rcv.name,company:rcv.company,zip:rcv.zip,state:rcv.state,city:rcv.city,address1:rcv.address1,phone:rcv.phone,email:rcv.email},sender:{...(settings?.sender||{})},fromZip,toZip:rcv.zip,weight:totalWeight,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",insurance:insurance||null,signature:sigOption!=="none",signatureOption:sigOption,saturdayDelivery:sat,reference:reference||o.name,poNo,invoiceNo,department};
     if(!canBook){
       const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:newTracking(carrier),carrier,...baseRec,status:"Label created",lastScan:"Label created",eta:"—",onTime:true};
       onShipped(rec,o.id); setBought(qq.key); setStatus({state:"demo",msg:(CLOUD.user&&CLOUD.user.demo)||(typeof window!=="undefined"&&(lsGet("session",{})||{}).demo)?"Demo only — no real label was created.":"Live booking isn't connected right now — no label was created. Contact support."}); return;
@@ -8812,7 +8816,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
     const need=[]; if(!rcv.name&&!rcv.company)need.push("name"); if(String(rcv.phone||"").replace(/\D/g,"").length<10)need.push("10-digit phone"); if(!rcv.email)need.push("email");
     if(need.length){ setStatus({state:"error",msg:"FedEx needs the receiver's "+need.join(", ")+"."}); return; }
     setBought(qq.key); setStatus({state:"booking",msg:"Booking with FedEx…"});
-    const _orFM=orFillMerge({reference:reference||o.name,invoiceNo,poNo},orBoxRefFill(qq,settings.orBoxField,o.name));
+    const _orFM=orFillMerge({reference:reference||o.name,invoiceNo,poNo,department},orBoxRefFill(qq,settings.orBoxField,o.name));
     const res=await bookOrderLabel(dest,{quote:qq,box,weightLb:totalWeight,residential,signatureOption:sigOption,saturdayDelivery:sat,insuranceAmount:insurance||null,packageTypeCode:qq.packageTypeCode||"",sender:settings.sender,reference:_orFM.reference,invoiceNo:_orFM.invoiceNo,poNo:_orFM.poNo,department:_orFM.department||""},eng,settings.sender);
     if(!res||!res.ok){ setStatus({state:"error",msg:(res&&res.error)||"Booking failed"}); setBought(null); return; }
     const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,...baseRec,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,bookNumber:res.bookNumber};
@@ -8960,10 +8964,11 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
                     <div className="text-[11px] text-stone-400">Saves the ship-to details on the left plus the info above. For Shopify orders, "Save these changes back to Shopify" under the address pushes the address &amp; email to Shopify too.</div>
                   </>):(<>
                     <div>{lbl("Ship from")}{(settings?.sender?.zip||settings?.sender?.company||settings?.sender?.name)?<div className="text-[13px] text-stone-600">{settings?.sender?.company||settings?.sender?.name||"Your address"} · {settings?.sender?.city} {settings?.sender?.state} {settings?.sender?.zip}</div>:<div className="text-[13px] text-amber-700">No sender set — set your default sender in Settings → Company.</div>}</div>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       <div>{lbl("Reference")}<input value={reference} onChange={e=>setReference(e.target.value)} placeholder="order / ref" className={inC+" w-full"}/></div>
                       <div>{lbl("PO #")}<input value={poNo} onChange={e=>setPoNo(e.target.value)} placeholder="PO-…" className={inC+" w-full"}/></div>
                       <div>{lbl("Invoice #")}<input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} placeholder="INV-…" className={inC+" w-full"}/></div>
+                      <div>{lbl("Department")}<input value={department} onChange={e=>setDepartment(e.target.value)} placeholder="DEPT-…" className={inC+" w-full"}/></div>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                       <div>{lbl("Weight (lb)")}<input type="number" value={weight} onChange={e=>{setWeight(e.target.value);upd({weight:+e.target.value});}} className={inC+" w-full font-mono"}/></div>
@@ -8972,7 +8977,6 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
                     </div>
                     <div>{lbl("Size (in)")}<div className="grid grid-cols-3 gap-2">{["L","W","H"].map(d=><input key={d} type="number" value={dims[d]} onChange={e=>{setDims(v=>({...v,[d]:e.target.value}));setBoxIdx(-1);setOrPkg("");}} placeholder={d} className={inC+" w-full font-mono"}/>)}</div></div>
                     <div className="flex flex-wrap items-center gap-3">
-                      <label className="flex items-center gap-1.5 text-[13px] text-stone-600"><input type="checkbox" checked={residential} onChange={e=>{setRes(e.target.checked);setResTouched(true);}} className="accent-[#0086E0]"/>Residential</label>
                       <label className="flex items-center gap-1.5 text-[13px] text-stone-600"><input type="checkbox" checked={sat} onChange={e=>setSat(e.target.checked)} className="accent-[#0086E0]"/>Saturday delivery</label>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
@@ -10737,8 +10741,8 @@ function LabelStockPreview({size,zones,showLabels,tabStock}){
           <div className="font-bold text-stone-900" style={{fontSize:"10px"}}>123 MAIN ST</div>
           <div className="font-bold text-stone-900" style={{fontSize:"11px"}}>AUSTIN TX 78701</div>
           <div className="mt-auto">
-            <div className="flex items-end justify-between">
-              <svg viewBox="0 0 336 100" style={{height:"13px"}} aria-label="FedEx"><path d="M0 0H54V24H26V38H50V62H26V100H0Z"/><rect x="58" y="28" width="66" height="72" rx="30"/><ellipse cx="91" cy="47" rx="13" ry="9" fill="#fff"/><path d="M88 66H124V84H88Z" fill="#fff"/><rect x="128" y="28" width="66" height="72" rx="30"/><path d="M168 0H194V100H168Z"/><ellipse cx="150" cy="64" rx="13" ry="20" fill="#fff"/><path d="M202 0H262V22H230V39H256V61H230V78H262V100H202Z" fill="#fff" stroke="#000" strokeWidth="6"/><path d="M256 28H282L336 100H310Z"/><path d="M310 28H336L282 100H256Z"/></svg>
+            <div className="flex items-end justify-end">
+              {/* carrier wordmark intentionally not drawn — previews are placeholders; the real label carries the carrier's official logo */}
               <div className="w-6 h-6 border-2 border-stone-800 flex items-center justify-center font-bold" style={{fontSize:"11px"}}>E</div>
             </div>
             <div className="mt-1 flex gap-px h-7 items-stretch">{Array.from({length:60}).map((_,i)=><span key={i} className="bg-stone-900" style={{width:(i%4?1:2)+"px",opacity:i%3?1:0.5}}/>)}</div>
@@ -12677,13 +12681,11 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
      accent recolors the logo live too. */
   const _commitRef=React.useRef(committedCustom); _commitRef.current=committedCustom;
   const _applyLook=(cc)=>{ try{ const el=document.documentElement;
-    el.classList.toggle("dark",cc.theme==="dark");
-    el.classList.toggle("grey",cc.theme==="grey");
     if(cc.accent){ el.setAttribute("data-accent","1"); el.style.setProperty("--acc",cc.accent); el.style.setProperty("--accD",shadeHex(cc.accent,-0.14)); el.style.setProperty("--accL",shadeHex(cc.accent,0.18)); }
     else { el.removeAttribute("data-accent"); el.style.removeProperty("--acc"); }
     el.style.fontSize=(cc.fontScale&&cc.fontScale!==100)?(cc.fontScale/100*16)+"px":"";
   }catch(e){} };
-  useEffect(()=>{ _applyLook(c||{}); },[c&&c.theme,c&&c.accent,c&&c.fontScale]);
+  useEffect(()=>{ _applyLook(c||{}); },[c&&c.accent,c&&c.fontScale]);
   useEffect(()=>()=>{ _applyLook(_commitRef.current||{}); },[]);
   /* Broadcast the draft accent so the live app chrome (logo tint + tab icon) previews it before
      Save. Only the main Customizations editor drives this — not the admin deploy editor or the
@@ -12836,7 +12838,6 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
     <Panel title="Appearance & navigation">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         {Sel({k:"fontScale",label:"Text size",opts:[[94,"Small"],[100,"Normal"],[107,"Large"]]})}
-        {Sel({k:"theme",label:"Theme",opts:[["light","Light"],["grey","Grey"],["dark","Dark"]]})}
         {Sel({k:"confetti",label:"Booking confetti",opts:[["page","Everywhere — full-page drop"],["button","Just around the button"],["off","Off"]]})}
         {(isAdmin||deployMode)&&Tog({k:"seasonal",label:"Seasonal touches (admin)",hint:"A little 🎅 🎃 ❤️ on the logo around the holidays. Off unless you, the admin, turn it on."})}
         {Sel({k:"startTab",label:"Start page after login",opts:tabChoices.map(x=>[x[0],x[1]])})}

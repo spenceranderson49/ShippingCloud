@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v491";
+const BUILD_TAG="addr-v492";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3979,7 +3979,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
 
     {tab==="notes"&&<div className="space-y-2">
       <Field label="Internal notes (admins only)"><textarea value={c.notes||""} onChange={e=>upClient({notes:e.target.value})} placeholder="Anything worth remembering — contacts, quirks, promises, follow-ups…" className="w-full border border-stone-300 rounded-lg p-2.5 text-sm min-h-[160px]"/></Field>
-      <div className="flex justify-end"><button onClick={()=>{if(!window.confirm('Delete customer "'+c.name+'"? Logins stay but lose the link.'))return;setUsers(us=>us.map(x=>x.clientId===cid?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==cid));onClose&&onClose();}} className="text-[11px] text-rose-500 hover:text-rose-600">Delete customer</button></div>
+      <div className="flex justify-end"><button onClick={()=>{if(!window.confirm('Delete customer "'+c.name+'"? Logins stay but lose the link.'))return;if(CLOUD.mode==="cloud")cloudCall({action:"deleteCustomer",token:CLOUD.token,clientId:cid});setUsers(us=>us.map(x=>x.clientId===cid?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==cid));onClose&&onClose();}} className="text-[11px] text-rose-500 hover:text-rose-600">Delete customer</button></div>
     </div>}
   </div>);
 }
@@ -4034,7 +4034,7 @@ function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureF
         {list.length===0&&<div className="px-4 py-8 text-sm text-stone-400 text-center">No customers match "{q}".</div>}
         {list.map(c=>{const lg=loginsOf(c.id);const prof=profOf(c.id);return (
           <div key={c.id} onClick={()=>onOpenCustomer&&onOpenCustomer(c.id)} className="group flex items-center gap-3 px-4 py-3 hover:bg-stone-50 cursor-pointer">
-            <button onClick={(e)=>{e.stopPropagation();if(!window.confirm('Delete customer "'+c.name+'"? Their logins stay but lose the link (they re-heal into a fresh blank customer on next login). Rates/rules assigned to them are kept but unassigned.'))return;setUsers(us=>us.map(x=>x.clientId===c.id?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==c.id));}} title="Delete customer" className="opacity-0 group-hover:opacity-100 text-stone-300 hover:text-rose-500 shrink-0 order-last"><Trash2 className="w-4 h-4"/></button>
+            <button onClick={(e)=>{e.stopPropagation();if(!window.confirm('Delete customer "'+c.name+'"? Their logins stay but lose the link. Rates/rules assigned to them are kept but unassigned.'))return;if(CLOUD.mode==="cloud")cloudCall({action:"deleteCustomer",token:CLOUD.token,clientId:c.id});setUsers(us=>us.map(x=>x.clientId===c.id?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==c.id));}} title="Delete customer" className="opacity-0 group-hover:opacity-100 text-stone-300 hover:text-rose-500 shrink-0 order-last"><Trash2 className="w-4 h-4"/></button>
             <div className="w-7 h-7 rounded-lg bg-[#0086E0]/10 text-[#0086E0] flex items-center justify-center font-bold text-xs shrink-0">{String(c.name||"?").slice(0,1).toUpperCase()}</div>
             <div className="flex-1 min-w-0"><div className="font-medium text-sm truncate">{c.name}</div><div className="text-[11px] text-stone-400 truncate">{c.contact||"—"}{c.email?` · ${c.email}`:""}</div></div>
             <div className="w-20 text-center"><Badge tone="blue">{lg.length}</Badge></div>

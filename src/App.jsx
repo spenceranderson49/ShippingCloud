@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v500";
+const BUILD_TAG="addr-v501";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3009,7 +3009,7 @@ function Login({users,onLogin,brand}){
     setMode("signin");
   };
   return (
-    <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4" style={{fontFamily:"ui-sans-serif,system-ui,sans-serif",...(lsGet("loginBg","")?{backgroundImage:`url(${lsGet("loginBg","")})`,backgroundSize:"cover",backgroundPosition:"center"}:{})}}>
+    <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4" style={{fontFamily:"Inter,system-ui,sans-serif",...(lsGet("loginBg","")?{backgroundImage:`url(${lsGet("loginBg","")})`,backgroundSize:"cover",backgroundPosition:"center"}:{})}}>
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center gap-2 mb-6">
           <div className="flex items-center gap-2">
@@ -3378,13 +3378,13 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection,cli
         <div className="grid lg:grid-cols-2 gap-0">
           <div className="overflow-x-auto max-h-[300px] overflow-y-auto border-r border-[#BAE6FD]/60">
             <table className="w-full text-[12px] min-w-[380px]">
-              <thead className="sticky top-0 bg-[#E6F4FF]"><tr className="text-[9px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal px-3 py-1.5">Customer</th><th className="text-right font-normal px-3 py-1.5">Ships</th><th className="text-right font-normal px-3 py-1.5">Quoted</th><th className="text-right font-normal px-3 py-1.5">Margin</th></tr></thead>
+              <thead className="sticky top-0 bg-[#E6F4FF]"><tr className="text-[10px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal px-3 py-1.5">Customer</th><th className="text-right font-normal px-3 py-1.5">Ships</th><th className="text-right font-normal px-3 py-1.5">Quoted</th><th className="text-right font-normal px-3 py-1.5">Margin</th></tr></thead>
               <tbody>{bc.map((e,i)=>(<tr key={i} className="border-t border-[#BAE6FD]/40"><td className="px-3 py-1.5 font-medium text-stone-800 truncate max-w-[180px]">{e.name}</td><td className="px-3 py-1.5 text-right font-mono">{e.n}{e.voided?" (−"+e.voided+")":""}</td><td className="px-3 py-1.5 text-right font-mono">{money(Math.round(e.q*100)/100)}</td><td className={"px-3 py-1.5 text-right font-mono "+(e.mg>=0?"text-emerald-700":"text-rose-600")}>{money(Math.round(e.mg*100)/100)}</td></tr>))}</tbody>
             </table>
           </div>
           <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
             <table className="w-full text-[12px] min-w-[420px]">
-              <thead className="sticky top-0 bg-[#E6F4FF]"><tr className="text-[9px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal px-3 py-1.5">Time</th><th className="text-left font-normal px-3 py-1.5">Customer</th><th className="text-left font-normal px-3 py-1.5">Tracking</th><th className="text-right font-normal px-3 py-1.5">Margin</th><th className="text-right font-normal px-3 py-1.5">Quote</th></tr></thead>
+              <thead className="sticky top-0 bg-[#E6F4FF]"><tr className="text-[10px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal px-3 py-1.5">Time</th><th className="text-left font-normal px-3 py-1.5">Customer</th><th className="text-left font-normal px-3 py-1.5">Tracking</th><th className="text-right font-normal px-3 py-1.5">Margin</th><th className="text-right font-normal px-3 py-1.5">Quote</th></tr></thead>
               <tbody>{rows.slice(0,150).map((x,i)=>(<tr key={i} className={"border-t border-[#BAE6FD]/40 "+(x.status==="Voided"?"opacity-45":"")}><td className="px-3 py-1.5 whitespace-nowrap text-stone-500">{timeOf(x)}</td><td className="px-3 py-1.5 truncate max-w-[150px] text-stone-800">{custOf(x)}</td><td className="px-3 py-1.5 font-mono text-[11px] text-stone-600">{x.tracking||"—"}</td><td className="px-3 py-1.5 text-right font-mono">{x.status==="Voided"?"—":money(marginOf(x))}</td><td className="px-3 py-1.5 text-right font-mono">{x.status==="Voided"?"—":money(+x.sell||0)}</td></tr>))}</tbody>
             </table>
           </div>
@@ -3408,7 +3408,7 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection,cli
                 <td className="px-3 py-1.5 whitespace-nowrap text-stone-500">{timeOf(x)}</td>
                 <td className="px-3 py-1.5 max-w-[220px]">{(()=>{const _cid=cidOf(x);return _cid&&openCustomer?<button onClick={()=>openCustomer(_cid)} className="truncate font-medium text-[#0086E0] hover:underline text-left block max-w-full">{custOf(x)}</button>:<div className="truncate font-medium text-stone-800">{custOf(x)}</div>;})()}<div className="text-[10px] text-stone-400 truncate">{uEmail(x._uid)}</div></td>
                 <td className="px-3 py-1.5 whitespace-nowrap text-stone-600">{x.carrier||"—"}</td>
-                <td className="px-3 py-1.5 whitespace-nowrap font-mono text-[12px] text-stone-600">{x.tracking||"—"}{x.status==="Voided"&&<span className="ml-1 text-[9px] uppercase text-rose-400">void</span>}</td>
+                <td className="px-3 py-1.5 whitespace-nowrap font-mono text-[12px] text-stone-600">{x.tracking||"—"}{x.status==="Voided"&&<span className="ml-1 text-[10px] uppercase text-rose-400">void</span>}</td>
                 <td className="px-3 py-1.5 whitespace-nowrap text-stone-500 max-w-[160px] truncate">{(x.service||"").replace("FedEx ","")}</td>
                 <td className="px-3 py-1.5 text-right font-mono">{x.status==="Voided"?"—":money(marginOf(x))}</td>
                 <td className="px-3 py-1.5 text-right font-mono font-medium">{x.status==="Voided"?"—":money(+x.sell||0)}</td>
@@ -6702,7 +6702,7 @@ function AppInner(){
   const exitImpersonation=()=>{ lsSet("session",adminReturn); lsDel("adminReturn"); window.location.reload(); };
   /* shell */
   return (
-    <div className="min-h-screen flex flex-col bg-stone-50 text-stone-800" style={{fontFamily:"ui-sans-serif,system-ui,sans-serif"}}><SandboxBanner/>
+    <div className="min-h-screen flex flex-col bg-stone-50 text-stone-800" style={{fontFamily:"Inter,system-ui,sans-serif"}}><SandboxBanner/>
       {adminReturn&&<div className="bg-[#0086E0] text-white text-[13px] px-4 py-2 flex items-center justify-center gap-3 sticky top-0 z-40">
         <ShieldCheck className="w-4 h-4 shrink-0"/>
         <span>Admin preview — you’re seeing {BRAND.product} exactly as <b>{currentUser&&(currentUser.name||currentUser.email)}</b> sees it. Anything you change here changes their account.</span>
@@ -9376,7 +9376,7 @@ function Dashboard({shipments,orders,returns,goTab}){
           <div className="flex-1 min-w-[180px] hidden sm:flex items-end justify-end gap-1.5 h-20 self-stretch pt-2">
             {a.byDay.map((v,i)=>(<div key={i} className="flex flex-col items-center gap-1 w-7">
               <div className="w-full bg-white/25 hover:bg-white/40 transition rounded-t" style={{height:`${Math.max(6,(v/maxDay)*100)}%`}} title={`${days[i]}: ${v}`}/>
-              <span className="text-[9px] text-white/50">{days[i][0]}</span>
+              <span className="text-[10px] text-white/50">{days[i][0]}</span>
             </div>))}
           </div>
         </div>
@@ -9811,7 +9811,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
               <option value="">Auto — {q.label}</option>
               {RULE_SERVICES.map(sv=><option key={sv} value={sv}>{sv}</option>)}
             </select>
-            {ovWhy[o.id]&&svcOv[o.id]&&<div className="text-[9px] text-violet-600 truncate mt-0.5 flex items-center gap-0.5"><Zap className="w-2.5 h-2.5 shrink-0"/>{ovWhy[o.id]}</div>}
+            {ovWhy[o.id]&&svcOv[o.id]&&<div className="text-[10px] text-violet-600 truncate mt-0.5 flex items-center gap-0.5"><Zap className="w-2.5 h-2.5 shrink-0"/>{ovWhy[o.id]}</div>}
           </div>}
         <div className="w-16 sm:w-20 text-right font-mono text-sm shrink-0">{showMoney?money(q.sell):"—"}</div>
       </div>

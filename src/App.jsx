@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v510";
+const BUILD_TAG="addr-v511";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6129,12 +6129,7 @@ function AssistantChat({who,getContext,onAction}){
       <div className="text-center text-[10px] text-stone-500 pb-1.5 -mt-0.5">Powered by {AI_NAME}</div>
     </div>}
     <button onClick={()=>setOpen(v=>!v)} title={"Ask "+AI_NAME+" about "+BRAND.product} className="fixed bottom-4 right-4 sm:bottom-5 sm:right-5 z-40 w-14 h-14 rounded-full bg-[#0086E0] hover:bg-[#0072BE] text-white shadow-lg flex items-center justify-center">
-      {/* Curved "SHIPPING HUB AI" wrapping the top half of the circle */}
-      {!open&&<svg viewBox="0 0 56 56" className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
-        <defs><path id="sc-ai-arc" d="M 10 28 A 18 18 0 0 1 46 28" fill="none"/></defs>
-        <text fill="#ffffff" style={{fontSize:"6px",fontWeight:700,letterSpacing:"0.3px"}}><textPath href="#sc-ai-arc" startOffset="50%" textAnchor="middle">SHIPPINGHUB AI</textPath></text>
-      </svg>}
-      <span className="mt-2.5">{open?<X className="w-5 h-5"/>:<Sparkles className="w-5 h-5"/>}</span>
+      <span>{open?<X className="w-5 h-5"/>:<Sparkles className="w-5 h-5"/>}</span>
     </button>
   </>);
 }

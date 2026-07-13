@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v502";
+const BUILD_TAG="addr-v503";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7437,13 +7437,17 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const sendLabel=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Your shipping label from ${settings.company||BRAND.product}`,type:"Label",body:emailMsg});setSent("label");setTimeout(()=>setSent(""),1800);};
   const saveMsgDefault=()=>{setSettings&&setSettings(s=>({...s,emailMessage:emailMsg}));setMsgSaved(true);setTimeout(()=>setMsgSaved(false),1600);};
 
-  const ordersToShow=useMemo(()=>{const list=orders.filter(o=>o.status==="unfulfilled");return [...list].sort((a,b)=>{
+  /* References that already have a (non-voided) label — used to keep already-processed orders
+     out of the Ship-screen picker even when their order status didn't flip to fulfilled. */
+  const labeledRefs=useMemo(()=>{const s=new Set();(shipments||[]).forEach(sh=>{if(sh&&sh.status!=="Voided"&&sh.reference)s.add(String(sh.reference).toLowerCase());});return s;},[shipments]);
+  const ordersToShow=useMemo(()=>{const hideLabeled=custom.hideLabeledOrders!==false;   // default ON: labeled orders drop off the picker
+    const list=orders.filter(o=>o.status==="unfulfilled"&&!(hideLabeled&&o.name&&labeledRefs.has(String(o.name).toLowerCase())));return [...list].sort((a,b)=>{
     if(orderSort==="total")return parseFloat(b.total||0)-parseFloat(a.total||0);
     if(orderSort==="customer")return (a.customer||"").localeCompare(b.customer||"");
     if(orderSort==="state")return (a.state||"").localeCompare(b.state||"");
     if(orderSort==="weight")return (b.weight||0)-(a.weight||0);
     return String(b.id).localeCompare(String(a.id));
-  });},[orders,orderSort]);
+  });},[orders,orderSort,labeledRefs,custom.hideLabeledOrders]);
   const orderTime=(o)=>{const d=o&&o.date||"";let t=Date.parse(d);if(isNaN(t)){const m=String(d).match(/^(\d{1,2})\/(\d{1,2})/);if(m)t=new Date(new Date().getFullYear(),+m[1]-1,+m[2]).getTime();}return isNaN(t)?0:t;};
   const storesPresent=useMemo(()=>Array.from(new Set(orders.filter(o=>o.status==="unfulfilled").map(o=>o.source||"Manual"))).filter(Boolean),[orders]);
   const ordersFiltered=useMemo(()=>{
@@ -7599,11 +7603,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           {isPOBox(receiver.address1)&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-xs text-rose-700 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>This looks like a PO Box — FedEx can’t deliver to PO Boxes. Use a street address (or USPS when available).</div>}
           {(()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);return so&&orderHasHazmat(so,settings.products||[])?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Contains a hazmat / lithium-battery item — ship ground only; air services aren’t allowed.</div>:null;})()}
           {(()=>{const d=dupShipment(reference,shipments);
-            /* Our own just-booked label: in AUTO-reset mode the banner would only flash for the
-               ~1s before the form clears — suppress it. In "Keep the info" mode it stays, as the
-               visible record that this reference already has a label. */
-            const _autoReset=cz(settings).printFlowV2?cz(settings).resetAfterPrint:(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint);
-            if(justBookedRef.current!=null&&_autoReset)return null;
+            /* Never warn about the label we ourselves just booked this session — showing "this
+               already has a label" for the label you just created is confusing, and in auto-advance
+               mode it flashed behind the booked summary before the form cleared. The booked summary
+               already offers reprint/details, so suppress this banner entirely post-booking. */
+            if(justBookedRef.current!=null)return null;
             return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex flex-wrap items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="flex-1 min-w-[180px]">Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}).</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:d.tracking}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><FileText className="w-3 h-3"/>See details</button><button onClick={()=>setLabelPreview({rec:d,tracking:d.tracking,service:d.service,carrier:d.carrier,pdf:d.labelPdf||d.pdf||null,fromExisting:true})} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><Printer className="w-3 h-3"/>Reprint</button><button onClick={newShipment} className="shrink-0 text-[11px] font-semibold text-white bg-stone-900 hover:bg-stone-800 border border-stone-900 rounded-lg px-2.5 py-1 flex items-center gap-1"><Plus className="w-3 h-3"/>New shipment</button></div>:null;})()}
           {pieces.map((p,i)=>(
             <div key={i} className="flex flex-wrap items-end gap-2 bg-white border border-stone-200 rounded-lg px-2 py-2">
@@ -12668,6 +12672,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
         {Tog({k:"hideAutopilotBox",label:"Hide the Autopilot match banner",hint:"Removes the ‘Autopilot rule matched…’ box above Select service. Rules still run and still pre-highlight the service."})}
         {Tog({k:"hideNotifyBox",label:"Hide the Send label & notify box",hint:"Removes the email panel at the bottom of the Ship tab. Automated notifications in Settings → Email automation still send."})}
         {Tog({k:"hideShipOrders",label:"Hide the orders list on the Ship screen",hint:"Removes the orders sidebar (and its collapsed tab) from the Ship screen completely — ship by scanning or typing shipments in manually. Orders still live on the Orders tab."})}
+        {Tog({k:"hideLabeledOrders",invert:true,label:"Show orders that already have a label",hint:"Off (recommended): once an order has a label, it drops off the Ship-screen orders list so you don't accidentally re-ship it. Turn on to keep already-labeled orders in the list."})}
         {Tog({k:"scanAutoFocus",label:"Scan mode — keep the scan box ready",hint:"The cursor lives in the scan box: it's focused when the Ship tab opens, re-arms after every scan and booking, and returns after you click orders, services or buttons. It only steps aside while you're typing in another field (like editing the shipping information), then comes back on your next click."})}
         {Tog({k:"hideInvoice",label:"Hide Invoice # field"})}
         {Tog({k:"hidePO",label:"Hide PO # field"})}

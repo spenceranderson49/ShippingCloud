@@ -681,7 +681,7 @@ exports.handler = async (event) => {
             customers, or logins.
          2. Every overwrite of a critical store snapshots the CURRENT value first
             (bak:<key>:<iso> rows, newest 10 kept) — anything is restorable. */
-      const CRITICAL = ["users", "clients", "rateRules", "featureFlags"];
+      const CRITICAL = ["users", "clients", "rateRules", "featureFlags", "invoicesIssued", "salesReps", "proposalReports"];
       for (const key of CRITICAL) {
         if (!(key in toWrite)) continue;
         const cur = await getStore(key);
@@ -697,6 +697,13 @@ exports.handler = async (event) => {
            snapshot below still runs for everything that IS allowed, so any change stays restorable.) */
         const bigShrink = !wipes && Array.isArray(curVal) && Array.isArray(nv) && curSize >= 5 && nvSize <= curSize * 0.4;
         if (wipes || bigShrink) { delete toWrite[key]; rejected.push(key + (bigShrink ? " (refused: would drop from " + curSize + " to " + nvSize + " entries — looks like a stale tab overwrote the full list; reload and try again)" : " (refused: would erase " + curSize + " existing entries — reload and try again)")); continue; }
+        /* F20: protect loaded rate cards — a rateRules save that drops ALL cost tables (baseCosts)
+           when some were loaded is a stale-tab overwrite, not a real edit. Refuse it. */
+        if (key === "rateRules" && curVal && nv) {
+          const curBC = (curVal.baseCosts && typeof curVal.baseCosts === "object") ? Object.keys(curVal.baseCosts).length : 0;
+          const nvBC = (nv.baseCosts && typeof nv.baseCosts === "object") ? Object.keys(nv.baseCosts).length : 0;
+          if (curBC >= 1 && nvBC === 0) { delete toWrite[key]; rejected.push("rateRules (refused: would drop " + curBC + " loaded rate card(s)/cost table(s) — reload and try again)"); continue; }
+        }
         if (curVal !== undefined) {
           try {
             const ts = new Date().toISOString().replace(/[:.]/g, "-");
@@ -774,7 +781,7 @@ exports.handler = async (event) => {
       if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
       const lr = await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=like." + encodeURIComponent("bak:") + "*&select=key,value&order=key.desc");
       const rows = (Array.isArray(lr.data) ? lr.data : []);
-      const SHOW = ["clients", "rateRules", "users", "featureFlags"];   // recovery UI focuses on the critical stores; per-customer op backups excluded here to keep the payload small
+      const SHOW = ["clients", "rateRules", "users", "featureFlags", "invoicesIssued", "salesReps", "proposalReports"];   // recovery UI focuses on the critical stores; per-customer op backups excluded here to keep the payload small
       const out = [];
       for (const r2 of rows) {
         const key = String(r2.key || "");

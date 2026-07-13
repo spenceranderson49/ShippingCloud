@@ -6,7 +6,8 @@
         (e.g. customers 8 -> 2) so you hear about missing data immediately, not by surprise.
      2) CUSTOMER SETUP QA — flags customers missing a login, or with no rates/markup set.
      3) OFF-SITE BACKUP — writes a full JSON snapshot of everything, keeps the last ~14 in the
-        database, EMAILS it to your admins (attachment), and UPLOADS it to Google Drive if
+        database, EMAILS it as ONE message to a single recipient (attachment) — from PRODUCTION
+        only, so you never get duplicate nightly emails — and UPLOADS it to Google Drive if
         configured.
 
    Env vars:
@@ -14,7 +15,7 @@
      DB_TENANT                                      (optional; default "main")
      RESEND_API_KEY                                 (already set for password emails) — enables the email
      EMAIL_FROM                                     (optional; sender)
-     GUARDIAN_EMAIL                                 (optional; extra recipient beyond admin logins)
+     GUARDIAN_EMAIL                                 (optional; the single recipient — else first admin)
      GOOGLE_SERVICE_ACCOUNT_JSON + GDRIVE_FOLDER_ID (optional; enables Google Drive upload)
      GUARDIAN_DISABLED=1                            (optional; skip on a given site, e.g. staging)
 */
@@ -70,7 +71,9 @@ async function uploadToDrive(filename, content) {
 async function emailSummary({ recipients, counts, alerts, qa, driveNote, backupStr, stamp }) {
   const key = (process.env.RESEND_API_KEY || "").trim();
   if (!key || !recipients.length) return;
-  const from = (process.env.EMAIL_FROM || "Freightwire <notify@shippingcloud.net>").trim();
+  const baseFrom = (process.env.EMAIL_FROM || "Freightwire <notify@shippingcloud.net>").trim();
+  const fromAddr = (baseFrom.match(/<([^>]+)>/) || [null, baseFrom])[1];
+  const from = "Freightwire <" + fromAddr + ">";   // always brand the sender "Freightwire", ignoring EMAIL_FROM's display name
   const chip = (n, l) => `<span style="display:inline-block;background:#f5f5f4;border-radius:6px;padding:4px 10px;margin:2px;font-size:13px;">${l}: <b>${n}</b></span>`;
   const health = alerts.length ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;color:#b91c1c;"><b>⚠️ Data changes to check:</b><ul style="margin:6px 0 0 18px;padding:0;">${alerts.map((a) => `<li>${a}</li>`).join("")}</ul></div>` : `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;color:#15803d;">✅ All counts steady vs. last night — nothing dropped.</div>`;
   const qaBlock = qa.length ? `<div style="margin-top:12px;"><b>Customers needing setup (${qa.length}):</b><div style="font-size:13px;color:#57534e;white-space:pre-wrap;margin-top:4px;">${qa.slice(0, 50).join("<br>")}${qa.length > 50 ? "<br>…and " + (qa.length - 50) + " more" : ""}</div></div>` : `<div style="margin-top:12px;color:#15803d;font-size:13px;">✅ Every customer has a login and rates set.</div>`;
@@ -138,11 +141,15 @@ export default async () => {
     let driveNote = "not configured (set GOOGLE_SERVICE_ACCOUNT_JSON + GDRIVE_FOLDER_ID)";
     try { driveNote = await uploadToDrive("freightwire-backup-" + stamp + ".json", backupStr); } catch (e) { driveNote = "upload error: " + (e && e.message || e); }
 
-    const admins = users.filter((u) => u && u.role === "admin" && u.email).map((u) => String(u.email));
-    const recipients = Array.from(new Set([...(process.env.GUARDIAN_EMAIL ? [process.env.GUARDIAN_EMAIL.trim()] : []), ...admins])).filter((e) => /.+@.+\..+/.test(e));
+    // ONE report email, to ONE fixed recipient, from PRODUCTION only.
+    // Staging (non-"main" tenant) still writes its own backup above but never emails,
+    // so a single nightly run can't fan out into a pile of duplicate messages.
+    // Recipient is Spencer only — never the full admin list (that's what caused the flood).
+    const solo = (process.env.GUARDIAN_EMAIL && process.env.GUARDIAN_EMAIL.trim()) || "spencer@freightwire.com";
+    const recipients = TENANT === "main" && /.+@.+\..+/.test(solo) ? [solo] : [];
     await emailSummary({ recipients, counts, alerts, qa, driveNote, backupStr, stamp });
 
-    console.log("[guardian] ok — counts", JSON.stringify(counts), "alerts", alerts.length, "qa", qa.length, "drive", driveNote, "emailed", recipients.length);
+    console.log("[guardian] ok — tenant", TENANT, "counts", JSON.stringify(counts), "alerts", alerts.length, "qa", qa.length, "drive", driveNote, "emailed", recipients.length);
     return new Response("ok", { status: 200 });
   } catch (e) { console.log("[guardian] error", e && e.message); return new Response("err", { status: 200 }); }
 };

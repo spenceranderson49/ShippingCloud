@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, Pause, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, EyeOff, MessageCircle, Sparkles, ClipboardList, Ban, Tag, Copy, Sliders, Save} from "lucide-react";
 const FW_BLUE="#0099FF";
@@ -48,7 +48,7 @@ function tintLogoDataUrl(src,accent,cb){
     img.src=src;
   }catch(e){cb(src);}
 }
-function FreightwireShipHub({logoH=44,sub=true,subText="Client Portal",accent=""}){
+function FreightwireShipHub({logoH=44,sub=true,subText="Customer Portal",accent=""}){
   const nameSize=Math.round(logoH*0.5);
   const [logoSrc,setLogoSrc]=useState(FW_LOGO);
   useEffect(()=>{ let dead=false; tintLogoDataUrl(FW_LOGO,String(accent||"").trim(),u=>{ if(!dead)setLogoSrc(u); }); return ()=>{dead=true;}; },[accent]);
@@ -77,7 +77,7 @@ const FEATURE_CATALOG=[
   {id:"drafts",label:"Drafts",desc:"Saved unfinished shipments",default:true},
   {id:"returns",label:"Returns",desc:"Return labels",default:true},
   {id:"dashboard",label:"Dashboard",desc:"Spend & volume overview",default:true},
-  {id:"addresses",label:"Address book",desc:"Saved contacts",default:true},
+  {id:"addresses",label:"Address Book",desc:"Saved contacts",default:true},
   {id:"pickups",label:"Pickups",desc:"Schedule carrier pickups",default:true},
   {id:"batch",label:"Batch",desc:"Rate & print in bulk",default:true},
   {id:"invoices",label:"Invoice Audit",desc:"Carrier invoice auditing",default:false},   /* off unless the admin grants it per login */
@@ -88,7 +88,7 @@ const FEATURE_CATALOG=[
   {id:"seeCosts",label:"See costs & spend",desc:"Rates, order totals, batch totals and Reports dollars. Turn OFF to hide all money from this customer's logins",default:true},
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own carrier accounts on the Connections page (England always shows; admins always have this)",default:false},
 ];
-const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All logins"],["rates","Rates & dim divisors"],["labelcert","FedEx labels"],["customizations","Features & access"],["branding","Branding"],["apiadmin","API"],["billing","Billing & invoices"],["domains","Domains"],["backups","Backups & restore"]];
+const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All Logins"],["rates","Rates & Dim Divisors"],["labelcert","FedEx Labels"],["customizations","Features & Access"],["branding","Branding"],["apiadmin","API"],["billing","Billing & Invoices"],["domains","Domains"],["backups","Backups & Restore"]];
 const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,labelcert:Printer,customizations:Sliders,branding:Sparkles,apiadmin:Plug,billing:Receipt,domains:ExternalLink,backups:RotateCcw};
 /* A restricted admin ALWAYS keeps access to "users" — without it there is no self-service way
    to ever fix a permission set that’s missing something, for yourself or anyone else. A wrong
@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v497";
+const BUILD_TAG="addr-v507";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -891,7 +891,7 @@ function drawFedexWordmarkMono(g,x,y,h){
   P([[310,28],[336,28],[282,100],[256,100]]);g.fill();                                               // x /
   g.restore();
 }
-function drawFedexMock(g,W,H,{to,sender,service,weight,pieceCount,refNo,residential}){
+function drawFedexMock(g,W,H,{to,sender,service,weight,pieceCount,refNo,residential,markImg}){
       const r=to||{},s=sender||{};
       let seed=0;const sk=String((r.zip||"")+(r.name||"")+(service||""));for(let i=0;i<sk.length;i++)seed=(seed*31+sk.charCodeAt(i))>>>0;
       const rnd=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
@@ -930,7 +930,17 @@ function drawFedexMock(g,W,H,{to,sender,service,weight,pieceCount,refNo,resident
       g.fillRect(48,pTop,10,300);g.fillRect(62,pTop,4,300);   // start guard
       for(let row=0;row<25;row++){let x=84;while(x<640){const bw=2+Math.floor(rnd()*7);if(rnd()>0.42)g.fillRect(x,pTop+row*12,bw,10);x+=bw+2+Math.floor(rnd()*3);}}
       g.fillRect(652,pTop,4,300);g.fillRect(662,pTop,10,300);   // end guard
-      drawFedexWordmarkMono(g,758,pTop+8,112);
+      if(markImg&&markImg.width&&markImg.height){
+        // Draw the owner-uploaded carrier logo, contained in a fixed box. Clear the box to white
+        // first so NOTHING from the placeholder/barcode can bleed through behind it, then fit the
+        // whole image (both "Fed" and "Ex") inside the box preserving aspect — no cropping.
+        const bx=750,by=pTop+2,boxW=384,boxH=120;
+        g.fillStyle="#fff";g.fillRect(bx,by,boxW,boxH);
+        const ar=markImg.width/markImg.height; let dw=boxW,dh=boxW/ar; if(dh>boxH){dh=boxH;dw=boxH*ar;}
+        g.drawImage(markImg,bx,by+(boxH-dh)/2,dw,dh);
+        g.fillStyle="#000";
+      }
+      else drawFedexWordmarkMono(g,758,pTop+8,112);
       g.lineWidth=2;
       const svcL=String(service||"").toLowerCase();
       const fam=/overnight|2day|express saver|one rate/.test(svcL)?"Express":/economy|smartpost/.test(svcL)?"Ground Economy":/home/.test(svcL)?"Home Delivery":"Ground";
@@ -967,12 +977,17 @@ function MockLabelImg({to,sender,service,weight,pieceCount,refNo,residential}){
   useEffect(()=>{let dead=false;(async()=>{
     try{
       const W=1200,H=1800;const cv=document.createElement("canvas");cv.width=W;cv.height=H;const g=cv.getContext("2d");
-      drawFedexMock(g,W,H,{to,sender,service,weight,pieceCount,refNo,residential});
+      const xx=(typeof window!=="undefined"&&window.__scPrintExtras)||null;
+      // If the owner uploaded the carrier's own logo file, draw that exact image on the mock;
+      // otherwise fall back to the built-in approximation. Loading is best-effort (jsdom/tests skip it).
+      let markImg=null;
+      if(xx&&xx.fedexMark){ try{ markImg=await new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=xx.fedexMark;}); }catch(e){markImg=null;} }
+      drawFedexMock(g,W,H,{to,sender,service,weight,pieceCount,refNo,residential,markImg});
       let out=[cv.toDataURL("image/png")];
-      try{ const xx=(typeof window!=="undefined"&&window.__scPrintExtras)||null; if(xx&&xx.logo&&xx.logo.on&&xx.logo.src)out=await stampLogo(out,{labelLogoOn:true,labelLogoPos:xx.logo.pos,labelLogoScale:xx.logo.scale,labelLogoDX:xx.logo.dx,labelLogoDY:xx.logo.dy,labelLogoX:xx.logo.x,labelLogoY:xx.logo.y},xx.logo.src); }catch(e){}
+      try{ if(xx&&xx.logo&&xx.logo.on&&xx.logo.src)out=await stampLogo(out,{labelLogoOn:true,labelLogoPos:xx.logo.pos,labelLogoScale:xx.logo.scale,labelLogoDX:xx.logo.dx,labelLogoDY:xx.logo.dy,labelLogoX:xx.logo.x,labelLogoY:xx.logo.y},xx.logo.src); }catch(e){}
       if(!dead)setSrc(out[0]);
     }catch(e){}
-  })();return ()=>{dead=true;};},[JSON.stringify(to||{}),JSON.stringify(sender||{}),service,weight,pieceCount,refNo,residential,JSON.stringify((typeof window!=="undefined"&&window.__scPrintExtras&&window.__scPrintExtras.logo)||null)]);
+  })();return ()=>{dead=true;};},[JSON.stringify(to||{}),JSON.stringify(sender||{}),service,weight,pieceCount,refNo,residential,JSON.stringify((typeof window!=="undefined"&&window.__scPrintExtras&&window.__scPrintExtras.logo)||null),(typeof window!=="undefined"&&window.__scPrintExtras&&window.__scPrintExtras.fedexMark)||null]);
   return src?<img src={src} alt="label preview" style={{maxHeight:"46vh"}} className="w-auto max-w-full mx-auto border border-stone-300 rounded shadow bg-white"/>:<div style={{height:"46vh"}} className="w-full max-w-[320px] mx-auto border border-dashed border-stone-300 rounded"/>;
 }
 /* DRAG-to-place logo editor on a real FedEx-look label. The logo is a live overlay you drag
@@ -2873,7 +2888,7 @@ const CUSTOM_DEFAULTS={
   confetti:"page",seasonal:false,loginBg:"",appBg:"",headerBg:"",pageBg:"",navBg:"",
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
-const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
+const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
 const SLIP_OPTS={thanks:"",footer:""};   // synced from settings by AppInner; read by packingSlipHTML
 const CI_OPTS={taxId:"",logo:""};                 // Tax ID / EIN printed on commercial invoices, from Settings → General
 const fireConfetti=()=>{try{window.dispatchEvent(new CustomEvent("sc-confetti"));}catch(e){}};
@@ -3009,11 +3024,11 @@ function Login({users,onLogin,brand}){
     setMode("signin");
   };
   return (
-    <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4" style={{fontFamily:"ui-sans-serif,system-ui,sans-serif",...(lsGet("loginBg","")?{backgroundImage:`url(${lsGet("loginBg","")})`,backgroundSize:"cover",backgroundPosition:"center"}:{})}}>
+    <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4" style={{fontFamily:"Inter,system-ui,sans-serif",...(lsGet("loginBg","")?{backgroundImage:`url(${lsGet("loginBg","")})`,backgroundSize:"cover",backgroundPosition:"center"}:{})}}>
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center gap-2 mb-6">
           <div className="flex items-center gap-2">
-            {BRAND.fw?<FreightwireShipHub logoH={46} subText={BRAND.admin?"Admin HQ":"Client Portal"}/>:(!B.name1||B.name1==="Shipping")&&(!B.name2||B.name2==="Cloud")?<ShipCloudLogo size={28}/>:<><BrandCloud className="h-10 w-auto" color={B.primary}/><span className="font-extrabold tracking-tight text-3xl" style={{color:B.dark}}>{B.name1}<span style={{color:B.primary}}>{B.name2}</span></span></>}
+            {BRAND.fw?<FreightwireShipHub logoH={46} subText={BRAND.admin?"Admin HQ":"Customer Portal"}/>:(!B.name1||B.name1==="Shipping")&&(!B.name2||B.name2==="Cloud")?<ShipCloudLogo size={28}/>:<><BrandCloud className="h-10 w-auto" color={B.primary}/><span className="font-extrabold tracking-tight text-3xl" style={{color:B.dark}}>{B.name1}<span style={{color:B.primary}}>{B.name2}</span></span></>}
           </div>
           {B.showLogo&&B.logo&&<div className="flex items-center gap-1.5 text-stone-400 text-xs">{B.partnerLabel}<img src={B.logo} alt="partner" className="h-3.5 w-auto object-contain"/></div>}
         </div>
@@ -3039,7 +3054,6 @@ function Login({users,onLogin,brand}){
             </div>
           </div>}
         </div>
-        <p className="text-[11px] text-stone-400 text-center mt-3">Local sign-in (no cloud database connected).</p>
       </div>
     </div>
   );
@@ -3110,8 +3124,25 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
       <div className="flex-1"><div className="text-[11px] text-stone-500">{label}</div><input value={b[k]} onChange={e=>set(k,e.target.value)} className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF]"/></div>
     </div>
   );
+  const uploadCarrierMark=(e)=>{const f=e.target.files&&e.target.files[0];e.target.value="";if(!f)return;if(f.size>1.5*1024*1024){uiAlert("That image is over 1.5 MB — please use a smaller PNG or SVG.");return;}const r=new FileReader();r.onload=()=>setPublicBrand&&setPublicBrand({carrierMark:String(r.result||"")});r.readAsDataURL(f);};
   return (<div className="max-w-3xl space-y-4">
     <p className="text-sm text-stone-500">White-label the platform for another shipping company — set the product name, colors, and partner logo. Changes apply across the whole app and are saved on this browser.</p>
+
+    {/* Carrier logo on label previews — global: one upload shows on every login's label preview */}
+    <div className="border border-stone-200 rounded-xl bg-white p-4 space-y-2">
+      <div className="text-sm font-semibold text-stone-800">Carrier logo on label previews</div>
+      <p className="text-[13px] text-stone-500">Upload your carrier's official logo file — it shows on the on-screen label <b>preview</b> for <b>every login</b>. The real label you print always comes from the carrier with their own official logo; this only replaces the placeholder mark in the preview.</p>
+      <div className="flex items-center gap-3 flex-wrap pt-1">
+        {publicBrand&&publicBrand.carrierMark
+          ? <img src={publicBrand.carrierMark} alt="carrier logo" className="h-9 w-auto max-w-[180px] object-contain border border-stone-200 rounded bg-white px-2 py-1"/>
+          : <span className="text-xs text-stone-400 italic">No file uploaded — previews show a built-in placeholder.</span>}
+        <label className="text-xs bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">
+          {publicBrand&&publicBrand.carrierMark?"Replace file":"Upload logo"}
+          <input type="file" accept="image/png,image/jpeg,image/svg+xml" className="hidden" onChange={uploadCarrierMark}/>
+        </label>
+        {publicBrand&&publicBrand.carrierMark&&<button onClick={()=>setPublicBrand&&setPublicBrand({carrierMark:""})} className="text-xs text-rose-500 hover:underline">Remove</button>}
+      </div>
+    </div>
 
     {/* Live preview */}
     <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
@@ -3194,7 +3225,7 @@ function FedexCertLab({settings}){
     setBusy(false);
   };
   const runCertSet=async()=>{
-    if(!window.confirm("Generate one label for each of the "+CERT_SERVICES.length+" express/ground services? Stops on the first FedEx error so you can fix and resume."))return;
+    if(!await uiConfirm("Generate one label for each of the "+CERT_SERVICES.length+" express/ground services? Stops on the first FedEx error so you can fix and resume."))return;
     setBusy(true);setLastErr(null);
     for(let i=0;i<CERT_SERVICES.length;i++){
       const [k,label]=CERT_SERVICES[i];
@@ -3276,7 +3307,7 @@ function FedexCertLab({settings}){
     </div>
 
     <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
-      <div className="px-4 py-2.5 text-sm font-semibold text-stone-700 border-b border-stone-100 flex items-center justify-between"><span>Generated labels (last 12 kept)</span>{log.length>0&&<button onClick={()=>{if(window.confirm("Clear the label log?"))setLog([]);}} className="text-[11px] text-stone-400 hover:text-rose-500">Clear</button>}</div>
+      <div className="px-4 py-2.5 text-sm font-semibold text-stone-700 border-b border-stone-100 flex items-center justify-between"><span>Generated labels (last 12 kept)</span>{log.length>0&&<button onClick={async()=>{if(await uiConfirm("Clear the label log?"))setLog([]);}} className="text-[11px] text-stone-400 hover:text-rose-500">Clear</button>}</div>
       {log.length===0?<div className="px-4 py-8 text-sm text-stone-400 text-center">No labels yet — generate the certification set above, download each PDF, and submit them to FedEx.</div>
       :<div className="divide-y divide-stone-100">{log.map(e2=>(
         <div key={e2.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm">
@@ -3379,13 +3410,13 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection,cli
         <div className="grid lg:grid-cols-2 gap-0">
           <div className="overflow-x-auto max-h-[300px] overflow-y-auto border-r border-[#BAE6FD]/60">
             <table className="w-full text-[12px] min-w-[380px]">
-              <thead className="sticky top-0 bg-[#E6F4FF]"><tr className="text-[9px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal px-3 py-1.5">Customer</th><th className="text-right font-normal px-3 py-1.5">Ships</th><th className="text-right font-normal px-3 py-1.5">Quoted</th><th className="text-right font-normal px-3 py-1.5">Margin</th></tr></thead>
+              <thead className="sticky top-0 bg-[#E6F4FF]"><tr className="text-[10px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal px-3 py-1.5">Customer</th><th className="text-right font-normal px-3 py-1.5">Ships</th><th className="text-right font-normal px-3 py-1.5">Quoted</th><th className="text-right font-normal px-3 py-1.5">Margin</th></tr></thead>
               <tbody>{bc.map((e,i)=>(<tr key={i} className="border-t border-[#BAE6FD]/40"><td className="px-3 py-1.5 font-medium text-stone-800 truncate max-w-[180px]">{e.name}</td><td className="px-3 py-1.5 text-right font-mono">{e.n}{e.voided?" (−"+e.voided+")":""}</td><td className="px-3 py-1.5 text-right font-mono">{money(Math.round(e.q*100)/100)}</td><td className={"px-3 py-1.5 text-right font-mono "+(e.mg>=0?"text-emerald-700":"text-rose-600")}>{money(Math.round(e.mg*100)/100)}</td></tr>))}</tbody>
             </table>
           </div>
           <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
             <table className="w-full text-[12px] min-w-[420px]">
-              <thead className="sticky top-0 bg-[#E6F4FF]"><tr className="text-[9px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal px-3 py-1.5">Time</th><th className="text-left font-normal px-3 py-1.5">Customer</th><th className="text-left font-normal px-3 py-1.5">Tracking</th><th className="text-right font-normal px-3 py-1.5">Margin</th><th className="text-right font-normal px-3 py-1.5">Quote</th></tr></thead>
+              <thead className="sticky top-0 bg-[#E6F4FF]"><tr className="text-[10px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal px-3 py-1.5">Time</th><th className="text-left font-normal px-3 py-1.5">Customer</th><th className="text-left font-normal px-3 py-1.5">Tracking</th><th className="text-right font-normal px-3 py-1.5">Margin</th><th className="text-right font-normal px-3 py-1.5">Quote</th></tr></thead>
               <tbody>{rows.slice(0,150).map((x,i)=>(<tr key={i} className={"border-t border-[#BAE6FD]/40 "+(x.status==="Voided"?"opacity-45":"")}><td className="px-3 py-1.5 whitespace-nowrap text-stone-500">{timeOf(x)}</td><td className="px-3 py-1.5 truncate max-w-[150px] text-stone-800">{custOf(x)}</td><td className="px-3 py-1.5 font-mono text-[11px] text-stone-600">{x.tracking||"—"}</td><td className="px-3 py-1.5 text-right font-mono">{x.status==="Voided"?"—":money(marginOf(x))}</td><td className="px-3 py-1.5 text-right font-mono">{x.status==="Voided"?"—":money(+x.sell||0)}</td></tr>))}</tbody>
             </table>
           </div>
@@ -3409,7 +3440,7 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection,cli
                 <td className="px-3 py-1.5 whitespace-nowrap text-stone-500">{timeOf(x)}</td>
                 <td className="px-3 py-1.5 max-w-[220px]">{(()=>{const _cid=cidOf(x);return _cid&&openCustomer?<button onClick={()=>openCustomer(_cid)} className="truncate font-medium text-[#0086E0] hover:underline text-left block max-w-full">{custOf(x)}</button>:<div className="truncate font-medium text-stone-800">{custOf(x)}</div>;})()}<div className="text-[10px] text-stone-400 truncate">{uEmail(x._uid)}</div></td>
                 <td className="px-3 py-1.5 whitespace-nowrap text-stone-600">{x.carrier||"—"}</td>
-                <td className="px-3 py-1.5 whitespace-nowrap font-mono text-[12px] text-stone-600">{x.tracking||"—"}{x.status==="Voided"&&<span className="ml-1 text-[9px] uppercase text-rose-400">void</span>}</td>
+                <td className="px-3 py-1.5 whitespace-nowrap font-mono text-[12px] text-stone-600">{x.tracking||"—"}{x.status==="Voided"&&<span className="ml-1 text-[10px] uppercase text-rose-400">void</span>}</td>
                 <td className="px-3 py-1.5 whitespace-nowrap text-stone-500 max-w-[160px] truncate">{(x.service||"").replace("FedEx ","")}</td>
                 <td className="px-3 py-1.5 text-right font-mono">{x.status==="Voided"?"—":money(marginOf(x))}</td>
                 <td className="px-3 py-1.5 text-right font-mono font-medium">{x.status==="Voided"?"—":money(+x.sell||0)}</td>
@@ -3475,7 +3506,7 @@ function BackupsAdmin({clients=[],setClients}){
   const parseTs=(ts)=>{const m=/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/.exec(String(ts||""));if(!m)return ts||"—";const d=new Date(`${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z`);return isNaN(d)?ts:d.toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});};
   const curIds=new Set((clients||[]).map(c=>c&&c.id));
   const restore=async(bk)=>{
-    if(!window.confirm("Restore ALL of "+(LABEL[bk.orig]||bk.orig)+" to the version from "+parseTs(bk.ts)+" ("+bk.count+" "+(bk.count===1?"entry":"entries")+")?\n\nThis replaces the whole list with that snapshot. Your current version is backed up first, so it's reversible. The page reloads afterward.\n\nTip: close any other admin tabs first so they don't overwrite it."))return;
+    if(!await uiConfirm("Restore ALL of "+(LABEL[bk.orig]||bk.orig)+" to the version from "+parseTs(bk.ts)+" ("+bk.count+" "+(bk.count===1?"entry":"entries")+")?\n\nThis replaces the whole list with that snapshot. Your current version is backed up first, so it's reversible. The page reloads afterward.\n\nTip: close any other admin tabs first so they don't overwrite it."))return;
     setBusy(bk.key);setMsg("");
     const r=await cloudCall({action:"restoreBackup",token:CLOUD.token,key:bk.key});
     setBusy("");
@@ -3625,8 +3656,8 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       setTimeout(_fire,12000);
       say("Login created — welcome email with a set-password link is on its way.");
     } else say("Login created.");};
-  const sendReset=async(u)=>{const r=await cloudCall({action:"requestReset",email:u.email,token:CLOUD.token});window.alert(r&&r.configured===false?"Email sending isn't set up on this site yet (RESEND_API_KEY).":(r&&r.found===false)?"That login isn't in the cloud yet (or is disabled) — no email was sent.":"Password reset link sent to "+u.email+" (valid 1 hour).");};
-  const setPw=async(u)=>{const np=window.prompt("New password for "+u.email+":");if(!np)return;if(CLOUD.mode==="cloud"){const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});window.alert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update."));}else{setUsers(us=>us.map(x=>x.id===u.id?{...x,password:np}:x));window.alert("Password updated (local).");}};
+  const sendReset=async(u)=>{const r=await cloudCall({action:"requestReset",email:u.email,token:CLOUD.token});uiAlert(r&&r.configured===false?"Email sending isn't set up on this site yet (RESEND_API_KEY).":(r&&r.found===false)?"That login isn't in the cloud yet (or is disabled) — no email was sent.":"Password reset link sent to "+u.email+" (valid 1 hour).");};
+  const setPw=async(u)=>{const np=await uiPrompt("New password for "+u.email+":","",{title:"Reset password"});if(!np)return;if(CLOUD.mode==="cloud"){const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});uiAlert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update."));}else{setUsers(us=>us.map(x=>x.id===u.id?{...x,password:np}:x));uiAlert("Password updated (local).");}};
   const dedicated=()=>{const id="p"+Date.now();upRules({profiles:[...profiles,{id,name:c.name,services:JSON.parse(JSON.stringify(prof.services||{})),surcharges:JSON.parse(JSON.stringify(prof.surcharges||{}))}],assign:{...assign,[cid]:id}});say("Dedicated profile created.");};
   const companyFeatureState=(fid)=>{if(!lg.length)return "none";const on=lg.filter(u=>featureOn(fid,u,featureFlags[u.id])).length;return on===0?"off":on===lg.length?"on":"mixed";};
   const setCompanyFeature=(fid,val)=>{setFeatureFlags&&setFeatureFlags(ff=>{const next={...ff};lg.forEach(u=>{next[u.id]={...(next[u.id]||{}),[fid]:val};});return next;});say((val?"Enabled":"Disabled")+" for all logins.");};
@@ -3676,7 +3707,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
           <button onClick={()=>setPw(u)} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Password</button>
           {CLOUD.mode==="cloud"&&<button onClick={()=>sendReset(u)} title="Email them a choose-a-new-password link (valid 1 hour)" className="text-[11px] rounded px-2 py-1 bg-[#E6F4FF] text-[#006FBF] hover:bg-[#CCEAFF]">Reset email</button>}
           <button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Log in as</button>
-          {u.id!==currentUser.id&&<button onClick={()=>{if(window.confirm("Delete "+u.email+"?"))setUsers(us=>us.filter(x=>x.id!==u.id));}} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button>}
+          {u.id!==currentUser.id&&<button onClick={async()=>{if(await uiConfirm("Delete "+u.email+"?"))setUsers(us=>us.filter(x=>x.id!==u.id));}} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button>}
         </div>)):<div className="px-3 py-4 text-sm text-stone-400">No logins yet — new logins inherit this customer's rates, credentials, and features automatically.</div>}
       </div>
       <div className="border border-stone-200 rounded-lg bg-white p-3 flex flex-wrap items-end gap-2">
@@ -3710,7 +3741,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       <div className="border border-stone-200 rounded-lg bg-white p-3">
         <div className="flex flex-wrap items-center gap-4">
           <div className="text-sm font-semibold text-stone-800">Dim divisors <span className="font-normal text-[11px] text-stone-400">(platform-wide — every customer)</span></div>
-          {[["express","Express"],["ground","Ground & HD"],["ground_economy","Ground Economy"]].map(([k,l])=>(
+          {[["express","Express"],["ground","Ground & Home Delivery"],["ground_economy","Ground Economy"]].map(([k,l])=>(
             <label key={k} className="text-xs text-stone-600 flex items-center gap-1.5">{l}
               <input type="number" min="50" max="300" value={(rules.dimDivisors&&rules.dimDivisors[k])||139}
                 onChange={e=>{const v=Math.max(50,Math.min(300,+e.target.value||139));setRules(r=>({...DEFAULT_RATE_RULES,...r,dimDivisors:{express:139,ground:139,ground_economy:139,...(r.dimDivisors||{}),[k]:v}}));}}
@@ -3745,7 +3776,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
           const brkSorted=(r.breaks||[]).map((b,_i)=>({...b,_i})).sort((a,b)=>{const A=(a.upTo==null||a.upTo==="")?1e12:+a.upTo,B=(b.upTo==null||b.upTo==="")?1e12:+b.upTo;return A-B;});
           const upBrkAt=(idx,patch)=>{const br=[...(r.breaks||[])];br[idx]={...br[idx],...patch};upProfSvc(prof.id,sv.k,{breaks:br});};
           const rmBrkAt=(idx)=>upProfSvc(prof.id,sv.k,{breaks:(r.breaks||[]).filter((_,j)=>j!==idx)});
-          const seedStd=()=>{ if(r.breaks&&r.breaks.length&&!window.confirm("Replace the existing weight breaks with the standard ranges (0–5, 6–10, 11–30, 31–75, 76+)?"))return; upProfSvc(prof.id,sv.k,{breaks:[{upTo:5},{upTo:10},{upTo:30},{upTo:75},{upTo:99999}].map(b=>({...b,pct:"",min:"",zones:{}}))}); };
+          const seedStd=async()=>{ if(r.breaks&&r.breaks.length&&!await uiConfirm("Replace the existing weight breaks with the standard ranges (0–5, 6–10, 11–30, 31–75, 76+)?"))return; upProfSvc(prof.id,sv.k,{breaks:[{upTo:5},{upTo:10},{upTo:30},{upTo:75},{upTo:99999}].map(b=>({...b,pct:"",min:"",zones:{}}))}); };
           return (<React.Fragment key={sv.k}>
           <tr className={`border-t border-stone-100 hover:bg-stone-50 ${svcHiddenMap[sv.k]?"opacity-50":""}`}>
             <td className="py-1.5 pl-3 pr-2 font-medium text-stone-800 whitespace-nowrap">{sv.l}</td>
@@ -3888,11 +3919,11 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       const upFx=(patch)=>setClients(cs=>cs.map(x=>x.id===cid?{...x,fedex:{...(x.fedex||{}),...patch}}:x));
       const svcDisc=fx.svcDisc||{};
       const upSvcDisc=(k,v)=>upFx({svcDisc:{...svcDisc,[k]:v}});
-      const applyTierToRates=()=>{
+      const applyTierToRates=async()=>{
         const d=+fx.listDiscount;
-        if(!(d>0))return window.alert("Set an overall FedEx list discount % first — that's what gets applied.");
-        if(prof.id==="default")return window.alert("This customer prices from the SHARED Default profile — applying the tier here would reprice every Default customer. Open the Rates tab and give them their own profile first.");
-        if(!window.confirm("Set every FedEx service on "+c.name+"'s profile to FedEx list − "+d+"%? (Per-service overrides below win where set.)"))return;
+        if(!(d>0))return uiAlert("Set an overall FedEx list discount % first — that's what gets applied.");
+        if(prof.id==="default")return uiAlert("This customer prices from the SHARED Default profile — applying the tier here would reprice every Default customer. Open the Rates tab and give them their own profile first.");
+        if(!await uiConfirm("Set every FedEx service on "+c.name+"'s profile to FedEx list − "+d+"%? (Per-service overrides below win where set.)"))return;
         const svcs={...(prof.services||{})};
         svcQuick.forEach(sv=>{const per=+svcDisc[sv.k];const use=(per>0)?per:d;svcs[sv.k]={...(svcs[sv.k]||{}),basis:"list",pct:use};});
         upRules({profiles:profiles.map(p=>p.id===prof.id?{...p,services:svcs}:p)});
@@ -3979,7 +4010,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
 
     {tab==="notes"&&<div className="space-y-2">
       <Field label="Internal notes (admins only)"><textarea value={c.notes||""} onChange={e=>upClient({notes:e.target.value})} placeholder="Anything worth remembering — contacts, quirks, promises, follow-ups…" className="w-full border border-stone-300 rounded-lg p-2.5 text-sm min-h-[160px]"/></Field>
-      <div className="flex justify-end"><button onClick={()=>{if(!window.confirm('Delete customer "'+c.name+'"? Logins stay but lose the link.'))return;if(CLOUD.mode==="cloud")cloudCall({action:"deleteCustomer",token:CLOUD.token,clientId:cid});setUsers(us=>us.map(x=>x.clientId===cid?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==cid));onClose&&onClose();}} className="text-[11px] text-rose-500 hover:text-rose-600">Delete customer</button></div>
+      <div className="flex justify-end"><button onClick={async()=>{if(!await uiConfirm('Delete customer "'+c.name+'"? Logins stay but lose the link.'))return;if(CLOUD.mode==="cloud")cloudCall({action:"deleteCustomer",token:CLOUD.token,clientId:cid});setUsers(us=>us.map(x=>x.clientId===cid?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==cid));onClose&&onClose();}} className="text-[11px] text-rose-500 hover:text-rose-600">Delete customer</button></div>
     </div>}
   </div>);
 }
@@ -4034,7 +4065,7 @@ function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureF
         {list.length===0&&<div className="px-4 py-8 text-sm text-stone-400 text-center">No customers match "{q}".</div>}
         {list.map(c=>{const lg=loginsOf(c.id);const prof=profOf(c.id);return (
           <div key={c.id} onClick={()=>onOpenCustomer&&onOpenCustomer(c.id)} className="group flex items-center gap-3 px-4 py-3 hover:bg-stone-50 cursor-pointer">
-            <button onClick={(e)=>{e.stopPropagation();if(!window.confirm('Delete customer "'+c.name+'"? Their logins stay but lose the link. Rates/rules assigned to them are kept but unassigned.'))return;if(CLOUD.mode==="cloud")cloudCall({action:"deleteCustomer",token:CLOUD.token,clientId:c.id});setUsers(us=>us.map(x=>x.clientId===c.id?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==c.id));}} title="Delete customer" className="opacity-0 group-hover:opacity-100 text-stone-300 hover:text-rose-500 shrink-0 order-last"><Trash2 className="w-4 h-4"/></button>
+            <button onClick={async(e)=>{e.stopPropagation();if(!await uiConfirm('Delete customer "'+c.name+'"? Their logins stay but lose the link. Rates/rules assigned to them are kept but unassigned.'))return;if(CLOUD.mode==="cloud")cloudCall({action:"deleteCustomer",token:CLOUD.token,clientId:c.id});setUsers(us=>us.map(x=>x.clientId===c.id?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==c.id));}} title="Delete customer" className="opacity-0 group-hover:opacity-100 text-stone-300 hover:text-rose-500 shrink-0 order-last"><Trash2 className="w-4 h-4"/></button>
             <div className="w-7 h-7 rounded-lg bg-[#0086E0]/10 text-[#0086E0] flex items-center justify-center font-bold text-xs shrink-0">{String(c.name||"?").slice(0,1).toUpperCase()}</div>
             <div className="flex-1 min-w-0"><div className="font-medium text-sm truncate">{c.name}</div><div className="text-[11px] text-stone-400 truncate">{c.contact||"—"}{c.email?` · ${c.email}`:""}</div></div>
             <div className="w-20 text-center"><Badge tone="blue">{lg.length}</Badge></div>
@@ -4130,23 +4161,23 @@ function RatesAdmin({clients=[],brand}){
   const upProf=(patch)=>upRules({profiles:profiles.map(p=>p.id===prof.id?{...p,...patch}:p)});
   const upSvc=(k,patch)=>upProf({services:{...(prof.services||{}),[k]:{...((prof.services||{})[k]||{}),...patch}}});
   const upSur=(id,patch)=>upProf({surcharges:{...(prof.surcharges||{}),[id]:{...((prof.surcharges||{})[id]||{}),...patch}}});
-  const newProfile=()=>{const n=window.prompt("Name for the new rate profile:");if(!n)return;const id="p"+Date.now();upRules({profiles:[...profiles,{id,name:n,services:JSON.parse(JSON.stringify(prof.services||{})),surcharges:JSON.parse(JSON.stringify(prof.surcharges||{}))}]});setProfId(id);};
-  const renameProfile=()=>{const n=window.prompt("Rename profile:",prof.name);if(!n)return;upProf({name:n});};
-  const deleteProfile=()=>{if(prof.id==="default")return window.alert("The Default profile can't be deleted.");if(!window.confirm('Delete profile "'+prof.name+'"? Customers on it fall back to Default.'))return;const na={...assign};Object.keys(na).forEach(k=>{if(na[k]===prof.id)delete na[k];});upRules({profiles:profiles.filter(p=>p.id!==prof.id),assign:na});setProfId("default");};
-  const quickSet=(v)=>{
+  const newProfile=async()=>{const n=await uiPrompt("Name for the new rate profile:","",{title:"New rate profile"});if(!n)return;const id="p"+Date.now();upRules({profiles:[...profiles,{id,name:n,services:JSON.parse(JSON.stringify(prof.services||{})),surcharges:JSON.parse(JSON.stringify(prof.surcharges||{}))}]});setProfId(id);};
+  const renameProfile=async()=>{const n=await uiPrompt("Rename profile:",prof.name,{title:"Rename profile"});if(!n)return;upProf({name:n});};
+  const deleteProfile=async()=>{if(prof.id==="default")return uiAlert("The Default profile can't be deleted.");if(!await uiConfirm('Delete profile "'+prof.name+'"? Customers on it fall back to Default.'))return;const na={...assign};Object.keys(na).forEach(k=>{if(na[k]===prof.id)delete na[k];});upRules({profiles:profiles.filter(p=>p.id!==prof.id),assign:na});setProfId("default");};
+  const quickSet=async(v)=>{
     if(!v)return;
     const svcs={...(prof.services||{})};
     const apply=(fn)=>{RATE_SERVICES[carrier].forEach(s=>{svcs[s.k]={...(svcs[s.k]||{}),...fn(svcs[s.k]||{})};});upProf({services:svcs});};
-    if(/^pct:/.test(v)){const p=+v.slice(4);if(window.confirm("Set every "+carrier.toUpperCase()+" service on \""+prof.name+"\" to "+p+"% markup over cost?"))apply(()=>({basis:"pct",pct:p}));}
+    if(/^pct:/.test(v)){const p=+v.slice(4);if(await uiConfirm("Set every "+carrier.toUpperCase()+" service on \""+prof.name+"\" to "+p+"% markup over cost?"))apply(()=>({basis:"pct",pct:p}));}
     else if(v==="listpct"){
       const withList=RATE_SERVICES[carrier].filter(s=>baseCosts["list:"+s.k]);
-      if(!withList.length)return window.alert("Import FedEx list rate tables first (Base costs tab) — the list basis prices live quotes as list − %, so it needs the list.");
-      const p=window.prompt("FedEx list minus what percent? Applies to the "+withList.length+" service"+(withList.length>1?"s":"")+" that have list tables.","35");
+      if(!withList.length)return uiAlert("Import FedEx list rate tables first (Base costs tab) — the list basis prices live quotes as list − %, so it needs the list.");
+      const p=await uiPrompt("FedEx list minus what percent? Applies to the "+withList.length+" service"+(withList.length>1?"s":"")+" that have list tables.","35",{title:"Bulk list discount"});
       if(p==null||p==="")return;
       const svcs={...(prof.services||{})};withList.forEach(s=>{svcs[s.k]={...(svcs[s.k]||{}),basis:"list",pct:+p};});upProf({services:svcs});
     }
-    else if(v==="clearmin"&&window.confirm("Clear every Min $ on this carrier?"))apply(()=>({min:""}));
-    else if(v==="clearzones"&&window.confirm("Remove every zone override on this carrier?"))apply(()=>({zones:null}));
+    else if(v==="clearmin"&&await uiConfirm("Clear every Min $ on this carrier?"))apply(()=>({min:""}));
+    else if(v==="clearzones"&&await uiConfirm("Remove every zone override on this carrier?"))apply(()=>({zones:null}));
   };
   /* sheet pricing with an explicit zone (the live resolver derives zone from zips) */
   const sheetSell=(rule,cost,weight,zone,key)=>{
@@ -4199,7 +4230,7 @@ function RatesAdmin({clients=[],brand}){
       html+="<table><tr><th>Weight (lb)</th>"+d.zones.map(z=>"<th>Zone "+z+"</th>").join("")+"</tr>"
         +d.rows.map(r=>"<tr><td style='font-weight:600'>"+r.w+"</td>"+r.cells.map(c=>c.c==null?"<td>—</td>":"<td>$"+c.c.toFixed(2)+(c.star?"*":"")+"</td>").join("")+"</tr>").join("")+"</table>";
     });
-    const w=window.open("","_blank");if(!w)return window.alert("Allow pop-ups to print the rate sheets.");
+    const w=window.open("","_blank");if(!w)return uiAlert("Allow pop-ups to print the rate sheets.");
     w.document.write("<html><head><title>Rate sheets — "+escS(prof.name)+"</title><style>"+_sheetStyles+"</style></head><body>"+_sheetLogo()+"<div class='sub'>Customer rate sheets · Profile: "+escS(prof.name)+" · Generated "+new Date().toLocaleDateString()+" · * = Min $ floor applied. Rates include base transportation; fees per the accessorials sheet.</div>"+html+"<script>window.print()</scr"+"ipt></body></html>");
     w.document.close();
   };
@@ -4223,7 +4254,7 @@ function RatesAdmin({clients=[],brand}){
       html+="<tr><td>"+escS(su.aka||su.desc)+"</td><td>"+escS(su.seg||"All")+"</td><td>"+escS(su.charge||"")+"</td><td style='font-weight:600'>"+escS(priceDesc(su))+"</td></tr>";
     });
     html+="</table>";
-    const w=window.open("","_blank");if(!w)return window.alert("Allow pop-ups to print the accessorials sheet.");
+    const w=window.open("","_blank");if(!w)return uiAlert("Allow pop-ups to print the accessorials sheet.");
     w.document.write("<html><head><title>Accessorials — "+escS(prof.name)+"</title><style>"+_sheetStyles+"</style></head><body>"+_sheetLogo()+"<h1>Accessorial charges</h1><div class='sub'>Profile: "+escS(prof.name)+" · Generated "+new Date().toLocaleDateString()+" · Fee names as they appear on FedEx quotes. Charges subject to FedEx Service Guide terms.</div>"+html+"<script>window.print()</scr"+"ipt></body></html>");
     w.document.close();
   };
@@ -4244,7 +4275,7 @@ function RatesAdmin({clients=[],brand}){
       if(sheetMargin&&c.f!=null){const m=Math.round((c.c-c.f)*100)/100;const p=c.c?Math.round(m/c.c*100):0;return "<td><b>$"+c.c.toFixed(2)+(c.star?"*":"")+"</b><br/><span style='color:#888'>F:$"+c.f.toFixed(2)+"</span><br/><span style='color:#0a7'>M:$"+m.toFixed(2)+" · "+p+"%</span></td>";}
       return "<td>$"+c.c.toFixed(2)+(c.star?"*":"")+"</td>";
     }).join("")+"</tr>").join("");
-    const w=window.open("","_blank");if(!w)return window.alert("Allow pop-ups to print the rate sheet.");
+    const w=window.open("","_blank");if(!w)return uiAlert("Allow pop-ups to print the rate sheet.");
     w.document.write("<html><head><title>"+escS(sheet.l)+" — rate sheet</title><style>body{font-family:system-ui,Segoe UI,Arial;padding:28px;color:#1c1917}table{border-collapse:collapse;width:100%;font-size:12px;margin-top:16px}th,td{border:1px solid #e5e5e5;padding:6px 8px;text-align:right}th{background:#f5f5f4}h1{font-size:17px;margin:14px 0 2px}.sub{color:#78716c;font-size:12px}</style></head><body>"+logo+"<h1>"+escS(sheet.l)+" — customer rate sheet</h1><div class='sub'>Profile: "+escS(prof.name)+" · Generated "+new Date().toLocaleDateString()+" · * = Min $ floor applied"+(sheetMargin?" · C=customer price, F=cost, M=margin":"")+"</div><table>"+head+body+"</table><div class='sub' style='margin-top:14px'>Rates include base transportation and automatic fuel/residential surcharges. Optional accessorials (signature, Saturday, declared value) are additional. Rates subject to change.</div><script>window.print()</scr"+"ipt></body></html>");
     w.document.close();
   };
@@ -4299,7 +4330,7 @@ function RatesAdmin({clients=[],brand}){
     setImpPreview(null);setImpText("");
     setImpMsg({ok:good.length+" "+(impKind==="list"?"FedEx list":"England cost")+" table"+(good.length>1?"s":"")+" imported — live quotes use them on the next rate fetch."});
   };
-  const dropTable=(key)=>{if(!window.confirm("Remove this table?"))return;const bc={...baseCosts};delete bc[key];upRules({baseCosts:bc});};
+  const dropTable=async(key)=>{if(!await uiConfirm("Remove this table?"))return;const bc={...baseCosts};delete bc[key];upRules({baseCosts:bc});};
   const svcList=RATE_SERVICES[carrier]||[];
   const groups=[];svcList.forEach(s=>{let g=groups.find(x=>x.g===s.g);if(!g){g={g:s.g,items:[]};groups.push(g);}g.items.push(s);});
   /* Cosmetic row-hiding so the services table isn't cluttered by services you never sell.
@@ -4312,7 +4343,7 @@ function RatesAdmin({clients=[],brand}){
   const assignedTo=(pid)=>clients.filter(c=>(assign[c.id]||"default")===pid);
   const surRow=(prof.surcharges||{});
   return (<div className="space-y-4">
-    <DraftBar dirty={_d.dirty} onSave={_d.save} onUndo={_d.undo} onReset={()=>{ if(window.confirm("Reset ALL rate rules to the blank default? This clears every profile, markup, and imported cost. You'll still need to click Save to make it permanent.")) _d.reset(); }} resetLabel="Reset all rates to default" savedNote="Rates saved" saveLabel="Save rates"/>
+    <DraftBar dirty={_d.dirty} onSave={_d.save} onUndo={_d.undo} onReset={async()=>{ if(await uiConfirm("Reset ALL rate rules to the blank default? This clears every profile, markup, and imported cost. You'll still need to click Save to make it permanent.")) _d.reset(); }} resetLabel="Reset all rates to default" savedNote="Rates saved" saveLabel="Save rates"/>
     <div className="border border-stone-200 rounded-lg bg-white p-3 flex flex-wrap items-center gap-3">
       <div className="text-sm font-semibold text-stone-800">England tier</div>
       <Select value={rules.englandTier||""} onChange={e=>upRules({englandTier:e.target.value})} className="w-56">
@@ -4480,7 +4511,7 @@ function RatesAdmin({clients=[],brand}){
               <span className="flex-1"/>
               {t&&t.rows&&t.rows.length?<Badge tone="green">{t.rows.length} weight rows · zones {t.zones&&t.zones.join(",")}</Badge>:<Badge tone="stone">no rate card</Badge>}
               <button onClick={()=>setCcImp({key:k,label:l,text:""})} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">{t?"Replace card":"Load rate card"}</button>
-              {t&&<button onClick={()=>{if(!window.confirm("Remove the "+l+" rate card?"))return;setRules(r=>{const bc={...(r.baseCosts||{})};delete bc["cc:"+k];return {...DEFAULT_RATE_RULES,...r,baseCosts:bc};});}} className="text-[11px] text-rose-500 hover:underline">Remove</button>}
+              {t&&<button onClick={async()=>{if(!await uiConfirm("Remove the "+l+" rate card?"))return;setRules(r=>{const bc={...(r.baseCosts||{})};delete bc["cc:"+k];return {...DEFAULT_RATE_RULES,...r,baseCosts:bc};});}} className="text-[11px] text-rose-500 hover:underline">Remove</button>}
             </div>);})}
         </div>))}
         {ccImp&&<div className="border border-[#99D6FF] bg-[#F5FAFF] rounded-xl p-4 space-y-2">
@@ -4488,7 +4519,7 @@ function RatesAdmin({clients=[],brand}){
           <div className="text-[11px] text-stone-500">Excel/CSV/TSV — first column weight (lb), one column per zone (headers = zone numbers). Same format as FedEx base-cost imports.</div>
           <textarea value={ccImp.text} onChange={e=>setCcImp(p=>({...p,text:e.target.value}))} rows={8} spellCheck={false} placeholder={"Weight\t2\t3\t4\t5\t6\t7\t8\n1\t4.10\t4.25\t…"} className="w-full bg-white border border-stone-200 rounded-lg p-2.5 font-mono text-[12px] outline-none focus:border-[#0099FF] resize-y"/>
           <div className="flex gap-2">
-            <button onClick={()=>{const r2=parseRateTable(ccImp.text);if(r2.error)return window.alert(r2.error);setRules(r=>({...DEFAULT_RATE_RULES,...r,baseCosts:{...(r.baseCosts||{}),["cc:"+ccImp.key]:r2}}));setCcImp(null);setImpMsg({ok:"Rate card staged — press Save rates to make it live."});}} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium">Stage rate card</button>
+            <button onClick={()=>{const r2=parseRateTable(ccImp.text);if(r2.error)return uiAlert(r2.error);setRules(r=>({...DEFAULT_RATE_RULES,...r,baseCosts:{...(r.baseCosts||{}),["cc:"+ccImp.key]:r2}}));setCcImp(null);setImpMsg({ok:"Rate card staged — press Save rates to make it live."});}} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium">Stage rate card</button>
             <button onClick={()=>setCcImp(null)} className="text-sm text-stone-500 px-3 py-2 hover:bg-stone-100 rounded-lg">Cancel</button>
           </div>
         </div>}
@@ -4611,13 +4642,13 @@ function BillingAdmin({clients=[],platform={},openCustomer}){
   const shipsForClient=(cid,ym)=>{const c=cById(cid);const nm=String(c.name||"").toLowerCase();
     return (platform.ships||[]).filter(x=>x.status!=="Voided"&&inMonth(x,ym)&&String(x.client||"").toLowerCase()===nm);};
   const nextNumber=()=>{const yr=genMonth.slice(0,4);const used=new Set((invoices||[]).map(i=>i.number));let n=(invoices.filter(i=>i.number&&i.number.includes("-"+yr+"-")).length)+1;let num;do{num="INV-"+yr+"-"+String(n).padStart(4,"0");n++;}while(used.has(num));return num;};   /* skip any number already taken → no collision */
-  const buildPreview=()=>{ if(!genClient)return;
+  const buildPreview=async()=>{ if(!genClient)return;
     const rows=shipsForClient(genClient,genMonth);
-    if(!rows.length)return window.alert("No billable shipments for "+(cById(genClient).name||"that customer")+" in "+genMonth+".");
-    if(invoices.some(i=>i.clientId===genClient&&i.month===genMonth&&i.status!=="void"))if(!window.confirm("An invoice for this customer + month already exists. Create another?"))return;
+    if(!rows.length)return uiAlert("No billable shipments for "+(cById(genClient).name||"that customer")+" in "+genMonth+".");
+    if(invoices.some(i=>i.clientId===genClient&&i.month===genMonth&&i.status!=="void"))if(!await uiConfirm("An invoice for this customer + month already exists. Create another?"))return;
     const alreadyBilled=rows.filter(x=>invoicedTrackings.has(x.tracking)).length;
     const items=rows.filter(x=>!invoicedTrackings.has(x.tracking)).map(x=>({date:x.date,tracking:x.tracking,service:(x.service||"").replace("FedEx ",""),reference:x.reference||"",amount:Math.round((+x.sell||0)*100)/100}));
-    if(!items.length)return window.alert("Every shipment for "+(cById(genClient).name||"that customer")+" in "+genMonth+" is already on an invoice.");
+    if(!items.length)return uiAlert("Every shipment for "+(cById(genClient).name||"that customer")+" in "+genMonth+" is already on an invoice.");
     const subtotal=Math.round(items.reduce((a,i)=>a+i.amount,0)*100)/100;
     setPreview({clientId:genClient,month:genMonth,number:nextNumber(),items,subtotal,total:subtotal,terms:bSettings.terms,skipped:alreadyBilled});
   };
@@ -4626,15 +4657,15 @@ function BillingAdmin({clients=[],platform={},openCustomer}){
     setInvoices(p=>[inv,...(p||[])]); setPreview(null); };
   /* trackings already on a non-void invoice — excluded from new previews so a shipment can't be billed twice */
   const invoicedTrackings=(()=>{const set=new Set();(invoices||[]).forEach(i=>{if(i.status!=="void")(i.items||[]).forEach(it=>it.tracking&&set.add(it.tracking));});return set;})();
-  const recordPayment=(inv)=>{ const amt=window.prompt("Payment amount for "+inv.number+" (balance "+money(balanceOf(inv))+"):",String(balanceOf(inv)));
+  const recordPayment=async(inv)=>{ const amt=await uiPrompt("Payment amount for "+inv.number+" (balance "+money(balanceOf(inv))+"):",String(balanceOf(inv)),{title:"Record a payment"});
     if(amt==null)return; const n=+amt; if(!(n>0))return;
     setInvoices(p=>(p||[]).map(i=>i.id===inv.id?(()=>{const pays=[...(i.payments||[]),{amount:Math.round(n*100)/100,when:new Date().toISOString(),method:"manual"}];const paid=pays.reduce((a,x)=>a+x.amount,0);return {...i,payments:pays,status:paid>=i.total-0.005?"paid":"open",paidAt:paid>=i.total-0.005?new Date().toISOString():null};})():i)); };
-  const voidInv=(inv)=>{ if(!window.confirm("Void invoice "+inv.number+"?"))return; setInvoices(p=>(p||[]).map(i=>i.id===inv.id?{...i,status:"void"}:i)); };
+  const voidInv=async(inv)=>{ if(!await uiConfirm("Void invoice "+inv.number+"?"))return; setInvoices(p=>(p||[]).map(i=>i.id===inv.id?{...i,status:"void"}:i)); };
   const balanceOf=(inv)=>Math.round((inv.total-(inv.payments||[]).reduce((a,x)=>a+x.amount,0))*100)/100;
   const printInv=(inv)=>{ const c=cById(inv.clientId);
     const esc=(x)=>String(x==null?"":x).replace(/[&<>]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]));
     const rows=inv.items.map(i=>"<tr><td>"+esc(i.date)+"</td><td>"+esc(i.tracking)+"</td><td>"+esc(i.service)+"</td><td>"+esc(i.reference)+"</td><td style='text-align:right'>"+money(i.amount)+"</td></tr>").join("");
-    const w=window.open("","_blank"); if(!w)return window.alert("Allow pop-ups to print.");
+    const w=window.open("","_blank"); if(!w)return uiAlert("Allow pop-ups to print.");
     w.document.write("<html><head><title>"+esc(inv.number)+"</title><style>body{font-family:system-ui,Arial;padding:34px;color:#1c1917}h1{font-size:22px;margin:0}table{border-collapse:collapse;width:100%;font-size:13px;margin-top:16px}th,td{border:1px solid #e5e5e5;padding:7px 9px;text-align:left}th{background:#f5f5f4}.r{text-align:right}.tot{font-size:16px;font-weight:700;margin-top:14px;text-align:right}.sub{color:#78716c;font-size:13px}</style></head><body><div style='display:flex;justify-content:space-between;align-items:flex-start'><div><h1>"+esc(brandWordmark0())+"</h1><div class='sub'>Invoice "+esc(inv.number)+"</div></div><div class='sub' style='text-align:right'>Issued "+esc((inv.issuedAt||'').slice(0,10))+"<br/>Terms: "+esc(inv.terms||bSettings.terms)+"<br/>Period: "+esc(inv.month)+"</div></div><div class='sub' style='margin-top:14px'>Bill to: <b>"+esc(c.name||'')+"</b>"+(c.email?" · "+esc(c.email):"")+"</div><table><tr><th>Date</th><th>Tracking</th><th>Service</th><th>Reference</th><th class='r'>Amount</th></tr>"+rows+"</table><div class='tot'>Total due: "+money(inv.total)+(balanceOf(inv)!==inv.total?" · Balance: "+money(balanceOf(inv)):"")+"</div>"+(bSettings.note?"<p class='sub' style='margin-top:16px'>"+esc(bSettings.note)+"</p>":"")+(bSettings.payUrl?"<p class='sub'>Pay online: "+esc(bSettings.payUrl)+"</p>":"")+"<script>window.print()</scr"+"ipt></body></html>");
     w.document.close(); };
   const brandWordmark0=()=>((BRAND&&BRAND.product)||"ShippingCloud");
@@ -4707,9 +4738,9 @@ function ApiAdmin({clients=[],platform={},openCustomer}){
     const r=await cloudCall({action:"apiKeyCreate",token:CLOUD.token,clientId:nk.clientId,label:nk.label,mode:nk.mode});
     setKBusy(false);
     if(r&&r.ok){setMinted({key:r.key,prefix:r.prefix});setPgKey(r.key);setNk({clientId:"",label:"",mode:"test"});loadKeys();}
-    else window.alert((r&&r.error)||"Couldn't create the key.");
+    else uiAlert((r&&r.error)||"Couldn't create the key.");
   };
-  const revoke=async(id)=>{ if(!window.confirm("Revoke this key? Integrations using it stop working immediately."))return;
+  const revoke=async(id)=>{ if(!await uiConfirm("Revoke this key? Integrations using it stop working immediately."))return;
     await cloudCall({action:"apiKeyRevoke",token:CLOUD.token,id}); loadKeys(); };
   const cName=(id)=>(clients.find(c=>c.id===id)||{}).name||id;
   /* ── Playground ── */
@@ -4818,7 +4849,7 @@ function ApiAdmin({clients=[],platform={},openCustomer}){
        :<div className="space-y-2">{repRows.map(rp=>(<div key={rp.id} className="border border-stone-200 rounded-lg bg-white p-3 space-y-2">
           <div className="flex items-center gap-3"><span className="font-medium">{rp.name}</span><Badge tone="blue">{rp.pct}% of margin</Badge><span className="flex-1"/>
             <span className="text-[12px] text-stone-500">{rp.shipN} shipments · margin {money(rp.margin)} · <b className="text-emerald-700">commission {money(rp.commission)}</b> this month</span>
-            <button onClick={()=>{if(window.confirm("Remove "+rp.name+"?"))setReps(p=>(p||[]).filter(x=>x.id!==rp.id));}} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button></div>
+            <button onClick={async()=>{if(await uiConfirm("Remove "+rp.name+"?"))setReps(p=>(p||[]).filter(x=>x.id!==rp.id));}} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button></div>
           <div className="flex flex-wrap gap-1.5">{clients.map(c=>{const on=(rp.clientIds||[]).includes(c.id);return (
             <button key={c.id} onClick={()=>setReps(p=>(p||[]).map(x=>x.id===rp.id?{...x,clientIds:on?(x.clientIds||[]).filter(i=>i!==c.id):[...(x.clientIds||[]),c.id]}:x))} className={`text-[11px] rounded-full px-2.5 py-1 border ${on?"bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF] font-medium":"bg-white border-stone-200 text-stone-400 hover:border-stone-300"}`}>{c.name}</button>);})}</div>
         </div>))}</div>}
@@ -4990,7 +5021,7 @@ function CustomizationsAdmin({users,clients,featureFlags={},setFeatureFlags,cust
     setCustomFeatures(cf=>[...cf,{id,label,desc:(draft.desc||"").trim(),clientNote:(draft.clientNote||"").trim(),createdAt:new Date().toISOString(),default:false}]);
     setDraft(null);
   };
-  const removeCustom=(id)=>{ if(!window.confirm("Remove this customization from the registry? (Any code behind it stays; user toggles for it are simply ignored.)"))return; setCustomFeatures(cf=>cf.filter(c=>c.id!==id)); };
+  const removeCustom=async(id)=>{ if(!await uiConfirm("Remove this customization from the registry? (Any code behind it stays; user toggles for it are simply ignored.)"))return; setCustomFeatures(cf=>cf.filter(c=>c.id!==id)); };
   /* called as {FeatureRow({...})} — an inline component type remounts its chips per click */
   const FeatureRow=({f,custom})=>(
     <div className="border border-stone-200 rounded-lg bg-white p-4">
@@ -5055,7 +5086,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
     setBusyReq(email);
     const res=await cloudCall({action:approve?"approveSignup":"denySignup",token:CLOUD.token,email,clientId:clientId||null});
     setBusyReq("");
-    if(!res||!res.ok){window.alert((res&&res.error)||"Could not update the request.");return;}
+    if(!res||!res.ok){uiAlert((res&&res.error)||"Could not update the request.");return;}
     if(res.users)setUsers(res.users);
     if(res.requests&&setSignupRequests)setSignupRequests(res.requests);
   };
@@ -5086,7 +5117,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
               <option value="">Reassign to…</option>
               {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
             </Select>
-            <button onClick={()=>{if(window.confirm(`Remove ${u.name}'s customer assignment? They'll price at raw cost until reassigned.`))setUsers(us=>us.map(x=>x.id===u.id?{...x,clientId:null}:x));}} className="text-xs text-rose-500 hover:bg-rose-50 rounded px-2 py-1">Clear</button>
+            <button onClick={async()=>{if(await uiConfirm(`Remove ${u.name}'s customer assignment? They'll price at raw cost until reassigned.`))setUsers(us=>us.map(x=>x.id===u.id?{...x,clientId:null}:x));}} className="text-xs text-rose-500 hover:bg-rose-50 rounded px-2 py-1">Clear</button>
           </div>))}
         </div>
       </div>);
@@ -5105,7 +5136,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
       <div className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Truck className="w-4 h-4 text-emerald-600"/>FedEx account requests<Badge tone="green">{fedexRequests.length}</Badge></div>
       {fedexRequests.map(r=>(<div key={r.id||r.uid} className="flex flex-wrap items-center gap-3 bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm">
         <div className="flex-1 min-w-[180px]"><div className="font-medium">{r.name||r.email}</div><div className="text-[11px] text-stone-400">{r.email}{r.volume?<> · {r.volume}/mo</>:null}{r.carrier?<> · ships {r.carrier}</>:null} · {r.requestedAt?new Date(r.requestedAt).toLocaleDateString():"recently"}</div></div>
-        {r.invoiceKey&&<button onClick={async()=>{const res=await cloudCall({action:"getUpload",token:CLOUD.token,key:r.invoiceKey});if(!res||!res.ok){window.alert((res&&res.error)||"Could not fetch the file.");return;}const bytes=atob(res.data);const arr=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);const url=URL.createObjectURL(new Blob([arr],{type:res.type}));const a=document.createElement("a");a.href=url;a.download=res.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);}} className="text-xs border border-[#0086E0]/40 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>Carrier invoice</button>}
+        {r.invoiceKey&&<button onClick={async()=>{const res=await cloudCall({action:"getUpload",token:CLOUD.token,key:r.invoiceKey});if(!res||!res.ok){uiAlert((res&&res.error)||"Could not fetch the file.");return;}const bytes=atob(res.data);const arr=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);const url=URL.createObjectURL(new Blob([arr],{type:res.type}));const a=document.createElement("a");a.href=url;a.download=res.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);}} className="text-xs border border-[#0086E0]/40 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>Carrier invoice</button>}
         <button onClick={()=>setFedexRequests&&setFedexRequests(rs=>rs.filter(x=>x!==r))} className="text-xs border border-stone-300 text-stone-600 rounded px-3 py-1.5 hover:bg-stone-50">Done</button>
       </div>))}
       <p className="text-[11px] text-stone-400">These come from the welcome popup after a user’s first sign-in. Provision their England/FedEx account, drop the credentials into their customer card, then hit Done.</p>
@@ -5114,7 +5145,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
       <div className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Users className="w-4 h-4 text-[#0086E0]"/>Access requests<Badge tone="blue">{signupRequests.length}</Badge></div>
       {signupRequests.map(r=>(<div key={r.id||r.email} className="flex flex-wrap items-center gap-3 bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm">
         <div className="flex-1 min-w-[180px]"><div className="font-medium">{r.name}{r.company?<span className="text-stone-400 font-normal"> · {r.company}</span>:null}</div><div className="text-[11px] text-stone-400">{r.email} · requested {r.requestedAt?new Date(r.requestedAt).toLocaleDateString():"recently"}{r.volume?<> · {r.volume}/mo</>:null}{r.carrier?<> · ships {r.carrier}</>:null}</div></div>
-        {r.invoiceKey&&<button onClick={async()=>{const res=await cloudCall({action:"getUpload",token:CLOUD.token,key:r.invoiceKey});if(!res||!res.ok){window.alert((res&&res.error)||"Could not fetch the file.");return;}const bytes=atob(res.data);const arr=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);const url=URL.createObjectURL(new Blob([arr],{type:res.type}));const a=document.createElement("a");a.href=url;a.download=res.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);}} className="text-xs border border-[#0086E0]/40 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>Carrier invoice</button>}
+        {r.invoiceKey&&<button onClick={async()=>{const res=await cloudCall({action:"getUpload",token:CLOUD.token,key:r.invoiceKey});if(!res||!res.ok){uiAlert((res&&res.error)||"Could not fetch the file.");return;}const bytes=atob(res.data);const arr=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);const url=URL.createObjectURL(new Blob([arr],{type:res.type}));const a=document.createElement("a");a.href=url;a.download=res.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);}} className="text-xs border border-[#0086E0]/40 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>Carrier invoice</button>}
         <select id={"reqclient-"+(r.id||r.email)} defaultValue="" className="text-xs border border-stone-300 rounded px-2 py-1.5 bg-white"><option value="">No customer account yet</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
         <button disabled={busyReq===r.email} onClick={()=>{const sel=document.getElementById("reqclient-"+(r.id||r.email));decide(r.email,true,sel?sel.value:null);}} className="text-xs bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-emerald-700 disabled:opacity-50">{busyReq===r.email?"…":"Approve"}</button>
         <button disabled={busyReq===r.email} onClick={()=>decide(r.email,false)} className="text-xs border border-stone-300 text-stone-600 rounded px-3 py-1.5 hover:bg-stone-50 disabled:opacity-50">Deny</button>
@@ -5154,9 +5185,9 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
             {u.role!=="admin"&&u.clientId&&<button onClick={()=>setRpOpen(rpOpen===u.id?null:u.id)} title="Which rate profile this company prices from — applies to every login of the company" className={`text-[11px] rounded px-2 py-1 ${rpOpen===u.id?"bg-[#0086E0] text-white":"bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}>Rates: {rateProfileName(rateRules,u.clientId)}</button>}
             {u.role!=="admin"&&<button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))} title={u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins"} className={`text-[11px] rounded px-2 py-1 ${u.companyAdmin?"bg-violet-600 text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>{u.companyAdmin?"Company admin ✓":"Company admin"}</button>}
             {u.role!=="admin"&&<button onClick={()=>setFeatOpen(featOpen===u.id?null:u.id)} title="Features for this login" className={`text-[11px] rounded px-2 py-1 ${featOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>Tabs &amp; logo</button>}
-            {CLOUD.mode==="cloud"&&(u.role!=="admin"||fullAdmin)&&<button onClick={async()=>{const np=window.prompt("New password for "+u.email+" (min 4 characters):");if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});window.alert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}} title="Reset password" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Password</button>}
-            {CLOUD.mode==="cloud"&&u.role!=="admin"&&<button onClick={async()=>{const r=await cloudCall({action:"requestReset",email:u.email,token:CLOUD.token});window.alert(r&&r.configured===false?"Email sending isn't set up on this site yet (RESEND_API_KEY).":"Password reset link sent to "+u.email+" (valid 1 hour).");}} title="Email them a choose-a-new-password link (valid 1 hour)" className="text-[11px] rounded px-2 py-1 bg-[#E6F4FF] text-[#006FBF] hover:bg-[#CCEAFF]">Reset email</button>}
-            {CLOUD.mode==="cloud"&&u.totp&&u.totp.enabled&&<button onClick={async()=>{if(!window.confirm("Turn OFF two-factor for "+u.email+"? Use this only if they lost their authenticator — they'll sign in with just their password afterward."))return;const r=await cloudCall({action:"clearTotp",token:CLOUD.token,email:u.email});window.alert(r&&r.ok?"2FA turned off for "+u.email+".":((r&&r.error)||"Could not reset 2FA."));}} title="Lost-phone recovery: turn off this user's 2FA" className="text-[11px] rounded px-2 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100">Reset 2FA</button>}
+            {CLOUD.mode==="cloud"&&(u.role!=="admin"||fullAdmin)&&<button onClick={async()=>{const np=await uiPrompt("New password for "+u.email+" (min 4 characters):","",{title:"Reset password"});if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});uiAlert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}} title="Reset password" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Password</button>}
+            {CLOUD.mode==="cloud"&&u.role!=="admin"&&<button onClick={async()=>{const r=await cloudCall({action:"requestReset",email:u.email,token:CLOUD.token});uiAlert(r&&r.configured===false?"Email sending isn't set up on this site yet (RESEND_API_KEY).":"Password reset link sent to "+u.email+" (valid 1 hour).");}} title="Email them a choose-a-new-password link (valid 1 hour)" className="text-[11px] rounded px-2 py-1 bg-[#E6F4FF] text-[#006FBF] hover:bg-[#CCEAFF]">Reset email</button>}
+            {CLOUD.mode==="cloud"&&u.totp&&u.totp.enabled&&<button onClick={async()=>{if(!await uiConfirm("Turn OFF two-factor for "+u.email+"? Use this only if they lost their authenticator — they'll sign in with just their password afterward."))return;const r=await cloudCall({action:"clearTotp",token:CLOUD.token,email:u.email});uiAlert(r&&r.ok?"2FA turned off for "+u.email+".":((r&&r.error)||"Could not reset 2FA."));}} title="Lost-phone recovery: turn off this user's 2FA" className="text-[11px] rounded px-2 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100">Reset 2FA</button>}
             <button onClick={()=>toggle(u.id)} title={u.status==="active"?"Deactivate":"Activate"} className={`text-[11px] rounded px-2 py-1 ${u.status==="active"?"bg-emerald-50 text-emerald-700":"bg-stone-100 text-stone-500"}`}>{u.status==="active"?"Active":"Deactivated"}</button>
             {u.id!==currentUser.id&&!isBuiltInAdmin(u.email)&&(u.role!=="admin"||(fullAdmin&&u.id!=="u1"))&&<button onClick={()=>del(u.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
           </div>
@@ -5664,8 +5695,8 @@ function CloudAuth({onDone,initialMode,intake}){
 
 /* ════════ PUBLIC LANDING PAGE ════════ */
 const AI_NAME=BRAND.product+" AI";
-const CONTACT_PHONE="(801) 555-0123";   // ← REPLACE with your real number (shows on the public landing page)
-const CONTACT_PHONE_TEL="+18015550123"; // ← same number, digits only with +1, used for tap-to-call
+const CONTACT_PHONE="(657) 622-0699";   // real support number (shows on the public landing page)
+const CONTACT_PHONE_TEL="+16576220699"; // same number, digits only with +1, used for tap-to-call
 const PHONE_REAL=!/555-?01/.test(CONTACT_PHONE);   /* placeholder guard: phone CTAs stay hidden until a real number replaces the 555 placeholder above */
 const CONTACT_EMAIL=BRAND.fw?"support@freightwireship.com":"support@shippingcloud.net"; // brand-matched support email (shows on the Contact page)
 
@@ -5689,7 +5720,7 @@ function LegalLinks(){
           <button onClick={()=>setOpen(null)} className="text-stone-400 hover:text-stone-600"><X className="w-5 h-5"/></button>
         </div>
         <div className="overflow-y-auto px-6 py-4 pb-8">
-          <p className="text-[11px] text-stone-400">Last updated July 2026 · Contact: support@shippingcloud.net</p>
+          <p className="text-[11px] text-stone-400">Last updated July 2026 · Contact: {CONTACT_EMAIL}</p>
           {open==="terms"&&<>
             <H>1. The service</H><P>{BRAND.product} (operated by Freightwire) is software for quoting, purchasing, and managing parcel shipping. We are an independent software platform and shipping reseller — <b>not a carrier</b>. Transportation is performed by third-party carriers (e.g. FedEx, DHL, USPS, UPS) under their own service terms, tariffs, and liability limits, which govern the physical handling of every shipment. We never take custody of, transport, or deliver packages; carriers do.</P>
             <H>2. Independent reseller — no carrier affiliation</H><P>Freightwire is an <b>independent reseller</b> of shipping services. We are <b>not affiliated with, sponsored by, endorsed by, an agent of, or acting on behalf of FedEx, DHL, USPS, UPS, or any other carrier</b>, and no such relationship should be inferred from our use of carrier names, service names, or rates for descriptive purposes. Rates we offer are our own resale prices, set by us; they are not carrier list rates, not carrier account rates, and are not offered under any carrier's authority. Any negotiated carrier discounts underlying our pricing are held under our own commercial arrangements and are not passed through as, or represented to be, a carrier's own contracted rate. Your relationship for the software and resale service is solely with Freightwire; your relationship for the physical transportation of a package is with the carrier that carries it, under that carrier's terms.</P>
@@ -5709,7 +5740,7 @@ function LegalLinks(){
             <H>2. How we use it</H><P>To quote and purchase shipping, print labels and documents, sync orders, send shipment notifications, calculate checkout rates, provide support, and improve the service. If you use the in-app assistant, the messages you send it (plus limited, non-personal workspace context) are processed to generate its responses.</P>
             <H>3. Who we share it with</H><P>Service providers who make the platform work: shipping carriers and our logistics partners (to move your packages), cloud hosting and database providers, an email delivery provider (for notifications you trigger), payment processing when applicable, and the AI provider powering the in-app assistant. Each receives only what its function requires. We do not sell personal information.</P>
             <H>4. Recipient data</H><P>When you ship to someone, you're providing us their delivery details on your authority. We use recipient data only to perform the shipment and related notifications — never for marketing to recipients.</P>
-            <H>5. Retention & your choices</H><P>We keep data while your account is active and as needed for legal, tax, and dispute purposes. You can export your data from within the platform, and you can request deletion of your account data by emailing support@shippingcloud.net.</P>
+            <H>5. Retention & your choices</H><P>We keep data while your account is active and as needed for legal, tax, and dispute purposes. You can export your data from within the platform, and you can request deletion of your account data by emailing {CONTACT_EMAIL}.</P>
             <H>6. Security</H><P>Data is encrypted in transit, access is credentialed and scoped, and secrets are stored server-side. No system is perfectly secure, but we take reasonable measures appropriate to the data we handle.</P>
             <H>7. Changes</H><P>We'll update this policy as the service evolves; material changes will be reflected on this page with a new date.</P>
           </>}
@@ -5795,7 +5826,7 @@ function Landing({onAuth}){
     </div>
     {/* features */}
     <div id="features" className="max-w-6xl mx-auto px-5 pb-16 scroll-mt-6">
-      <div className="text-center mb-10"><h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-2xl sm:text-3xl font-bold text-stone-900">Your customized long term solution</h2></div>
+      <div className="text-center mb-10"><h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-2xl sm:text-3xl font-bold text-stone-900">A shipping platform built around how you actually ship</h2></div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <F icon={DollarSign} title="Industry-leading FedEx rates">The pricing big shippers get, from day one. No volume commitments, no negotiating.</F>
         <F icon={BarChart3} title="Transit dashboard & detailed reporting">Track every shipment end to end and see spend, transit times, and delivery performance at a glance — with reports you can act on.</F>
@@ -5812,7 +5843,7 @@ function Landing({onAuth}){
         <div className="absolute -bottom-20 -left-10 w-64 h-64 rounded-full bg-white/10 blur-2xl"/>
         <div className="relative">
           <h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-3xl sm:text-4xl font-bold text-white leading-tight">Save 10–15% switching to our FedEx rates.</h2>
-          <p className="mt-4 text-white/85 max-w-2xl mx-auto text-[15px] leading-relaxed">Send us a recent carrier invoice and get a line-by-line comparison back — the same day. No BS, no pressure.</p>
+          <p className="mt-4 text-white/85 max-w-2xl mx-auto text-[15px] leading-relaxed">Send us a recent carrier invoice and get a line-by-line comparison back — the same day. No jargon, no pressure.</p>
           <div className="mt-7 flex flex-wrap gap-3 justify-center">
             <button onClick={()=>onAuth("fedex")} className="bg-white text-[#0064B0] font-semibold rounded-lg px-7 py-3.5 text-[15px] hover:bg-stone-100 transition-colors">Get your own FedEx account</button>
             <button onClick={()=>onAuth("request")} className="border border-white/60 text-white font-semibold rounded-lg px-7 py-3.5 text-[15px] hover:bg-white/10 transition-colors">Compare my rates</button>
@@ -5970,7 +6001,7 @@ function CompanyAdminRequestButton({currentUser}){
     const r=await cloudCall({action:"requestCompanyAdmin",token:CLOUD.token});
     setBusy(false);
     if(r&&r.ok){ setState("pending"); lsSet("u/"+uid+"/caReq","pending"); }
-    else window.alert((r&&r.error)||"Could not send the request — try again.");
+    else uiAlert((r&&r.error)||"Could not send the request — try again.");
   };
   return (<div className="mt-3 pt-3 border-t border-stone-200 px-1">
     {state==="pending"
@@ -6004,13 +6035,13 @@ function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,set
   };
   const setActive=async(u)=>{
     const to=u.status!=="active";
-    if(!to&&!window.confirm(`Deactivate ${u.email}? They won’t be able to sign in until re-activated.`))return;
+    if(!to&&!await uiConfirm(`Deactivate ${u.email}? They won’t be able to sign in until re-activated.`))return;
     const r=await cloudCall({action:"companySetActive",token:CLOUD.token,uid:u.id,active:to});
     if(r&&r.ok)setCompanyUsers(list=>(list||[]).map(x=>x.id===u.id?{...x,status:r.status}:x));
     else flash({err:(r&&r.error)||"Could not save."});
   };
   const resetPw=async(u)=>{
-    const np=window.prompt("New password for "+u.email+" (min 4 characters):");
+    const np=await uiPrompt("New password for "+u.email+" (min 4 characters):","",{title:"Reset password"});
     if(!np)return;
     const r=await cloudCall({action:"companySetPassword",token:CLOUD.token,uid:u.id,password:np});
     if(r&&r.ok)flash({ok:`Password updated for ${u.email}.`});
@@ -6147,6 +6178,46 @@ function LandingGate({onDone}){
     </div>}
   </div>);
 }
+/* ── Styled dialogs — one in-app replacement for window.confirm/prompt/alert, so the whole
+   product looks like one polished tool instead of dropping to grey OS pop-ups. Promise-based:
+   `await uiConfirm(msg)` → true/false, `await uiPrompt(msg, default)` → string|null,
+   `uiAlert(msg)` → resolves when dismissed. Falls back to the native dialog if the host isn't
+   mounted yet (boot/tests), so a call can never hang. */
+let _dlgOpen=null;
+function uiDialog(opts){
+  if(typeof _dlgOpen==="function") return _dlgOpen(opts);
+  try{
+    if(opts.kind==="confirm") return Promise.resolve(globalThis.confirm(opts.message));
+    if(opts.kind==="prompt") return Promise.resolve(globalThis.prompt(opts.message,opts.default||""));
+    globalThis.alert(opts.message); return Promise.resolve();
+  }catch(e){ return Promise.resolve(opts.kind==="confirm"?false:opts.kind==="prompt"?null:undefined); }
+}
+const uiAlert=(message,opts={})=>uiDialog({kind:"alert",message,...opts});
+const uiConfirm=(message,opts={})=>uiDialog({kind:"confirm",message,...opts});
+const uiPrompt=(message,def="",opts={})=>uiDialog({kind:"prompt",message,default:def==null?"":String(def),...opts});
+function DialogHost(){
+  const [d,setD]=useState(null);
+  const [val,setVal]=useState("");
+  const inRef=useRef(null);
+  useEffect(()=>{ _dlgOpen=(opts)=>new Promise(res=>{ setVal(opts.default||""); setD({...opts,resolve:res}); }); return ()=>{ _dlgOpen=null; }; },[]);
+  useEffect(()=>{ if(d&&d.kind==="prompt"){ const t=setTimeout(()=>{ try{ inRef.current&&inRef.current.focus(); inRef.current&&inRef.current.select(); }catch(e){} },20); return ()=>clearTimeout(t); } },[d]);
+  if(!d) return null;
+  const done=(result)=>{ const r=d.resolve; setD(null); r(result); };
+  const cancel=()=>done(d.kind==="confirm"?false:d.kind==="prompt"?null:undefined);
+  const ok=()=>done(d.kind==="confirm"?true:d.kind==="prompt"?val:undefined);
+  const okLabel=d.okLabel||(d.kind==="prompt"?"Save":d.kind==="alert"?"OK":"Confirm");
+  return (<div className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onMouseDown={cancel} onKeyDown={e=>{ if(e.key==="Escape")cancel(); }}>
+    <div className="w-full max-w-sm bg-white rounded-xl shadow-2xl p-5 space-y-4" onMouseDown={e=>e.stopPropagation()}>
+      {d.title&&<div className="text-base font-semibold text-stone-800">{d.title}</div>}
+      <div className="text-sm text-stone-600 whitespace-pre-line leading-relaxed">{d.message}</div>
+      {d.kind==="prompt"&&<input ref={inRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter")ok(); }} className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0086E0] focus:ring-2 focus:ring-[#0086E0]/20"/>}
+      <div className="flex items-center justify-end gap-2 pt-1">
+        {d.kind!=="alert"&&<button onClick={cancel} className="text-sm text-stone-500 hover:text-stone-700 rounded-lg px-3 py-2">Cancel</button>}
+        <button onClick={ok} autoFocus={d.kind!=="prompt"} className={"text-sm font-semibold rounded-lg px-4 py-2 text-white "+(d.danger?"bg-rose-600 hover:bg-rose-700":"bg-[#0086E0] hover:bg-[#0072BE]")}>{okLabel}</button>
+      </div>
+    </div>
+  </div>);
+}
 export default function App(){
   const [phase,setPhase]=useState("boot");
   const [bootMsg,setBootMsg]=useState("");
@@ -6184,6 +6255,7 @@ export default function App(){
   return (<>
     {bootMsg&&<div className="bg-amber-50 border-b border-amber-200 text-amber-800 text-xs px-4 py-2 text-center">{bootMsg}</div>}
     <AppInner/>
+    <DialogHost/>
   </>);
 }
 function AppInner(){
@@ -6416,9 +6488,10 @@ function AppInner(){
       const rc=settings&&settings.receipt;
       window.__scPrintExtras={
         logo:{on:!!cc.labelLogoOn,src:cc.labelLogo||settings.companyLogo||"",pos:cc.labelLogoPos||"bottom_left",scale:cc.labelLogoScale,dx:cc.labelLogoDX,dy:cc.labelLogoDY,x:cc.labelLogoX,y:cc.labelLogoY},
+        fedexMark:(publicBrand&&publicBrand.carrierMark)||cc.fedexMarkSrc||"",
         receipt:{enabled:!!(rc&&rc.enabled&&rc.withLabel!==false),cfg:rc||null,logo:(rc&&rc.showLogo!==false?(settings.companyLogo||""):"")}
       };
-    }catch(e){} },[settings&&settings.custom,settings&&settings.receipt,settings&&settings.companyLogo]);
+    }catch(e){} },[settings&&settings.custom,settings&&settings.receipt,settings&&settings.companyLogo,publicBrand&&publicBrand.carrierMark]);
   const brand=BRAND.fw
     ?{...DEFAULT_BRAND,name1:"FREIGHT",name2:"WIRE SHIP",dark:"#1c1917",primary:"#1E9BF0",...(settings.brand||{})}
     :{...DEFAULT_BRAND,...(settings.brand||{})};
@@ -6662,7 +6735,7 @@ function AppInner(){
   const exitImpersonation=()=>{ lsSet("session",adminReturn); lsDel("adminReturn"); window.location.reload(); };
   /* shell */
   return (
-    <div className="min-h-screen flex flex-col bg-stone-50 text-stone-800" style={{fontFamily:"ui-sans-serif,system-ui,sans-serif"}}><SandboxBanner/>
+    <div className="min-h-screen flex flex-col bg-stone-50 text-stone-800" style={{fontFamily:"Inter,system-ui,sans-serif"}}><SandboxBanner/>
       {adminReturn&&<div className="bg-[#0086E0] text-white text-[13px] px-4 py-2 flex items-center justify-center gap-3 sticky top-0 z-40">
         <ShieldCheck className="w-4 h-4 shrink-0"/>
         <span>Admin preview — you’re seeing {BRAND.product} exactly as <b>{currentUser&&(currentUser.name||currentUser.email)}</b> sees it. Anything you change here changes their account.</span>
@@ -7268,7 +7341,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       const _dup=dupShipment(reference,shipments);
       if((_so&&_so.status==="fulfilled")||_dup){
         const _old=(_so&&_so.tracking)||(_dup&&_dup.tracking)||"";
-        if(!window.confirm("This order already has a label"+(_old?" — tracking "+_old:"")+".\n\nBooking a new label will OVERRIDE the current tracking and shipping info"+((_so&&_so.source==="Shopify")?" on Shopify":"")+".\n\nAre you sure you want to proceed?"))return;
+        if(!await uiConfirm("This order already has a label"+(_old?" — tracking "+_old:"")+".\n\nBooking a new label will OVERRIDE the current tracking and shipping info"+((_so&&_so.source==="Shopify")?" on Shopify":"")+".\n\nAre you sure you want to proceed?"))return;
       }
     }
     const carrier=carrierOf(q.label);
@@ -7393,17 +7466,21 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     return {t:"info",m:"booking now…"};
   },[handsFree,custom.autoRulesOnShip,custom.hideShipOrders,selectedOrder,hfArmed,ready,rateSrc.live,rateSrc.loading,addrClassified,matched,quotes,bought,shipStatus,client,settings,liveRuleMatch,JSON.stringify(pieces)]);
 
-  const sendEmail=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Tracking for your ${settings.company||BRAND.product} shipment ☁️`,type:"Shipped",body:emailMsg});setSent("email");setTimeout(()=>setSent(""),1800);};
+  const sendEmail=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Tracking for your ${settings.company||BRAND.product} shipment`,type:"Shipped",body:emailMsg});setSent("email");setTimeout(()=>setSent(""),1800);};
   const sendLabel=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Your shipping label from ${settings.company||BRAND.product}`,type:"Label",body:emailMsg});setSent("label");setTimeout(()=>setSent(""),1800);};
   const saveMsgDefault=()=>{setSettings&&setSettings(s=>({...s,emailMessage:emailMsg}));setMsgSaved(true);setTimeout(()=>setMsgSaved(false),1600);};
 
-  const ordersToShow=useMemo(()=>{const list=orders.filter(o=>o.status==="unfulfilled");return [...list].sort((a,b)=>{
+  /* References that already have a (non-voided) label — used to keep already-processed orders
+     out of the Ship-screen picker even when their order status didn't flip to fulfilled. */
+  const labeledRefs=useMemo(()=>{const s=new Set();(shipments||[]).forEach(sh=>{if(sh&&sh.status!=="Voided"&&sh.reference)s.add(String(sh.reference).toLowerCase());});return s;},[shipments]);
+  const ordersToShow=useMemo(()=>{const hideLabeled=custom.hideLabeledOrders!==false;   // default ON: labeled orders drop off the picker
+    const list=orders.filter(o=>o.status==="unfulfilled"&&!(hideLabeled&&o.name&&labeledRefs.has(String(o.name).toLowerCase())));return [...list].sort((a,b)=>{
     if(orderSort==="total")return parseFloat(b.total||0)-parseFloat(a.total||0);
     if(orderSort==="customer")return (a.customer||"").localeCompare(b.customer||"");
     if(orderSort==="state")return (a.state||"").localeCompare(b.state||"");
     if(orderSort==="weight")return (b.weight||0)-(a.weight||0);
     return String(b.id).localeCompare(String(a.id));
-  });},[orders,orderSort]);
+  });},[orders,orderSort,labeledRefs,custom.hideLabeledOrders]);
   const orderTime=(o)=>{const d=o&&o.date||"";let t=Date.parse(d);if(isNaN(t)){const m=String(d).match(/^(\d{1,2})\/(\d{1,2})/);if(m)t=new Date(new Date().getFullYear(),+m[1]-1,+m[2]).getTime();}return isNaN(t)?0:t;};
   const storesPresent=useMemo(()=>Array.from(new Set(orders.filter(o=>o.status==="unfulfilled").map(o=>o.source||"Manual"))).filter(Boolean),[orders]);
   const ordersFiltered=useMemo(()=>{
@@ -7559,11 +7636,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           {isPOBox(receiver.address1)&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-xs text-rose-700 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>This looks like a PO Box — FedEx can’t deliver to PO Boxes. Use a street address (or USPS when available).</div>}
           {(()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);return so&&orderHasHazmat(so,settings.products||[])?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Contains a hazmat / lithium-battery item — ship ground only; air services aren’t allowed.</div>:null;})()}
           {(()=>{const d=dupShipment(reference,shipments);
-            /* Our own just-booked label: in AUTO-reset mode the banner would only flash for the
-               ~1s before the form clears — suppress it. In "Keep the info" mode it stays, as the
-               visible record that this reference already has a label. */
-            const _autoReset=cz(settings).printFlowV2?cz(settings).resetAfterPrint:(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint);
-            if(justBookedRef.current!=null&&_autoReset)return null;
+            /* Never warn about the label we ourselves just booked this session — showing "this
+               already has a label" for the label you just created is confusing, and in auto-advance
+               mode it flashed behind the booked summary before the form cleared. The booked summary
+               already offers reprint/details, so suppress this banner entirely post-booking. */
+            if(justBookedRef.current!=null)return null;
             return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex flex-wrap items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="flex-1 min-w-[180px]">Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}).</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:d.tracking}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><FileText className="w-3 h-3"/>See details</button><button onClick={()=>setLabelPreview({rec:d,tracking:d.tracking,service:d.service,carrier:d.carrier,pdf:d.labelPdf||d.pdf||null,fromExisting:true})} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><Printer className="w-3 h-3"/>Reprint</button><button onClick={newShipment} className="shrink-0 text-[11px] font-semibold text-white bg-stone-900 hover:bg-stone-800 border border-stone-900 rounded-lg px-2.5 py-1 flex items-center gap-1"><Plus className="w-3 h-3"/>New shipment</button></div>:null;})()}
           {pieces.map((p,i)=>(
             <div key={i} className="flex flex-wrap items-end gap-2 bg-white border border-stone-200 rounded-lg px-2 py-2">
@@ -7612,7 +7689,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           Tried England on your <b>{rateSrc.diag.src==="customer"?"customer's":"main"}</b> account · from ZIP {rateSrc.diag.fromZip} · customer ID {rateSrc.diag.cust} · key {rateSrc.diag.key} · {rateSrc.diag.enabled?"live toggle ON":"live toggle OFF"}{!rateSrc.diag.hasKey?" · no API key found":""}{!rateSrc.diag.hasCust?" · no customer ID found":""}{rateSrc.diag.fromZip==="(none)"?" — no origin ZIP: set your sender ZIP or the customer's origin.":""}{rateSrc.error&&/401|invalid/i.test(rateSrc.error)?" — England rejected this key/ID pair. Re-enter it in Settings → Carrier accounts and Test again.":""}
         </div>}
         {ready&&rateSrc.live&&rateSrc.dvPriced===false&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-2 text-xs text-rose-700 flex items-start gap-2">
-          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span><b>Declared value fee missing:</b> you asked for coverage over $100, but FedEx's rates came back with <b>no itemized declared-value fee</b>. The totals below may not include coverage — verify before booking, and tell support if this persists.</span>
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span><b>Double-check your coverage:</b> you asked for declared-value coverage over $100, but it isn't showing as a separate line in FedEx's pricing yet. Make sure the total below includes coverage before you book — if this keeps happening, let us know.</span>
         </div>}
         {ready&&!rateSrc.loading&&!rateSrc.live&&rateSrc.error&&rateSrc.diag&&rateSrc.diag.enabled&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-2 text-xs text-rose-700">
           <div className="font-semibold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Live FedEx rates didn't come back — no prices are shown (we never guess).</div>
@@ -7707,14 +7784,14 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                   <input type="number" value={l.wkg??""} onChange={e=>setLine(i,{wkg:e.target.value})} placeholder="kg" className="w-[120px] bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/>}
                   <input type="number" value={l.qty} onChange={e=>setLine(i,{qty:+e.target.value})} className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
                   <input type="number" value={l.value} onChange={e=>setLine(i,{value:e.target.value})} placeholder="0.00" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
-                  <button onClick={()=>shipSuggestHS(i)} disabled={!l.desc||shipHsBusy===i} title={AI_NAME+" reads the item description and suggests an HTS code"} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap self-center">{shipHsBusy===i?"Searching…":"✨ Search HTS codes"}</button>
-                  {!!(l.desc&&l.hts)&&<button onClick={()=>saveHtsToCatalog(l)} title="Save this HTS code to your product catalog for next time" className="text-xs text-[#006FBF] hover:underline whitespace-nowrap self-center">💾 Save to catalog</button>}
+                  <button onClick={()=>shipSuggestHS(i)} disabled={!l.desc||shipHsBusy===i} title={AI_NAME+" reads the item description and suggests an HTS code"} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap self-center">{shipHsBusy===i?"Searching…":"Search HTS codes"}</button>
+                  {!!(l.desc&&l.hts)&&<button onClick={()=>saveHtsToCatalog(l)} title="Save this HTS code to your product catalog for next time" className="text-xs text-[#006FBF] hover:underline whitespace-nowrap self-center">Save to catalog</button>}
                   <button onClick={()=>delLine(i)} className="text-stone-300 hover:text-rose-500 w-5"><X className="w-4 h-4"/></button>
                 </div>
               ))}
               {shipHsMsg&&<div className={`text-[11px] rounded px-2 py-1 border ${shipHsMsg.err?"text-rose-700 bg-rose-50 border-rose-200":"text-emerald-700 bg-emerald-50 border-emerald-200"}`}>{shipHsMsg.err||shipHsMsg.ok}</div>}
               {shipHsOpts&&<div className="flex flex-wrap gap-1.5">{shipHsOpts.opts.map(op=>(
-                <button key={op.code} onClick={()=>{setLine(shipHsOpts.line,{hts:op.code});setShipHsOpts(null);setShipHsMsg({ok:`Applied ${op.code}. Click 💾 Save on the line to remember it for this product.`});}} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-full px-2.5 py-1 font-medium hover:bg-[#CCEAFF]">
+                <button key={op.code} onClick={()=>{setLine(shipHsOpts.line,{hts:op.code});setShipHsOpts(null);setShipHsMsg({ok:`Applied ${op.code}. Click Save on the line to remember it for this product.`});}} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-full px-2.5 py-1 font-medium hover:bg-[#CCEAFF]">
                   <span className="font-mono font-semibold">{op.code}</span>{op.reason?` — ${op.reason}`:""}{op.confidence?` (${op.confidence})`:""}
                 </button>))}
                 <button onClick={()=>setShipHsOpts(null)} className="text-[11px] text-stone-400 hover:text-stone-600 px-1">dismiss</button></div>}
@@ -7729,7 +7806,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 <label className="text-[11px] text-[#006FBF] hover:underline cursor-pointer px-1 whitespace-nowrap">Change logo<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,companyLogo:b})),600);e.target.value="";}}/></label>
               </span>
               <input value={customs.printedName??((settings.sender&&settings.sender.name)||"")} onChange={e=>setCustoms({...customs,printedName:e.target.value})} placeholder="Printed name (under signature)" className="w-48 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-              <button onClick={()=>setShipPad(v=>!v)} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">✍️ Draw a signature</button>
+              <button onClick={()=>setShipPad(v=>!v)} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">Draw a signature</button>
               <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload signature<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"signature",name:f.name.replace(/\.[a-z]+$/i,""),data:b},...(pp.docAssets||[])]})),500);e.target.value="";}}/></label>
               
               <span className="flex-1"/>
@@ -8253,7 +8330,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
   const ordPad=custom.density==="compact"?"px-3 py-1":"px-3 py-2.5";
   const hideCol=new Set(custom.orderCols||[]);
   const views=custom.orderViews||[];
-  const saveView=()=>{ if(!setSettings)return; let name=""; try{name=window.prompt("Name this view (current search, filters, sort & columns will be saved):","");}catch(e){} if(!name)return;
+  const saveView=async()=>{ if(!setSettings)return; let name=""; try{name=await uiPrompt("Name this view (current search, filters, sort & columns will be saved):","",{title:"Save this view"});}catch(e){} if(!name)return;
     const v={id:"v"+Date.now(),name:String(name).slice(0,24),q,filter,storeFilter,sort,cols:custom.orderCols||[]};
     setSettings(pp=>({...pp,custom:{...(pp.custom||{}),orderViews:[...((pp.custom||{}).orderViews||[]),v]}})); };
   const applyView=(v)=>{ setQ(v.q||"");setFilter(v.filter||"all");setStoreFilter(v.storeFilter||"all");setSort(v.sort||"date");
@@ -8374,7 +8451,11 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
-                  {sorted.length===0&&<tr><td colSpan={10} className="p-8 text-center text-stone-400">No orders{(storeFilter!=="all"||filter!=="all"||q)?" match this view":" yet"}.</td></tr>}
+                  {sorted.length===0&&(()=>{const fv=(storeFilter!=="all"||filter!=="all"||q);return <tr><td colSpan={10} className="px-3 py-14 text-center">
+                    <ShoppingBag className="w-8 h-8 text-stone-300 mx-auto mb-3"/>
+                    <div className="text-stone-600 font-medium">{fv?"No orders match this view":"No orders yet"}</div>
+                    <div className="text-sm text-stone-400 mt-1 max-w-sm mx-auto">{fv?"Try clearing your search or filters to see more.":"Connect a store or add an order and it’ll show up here, ready to rate and print."}</div>
+                  </td></tr>;})()}
                   {sorted.map(o=>(
                     <tr key={o.id} className="hover:bg-stone-50 cursor-pointer" onClick={()=>setOpen(o)}>
                       <td className={ordPad+" whitespace-nowrap"}><div className="font-semibold text-stone-800 flex items-center gap-1.5">{o.name}{o.source&&<Badge tone={SOURCE_TONE[o.source]||"stone"}>{o.source}</Badge>}</div></td>
@@ -8391,7 +8472,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
                       <td className="px-3 py-2.5 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button onClick={(e)=>{e.stopPropagation();setOpen(o);}} className={`text-sm rounded px-3 py-1.5 font-medium ${o.status==="fulfilled"?"bg-stone-100 text-stone-600 hover:bg-stone-200":"bg-stone-900 text-white hover:bg-stone-800"}`}>{o.status==="fulfilled"?"View":"Ship"}</button>
-                          <button onClick={(e)=>{e.stopPropagation();if(window.confirm(`Delete order ${o.name}? This removes it from ${BRAND.product} completely.`))setOrders(os=>os.filter(x=>x.id!==o.id));}} title="Delete order" className="text-stone-300 hover:text-rose-500 p-1"><Trash2 className="w-4 h-4"/></button>
+                          <button onClick={async(e)=>{e.stopPropagation();if(await uiConfirm(`Delete order ${o.name}? This removes it from ${BRAND.product} completely.`))setOrders(os=>os.filter(x=>x.id!==o.id));}} title="Delete order" className="text-stone-300 hover:text-rose-500 p-1"><Trash2 className="w-4 h-4"/></button>
                         </div>
                       </td>
                     </tr>
@@ -8473,7 +8554,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
   const quotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,listBase:qq.listBase,surcharges:qq.surcharges,fromZip,toZip:o.zip,weight:ruleWeightFor([{weight:+weight||o.weight||1,L:box.L,W:box.W,H:box.H}],qq.label)})})).sort((a,b)=>(a.sell||1e9)-(b.sell||1e9));},[rateSrc,residential,client,settings,rateRules,weight]);
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
   const printHere=async(qq)=>{
-    if(canBook&&(!qq.carrierCode||!qq.serviceCode)){ setRateNonce(n=>n+1); setStatus({state:"error",msg:"That rate was stale — refreshing live rates now. Pick the service again in a moment."}); return; }
+    if(canBook&&(!qq.carrierCode||!qq.serviceCode)){ setRateNonce(n=>n+1); setStatus({state:"error",msg:"This rate just expired — we're refreshing live prices. Pick your service again in a moment."}); return; }
     const carrier=carrierOf(qq.label);
     if(!canBook){ // demo mode: record locally
       const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:newTracking(carrier),carrier,service:qq.label,recipient:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings?.sender||{})},fromZip,toZip:o.zip,weight:+weight,pieces:[{weight:+weight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference:o.name};
@@ -8697,7 +8778,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   const pickBox=(j)=>{ setBoxIdx(j); if(j>=0){const b=boxes[j];setDims({L:b.L,W:b.W,H:b.H});} };
   const printHere=async(qq)=>{
     if(!qq)return;
-    if(canBook&&(!qq.carrierCode||!qq.serviceCode)){ setRateNonce(n=>n+1); setStatus({state:"error",msg:"That rate was stale — refreshing live rates now. Pick the service again in a moment."}); return; }
+    if(canBook&&(!qq.carrierCode||!qq.serviceCode)){ setRateNonce(n=>n+1); setStatus({state:"error",msg:"This rate just expired — we're refreshing live prices. Pick your service again in a moment."}); return; }
     const carrier=carrierOf(qq.label);
     const baseRec={service:qq.label,recipient:{name:rcv.name,company:rcv.company,zip:rcv.zip,state:rcv.state,city:rcv.city,address1:rcv.address1,phone:rcv.phone,email:rcv.email},sender:{...(settings?.sender||{})},fromZip,toZip:rcv.zip,weight:totalWeight,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",insurance:insurance||null,signature:sigOption!=="none",signatureOption:sigOption,saturdayDelivery:sat,reference:reference||o.name,poNo,invoiceNo,department:""};
     if(!canBook){
@@ -8905,7 +8986,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
     setSlipEdit(null);
   };
   const [reprintLp,setReprintLp]=useState(null);
-  const doReprint=(sh)=>{ const e=labels&&labels[sh.id]; if(e&&e.pdf){ setReprintLp({pdf:e.pdf,tracking:sh.tracking,service:sh.service,carrier:sh.carrier,rec:sh}); } else { window.alert("No stored label for this shipment on this account (labels are kept for the 60 most recent bookings). Use Edit & reship to book a fresh one."); } };
+  const doReprint=(sh)=>{ const e=labels&&labels[sh.id]; if(e&&e.pdf){ setReprintLp({pdf:e.pdf,tracking:sh.tracking,service:sh.service,carrier:sh.carrier,rec:sh}); } else { uiAlert("No stored label for this shipment on this account (labels are kept for the 60 most recent bookings). Use Edit & reship to book a fresh one."); } };
   const custom=cz(settings||{});
   const stuck=(sh)=>{ if(!custom.stuckDays)return false; if(!/in transit/i.test(sh.status||""))return false; const t=new Date(sh.date).getTime(); return t&&(Date.now()-t)>custom.stuckDays*864e5; };
   const [open,setOpen]=useState(null);
@@ -8984,7 +9065,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                 <Info k="To" v={`${s.recipient?.name||""}${s.recipient?.company?" · "+s.recipient.company:""} — ${s.recipient?.address1||""}, ${s.recipient?.city||""}, ${s.recipient?.state||""} ${s.recipient?.zip||""}`}/>
                 <Info k="Reference" v={s.reference||"—"}/>
                 <div className="flex items-end gap-2"><button onClick={(e)=>{e.stopPropagation();printPackingSlips([slipFromShipment(s)]);}} className="text-xs bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing slip</button><button onClick={(e)=>{e.stopPropagation();openSlipEdit(s);}} title="Type the items for this slip — perfect for manual shipments with no store connected. Items are saved for reprints." className="text-xs bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF] flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5"/>Slip with items</button>
-                {s.status!=="Voided"&&s.status!=="Delivered"&&<button onClick={(e)=>{e.stopPropagation();if(!window.confirm("Void this label?\n\nIt will be marked Voided here and excluded from audits and duplicate checks. The carrier refund is processed automatically — contact support if you don't see it within a few days."))return;setShipments(list=>list.map(x=>x.id===s.id?{...x,status:"Voided",voidedAt:new Date().toLocaleString()}:x));window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Voided label",detail:(s.reference||"")+" · "+(s.tracking||"")}}));}} className="text-xs bg-rose-50 border border-rose-200 text-rose-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-rose-100 flex items-center gap-1.5"><Ban className="w-3.5 h-3.5"/>Void label</button>}</div>
+                {s.status!=="Voided"&&s.status!=="Delivered"&&<button onClick={async(e)=>{e.stopPropagation();if(!await uiConfirm("Void this label?\n\nIt will be marked Voided here and excluded from audits and duplicate checks. The carrier refund is processed automatically — contact support if you don't see it within a few days."))return;setShipments(list=>list.map(x=>x.id===s.id?{...x,status:"Voided",voidedAt:new Date().toLocaleString()}:x));window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Voided label",detail:(s.reference||"")+" · "+(s.tracking||"")}}));}} className="text-xs bg-rose-50 border border-rose-200 text-rose-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-rose-100 flex items-center gap-1.5"><Ban className="w-3.5 h-3.5"/>Void label</button>}</div>
                 <Info k="Created" v={`${s.date}${s.time?" · "+s.time:""}`}/>
                 <Info k="From ZIP" v={s.fromZip}/>
                 <Info k="Packages" v={`${s.pieces?.length||1} pkg · ${s.weight} lb total`}/>
@@ -9046,7 +9127,7 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true,isAdmin
   const _pf=useMemo(()=>pickupFeeFor(rateRules,client,f.carrierCode),[rateRules,client,f.carrierCode]);
   const pickupFee=_pf.fee;
   const cancelLive=async(p)=>{
-    if(!window.confirm("Cancel this FedEx pickup ("+p.conf+")? The driver will not come."))return;
+    if(!await uiConfirm("Cancel this FedEx pickup ("+p.conf+")? The driver will not come."))return;
     setCanceling(p.id);
     const res=await fedexCancelPickup({confirmationCode:p.conf,carrierCode:p.carrierCode||"FDXE",date:p.date,location:p.fxLocation||""});
     setCanceling(null);
@@ -9212,7 +9293,7 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
             <Field label={pieces.length>1?"Insure $/box":"Insurance $"}><Input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0"/></Field>
             {hasExpress&&<label className="flex items-center gap-1.5 text-sm text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSaturday(e.target.checked)} className="accent-[#0086E0]"/>Saturday delivery <span className="text-stone-400 text-xs">(Express only)</span></label>}
             <div className="grid grid-cols-2 gap-px bg-stone-200 border border-stone-200 rounded overflow-hidden font-mono text-center"><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">zone</div><div className="font-semibold">{ready?zoneEst(fromZip,toZip):"—"}</div></div><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">billable</div><div className="font-semibold">{ready?billable(pieces[0].L,pieces[0].W,pieces[0].H,totalWeight)+" lb":"—"}</div></div></div>
-            {rateSrc.live&&rateSrc.dvPriced===false&&<div className="text-[11px] rounded px-2 py-1.5 mb-1 bg-rose-50 text-rose-700 border border-rose-200">Coverage fee missing from FedEx's response — totals may exclude declared value.</div>}{demo?<div className="text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 bg-amber-50 text-amber-800 border border-amber-200"><Eye className="w-3 h-3"/>Demo — example rates only; labels can't be created</div>:ready&&<div className={`text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700":"bg-[#E6F4FF] text-[#006FBF]"}`}>{rateSrc.loading?<><Loader2 className="w-3 h-3 animate-spin"/>Fetching…</>:rateSrc.live?<><Wifi className="w-3 h-3"/>Live rates</>:<><Calculator className="w-3 h-3"/>Estimated</>}</div>}
+            {rateSrc.live&&rateSrc.dvPriced===false&&<div className="text-[11px] rounded px-2 py-1.5 mb-1 bg-rose-50 text-rose-700 border border-rose-200">Declared-value coverage isn't itemized right now — this total may not include it.</div>}{demo?<div className="text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 bg-amber-50 text-amber-800 border border-amber-200"><Eye className="w-3 h-3"/>Demo — example rates only; labels can't be created</div>:ready&&<div className={`text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700":"bg-[#E6F4FF] text-[#006FBF]"}`}>{rateSrc.loading?<><Loader2 className="w-3 h-3 animate-spin"/>Fetching…</>:rateSrc.live?<><Wifi className="w-3 h-3"/>Live rates</>:<><Calculator className="w-3 h-3"/>Estimated</>}</div>}
           </Panel></div>
           <div className="flex-1 min-w-0"><ServiceList quotes={quotes} ready={ready} live={rateSrc.live} loading={rateSrc.loading} resetKey={`${fromZip}|${toZip}|${residential}|${pieces.length}|${((effClient&&effClient.blockedServices)||[]).join(",")}`}/></div>
         </div>
@@ -9336,7 +9417,7 @@ function Dashboard({shipments,orders,returns,goTab}){
           <div className="flex-1 min-w-[180px] hidden sm:flex items-end justify-end gap-1.5 h-20 self-stretch pt-2">
             {a.byDay.map((v,i)=>(<div key={i} className="flex flex-col items-center gap-1 w-7">
               <div className="w-full bg-white/25 hover:bg-white/40 transition rounded-t" style={{height:`${Math.max(6,(v/maxDay)*100)}%`}} title={`${days[i]}: ${v}`}/>
-              <span className="text-[9px] text-white/50">{days[i][0]}</span>
+              <span className="text-[10px] text-white/50">{days[i][0]}</span>
             </div>))}
           </div>
         </div>
@@ -9568,13 +9649,13 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
     setFs({state:new Set((c.fs&&c.fs.state)||[]),zone:new Set((c.fs&&c.fs.zone)||[]),source:new Set((c.fs&&c.fs.source)||[]),sku:new Set((c.fs&&c.fs.sku)||[]),product:new Set((c.fs&&c.fs.product)||[]),service:new Set((c.fs&&c.fs.service)||[]),carrier:new Set((c.fs&&c.fs.carrier)||[])});
     setSel(new Set());
   };
-  const savePreset=()=>{ const name=window.prompt("Name this batch (e.g. \u201cYesterday \u2014 Shopify ground\u201d):"); if(!name||!name.trim())return;
+  const savePreset=async()=>{ const name=await uiPrompt("Name this batch (e.g. \u201cYesterday \u2014 Shopify ground\u201d):","",{title:"Save this batch"}); if(!name||!name.trim())return;
     const p={id:"bp"+Date.now(),name:name.trim(),crit:snapshotCriteria()};
     setPresets(ps=>[...(ps||[]).filter(x=>x.name.toLowerCase()!==p.name.toLowerCase()),p]); setPresetSel(p.id);
     setMsg("Saved \u201c"+p.name+"\u201d \u2014 pick it any time to restore these exact criteria.");setTimeout(()=>setMsg(""),3000);
   };
-  const deletePreset=()=>{ const p=(presets||[]).find(x=>x.id===presetSel); if(!p)return;
-    if(!window.confirm("Delete the saved batch \u201c"+p.name+"\u201d?"))return;
+  const deletePreset=async()=>{ const p=(presets||[]).find(x=>x.id===presetSel); if(!p)return;
+    if(!await uiConfirm("Delete the saved batch \u201c"+p.name+"\u201d?"))return;
     setPresets(ps=>(ps||[]).filter(x=>x.id!==presetSel)); setPresetSel("");
   };
   const dimValues=(d)=>{const m={};pool.forEach(o=>{const k=dimOf(o,d);m[k]=(m[k]||0)+1;});return Object.entries(m).sort((a,b)=>b[1]-a[1]);};
@@ -9771,7 +9852,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
               <option value="">Auto — {q.label}</option>
               {RULE_SERVICES.map(sv=><option key={sv} value={sv}>{sv}</option>)}
             </select>
-            {ovWhy[o.id]&&svcOv[o.id]&&<div className="text-[9px] text-violet-600 truncate mt-0.5 flex items-center gap-0.5"><Zap className="w-2.5 h-2.5 shrink-0"/>{ovWhy[o.id]}</div>}
+            {ovWhy[o.id]&&svcOv[o.id]&&<div className="text-[10px] text-violet-600 truncate mt-0.5 flex items-center gap-0.5"><Zap className="w-2.5 h-2.5 shrink-0"/>{ovWhy[o.id]}</div>}
           </div>}
         <div className="w-16 sm:w-20 text-right font-mono text-sm shrink-0">{showMoney?money(q.sell):"—"}</div>
       </div>
@@ -10221,9 +10302,9 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
      policy/fallback logic unchanged. */
   const SEC_GROUPS=[
     ["Workspace",[["general","General",Cog],["customize","Customizations",Sliders]]],
-    ["Shipping",[["shipscreen","Ship screen",Truck],["orderspage","Orders",ShoppingBag],["carriers",BRAND.fw?"FedEx account":"Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["catalog","Product catalog",Boxes],["reference","Reference fields",Receipt]]],
-    ["Documents & printing",[["printer","Print settings",Printer],["cieditor","Commercial invoice",Receipt],["otherdocs","Other documents",FileText],["manifests","Manifests",FileText]]],
-    ["Automation & integrations",[["integrations","Integrations",Layers],["notifications","Email automation",Mail],["checkout","Checkout rates",ShoppingBag]]],
+    ["Shipping",[["shipscreen","Ship Screen",Truck],["orderspage","Orders",ShoppingBag],["carriers",BRAND.fw?"FedEx Account":"Carrier Accounts",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package Sizes",Package],["boxlogic","Box Logic",Layers],["catalog","Product Catalog",Boxes],["reference","Reference Fields",Receipt]]],
+    ["Documents & Printing",[["printer","Print Settings",Printer],["cieditor","Commercial Invoice",Receipt],["otherdocs","Other Documents",FileText],["manifests","Manifests",FileText]]],
+    ["Automation & Integrations",[["integrations","Integrations",Layers],["notifications","Email Automation",Mail],["checkout","Checkout Rates",ShoppingBag]]],
     ["Account",[["reports","Reports",TrendingUp],["billing","Billing",CreditCard],["subscription","Subscription",Star]]],
   ];
   const secs=SEC_GROUPS.flatMap(g=>g[1]);
@@ -10295,7 +10376,7 @@ function ReferenceFields({settings,setSettings}){
   ];
   return (<div className="max-w-2xl space-y-4">
     <div>
-      <h2 className="text-base font-semibold text-stone-800">Reference fields</h2>
+      <h2 className="text-base font-semibold text-stone-800">Reference Fields</h2>
       <p className="text-sm text-stone-500 mt-1">When you pick a <b>FedEx One Rate</b> service, {BRAND.product} can auto-fill the chosen box name into a reference field so it prints on the label and your team knows which box to grab. Pick where it goes — or turn it off.</p>
     </div>
     <div className="bg-white border border-stone-200 rounded-lg p-4 flex items-center justify-between">
@@ -10419,7 +10500,7 @@ function ProductCatalog({settings,setSettings}){
     setBusy(false);
   };
 
-  const exportCSV=()=>downloadCSV("shippingcloud-products.csv",[["SKU","Name","Length","Width","Height","Weight","Value","Origin","HS Code","Barcode","Ships Alone"],...products.map(p=>[p.sku,p.name,p.l,p.w,p.h,p.wt,p.value,p.origin,p.hs,p.barcode||"",p.shipsAlone?"yes":""])]);
+  const exportCSV=()=>downloadCSV((BRAND.fw?"freightwire":"shippingcloud")+"-products.csv",[["SKU","Name","Length","Width","Height","Weight","Value","Origin","HS Code","Barcode","Ships Alone"],...products.map(p=>[p.sku,p.name,p.l,p.w,p.h,p.wt,p.value,p.origin,p.hs,p.barcode||"",p.shipsAlone?"yes":""])]);
 
   return (<div className="max-w-4xl space-y-3">
     <div>
@@ -11483,10 +11564,10 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
   const run=useMemo(()=>runRuleEngine(rules||[],ords,originZip),[rules,ords,originZip]);
   const matchCount=(id)=>run.results.filter(r=>r.fires.some(f=>f.ruleId===id)).length;
   const active=rules.filter(r=>r.enabled).length;
-  const applyToOrders=()=>{
+  const applyToOrders=async()=>{
     const patchById=rulePatchesFor(run); const n=Object.keys(patchById).length;
     if(!n){ setApplied({n:0}); setTimeout(()=>setApplied(null),5000); return; }
-    if(!window.confirm(`Apply rule outcomes to ${n} order${n!==1?"s":""}? This writes service, package, tags, notes, signature, insurance, Saturday, weight, custom fields, gift, assignee, ship-from and holds onto those orders.`))return;
+    if(!await uiConfirm(`Apply rule outcomes to ${n} order${n!==1?"s":""}? This writes service, package, tags, notes, signature, insurance, Saturday, weight, custom fields, gift, assignee, ship-from and holds onto those orders.`))return;
     setOrders(os=>os.map(o=>patchById[o.id]?{...o,...patchById[o.id],_ruled:true}:o));
     setApplied({n});
     setTimeout(()=>setApplied(null),6000);
@@ -11517,7 +11598,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
     const eligible=run.results.filter(r=>r.order.status!=="fulfilled"&&!r.view.hold).map(r=>r.order);
     const heldN=run.results.filter(r=>r.order.status!=="fulfilled"&&r.view.hold).length;
     if(!eligible.length){ setApResults({rows:[],heldN,none:true}); return; }
-    if(!window.confirm(`Autopilot will apply your rules and create labels for ${eligible.length} unfulfilled order${eligible.length!==1?"s":""}${heldN?` (${heldN} held for your review — skipped)`:""}. Continue?`))return;
+    if(!await uiConfirm(`Autopilot will apply your rules and create labels for ${eligible.length} unfulfilled order${eligible.length!==1?"s":""}${heldN?` (${heldN} held for your review — skipped)`:""}. Continue?`))return;
     if(Object.keys(patchById).length)setOrders(os=>os.map(o=>patchById[o.id]?{...o,...patchById[o.id],_ruled:true}:o));
     const senderZip=(settings&&settings.sender&&settings.sender.zip)||(client&&client.origin)||"";
     const rows=[];
@@ -12065,7 +12146,7 @@ function AssetLibrary({settings,setSettings}){
   </label>);
   return (<Panel title="Signatures, letterhead & attachments">
     <div className="flex flex-wrap gap-2">
-      <button onClick={()=>setPad(v=>!v)} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">✍️ Draw a signature</button>
+      <button onClick={()=>setPad(v=>!v)} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">Draw a signature</button>
       {Up({type:"signature",label:"Upload signature image",maxW:500})}
       {Up({type:"letterhead",label:"Upload letterhead",maxW:1400})}
       {Up({type:"image",label:"Upload attachment image",maxW:1200})}
@@ -12224,7 +12305,7 @@ function CIEditor({settings,setSettings,shipments}){
         <In v={r.qty} on={v=>setRow(i,{qty:v})} ph="1" cls="w-14"/>
         <In v={r.unit} on={v=>setRow(i,{unit:v})} ph="0.00" cls="w-20"/>
         <input value={r.hs} onChange={e=>setRow(i,{hs:e.target.value})} list="sc-hts-list-ci" placeholder="HS" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-        <button onClick={()=>suggestHS(i)} disabled={!r.name||hsBusy===i} title={AI_NAME+" reads the item description and suggests an HTS code"} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap">{hsBusy===i?"Searching…":"✨ Search HTS"}</button>
+        <button onClick={()=>suggestHS(i)} disabled={!r.name||hsBusy===i} title={AI_NAME+" reads the item description and suggests an HTS code"} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap">{hsBusy===i?"Searching…":"Search HTS"}</button>
         <select value={r.origin} onChange={e=>setRow(i,{origin:e.target.value})} className="w-32 bg-white border border-stone-200 rounded-lg px-1 py-1.5 text-sm outline-none focus:border-[#0099FF]">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
         <button onClick={()=>setDoc(d=>({...d,rows:d.rows.filter((_,j)=>j!==i)}))} className="text-stone-300 hover:text-rose-500">×</button>
       </div>))}
@@ -12407,11 +12488,11 @@ function TwoFactorPanel(){
   useEffect(()=>{load();},[]);
   const begin=async()=>{ setBusy(true); setMsg(null); const r=await cloudCall({action:"totpBegin",token:CLOUD.token}); setBusy(false); if(r&&r.ok){setSetup({secret:r.secret,otpauth:r.otpauth});setCode("");}else setMsg({t:"err",m:(r&&r.error)||"Could not start setup."}); };
   const enable=async()=>{ setBusy(true); setMsg(null); const r=await cloudCall({action:"totpEnable",token:CLOUD.token,code:code.trim()}); setBusy(false); if(r&&r.ok){setSetup(null);setCode("");setMsg({t:"ok",m:"Two-factor authentication is now ON."});if(r.backupCodes)setCodes(r.backupCodes);load();}else setMsg({t:"err",m:(r&&r.error)||"Could not turn on 2FA."}); };
-  const disable=async()=>{ const c=window.prompt("Turn OFF two-factor. Enter a current 6-digit code from your authenticator app (or leave blank and use your password on the next prompt):",""); if(c===null)return; let pw=""; if(!String(c).trim()){ pw=window.prompt("Enter your account password to turn off 2FA:","")||""; if(!pw)return; } setBusy(true); setMsg(null); const r=await cloudCall({action:"totpDisable",token:CLOUD.token,code:String(c).trim(),password:pw}); setBusy(false); if(r&&r.ok){setMsg({t:"ok",m:"Two-factor authentication is off."});setCodes(null);load();}else setMsg({t:"err",m:(r&&r.error)||"Could not turn off 2FA."}); };
-  const regen=async()=>{ const c=window.prompt("Make a new set of backup codes? This invalidates any old ones. Enter a current 6-digit code (or leave blank to use your password):",""); if(c===null)return; let pw=""; if(!String(c).trim()){ pw=window.prompt("Enter your account password:","")||""; if(!pw)return; } setBusy(true); setMsg(null); const r=await cloudCall({action:"totpBackupRegen",token:CLOUD.token,code:String(c).trim(),password:pw}); setBusy(false); if(r&&r.ok){setCodes(r.backupCodes||[]);setMsg({t:"ok",m:"New backup codes generated — save them now."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not make new codes."}); };
+  const disable=async()=>{ const c=await uiPrompt("Turn OFF two-factor. Enter a current 6-digit code from your authenticator app (or leave blank and use your password next):","",{title:"Turn off two-factor"}); if(c===null)return; let pw=""; if(!String(c).trim()){ pw=await uiPrompt("Enter your account password to turn off 2FA:","",{title:"Confirm password"})||""; if(!pw)return; } setBusy(true); setMsg(null); const r=await cloudCall({action:"totpDisable",token:CLOUD.token,code:String(c).trim(),password:pw}); setBusy(false); if(r&&r.ok){setMsg({t:"ok",m:"Two-factor authentication is off."});setCodes(null);load();}else setMsg({t:"err",m:(r&&r.error)||"Could not turn off 2FA."}); };
+  const regen=async()=>{ const c=await uiPrompt("Make a new set of backup codes? This invalidates any old ones. Enter a current 6-digit code (or leave blank to use your password):","",{title:"New backup codes"}); if(c===null)return; let pw=""; if(!String(c).trim()){ pw=await uiPrompt("Enter your account password:","",{title:"Confirm password"})||""; if(!pw)return; } setBusy(true); setMsg(null); const r=await cloudCall({action:"totpBackupRegen",token:CLOUD.token,code:String(c).trim(),password:pw}); setBusy(false); if(r&&r.ok){setCodes(r.backupCodes||[]);setMsg({t:"ok",m:"New backup codes generated — save them now."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not make new codes."}); };
   const e2begin=async()=>{ setBusy(true);setMsg(null); const r=await cloudCall({action:"email2faBegin",token:CLOUD.token}); setBusy(false); if(r&&r.ok){setE2sent(true);setE2code("");setMsg({t:"ok",m:"We emailed a 6-digit code"+(r.sentTo?" to "+r.sentTo:"")+" — enter it below to turn it on."});}else setMsg({t:"err",m:(r&&r.error)||"Could not send the code."}); };
   const e2enable=async()=>{ setBusy(true);setMsg(null); const r=await cloudCall({action:"email2faEnable",token:CLOUD.token,code:e2code.trim()}); setBusy(false); if(r&&r.ok){setE2sent(false);setE2code("");setMsg({t:"ok",m:"Email verification is now ON for sign-in."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not enable."}); };
-  const e2disable=async()=>{ const pw=window.prompt("Enter your account password to turn off email verification:","")||""; if(!pw)return; setBusy(true);setMsg(null); const r=await cloudCall({action:"email2faDisable",token:CLOUD.token,password:pw}); setBusy(false); if(r&&r.ok){setMsg({t:"ok",m:"Email verification is off."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not disable."}); };
+  const e2disable=async()=>{ const pw=await uiPrompt("Enter your account password to turn off email verification:","",{title:"Turn off email verification"})||""; if(!pw)return; setBusy(true);setMsg(null); const r=await cloudCall({action:"email2faDisable",token:CLOUD.token,password:pw}); setBusy(false); if(r&&r.ok){setMsg({t:"ok",m:"Email verification is off."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not disable."}); };
   if(!cloud) return null;
   const codesText=(codes||[]).join("\n");
   return (<Panel title="Two-factor authentication (2FA)">
@@ -12610,7 +12691,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
      single panel with no tab bar — used by Settings → Ship screen. */
   const CTABS=[...(deployMode?[["services","Services"],["ship","Ship screen"],["orders","Orders & lists"]]:[]),["appearance","Appearance"]];   // Services (rate view + service on/off) moved under Settings → Ship screen; Customizations keeps Appearance/tabs/branding   // Ship screen + Orders are their own top-level Settings sections now (still tabs in deployMode so team-deploy keeps every option in one place). Packing-slip message/footer moved to Settings → Print settings → Packing slip (v393). Autopilot toggles → Print settings (v355). Labels & printing → Printer settings (v281).
   return (<div className="max-w-2xl space-y-4">
-    <DraftBar dirty={_cd.dirty} onSave={_cd.save} onUndo={_cd.undo} onReset={()=>{ if(window.confirm("Reset all customizations to their defaults? You'll still need to click Save to keep it.")) _cd.reset(); }} resetLabel="Reset to defaults" savedNote="Customizations saved"/>
+    <DraftBar dirty={_cd.dirty} onSave={_cd.save} onUndo={_cd.undo} onReset={async()=>{ if(await uiConfirm("Reset all customizations to their defaults? You'll still need to click Save to keep it.")) _cd.reset(); }} resetLabel="Reset to defaults" savedNote="Customizations saved"/>
     {!deployMode&&!only&&<div className="text-sm text-stone-500">Make {BRAND.product} yours. Every option here changes the app immediately for <b>your login only</b>.</div>}
     {only==="ship"&&<div className="text-sm text-stone-500">Tune the Ship tab. Every option here changes the app immediately for <b>your login only</b>.</div>}
     {only==="orders"&&<div className="text-sm text-stone-500">Tune the Orders page — pick which columns show and how lists behave. Changes apply immediately for <b>your login only</b>.</div>}
@@ -12624,6 +12705,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
         {Tog({k:"hideAutopilotBox",label:"Hide the Autopilot match banner",hint:"Removes the ‘Autopilot rule matched…’ box above Select service. Rules still run and still pre-highlight the service."})}
         {Tog({k:"hideNotifyBox",label:"Hide the Send label & notify box",hint:"Removes the email panel at the bottom of the Ship tab. Automated notifications in Settings → Email automation still send."})}
         {Tog({k:"hideShipOrders",label:"Hide the orders list on the Ship screen",hint:"Removes the orders sidebar (and its collapsed tab) from the Ship screen completely — ship by scanning or typing shipments in manually. Orders still live on the Orders tab."})}
+        {Tog({k:"hideLabeledOrders",invert:true,label:"Show orders that already have a label",hint:"Off (recommended): once an order has a label, it drops off the Ship-screen orders list so you don't accidentally re-ship it. Turn on to keep already-labeled orders in the list."})}
         {Tog({k:"scanAutoFocus",label:"Scan mode — keep the scan box ready",hint:"The cursor lives in the scan box: it's focused when the Ship tab opens, re-arms after every scan and booking, and returns after you click orders, services or buttons. It only steps aside while you're typing in another field (like editing the shipping information), then comes back on your next click."})}
         {Tog({k:"hideInvoice",label:"Hide Invoice # field"})}
         {Tog({k:"hidePO",label:"Hide PO # field"})}
@@ -12637,7 +12719,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
         {Tog({k:"emailRequired",label:"Require receiver email to book",hint:"Uncheck to make email optional"})}
         {Sel({k:"defaultSignature",label:"Default signature on new shipments",opts:[["none","None"],["indirect","Indirect"],["direct","Direct"],["adult","Adult"]]})}
         {Num({k:"autoInsureValue",label:"Auto-insure orders over",hint:"When you load an order worth this much or more, insurance is set to the full order value. 0 = off. Takes priority over the % below.",prefix:"$"})}
-        {Num({k:"autoInsurePct",label:"Auto-insure orders (% of value)",hint:"Legacy: insures this % of order value on load. Ignored if the $ threshold above is set. 0 = off",suffix:"%"})}
+        {Num({k:"autoInsurePct",label:"Auto-insure orders (% of value)",hint:"Insures this percent of the order's value automatically. Ignored if the dollar threshold above is set. 0 = off.",suffix:"%"})}
         {Num({k:"autoSigValue",label:"Auto-add signature over",hint:"When you load an order worth this much or more, a signature is added automatically. 0 = off. Uses the signature type below.",prefix:"$"})}
         {Sel({k:"autoSigType",label:"Signature type to auto-add",opts:[["indirect","Indirect"],["direct","Direct"],["adult","Adult"]]})}
         <label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>Ship-date cutoff time<span className="block text-[11px] text-stone-400">After this local time, new shipments default to the NEXT day's ship date. Leave blank to always use today.</span></span>
@@ -12718,7 +12800,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         {Sel({k:"fontScale",label:"Text size",opts:[[94,"Small"],[100,"Normal"],[107,"Large"]]})}
         {Sel({k:"theme",label:"Theme",opts:[["light","Light"],["grey","Grey"],["dark","Dark"]]})}
-        {Sel({k:"confetti",label:"Booking confetti 🎉",opts:[["page","Everywhere — full-page drop"],["button","Just around the button"],["off","Off"]]})}
+        {Sel({k:"confetti",label:"Booking confetti",opts:[["page","Everywhere — full-page drop"],["button","Just around the button"],["off","Off"]]})}
         {(isAdmin||deployMode)&&Tog({k:"seasonal",label:"Seasonal touches (admin)",hint:"A little 🎅 🎃 ❤️ on the logo around the holidays. Off unless you, the admin, turn it on."})}
         {Sel({k:"startTab",label:"Start page after login",opts:tabChoices.map(x=>[x[0],x[1]])})}
       </div>
@@ -12797,7 +12879,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
             <div className="text-[11px] text-stone-400 mt-1">{hint}</div>
           </div>))}
       </div>}
-        <div className="text-[11px] text-stone-400 mt-1.5">Recolors buttons, links, active tabs and highlights across the app. Dark mode is a first version — if any screen looks off in the dark, tell us.</div>
+        <div className="text-[11px] text-stone-400 mt-1.5">Recolors buttons, links, active tabs and highlights across the app.</div>
       </div>
       <div className="border-t border-stone-100 mt-3 pt-3 grid sm:grid-cols-2 gap-6">
         <div>
@@ -12968,7 +13050,7 @@ function Subscription({settings,setSettings}){
         </div>
       );})}
     </div>
-    <p className="text-[11px] text-stone-400">Plans shown for demo. Billing isn't charged here — wire this to Stripe when you're ready to take payments.</p>
+    <p className="text-[11px] text-stone-400">Changing your plan here won't charge your card — reach out and we'll get billing set up for you.</p>
   </div>);
 }
 
@@ -13506,6 +13588,6 @@ function Field({label,children}){return <label className="block space-y-1"><span
 function Input({className="",...p}){return <input {...p} className={`w-full bg-white border border-stone-200 rounded px-2.5 py-2 text-sm font-mono text-stone-900 focus:border-[#0099FF] outline-none ${className}`}/>;}
 function Select({children,...p}){return <select {...p} className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm focus:border-[#0099FF] outline-none">{children}</select>;}
 function Toggle({on,set,label}){return <button onClick={()=>set(!on)} className={`flex items-center gap-1.5 text-xs rounded px-2.5 py-1.5 border ${on?"bg-[#E6F4FF] border-[#99D6FF] text-[#0086E0]":"bg-white border-stone-200 text-stone-400"}`}><span className={`w-2 h-2 rounded-full ${on?"bg-[#0086E0]":"bg-stone-300"}`}/>{label}</button>;}
-function Badge({children,tone="stone"}){const t={stone:"bg-stone-100 text-stone-500 border-stone-200",green:"bg-emerald-50 text-emerald-700 border-emerald-200",amber:"bg-amber-50 text-amber-700 border-amber-200",blue:"bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]",rose:"bg-rose-50 text-rose-600 border-rose-200"}[tone];return <span className={`text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 border ${t}`}>{children}</span>;}
+function Badge({children,tone="stone"}){const t={stone:"bg-stone-100 text-stone-500 border-stone-200",green:"bg-emerald-50 text-emerald-700 border-emerald-200",amber:"bg-amber-50 text-amber-700 border-amber-200",blue:"bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]",rose:"bg-rose-50 text-rose-600 border-rose-200",violet:"bg-violet-50 text-violet-700 border-violet-200"}[tone]||"bg-stone-100 text-stone-500 border-stone-200";return <span className={`text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 border ${t}`}>{children}</span>;}
 function Empty({icon:Icon,title,body}){return <div className="border border-dashed border-stone-300 rounded-lg p-12 text-center"><Icon className="w-8 h-8 text-stone-300 mx-auto mb-3"/><div className="text-stone-700 font-medium">{title}</div><div className="text-sm text-stone-400 mt-1 max-w-sm mx-auto">{body}</div></div>;}
 function Info({k,v}){return <div className="flex justify-between gap-4 py-0.5 border-b border-stone-100"><span className="text-stone-400">{k}</span><span className="text-stone-800 text-right">{v}</span></div>;}

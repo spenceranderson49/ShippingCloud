@@ -48,7 +48,7 @@ function tintLogoDataUrl(src,accent,cb){
     img.src=src;
   }catch(e){cb(src);}
 }
-function FreightwireShipHub({logoH=44,sub=true,subText="Client Portal",accent=""}){
+function FreightwireShipHub({logoH=44,sub=true,subText="Customer Portal",accent=""}){
   const nameSize=Math.round(logoH*0.5);
   const [logoSrc,setLogoSrc]=useState(FW_LOGO);
   useEffect(()=>{ let dead=false; tintLogoDataUrl(FW_LOGO,String(accent||"").trim(),u=>{ if(!dead)setLogoSrc(u); }); return ()=>{dead=true;}; },[accent]);
@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v501";
+const BUILD_TAG="addr-v502";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3013,7 +3013,7 @@ function Login({users,onLogin,brand}){
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center gap-2 mb-6">
           <div className="flex items-center gap-2">
-            {BRAND.fw?<FreightwireShipHub logoH={46} subText={BRAND.admin?"Admin HQ":"Client Portal"}/>:(!B.name1||B.name1==="Shipping")&&(!B.name2||B.name2==="Cloud")?<ShipCloudLogo size={28}/>:<><BrandCloud className="h-10 w-auto" color={B.primary}/><span className="font-extrabold tracking-tight text-3xl" style={{color:B.dark}}>{B.name1}<span style={{color:B.primary}}>{B.name2}</span></span></>}
+            {BRAND.fw?<FreightwireShipHub logoH={46} subText={BRAND.admin?"Admin HQ":"Customer Portal"}/>:(!B.name1||B.name1==="Shipping")&&(!B.name2||B.name2==="Cloud")?<ShipCloudLogo size={28}/>:<><BrandCloud className="h-10 w-auto" color={B.primary}/><span className="font-extrabold tracking-tight text-3xl" style={{color:B.dark}}>{B.name1}<span style={{color:B.primary}}>{B.name2}</span></span></>}
           </div>
           {B.showLogo&&B.logo&&<div className="flex items-center gap-1.5 text-stone-400 text-xs">{B.partnerLabel}<img src={B.logo} alt="partner" className="h-3.5 w-auto object-contain"/></div>}
         </div>
@@ -7747,14 +7747,14 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                   <input type="number" value={l.wkg??""} onChange={e=>setLine(i,{wkg:e.target.value})} placeholder="kg" className="w-[120px] bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300"/>}
                   <input type="number" value={l.qty} onChange={e=>setLine(i,{qty:+e.target.value})} className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
                   <input type="number" value={l.value} onChange={e=>setLine(i,{value:e.target.value})} placeholder="0.00" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:border-[#0099FF]"/>
-                  <button onClick={()=>shipSuggestHS(i)} disabled={!l.desc||shipHsBusy===i} title={AI_NAME+" reads the item description and suggests an HTS code"} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap self-center">{shipHsBusy===i?"Searching…":"✨ Search HTS codes"}</button>
-                  {!!(l.desc&&l.hts)&&<button onClick={()=>saveHtsToCatalog(l)} title="Save this HTS code to your product catalog for next time" className="text-xs text-[#006FBF] hover:underline whitespace-nowrap self-center">💾 Save to catalog</button>}
+                  <button onClick={()=>shipSuggestHS(i)} disabled={!l.desc||shipHsBusy===i} title={AI_NAME+" reads the item description and suggests an HTS code"} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap self-center">{shipHsBusy===i?"Searching…":"Search HTS codes"}</button>
+                  {!!(l.desc&&l.hts)&&<button onClick={()=>saveHtsToCatalog(l)} title="Save this HTS code to your product catalog for next time" className="text-xs text-[#006FBF] hover:underline whitespace-nowrap self-center">Save to catalog</button>}
                   <button onClick={()=>delLine(i)} className="text-stone-300 hover:text-rose-500 w-5"><X className="w-4 h-4"/></button>
                 </div>
               ))}
               {shipHsMsg&&<div className={`text-[11px] rounded px-2 py-1 border ${shipHsMsg.err?"text-rose-700 bg-rose-50 border-rose-200":"text-emerald-700 bg-emerald-50 border-emerald-200"}`}>{shipHsMsg.err||shipHsMsg.ok}</div>}
               {shipHsOpts&&<div className="flex flex-wrap gap-1.5">{shipHsOpts.opts.map(op=>(
-                <button key={op.code} onClick={()=>{setLine(shipHsOpts.line,{hts:op.code});setShipHsOpts(null);setShipHsMsg({ok:`Applied ${op.code}. Click 💾 Save on the line to remember it for this product.`});}} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-full px-2.5 py-1 font-medium hover:bg-[#CCEAFF]">
+                <button key={op.code} onClick={()=>{setLine(shipHsOpts.line,{hts:op.code});setShipHsOpts(null);setShipHsMsg({ok:`Applied ${op.code}. Click Save on the line to remember it for this product.`});}} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-full px-2.5 py-1 font-medium hover:bg-[#CCEAFF]">
                   <span className="font-mono font-semibold">{op.code}</span>{op.reason?` — ${op.reason}`:""}{op.confidence?` (${op.confidence})`:""}
                 </button>))}
                 <button onClick={()=>setShipHsOpts(null)} className="text-[11px] text-stone-400 hover:text-stone-600 px-1">dismiss</button></div>}
@@ -7769,7 +7769,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 <label className="text-[11px] text-[#006FBF] hover:underline cursor-pointer px-1 whitespace-nowrap">Change logo<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,companyLogo:b})),600);e.target.value="";}}/></label>
               </span>
               <input value={customs.printedName??((settings.sender&&settings.sender.name)||"")} onChange={e=>setCustoms({...customs,printedName:e.target.value})} placeholder="Printed name (under signature)" className="w-48 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-              <button onClick={()=>setShipPad(v=>!v)} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">✍️ Draw a signature</button>
+              <button onClick={()=>setShipPad(v=>!v)} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">Draw a signature</button>
               <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload signature<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"signature",name:f.name.replace(/\.[a-z]+$/i,""),data:b},...(pp.docAssets||[])]})),500);e.target.value="";}}/></label>
               
               <span className="flex-1"/>
@@ -8414,7 +8414,11 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
-                  {sorted.length===0&&<tr><td colSpan={10} className="p-8 text-center text-stone-400">No orders{(storeFilter!=="all"||filter!=="all"||q)?" match this view":" yet"}.</td></tr>}
+                  {sorted.length===0&&(()=>{const fv=(storeFilter!=="all"||filter!=="all"||q);return <tr><td colSpan={10} className="px-3 py-14 text-center">
+                    <ShoppingBag className="w-8 h-8 text-stone-300 mx-auto mb-3"/>
+                    <div className="text-stone-600 font-medium">{fv?"No orders match this view":"No orders yet"}</div>
+                    <div className="text-sm text-stone-400 mt-1 max-w-sm mx-auto">{fv?"Try clearing your search or filters to see more.":"Connect a store or add an order and it’ll show up here, ready to rate and print."}</div>
+                  </td></tr>;})()}
                   {sorted.map(o=>(
                     <tr key={o.id} className="hover:bg-stone-50 cursor-pointer" onClick={()=>setOpen(o)}>
                       <td className={ordPad+" whitespace-nowrap"}><div className="font-semibold text-stone-800 flex items-center gap-1.5">{o.name}{o.source&&<Badge tone={SOURCE_TONE[o.source]||"stone"}>{o.source}</Badge>}</div></td>
@@ -12105,7 +12109,7 @@ function AssetLibrary({settings,setSettings}){
   </label>);
   return (<Panel title="Signatures, letterhead & attachments">
     <div className="flex flex-wrap gap-2">
-      <button onClick={()=>setPad(v=>!v)} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">✍️ Draw a signature</button>
+      <button onClick={()=>setPad(v=>!v)} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">Draw a signature</button>
       {Up({type:"signature",label:"Upload signature image",maxW:500})}
       {Up({type:"letterhead",label:"Upload letterhead",maxW:1400})}
       {Up({type:"image",label:"Upload attachment image",maxW:1200})}
@@ -12264,7 +12268,7 @@ function CIEditor({settings,setSettings,shipments}){
         <In v={r.qty} on={v=>setRow(i,{qty:v})} ph="1" cls="w-14"/>
         <In v={r.unit} on={v=>setRow(i,{unit:v})} ph="0.00" cls="w-20"/>
         <input value={r.hs} onChange={e=>setRow(i,{hs:e.target.value})} list="sc-hts-list-ci" placeholder="HS" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-        <button onClick={()=>suggestHS(i)} disabled={!r.name||hsBusy===i} title={AI_NAME+" reads the item description and suggests an HTS code"} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap">{hsBusy===i?"Searching…":"✨ Search HTS"}</button>
+        <button onClick={()=>suggestHS(i)} disabled={!r.name||hsBusy===i} title={AI_NAME+" reads the item description and suggests an HTS code"} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap">{hsBusy===i?"Searching…":"Search HTS"}</button>
         <select value={r.origin} onChange={e=>setRow(i,{origin:e.target.value})} className="w-32 bg-white border border-stone-200 rounded-lg px-1 py-1.5 text-sm outline-none focus:border-[#0099FF]">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
         <button onClick={()=>setDoc(d=>({...d,rows:d.rows.filter((_,j)=>j!==i)}))} className="text-stone-300 hover:text-rose-500">×</button>
       </div>))}
@@ -12758,7 +12762,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         {Sel({k:"fontScale",label:"Text size",opts:[[94,"Small"],[100,"Normal"],[107,"Large"]]})}
         {Sel({k:"theme",label:"Theme",opts:[["light","Light"],["grey","Grey"],["dark","Dark"]]})}
-        {Sel({k:"confetti",label:"Booking confetti 🎉",opts:[["page","Everywhere — full-page drop"],["button","Just around the button"],["off","Off"]]})}
+        {Sel({k:"confetti",label:"Booking confetti",opts:[["page","Everywhere — full-page drop"],["button","Just around the button"],["off","Off"]]})}
         {(isAdmin||deployMode)&&Tog({k:"seasonal",label:"Seasonal touches (admin)",hint:"A little 🎅 🎃 ❤️ on the logo around the holidays. Off unless you, the admin, turn it on."})}
         {Sel({k:"startTab",label:"Start page after login",opts:tabChoices.map(x=>[x[0],x[1]])})}
       </div>

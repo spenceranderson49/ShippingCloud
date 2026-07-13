@@ -77,12 +77,12 @@ const FEATURE_CATALOG=[
   {id:"drafts",label:"Drafts",desc:"Saved unfinished shipments",default:true},
   {id:"returns",label:"Returns",desc:"Return labels",default:true},
   {id:"dashboard",label:"Dashboard",desc:"Spend & volume overview",default:true},
-  {id:"addresses",label:"Address Book",desc:"Saved contacts",default:true},
+  {id:"addresses",label:"Address book",desc:"Saved contacts",default:true},
   {id:"pickups",label:"Pickups",desc:"Schedule carrier pickups",default:true},
   {id:"batch",label:"Batch",desc:"Rate & print in bulk",default:true},
   {id:"invoices",label:"Invoice Audit",desc:"Carrier invoice auditing",default:false},   /* off unless the admin grants it per login */
   {id:"pickupCosts",label:"Pickup fee display",desc:"Show pickup fee estimates on the Pickups tab",default:true},
-  {id:"rules",label:"Autopilot",desc:"Autopilot Mode — automation rules",default:true},
+  {id:"rules",label:"Autopilot",desc:"Autopilot mode — automation rules",default:true},
   {id:"scan",label:"Scan",desc:"Barcode scan station",default:true},
   {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:true},
   {id:"seeCosts",label:"See costs & spend",desc:"Rates, order totals, batch totals and Reports dollars. Turn OFF to hide all money from this customer's logins",default:true},
@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v496";
+const BUILD_TAG="addr-v497";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2873,7 +2873,7 @@ const CUSTOM_DEFAULTS={
   confetti:"page",seasonal:false,loginBg:"",appBg:"",headerBg:"",pageBg:"",navBg:"",
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
-const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
+const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
 const SLIP_OPTS={thanks:"",footer:""};   // synced from settings by AppInner; read by packingSlipHTML
 const CI_OPTS={taxId:"",logo:""};                 // Tax ID / EIN printed on commercial invoices, from Settings → General
 const fireConfetti=()=>{try{window.dispatchEvent(new CustomEvent("sc-confetti"));}catch(e){}};
@@ -5799,7 +5799,7 @@ function Landing({onAuth}){
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <F icon={DollarSign} title="Industry-leading FedEx rates">The pricing big shippers get, from day one. No volume commitments, no negotiating.</F>
         <F icon={BarChart3} title="Transit dashboard & detailed reporting">Track every shipment end to end and see spend, transit times, and delivery performance at a glance — with reports you can act on.</F>
-        <F icon={Zap} title="Autopilot Mode">Set your rules once, then let the platform do all the work. Orders arrive rated, boxed, and ready to print — you just hit go.</F>
+        <F icon={Zap} title="Autopilot mode">Set your rules once, then let the platform do all the work. Orders arrive rated, boxed, and ready to print — you just hit go.</F>
         <F icon={Cog} title="Customization">We adapt to your flow, not the other way around. Need something the platform doesn’t do? Tell us. We’ll build it.</F>
         <F icon={Users} title="Built by shipping people, supported by tech people">We’ve stood at the shipping desk — the reweighs, the surprise surcharges, the reps who never call back. We know the problems firsthand, and we have the tech team to fix them.</F>
         <F icon={Boxes} title="Box logic and live cart rates">We know your products and your boxes, so your store shows the real cost to ship — and you never pay to ship empty space.</F>
@@ -6653,6 +6653,11 @@ function AppInner(){
   if(BRAND.admin&&currentUser.role!=="admin"&&!lsGet("adminReturn",null)) return (<div className="min-h-screen bg-stone-100 flex items-center justify-center p-4"><div className="bg-white border border-stone-200 rounded-xl p-8 text-center max-w-sm"><ShieldCheck className="w-8 h-8 text-stone-300 mx-auto mb-3"/><div className="font-semibold text-stone-800">Administrators only</div><p className="text-sm text-stone-500 mt-1">This portal is the admin HQ. Your account works on shippingcloud.net and freightwireship.com.</p><button onClick={()=>{lsDel("session");window.location.reload();}} className="mt-4 text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Sign out</button></div></div>);
 
   const [fedexPrompt,setFedexPrompt]=usePersist("fedexPrompt",{seen:false});
+  // The "Get your own FedEx account" welcome popup is for BRAND-NEW signups only —
+  // never nag an existing login with it. Accounts carry a createdAt at signup; a
+  // recent one means new, a missing/old one means an established (or legacy) login.
+  const _acctAgeDays=currentUser&&currentUser.createdAt?(Date.now()-new Date(currentUser.createdAt).getTime())/86400000:Infinity;
+  const isNewAccount=_acctAgeDays<=14;
   const adminReturn=lsGet("adminReturn",null);
   const exitImpersonation=()=>{ lsSet("session",adminReturn); lsDel("adminReturn"); window.location.reload(); };
   /* shell */
@@ -6668,7 +6673,7 @@ function AppInner(){
         <button onClick={()=>{lsSet("postDemo","request");lsSet("session",null);window.location.reload();}} className="bg-white/20 hover:bg-white/30 rounded-lg px-2.5 py-1 text-xs font-semibold">Create your real account</button>
         <button onClick={()=>{lsSet("session",null);window.location.reload();}} className="bg-white/10 hover:bg-white/20 rounded-lg px-2.5 py-1 text-xs">Exit demo</button>
       </div>}
-      {!isDemo&&!isAdmin&&!adminReturn&&CLOUD.mode==="cloud"&&!fedexPrompt.seen&&<FirstRunFedEx user={currentUser} onClose={()=>setFedexPrompt({seen:true})}/>}
+      {!isDemo&&!isAdmin&&!adminReturn&&CLOUD.mode==="cloud"&&!fedexPrompt.seen&&isNewAccount&&<FirstRunFedEx user={currentUser} onClose={()=>setFedexPrompt({seen:true})}/>}
       <AssistantChat who={isDemo?"demo":isAdmin?"admin":"customer"} getContext={assistantContext} onAction={onAssistantAction}/>
       {shopPush&&<div className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] max-w-lg w-[92vw] sm:w-auto rounded-xl shadow-2xl border px-4 py-3 text-sm flex items-start gap-2.5 ${shopPush.ok?"bg-emerald-50 border-emerald-300 text-emerald-800":"bg-rose-50 border-rose-300 text-rose-800"}`}>
         {shopPush.ok?<CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5"/>:<AlertTriangle className="w-5 h-5 shrink-0 mt-0.5"/>}
@@ -6793,6 +6798,16 @@ function shipDateDefault(settings){
   // local-date ISO (avoid UTC shifting the day)
   const off=d.getTimezoneOffset();
   return new Date(d.getTime()-off*60000).toISOString().slice(0,10);
+}
+/* Numbered step marker for the Ship screen — gives the dense form a clear, professional
+   1-2-3 flow (Ship from & to → Packages & options → Service & rate) without moving any
+   of the price-interdependent inputs around. */
+function StepHead({n,label}){
+  return (<div className="flex items-center gap-2 pt-1">
+    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-[#0086E0] text-white text-[10px] font-bold shrink-0">{n}</span>
+    <span className="text-[11px] font-semibold uppercase tracking-widest text-stone-500">{label}</span>
+    <span className="flex-1 h-px bg-stone-200"/>
+  </div>);
 }
 function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,drafts,setDrafts,prefill,clearPrefill,onShipped,onPending,logEmail,onQuickQuote,onRefresh,syncing,currentUser,setUsers,setCurrentUser,clients=[],priceAs="",setPriceAs=null}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 rate database — global, follows the customer's profile
@@ -7364,7 +7379,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(hfArmed!==selectedOrder)return {t:"info",m:custom.hideShipOrders?"this order was already on screen when the page loaded — scan it and it will book itself":"this order was already on screen when the page loaded — click it in the sidebar (or scan it) and it will book itself"};
     if(!ready)return {t:"info",m:"waiting for a valid destination ZIP and weight"};
     if(rateSrc.loading)return {t:"info",m:"waiting for live rates…"};
-    if(!rateSrc.live)return {t:"warn",m:"live rates aren't coming back (these are estimates) — hands-free never books on an estimate. Check the carrier account under Settings → FedEx Account"};
+    if(!rateSrc.live)return {t:"warn",m:"live rates aren't coming back (these are estimates) — hands-free never books on an estimate. Check the carrier account under Settings → FedEx account"};
     if(!addrClassified)return {t:"info",m:"waiting for FedEx to classify the address (residential vs commercial)…"};
     if(!matched||matched.src!=="autopilot"){
       const _rc=liveRuleMatch?canonSvc(groundFamilySwap(liveRuleMatch,addrClassified?residential:null)):"";
@@ -7494,6 +7509,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}
           </div>
         </div>
+        <StepHead n="1" label="Ship from & to"/>
         <div className="relative grid lg:grid-cols-3 gap-4">
           <div className="min-w-0"><AddressCard title="Sender" data={sender} set={setSender} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} hideAddr23={custom.hideAddr23}/></div>
           <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-1/3 top-11 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-4 h-4"/></button>
@@ -7509,6 +7525,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         </div>}
         {intl&&<div className="flex items-center gap-2 text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2"><MapPin className="w-4 h-4"/>International shipment to <b>{receiver.country}</b> — FedEx &amp; DHL rates shown, customs info required below.</div>}
 
+        <StepHead n="2" label="Packages & options"/>
         <div className="bg-stone-100 border border-stone-200 rounded-lg p-3 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <datalist id="sc-ref-list">{[...((settings.fieldLists||{}).department||[]),...((settings.fieldLists||{}).reference||[])].map(v=><option key={v} value={v}/>)}</datalist>
@@ -7639,6 +7656,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <Printer className="w-3.5 h-3.5 shrink-0"/>
           <span><b>Hands-free:</b> {hfWait.m}</span>
         </div>}
+        <StepHead n="3" label="Service & rate"/>
         <ServiceList quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${orBox?orBox.code:""}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
         {intl&&(
           <div className="border border-[#99D6FF] bg-[#E6F4FF]/40 rounded-lg p-3 space-y-3">
@@ -8228,7 +8246,7 @@ function LiveEstRate({o,client,settings,rateRules,ruleset}){
   return <span className="text-stone-600 font-mono whitespace-nowrap" title={v.label+(v.ruled?" — picked by your Autopilot rule":"")}>{money(v.sell)}<span className="text-stone-300 font-sans"> {v.live?"live":"est."}</span>{v.ruled&&<Zap className="w-3 h-3 inline ml-0.5 text-[#0086E0]" />}</span>;
 }
 function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,openOrderId=null,onOpenedOrder,showMoney=true}){
-  const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // Est. Rate shows the SELL estimate — raw carrier cost must never render in a customer-visible table
+  const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // Est. rate shows the SELL estimate — raw carrier cost must never render in a customer-visible table
   const [ruleset]=usePersist("ruleset",SEED_RULESET);              // Autopilot rules drive the service the rate column prices
   useEffect(()=>{ if(!openOrderId)return; const found=orders.find(o=>o.id===openOrderId); if(found)setOpen(found); if(onOpenedOrder)onOpenedOrder(); },[openOrderId,orders]);
   const custom=cz(settings||{});
@@ -8348,7 +8366,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
                     {!hideCol.has("recipient")&&<th className="text-left font-medium px-3 py-2">Recipient</th>}
                     {!hideCol.has("requested")&&<th className="text-left font-medium px-3 py-2 whitespace-nowrap">Requested</th>}
                     {filter!=="fulfilled"&&custom.autopilotPreview&&!hideCol.has("autopilot")&&<th className="text-left font-medium px-3 py-2 whitespace-nowrap"><span className="inline-flex items-center gap-1"><Zap className="w-3 h-3 text-violet-500"/>Autopilot</span></th>}
-                    {filter!=="fulfilled"&&!hideCol.has("estRate")&&<th className="text-right font-medium px-3 py-2 whitespace-nowrap">Est. Rate</th>}
+                    {filter!=="fulfilled"&&!hideCol.has("estRate")&&<th className="text-right font-medium px-3 py-2 whitespace-nowrap">Est. rate</th>}
                     {!hideCol.has("qty")&&<th className="text-right font-medium px-3 py-2">Qty</th>}
                     {!hideCol.has("total")&&<th className="text-right font-medium px-3 py-2 whitespace-nowrap">Order total</th>}
                     {!hideCol.has("status")&&<th className="text-left font-medium px-3 py-2">Status</th>}
@@ -10203,7 +10221,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
      policy/fallback logic unchanged. */
   const SEC_GROUPS=[
     ["Workspace",[["general","General",Cog],["customize","Customizations",Sliders]]],
-    ["Shipping",[["shipscreen","Ship screen",Truck],["orderspage","Orders",ShoppingBag],["carriers",BRAND.fw?"FedEx Account":"Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["catalog","Product catalog",Boxes],["reference","Reference Fields",Receipt]]],
+    ["Shipping",[["shipscreen","Ship screen",Truck],["orderspage","Orders",ShoppingBag],["carriers",BRAND.fw?"FedEx account":"Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["catalog","Product catalog",Boxes],["reference","Reference fields",Receipt]]],
     ["Documents & printing",[["printer","Print settings",Printer],["cieditor","Commercial invoice",Receipt],["otherdocs","Other documents",FileText],["manifests","Manifests",FileText]]],
     ["Automation & integrations",[["integrations","Integrations",Layers],["notifications","Email automation",Mail],["checkout","Checkout rates",ShoppingBag]]],
     ["Account",[["reports","Reports",TrendingUp],["billing","Billing",CreditCard],["subscription","Subscription",Star]]],
@@ -10277,7 +10295,7 @@ function ReferenceFields({settings,setSettings}){
   ];
   return (<div className="max-w-2xl space-y-4">
     <div>
-      <h2 className="text-base font-semibold text-stone-800">Reference Fields</h2>
+      <h2 className="text-base font-semibold text-stone-800">Reference fields</h2>
       <p className="text-sm text-stone-500 mt-1">When you pick a <b>FedEx One Rate</b> service, {BRAND.product} can auto-fill the chosen box name into a reference field so it prints on the label and your team knows which box to grab. Pick where it goes — or turn it off.</p>
     </div>
     <div className="bg-white border border-stone-200 rounded-lg p-4 flex items-center justify-between">
@@ -12652,12 +12670,12 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
     {cs==="orders"&&<Panel title="Orders page">
       <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Columns — untick to hide completely</div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-        {[["age","Age"],["date","Order date"],["items","Items"],["recipient","Recipient"],["requested","Requested"],["estRate","Est. Rate"],["qty","Qty"],["total","Order total"],["status","Status"],...(c.autopilotPreview?[["autopilot","Autopilot"]]:[])].map(([k,l])=>{
+        {[["age","Age"],["date","Order date"],["items","Items"],["recipient","Recipient"],["requested","Requested"],["estRate","Est. rate"],["qty","Qty"],["total","Order total"],["status","Status"],...(c.autopilotPreview?[["autopilot","Autopilot"]]:[])].map(([k,l])=>{
           const hidden=(c.orderCols||[]).includes(k);
           return <label key={k} className="flex items-center gap-1.5 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!hidden} onChange={()=>{const nx=new Set(c.orderCols||[]);hidden?nx.delete(k):nx.add(k);set("orderCols",[...nx]);}} className="accent-[#0086E0]"/><span className={hidden?"text-stone-300":""}>{l}</span></label>;
         })}
       </div>
-      <div className="text-[11px] text-stone-400 mt-1.5">Order # and actions always show. Shipped orders never show Autopilot or Est. Rate — those only mean something before the label is booked.</div>
+      <div className="text-[11px] text-stone-400 mt-1.5">Order # and actions always show. Shipped orders never show Autopilot or Est. rate — those only mean something before the label is booked.</div>
       <div className="border-t border-stone-100 mt-3 pt-3 grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         {Tog({k:"autopilotPreview",label:"Show an Autopilot preview column",hint:"Adds a column showing what your Autopilot rules would pick for each order — the service, a hold, or 'no rule matches' — before you ship. Runs your real rules, updates live."})}
         {Sel({k:"density",label:"List density",opts:[["comfortable","Comfortable"],["compact","Compact — more rows per screen"]]})}
@@ -13459,7 +13477,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
         <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400"/>
         <input value={q} onChange={e=>{setQ(e.target.value);setOpen(true);}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder={(addresses&&addresses.length)?`Address book — ${addresses.length} saved…`:"Search address book…"} className="w-full bg-white border border-stone-200 rounded pl-8 pr-8 py-1.5 text-[13px] outline-none focus:border-[#0099FF] placeholder-stone-300"/>
         <button type="button" onMouseDown={(e)=>{e.preventDefault();setOpen(o=>!o);}} className="absolute right-2 top-1.5 text-stone-400 hover:text-[#0086E0]" title="Show all saved addresses"><ChevronDown className={`w-4 h-4 transition-transform ${open?"rotate-180":""}`}/></button>
-        {open&&matches.length===0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg px-3 py-2.5 text-xs text-stone-400">{(addresses&&addresses.length)?"No matches — try fewer letters.":"Nothing saved yet. Fill in an address and hit “Save to Address Book” — it’ll be one click next time."}</div>}
+        {open&&matches.length===0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg px-3 py-2.5 text-xs text-stone-400">{(addresses&&addresses.length)?"No matches — try fewer letters.":"Nothing saved yet. Fill in an address and hit “Save to Address book” — it’ll be one click next time."}</div>}
         {open&&matches.length>0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-64 overflow-auto">
           <div className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50 border-b border-stone-100 sticky top-0">{q.trim()?`${matches.length} match${matches.length===1?"":"es"}`:`${addresses.length} saved address${addresses.length===1?"":"es"}`}</div>
           <div className="divide-y divide-stone-100">

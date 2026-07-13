@@ -28,7 +28,7 @@ const btnByText = (label) => [...window.document.querySelectorAll("button")].fin
 try { window.eval(code); } catch (e) { errs.push("EVAL THREW: " + (e.stack || e)); }
 
 const MAIN_TABS = ["ship", "orders", "shipments", "batch", "returns", "pickups", "invoices", "rules", "drafts", "scan", "settings"];
-const SETTINGS_SECTIONS = ["General", "Customizations", "Ship screen", "Orders", "Carrier accounts", "Warehouses", "Package sizes", "Box logic", "Product catalog", "Reference fields", "Print settings", "Commercial invoice", "Other documents", "Manifests", "Integrations", "Email automation", "Checkout rates", "Reports", "Billing", "Subscription"];
+const SETTINGS_SECTIONS = ["General", "Customizations", "Ship Screen", "Orders", "Carrier Accounts", "Warehouses", "Package Sizes", "Box Logic", "Product Catalog", "Reference Fields", "Print Settings", "Commercial Invoice", "Other Documents", "Manifests", "Integrations", "Email Automation", "Checkout Rates", "Reports", "Billing", "Subscription"];
 
 (async () => {
   await sleep(1200);

@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v495";
+const BUILD_TAG="addr-v496";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7503,7 +7503,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             {scanMsg&&<span className="absolute right-2 top-2">{scanMsg.ok?<CheckCircle2 className="w-4 h-4 text-emerald-500"/>:<AlertTriangle className="w-4 h-4 text-rose-400"/>}</span>}
           </div>} contactFallback={{phone:sender.phone,email:sender.email}} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }} hideAddr23={custom.hideAddr23} reqOverrides={{phone:custom.phoneRequired!==false,email:custom.emailRequired!==false}} side={addressCheck}/></div>
         </div>
-        {!(sender.name||sender.company||sender.address1||sender.zip)&&<div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No sender on file — fill in the Sender card above, or set your default sender in Settings → Company.</div>}
+        {!(sender.name||sender.company||sender.address1||sender.zip)&&<div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2 flex-wrap"><span className="flex-1 min-w-[180px]">No sender on file — fill in the Sender card above, or set a default sender.</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"settings"}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1">Set default sender →</button></div>}
         {billTo==="third"&&thirdAcct&&<div className="flex flex-wrap items-center gap-2 text-xs -mt-1">
           <span className="flex items-center gap-1.5 text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-1.5"><CreditCard className="w-3.5 h-3.5"/>Auto-billing to third-party account <b className="font-mono">{thirdAcct}</b><button onClick={()=>{setBillTo("sender");setThirdAcct("");}} className="ml-1 text-[#0086E0] hover:text-[#006FBF] underline">bill sender instead</button></span>
         </div>}
@@ -12586,11 +12586,11 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
   const togTab=(k)=>{const nx=new Set(hiddenTabs); nx.has(k)?nx.delete(k):nx.add(k); set("hiddenTabs",[...nx]);};
   const order=(c.tabOrder&&c.tabOrder.length)?c.tabOrder:tabChoices.map(x=>x[0]);
   const move=(k,dir)=>{const a=[...order];const i=a.indexOf(k);const j=i+dir;if(i<0||j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];set("tabOrder",a);};
-  const [cs,setCs]=useState(only||"services");
+  const [cs,setCs]=useState(only||(deployMode?"services":"appearance"));
   /* Ship screen is its own top-level Settings section now (v376). It still shows as a tab in
      deployMode so the admin team-deploy screen keeps every option in one place. `only` renders a
      single panel with no tab bar — used by Settings → Ship screen. */
-  const CTABS=[["services","Services"],...(deployMode?[["ship","Ship screen"],["orders","Orders & lists"]]:[]),["appearance","Appearance"]];   // Ship screen + Orders are their own top-level Settings sections now (still tabs in deployMode so team-deploy keeps every option in one place). Packing-slip message/footer moved to Settings → Print settings → Packing slip (v393). Autopilot toggles → Print settings (v355). Labels & printing → Printer settings (v281).
+  const CTABS=[...(deployMode?[["services","Services"],["ship","Ship screen"],["orders","Orders & lists"]]:[]),["appearance","Appearance"]];   // Services (rate view + service on/off) moved under Settings → Ship screen; Customizations keeps Appearance/tabs/branding   // Ship screen + Orders are their own top-level Settings sections now (still tabs in deployMode so team-deploy keeps every option in one place). Packing-slip message/footer moved to Settings → Print settings → Packing slip (v393). Autopilot toggles → Print settings (v355). Labels & printing → Printer settings (v281).
   return (<div className="max-w-2xl space-y-4">
     <DraftBar dirty={_cd.dirty} onSave={_cd.save} onUndo={_cd.undo} onReset={()=>{ if(window.confirm("Reset all customizations to their defaults? You'll still need to click Save to keep it.")) _cd.reset(); }} resetLabel="Reset to defaults" savedNote="Customizations saved"/>
     {!deployMode&&!only&&<div className="text-sm text-stone-500">Make {BRAND.product} yours. Every option here changes the app immediately for <b>your login only</b>.</div>}
@@ -12629,7 +12629,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
       </div>
     </Panel>}
 
-    {cs==="services"&&<Panel title="Rates & services">
+    {(cs==="services"||only==="ship")&&<Panel title="Rates & services">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         {Sel({k:"defaultView",label:"Default rate view",opts:[["cheapest","Cheapest first"],["carrier","Grouped by carrier"]]})}
         {(isAdmin||deployMode)&&<div className="rounded-lg border border-blue-100 bg-blue-50/40 p-2.5"><div className="text-[10px] uppercase tracking-widest text-blue-400 mb-1.5 flex items-center gap-1"><ShieldCheck className="w-3 h-3"/>Admin only</div>{Tog({k:"showRateViewToggle",label:"Show the Cheapest / By carrier switch on Ship",hint:"Off = the rate list just uses the default view above, with no toggle or 'enter ZIP & weight' hint shown. Only you (admin) can turn this on."})}</div>}

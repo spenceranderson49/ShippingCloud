@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v509";
+const BUILD_TAG="addr-v510";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -12996,26 +12996,9 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
         {SHOW_ENGLAND&&isAdmin&&<p className="text-[11px] text-stone-400">For production, store the API key as a Netlify env var (<span className="font-mono">ENGLAND_API_KEY</span>, <span className="font-mono">ENGLAND_CUSTOMER_ID</span>) instead of here, so it never ships to the browser. England authenticates with the API key + customer ID; if you only have the FedEx account number, try it as the customer ID or confirm the key with your England rep.</p>}
       </div>
     </div>
-    {byoCarrier&&<>
-    <div>
-      <div className="flex items-center justify-between mb-2"><h3 className="text-sm font-semibold text-stone-700">Your own carrier accounts</h3><button onClick={()=>setAdding(v=>!v)} className="flex items-center gap-1 text-sm bg-stone-200 hover:bg-stone-300 rounded-lg px-2.5 py-1.5"><Plus className="w-4 h-4"/>Add</button></div>
-      <p className="text-sm text-stone-500 mb-3">Prefer your own negotiated rates? Connect your own carrier account number.</p>
-      {adding&&<Panel title="Add carrier account">
-        <div className="grid grid-cols-2 gap-3"><Field label="Label"><Input value={d.label} onChange={e=>setD({...d,label:e.target.value})}/></Field><Field label="Provider"><Select value={d.provider} onChange={e=>setD({...d,provider:e.target.value})}>{PROVIDERS.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field></div>
-        <Field label="Account #"><Input value={d.account} onChange={e=>setD({...d,account:e.target.value})}/></Field>
-        <Field label="API key"><Input type="password" value={d.apiKey} onChange={e=>setD({...d,apiKey:e.target.value})}/></Field>
-        {d.provider==="england"&&<Field label="Customer ID"><Input value={d.customerId} onChange={e=>setD({...d,customerId:e.target.value})}/></Field>}
-        {d.provider!=="england"&&<Field label="Secret"><Input type="password" value={d.secret} onChange={e=>setD({...d,secret:e.target.value})}/></Field>}
-        <button onClick={add} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium">Connect</button>
-      </Panel>}
-      <div className="space-y-2 mt-2">{accounts.map(a=>(<div key={a.id} className="border border-stone-200 rounded-lg bg-white p-4 flex items-center gap-3">
-        <div className="w-9 h-9 rounded bg-[#E6F4FF] text-[#0086E0] flex items-center justify-center"><Wifi className="w-4 h-4"/></div>
-        <div className="flex-1"><div className="font-medium">{a.label||a.provider}</div><div className="text-[11px] text-stone-400 font-mono">{(PROVIDERS.find(p=>p.id===a.provider)||{}).name}{a.account?` · ${a.account}`:""}</div></div>
-        <Badge tone="amber">{a.mode}</Badge>
-        <button onClick={()=>setAccounts(x=>x.filter(y=>y.id!==a.id))} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>
-      </div>))}</div>
-    </div>
-    </>}
+    {/* "Bring your own carrier account" section removed per owner request (v510) — resellers price
+       from our own carrier accounts, so customers never connect their own. The byoCarrier feature
+       flag + plumbing stay in place, just not surfaced here. */}
   </div>);
 }
 

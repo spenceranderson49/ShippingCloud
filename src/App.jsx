@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v505";
+const BUILD_TAG="addr-v506";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3115,8 +3115,25 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
       <div className="flex-1"><div className="text-[11px] text-stone-500">{label}</div><input value={b[k]} onChange={e=>set(k,e.target.value)} className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF]"/></div>
     </div>
   );
+  const uploadCarrierMark=(e)=>{const f=e.target.files&&e.target.files[0];e.target.value="";if(!f)return;if(f.size>1.5*1024*1024){uiAlert("That image is over 1.5 MB — please use a smaller PNG or SVG.");return;}const r=new FileReader();r.onload=()=>setPublicBrand&&setPublicBrand({carrierMark:String(r.result||"")});r.readAsDataURL(f);};
   return (<div className="max-w-3xl space-y-4">
     <p className="text-sm text-stone-500">White-label the platform for another shipping company — set the product name, colors, and partner logo. Changes apply across the whole app and are saved on this browser.</p>
+
+    {/* Carrier logo on label previews — global: one upload shows on every login's label preview */}
+    <div className="border border-stone-200 rounded-xl bg-white p-4 space-y-2">
+      <div className="text-sm font-semibold text-stone-800">Carrier logo on label previews</div>
+      <p className="text-[13px] text-stone-500">Upload your carrier's official logo file — it shows on the on-screen label <b>preview</b> for <b>every login</b>. The real label you print always comes from the carrier with their own official logo; this only replaces the placeholder mark in the preview.</p>
+      <div className="flex items-center gap-3 flex-wrap pt-1">
+        {publicBrand&&publicBrand.carrierMark
+          ? <img src={publicBrand.carrierMark} alt="carrier logo" className="h-9 w-auto max-w-[180px] object-contain border border-stone-200 rounded bg-white px-2 py-1"/>
+          : <span className="text-xs text-stone-400 italic">No file uploaded — previews show a built-in placeholder.</span>}
+        <label className="text-xs bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">
+          {publicBrand&&publicBrand.carrierMark?"Replace file":"Upload logo"}
+          <input type="file" accept="image/png,image/jpeg,image/svg+xml" className="hidden" onChange={uploadCarrierMark}/>
+        </label>
+        {publicBrand&&publicBrand.carrierMark&&<button onClick={()=>setPublicBrand&&setPublicBrand({carrierMark:""})} className="text-xs text-rose-500 hover:underline">Remove</button>}
+      </div>
+    </div>
 
     {/* Live preview */}
     <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
@@ -6462,10 +6479,10 @@ function AppInner(){
       const rc=settings&&settings.receipt;
       window.__scPrintExtras={
         logo:{on:!!cc.labelLogoOn,src:cc.labelLogo||settings.companyLogo||"",pos:cc.labelLogoPos||"bottom_left",scale:cc.labelLogoScale,dx:cc.labelLogoDX,dy:cc.labelLogoDY,x:cc.labelLogoX,y:cc.labelLogoY},
-        fedexMark:cc.fedexMarkSrc||"",
+        fedexMark:(publicBrand&&publicBrand.carrierMark)||cc.fedexMarkSrc||"",
         receipt:{enabled:!!(rc&&rc.enabled&&rc.withLabel!==false),cfg:rc||null,logo:(rc&&rc.showLogo!==false?(settings.companyLogo||""):"")}
       };
-    }catch(e){} },[settings&&settings.custom,settings&&settings.receipt,settings&&settings.companyLogo]);
+    }catch(e){} },[settings&&settings.custom,settings&&settings.receipt,settings&&settings.companyLogo,publicBrand&&publicBrand.carrierMark]);
   const brand=BRAND.fw
     ?{...DEFAULT_BRAND,name1:"FREIGHT",name2:"WIRE SHIP",dark:"#1c1917",primary:"#1E9BF0",...(settings.brand||{})}
     :{...DEFAULT_BRAND,...(settings.brand||{})};
@@ -10851,19 +10868,6 @@ function PrinterSettings({settings,setSettings}){
   const DOC_KINDS=[["packSlip","Packing slips","Auto-printed slips and every Packing slip button"],["pickList","Pick lists","The Pick list buttons in Orders & Batch"],["docs","Receipts & other documents","Shipment receipts and commercial invoices"]];
   return (<div className="max-w-2xl space-y-4">
     <p className="text-sm text-stone-500">Controls how labels are generated and printed when you buy a label or run a batch.</p>
-    <Panel title="Carrier logo on the label preview">
-      <p className="text-[13px] text-stone-500 -mt-1">Upload your carrier's official logo file to show it on the on-screen label <b>preview</b>. The real label you print always comes from the carrier with their own official logo — this only replaces the placeholder mark in the preview mock.</p>
-      <div className="mt-3 flex items-center gap-3 flex-wrap">
-        {c.fedexMarkSrc
-          ? <img src={c.fedexMarkSrc} alt="carrier logo" className="h-9 w-auto max-w-[180px] object-contain border border-stone-200 rounded bg-white px-2 py-1"/>
-          : <span className="text-xs text-stone-400 italic">No file uploaded — the preview shows a built-in placeholder.</span>}
-        <label className="text-xs bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">
-          {c.fedexMarkSrc?"Replace file":"Upload logo"}
-          <input type="file" accept="image/png,image/jpeg,image/svg+xml" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];e.target.value="";if(!f)return;if(f.size>1.5*1024*1024){uiAlert("That image is over 1.5 MB — please use a smaller PNG or SVG.");return;}const r=new FileReader();r.onload=()=>setCust("fedexMarkSrc",String(r.result||""));r.readAsDataURL(f);}}/>
-        </label>
-        {c.fedexMarkSrc&&<button onClick={()=>setCust("fedexMarkSrc","")} className="text-xs text-rose-500 hover:underline">Remove</button>}
-      </div>
-    </Panel>
     <Panel title="Ship & print automation">
       <div className="space-y-3">
         <p className="text-[11px] text-stone-500 -mt-1">Set it once, top to bottom: what the app does when an order comes in, then exactly how the label prints and what pops up.</p>

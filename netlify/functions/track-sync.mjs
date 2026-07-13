@@ -13,6 +13,7 @@
    start moving with no code change. Dashboard, live board, Shipments, and the
    Transit audit all compute from this data, so they go live together. */
 
+import crypto from "node:crypto";
 const ACTIVE = ["Label created", "In transit", "Out for delivery"];
 const MAX_PER_RUN = 120;   // 4 Track calls of 30 — well inside the 30s scheduled budget
 const BATCH = 30;          // FedEx Track API max tracking numbers per call
@@ -162,11 +163,44 @@ export default async () => {
     if (dirty) changed.push({ tenant: "main", key: row.key, value: list });
   }
 
+  /* collect status changes on API accounts (key = u/api_<clientId>/shipments) to push webhooks */
+  const apiEvents = [];
+  for (const ri of touched) {
+    const key = rows[ri] && rows[ri].key;
+    const m = /^u\/(api_[^/]+)\/shipments$/.exec(String(key || ""));
+    if (!m) continue;
+    const before = new Map((Array.isArray(rows[ri].value) ? rows[ri].value : []).map((s) => [String(s && s.tracking), s && s.status]));
+    const after = (changed.find((c) => c.key === key) || {}).value;
+    if (!after) continue;
+    for (const s of after) {
+      if (s && s.tracking && before.get(String(s.tracking)) !== s.status) apiEvents.push({ apiUid: m[1], tracking: s.tracking, status: s.status, ref: s.reference || null });
+    }
+  }
+
   if (changed.length) {
     const ok = await pgUpsert(changed);
     console.log(`track-sync: checked ${jobs.length}, updated ${changed.length} account store(s), write ${ok ? "ok" : "FAILED"}`);
   } else {
     console.log(`track-sync: checked ${jobs.length}, no changes`);
+  }
+
+  /* fire tracking.updated webhooks (signed) for API accounts whose shipment status moved */
+  for (const ev of apiEvents.slice(0, 200)) {
+    try {
+      const hr = await pgGet("app_stores?tenant=eq.main&key=eq." + encodeURIComponent("u/" + ev.apiUid + "/webhooks") + "&select=value");
+      const hooks = ((hr && hr[0] && hr[0].value) || []).filter((h) => h && !h.disabled && (!h.events || h.events.includes("tracking.updated")));
+      if (!hooks.length) continue;
+      const body = JSON.stringify({ event: "tracking.updated", created: new Date().toISOString(), data: { tracking_number: ev.tracking, status: ev.status, reference: ev.ref } });
+      for (const h of hooks.slice(0, 5)) {
+        try {
+          const host = (() => { try { return new URL(h.url).hostname; } catch (e) { return ""; } })();
+          if (/^(localhost|127\.|10\.|192\.168\.|169\.254\.|0\.)/.test(host) || /\.local$/.test(host)) continue;   // no internal targets
+          const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 5000);
+          await fetch(h.url, { method: "POST", redirect: "manual", headers: { "Content-Type": "application/json", "X-SC-Event": "tracking.updated", "X-SC-Signature": crypto.createHmac("sha256", String(h.secret || "")).update(body).digest("hex") }, body, signal: ctrl.signal });
+          clearTimeout(t);
+        } catch (e) {}
+      }
+    } catch (e) {}
   }
 };
 

@@ -133,7 +133,7 @@ function scAuth(body) {
     const got = Buffer.from(sig, "hex");
     if (want.length !== got.length || !scCrypto.timingSafeEqual(want, got)) return null;
     const d = JSON.parse(Buffer.from(String(p).replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
-    if (!d || !d.uid || !d.exp || Date.now() > d.exp) return null;
+    if (!d || d.kind || !d.uid || !d.exp || Date.now() > d.exp) return null;   /* d.kind = special-purpose token (password reset) — never a session */
     return d;
   } catch (e) { return null; }
 }
@@ -198,6 +198,7 @@ exports.handler = async (event) => {
   if (o.reference) refs.push({ customerReferenceType: "CUSTOMER_REFERENCE", value: String(o.reference).slice(0, 40) });
   if (o.invoiceNo) refs.push({ customerReferenceType: "INVOICE_NUMBER", value: String(o.invoiceNo).slice(0, 40) });
   if (o.poNo) refs.push({ customerReferenceType: "P_O_NUMBER", value: String(o.poNo).slice(0, 40) });
+  if (o.department) refs.push({ customerReferenceType: "DEPARTMENT_NUMBER", value: String(o.department).slice(0, 40) });
 
   const lineItems = pieces.map((p, i) => {
     const it = {
@@ -270,14 +271,24 @@ exports.handler = async (event) => {
     requestedShipment.customsClearanceDetail = {
       dutiesPayment: { paymentType: "SENDER" },
       isDocumentOnly: false,
-      commodities: [{
-        description: String(o.contentDescription || "Merchandise").slice(0, 450),
-        countryOfManufacture: toISO(sender.country || "US"),
-        quantity: 1, quantityUnits: "PCS",
-        unitPrice: { amount: customsVal, currency: "USD" },
-        customsValue: { amount: customsVal, currency: "USD" },
-        weight: { units: "LB", value: totalWeight }
-      }]
+      commodities: (Array.isArray(o.commodities) && o.commodities.length
+        ? o.commodities.map((ci) => { const qty = Math.max(1, Math.round(+ci.quantity || 1)); const unit = Math.max(0, +ci.unitPrice || +ci.value || 0); return {
+            description: String(ci.description || "Merchandise").slice(0, 450),
+            countryOfManufacture: toISO(ci.countryOfOrigin || sender.country || "US"),
+            quantity: qty, quantityUnits: "PCS",
+            harmonizedCode: ci.hsCode ? String(ci.hsCode).replace(/[^0-9]/g, "").slice(0, 14) : undefined,
+            unitPrice: { amount: Math.round(unit * 100) / 100, currency: "USD" },
+            customsValue: { amount: Math.round(unit * qty * 100) / 100, currency: "USD" },
+            weight: { units: "LB", value: Math.max(0.1, +ci.weight || (totalWeight / (o.commodities.length || 1))) }
+          }; })
+        : [{
+            description: String(o.contentDescription || "Merchandise").slice(0, 450),
+            countryOfManufacture: toISO(sender.country || "US"),
+            quantity: 1, quantityUnits: "PCS",
+            unitPrice: { amount: customsVal, currency: "USD" },
+            customsValue: { amount: customsVal, currency: "USD" },
+            weight: { units: "LB", value: totalWeight }
+          }])
     };
   }
 

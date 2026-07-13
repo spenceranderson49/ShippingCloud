@@ -88,7 +88,7 @@ function verifyToken(token) {
     const want = Buffer.from(sign(p), "hex"); const got = Buffer.from(sig, "hex");
     if (want.length !== got.length || !crypto.timingSafeEqual(want, got)) return null;
     const payload = JSON.parse(unb64u(p));
-    if (!payload || !payload.uid || !payload.exp || Date.now() > payload.exp) return null;
+    if (!payload || payload.kind || !payload.uid || !payload.exp || Date.now() > payload.exp) return null;   /* kind = pwreset — only resetPassword may consume it */
     return payload;
   } catch { return null; }
 }
@@ -373,7 +373,8 @@ exports.handler = async (event) => {
       const curU = await getStore("users");
       const users = Array.isArray(curU.value) ? curU.value : [];
       const u = users.find((x) => x && String(x.email || "").toLowerCase() === email && x.status !== "disabled");
-      if (!u) return J(generic); // never reveal which emails exist
+      const _adm = verifyToken(body.token);
+      if (!u) return J(_adm && _adm.role === "admin" ? { ...generic, found: false } : generic); // never reveal which emails exist to anonymous callers
       /* welcome variant: only an authenticated ADMIN can request it (it says "an account was
          created for you", so it must never be triggerable by an anonymous visitor). 72h link —
          a brand-new user may not check email within the reset flow's 1 hour. */
@@ -729,6 +730,35 @@ exports.handler = async (event) => {
       const w = await putStores(toWrite);
       if (!w.ok) return J({ ok: false, error: "Save failed: " + ((w.err && w.err.text) || "").slice(0, 200) });
       return J({ ok: true, saved: Object.keys(toWrite), rejected });
+    }
+
+    /* ── ShippingCloud API keys (Admin → API): hashed at rest, full key returned ONCE ── */
+    if (action === "apiKeys") {
+      if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
+      const cur = await getStore("apiKeys");
+      const keys = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+      return J({ ok: true, keys: keys.map((k) => ({ id: k.id, mode: k.mode || "live", prefix: k.prefix, label: k.label, clientId: k.clientId, createdAt: k.createdAt, lastUsed: k.lastUsed || null, revoked: !!k.revoked })) });
+    }
+    if (action === "apiKeyCreate") {
+      if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
+      const clientId = String(body.clientId || "");
+      if (!clientId) return J({ ok: false, error: "Pick the customer this key belongs to." });
+      const cur = await getStore("apiKeys");
+      const keys = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+      if (keys.filter((k) => !k.revoked).length >= 500) return J({ ok: false, error: "Key limit reached." });
+      const mode = ["test","live","admin"].includes(String(body.mode || "live")) ? String(body.mode) : "live";
+      const raw = "sck_" + mode + "_" + crypto.randomBytes(24).toString("hex");
+      const row = { id: "k" + Date.now(), mode, prefix: raw.slice(0, 14) + "…", label: String(body.label || "").slice(0, 60), clientId, hash: crypto.createHash("sha256").update(raw).digest("hex"), createdAt: new Date().toISOString() };
+      const w = await putStores({ apiKeys: [...keys, row] });
+      if (!w.ok) return J({ ok: false, error: "Save failed." });
+      return J({ ok: true, key: raw, id: row.id, prefix: row.prefix });
+    }
+    if (action === "apiKeyRevoke") {
+      if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
+      const cur = await getStore("apiKeys");
+      const keys = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+      const w = await putStores({ apiKeys: keys.map((k) => k.id === String(body.id) ? { ...k, revoked: true } : k) });
+      return J(w.ok ? { ok: true } : { ok: false, error: "Save failed." });
     }
 
     /* ── snapshot management (F17): bak:<key>:<ts> rows are written by the wipe-guards above.

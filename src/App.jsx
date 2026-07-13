@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v516";
+const BUILD_TAG="addr-v517";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -4080,6 +4080,18 @@ function useDraft(committed,commit,defaultVal){
   const reset=React.useCallback(()=>setDraft(defaultVal),[defaultVal]);
   return {draft,setDraft:setDraftVal,dirty,save,undo,reset};
 }
+/* Buffer a section's setSettings calls until Save: edits render from the buffered view, the
+   pinned DraftBar commits them in order (the exact patches the section would have auto-saved),
+   Undo drops them. Buffering patches — not copying the object — keeps company-deployed
+   products/addresses/custom out of the person's own saved settings. */
+function useSettingsDraft(settings,setSettings){
+  const [pend,setPend]=React.useState([]);
+  const view=React.useMemo(()=>{let v=settings;for(const f of pend)v=typeof f==="function"?f(v):f;return v;},[settings,pend]);
+  const stage=React.useCallback((u)=>setPend(p=>[...p,u]),[]);
+  const save=React.useCallback(()=>{ setPend(p=>{ if(p.length)setSettings(prev=>{let v=prev;for(const f of p)v=typeof f==="function"?f(v):f;return v;}); return []; }); },[setSettings]);
+  const undo=React.useCallback(()=>setPend([]),[]);
+  return {view,stage,save,undo,dirty:pend.length>0};
+}
 /* Sticky action bar shown while a draft has unsaved edits. */
 function DraftBar({dirty,onSave,onUndo,onReset,resetLabel,savedNote,saveLabel}){
   // Track the CLOUD result of the last save so the admin knows for certain it persisted (not just locally).
@@ -5728,10 +5740,9 @@ function LegalLinks(){
             <H>3. You are responsible for adjusted charges — and we will pass them through</H><P>When a carrier rebills or adjusts a shipment, that adjustment is your responsibility. <b>You agree that we may bill, re-bill, charge, or invoice you for the corrected amount, including any difference between the original estimate and the carrier's final charge, plus any associated carrier fees, penalties, or accessorials.</b> We will update the affected invoice and/or issue a supplemental invoice reflecting the carrier's adjustment, and such amounts are due on the same terms as your other charges. You authorize these adjustment charges as a condition of using the service. Carrier adjustments can arrive days or weeks after a shipment; there is no time limit on our right to pass through a legitimate carrier adjustment once we receive it.</P>
             <H>4. Accuracy of the details you provide</H><P>Accurate quotes depend on accurate inputs. You are responsible for entering correct weights, dimensions, package types, addresses, and service selections. Under-declaring weight or dimensions, mis-classifying a residential address as commercial, or selecting the wrong service will produce an inaccurate estimate and will typically result in a carrier adjustment for which you are responsible. We are not liable for estimate inaccuracies caused by incorrect, incomplete, or outdated information supplied by you, your customers, your store, or any connected system.</P>
             <H>5. No liability for quoting inaccuracies</H><P>To the maximum extent permitted by law, we are <b>not liable</b> for any loss, cost, expense, overcharge, undercharge, lost profit, or damage of any kind arising out of or relating to an inaccurate, incomplete, delayed, or erroneous rate quote, price estimate, surcharge calculation, delivery-time estimate, or total — whether caused by carrier rate changes, carrier adjustments, DIM-weight recalculation, data-entry error, integration or import error, software error, or any other cause. Your sole remedy for a disputed carrier adjustment is to pursue it with the carrier under the carrier's own dispute process; we will provide reasonable documentation to assist, but we do not guarantee any outcome.</P>
-            <H>6. Markup and reseller pricing</H><P>Prices shown to you may include our margin over negotiated carrier rates and do not necessarily reflect the carrier's own list or account rate. Pricing, discounts, and surcharges may change at any time without notice. Nothing in a displayed price obligates us to honor a rate that was displayed in error or that is superseded by a carrier's adjustment.</P>
-            <H>7. Estimates at checkout</H><P>Where shipping rates are displayed to your buyers at your store's checkout, those rates are estimates presented on your behalf and under your authority. You are responsible for how shipping is priced and disclosed to your customers, and for any difference between what your customer paid you and what the shipment ultimately costs.</P>
-            <H>8. Disputes and documentation</H><P>If you believe a carrier adjustment is incorrect, notify us promptly and we will share the carrier's stated basis for the adjustment (e.g., reweigh dimensions or corrected address) where available. Disputes over a carrier's measurement or classification are resolved between you and the carrier. Adjustment amounts remain payable while a dispute is pending unless and until the carrier reverses the charge.</P>
-            <H>9. Not legal advice; entire agreement on billing</H><P>This statement supplements the Terms of Service and controls on matters of rate accuracy and carrier adjustments. It does not limit any broader limitation of liability, disclaimer, or indemnification in the Terms. By using the service you acknowledge that quoted amounts are estimates and that carrier adjustments are your responsibility.</P>
+            <H>6. Estimates at checkout</H><P>Where shipping rates are displayed to your buyers at your store's checkout, those rates are estimates presented on your behalf and under your authority. You are responsible for how shipping is priced and disclosed to your customers, and for any difference between what your customer paid you and what the shipment ultimately costs.</P>
+            <H>7. Disputes and documentation</H><P>If you believe a carrier adjustment is incorrect, notify us promptly and we will share the carrier's stated basis for the adjustment (e.g., reweigh dimensions or corrected address) where available. Disputes over a carrier's measurement or classification are resolved between you and the carrier. Adjustment amounts remain payable while a dispute is pending unless and until the carrier reverses the charge.</P>
+            <H>8. Not legal advice; entire agreement on billing</H><P>This statement supplements the Terms of Service and controls on matters of rate accuracy and carrier adjustments. It does not limit any broader limitation of liability, disclaimer, or indemnification in the Terms. By using the service you acknowledge that quoted amounts are estimates and that carrier adjustments are your responsibility.</P>
           </>}
         </div>
       </div>
@@ -10823,7 +10834,11 @@ const PSOpt=({on,pick,title,desc,group})=>(<label className={`flex items-start g
 const PSBox=({n,title,children})=>(<div className="rounded-xl border border-stone-200 bg-stone-50 p-3 space-y-2">
   <div className="text-[10px] uppercase tracking-widest text-stone-400">{n} · {title}</div>{children}
 </div>);
-function PrinterSettings({settings,setSettings}){
+function PrinterSettings({settings:settingsLive,setSettings:commitSettings}){
+  /* Print settings now save on CLICK like Customizations: edits stage into a draft buffer and
+     the pinned Save bar commits them — same continuity everywhere in Settings. */
+  const _pd=useSettingsDraft(settingsLive,commitSettings);
+  const settings=_pd.view, setSettings=_pd.stage;
   const pr=settings.printer||{labelSize:"4x6",format:"PDF",printer:"",packingSlip:true,autoPrint:false,slipSize:"letter",rotate:false};
   /* FUNCTIONAL update only — a replacement built from the render-scope `settings` silently
      destroys any update queued in the same click (this is exactly how the printFlowV2 stamp
@@ -10907,6 +10922,7 @@ function PrinterSettings({settings,setSettings}){
   const DOC_KINDS=[["packSlip","Packing slips","Auto-printed slips and every Packing slip button"],["pickList","Pick lists","The Pick list buttons in Orders & Batch"],["docs","Receipts & other documents","Shipment receipts and commercial invoices"]];
   return (<div className="max-w-2xl space-y-4">
     <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Printer className="w-4 h-4"/>Print Settings</h2>
+    <DraftBar dirty={_pd.dirty} onSave={_pd.save} onUndo={_pd.undo} savedNote="Print settings saved"/>
     <p className="text-sm text-stone-500">Controls how labels are generated and printed when you buy a label or run a batch.</p>
     <Panel title="Ship & print automation">
       <div className="space-y-3">

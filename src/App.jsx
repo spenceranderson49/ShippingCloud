@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v507";
+const BUILD_TAG="addr-v508";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -918,7 +918,6 @@ function drawFedexMock(g,W,H,{to,sender,service,weight,pieceCount,refNo,resident
       g.font=AR(52,700);g.fillText(U(r.name||r.company||"RECIPIENT").slice(0,22),110,ty);ty+=56;
       if(r.company&&r.name){g.font=AR(44,700);g.fillText(U(r.company).slice(0,26),110,ty);ty+=52;}
       g.font=AR(44,700);g.fillText(U(r.address1).slice(0,26),110,ty);ty+=56;
-      if(residential===false){g.font=AR(34,700);g.fillText("**COMMERCIAL ADDRESS**",110,ty);ty+=46;}
       g.font=AR(52,700);g.fillText((U(r.city)+" "+U(r.state)+" "+U(r.zip)).trim().slice(0,22),110,ty);ty+=50;
       g.font=AR(24,400);
       g.fillText(fone(r.phone),40,ty);g.fillText("REF: "+String(refNo||"").slice(0,18),420,ty);ty+=38;
@@ -930,17 +929,8 @@ function drawFedexMock(g,W,H,{to,sender,service,weight,pieceCount,refNo,resident
       g.fillRect(48,pTop,10,300);g.fillRect(62,pTop,4,300);   // start guard
       for(let row=0;row<25;row++){let x=84;while(x<640){const bw=2+Math.floor(rnd()*7);if(rnd()>0.42)g.fillRect(x,pTop+row*12,bw,10);x+=bw+2+Math.floor(rnd()*3);}}
       g.fillRect(652,pTop,4,300);g.fillRect(662,pTop,10,300);   // end guard
-      if(markImg&&markImg.width&&markImg.height){
-        // Draw the owner-uploaded carrier logo, contained in a fixed box. Clear the box to white
-        // first so NOTHING from the placeholder/barcode can bleed through behind it, then fit the
-        // whole image (both "Fed" and "Ex") inside the box preserving aspect — no cropping.
-        const bx=750,by=pTop+2,boxW=384,boxH=120;
-        g.fillStyle="#fff";g.fillRect(bx,by,boxW,boxH);
-        const ar=markImg.width/markImg.height; let dw=boxW,dh=boxW/ar; if(dh>boxH){dh=boxH;dw=boxH*ar;}
-        g.drawImage(markImg,bx,by+(boxH-dh)/2,dw,dh);
-        g.fillStyle="#000";
-      }
-      else drawFedexWordmarkMono(g,758,pTop+8,112);
+      /* Carrier wordmark intentionally NOT drawn on the mock — the on-screen preview is a
+         placeholder; the real printed label carries the carrier's own official logo. */
       g.lineWidth=2;
       const svcL=String(service||"").toLowerCase();
       const fam=/overnight|2day|express saver|one rate/.test(svcL)?"Express":/economy|smartpost/.test(svcL)?"Ground Economy":/home/.test(svcL)?"Home Delivery":"Ground";
@@ -3124,25 +3114,8 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
       <div className="flex-1"><div className="text-[11px] text-stone-500">{label}</div><input value={b[k]} onChange={e=>set(k,e.target.value)} className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF]"/></div>
     </div>
   );
-  const uploadCarrierMark=(e)=>{const f=e.target.files&&e.target.files[0];e.target.value="";if(!f)return;if(f.size>1.5*1024*1024){uiAlert("That image is over 1.5 MB — please use a smaller PNG or SVG.");return;}const r=new FileReader();r.onload=()=>setPublicBrand&&setPublicBrand({carrierMark:String(r.result||"")});r.readAsDataURL(f);};
   return (<div className="max-w-3xl space-y-4">
     <p className="text-sm text-stone-500">White-label the platform for another shipping company — set the product name, colors, and partner logo. Changes apply across the whole app and are saved on this browser.</p>
-
-    {/* Carrier logo on label previews — global: one upload shows on every login's label preview */}
-    <div className="border border-stone-200 rounded-xl bg-white p-4 space-y-2">
-      <div className="text-sm font-semibold text-stone-800">Carrier logo on label previews</div>
-      <p className="text-[13px] text-stone-500">Upload your carrier's official logo file — it shows on the on-screen label <b>preview</b> for <b>every login</b>. The real label you print always comes from the carrier with their own official logo; this only replaces the placeholder mark in the preview.</p>
-      <div className="flex items-center gap-3 flex-wrap pt-1">
-        {publicBrand&&publicBrand.carrierMark
-          ? <img src={publicBrand.carrierMark} alt="carrier logo" className="h-9 w-auto max-w-[180px] object-contain border border-stone-200 rounded bg-white px-2 py-1"/>
-          : <span className="text-xs text-stone-400 italic">No file uploaded — previews show a built-in placeholder.</span>}
-        <label className="text-xs bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">
-          {publicBrand&&publicBrand.carrierMark?"Replace file":"Upload logo"}
-          <input type="file" accept="image/png,image/jpeg,image/svg+xml" className="hidden" onChange={uploadCarrierMark}/>
-        </label>
-        {publicBrand&&publicBrand.carrierMark&&<button onClick={()=>setPublicBrand&&setPublicBrand({carrierMark:""})} className="text-xs text-rose-500 hover:underline">Remove</button>}
-      </div>
-    </div>
 
     {/* Live preview */}
     <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">

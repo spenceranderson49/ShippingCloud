@@ -207,7 +207,7 @@ async function sendOtpCode(event, to, code) {
   const baseFrom = (process.env.EMAIL_FROM || "ShippingCloud <notify@shippingcloud.net>").trim();
   const fromAddr = (baseFrom.match(/<([^>]+)>/) || [null, baseFrom])[1];
   const from = product.replace(" Admin", "") + " <" + fromAddr + ">";
-  const html = `<body style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1c1917;"><div style="max-width:420px;margin:0 auto;padding:24px 20px;text-align:center;"><div style="font-size:18px;font-weight:800;color:#0c4a6e;">${header}</div><p style="font-size:14px;color:#57534e;margin-top:16px;">Your sign-in verification code:</p><div style="font-size:32px;font-weight:800;letter-spacing:8px;color:#0c4a6e;margin:10px 0;">${code}</div><p style="font-size:12px;color:#a8a29e;">Expires in 10 minutes. If you didn't try to sign in, ignore this email and change your password.</p></div></body>`;
+  const html = `<body style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1c1917;"><div style="max-width:420px;margin:0 auto;padding:24px 20px;text-align:center;"><div style="font-size:18px;font-weight:800;color:#0c4a6e;">${header}</div><p style="font-size:14px;color:#57534e;margin-top:16px;">Your sign-in verification code:</p><div style="font-size:32px;font-weight:800;letter-spacing:8px;color:#0c4a6e;margin:10px 0;">${code}</div><p style="font-size:12px;color:#a8a29e;">Expires in 10 minutes. If you didn’t try to sign in, ignore this email and change your password.</p></div></body>`;
   try { const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key }, body: JSON.stringify({ from, to: [to], subject: code + " is your " + brandName + " sign-in code", html }) }); return { ok: r.ok }; } catch (e) { return { ok: false }; }
 }
 
@@ -247,7 +247,7 @@ exports.handler = async (event) => {
     const action = body.action || "";
 
     if (action === "ping") return J({ ok: true, configured: configured() });
-    if (!configured()) return J({ ok: false, notConfigured: true, error: "We're having trouble reaching the server — try again in a moment." });
+    if (!configured()) return J({ ok: false, notConfigured: true, error: "We’re having trouble reaching the server — try again in a moment." });
 
     /* ── login (+ first-ever bootstrap) ── */
     /* Every customer login must resolve to a real client record. Minted HERE (server-side)
@@ -280,7 +280,7 @@ exports.handler = async (event) => {
       const password = String(body.password || "");
       if (!email || !password) return J({ ok: false, error: "Enter your email and password." });
       const cur = await getStore("users");
-      if (!cur.ok) return J({ ok: false, error: "We're having trouble reaching the server — try again in a moment." });
+      if (!cur.ok) return J({ ok: false, error: "We’re having trouble reaching the server — try again in a moment." });
       let users = Array.isArray(cur.value) ? cur.value : [];
       if (!users.length) {
         // BOOTSTRAP: very first login creates the admin account with this email + password.
@@ -312,12 +312,12 @@ exports.handler = async (event) => {
         if (!totpVerify(u.totp.secret, code)) {
           // fall back to a one-time backup code (lost-phone escape hatch)
           const bc = consumeBackup(u.totp.backup, raw);
-          if (!bc.ok) return J({ ok: false, needsTotp: true, error: "That code isn't right or has expired — try the current one, or a backup code." });
+          if (!bc.ok) return J({ ok: false, needsTotp: true, error: "That code isn’t right or has expired — try the current one, or a backup code." });
           // A backup code is one-time — its "used" state MUST persist before we grant a session,
           // or a failed write would leave the code replayable. Refuse the login if we can't record it.
           const merged = users.map((x) => x && x.id === u.id ? { ...x, totp: { ...u.totp, backup: bc.list } } : x);
           const bw = await putStores({ users: merged });
-          if (!bw.ok) return J({ ok: false, needsTotp: true, error: "Couldn't verify your backup code just now — try again in a moment." });
+          if (!bw.ok) return J({ ok: false, needsTotp: true, error: "Couldn’t verify your backup code just now — try again in a moment." });
         }
       }
       /* Email 2FA (opt-in alternative to the authenticator app). Only when TOTP is NOT enabled.
@@ -338,7 +338,7 @@ exports.handler = async (event) => {
         try { const a = Buffer.from(otpHash(raw), "hex"), b = Buffer.from(p.hash, "hex"); match = a.length === b.length && crypto.timingSafeEqual(a, b); } catch (e) { match = false; }
         if (!match) {
           await putStores({ users: users.map((x) => x && x.id === u.id ? { ...x, email2fa: { enabled: true, pending: { ...p, tries: (p.tries || 0) + 1 } } } : x) });
-          return J({ ok: false, needsEmailCode: true, error: "That code isn't right — check the latest email." });
+          return J({ ok: false, needsEmailCode: true, error: "That code isn’t right — check the latest email." });
         }
         await putStores({ users: users.map((x) => x && x.id === u.id ? { ...x, email2fa: { enabled: true } } : x) });   // valid — clear the used code
       }
@@ -465,7 +465,7 @@ exports.handler = async (event) => {
       try {
         const rr = await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
           body: JSON.stringify({ from, to: [email], subject: isWelcome ? ("Welcome to " + brandName + " — set your password") : ("Reset your " + brandName + " password"),
-            html: `<body style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;"><div style="max-width:480px;margin:0 auto;padding:28px 20px;"><div style="font-size:20px;font-weight:800;color:#0c4a6e;">${wordmark}</div>${isWelcome?`<p style="font-size:14px;color:#57534e;">An account was created for you. Click below to choose your password and sign in. This link works for 72 hours.</p>`:`<p style="font-size:14px;color:#57534e;">Someone (hopefully you) asked to reset the password for this account. This link works for 1 hour.</p>`}<a href="${link}" style="display:inline-block;background:#0086E0;color:#fff;text-decoration:none;font-weight:600;border-radius:8px;padding:10px 18px;font-size:14px;">${isWelcome?"Set my password":"Choose a new password"}</a>${isWelcome?"":`<p style="font-size:11px;color:#a8a29e;margin-top:16px;">Didn\u2019t ask for this? Ignore this email \u2014 nothing changes.</p>`}</div></body>` }) });
+            html: `<body style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;"><div style="max-width:480px;margin:0 auto;padding:28px 20px;"><div style="font-size:20px;font-weight:800;color:#0c4a6e;">${wordmark}</div>${isWelcome?`<p style="font-size:14px;color:#57534e;">An account was created for you. Click below to choose your password and sign in. This link works for 72 hours.</p>`:`<p style="font-size:14px;color:#57534e;">Someone (hopefully you) asked to reset the password for this account. This link works for 1 hour.</p>`}<a href="${link}" style="display:inline-block;background:#0086E0;color:#fff;text-decoration:none;font-weight:600;border-radius:8px;padding:10px 18px;font-size:14px;">${isWelcome?"Set my password":"Choose a new password"}</a>${isWelcome?"":`<p style="font-size:11px;color:#a8a29e;margin-top:16px;">Didn’t ask for this? Ignore this email — nothing changes.</p>`}</div></body>` }) });
         const rt = await rr.text().catch(() => "");
         if (rr.ok) console.log("[requestReset] sent OK via Resend from <" + from + "> (origin " + (reqOrigin || "none") + ")");
         else console.log("[requestReset] Resend REJECTED the send (" + rr.status + "): " + rt.slice(0, 300) + " — common causes: wrong API key, or the EMAIL_FROM domain isn't verified in the Resend dashboard.");
@@ -479,7 +479,7 @@ exports.handler = async (event) => {
         const want = Buffer.from(sign(pp), "hex"); const got = Buffer.from(sig || "", "hex");
         if (pp && sig && want.length === got.length && crypto.timingSafeEqual(want, got)) data = JSON.parse(unb64u(pp));
       } catch (e) {}
-      if (!data || data.kind !== "pwreset" || !data.uid || Date.now() > data.exp) return J({ ok: false, error: "That reset link is invalid or expired \u2014 request a new one." });
+      if (!data || data.kind !== "pwreset" || !data.uid || Date.now() > data.exp) return J({ ok: false, error: "That reset link is invalid or expired — request a new one." });
       const password = String(body.password || "");
       if (password.length < 6) return J({ ok: false, error: "Password must be at least 6 characters." });
       const curU2 = await getStore("users");
@@ -487,7 +487,7 @@ exports.handler = async (event) => {
       if (!users.find((x) => x && x.id === data.uid)) return J({ ok: false, error: "Account not found." });
       const merged = users.map((x) => x && x.id === data.uid ? { ...x, password: "", passHash: hashPw(password) } : x);
       const w = await putStores({ users: merged });
-      if (!w.ok) return J({ ok: false, error: "Could not save \u2014 try again." });
+      if (!w.ok) return J({ ok: false, error: "Could not save — try again." });
       return J({ ok: true });
     }
 
@@ -535,7 +535,7 @@ exports.handler = async (event) => {
         const pending = me.totp && me.totp.pendingSecret;
         if (!pending) return J({ ok: false, error: "Start 2FA setup first." });
         const code = String(body.code || "").replace(/\D/g, "");
-        if (!totpVerify(pending, code)) return J({ ok: false, error: "That code isn't right or has expired — try the current one." });
+        if (!totpVerify(pending, code)) return J({ ok: false, error: "That code isn’t right or has expired — try the current one." });
         const bc = newBackupCodes(10);
         // promote the pending secret to the live one, issue backup codes, clear the pending field
         const merged = allUsers.map((x) => x && x.id === auth.uid ? { ...x, totp: { secret: pending, enabled: true, backup: bc.stored } } : x);
@@ -575,7 +575,7 @@ exports.handler = async (event) => {
         const w = await putStores({ users: merged });
         if (!w.ok) return J({ ok: false, error: "Could not start setup — try again." });
         const s = await sendOtpCode(event, me.email, code);
-        if (!s.ok) return J({ ok: false, error: s.configured === false ? "Email sending isn't set up on this site yet (RESEND_API_KEY)." : "Couldn't send the code email — try again." });
+        if (!s.ok) return J({ ok: false, error: s.configured === false ? "Email sending isn’t set up on this site yet (RESEND_API_KEY)." : "Couldn’t send the code email — try again." });
         return J({ ok: true, sentTo: maskEmail(me.email) });
       }
       if (action === "email2faEnable") {
@@ -584,7 +584,7 @@ exports.handler = async (event) => {
         const raw = String(body.code || "").replace(/\s+/g, "");
         let match = false;
         try { const a = Buffer.from(otpHash(raw), "hex"), b = Buffer.from(p.hash, "hex"); match = a.length === b.length && crypto.timingSafeEqual(a, b); } catch (e) { match = false; }
-        if (!match) return J({ ok: false, error: "That code isn't right — check the latest email." });
+        if (!match) return J({ ok: false, error: "That code isn’t right — check the latest email." });
         const merged = allUsers.map((x) => x && x.id === auth.uid ? { ...x, email2fa: { enabled: true } } : x);
         const w = await putStores({ users: merged });
         if (!w.ok) return J({ ok: false, error: "Could not enable — try again." });
@@ -654,7 +654,7 @@ exports.handler = async (event) => {
         if (me && me.companyAdmin && me.clientId) {
           stores.companyUsers = allUsers
             .filter((x) => x && x.role !== "admin" && x.clientId === me.clientId)
-            .map((x) => ({ id: x.id, name: x.name, email: x.email, status: x.status || "active", companyAdmin: !!x.companyAdmin, lastLogin: x.lastLogin || "\u2014" }));
+            .map((x) => ({ id: x.id, name: x.name, email: x.email, status: x.status || "active", companyAdmin: !!x.companyAdmin, lastLogin: x.lastLogin || "—" }));
           const fmap = (allFlags && allFlags.value) || {};
           const cf = {}; stores.companyUsers.forEach((m) => { cf[m.id] = fmap[m.id] || {}; });
           stores.companyFlags = cf;
@@ -679,7 +679,7 @@ exports.handler = async (event) => {
         if (list.some((r2) => r2 && r2.uid === auth.uid)) return J({ ok: true, pending: true });
         list.push({ id: "car" + Date.now(), uid: auth.uid, name: me.name || "", email: me.email || "", clientId: me.clientId || null, date: new Date().toLocaleDateString() });
         const w = await putStores({ companyAdminRequests: list });
-        if (!w.ok) return J({ ok: false, error: "Could not file the request \u2014 try again." });
+        if (!w.ok) return J({ ok: false, error: "Could not file the request — try again." });
         return J({ ok: true, pending: true });
       }
 
@@ -694,17 +694,17 @@ exports.handler = async (event) => {
         if (!name || !/.+@.+\..+/.test(email) || password.length < 4) return J({ ok: false, error: "Enter a name, valid email, and password (4+ characters)." });
         if (allUsers.some((x) => x && String(x.email || "").toLowerCase() === email)) return J({ ok: false, error: "That email already has a login." });
         if (allUsers.length >= 2000) return J({ ok: false, error: "User limit reached." });
-        const nu = { id: "u" + Date.now() + Math.floor(Math.random() * 1000), name, email, role: "customer", clientId: me.clientId, status: "active", password, lastLogin: "\u2014", createdBy: auth.uid };
+        const nu = { id: "u" + Date.now() + Math.floor(Math.random() * 1000), name, email, role: "customer", clientId: me.clientId, status: "active", password, lastLogin: "—", createdBy: auth.uid };
         const merged = mergeUsersForWrite([...allUsers, nu], allUsers);
         const w = await putStores({ users: merged });
-        if (!w.ok) return J({ ok: false, error: "Could not create the login \u2014 try again." });
-        return J({ ok: true, user: { id: nu.id, name, email, status: "active", companyAdmin: false, lastLogin: "\u2014" } });
+        if (!w.ok) return J({ ok: false, error: "Could not create the login — try again." });
+        return J({ ok: true, user: { id: nu.id, name, email, status: "active", companyAdmin: false, lastLogin: "—" } });
       }
 
       if (action === "companySetFlags") {
         const uid = String(body.uid || "");
         const target = allUsers.find((x) => x && x.id === uid);
-        if (!sameCompany(target)) return J({ ok: false, error: "That login isn\u2019t in your company." });
+        if (!sameCompany(target)) return J({ ok: false, error: "That login isn’t in your company." });
         const raw = (body.flags && typeof body.flags === "object") ? body.flags : {};
         const flags = {}; let n = 0;
         for (const k of Object.keys(raw)) { if (n >= 64) break; if (typeof k === "string" && k.length <= 64) { flags[k] = raw[k] === true; n++; } }
@@ -712,19 +712,19 @@ exports.handler = async (event) => {
         const map = (cur.ok && cur.value && typeof cur.value === "object") ? cur.value : {};
         map[uid] = flags;
         const w = await putStores({ featureFlags: map });
-        if (!w.ok) return J({ ok: false, error: "Could not save \u2014 try again." });
+        if (!w.ok) return J({ ok: false, error: "Could not save — try again." });
         return J({ ok: true, uid, flags });
       }
 
       if (action === "companySetActive") {
         const uid = String(body.uid || "");
-        if (uid === auth.uid) return J({ ok: false, error: "You can\u2019t deactivate your own login." });
+        if (uid === auth.uid) return J({ ok: false, error: "You can’t deactivate your own login." });
         const target = allUsers.find((x) => x && x.id === uid);
-        if (!sameCompany(target)) return J({ ok: false, error: "That login isn\u2019t in your company." });
+        if (!sameCompany(target)) return J({ ok: false, error: "That login isn’t in your company." });
         const status = body.active ? "active" : "disabled";
         const merged = mergeUsersForWrite(allUsers.map((x) => x && x.id === uid ? { ...x, status } : x), allUsers);
         const w = await putStores({ users: merged });
-        if (!w.ok) return J({ ok: false, error: "Could not save \u2014 try again." });
+        if (!w.ok) return J({ ok: false, error: "Could not save — try again." });
         return J({ ok: true, uid, status });
       }
 
@@ -733,11 +733,11 @@ exports.handler = async (event) => {
         const password = String(body.password || "");
         if (password.length < 4) return J({ ok: false, error: "Password must be at least 4 characters." });
         const target = allUsers.find((x) => x && x.id === uid);
-        if (!sameCompany(target)) return J({ ok: false, error: "That login isn\u2019t in your company." });
+        if (!sameCompany(target)) return J({ ok: false, error: "That login isn’t in your company." });
         // mergeUsersForWrite never rehashes existing users, so hash explicitly here
         const merged = allUsers.map((x) => x && x.id === uid ? { ...x, password: "", passHash: hashPw(password) } : x);
         const w = await putStores({ users: merged });
-        if (!w.ok) return J({ ok: false, error: "Could not save \u2014 try again." });
+        if (!w.ok) return J({ ok: false, error: "Could not save — try again." });
         return J({ ok: true, uid });
       }
 
@@ -976,7 +976,7 @@ exports.handler = async (event) => {
       const users = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
       const me = users.find((x) => x && x.id === auth.uid) || null;
       if (!me) return J({ ok: false, error: "Account not found." });
-      if (!checkPw(password, me.passHash)) return J({ ok: false, error: "That password isn't right — enter your current password to change your email." });
+      if (!checkPw(password, me.passHash)) return J({ ok: false, error: "That password isn’t right — enter your current password to change your email." });
       if (users.some((x) => x && x.id !== auth.uid && String(x.email || "").toLowerCase() === newEmail)) return J({ ok: false, error: "Another account already uses that email." });
       // spread ...x preserves passHash AND totp (secret + backup codes) — only the email changes
       const merged = users.map((x) => x && x.id === auth.uid ? { ...x, email: newEmail } : x);

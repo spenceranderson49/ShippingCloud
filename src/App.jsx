@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v508";
+const BUILD_TAG="addr-v509";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3032,11 +3032,11 @@ function Login({users,onLogin,brand}){
           {mode==="signin"&&needTotp&&<Field label="Authenticator code"><Input value={code} onChange={e=>setCode(e.target.value.replace(/[^0-9A-Za-z-]/g,"").toUpperCase().slice(0,9))} onKeyDown={e=>{if(e.key==="Enter")signin();}} placeholder="123456" inputMode="text" autoFocus className="tracking-[0.2em] text-center"/><div className="text-[11px] text-stone-400 mt-1">Enter the current 6-digit code from your authenticator app — or one of your backup codes if you don’t have your phone.</div></Field>}
           {err&&<div className="text-sm text-rose-600 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4"/>{err}</div>}
           {note&&<div className="text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2">{note}</div>}
-          <button onClick={mode==="signin"?signin:signup} className="w-full bg-stone-900 text-white rounded-lg px-4 py-2.5 font-medium hover:bg-stone-800 disabled:opacity-50" disabled={busy}>{busy?"One moment…":(mode==="signin"?"Sign in":"Request account")}</button>
+          <button onClick={mode==="signin"?signin:signup} className="w-full bg-[#0086E0] text-white rounded-lg px-4 py-2.5 font-medium hover:bg-[#006db8] disabled:opacity-50" disabled={busy}>{busy?"One moment…":(mode==="signin"?"Sign in":"Request account")}</button>
           {mode==="signin"&&<button onClick={()=>{setFp("ask");setFpEmail(email);setFpErr("");}} className="w-full text-center text-xs text-stone-400 hover:text-stone-600 underline underline-offset-2">Forgot password?</button>}
           {fp&&<div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={()=>fp!=="done"&&setFp(null)}>
             <div onClick={e=>e.stopPropagation()} className="bg-white rounded-2xl p-6 max-w-sm w-full space-y-3 text-left">
-              {fp==="ask"&&<><div className="font-semibold text-stone-800">Reset your password</div><p className="text-[13px] text-stone-500">Enter your login email and we’ll send a one-hour reset link.</p><input value={fpEmail} onChange={e=>setFpEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&fpAsk()} placeholder="you@company.com" autoFocus className="w-full border border-stone-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0086E0]/30"/><button onClick={fpAsk} className="w-full text-sm bg-stone-900 text-white rounded-lg py-2 font-medium hover:bg-stone-800">Send reset link</button></>}
+              {fp==="ask"&&<><div className="font-semibold text-stone-800">Reset your password</div><p className="text-[13px] text-stone-500">Enter your login email and we’ll send a one-hour reset link.</p><input value={fpEmail} onChange={e=>setFpEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&fpAsk()} placeholder="you@company.com" autoFocus className="w-full border border-stone-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0086E0]/30"/><button onClick={fpAsk} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium hover:bg-[#006db8]">Send reset link</button></>}
               {fp==="sent"&&<><div className="font-semibold text-stone-800">Check your email</div><p className="text-[13px] text-stone-500">If that address has an account, a reset link is on its way. It works for one hour.</p><button onClick={()=>setFp(null)} className="w-full text-sm bg-stone-100 text-stone-700 rounded-lg py-2 font-medium hover:bg-stone-200">Close</button></>}
               {fp&&fp.reset&&<><div className="font-semibold text-stone-800">Choose a new password</div><input type="password" value={fpPw} onChange={e=>setFpPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&fpSave()} placeholder="New password (min 6 characters)" autoFocus className="w-full border border-stone-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0086E0]/30"/><button onClick={fpSave} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium hover:bg-[#0072BE]">Save new password</button></>}
               {fp==="done"&&<><div className="font-semibold text-emerald-700 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>Password updated</div><p className="text-[13px] text-stone-500">Sign in with your new password.</p><button onClick={()=>setFp(null)} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium">Sign in</button></>}
@@ -3073,7 +3073,7 @@ function Domains({settings,setSettings,clients}){
           </div>
         </div>
         <div className="sm:w-48"><Field label="Partner / label (optional)"><Input value={label} onChange={e=>setLabel(e.target.value)} placeholder="InXpress"/></Field></div>
-        <button onClick={add} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Plus className="w-4 h-4"/>Create</button>
+        <button onClick={add} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>Create</button>
       </div>
       {sub&&<div className="text-[11px] text-stone-400 mt-1">Will create <span className="font-mono text-[#0086E0]">{clean(sub)||"…"}.{base}</span></div>}
     </Panel>
@@ -3150,7 +3150,7 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
         <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
           <div className="sm:w-28"><Field label="Label"><Input value={b.partnerLabel} onChange={e=>set("partnerLabel",e.target.value)} placeholder="by"/></Field></div>
           <div className="flex items-center gap-3">
-            <label className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 cursor-pointer"><Upload className="w-4 h-4"/>Upload logo<input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={upload} className="hidden"/></label>
+            <label className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#006db8] cursor-pointer"><Upload className="w-4 h-4"/>Upload logo<input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={upload} className="hidden"/></label>
             {b.logo&&<><img src={b.logo} alt="logo" className="h-7 w-auto object-contain border border-stone-100 rounded px-1 bg-white"/><button onClick={()=>set("logo","")} className="text-xs text-stone-400 hover:text-rose-500 underline">remove</button></>}
           </div>
         </div>
@@ -3159,7 +3159,7 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
     </Panel>
 
     <div className="flex items-center gap-3">
-      <button onClick={save} className={`text-sm rounded px-4 py-2 font-medium ${saved?"bg-emerald-600 text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{saved?"✓ Saved — applied app-wide":"Save branding"}</button>
+      <button onClick={save} className={`text-sm rounded px-4 py-2 font-medium ${saved?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{saved?"✓ Saved — applied app-wide":"Save branding"}</button>
       <button onClick={reset} className="text-sm text-stone-500 hover:text-stone-800 underline">Reset to ShippingCloud / Freightwire</button>
     </div>
   </div>);
@@ -3270,7 +3270,7 @@ function FedexCertLab({settings}){
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <button onClick={generate} disabled={busy||!st.auth} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-50 flex items-center gap-1.5">{busy&&!runAll?<Loader2 className="w-4 h-4 animate-spin"/>:<Printer className="w-4 h-4"/>}Generate label</button>
-        <button onClick={runCertSet} disabled={busy||!st.auth} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-50">Run the certification set — one label per service</button>
+        <button onClick={runCertSet} disabled={busy||!st.auth} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-50">Run the certification set — one label per service</button>
         {runAll&&<span className="text-sm text-stone-500 flex items-center gap-1.5"><Loader2 className="w-4 h-4 animate-spin"/>{runAll.i}/{runAll.total} · {runAll.current}</span>}
       </div>
       {lastErr&&<div className="border border-rose-200 bg-rose-50/60 rounded-lg p-3 text-sm text-rose-700">
@@ -3675,12 +3675,14 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         <div key={u.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
           <div className="flex-1 min-w-[180px] grid grid-cols-2 gap-2"><Input value={u.name||""} onChange={e=>setUsers(us=>us.map(x=>x.id===u.id?{...x,name:e.target.value}:x))}/><Input value={u.email||""} onChange={e=>setUsers(us=>us.map(x=>x.id===u.id?{...x,email:e.target.value}:x))}/></div>
           <span className="text-[11px] text-stone-400 w-20">{u.lastLogin||"—"}</span>
+          <button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }} title="Open the app exactly as this person sees it" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Log in as</button>
           <button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,status:x.status==="disabled"?"active":"disabled"}:x))} className={`text-[11px] rounded px-2 py-1 ${u.status==="disabled"?"bg-rose-100 text-rose-600":"bg-emerald-50 text-emerald-700"}`}>{u.status==="disabled"?"disabled":"active"}</button>
-          <button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))} className={`text-[11px] rounded px-2 py-1 ${u.companyAdmin?"bg-violet-600 text-white":"bg-stone-100 text-stone-600"}`}>{u.companyAdmin?"Co. admin ✓":"Co. admin"}</button>
-          <button onClick={()=>setPw(u)} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Password</button>
-          {CLOUD.mode==="cloud"&&<button onClick={()=>sendReset(u)} title="Email them a choose-a-new-password link (valid 1 hour)" className="text-[11px] rounded px-2 py-1 bg-[#E6F4FF] text-[#006FBF] hover:bg-[#CCEAFF]">Reset email</button>}
-          <button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Log in as</button>
-          {u.id!==currentUser.id&&<button onClick={async()=>{if(await uiConfirm("Delete "+u.email+"?"))setUsers(us=>us.filter(x=>x.id!==u.id));}} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button>}
+          <RowMenu title={"More actions for "+(u.name||u.email)} items={[
+            {label:"Company admin",title:u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins",active:!!u.companyAdmin,onClick:()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))},
+            {label:"Set password…",title:"Reset password",onClick:()=>setPw(u)},
+            CLOUD.mode==="cloud"&&{label:"Send reset email",title:"Email them a choose-a-new-password link (valid 1 hour)",onClick:()=>sendReset(u)},
+            u.id!==currentUser.id&&{label:"Delete login…",danger:true,onClick:async()=>{if(await uiConfirm("Delete "+u.email+"'s login? They won't be able to sign in anymore. The customer account and its data are not touched."))setUsers(us=>us.filter(x=>x.id!==u.id));}},
+          ]}/>
         </div>)):<div className="px-3 py-4 text-sm text-stone-400">No logins yet — new logins inherit this customer's rates, credentials, and features automatically.</div>}
       </div>
       <div className="border border-stone-200 rounded-lg bg-white p-3 flex flex-wrap items-end gap-2">
@@ -3726,7 +3728,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-stone-600">{c.name} prices from</span>
         <Select value={assign[cid]||"default"} onChange={e=>upRules({assign:{...assign,[cid]:e.target.value}})}>{profiles.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</Select>
-        {prof.id==="default"&&<button onClick={dedicated} className="text-xs bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-800">Create dedicated "{c.name}" profile</button>}
+        {prof.id==="default"&&<button onClick={dedicated} className="text-xs bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8]">Create dedicated "{c.name}" profile</button>}
         <span className="text-[11px] text-stone-400">{prof.id==="default"?"On shared Default — your first edit below automatically forks "+c.name+"'s own copy, so other customers are never touched.":"Changes below price only "+c.name+"."}</span>
       </div>
       {(()=>{
@@ -4021,7 +4023,7 @@ function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureF
       <Field label="Search customers & logins"><Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Company, contact, login name or email…" className="w-64"/></Field>
       <Field label="Sort by"><Select value={sort} onChange={e=>setSort(e.target.value)}><option value="name">Name</option><option value="logins">Most logins</option><option value="markup">Highest markup</option><option value="profile">Rate profile</option><option value="status">Status</option></Select></Field>
       <span className="flex-1"/>
-      <button onClick={()=>setAdding(a=>!a)} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800"><Plus className="w-4 h-4"/>New customer</button>
+      <button onClick={()=>setAdding(a=>!a)} className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#006db8]"><Plus className="w-4 h-4"/>New customer</button>
     </div>
     {adding&&<div className="border border-stone-200 rounded-lg bg-white p-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
       <Field label="Company"><Input value={nf.name} onChange={e=>setNf({...nf,name:e.target.value})}/></Field>
@@ -4030,7 +4032,7 @@ function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureF
       <Field label="Phone"><Input value={nf.phone} onChange={e=>setNf({...nf,phone:e.target.value})}/></Field>
       <Field label="Origin ZIP"><Input value={nf.origin} onChange={e=>setNf({...nf,origin:e.target.value})}/></Field>
       <Field label="Markup %"><Input type="number" value={nf.markup} onChange={e=>setNf({...nf,markup:e.target.value})}/></Field>
-      <div className="col-span-2 sm:col-span-3"><button onClick={createCustomer} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Create &amp; open</button></div>
+      <div className="col-span-2 sm:col-span-3"><button onClick={createCustomer} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium">Create &amp; open</button></div>
     </div>}
     <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
       <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="w-4"/><div className="flex-1">Customer</div><div className="w-20 text-center">Logins</div><div className="w-28">Rate profile</div><div className="w-16 text-right">Markup</div><div className="w-20 text-right">Status</div></div>
@@ -4492,7 +4494,7 @@ function RatesAdmin({clients=[],brand}){
           <div className="text-[11px] text-stone-500">Excel/CSV/TSV — first column weight (lb), one column per zone (headers = zone numbers). Same format as FedEx base-cost imports.</div>
           <textarea value={ccImp.text} onChange={e=>setCcImp(p=>({...p,text:e.target.value}))} rows={8} spellCheck={false} placeholder={"Weight\t2\t3\t4\t5\t6\t7\t8\n1\t4.10\t4.25\t…"} className="w-full bg-white border border-stone-200 rounded-lg p-2.5 font-mono text-[12px] outline-none focus:border-[#0099FF] resize-y"/>
           <div className="flex gap-2">
-            <button onClick={()=>{const r2=parseRateTable(ccImp.text);if(r2.error)return uiAlert(r2.error);setRules(r=>({...DEFAULT_RATE_RULES,...r,baseCosts:{...(r.baseCosts||{}),["cc:"+ccImp.key]:r2}}));setCcImp(null);setImpMsg({ok:"Rate card staged — press Save rates to make it live."});}} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium">Stage rate card</button>
+            <button onClick={()=>{const r2=parseRateTable(ccImp.text);if(r2.error)return uiAlert(r2.error);setRules(r=>({...DEFAULT_RATE_RULES,...r,baseCosts:{...(r.baseCosts||{}),["cc:"+ccImp.key]:r2}}));setCcImp(null);setImpMsg({ok:"Rate card staged — press Save rates to make it live."});}} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium">Stage rate card</button>
             <button onClick={()=>setCcImp(null)} className="text-sm text-stone-500 px-3 py-2 hover:bg-stone-100 rounded-lg">Cancel</button>
           </div>
         </div>}
@@ -4507,7 +4509,7 @@ function RatesAdmin({clients=[],brand}){
         <div className="border-t border-stone-100 pt-3 space-y-2">
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Table kind"><Select value={impKind} onChange={e=>{setImpKind(e.target.value);setImpPreview(null);}}><option value="cost">England cost sheets</option><option value="list">FedEx list rates</option><option value="onerate">One Rate flat table</option></Select></Field>
-            {impKind!=="onerate"&&<label className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 cursor-pointer flex items-center gap-1.5"><Upload className="w-4 h-4"/>{impBusy?"Reading…":"Upload files"}<input type="file" multiple accept=".csv,.tsv,.txt,.xlsx" onChange={e=>{readFiles(e.target.files);e.target.value="";}} className="hidden"/></label>}
+            {impKind!=="onerate"&&<label className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] cursor-pointer flex items-center gap-1.5"><Upload className="w-4 h-4"/>{impBusy?"Reading…":"Upload files"}<input type="file" multiple accept=".csv,.tsv,.txt,.xlsx" onChange={e=>{readFiles(e.target.files);e.target.value="";}} className="hidden"/></label>}
             {impKind!=="onerate"&&<Field label="Service for a single un-titled table"><Select value={impKey} onChange={e=>setImpKey(e.target.value)}>{svcList.filter(s=>!s.or).map(s=><option key={s.k} value={s.k}>{s.l}</option>)}</Select></Field>}
             <button onClick={doImport} disabled={impBusy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-50">{impKind==="onerate"?"Import":"Preview import"}</button>
           </div>
@@ -4651,7 +4653,7 @@ function BillingAdmin({clients=[],platform={},openCustomer}){
       <div className="flex flex-wrap items-end gap-2">
         <Field label="Customer"><Select value={genClient} onChange={e=>setGenClient(e.target.value)}><option value="">— pick —</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
         <Field label="Month"><Input type="month" value={genMonth} onChange={e=>setGenMonth(e.target.value)}/></Field>
-        <button onClick={buildPreview} disabled={!genClient} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium disabled:opacity-40 flex items-center gap-1.5"><Receipt className="w-4 h-4"/>Preview</button>
+        <button onClick={buildPreview} disabled={!genClient} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium disabled:opacity-40 flex items-center gap-1.5"><Receipt className="w-4 h-4"/>Preview</button>
       </div>
       {preview&&<div className="mt-3 border border-stone-200 rounded-lg overflow-hidden">
         <div className="bg-stone-50 px-3 py-2 flex items-center justify-between"><div className="text-sm font-medium">{preview.number} · {cById(preview.clientId).name} · {preview.month}{preview.skipped?<span className="text-[11px] text-stone-400 ml-1">({preview.skipped} already invoiced, excluded)</span>:""}</div><div className="font-mono font-semibold">{money(preview.total)}</div></div>
@@ -4773,7 +4775,7 @@ function ApiAdmin({clients=[],platform={},openCustomer}){
         <Field label="Customer"><Select value={nk.clientId} onChange={e=>setNk({...nk,clientId:e.target.value})}><option value="">— pick —</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
         <Field label="Label (optional)"><Input value={nk.label} onChange={e=>setNk({...nk,label:e.target.value})} placeholder="e.g. Their WMS"/></Field>
         <Field label="Mode"><Select value={nk.mode} onChange={e=>setNk({...nk,mode:e.target.value})}><option value="test">Test — real quotes, can NEVER book a real label</option><option value="live">Live — books real FedEx labels</option><option value="admin">Integration (admin) — push rate cards from your proposal tool</option></Select></Field>
-        <button onClick={createKey} disabled={(nk.mode!=="admin"&&!nk.clientId)||kBusy} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium disabled:opacity-40 flex items-center gap-1.5">{kBusy?<Loader2 className="w-4 h-4 animate-spin"/>:<Plus className="w-4 h-4"/>}Create key</button>
+        <button onClick={createKey} disabled={(nk.mode!=="admin"&&!nk.clientId)||kBusy} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium disabled:opacity-40 flex items-center gap-1.5">{kBusy?<Loader2 className="w-4 h-4 animate-spin"/>:<Plus className="w-4 h-4"/>}Create key</button>
       </div>
       {keys==null?<div className="text-sm text-stone-400">Loading…</div>
        :!keys.length?<div className="text-sm text-stone-400">No keys yet — create one above and hand it to the customer (it authenticates every call).</div>
@@ -4816,7 +4818,7 @@ function ApiAdmin({clients=[],platform={},openCustomer}){
       <div className="flex flex-wrap items-end gap-2 mb-3">
         <Field label="Rep name"><Input value={nr.name} onChange={e=>setNr({...nr,name:e.target.value})}/></Field>
         <Field label="% of margin"><Input type="number" value={nr.pct} onChange={e=>setNr({...nr,pct:e.target.value})} placeholder="10"/></Field>
-        <button onClick={()=>{if(!nr.name||!(+nr.pct>0))return;setReps(p=>[...(p||[]),{id:"r"+Date.now(),name:nr.name,pct:+nr.pct,clientIds:[]}]);setNr({name:"",pct:"",clientIds:[]});}} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5"><Plus className="w-4 h-4"/>Add rep</button>
+        <button onClick={()=>{if(!nr.name||!(+nr.pct>0))return;setReps(p=>[...(p||[]),{id:"r"+Date.now(),name:nr.name,pct:+nr.pct,clientIds:[]}]);setNr({name:"",pct:"",clientIds:[]});}} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5"><Plus className="w-4 h-4"/>Add rep</button>
       </div>
       {!repRows.length?<div className="text-sm text-stone-400">No reps yet.</div>
        :<div className="space-y-2">{repRows.map(rp=>(<div key={rp.id} className="border border-stone-200 rounded-lg bg-white p-3 space-y-2">
@@ -4888,7 +4890,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
   const uEmail=(uid)=>{const u=users.find(x=>x&&x.id===uid);return u?(u.name||u.email):uid;};
   const NAV_GROUPS=[
     {label:"Overview",items:[["overview","Dashboard",BarChart3]]},
-    {label:"Accounts",items:[["customers","Customers",Building2],["users","All logins",Users]]},
+    {label:"Accounts",items:[["customers","Customers",Building2],["users","All Logins",Users]]},
     {label:"Pricing",items:[["rates","Rates & dim divisors",DollarSign],["labelcert","FedEx labels",Printer]]},
     {label:"Experience",items:[["customizations","Features & access",Sliders],["branding","Branding",Sparkles],["apiadmin","API",Plug],["billing","Billing & invoices",Receipt],["domains","Domains",ExternalLink]]},
     {label:"Data",items:[["backups","Backups & restore",RotateCcw]]},
@@ -5021,7 +5023,7 @@ function CustomizationsAdmin({users,clients,featureFlags={},setFeatureFlags,cust
   return (<div className="space-y-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="text-sm text-stone-500 max-w-2xl">Every customization and platform feature, and exactly who has it. Blue chip = on for that login; click any chip to flip it. When we build something custom for one client, register it here — turning it on for the next client is one click.</div>
-      <button onClick={()=>setDraft({label:"",desc:"",clientNote:""})} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Plus className="w-4 h-4"/>Register customization</button>
+      <button onClick={()=>setDraft({label:"",desc:"",clientNote:""})} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>Register customization</button>
     </div>
     {draft&&<div className="border border-[#0086E0]/40 bg-blue-50/40 rounded-lg p-4 space-y-3">
       <div className="grid sm:grid-cols-3 gap-3">
@@ -5071,7 +5073,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
   return (<div className="space-y-3">
     <div className="text-sm text-stone-500 space-y-1">
       <p>Create and manage every login on the platform. <b>Customer</b> logins see only their own data and the tabs you give them; <b>admin</b> logins run this portal.</p>
-      <p className="text-xs text-stone-400">Per-login buttons: <b>Log in as</b> opens the app exactly as that person sees it (sign out to come back) · <b>Company admin</b> lets them manage their own company's logins · <b>Tabs &amp; logo</b> sets which tabs they see and their header logo · <b>Password</b> resets it · <b>Active/Deactivated</b> controls whether they can sign in.</p>
+      <p className="text-xs text-stone-400">Per-login: <b>Log in as</b> opens the app exactly as that person sees it (sign out to come back) · <b>Active/Deactivated</b> controls whether they can sign in · everything else (rates, company admin, tabs &amp; logo, passwords, 2FA, delete) lives under the <b>···</b> menu on each row.</p>
     </div>
     {(()=>{
       const clientIds=new Set(clients.map(c=>c.id));
@@ -5142,7 +5144,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
         </div>}
         <p className="text-[11px] text-stone-400">Limits which Admin portal sections this login can open. They still get every regular tab (Ship, Orders, Settings…) like any admin.</p>
       </div>}
-      <button onClick={create} className={`text-sm rounded px-4 py-2 font-medium flex items-center gap-1.5 ${added?"bg-emerald-600 text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{added?<><Check className="w-4 h-4"/>Created</>:<><Plus className="w-4 h-4"/>Create login</>}</button>
+      <button onClick={create} className={`text-sm rounded px-4 py-2 font-medium flex items-center gap-1.5 ${added?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{added?<><Check className="w-4 h-4"/>Created</>:<><Plus className="w-4 h-4"/>Create login</>}</button>
     </div>
     <div className="border border-stone-200 rounded-lg bg-white overflow-hidden divide-y divide-stone-100">
       <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="flex-1">Login</div><div className="w-24">Role</div><div className="w-32 hidden sm:block">Company</div><div className="w-24 hidden sm:block">Last login</div><div className="text-right flex-1 hidden lg:block">Actions</div></div>
@@ -5153,16 +5155,18 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
           <div className="w-32 hidden sm:block text-xs text-stone-500 truncate">{u.role==="admin"?"— all —":(clients.find(c=>c.id===u.clientId)||{}).name||"—"}</div>
           <div className="w-24 hidden sm:block text-xs text-stone-400">{u.lastLogin||"—"}</div>
           <div className="flex flex-wrap items-center justify-end gap-1.5">
-            {u.role==="admin"&&u.id!=="u1"&&!isBuiltInAdmin(u.email)&&u.id!==currentUser.id&&fullAdmin&&<button onClick={()=>setAccessOpen(accessOpen===u.id?null:u.id)} title="Which Admin sections this login can open" className={`text-[11px] rounded px-2 py-1 ${accessOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>Portal access</button>}
             {u.role!=="admin"&&<button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }} title="Open the app exactly as this person sees it" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Log in as</button>}
-            {u.role!=="admin"&&u.clientId&&<button onClick={()=>setRpOpen(rpOpen===u.id?null:u.id)} title="Which rate profile this company prices from — applies to every login of the company" className={`text-[11px] rounded px-2 py-1 ${rpOpen===u.id?"bg-[#0086E0] text-white":"bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}>Rates: {rateProfileName(rateRules,u.clientId)}</button>}
-            {u.role!=="admin"&&<button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))} title={u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins"} className={`text-[11px] rounded px-2 py-1 ${u.companyAdmin?"bg-violet-600 text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>{u.companyAdmin?"Company admin ✓":"Company admin"}</button>}
-            {u.role!=="admin"&&<button onClick={()=>setFeatOpen(featOpen===u.id?null:u.id)} title="Features for this login" className={`text-[11px] rounded px-2 py-1 ${featOpen===u.id?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>Tabs &amp; logo</button>}
-            {CLOUD.mode==="cloud"&&(u.role!=="admin"||fullAdmin)&&<button onClick={async()=>{const np=await uiPrompt("New password for "+u.email+" (min 4 characters):","",{title:"Reset password"});if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});uiAlert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}} title="Reset password" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Password</button>}
-            {CLOUD.mode==="cloud"&&u.role!=="admin"&&<button onClick={async()=>{const r=await cloudCall({action:"requestReset",email:u.email,token:CLOUD.token});uiAlert(r&&r.configured===false?"Email sending isn't set up on this site yet (RESEND_API_KEY).":"Password reset link sent to "+u.email+" (valid 1 hour).");}} title="Email them a choose-a-new-password link (valid 1 hour)" className="text-[11px] rounded px-2 py-1 bg-[#E6F4FF] text-[#006FBF] hover:bg-[#CCEAFF]">Reset email</button>}
-            {CLOUD.mode==="cloud"&&u.totp&&u.totp.enabled&&<button onClick={async()=>{if(!await uiConfirm("Turn OFF two-factor for "+u.email+"? Use this only if they lost their authenticator — they'll sign in with just their password afterward."))return;const r=await cloudCall({action:"clearTotp",token:CLOUD.token,email:u.email});uiAlert(r&&r.ok?"2FA turned off for "+u.email+".":((r&&r.error)||"Could not reset 2FA."));}} title="Lost-phone recovery: turn off this user's 2FA" className="text-[11px] rounded px-2 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100">Reset 2FA</button>}
             <button onClick={()=>toggle(u.id)} title={u.status==="active"?"Deactivate":"Activate"} className={`text-[11px] rounded px-2 py-1 ${u.status==="active"?"bg-emerald-50 text-emerald-700":"bg-stone-100 text-stone-500"}`}>{u.status==="active"?"Active":"Deactivated"}</button>
-            {u.id!==currentUser.id&&!isBuiltInAdmin(u.email)&&(u.role!=="admin"||(fullAdmin&&u.id!=="u1"))&&<button onClick={()=>del(u.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
+            <RowMenu title={"More actions for "+(u.name||u.email)} items={[
+              u.role==="admin"&&u.id!=="u1"&&!isBuiltInAdmin(u.email)&&u.id!==currentUser.id&&fullAdmin&&{label:"Portal access…",title:"Which Admin sections this login can open",active:accessOpen===u.id,onClick:()=>setAccessOpen(accessOpen===u.id?null:u.id)},
+              u.role!=="admin"&&u.clientId&&{label:"Rates: "+rateProfileName(rateRules,u.clientId),title:"Which rate profile this company prices from — applies to every login of the company",active:rpOpen===u.id,onClick:()=>setRpOpen(rpOpen===u.id?null:u.id)},
+              u.role!=="admin"&&{label:"Company admin",title:u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins",active:!!u.companyAdmin,onClick:()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))},
+              u.role!=="admin"&&{label:"Tabs & logo…",title:"Features for this login",active:featOpen===u.id,onClick:()=>setFeatOpen(featOpen===u.id?null:u.id)},
+              CLOUD.mode==="cloud"&&(u.role!=="admin"||fullAdmin)&&{label:"Set password…",title:"Reset password",onClick:async()=>{const np=await uiPrompt("New password for "+u.email+" (min 4 characters):","",{title:"Reset password"});if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});uiAlert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}},
+              CLOUD.mode==="cloud"&&u.role!=="admin"&&{label:"Send reset email",title:"Email them a choose-a-new-password link (valid 1 hour)",onClick:async()=>{const r=await cloudCall({action:"requestReset",email:u.email,token:CLOUD.token});uiAlert(r&&r.configured===false?"Email sending isn't set up on this site yet (RESEND_API_KEY).":"Password reset link sent to "+u.email+" (valid 1 hour).");}},
+              CLOUD.mode==="cloud"&&u.totp&&u.totp.enabled&&{label:"Reset 2FA",title:"Lost-phone recovery: turn off this user's 2FA",onClick:async()=>{if(!await uiConfirm("Turn OFF two-factor for "+u.email+"? Use this only if they lost their authenticator — they'll sign in with just their password afterward."))return;const r=await cloudCall({action:"clearTotp",token:CLOUD.token,email:u.email});uiAlert(r&&r.ok?"2FA turned off for "+u.email+".":((r&&r.error)||"Could not reset 2FA."));}},
+              u.id!==currentUser.id&&!isBuiltInAdmin(u.email)&&(u.role!=="admin"||(fullAdmin&&u.id!=="u1"))&&{label:"Delete login…",danger:true,onClick:async()=>{if(await uiConfirm("Delete "+(u.name||u.email)+"'s login? They won't be able to sign in anymore. Their customer account and its data are not touched."))del(u.id);}},
+            ]}/>
           </div>
           {rpOpen===u.id&&u.role!=="admin"&&u.clientId&&<div className="w-full mt-2 border-t border-stone-100 pt-3">
             <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Rate profile for {(clients.find(c=>c.id===u.clientId)||{}).name||"this company"} — every login of the company prices from it</div>
@@ -5660,7 +5664,7 @@ function CloudAuth({onDone,initialMode,intake}){
         </div>}
       </div>
       {err&&<div className="text-xs text-red-600">{err}</div>}
-      <button onClick={mode==="signin"?signin:request} disabled={busy} className="w-full bg-stone-900 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"One moment…":(mode==="signin"?"Sign in":"Create account")}</button>
+      <button onClick={mode==="signin"?signin:request} disabled={busy} className="w-full bg-[#0086E0] text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-[#006db8] disabled:opacity-50">{busy?"One moment…":(mode==="signin"?"Sign in":"Create account")}</button>
       {mode==="signin"&&<button onClick={()=>{setFp("ask");setFpEmail("");}} className="w-full text-center text-xs text-stone-400 hover:text-stone-600 underline underline-offset-2">Forgot password?</button>}
     </>)}
   </div>);
@@ -5936,7 +5940,7 @@ function FirstRunFedEx({user,onClose}){
         <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto"/>
         <div className="text-lg font-semibold text-stone-800">You’re on the list</div>
         <p className="text-sm text-stone-500">A real person will set up your FedEx account and reach out — usually the same day. If you attached an invoice, your rate comparison comes with it.</p>
-        <button onClick={onClose} className="bg-stone-900 text-white rounded-lg px-5 py-2 text-sm font-medium">Start shipping</button>
+        <button onClick={onClose} className="bg-[#0086E0] text-white rounded-lg px-5 py-2 text-sm font-medium">Start shipping</button>
       </div>):(<>
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -6696,7 +6700,7 @@ function AppInner(){
   const unfulfilled=orders.filter(o=>o.status==="unfulfilled").length;
 
   if(!currentUser) return <Login users={users} brand={{...DEFAULT_BRAND,...(settings.brand||{})}} onLogin={(u)=>{ const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }}/>;
-  if(BRAND.admin&&currentUser.role!=="admin"&&!lsGet("adminReturn",null)) return (<div className="min-h-screen bg-stone-100 flex items-center justify-center p-4"><div className="bg-white border border-stone-200 rounded-xl p-8 text-center max-w-sm"><ShieldCheck className="w-8 h-8 text-stone-300 mx-auto mb-3"/><div className="font-semibold text-stone-800">Administrators only</div><p className="text-sm text-stone-500 mt-1">This portal is the admin HQ. Your account works on shippingcloud.net and freightwireship.com.</p><button onClick={()=>{lsDel("session");window.location.reload();}} className="mt-4 text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Sign out</button></div></div>);
+  if(BRAND.admin&&currentUser.role!=="admin"&&!lsGet("adminReturn",null)) return (<div className="min-h-screen bg-stone-100 flex items-center justify-center p-4"><div className="bg-white border border-stone-200 rounded-xl p-8 text-center max-w-sm"><ShieldCheck className="w-8 h-8 text-stone-300 mx-auto mb-3"/><div className="font-semibold text-stone-800">Administrators only</div><p className="text-sm text-stone-500 mt-1">This portal is the admin HQ. Your account works on shippingcloud.net and freightwireship.com.</p><button onClick={()=>{lsDel("session");window.location.reload();}} className="mt-4 text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium">Sign out</button></div></div>);
 
   const [fedexPrompt,setFedexPrompt]=usePersist("fedexPrompt",{seen:false});
   // The "Get your own FedEx account" welcome popup is for BRAND-NEW signups only —
@@ -7614,7 +7618,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                mode it flashed behind the booked summary before the form cleared. The booked summary
                already offers reprint/details, so suppress this banner entirely post-booking. */
             if(justBookedRef.current!=null)return null;
-            return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex flex-wrap items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="flex-1 min-w-[180px]">Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}).</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:d.tracking}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><FileText className="w-3 h-3"/>See details</button><button onClick={()=>setLabelPreview({rec:d,tracking:d.tracking,service:d.service,carrier:d.carrier,pdf:d.labelPdf||d.pdf||null,fromExisting:true})} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><Printer className="w-3 h-3"/>Reprint</button><button onClick={newShipment} className="shrink-0 text-[11px] font-semibold text-white bg-stone-900 hover:bg-stone-800 border border-stone-900 rounded-lg px-2.5 py-1 flex items-center gap-1"><Plus className="w-3 h-3"/>New shipment</button></div>:null;})()}
+            return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex flex-wrap items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="flex-1 min-w-[180px]">Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}).</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:d.tracking}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><FileText className="w-3 h-3"/>See details</button><button onClick={()=>setLabelPreview({rec:d,tracking:d.tracking,service:d.service,carrier:d.carrier,pdf:d.labelPdf||d.pdf||null,fromExisting:true})} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><Printer className="w-3 h-3"/>Reprint</button><button onClick={newShipment} className="shrink-0 text-[11px] font-semibold text-white bg-[#0086E0] hover:bg-[#006db8] border border-[#0086E0] rounded-lg px-2.5 py-1 flex items-center gap-1"><Plus className="w-3 h-3"/>New shipment</button></div>:null;})()}
           {pieces.map((p,i)=>(
             <div key={i} className="flex flex-wrap items-end gap-2 bg-white border border-stone-200 rounded-lg px-2 py-2">
               <div className="text-[11px] text-stone-400 font-mono w-6">#{i+1}</div>
@@ -7796,7 +7800,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           </div>
         )}
         {labelPreview&&<LabelPreviewModal data={labelPreview} settings={settings} onNewShipment={newShipment} onClose={()=>{const pend=labelPreview&&labelPreview.pendingBook;setLabelPreview(null);if(!pend&&(cz(settings).printFlowV2?cz(settings).resetAfterPrint:(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint)))newShipment();}}/>}
-        {naming&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setNaming(false)}><div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-sm space-y-3" onClick={e=>e.stopPropagation()}><div className="text-sm font-semibold text-stone-800">Name this draft</div><input autoFocus value={draftName} onChange={e=>setDraftName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")commitDraft(draftName.trim());}} placeholder="e.g. Dana Cole – Miami" className="w-full bg-white border border-stone-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><div className="flex justify-end gap-2"><button onClick={()=>setNaming(false)} className="text-sm px-3 py-1.5 rounded text-stone-600 hover:bg-stone-100">Cancel</button><button onClick={()=>commitDraft(draftName.trim())} className="text-sm px-3 py-1.5 rounded bg-stone-900 text-white font-medium hover:bg-stone-800">Save draft</button></div></div></div>}
+        {naming&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setNaming(false)}><div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-sm space-y-3" onClick={e=>e.stopPropagation()}><div className="text-sm font-semibold text-stone-800">Name this draft</div><input autoFocus value={draftName} onChange={e=>setDraftName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")commitDraft(draftName.trim());}} placeholder="e.g. Dana Cole – Miami" className="w-full bg-white border border-stone-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><div className="flex justify-end gap-2"><button onClick={()=>setNaming(false)} className="text-sm px-3 py-1.5 rounded text-stone-600 hover:bg-stone-100">Cancel</button><button onClick={()=>commitDraft(draftName.trim())} className="text-sm px-3 py-1.5 rounded bg-[#0086E0] text-white font-medium hover:bg-[#006db8]">Save draft</button></div></div></div>}
         {shipStatus&&(!handsFree||shipStatus.state==="error"||shipStatus.state==="pending_timeout")&&<div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2.5 ${shipStatus.state==="error"?"bg-rose-50 text-rose-700 border border-rose-200":shipStatus.state==="booked"?"bg-emerald-50 text-emerald-700 border border-emerald-200":shipStatus.state==="pending_timeout"?"bg-amber-50 text-amber-700 border border-amber-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
           {shipStatus.state==="booking"&&<><Loader2 className="w-4 h-4 animate-spin"/>Booking label on your FedEx account…</>}
           {shipStatus.state==="pending"&&<><Loader2 className="w-4 h-4 animate-spin"/>Booking your label — waiting for the carrier to confirm…</>}
@@ -7820,7 +7824,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><Send className="w-3.5 h-3.5"/>Send label &amp; notify</div>
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex-1 min-w-0"><div className="text-[10px] uppercase tracking-widest text-stone-400">Send to email</div><input value={emailTo} onChange={e=>setEmailTo(e.target.value)} placeholder={receiver.email||"customer@example.com"} className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
-            <button onClick={sendLabel} className={`flex items-center gap-1.5 text-sm rounded px-3 py-2 font-medium ${sent==="label"?"bg-emerald-600 text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{sent==="label"?<><Check className="w-4 h-4"/>Label sent</>:<><Printer className="w-4 h-4"/>Send shipping label</>}</button>
+            <button onClick={sendLabel} className={`flex items-center gap-1.5 text-sm rounded px-3 py-2 font-medium ${sent==="label"?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{sent==="label"?<><Check className="w-4 h-4"/>Label sent</>:<><Printer className="w-4 h-4"/>Send shipping label</>}</button>
             <button onClick={sendEmail} className={`flex items-center gap-1.5 text-sm rounded px-3 py-2 font-medium ${sent==="email"?"bg-emerald-600 text-white":"bg-stone-200 text-stone-700 hover:bg-stone-300"}`}>{sent==="email"?<><Check className="w-4 h-4"/>Email sent</>:<><Mail className="w-4 h-4"/>Send tracking email</>}</button>
           </div>
           <div>
@@ -7835,7 +7839,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);printPackingSlips([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:(shipStatus&&shipStatus.tracking)||"",service:""}]);}} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-200"><FileText className="w-4 h-4"/>Packing slip</button>
           <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-300"><Plus className="w-4 h-4"/>New shipment</button>
-          <button onClick={saveDraft} className={`flex items-center gap-1.5 text-sm rounded px-4 py-2 font-medium ${saved?"bg-emerald-600 text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{saved?<><Check className="w-4 h-4"/>Saved to drafts</>:<><FileText className="w-4 h-4"/>Save draft</>}</button>
+          <button onClick={saveDraft} className={`flex items-center gap-1.5 text-sm rounded px-4 py-2 font-medium ${saved?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{saved?<><Check className="w-4 h-4"/>Saved to drafts</>:<><FileText className="w-4 h-4"/>Save draft</>}</button>
         </div>
       </div>
     </div>
@@ -7957,7 +7961,7 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
             {data.insurance>0?<div className="flex justify-between"><span className="text-stone-500">Declared value</span><span className="font-mono text-stone-800">{money(data.insurance)}</span></div>:null}
           </div>
           <div className="px-4 pb-4 flex gap-2 shrink-0">
-            <button onClick={()=>data.onConfirm&&data.onConfirm()} className="flex-1 bg-stone-900 text-white rounded-lg px-4 py-2.5 font-medium hover:bg-stone-800 flex items-center justify-center gap-2"><Printer className="w-4 h-4"/>Print label — book it</button>
+            <button onClick={()=>data.onConfirm&&data.onConfirm()} className="flex-1 bg-[#0086E0] text-white rounded-lg px-4 py-2.5 font-medium hover:bg-[#006db8] flex items-center justify-center gap-2"><Printer className="w-4 h-4"/>Print label — book it</button>
             <button onClick={cancel} className="px-4 py-2.5 text-sm text-stone-500 hover:text-stone-800 border border-stone-200 rounded-lg">Cancel</button>
           </div>
         </div>
@@ -8002,7 +8006,7 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
           <button onClick={doPrint} className={autoPrintOff&&!hasPrinted?"text-sm px-4 py-2 rounded bg-[#0086E0] hover:bg-[#0072BE] text-white font-semibold flex items-center gap-1.5":"text-sm px-4 py-2 rounded border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 flex items-center gap-1.5"}><Printer className="w-4 h-4"/>{autoPrintOff?(hasPrinted?"Print again":"Print label"):"Reprint label"}</button>
           <button onClick={()=>setShowDetails(v=>!v)} className="text-sm px-3 py-2 rounded border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"><FileText className="w-4 h-4"/>See details</button>
           {data.tracking&&<button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:data.tracking}}));}catch(e){} onClose();}} className="text-sm px-3 py-2 rounded border border-[#99D6FF] text-[#006FBF] bg-[#E6F4FF] hover:bg-[#CCEAFF] flex items-center gap-1.5"><Truck className="w-4 h-4"/>Go to shipment</button>}
-          {onNewShipment&&<button onClick={()=>{onNewShipment();onClose();}} className="text-sm px-4 py-2 rounded bg-stone-900 text-white hover:bg-stone-800 flex items-center gap-1.5"><Plus className="w-4 h-4"/>New shipment</button>}
+          {onNewShipment&&<button onClick={()=>{onNewShipment();onClose();}} className="text-sm px-4 py-2 rounded bg-[#0086E0] text-white hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>New shipment</button>}
         </div>
         {showDetails&&(()=>{ const r=data.rec||{}; const ins=parseFloat(r.insurance||0)||0;
           const D=({k,v})=>v?(<div className="flex justify-between py-0.5"><span className="text-stone-400">{k}</span><span className="text-stone-700 text-right">{v}</span></div>):null;
@@ -8135,7 +8139,7 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
           </div>
           <div className="text-right font-mono">{!!(custom.priceWarn>0&&ready&&hasPrice&&sell>custom.priceWarn)&&<div className="text-[10px] text-amber-600 flex items-center justify-end gap-0.5" title={"Above your $"+custom.priceWarn+" price alert"}><AlertTriangle className="w-3 h-3"/>over limit</div>}<div className="text-base font-semibold text-stone-900">{!ready?<span className="text-stone-300">—</span>:(live||fxLive)?(hasPrice?money(sell):<span className="text-stone-300">—</span>):loading?<span className="text-[11px] font-normal text-stone-400">pricing…</span>:(hasPrice?money(sell):<span className="text-stone-300">—</span>)}</div></div>
           {action&&(()=>{const unavailable=q._unavailable||(!hasPrice&&!loading&&live);
-            return <button onClick={(e)=>{e.stopPropagation();if(!unavailable)action(q);}} disabled={!ready||!hasPrice||unavailable} title={unavailable?"FedEx isn't offering this service for this shipment (size/weight/destination).":!hasPrice&&q._oneRate?"No One Rate flat price came back — pick a priced service.":undefined} className={`shrink-0 w-32 text-sm rounded px-3 py-2 font-medium flex items-center justify-center gap-1.5 disabled:cursor-not-allowed ${unavailable?"bg-rose-50 text-rose-600 border border-rose-200":bought===q.key?"bg-[#0086E0] text-white":"bg-stone-900 text-white hover:bg-stone-800 disabled:opacity-40"}`}>{unavailable?<>Unavailable</>:bought===q.key?<><Check className="w-4 h-4"/>{doneLabel}</>:!hasPrice&&q._oneRate?<>No quote</>:<><Printer className="w-4 h-4"/>{label}</>}</button>;})()}
+            return <button onClick={(e)=>{e.stopPropagation();if(!unavailable)action(q);}} disabled={!ready||!hasPrice||unavailable} title={unavailable?"FedEx isn't offering this service for this shipment (size/weight/destination).":!hasPrice&&q._oneRate?"No One Rate flat price came back — pick a priced service.":undefined} className={`shrink-0 w-32 text-sm rounded px-3 py-2 font-medium flex items-center justify-center gap-1.5 disabled:cursor-not-allowed ${unavailable?"bg-rose-50 text-rose-600 border border-rose-200":bought===q.key?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8] disabled:opacity-40"}`}>{unavailable?<>Unavailable</>:bought===q.key?<><Check className="w-4 h-4"/>{doneLabel}</>:!hasPrice&&q._oneRate?<>No quote</>:<><Printer className="w-4 h-4"/>{label}</>}</button>;})()}
         </div>
         {isOpen&&ready&&hasPrice&&<div className="px-4 pb-3 pt-1 border-t border-stone-100">
           <div className="flex items-center justify-between mb-1.5">
@@ -8393,7 +8397,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
               return <button onClick={toggle} title="When on, pulling an order into Ship pre-selects the service your Autopilot rules pick — applied as you ship." className={`flex items-center gap-1.5 text-sm rounded-lg px-3 py-2 font-medium border ${on?"bg-violet-50 border-violet-300 text-violet-700 hover:bg-violet-100":"bg-white border-stone-200 text-stone-500 hover:bg-stone-50"}`}><Zap className="w-4 h-4"/>Autopilot as I ship<span className={`ml-0.5 w-8 h-4 rounded-full flex items-center px-0.5 transition-colors ${on?"bg-violet-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-3 h-3 bg-white rounded-full"/></span></button>;
             })()}
             {orderSources.length>0&&<button onClick={syncAll} disabled={syncing} title={orderSources.length>1?`Syncs: ${orderSources.map(s=>s.name).join(", ")}`:undefined} className="flex items-center gap-1.5 text-sm border border-[#0086E0]/30 bg-[#E6F4FF] text-[#006FBF] rounded-lg px-3 py-2 font-medium hover:bg-[#CDE9FF] disabled:opacity-40">{syncing?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>{syncLabel}</>}</button>}
-            <button onClick={()=>setAdding(true)} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800"><Plus className="w-4 h-4"/>New order</button>
+            <button onClick={()=>setAdding(true)} className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#006db8]"><Plus className="w-4 h-4"/>New order</button>
           </div>
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
             {views.map(v=>(<span key={v.id} className="group inline-flex items-center gap-1 bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-full pl-2.5 pr-1.5 py-1 font-medium">
@@ -8444,7 +8448,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
                       {!hideCol.has("status")&&<td className={ordPad}><div className="flex items-center gap-1 flex-wrap"><Badge tone={o.status==="fulfilled"?"green":"amber"}>{o.status==="fulfilled"?"Shipped":"Awaiting"}</Badge>{o.hold&&<span title={o.hold}><Badge tone="rose">Held</Badge></span>}{o.gift&&<span title={o.giftMessage||"Gift"}><Badge tone="blue">Gift</Badge></span>}{o.assignee&&<span title={"Assigned to "+o.assignee}><Badge tone="stone">{o.assignee}</Badge></span>}</div></td>}
                       <td className="px-3 py-2.5 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <button onClick={(e)=>{e.stopPropagation();setOpen(o);}} className={`text-sm rounded px-3 py-1.5 font-medium ${o.status==="fulfilled"?"bg-stone-100 text-stone-600 hover:bg-stone-200":"bg-stone-900 text-white hover:bg-stone-800"}`}>{o.status==="fulfilled"?"View":"Ship"}</button>
+                          <button onClick={(e)=>{e.stopPropagation();setOpen(o);}} className={`text-sm rounded px-3 py-1.5 font-medium ${o.status==="fulfilled"?"bg-stone-100 text-stone-600 hover:bg-stone-200":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{o.status==="fulfilled"?"View":"Ship"}</button>
                           <button onClick={async(e)=>{e.stopPropagation();if(await uiConfirm(`Delete order ${o.name}? This removes it from ${BRAND.product} completely.`))setOrders(os=>os.filter(x=>x.id!==o.id));}} title="Delete order" className="text-stone-300 hover:text-rose-500 p-1"><Trash2 className="w-4 h-4"/></button>
                         </div>
                       </td>
@@ -8485,7 +8489,7 @@ function NewOrderForm({onClose,onCreate}){
         <Field label="Order total $"><Input value={f.total} onChange={e=>set("total",e.target.value)}/></Field>
         <Field label="Source"><Select value={f.source} onChange={e=>set("source",e.target.value)}>{["Manual","Shopify",...CONNECTORS.filter(c=>c.orders).map(c=>c.name)].map(s=><option key={s}>{s}</option>)}</Select></Field>
       </div>
-      <button onClick={create} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800">Create order</button>
+      <button onClick={create} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8]">Create order</button>
     </div>
   );
 }
@@ -9007,7 +9011,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
           <textarea value={slipEdit.note} onChange={e=>setSlipEdit(p=>({...p,note:e.target.value}))} rows={2} placeholder="Note to print on the slip (optional)" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 resize-y"/>
           <div className="flex justify-end gap-2 pt-1">
             <button onClick={()=>setSlipEdit(null)} className="text-sm rounded-lg px-3 py-2 text-stone-500 hover:bg-stone-100">Cancel</button>
-            <button onClick={slipEditPrint} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Printer className="w-4 h-4"/>Print slip</button>
+            <button onClick={slipEditPrint} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Printer className="w-4 h-4"/>Print slip</button>
           </div>
         </div>
       </div>,document.body)}
@@ -9072,7 +9076,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button onClick={()=>reship(s)} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-800 flex items-center gap-1.5"><RotateCcw className="w-3.5 h-3.5"/>Edit &amp; reship</button>
+                <button onClick={()=>reship(s)} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><RotateCcw className="w-3.5 h-3.5"/>Edit &amp; reship</button>
                 <button onClick={(e)=>{e.stopPropagation();doReprint(s);}} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 flex items-center gap-1.5"><Printer className="w-3.5 h-3.5"/>Reprint</button>
                 {s.status!=="Voided"&&<button onClick={()=>voidS(s.id)} className="text-sm text-rose-600 hover:bg-rose-50 rounded-lg px-3 py-1.5 font-medium flex items-center gap-1.5"><X className="w-3.5 h-3.5"/>Void label</button>}
               </div>
@@ -9134,7 +9138,7 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true,isAdmin
         {showCosts&&<div className="flex items-center justify-between text-sm bg-stone-50 border border-stone-200 rounded-lg px-3 py-2"><span className="text-stone-600">On-call pickup fee ({f.carrierCode==="FDXG"?"Ground":"Express"}){isAdmin&&<span className="block text-[10px] text-stone-400">{_pf.ruleDesc} — edit it on the Rates tab accessorials (Pickup &amp; returns)</span>}</span><span className="font-mono font-semibold text-stone-900">{money(pickupFee)}</span></div>}
         {showCosts&&<div className="text-[10px] text-stone-400 -mt-1">Billed per on-call pickup. Regular scheduled pickup routes bill weekly instead.</div>}
         {err&&<div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1.5 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>{err}</div>}
-        <button onClick={add} disabled={busy||!addrReady} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Scheduling with FedEx…</>:<><Calendar className="w-4 h-4"/>Schedule pickup</>}</button>
+        <button onClick={add} disabled={busy||!addrReady} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Scheduling with FedEx…</>:<><Calendar className="w-4 h-4"/>Schedule pickup</>}</button>
       </Panel>
       <div className="space-y-2">
         <div className="text-xs font-semibold uppercase tracking-widest text-stone-500">Scheduled</div>
@@ -9303,7 +9307,7 @@ function Scan({orders,goShip,goTab}){
       <div className="border-2 border-dashed border-[#99D6FF] rounded-xl bg-[#E6F4FF]/40 p-6 flex flex-col items-center gap-3">
         <ScanLine className="w-10 h-10 text-[#33ABFF]"/>
         <input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();submit(val);}}} placeholder="Scan or type a code, then Enter" className="w-full max-w-md text-center bg-white border border-stone-300 rounded-lg px-4 py-3 text-lg font-mono outline-none focus:border-[#0099FF]"/>
-        <button onClick={()=>submit(val)} className="text-sm bg-stone-900 text-white rounded-lg px-5 py-2 font-medium hover:bg-stone-800">Look up</button>
+        <button onClick={()=>submit(val)} className="text-sm bg-[#0086E0] text-white rounded-lg px-5 py-2 font-medium hover:bg-[#006db8]">Look up</button>
         {err&&<div className="text-sm text-rose-600 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4"/>{err}</div>}
       </div>
       <div className="text-[11px] text-stone-400">Tip: most barcode scanners act like a keyboard and send Enter automatically — just keep this box focused and scan.</div>
@@ -10027,7 +10031,7 @@ function Returns({returns,setReturns,orders,settings,logEmail}){
   const tone=s=>s==="Delivered"?"green":s==="In transit"?"amber":"blue";
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between"><h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Undo2 className="w-4 h-4"/>Returns &amp; RMAs</h2><button onClick={()=>setCreating(v=>!v)} className="flex items-center gap-1 text-sm bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-800"><Plus className="w-4 h-4"/>Create return</button></div>
+      <div className="flex items-center justify-between"><h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Undo2 className="w-4 h-4"/>Returns &amp; RMAs</h2><button onClick={()=>setCreating(v=>!v)} className="flex items-center gap-1 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8]"><Plus className="w-4 h-4"/>Create return</button></div>
       {creating&&<Panel title="New return label">
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Customer"><Input value={f.customer} onChange={e=>setF({...f,customer:e.target.value})} placeholder="Name"/></Field>
@@ -10035,7 +10039,7 @@ function Returns({returns,setReturns,orders,settings,logEmail}){
           <Field label="Reason"><Select value={f.reason} onChange={e=>setF({...f,reason:e.target.value})}><option>Wrong size</option><option>Defective</option><option>Not as described</option><option>No longer wanted</option></Select></Field>
           <Field label="Return carrier"><Select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})}><option>FedEx</option><option>USPS</option></Select></Field>
         </div>
-        <button onClick={create} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Generate return label</button>
+        <button onClick={create} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium">Generate return label</button>
       </Panel>}
       <div className="border border-stone-200 rounded-lg overflow-hidden bg-white divide-y divide-stone-100">
         {returns.length===0&&<div className="p-8 text-center text-sm text-stone-400">No returns yet.</div>}
@@ -10091,7 +10095,7 @@ function Manifests({shipments,setShipments,manifests,setManifests,settings}){
   return (
     <div className="space-y-4 max-w-3xl">
       <div className="border border-stone-200 rounded-lg bg-white p-4">
-        <div className="flex items-center justify-between mb-3"><h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><FileText className="w-4 h-4"/>End-of-day manifests</h2><button onClick={closeAll} disabled={!open.length} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40">Close manifests</button></div>
+        <div className="flex items-center justify-between mb-3"><h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><FileText className="w-4 h-4"/>End-of-Day Manifests</h2><button onClick={closeAll} disabled={!open.length} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40">Close manifests</button></div>
         {open.length===0?<p className="text-sm text-stone-400">No open labels. Today's labels are all manifested.</p>:
           <div className="grid sm:grid-cols-3 gap-3">{Object.entries(byCarrier).map(([c,n])=>(<div key={c} className="border border-stone-200 rounded-lg p-3"><div className={`text-xs font-bold ${CARRIER_TINT[c]}`}>{c}</div><div className="text-2xl font-bold mt-1">{n}</div><div className="text-[11px] text-stone-400">open labels</div></div>))}</div>}
       </div>
@@ -10125,7 +10129,7 @@ function Reports({shipments,showMoney=true}){
         <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><TrendingUp className="w-4 h-4"/>Reports</h2>
         <div className="flex-1"/>
         <select value={range} onChange={e=>setRange(+e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option><option value={0}>All time</option></select>
-        <button onClick={exportCSV} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-800"><Download className="w-4 h-4"/>Export CSV</button>
+        <button onClick={exportCSV} className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8]"><Download className="w-4 h-4"/>Export CSV</button>
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat2 label="Labels" v={a.count}/>{showMoney&&<Stat2 label="Shipping spend" v={money(a.revenue)}/>}{showMoney&&<Stat2 label="Avg / label" v={money(a.count?a.revenue/a.count:0)}/>}<Stat2 label="Carriers used" v={carriers.length}/>
@@ -10183,7 +10187,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
       {/* CONFIG */}
       <div className="space-y-4">
         <div>
-          <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2 mb-1"><ShoppingBag className="w-4 h-4"/>Live checkout rates</h2>
+          <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2 mb-1"><ShoppingBag className="w-4 h-4"/>Live Checkout Rates</h2>
           <p className="text-sm text-stone-500">Show live, calculated shipping rates inside your Shopify checkout. {BRAND.product} answers Shopify's CarrierService callback in real time, so buyers always see an accurate rate.</p>
         </div>
         <div className="border border-stone-200 rounded-lg bg-white p-4">
@@ -10349,7 +10353,7 @@ function ReferenceFields({settings,setSettings}){
   ];
   return (<div className="max-w-2xl space-y-4">
     <div>
-      <h2 className="text-base font-semibold text-stone-800">Reference Fields</h2>
+      <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Receipt className="w-4 h-4"/>Reference Fields</h2>
       <p className="text-sm text-stone-500 mt-1">When you pick a <b>FedEx One Rate</b> service, {BRAND.product} can auto-fill the chosen box name into a reference field so it prints on the label and your team knows which box to grab. Pick where it goes — or turn it off.</p>
     </div>
     <div className="bg-white border border-stone-200 rounded-lg p-4 flex items-center justify-between">
@@ -10375,7 +10379,7 @@ function Warehouses({settings,setSettings}){
   const del=(name)=>setSettings({...settings,warehouses:list.filter(w=>w.name!==name)});
   return (<div className="max-w-3xl space-y-4">
     <div>
-      <h2 className="text-base font-semibold text-stone-800">Warehouses / ship-from locations</h2>
+      <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Warehouse className="w-4 h-4"/>Warehouses / Ship-From Locations</h2>
       <p className="text-sm text-stone-500 mt-1">Save the places you ship from. Rules can route orders to a warehouse with the <b>“Set From Address”</b> action, and you can pick one as the ship-from when creating a label. The ZIP here also feeds the estimated <b>zone</b> used by your rules.</p>
     </div>
     <div className="bg-white border border-stone-200 rounded-lg divide-y divide-stone-100">
@@ -10477,7 +10481,7 @@ function ProductCatalog({settings,setSettings}){
 
   return (<div className="max-w-4xl space-y-3">
     <div>
-      <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Boxes className="w-4 h-4"/>Product catalog</h2>
+      <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Boxes className="w-4 h-4"/>Product Catalog</h2>
       <p className="text-sm text-stone-500 mt-0.5">Your products with dimensions and weight. Box logic uses these to auto-pick the right box for every order — so your labels bill the real size, not a guess.</p>
     </div>
     {msg&&<div className={`text-xs rounded-lg px-3 py-2 border flex items-center gap-2 ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err?<AlertTriangle className="w-4 h-4"/>:<CheckCircle2 className="w-4 h-4"/>}{msg.err||msg.ok}</div>}
@@ -10558,6 +10562,7 @@ function BoxesSettings({settings,setSettings}){
   const add=()=>{if(!n.name)return;setSettings({...settings,boxes:[...boxes,{id:"bx"+Date.now(),name:n.name,L:+n.L||1,W:+n.W||1,H:+n.H||1,maxWt:+n.maxWt||50,empty:+n.empty||0.3}]});setN({name:"",L:"",W:"",H:"",maxWt:"",empty:""});};
   const del=(id)=>setSettings({...settings,boxes:boxes.filter(b=>b.id!==id)});
   return (<div className="max-w-2xl space-y-3">
+    <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Package className="w-4 h-4"/>Package Sizes</h2>
     <p className="text-sm text-stone-500">Your box catalog. {BRAND.product}'s box logic auto-picks the smallest box that fits each order — used on the Ship tab and for live Shopify checkout rates.</p>
     <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
       <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="flex-1">Box</div><div className="w-28">Dimensions</div><div className="w-16 text-right">Max wt</div><div className="w-16 text-right">Empty</div><div className="w-6"/></div>
@@ -10579,7 +10584,7 @@ function BoxesSettings({settings,setSettings}){
         <Field label="H"><Input type="number" value={n.H} onChange={e=>setN({...n,H:e.target.value})}/></Field>
         <Field label="Max wt"><Input type="number" value={n.maxWt} onChange={e=>setN({...n,maxWt:e.target.value})}/></Field>
       </div>
-      <button onClick={add} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Add box</button>
+      <button onClick={add} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium">Add box</button>
     </Panel>
   </div>);
 }
@@ -10596,6 +10601,7 @@ function BoxLogic({settings,setSettings}){
   const dimWt=testPack?Math.round((testPack.box.L*testPack.box.W*testPack.box.H/(+bl.dimDivisor||139))*10)/10:0;
   const billShown=testPack?Math.max(testPack.billWt,dimWt):0;
   return (<div className="max-w-2xl space-y-4">
+    <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Layers className="w-4 h-4"/>Box Logic</h2>
     <p className="text-sm text-stone-500">Box logic decides which box each order ships in and how billable weight is figured. It runs automatically on the Ship tab, in Batch, and for live checkout rates.</p>
     <Panel title="Cartonization">
       <Field label="How a box is chosen">
@@ -10849,6 +10855,7 @@ function PrinterSettings({settings,setSettings}){
   };
   const DOC_KINDS=[["packSlip","Packing slips","Auto-printed slips and every Packing slip button"],["pickList","Pick lists","The Pick list buttons in Orders & Batch"],["docs","Receipts & other documents","Shipment receipts and commercial invoices"]];
   return (<div className="max-w-2xl space-y-4">
+    <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Printer className="w-4 h-4"/>Print Settings</h2>
     <p className="text-sm text-stone-500">Controls how labels are generated and printed when you buy a label or run a batch.</p>
     <Panel title="Ship & print automation">
       <div className="space-y-3">
@@ -10924,7 +10931,7 @@ function PrinterSettings({settings,setSettings}){
           <label className="block text-sm text-stone-700 flex-1 min-w-[220px]">PrintNode API key
             <input type="password" value={pnc.apiKey||""} onChange={e=>setPnCfg({apiKey:e.target.value})} placeholder="paste your key" className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/>
           </label>
-          <button onClick={pnFind} disabled={!String(pnc.apiKey||"").trim()||pnBusy==="find"} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{pnBusy==="find"?<><Loader2 className="w-4 h-4 animate-spin"/>Finding…</>:<><Search className="w-4 h-4"/>Find my printers</>}</button>
+          <button onClick={pnFind} disabled={!String(pnc.apiKey||"").trim()||pnBusy==="find"} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{pnBusy==="find"?<><Loader2 className="w-4 h-4 animate-spin"/>Finding…</>:<><Search className="w-4 h-4"/>Find my printers</>}</button>
         </div>
         {(pnList||knownPrinters.length>0)&&<div className="flex flex-wrap items-end gap-2">
           <label className="block text-sm text-stone-700 flex-1 min-w-[220px]">Label printer
@@ -10996,7 +11003,7 @@ function PrinterSettings({settings,setSettings}){
           <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><input type="radio" name="defprinter" checked={settings.defaultPrinterId===x.id} onChange={()=>setSettings({...settings,defaultPrinterId:x.id})} className="accent-[#0086E0]"/>default</label>
           <button onClick={()=>delPrinter(x.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button>
         </div>))}
-        <div className="flex items-center gap-2"><Input value={pn} onChange={e=>setPn(e.target.value)} placeholder="Printer name (e.g. Zebra — Station A)"/><button onClick={addPrinter} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium shrink-0">Add</button></div>
+        <div className="flex items-center gap-2"><Input value={pn} onChange={e=>setPn(e.target.value)} placeholder="Printer name (e.g. Zebra — Station A)"/><button onClick={addPrinter} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium shrink-0">Add</button></div>
       </div>
       {printers.length>0&&<div className="space-y-1.5 pt-2 border-t border-stone-100">
         <div className="text-[10px] uppercase tracking-widest text-stone-400">Routing rules · first match wins</div>
@@ -11166,6 +11173,7 @@ function Notifications({settings,setSettings,emails}){
   const items=[["orderConfirm","Order confirmation","Sent to the customer when an order is placed"],["shipped","Shipment confirmation","Tracking link emailed when a label prints"],["delivered","Delivered notice","Sent when the carrier marks delivered"],["returnLabel","Return label","Emailed when an RMA label is created"],["exception","Delivery exception alert","Internal alert when a shipment hits a delivery exception"]];
   const toggle=k=>setSettings({...settings,notify:{...N,[k]:!N[k]}});
   return (<div className="space-y-4 max-w-2xl">
+    <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Mail className="w-4 h-4"/>Email Automation</h2>
     <p className="text-sm text-stone-500">Automated emails fire on shipping & warehouse events. Toggle what sends — the log below records every send.</p>
     <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
       {items.map(([k,l,d])=>(<div key={k} className="flex items-center gap-3 px-4 py-3"><div className="flex-1"><div className="text-sm font-medium">{l}</div><div className="text-[11px] text-stone-400">{d}</div></div><button onClick={()=>toggle(k)}><span className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${N[k]?"bg-[#0086E0] justify-end":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></span></button></div>))}
@@ -11842,7 +11850,7 @@ function AddressBook({settings,setSettings}){
     <div className="flex flex-wrap items-center gap-3">
       <p className="text-sm text-stone-500 flex-1">Saved contacts for fast ship-to / ship-from. Import your whole list from a CSV.</p>
       <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Save this address: "}}))} title={"Dictate a contact and "+AI_NAME+" saves it"} className="flex items-center gap-1.5 text-sm bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-3 py-2 font-medium hover:bg-[#CCEAFF]"><Sparkles className="w-4 h-4"/>Ask {AI_NAME} to add one</button>
-      <label className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
+      <label className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#006db8] cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
     </div>
     {msg&&<div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{msg}</div>}
     <div className="text-[11px] text-stone-400">CSV columns recognized: name, company, address, city, state, zip, phone (header row optional).</div>
@@ -11857,7 +11865,7 @@ function AddressBook({settings,setSettings}){
         </div>
         <div className="text-[11px] text-stone-400 mt-1">When this contact is selected on the Ship page, shipments auto-bill to this {f.acctCarrier||"carrier"} account instead of you.</div>
       </div>
-      <button onClick={add} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Save address</button>
+      <button onClick={add} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium">Save address</button>
     </Panel>
     <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
       <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 flex items-center justify-between"><span>{filtered.length} address{filtered.length===1?"":"es"}</span></div>
@@ -11933,15 +11941,15 @@ function ConnectorModal({c,settings,setSettings,orders,setOrders,onClose}){
 
           {c.auth==="token"&&(<div className="space-y-2 pt-1">
             {(c.fields||[]).map(([k,label,ph])=>(<div key={k}><div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">{label}</div><Input value={form[k]||""} onChange={e=>setForm({...form,[k]:e.target.value})} placeholder={ph}/></div>))}
-            <button onClick={saveToken} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Check className="w-4 h-4"/>Save credentials</button>
+            <button onClick={saveToken} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Check className="w-4 h-4"/>Save credentials</button>
           </div>)}
 
           {c.auth==="oauth"&&(<div className="pt-1 space-y-2">
-            <button onClick={startOAuth} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Plug className="w-4 h-4"/>Connect with {c.name}</button>
+            <button onClick={startOAuth} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plug className="w-4 h-4"/>Connect with {c.name}</button>
             {c.postShopId&&<div className="pt-1"><div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">Etsy Shop ID (after connecting)</div><div className="flex gap-2"><Input value={shopId} onChange={e=>setShopId(e.target.value)} placeholder="e.g. 12345678"/><button onClick={saveShopId} className="text-sm border border-stone-200 rounded px-3 hover:bg-stone-50">Save</button></div></div>}
           </div>)}
 
-          {c.auth==="qwc"&&(<div className="pt-1"><button onClick={downloadQwc} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Download className="w-4 h-4"/>Download .qwc file</button></div>)}
+          {c.auth==="qwc"&&(<div className="pt-1"><button onClick={downloadQwc} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Download className="w-4 h-4"/>Download .qwc file</button></div>)}
 
           {msg&&<div className={`text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${msg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{msg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{msg.err||msg.ok}</div>}
         </div>
@@ -12002,6 +12010,7 @@ function Integrations({settings,setSettings,orders,setOrders}){
   };
   const activeC=active?connectorOf(active):null;
   return (<div className="max-w-3xl space-y-3">
+    <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Layers className="w-4 h-4"/>Integrations</h2>
     <p className="text-sm text-stone-500">Connect one or more stores so orders flow into Orders automatically, and tracking pushes back to the right store when you print a label. Click any tile for exact setup steps.</p>
     {/* Shopify (live) — supports multiple stores */}
     <div className="border border-stone-200 rounded-lg bg-white p-4">
@@ -12016,11 +12025,11 @@ function Integrations({settings,setSettings,orders,setOrders}){
           <span className="font-mono text-[12px] text-stone-600 truncate flex-1">{c.shop}</span>
           <button onClick={()=>disconnect(c.shop)} className="text-[11px] text-stone-400 hover:text-rose-600 shrink-0">Disconnect</button>
         </div>))}
-        <button onClick={sync} disabled={busy} className="mt-1 text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>Sync all orders now</>}</button>
+        <button onClick={sync} disabled={busy} className="mt-1 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>Sync all orders now</>}</button>
       </div>}
       <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-stone-100 pt-3">
         <div className="flex-1 min-w-[220px]"><div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">{connected?"Connect another store":"Store domain"}</div><Input value={shop} onChange={e=>setShop(e.target.value)} placeholder="mystore.myshopify.com"/></div>
-        <button onClick={connect} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 flex items-center gap-1.5"><Plug className="w-4 h-4"/>{connected?"Add store":"Connect"}</button>
+        <button onClick={connect} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plug className="w-4 h-4"/>{connected?"Add store":"Connect"}</button>
         <button onClick={()=>{setTokMode(v=>!v);setMsg(null);}} className="text-[11px] text-[#0086E0] hover:underline pb-2.5">{tokMode?"Hide token connect":"Connect with an access token instead"}</button>
       </div>
       {tokMode&&<div className="mt-3 bg-stone-50 border border-stone-200 rounded-lg p-3 space-y-2">
@@ -12061,6 +12070,7 @@ function Billing({settings,setSettings}){
   const [added,setAdded]=useState(false);
   const addFunds=()=>{const a=parseFloat(amt);if(!a||a<=0)return;const bal=Math.round((prepaid.balance+a)*100)/100;const hist=[{id:Date.now(),amount:a,when:new Date().toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})},...(prepaid.history||[])].slice(0,20);setPrepaid({balance:bal,history:hist});setAdded(true);setTimeout(()=>setAdded(false),1800);};
   return (<div className="max-w-xl space-y-4">
+    <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><CreditCard className="w-4 h-4"/>Billing</h2>
     <Panel title="Prepaid balance">
       <div className="flex items-end justify-between">
         <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Available funds</div><div className="text-3xl font-semibold text-stone-900 font-mono">{money(prepaid.balance||0)}</div></div>
@@ -12069,7 +12079,7 @@ function Billing({settings,setSettings}){
       <p className="text-xs text-stone-400">Prepaid funds cover label purchases and prepaid carrier products. Top up here; each label drawn against this balance shows in the ledger.</p>
       <div className="flex items-end gap-2">
         <div className="flex-1"><div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">Add amount ($)</div><div className="flex gap-1.5">{[50,100,250,500].map(v=><button key={v} onClick={()=>setAmt(String(v))} className={`text-sm rounded px-2.5 py-1.5 border ${String(v)===amt?"bg-[#E6F4FF] border-[#66C1FF] text-[#006FBF]":"bg-white border-stone-200 text-stone-600 hover:bg-stone-50"}`}>${v}</button>)}<Input type="number" value={amt} onChange={e=>setAmt(e.target.value)} className="w-24"/></div></div>
-        <button onClick={addFunds} className={`text-sm rounded px-4 py-2 font-medium flex items-center gap-1.5 ${added?"bg-emerald-600 text-white":"bg-stone-900 text-white hover:bg-stone-800"}`}>{added?<><Check className="w-4 h-4"/>Added</>:<><Plus className="w-4 h-4"/>Add funds</>}</button>
+        <button onClick={addFunds} className={`text-sm rounded px-4 py-2 font-medium flex items-center gap-1.5 ${added?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{added?<><Check className="w-4 h-4"/>Added</>:<><Plus className="w-4 h-4"/>Add funds</>}</button>
       </div>
       <label className="flex items-center gap-2 text-sm text-stone-600 pt-1"><input type="checkbox" checked={prepaid.autoRecharge} onChange={e=>setPrepaid({autoRecharge:e.target.checked})} className="accent-[#0086E0]"/>Auto-recharge when balance is low</label>
       {prepaid.autoRecharge&&<div className="grid grid-cols-2 gap-2 pl-6">
@@ -12085,7 +12095,7 @@ function Billing({settings,setSettings}){
       <p className="text-xs text-stone-400">Bill shipping to someone else's FedEx account number.</p>
       {(settings.thirdPartyAccts||[]).map(t=>(<div key={t.id} className="flex items-center gap-2 text-sm border border-stone-200 rounded px-3 py-2"><span className={`text-xs font-bold ${CARRIER_TINT[t.carrier]}`}>{t.carrier}</span><span className="flex-1 font-mono">{t.account}</span><span className="text-stone-400">{t.label}</span><button onClick={()=>setSettings({...settings,thirdPartyAccts:settings.thirdPartyAccts.filter(x=>x.id!==t.id)})} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button></div>))}
       <div className="grid grid-cols-3 gap-2"><Select value={n.carrier} onChange={e=>setN({...n,carrier:e.target.value})}><option>FedEx</option></Select><Input placeholder="Account #" value={n.account} onChange={e=>setN({...n,account:e.target.value})}/><Input placeholder="Label" value={n.label} onChange={e=>setN({...n,label:e.target.value})}/></div>
-      <button onClick={add} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Add account</button>
+      <button onClick={add} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium">Add account</button>
     </Panel>
   </div>);
 }
@@ -12218,6 +12228,7 @@ function CIEditor({settings,setSettings,shipments}){
   };
   const In=CIn;   // stable module-scope type — see CIn above
   return (<div className="max-w-3xl space-y-4">
+    <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Receipt className="w-4 h-4"/>Commercial Invoice</h2>
     <div className="text-sm text-stone-500">Rebuild, edit, and reprint a commercial invoice — start from a past international shipment or from scratch. (There's no way to reliably parse an uploaded PDF back into editable fields, so editing starts from your shipment data instead.)</div>
     <Panel title="Start from">
       <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -12329,6 +12340,7 @@ function OtherDocs({settings,setSettings}){
     const w=window.open("","_blank"); if(!w)return; w.document.write(html); w.document.close();
   };
   return (<div className="max-w-3xl space-y-4">
+    <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><FileText className="w-4 h-4"/>Other Documents</h2>
     <AssetLibrary settings={settings} setSettings={setSettings}/>
     <div className="text-sm text-stone-500">Build, save, and print letterheaded documents — shipper waivers, declarations, letters of instruction. Printing uses your browser's print dialog: choose "Save as PDF" there for a file.</div>
     <Panel title="Start from a template">
@@ -12374,6 +12386,7 @@ function GeneralSettings({settings,setSettings,goSec,audit=[],currentUser,setCur
     {hint&&<span className="block text-[11px] text-stone-400 mt-0.5">{hint}</span>}</label>);
   const links=[["shipscreen","Ship screen","Scan mode, hidden fields & Ship-tab options"],["customize","Customizations","Services, appearance, tabs & packing slips"],["reference","Reference Fields","Dropdown values, required & locked fields"],["carriers",BRAND.fw?"FedEx Account":"Carrier accounts",BRAND.fw?"Your FedEx connection":"FedEx & DHL connections"],["boxes","Package sizes","Your box library"],["printer","Print settings","Labels, printing, doc tabs & automation"],["notifications","Email automation","Customer notifications"],["integrations","Integrations","Stores & order sources"]];
   return (<div className="max-w-2xl space-y-4">
+    <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Cog className="w-4 h-4"/>General</h2>
     <Panel title="Your company">
       <div className="grid sm:grid-cols-2 gap-3">
         {F({k:"company",label:"Company name",ph:"Acme Outfitters",hint:"Shown in the header and on packing slips."})}
@@ -12439,7 +12452,7 @@ function AccountLoginPanel({currentUser,setCurrentUser}){
       <Field label="Email"><Input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@company.com"/></Field>
       {changed&&<Field label="Confirm with your current password"><Input type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&save()} placeholder="••••••••"/></Field>}
       <div className="flex items-center gap-2">
-        <button disabled={busy||!changed} onClick={save} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"Saving…":"Update login email"}</button>
+        <button disabled={busy||!changed} onClick={save} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#006db8] disabled:opacity-50">{busy?"Saving…":"Update login email"}</button>
         {changed&&<button disabled={busy} onClick={()=>{setEmail(curEmail);setPw("");setMsg(null);}} className="text-xs text-stone-400 hover:text-stone-600">Cancel</button>}
       </div>
       {msg&&<div className={`text-sm ${msg.t==="ok"?"text-emerald-700":"text-rose-600"}`}>{msg.m}</div>}
@@ -12481,7 +12494,7 @@ function TwoFactorPanel(){
         <button disabled={busy} onClick={regen} className="rounded px-2.5 py-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200 disabled:opacity-50">New backup codes</button>
       </div>
     </div>}
-    {status&&!status.enabled&&!setup&&<button disabled={busy} onClick={begin} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"One moment…":"Set up 2FA"}</button>}
+    {status&&!status.enabled&&!setup&&<button disabled={busy} onClick={begin} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#006db8] disabled:opacity-50">{busy?"One moment…":"Set up 2FA"}</button>}
     {setup&&<div className="space-y-3">
       <div className="text-sm text-stone-700">1. In your authenticator app, add an account and enter this key (or paste the setup link):</div>
       <div className="bg-stone-50 border border-stone-200 rounded-lg p-3 space-y-2">
@@ -12512,7 +12525,7 @@ function TwoFactorPanel(){
       <p className="text-xs text-stone-500 mt-0.5 mb-2">Prefer not to use an authenticator app? Turn on email verification and we'll email you a 6-digit code each time you sign in. (If both are on, the authenticator app is used.)</p>
       {e2===null&&<div className="text-sm text-stone-400">Checking…</div>}
       {e2&&e2.enabled&&<div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm text-emerald-700"><Check className="w-4 h-4"/>Email verification is <b>on</b>.</div><button disabled={busy} onClick={e2disable} className="text-xs rounded px-2.5 py-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200 disabled:opacity-50">Turn off</button></div>}
-      {e2&&!e2.enabled&&!e2sent&&<button disabled={busy} onClick={e2begin} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"Sending…":"Turn on email verification"}</button>}
+      {e2&&!e2.enabled&&!e2sent&&<button disabled={busy} onClick={e2begin} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#006db8] disabled:opacity-50">{busy?"Sending…":"Turn on email verification"}</button>}
       {e2&&!e2.enabled&&e2sent&&<div className="flex items-center gap-2">
         <input value={e2code} onChange={e=>setE2code(e.target.value.replace(/\D/g,"").slice(0,6))} onKeyDown={e=>e.key==="Enter"&&e2enable()} placeholder="123456" inputMode="numeric" className="w-32 border border-stone-300 rounded-lg px-3 py-2 text-sm tracking-[0.3em] text-center outline-none focus:border-[#0099FF]"/>
         <button disabled={busy||e2code.length!==6} onClick={e2enable} className="text-sm bg-emerald-600 text-white rounded-lg px-3 py-2 font-medium hover:bg-emerald-700 disabled:opacity-50">Confirm code</button>
@@ -12664,6 +12677,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
      single panel with no tab bar — used by Settings → Ship screen. */
   const CTABS=[...(deployMode?[["services","Services"],["ship","Ship screen"],["orders","Orders & lists"]]:[]),["appearance","Appearance"]];   // Services (rate view + service on/off) moved under Settings → Ship screen; Customizations keeps Appearance/tabs/branding   // Ship screen + Orders are their own top-level Settings sections now (still tabs in deployMode so team-deploy keeps every option in one place). Packing-slip message/footer moved to Settings → Print settings → Packing slip (v393). Autopilot toggles → Print settings (v355). Labels & printing → Printer settings (v281).
   return (<div className="max-w-2xl space-y-4">
+    {!deployMode&&<h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2">{only==="ship"?<><Truck className="w-4 h-4"/>Ship Screen</>:only==="orders"?<><ShoppingBag className="w-4 h-4"/>Orders</>:<><Sliders className="w-4 h-4"/>Customizations</>}</h2>}
     <DraftBar dirty={_cd.dirty} onSave={_cd.save} onUndo={_cd.undo} onReset={async()=>{ if(await uiConfirm("Reset all customizations to their defaults? You'll still need to click Save to keep it.")) _cd.reset(); }} resetLabel="Reset to defaults" savedNote="Customizations saved"/>
     {!deployMode&&!only&&<div className="text-sm text-stone-500">Make {BRAND.product} yours. Every option here changes the app immediately for <b>your login only</b>.</div>}
     {only==="ship"&&<div className="text-sm text-stone-500">Tune the Ship tab. Every option here changes the app immediately for <b>your login only</b>.</div>}
@@ -12954,7 +12968,7 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
   };
   return (<div className="max-w-2xl space-y-5">
     <div>
-      <h3 className="text-sm font-semibold text-stone-700 mb-1 flex items-center gap-2"><Wifi className="w-4 h-4 text-emerald-600"/>{SHOW_ENGLAND&&isAdmin?"England Logistics — live rates":"Live FedEx rates"}</h3>
+      <h2 className="text-sm font-semibold text-stone-700 mb-1 flex items-center gap-2"><Wifi className="w-4 h-4 text-emerald-600"/>{SHOW_ENGLAND&&isAdmin?"England Logistics — Live Rates":"Live FedEx Rates"}</h2>
       <p className="text-sm text-stone-500 mb-3">Turn this on to pull your real negotiated rates on the Ship tab and Quick quote. Until it's on, the app shows estimates.</p>
       <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
         <label className="flex items-center justify-between gap-3">
@@ -12971,7 +12985,7 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
         </div>
         {SHOW_ENGLAND&&isAdmin&&<p className="text-[11px] text-stone-400 -mt-1">The Integration ID enables real label printing. In Webship: gear/settings → eCommerce Integrations → Add → Rest API → Save New Integration → copy the ID. Turn on auto-ship for that integration so labels book automatically. The Provider account ID tells England which carrier account to ship on — click <b>Check booking access</b> to auto-fill it, or paste it manually if England hasn't opened that endpoint on your key.</p>}
         <div className="flex flex-wrap items-center gap-3">
-          <button onClick={runTest} disabled={false} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium hover:bg-stone-800 disabled:opacity-40 flex items-center gap-1.5">{test&&test.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Testing…</>:<><ShieldCheck className="w-4 h-4"/>Test connection</>}</button>
+          <button onClick={runTest} disabled={false} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{test&&test.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Testing…</>:<><ShieldCheck className="w-4 h-4"/>Test connection</>}</button>
           <button onClick={runDiag} disabled={false} className="text-sm border border-stone-300 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5">{diag&&diag.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Checking…</>:<><Truck className="w-4 h-4"/>Check booking access</>}</button>
           {SHOW_ENGLAND&&isAdmin&&<button onClick={runFlush} disabled={flush&&flush.loading} className="text-sm border border-stone-300 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5" title="Clear saved quotes so every rate pulls fresh from England — use after changing pricing in England's backend">{flush&&flush.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Refreshing…</>:<><RefreshCw className="w-4 h-4"/>Refresh rates</>}</button>}
           {test&&!test.loading&&<span className={`text-xs flex items-center gap-1.5 ${test.ok?"text-emerald-700":"text-[#0086E0]"}`}>{test.ok?<CheckCircle2 className="w-4 h-4"/>:<AlertTriangle className="w-4 h-4"/>}{test.msg}</span>}
@@ -12992,7 +13006,7 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
         <Field label="API key"><Input type="password" value={d.apiKey} onChange={e=>setD({...d,apiKey:e.target.value})}/></Field>
         {d.provider==="england"&&<Field label="Customer ID"><Input value={d.customerId} onChange={e=>setD({...d,customerId:e.target.value})}/></Field>}
         {d.provider!=="england"&&<Field label="Secret"><Input type="password" value={d.secret} onChange={e=>setD({...d,secret:e.target.value})}/></Field>}
-        <button onClick={add} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Connect</button>
+        <button onClick={add} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium">Connect</button>
       </Panel>}
       <div className="space-y-2 mt-2">{accounts.map(a=>(<div key={a.id} className="border border-stone-200 rounded-lg bg-white p-4 flex items-center gap-3">
         <div className="w-9 h-9 rounded bg-[#E6F4FF] text-[#0086E0] flex items-center justify-center"><Wifi className="w-4 h-4"/></div>
@@ -13010,6 +13024,7 @@ function Subscription({settings,setSettings}){
   const current=settings.plan||"starter";
   const order=["free","starter","pro","scale"];
   return (<div className="space-y-4">
+    <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Star className="w-4 h-4"/>Subscription</h2>
     <p className="text-sm text-stone-500">Your {BRAND.product} plan. Upgrade to unlock more volume, integrations, and tools. Downgrade anytime.</p>
     <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
       {PLANS.map(p=>{const active=p.id===current;const isUp=order.indexOf(p.id)>order.indexOf(current);return (
@@ -13019,7 +13034,7 @@ function Subscription({settings,setSettings}){
           <div className="text-2xl font-bold">{p.price===0?"Free":<>${p.price}<span className="text-sm font-normal text-stone-400">/mo</span></>}</div>
           <div className="text-[11px] text-[#0086E0] font-medium mb-3">{p.limits}</div>
           <ul className="space-y-1.5 flex-1">{p.features.map(f=>(<li key={f} className="flex items-start gap-1.5 text-xs text-stone-600"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5"/>{f}</li>))}</ul>
-          <button onClick={()=>setSettings({...settings,plan:p.id})} disabled={active} className={`mt-3 text-sm rounded px-3 py-2 font-medium ${active?"bg-stone-100 text-stone-400":isUp?"bg-stone-900 text-white hover:bg-stone-800":"bg-stone-200 text-stone-700 hover:bg-stone-300"}`}>{active?"Current plan":isUp?"Upgrade":"Switch"}</button>
+          <button onClick={()=>setSettings({...settings,plan:p.id})} disabled={active} className={`mt-3 text-sm rounded px-3 py-2 font-medium ${active?"bg-stone-100 text-stone-400":isUp?"bg-[#0086E0] text-white hover:bg-[#006db8]":"bg-stone-200 text-stone-700 hover:bg-stone-300"}`}>{active?"Current plan":isUp?"Upgrade":"Switch"}</button>
         </div>
       );})}
     </div>
@@ -13037,7 +13052,7 @@ function Drafts({drafts,setDrafts,goShip}){
       {drafts.map(d=>(<div key={d.id} className="flex items-center gap-3 px-4 py-3 hover:bg-stone-50">
         <FileText className="w-4 h-4 text-stone-300 shrink-0"/>
         <div className="flex-1 min-w-0"><div className="text-sm font-medium text-stone-800 truncate">{d.label}</div><div className="text-[11px] text-stone-400">{d.to?`to ${d.to} · `:""}saved {d.when}</div></div>
-        <button onClick={()=>load(d)} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-800">Open</button>
+        <button onClick={()=>load(d)} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8]">Open</button>
         <button onClick={()=>setDrafts(p=>p.filter(x=>x.id!==d.id))} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>
       </div>))}
     </div>
@@ -13092,7 +13107,7 @@ function TransitAudit({shipments}){
       <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Clock className="w-4 h-4"/>Transit audit</h2>
       <p className="text-sm text-stone-500 mt-0.5">Upload a carrier invoice (PDF or CSV). We pull every tracking number on it, match them to your shipments, and grade how the carrier actually performed.</p>
     </div>
-    <label className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 cursor-pointer w-fit">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<Upload className="w-4 h-4"/>}Upload invoice<input type="file" accept=".pdf,.csv,application/pdf,text/csv" onChange={onFile} className="hidden" disabled={busy}/></label>
+    <label className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#006db8] cursor-pointer w-fit">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<Upload className="w-4 h-4"/>}Upload invoice<input type="file" accept=".pdf,.csv,application/pdf,text/csv" onChange={onFile} className="hidden" disabled={busy}/></label>
     {name&&!busy&&<div className="text-xs text-stone-400">{name}{trks?` · ${trks.length} tracking number${trks.length===1?"":"s"} found`:""}</div>}
     {err&&<div className="bg-rose-50 border border-rose-200 text-rose-600 rounded-lg px-3 py-2 text-sm">{err}</div>}
     {rep&&<>
@@ -13320,7 +13335,7 @@ function CarrierAudit({shipments}){
       <div className="flex flex-wrap items-center gap-3">
         <div className="text-[13px] text-stone-500">You were quoted <b className="text-stone-700 font-mono">{money(recon.sum.quoted)}</b> · Invoice billed <b className="text-stone-700 font-mono">{money(recon.sum.billed)}</b>{recon.sum.unmatched>0?<> · <span className="text-stone-400">{recon.sum.unmatched} not found in your shipments</span></>:null}</div>
         <div className="flex-1"/>
-        <button onClick={exportReport} className="flex items-center gap-1.5 text-sm bg-stone-900 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-stone-800"><Download className="w-4 h-4"/>Export report</button>
+        <button onClick={exportReport} className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8]"><Download className="w-4 h-4"/>Export report</button>
       </div>
       <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
         <div className="flex items-center gap-3 px-3 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="w-4"/><div className="flex-1">Tracking / shipment</div><div className="w-24 text-right">Weight</div><div className="w-24 text-right">You paid</div><div className="w-24 text-right">Billed</div><div className="w-24 text-right">Difference</div></div>
@@ -13562,5 +13577,31 @@ function Input({className="",...p}){return <input {...p} className={`w-full bg-w
 function Select({children,...p}){return <select {...p} className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm focus:border-[#0099FF] outline-none">{children}</select>;}
 function Toggle({on,set,label}){return <button onClick={()=>set(!on)} className={`flex items-center gap-1.5 text-xs rounded px-2.5 py-1.5 border ${on?"bg-[#E6F4FF] border-[#99D6FF] text-[#0086E0]":"bg-white border-stone-200 text-stone-400"}`}><span className={`w-2 h-2 rounded-full ${on?"bg-[#0086E0]":"bg-stone-300"}`}/>{label}</button>;}
 function Badge({children,tone="stone"}){const t={stone:"bg-stone-100 text-stone-500 border-stone-200",green:"bg-emerald-50 text-emerald-700 border-emerald-200",amber:"bg-amber-50 text-amber-700 border-amber-200",blue:"bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]",rose:"bg-rose-50 text-rose-600 border-rose-200",violet:"bg-violet-50 text-violet-700 border-violet-200"}[tone]||"bg-stone-100 text-stone-500 border-stone-200";return <span className={`text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 border ${t}`}>{children}</span>;}
+/* "···" overflow menu for dense action rows. Portaled + fixed-position so overflow-hidden list
+   containers can't clip it. Items: {label, onClick, title, danger, active} — falsy items skipped. */
+function RowMenu({items,title="More actions"}){
+  const vis=(items||[]).filter(Boolean);
+  const [open,setOpen]=useState(false);
+  const [pos,setPos]=useState({top:0,right:0});
+  const btnRef=useRef(null);
+  useEffect(()=>{ if(!open)return;
+    const close=()=>setOpen(false);
+    const key=(e)=>{ if(e.key==="Escape")setOpen(false); };
+    window.addEventListener("click",close);
+    window.addEventListener("scroll",close,true);
+    window.addEventListener("resize",close);
+    window.addEventListener("keydown",key);
+    return ()=>{ window.removeEventListener("click",close); window.removeEventListener("scroll",close,true); window.removeEventListener("resize",close); window.removeEventListener("keydown",key); };
+  },[open]);
+  if(!vis.length)return null;
+  const toggle=(e)=>{ e.stopPropagation(); if(open){setOpen(false);return;} const r=btnRef.current.getBoundingClientRect(); setPos({top:r.bottom+4,right:Math.max(8,window.innerWidth-r.right)}); setOpen(true); };
+  return (<>
+    <button ref={btnRef} onClick={toggle} title={title} aria-label={title} className={`text-[11px] rounded px-2 py-1 font-bold leading-none tracking-wider ${open?"bg-stone-800 text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>···</button>
+    {open&&createPortal(
+      <div style={{top:pos.top,right:pos.right}} className="fixed z-[95] bg-white border border-stone-200 rounded-lg shadow-lg py-1 min-w-[190px]" onClick={e=>e.stopPropagation()}>
+        {vis.map((it,i)=><button key={i} onClick={()=>{setOpen(false);it.onClick&&it.onClick();}} title={it.title} className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-stone-50 ${it.danger?"text-rose-600":"text-stone-700"}`}>{it.label}{it.active&&<Check className="w-3.5 h-3.5 ml-auto text-emerald-600"/>}</button>)}
+      </div>, document.body)}
+  </>);
+}
 function Empty({icon:Icon,title,body}){return <div className="border border-dashed border-stone-300 rounded-lg p-12 text-center"><Icon className="w-8 h-8 text-stone-300 mx-auto mb-3"/><div className="text-stone-700 font-medium">{title}</div><div className="text-sm text-stone-400 mt-1 max-w-sm mx-auto">{body}</div></div>;}
 function Info({k,v}){return <div className="flex justify-between gap-4 py-0.5 border-b border-stone-100"><span className="text-stone-400">{k}</span><span className="text-stone-800 text-right">{v}</span></div>;}

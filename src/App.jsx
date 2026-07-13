@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v497";
+const BUILD_TAG="addr-v498";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3039,7 +3039,6 @@ function Login({users,onLogin,brand}){
             </div>
           </div>}
         </div>
-        <p className="text-[11px] text-stone-400 text-center mt-3">Local sign-in (no cloud database connected).</p>
       </div>
     </div>
   );
@@ -5664,8 +5663,8 @@ function CloudAuth({onDone,initialMode,intake}){
 
 /* ════════ PUBLIC LANDING PAGE ════════ */
 const AI_NAME=BRAND.product+" AI";
-const CONTACT_PHONE="(801) 555-0123";   // ← REPLACE with your real number (shows on the public landing page)
-const CONTACT_PHONE_TEL="+18015550123"; // ← same number, digits only with +1, used for tap-to-call
+const CONTACT_PHONE="(657) 622-0699";   // real support number (shows on the public landing page)
+const CONTACT_PHONE_TEL="+16576220699"; // same number, digits only with +1, used for tap-to-call
 const PHONE_REAL=!/555-?01/.test(CONTACT_PHONE);   /* placeholder guard: phone CTAs stay hidden until a real number replaces the 555 placeholder above */
 const CONTACT_EMAIL=BRAND.fw?"support@freightwireship.com":"support@shippingcloud.net"; // brand-matched support email (shows on the Contact page)
 
@@ -5689,7 +5688,7 @@ function LegalLinks(){
           <button onClick={()=>setOpen(null)} className="text-stone-400 hover:text-stone-600"><X className="w-5 h-5"/></button>
         </div>
         <div className="overflow-y-auto px-6 py-4 pb-8">
-          <p className="text-[11px] text-stone-400">Last updated July 2026 · Contact: support@shippingcloud.net</p>
+          <p className="text-[11px] text-stone-400">Last updated July 2026 · Contact: {CONTACT_EMAIL}</p>
           {open==="terms"&&<>
             <H>1. The service</H><P>{BRAND.product} (operated by Freightwire) is software for quoting, purchasing, and managing parcel shipping. We are an independent software platform and shipping reseller — <b>not a carrier</b>. Transportation is performed by third-party carriers (e.g. FedEx, DHL, USPS, UPS) under their own service terms, tariffs, and liability limits, which govern the physical handling of every shipment. We never take custody of, transport, or deliver packages; carriers do.</P>
             <H>2. Independent reseller — no carrier affiliation</H><P>Freightwire is an <b>independent reseller</b> of shipping services. We are <b>not affiliated with, sponsored by, endorsed by, an agent of, or acting on behalf of FedEx, DHL, USPS, UPS, or any other carrier</b>, and no such relationship should be inferred from our use of carrier names, service names, or rates for descriptive purposes. Rates we offer are our own resale prices, set by us; they are not carrier list rates, not carrier account rates, and are not offered under any carrier's authority. Any negotiated carrier discounts underlying our pricing are held under our own commercial arrangements and are not passed through as, or represented to be, a carrier's own contracted rate. Your relationship for the software and resale service is solely with Freightwire; your relationship for the physical transportation of a package is with the carrier that carries it, under that carrier's terms.</P>
@@ -5709,7 +5708,7 @@ function LegalLinks(){
             <H>2. How we use it</H><P>To quote and purchase shipping, print labels and documents, sync orders, send shipment notifications, calculate checkout rates, provide support, and improve the service. If you use the in-app assistant, the messages you send it (plus limited, non-personal workspace context) are processed to generate its responses.</P>
             <H>3. Who we share it with</H><P>Service providers who make the platform work: shipping carriers and our logistics partners (to move your packages), cloud hosting and database providers, an email delivery provider (for notifications you trigger), payment processing when applicable, and the AI provider powering the in-app assistant. Each receives only what its function requires. We do not sell personal information.</P>
             <H>4. Recipient data</H><P>When you ship to someone, you're providing us their delivery details on your authority. We use recipient data only to perform the shipment and related notifications — never for marketing to recipients.</P>
-            <H>5. Retention & your choices</H><P>We keep data while your account is active and as needed for legal, tax, and dispute purposes. You can export your data from within the platform, and you can request deletion of your account data by emailing support@shippingcloud.net.</P>
+            <H>5. Retention & your choices</H><P>We keep data while your account is active and as needed for legal, tax, and dispute purposes. You can export your data from within the platform, and you can request deletion of your account data by emailing {CONTACT_EMAIL}.</P>
             <H>6. Security</H><P>Data is encrypted in transit, access is credentialed and scoped, and secrets are stored server-side. No system is perfectly secure, but we take reasonable measures appropriate to the data we handle.</P>
             <H>7. Changes</H><P>We'll update this policy as the service evolves; material changes will be reflected on this page with a new date.</P>
           </>}
@@ -5795,7 +5794,7 @@ function Landing({onAuth}){
     </div>
     {/* features */}
     <div id="features" className="max-w-6xl mx-auto px-5 pb-16 scroll-mt-6">
-      <div className="text-center mb-10"><h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-2xl sm:text-3xl font-bold text-stone-900">Your customized long term solution</h2></div>
+      <div className="text-center mb-10"><h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-2xl sm:text-3xl font-bold text-stone-900">A shipping platform built around how you actually ship</h2></div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <F icon={DollarSign} title="Industry-leading FedEx rates">The pricing big shippers get, from day one. No volume commitments, no negotiating.</F>
         <F icon={BarChart3} title="Transit dashboard & detailed reporting">Track every shipment end to end and see spend, transit times, and delivery performance at a glance — with reports you can act on.</F>
@@ -5812,7 +5811,7 @@ function Landing({onAuth}){
         <div className="absolute -bottom-20 -left-10 w-64 h-64 rounded-full bg-white/10 blur-2xl"/>
         <div className="relative">
           <h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-3xl sm:text-4xl font-bold text-white leading-tight">Save 10–15% switching to our FedEx rates.</h2>
-          <p className="mt-4 text-white/85 max-w-2xl mx-auto text-[15px] leading-relaxed">Send us a recent carrier invoice and get a line-by-line comparison back — the same day. No BS, no pressure.</p>
+          <p className="mt-4 text-white/85 max-w-2xl mx-auto text-[15px] leading-relaxed">Send us a recent carrier invoice and get a line-by-line comparison back — the same day. No jargon, no pressure.</p>
           <div className="mt-7 flex flex-wrap gap-3 justify-center">
             <button onClick={()=>onAuth("fedex")} className="bg-white text-[#0064B0] font-semibold rounded-lg px-7 py-3.5 text-[15px] hover:bg-stone-100 transition-colors">Get your own FedEx account</button>
             <button onClick={()=>onAuth("request")} className="border border-white/60 text-white font-semibold rounded-lg px-7 py-3.5 text-[15px] hover:bg-white/10 transition-colors">Compare my rates</button>
@@ -7393,7 +7392,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     return {t:"info",m:"booking now…"};
   },[handsFree,custom.autoRulesOnShip,custom.hideShipOrders,selectedOrder,hfArmed,ready,rateSrc.live,rateSrc.loading,addrClassified,matched,quotes,bought,shipStatus,client,settings,liveRuleMatch,JSON.stringify(pieces)]);
 
-  const sendEmail=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Tracking for your ${settings.company||BRAND.product} shipment ☁️`,type:"Shipped",body:emailMsg});setSent("email");setTimeout(()=>setSent(""),1800);};
+  const sendEmail=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Tracking for your ${settings.company||BRAND.product} shipment`,type:"Shipped",body:emailMsg});setSent("email");setTimeout(()=>setSent(""),1800);};
   const sendLabel=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Your shipping label from ${settings.company||BRAND.product}`,type:"Label",body:emailMsg});setSent("label");setTimeout(()=>setSent(""),1800);};
   const saveMsgDefault=()=>{setSettings&&setSettings(s=>({...s,emailMessage:emailMsg}));setMsgSaved(true);setTimeout(()=>setMsgSaved(false),1600);};
 
@@ -7612,7 +7611,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           Tried England on your <b>{rateSrc.diag.src==="customer"?"customer's":"main"}</b> account · from ZIP {rateSrc.diag.fromZip} · customer ID {rateSrc.diag.cust} · key {rateSrc.diag.key} · {rateSrc.diag.enabled?"live toggle ON":"live toggle OFF"}{!rateSrc.diag.hasKey?" · no API key found":""}{!rateSrc.diag.hasCust?" · no customer ID found":""}{rateSrc.diag.fromZip==="(none)"?" — no origin ZIP: set your sender ZIP or the customer's origin.":""}{rateSrc.error&&/401|invalid/i.test(rateSrc.error)?" — England rejected this key/ID pair. Re-enter it in Settings → Carrier accounts and Test again.":""}
         </div>}
         {ready&&rateSrc.live&&rateSrc.dvPriced===false&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-2 text-xs text-rose-700 flex items-start gap-2">
-          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span><b>Declared value fee missing:</b> you asked for coverage over $100, but FedEx's rates came back with <b>no itemized declared-value fee</b>. The totals below may not include coverage — verify before booking, and tell support if this persists.</span>
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span><b>Double-check your coverage:</b> you asked for declared-value coverage over $100, but it isn't showing as a separate line in FedEx's pricing yet. Make sure the total below includes coverage before you book — if this keeps happening, let us know.</span>
         </div>}
         {ready&&!rateSrc.loading&&!rateSrc.live&&rateSrc.error&&rateSrc.diag&&rateSrc.diag.enabled&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-2 text-xs text-rose-700">
           <div className="font-semibold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Live FedEx rates didn't come back — no prices are shown (we never guess).</div>
@@ -8473,7 +8472,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
   const quotes=useMemo(()=>{const hs=new Set(cz(settings).hiddenServices||[]);const bs=new Set((client&&client.blockedServices)||[]);return (rateSrc.rates||[]).filter(qq=>qq.carrier==="FedEx"&&!hs.has(canonSvc(qq.label))&&!bs.has(canonSvc(qq.label))).map(qq=>({...qq,sell:rateSellFor(qq.cost,qq.label,{rules:rateRules,client,list:qq.list,listBase:qq.listBase,surcharges:qq.surcharges,fromZip,toZip:o.zip,weight:ruleWeightFor([{weight:+weight||o.weight||1,L:box.L,W:box.W,H:box.H}],qq.label)})})).sort((a,b)=>(a.sell||1e9)-(b.sell||1e9));},[rateSrc,residential,client,settings,rateRules,weight]);
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
   const printHere=async(qq)=>{
-    if(canBook&&(!qq.carrierCode||!qq.serviceCode)){ setRateNonce(n=>n+1); setStatus({state:"error",msg:"That rate was stale — refreshing live rates now. Pick the service again in a moment."}); return; }
+    if(canBook&&(!qq.carrierCode||!qq.serviceCode)){ setRateNonce(n=>n+1); setStatus({state:"error",msg:"This rate just expired — we're refreshing live prices. Pick your service again in a moment."}); return; }
     const carrier=carrierOf(qq.label);
     if(!canBook){ // demo mode: record locally
       const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:newTracking(carrier),carrier,service:qq.label,recipient:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},sender:{...(settings?.sender||{})},fromZip,toZip:o.zip,weight:+weight,pieces:[{weight:+weight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference:o.name};
@@ -8697,7 +8696,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   const pickBox=(j)=>{ setBoxIdx(j); if(j>=0){const b=boxes[j];setDims({L:b.L,W:b.W,H:b.H});} };
   const printHere=async(qq)=>{
     if(!qq)return;
-    if(canBook&&(!qq.carrierCode||!qq.serviceCode)){ setRateNonce(n=>n+1); setStatus({state:"error",msg:"That rate was stale — refreshing live rates now. Pick the service again in a moment."}); return; }
+    if(canBook&&(!qq.carrierCode||!qq.serviceCode)){ setRateNonce(n=>n+1); setStatus({state:"error",msg:"This rate just expired — we're refreshing live prices. Pick your service again in a moment."}); return; }
     const carrier=carrierOf(qq.label);
     const baseRec={service:qq.label,recipient:{name:rcv.name,company:rcv.company,zip:rcv.zip,state:rcv.state,city:rcv.city,address1:rcv.address1,phone:rcv.phone,email:rcv.email},sender:{...(settings?.sender||{})},fromZip,toZip:rcv.zip,weight:totalWeight,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],dims:box,cost:qq.cost,sell:qq.sell,billTo:"sender",insurance:insurance||null,signature:sigOption!=="none",signatureOption:sigOption,saturdayDelivery:sat,reference:reference||o.name,poNo,invoiceNo,department:""};
     if(!canBook){
@@ -9212,7 +9211,7 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
             <Field label={pieces.length>1?"Insure $/box":"Insurance $"}><Input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0"/></Field>
             {hasExpress&&<label className="flex items-center gap-1.5 text-sm text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSaturday(e.target.checked)} className="accent-[#0086E0]"/>Saturday delivery <span className="text-stone-400 text-xs">(Express only)</span></label>}
             <div className="grid grid-cols-2 gap-px bg-stone-200 border border-stone-200 rounded overflow-hidden font-mono text-center"><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">zone</div><div className="font-semibold">{ready?zoneEst(fromZip,toZip):"—"}</div></div><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">billable</div><div className="font-semibold">{ready?billable(pieces[0].L,pieces[0].W,pieces[0].H,totalWeight)+" lb":"—"}</div></div></div>
-            {rateSrc.live&&rateSrc.dvPriced===false&&<div className="text-[11px] rounded px-2 py-1.5 mb-1 bg-rose-50 text-rose-700 border border-rose-200">Coverage fee missing from FedEx's response — totals may exclude declared value.</div>}{demo?<div className="text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 bg-amber-50 text-amber-800 border border-amber-200"><Eye className="w-3 h-3"/>Demo — example rates only; labels can't be created</div>:ready&&<div className={`text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700":"bg-[#E6F4FF] text-[#006FBF]"}`}>{rateSrc.loading?<><Loader2 className="w-3 h-3 animate-spin"/>Fetching…</>:rateSrc.live?<><Wifi className="w-3 h-3"/>Live rates</>:<><Calculator className="w-3 h-3"/>Estimated</>}</div>}
+            {rateSrc.live&&rateSrc.dvPriced===false&&<div className="text-[11px] rounded px-2 py-1.5 mb-1 bg-rose-50 text-rose-700 border border-rose-200">Declared-value coverage isn't itemized right now — this total may not include it.</div>}{demo?<div className="text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 bg-amber-50 text-amber-800 border border-amber-200"><Eye className="w-3 h-3"/>Demo — example rates only; labels can't be created</div>:ready&&<div className={`text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700":"bg-[#E6F4FF] text-[#006FBF]"}`}>{rateSrc.loading?<><Loader2 className="w-3 h-3 animate-spin"/>Fetching…</>:rateSrc.live?<><Wifi className="w-3 h-3"/>Live rates</>:<><Calculator className="w-3 h-3"/>Estimated</>}</div>}
           </Panel></div>
           <div className="flex-1 min-w-0"><ServiceList quotes={quotes} ready={ready} live={rateSrc.live} loading={rateSrc.loading} resetKey={`${fromZip}|${toZip}|${residential}|${pieces.length}|${((effClient&&effClient.blockedServices)||[]).join(",")}`}/></div>
         </div>
@@ -10419,7 +10418,7 @@ function ProductCatalog({settings,setSettings}){
     setBusy(false);
   };
 
-  const exportCSV=()=>downloadCSV("shippingcloud-products.csv",[["SKU","Name","Length","Width","Height","Weight","Value","Origin","HS Code","Barcode","Ships Alone"],...products.map(p=>[p.sku,p.name,p.l,p.w,p.h,p.wt,p.value,p.origin,p.hs,p.barcode||"",p.shipsAlone?"yes":""])]);
+  const exportCSV=()=>downloadCSV((BRAND.fw?"freightwire":"shippingcloud")+"-products.csv",[["SKU","Name","Length","Width","Height","Weight","Value","Origin","HS Code","Barcode","Ships Alone"],...products.map(p=>[p.sku,p.name,p.l,p.w,p.h,p.wt,p.value,p.origin,p.hs,p.barcode||"",p.shipsAlone?"yes":""])]);
 
   return (<div className="max-w-4xl space-y-3">
     <div>
@@ -12637,7 +12636,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
         {Tog({k:"emailRequired",label:"Require receiver email to book",hint:"Uncheck to make email optional"})}
         {Sel({k:"defaultSignature",label:"Default signature on new shipments",opts:[["none","None"],["indirect","Indirect"],["direct","Direct"],["adult","Adult"]]})}
         {Num({k:"autoInsureValue",label:"Auto-insure orders over",hint:"When you load an order worth this much or more, insurance is set to the full order value. 0 = off. Takes priority over the % below.",prefix:"$"})}
-        {Num({k:"autoInsurePct",label:"Auto-insure orders (% of value)",hint:"Legacy: insures this % of order value on load. Ignored if the $ threshold above is set. 0 = off",suffix:"%"})}
+        {Num({k:"autoInsurePct",label:"Auto-insure orders (% of value)",hint:"Insures this percent of the order's value automatically. Ignored if the dollar threshold above is set. 0 = off.",suffix:"%"})}
         {Num({k:"autoSigValue",label:"Auto-add signature over",hint:"When you load an order worth this much or more, a signature is added automatically. 0 = off. Uses the signature type below.",prefix:"$"})}
         {Sel({k:"autoSigType",label:"Signature type to auto-add",opts:[["indirect","Indirect"],["direct","Direct"],["adult","Adult"]]})}
         <label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>Ship-date cutoff time<span className="block text-[11px] text-stone-400">After this local time, new shipments default to the NEXT day's ship date. Leave blank to always use today.</span></span>
@@ -12797,7 +12796,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
             <div className="text-[11px] text-stone-400 mt-1">{hint}</div>
           </div>))}
       </div>}
-        <div className="text-[11px] text-stone-400 mt-1.5">Recolors buttons, links, active tabs and highlights across the app. Dark mode is a first version — if any screen looks off in the dark, tell us.</div>
+        <div className="text-[11px] text-stone-400 mt-1.5">Recolors buttons, links, active tabs and highlights across the app.</div>
       </div>
       <div className="border-t border-stone-100 mt-3 pt-3 grid sm:grid-cols-2 gap-6">
         <div>
@@ -12968,7 +12967,7 @@ function Subscription({settings,setSettings}){
         </div>
       );})}
     </div>
-    <p className="text-[11px] text-stone-400">Plans shown for demo. Billing isn't charged here — wire this to Stripe when you're ready to take payments.</p>
+    <p className="text-[11px] text-stone-400">Changing your plan here won't charge your card — reach out and we'll get billing set up for you.</p>
   </div>);
 }
 

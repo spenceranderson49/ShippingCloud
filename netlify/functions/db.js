@@ -690,7 +690,13 @@ exports.handler = async (event) => {
         const nv = toWrite[key];
         const nvSize = Array.isArray(nv) ? nv.length : (nv && typeof nv === "object" ? Object.keys(nv).length : 0);
         const wipes = curSize > 0 && (nv == null || nvSize === 0 || (key === "rateRules" && (!nv.profiles || !nv.profiles.length) && curVal && curVal.profiles && curVal.profiles.length));
-        if (wipes) { delete toWrite[key]; rejected.push(key + " (refused: would erase " + curSize + " existing entries — reload and try again)"); continue; }
+        /* F19: also refuse a SEVERE partial shrink of a list store (users/clients) — the classic
+           multi-tab clobber, where a stale tab that loaded a short list saves it over the full one.
+           Dropping a ≥5-entry list to ≤40% of its size is almost never a real bulk delete; refuse it
+           and tell the client to reload. (Total wipes are already caught above; the per-overwrite
+           snapshot below still runs for everything that IS allowed, so any change stays restorable.) */
+        const bigShrink = !wipes && Array.isArray(curVal) && Array.isArray(nv) && curSize >= 5 && nvSize <= curSize * 0.4;
+        if (wipes || bigShrink) { delete toWrite[key]; rejected.push(key + (bigShrink ? " (refused: would drop from " + curSize + " to " + nvSize + " entries — looks like a stale tab overwrote the full list; reload and try again)" : " (refused: would erase " + curSize + " existing entries — reload and try again)")); continue; }
         if (curVal !== undefined) {
           try {
             const ts = new Date().toISOString().replace(/[:.]/g, "-");

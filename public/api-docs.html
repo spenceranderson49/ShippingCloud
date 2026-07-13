@@ -28,7 +28,7 @@
 <main>
   <div class="brand">Shipping<span style="color:#0086E0">Cloud</span> <span style="color:#a8a29e;font-weight:600">API</span></div>
   <h1>API Reference — v1</h1>
-  <p class="sub">Integrate your systems directly: live discounted FedEx rates on your own pricing, label booking, shipments, pickups, and billing. On Shipping Hub sites this same API is the <b>Shipping Hub API</b> — identical endpoints. Support: <a href="mailto:support@shippingcloud.net">support@shippingcloud.net</a></p>
+  <p class="sub">Integrate your systems directly: live discounted FedEx rates on your own pricing, label booking, shipments, pickups, and billing. On ShippingHub sites this same API is the <b>ShippingHub API</b> — identical endpoints. Support: <a href="mailto:support@shippingcloud.net">support@shippingcloud.net</a></p>
 
   <h2>Base URL &amp; authentication</h2>
   <pre><code>https://&lt;your-platform-domain&gt;/api/v1</code></pre>
@@ -137,7 +137,7 @@ X-API-Key: sck_live_xxxxxxxxxxxxxxxx</code></pre>
   }'</code></pre>
   <table><tr><th>Field</th><th>Notes</th></tr>
     <tr><td><code>customer.name</code></td><td>Required. <code>external_id</code> (your proposal ID) + <code>email</code> are matched to update the same customer next time instead of duplicating.</td></tr>
-    <tr><td><code>pricing.services{}</code></td><td>Keyed by Shipping Hub service code (<code>ground, home, 2day, priority, standard_overnight, saver, ground_economy, …</code> — see <code>/v1/services</code>). Each: <code>mode</code> = <code>discount_off_list</code> (% off FedEx list) · <code>markup_over_cost</code> (% over your cost) · <code>dollars_over_cost</code> · <code>flat</code> · <code>none</code> (no rule). <code>value</code> is the number; optional <code>min</code> is the floor on the base rate.</td></tr>
+    <tr><td><code>pricing.services{}</code></td><td>Keyed by ShippingHub service code (<code>ground, home, 2day, priority, standard_overnight, saver, ground_economy, …</code> — see <code>/v1/services</code>). Each: <code>mode</code> = <code>discount_off_list</code> (% off FedEx list) · <code>markup_over_cost</code> (% over your cost) · <code>dollars_over_cost</code> · <code>flat</code> · <code>none</code> (no rule). <code>value</code> is the number; optional <code>min</code> is the floor on the base rate.</td></tr>
     <tr><td><code>pricing.fees{}</code></td><td>Keyed by fee id (fuel, residential, DAS, etc. — from <code>/v1/rate-card</code>). <code>mode</code>: <code>discount_off_list</code> · <code>markup_percent</code> · <code>dollars_over</code> · <code>flat</code>.</td></tr>
     <tr><td><code>replace</code></td><td>Default <code>true</code> — the sent rate card becomes the whole profile. <code>false</code> merges on top of what's there.</td></tr>
   </table>

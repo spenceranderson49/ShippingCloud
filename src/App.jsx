@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v506";
+const BUILD_TAG="addr-v507";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -930,7 +930,16 @@ function drawFedexMock(g,W,H,{to,sender,service,weight,pieceCount,refNo,resident
       g.fillRect(48,pTop,10,300);g.fillRect(62,pTop,4,300);   // start guard
       for(let row=0;row<25;row++){let x=84;while(x<640){const bw=2+Math.floor(rnd()*7);if(rnd()>0.42)g.fillRect(x,pTop+row*12,bw,10);x+=bw+2+Math.floor(rnd()*3);}}
       g.fillRect(652,pTop,4,300);g.fillRect(662,pTop,10,300);   // end guard
-      if(markImg&&markImg.width&&markImg.height){const mh=112,mw=Math.min(400,mh*(markImg.width/markImg.height));g.drawImage(markImg,758,pTop+8,mw,mh);}
+      if(markImg&&markImg.width&&markImg.height){
+        // Draw the owner-uploaded carrier logo, contained in a fixed box. Clear the box to white
+        // first so NOTHING from the placeholder/barcode can bleed through behind it, then fit the
+        // whole image (both "Fed" and "Ex") inside the box preserving aspect — no cropping.
+        const bx=750,by=pTop+2,boxW=384,boxH=120;
+        g.fillStyle="#fff";g.fillRect(bx,by,boxW,boxH);
+        const ar=markImg.width/markImg.height; let dw=boxW,dh=boxW/ar; if(dh>boxH){dh=boxH;dw=boxH*ar;}
+        g.drawImage(markImg,bx,by+(boxH-dh)/2,dw,dh);
+        g.fillStyle="#000";
+      }
       else drawFedexWordmarkMono(g,758,pTop+8,112);
       g.lineWidth=2;
       const svcL=String(service||"").toLowerCase();

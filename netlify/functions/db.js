@@ -234,6 +234,17 @@ exports.handler = async (event) => {
     async function healClientFor(u, users, clients) {
       if (!u || (u.role || "customer") !== "customer" || u.demo) return null;
       if (u.clientId && clients.some((c) => c && c.id === u.clientId)) return null;
+      /* If this login points at a customer that was DELETED on purpose (tombstoned), do NOT
+         resurrect it — just unlink the login so it stops re-healing. Fixes "I delete a customer
+         and it comes right back": a login still referencing the gone client used to re-mint it. */
+      if (u.clientId) {
+        const tRes = await getStore("deletedClients");
+        const tomb = (tRes.ok && Array.isArray(tRes.value)) ? tRes.value : [];
+        if (tomb.includes(u.clientId)) {
+          try { await putStores({ users: users.map((x) => x && x.id === u.id ? { ...x, clientId: null } : x) }); } catch (e) {}
+          return null;
+        }
+      }
       const id = "c" + Date.now() + Math.floor(Math.random() * 1000);
       const nc = { id, name: u.company || u.name || u.email || "New customer", contact: u.name || "", email: u.email || "", phone: "", origin: "", markup: "", status: "active", since: new Date().toISOString().slice(0, 7), plan: "Standard", selfSignup: true, createdAt: new Date().toISOString(), blockedServices: [...DEFAULT_BLOCKED_SERVICES] };
       const w = await putStores({ clients: [...clients, nc], users: users.map((x) => x && x.id === u.id ? { ...x, clientId: id } : x) });
@@ -777,6 +788,28 @@ exports.handler = async (event) => {
     /* ── snapshot management (F17): bak:<key>:<ts> rows are written by the wipe-guards above.
        listBackups shows what exists; restoreBackup puts one back — after snapshotting the
        CURRENT value first, so a restore is itself reversible. Admin only. ── */
+    if (action === "deleteCustomer") {   // atomic delete: remove client + unlink its logins + tombstone (so heal can't resurrect it)
+      if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
+      const cid = String(body.clientId || "");
+      if (!cid) return J({ ok: false, error: "No customer id." });
+      const [cRes, uRes, tRes] = await Promise.all([getStore("clients"), getStore("users"), getStore("deletedClients")]);
+      const clients = (cRes.ok && Array.isArray(cRes.value)) ? cRes.value : [];
+      const users = (uRes.ok && Array.isArray(uRes.value)) ? uRes.value : [];
+      const tomb = (tRes.ok && Array.isArray(tRes.value)) ? tRes.value : [];
+      if (!clients.some((c) => c && c.id === cid)) {
+        // already gone from clients — still make sure it's tombstoned + logins unlinked
+        const nt = tomb.includes(cid) ? tomb : [...tomb, cid].slice(-1000);
+        await putStores({ users: users.map((u) => u && u.clientId === cid ? { ...u, clientId: null } : u), deletedClients: nt });
+        return J({ ok: true, removed: cid, already: true });
+      }
+      try { const ts = new Date().toISOString().replace(/[:.]/g, "-"); await putStores({ ["bak:clients:" + ts]: clients }); } catch (e) {}   // snapshot before an intentional delete
+      const newClients = clients.filter((c) => c && c.id !== cid);
+      const newUsers = users.map((u) => u && u.clientId === cid ? { ...u, clientId: null } : u);
+      const newTomb = tomb.includes(cid) ? tomb : [...tomb, cid].slice(-1000);
+      const w = await putStores({ clients: newClients, users: newUsers, deletedClients: newTomb });
+      if (!w.ok) return J({ ok: false, error: "Delete failed: " + ((w.err && w.err.text) || "").slice(0, 150) });
+      return J({ ok: true, removed: cid });
+    }
     if (action === "listBackups") {
       if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
       const lr = await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=like." + encodeURIComponent("bak:") + "*&select=key,value&order=key.desc");

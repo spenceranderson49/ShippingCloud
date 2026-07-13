@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v512";
+const BUILD_TAG="addr-v513";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -5671,7 +5671,7 @@ function CloudAuth({onDone,initialMode,intake}){
 }
 
 /* ════════ PUBLIC LANDING PAGE ════════ */
-const AI_NAME=BRAND.product+" AI";
+const AI_NAME=BRAND.fw?"Freightwire AI":(BRAND.product+" AI");   // Freightwire/admin brands → "Freightwire AI"; white-label ShippingCloud keeps its own name
 const CONTACT_PHONE="(657) 622-0699";   // real support number (shows on the public landing page)
 const CONTACT_PHONE_TEL="+16576220699"; // same number, digits only with +1, used for tap-to-call
 const PHONE_REAL=!/555-?01/.test(CONTACT_PHONE);   /* placeholder guard: phone CTAs stay hidden until a real number replaces the 555 placeholder above */
@@ -6337,7 +6337,7 @@ function AppInner(){
   const [qq,setQQ]=useState(false);
   const [navOpen,setNavOpen]=useState(false);
   const [prefill,setPrefill]=useState(null);
-  const [settingsRaw,setSettingsRaw]=usePersist("settings",{company:"",sender:{name:"",company:"",zip:"",state:"",city:"",address1:"",phone:"",email:""},defaultBillTo:"sender",thirdPartyAccts:[],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,products:SEED_PRODUCTS,checkout:CHECKOUT_DEFAULTS,platforms:PLATFORM_DEFAULTS,plan:"starter",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:""},addresses:[],warehouses:[],autoRunRules:false,brand:DEFAULT_BRAND,domains:[],companyLogo:""});
+  const [settingsRaw,setSettingsRaw]=usePersist("settings",{company:"",sender:{name:"",company:"",zip:"",state:"",city:"",address1:"",phone:"",email:""},defaultBillTo:"sender",thirdPartyAccts:[],shopify:true,notify:NOTIFY_DEFAULTS,boxes:SEED_BOXES,products:[],checkout:CHECKOUT_DEFAULTS,platforms:PLATFORM_DEFAULTS,plan:"starter",england:{enabled:false,base:"https://englandship.rocksolidinternet.com",apiKey:"",customerId:"",account:""},addresses:[],warehouses:[],autoRunRules:false,brand:DEFAULT_BRAND,domains:[],companyLogo:""});   /* new accounts start with an EMPTY product catalog — no sample goods (the demo explorer still seeds SEED_PRODUCTS via makeDemoData) */
   const deployedCustom=useMemo(()=>{ const uid=currentUser&&currentUser.id;
     const fl=(uid&&featureFlags&&featureFlags[uid])||(CLOUD.mode==="cloud"?(myFeatures||{}):{});
     return (fl&&fl._custom)||{};

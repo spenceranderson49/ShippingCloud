@@ -5,6 +5,9 @@
      1) INTEGRITY WATCHDOG — compares each store's count to last night's; flags a big drop
         (e.g. customers 8 -> 2) so you hear about missing data immediately, not by surprise.
      2) CUSTOMER SETUP QA — flags customers missing a login, or with no rates/markup set.
+     2b) DRIFT / FACTORY-RULE SCAN — flags any real customer login still carrying the built-in
+        demo Autopilot rules (names use a "→" arrow). Left behind by a migration, these can
+        silently reroute real shipments — this is the alarm for the LAgence-style drift.
      3) OFF-SITE BACKUP — writes a full JSON snapshot of everything, keeps the last ~14 in the
         database, EMAILS it as ONE message to a single recipient (attachment) — from PRODUCTION
         only, so you never get duplicate nightly emails — and UPLOADS it to Google Drive if
@@ -68,7 +71,7 @@ async function uploadToDrive(filename, content) {
   return "uploaded ✓";
 }
 
-async function emailSummary({ recipients, counts, alerts, qa, driveNote, backupStr, stamp }) {
+async function emailSummary({ recipients, counts, alerts, qa, drift = [], driveNote, backupStr, stamp }) {
   const key = (process.env.RESEND_API_KEY || "").trim();
   if (!key || !recipients.length) return;
   const baseFrom = (process.env.EMAIL_FROM || "Freightwire <notify@shippingcloud.net>").trim();
@@ -77,17 +80,19 @@ async function emailSummary({ recipients, counts, alerts, qa, driveNote, backupS
   const chip = (n, l) => `<span style="display:inline-block;background:#f5f5f4;border-radius:6px;padding:4px 10px;margin:2px;font-size:13px;">${l}: <b>${n}</b></span>`;
   const health = alerts.length ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;color:#b91c1c;"><b>⚠️ Data changes to check:</b><ul style="margin:6px 0 0 18px;padding:0;">${alerts.map((a) => `<li>${a}</li>`).join("")}</ul></div>` : `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;color:#15803d;">✅ All counts steady vs. last night — nothing dropped.</div>`;
   const qaBlock = qa.length ? `<div style="margin-top:12px;"><b>Customers needing setup (${qa.length}):</b><div style="font-size:13px;color:#57534e;white-space:pre-wrap;margin-top:4px;">${qa.slice(0, 50).join("<br>")}${qa.length > 50 ? "<br>…and " + (qa.length - 50) + " more" : ""}</div></div>` : `<div style="margin-top:12px;color:#15803d;font-size:13px;">✅ Every customer has a login and rates set.</div>`;
+  const driftBlock = drift.length ? `<div style="margin-top:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px;color:#92400e;"><b>⚠️ Accounts to check — factory demo rules / missing logo (${drift.length}):</b><div style="font-size:13px;white-space:pre-wrap;margin-top:6px;">${drift.slice(0, 50).join("<br>")}${drift.length > 50 ? "<br>…and " + (drift.length - 50) + " more" : ""}</div><div style="font-size:12px;color:#a16207;margin-top:8px;">These carry the built-in demo Autopilot rules (or lost a logo) — usually a migration leftover. Clear the demo rules on any real customer so they can't reroute live shipments.</div></div>` : `<div style="margin-top:12px;color:#15803d;font-size:13px;">✅ No account is carrying factory demo rules; no logos went missing.</div>`;
   const html = `<body style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1c1917;"><div style="max-width:560px;margin:0 auto;padding:24px 20px;">
     <div style="font-size:18px;font-weight:800;color:#0c4a6e;">Freightwire — nightly guardian</div>
     <div style="font-size:12px;color:#a8a29e;margin-bottom:12px;">${stamp} · tenant ${TENANT}</div>
     ${health}
     <div style="margin:12px 0;">${chip(counts.clients, "Customers")}${chip(counts.users, "Logins")}${chip(counts.profiles, "Rate profiles")}${chip(counts.rateCards, "Rate cards")}${chip(counts.invoices, "Invoices")}${chip(counts.shipments, "Shipments")}</div>
     ${qaBlock}
+    ${driftBlock}
     <div style="margin-top:14px;font-size:13px;color:#57534e;">Full backup attached (JSON). Google Drive: <b>${driveNote}</b>. The last ~14 nightly backups are also kept inside the app.</div>
   </div></body>`;
   const attachment = { filename: "freightwire-backup-" + stamp + ".json", content: Buffer.from(backupStr).toString("base64") };
   try {
-    await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key }, body: JSON.stringify({ from, to: recipients, subject: (alerts.length ? "⚠️ " : "") + "Freightwire nightly backup & health — " + stamp, html, attachments: [attachment] }) });
+    await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key }, body: JSON.stringify({ from, to: recipients, subject: (alerts.length || drift.length ? "⚠️ " : "") + "Freightwire nightly backup & health — " + stamp, html, attachments: [attachment] }) });
   } catch (e) { console.log("[guardian] email error", e && e.message); }
 }
 
@@ -131,11 +136,47 @@ export default async () => {
       if (issues.length) qa.push("• " + (c.name || c.id) + ": " + issues.join(", "));
     });
 
+    /* 2b) drift / factory-rule scan — a real customer login carrying the built-in demo rules
+       (their names use the "→" arrow; hand-made rules never do) is a migration leftover that can
+       reroute real shipments. Flag each one, with how many are ACTIVE. Also flag a login whose
+       company logo went missing since we last recorded it having one. */
+    const userById = {}; users.forEach((u) => { if (u && u.id) userById[u.id] = u; });
+    const clientById = {}; clients.forEach((c) => { if (c && c.id) clientById[c.id] = c; });
+    const drift = [];
+    const logoSeen = (store["guardian:state"] && store["guardian:state"].logos) || {};
+    const logoNow = {};
+    for (const k in store) {
+      const mr = /^u\/([^/]+)\/ruleset$/.exec(k);
+      if (mr) {
+        const u = userById[mr[1]];
+        if (!u || (u.role || "customer") === "admin") continue;   // only real customer logins
+        const demoRules = (Array.isArray(store[k]) ? store[k] : []).filter((r) => r && typeof r.name === "string" && r.name.indexOf("→") !== -1);
+        if (demoRules.length) {
+          const who = u.name || u.email || mr[1];
+          const co = (u.clientId && clientById[u.clientId] && clientById[u.clientId].name) || "no customer";
+          const active = demoRules.filter((r) => r.enabled).length;
+          drift.push("• " + who + " (" + co + "): " + demoRules.length + " factory demo rule" + (demoRules.length > 1 ? "s" : "") + (active ? ", " + active + " ACTIVE" : " (all off)") + " — " + demoRules.map((r) => r.name).slice(0, 4).join("; "));
+        }
+      }
+      const ms = /^u\/([^/]+)\/settings$/.exec(k);
+      if (ms) {
+        const u = userById[ms[1]];
+        if (!u || (u.role || "customer") === "admin") continue;
+        const hasLogo = !!(store[k] && typeof store[k] === "object" && store[k].companyLogo);
+        if (hasLogo) logoNow[ms[1]] = 1;
+        else if (logoSeen[ms[1]]) {
+          const who = u.name || u.email || ms[1];
+          const co = (u.clientId && clientById[u.clientId] && clientById[u.clientId].name) || "no customer";
+          drift.push("• " + who + " (" + co + "): company logo is now MISSING (it had one before)");
+        }
+      }
+    }
+
     /* 3) off-site backup */
     const stamp = new Date().toISOString().slice(0, 19).replace(/T/, "_").replace(/:/g, "-");
     const backup = { tenant: TENANT, at: new Date().toISOString(), counts, data: store };
     const backupStr = JSON.stringify(backup);
-    await pgUpsert([{ tenant: TENANT, key: "bak:full:" + stamp, value: backup }, { tenant: TENANT, key: "guardian:state", value: { counts, at: new Date().toISOString() } }]);
+    await pgUpsert([{ tenant: TENANT, key: "bak:full:" + stamp, value: backup }, { tenant: TENANT, key: "guardian:state", value: { counts, logos: logoNow, at: new Date().toISOString() } }]);
     await pgPruneFullBackups();
 
     let driveNote = "not configured (set GOOGLE_SERVICE_ACCOUNT_JSON + GDRIVE_FOLDER_ID)";
@@ -147,9 +188,9 @@ export default async () => {
     // Recipient is Spencer only — never the full admin list (that's what caused the flood).
     const solo = (process.env.GUARDIAN_EMAIL && process.env.GUARDIAN_EMAIL.trim()) || "spencer@freightwire.com";
     const recipients = TENANT === "main" && /.+@.+\..+/.test(solo) ? [solo] : [];
-    await emailSummary({ recipients, counts, alerts, qa, driveNote, backupStr, stamp });
+    await emailSummary({ recipients, counts, alerts, qa, drift, driveNote, backupStr, stamp });
 
-    console.log("[guardian] ok — tenant", TENANT, "counts", JSON.stringify(counts), "alerts", alerts.length, "qa", qa.length, "drive", driveNote, "emailed", recipients.length);
+    console.log("[guardian] ok — tenant", TENANT, "counts", JSON.stringify(counts), "alerts", alerts.length, "qa", qa.length, "drift", drift.length, "drive", driveNote, "emailed", recipients.length);
     return new Response("ok", { status: 200 });
   } catch (e) { console.log("[guardian] error", e && e.message); return new Response("err", { status: 200 }); }
 };

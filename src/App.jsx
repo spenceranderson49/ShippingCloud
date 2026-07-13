@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v487";
+const BUILD_TAG="addr-v488";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3634,7 +3634,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
   const secPolicyState=(sid)=>{ if(!lg.length)return "on"; const vals=lg.map(u=>String(((featureFlags[u.id]||{})._secPolicy||{})[sid]||"on")); return vals.every(v=>v===vals[0])?vals[0]:"mixed"; };
   const setCompanySecPolicy=(sid,val)=>{ setFeatureFlags&&setFeatureFlags(ff=>{ const next={...ff}; lg.forEach(u=>{ const cur=next[u.id]||{}; next[u.id]={...cur,_secPolicy:{...(cur._secPolicy||{}),[sid]:val}}; }); return next; }); say("Settings pages updated for all logins."); };
   const supplies=pf.supplies||{};
-  const TABS=[["profile","Profile"],["logins","Logins ("+lg.length+")"],["rates","Rates"],["services","Services"],["fedex","FedEx tier"],["shipments","Shipments"],["features","Features"],["notes","Notes"]];   /* write-only tabs (Address/Label prefs/Supplies/Credentials) removed — nothing read them (audit-admin-portal §2) */
+  const TABS=[["profile","Profile"],["logins","Logins ("+lg.length+")"],["rates","Rates"],["carriers","Carriers"],["services","Services"],["fedex","FedEx tier"],["shipments","Shipments"],["features","Features"],["notes","Notes"]];   /* write-only tabs (Address/Label prefs/Supplies/Credentials) removed — nothing read them (audit-admin-portal §2) */
   const svcQuick=RATE_SERVICES.fedex.filter(s=>!s.or);
   return (<div className="space-y-4">
     <div className="flex flex-wrap items-center gap-3">
@@ -3830,18 +3830,45 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       </div>
     </div>}
 
-    {tab==="services"&&<div className="space-y-3">
-      {(()=>{const on=(c&&c.enabledCarriers)||[];return (
-        <div className="border border-violet-200 bg-violet-50/40 rounded-lg p-3 mb-1">
-          <div className="text-[10px] uppercase tracking-widest text-violet-500 font-semibold mb-1">Other carriers (admin-only — invisible to every customer until checked here)</div>
-          <div className="flex flex-wrap gap-2">
-            {CUSTOM_CARRIERS.map(cc=>{const has=cc.services.some(([k])=>((rules.baseCosts||{})["cc:"+k]));const en=on.includes(cc.id);return (
-              <label key={cc.id} className={`flex items-center gap-1.5 text-xs rounded-lg border px-2.5 py-1.5 ${has?"cursor-pointer bg-white border-stone-200":"opacity-40 border-stone-100"}`} title={has?"":"Load a rate card first (Rates → Other carriers)"}>
-                <input type="checkbox" disabled={!has} checked={en} onChange={e=>upClient({enabledCarriers:e.target.checked?[...on,cc.id]:on.filter(x=>x!==cc.id)})} className="accent-violet-600"/>{cc.name}
-              </label>);})}
+    {tab==="carriers"&&<div className="space-y-3">
+      <DraftBar dirty={ratesDirty} onSave={saveRates} onUndo={undoRates} savedNote={"Saved — live for "+c.name} saveLabel="Save carrier markups"/>
+      <div className="border border-violet-200 bg-violet-50/40 rounded-lg p-3">
+        <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><Truck className="w-4 h-4 text-violet-600"/>Other carriers — {c.name} only</div>
+        <p className="text-[11px] text-stone-500 mt-1">Turn on carriers beyond FedEx for <b>this customer</b>. They stay invisible to everyone until enabled here. Once on, they quote on {c.name}'s Quick quote, Ship screen and API — priced from the loaded cost card × your markup below. Load a carrier's cost card in <b>Admin → Rates → Other carriers</b>. Quote-only today (labels still print on FedEx). Enabling is instant; markups save with the green button.</p>
+      </div>
+      {CUSTOM_CARRIERS.map(cc=>{
+        const on=(c&&c.enabledCarriers)||[];
+        const en=on.includes(cc.id);
+        const cardLoaded=cc.services.some(([k])=>((rules.baseCosts||{})["cc:"+k]));
+        return (<div key={cc.id} className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+          <div className="flex flex-wrap items-center gap-2.5 px-4 py-3">
+            <div className="font-semibold text-stone-800">{cc.name}</div>
+            {cardLoaded?<Badge tone="green">cost card loaded</Badge>:<Badge tone="amber">no cost card yet</Badge>}
+            {en&&<Badge tone="blue">live for {c.name}</Badge>}
+            <span className="flex-1"/>
+            <button onClick={()=>upClient({enabledCarriers:en?on.filter(x=>x!==cc.id):[...on,cc.id]})} className={`text-sm rounded-lg px-3 py-1.5 font-medium ${en?"bg-violet-600 text-white hover:bg-violet-700":"bg-stone-100 text-stone-700 hover:bg-stone-200"}`}>{en?"Enabled ✓":"Enable"}</button>
           </div>
-          <div className="text-[10px] text-stone-400 mt-1.5">Checked carriers quote for THIS customer on Quick quote, Ship and the API — priced from the Rates section's cards + rules.</div>
-        </div>);})()}
+          {en&&<div className="border-t border-stone-100 px-4 py-3 space-y-2 bg-stone-50/40">
+            {!cardLoaded&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">No cost card loaded for {cc.name} yet — {c.name} won't see quotes until you load one under <b>Admin → Rates → Other carriers</b>.</div>}
+            <div className="text-[11px] text-stone-500">Markup on each {cc.name} service for {c.name} — priced over the loaded cost. Blank = the account-wide markup on the Rates tab applies.</div>
+            <div className="overflow-x-auto"><table className="w-full text-sm min-w-[440px]">
+              <thead><tr className="text-[10px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal py-1">Service</th><th className="text-left font-normal py-1 pl-3">Markup</th><th className="text-right font-normal py-1">Value</th><th className="text-right font-normal py-1">Min $ / label</th></tr></thead>
+              <tbody>
+                {cc.services.map(([k,l])=>{const rule=(prof.services||{})[k]||{};const basis=rule.basis||"percent";return (
+                  <tr key={k} className="border-t border-stone-100">
+                    <td className="py-1.5 text-stone-700">{l}</td>
+                    <td className="py-1.5 pl-3"><Select value={basis} onChange={e=>upProfSvc(prof.id,k,{basis:e.target.value})}><option value="percent">% over cost</option><option value="fixed">$ over cost</option><option value="flat">Flat price</option></Select></td>
+                    <td className="py-1.5 text-right"><Input type="number" className="w-24 text-right" placeholder={basis==="flat"?"$ price":basis==="fixed"?"$":"%"} value={rule.pct==null?"":rule.pct} onChange={e=>upProfSvc(prof.id,k,{pct:e.target.value===""?"":+e.target.value})}/></td>
+                    <td className="py-1.5 text-right"><Input type="number" className="w-20 text-right" placeholder="—" value={rule.min==null?"":rule.min} onChange={e=>upProfSvc(prof.id,k,{min:e.target.value===""?"":+e.target.value})}/></td>
+                  </tr>);})}
+              </tbody>
+            </table></div>
+          </div>}
+        </div>);
+      })}
+    </div>}
+
+    {tab==="services"&&<div className="space-y-3">
       <div className="text-sm font-semibold text-stone-800">Services — {c.name}</div>
       <p className="text-[11px] text-stone-500">Checked = offered to this customer. Uncheck to lock a service off platform-wide for them — it disappears as a quote option and greys out on their own Settings screen. New customers start with the standard set (2Day A.M., Intl Priority Express/First, freight, and all OneRate except 2Day OneRate off).</p>
       <div className="flex items-center gap-3">

@@ -56,7 +56,7 @@ function FreightwireShipHub({logoH=44,sub=true,subText="Client Portal",accent=""
     <img src={logoSrc} alt="Freightwire" style={{height:logoH}} className="w-auto shrink-0" draggable={false}/>
     <span style={{width:1,height:Math.round(logoH*0.82),background:"#d6d3ce"}} className="shrink-0"/>
     <span className="inline-flex flex-col" style={{gap:1}}>
-      <span style={{fontFamily:"Inter,system-ui,sans-serif",fontWeight:800,fontSize:nameSize,letterSpacing:"0.1em",lineHeight:1,color:"#1F1B18",textTransform:"uppercase"}}>Shipping <span style={{color:"var(--acc,#0198FF)"}}>Hub</span></span>
+      <span style={{fontFamily:"Inter,system-ui,sans-serif",fontWeight:800,fontSize:nameSize,letterSpacing:"0.1em",lineHeight:1,color:"#1F1B18",textTransform:"uppercase"}}>Shipping<span style={{color:"var(--acc,#0198FF)"}}>Hub</span></span>
       {sub&&<span style={{fontFamily:"Inter,system-ui,sans-serif",fontSize:Math.max(9,Math.round(logoH*0.2)),letterSpacing:"0.12em",color:"#78716c",fontWeight:500,textTransform:"uppercase",lineHeight:1}}>{subText}</span>}
     </span>
   </span>);
@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v464r4";
+const BUILD_TAG="addr-v464r5";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -146,12 +146,12 @@ class TabBoundary extends React.Component {
 const IS_STAGING=(()=>{ try{ return String((import.meta.env&&import.meta.env.VITE_STAGING)||"").toLowerCase()==="true"; }catch(e){ return false; } })();
 const SHOW_ENGLAND=(()=>{ try{ return String((import.meta.env&&import.meta.env.VITE_CARRIER_BACKEND)||"").toLowerCase()==="england"; }catch(e){ return false; } })();
 const BRAND=(()=>{ let k="shippingcloud"; try{ k=(import.meta.env&&import.meta.env.VITE_BRAND)||"shippingcloud"; }catch(e){}
-  if(k==="admin")return {key:"admin",fw:true,admin:true,name:"Shipping Hub Admin",short:"Admin HQ",product:"Shipping Hub",accent:"#1e3a5f",accent2:"#2d5a8e"};
+  if(k==="admin")return {key:"admin",fw:true,admin:true,name:"ShippingHub Admin",short:"Admin HQ",product:"ShippingHub",accent:"#1e3a5f",accent2:"#2d5a8e"};
   /* "shiphub" accepted as an alias for "freightwire" — the Netlify sites and the build checks
      have used both spellings, and an unrecognized key silently rendered the RETAIL brand on
      freightwireship.com. product = the name used inside shared app copy. */
   return (k==="freightwire"||k==="shiphub")
-    ?{key:"freightwire",fw:true,name:"Shipping Hub",short:"Shipping Hub",product:"Shipping Hub",accent:"#1e3a5f",accent2:"#2d5a8e"}
+    ?{key:"freightwire",fw:true,name:"ShippingHub",short:"ShippingHub",product:"ShippingHub",accent:"#1e3a5f",accent2:"#2d5a8e"}
     :{key:"shippingcloud",fw:false,name:"ShippingCloud",short:"ShippingCloud",product:"ShippingCloud",accent:"#0086E0",accent2:"#0072BE"}; })();
 /* The site's own origin — integration redirect-URI instructions must show THIS site's domain,
    not a hardcoded one, so the white-label builds never leak another brand's URL. */
@@ -160,7 +160,7 @@ const APP_ORIGIN=(()=>{ try{ return (typeof window!=="undefined"&&window.locatio
    by scanning for the transparent gap before the wordmark) instead of the ShippingCloud cloud, plus
    the FreightwireShip tab title. Crop bounds verified against the shipped asset: mark = 78x78 at x5,y2. */
 if(typeof window!=="undefined"&&BRAND.fw){
-  try{ document.title=BRAND.admin?"Shipping Hub Admin — Freightwire":"Shipping Hub — Freightwire"; }catch(e){}
+  try{ document.title=BRAND.admin?"ShippingHub Admin — Freightwire":"ShippingHub — Freightwire"; }catch(e){}
   try{
     const setIcon=(href)=>{ try{
       document.querySelectorAll('link[rel*="icon"]').forEach(l=>l.parentNode&&l.parentNode.removeChild(l));
@@ -5744,7 +5744,7 @@ function AssistantChat({who,getContext,onAction}){
       {/* Curved "SHIPHUB AI" wrapping the top half of the circle */}
       {!open&&<svg viewBox="0 0 56 56" className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
         <defs><path id="sc-ai-arc" d="M 10 28 A 18 18 0 0 1 46 28" fill="none"/></defs>
-        <text fill="#ffffff" style={{fontSize:"5.5px",fontWeight:700,letterSpacing:"0.2px"}}><textPath href="#sc-ai-arc" startOffset="50%" textAnchor="middle">SHIPPING HUB AI</textPath></text>
+        <text fill="#ffffff" style={{fontSize:"6px",fontWeight:700,letterSpacing:"0.3px"}}><textPath href="#sc-ai-arc" startOffset="50%" textAnchor="middle">SHIPPINGHUB AI</textPath></text>
       </svg>}
       <span className="mt-2.5">{open?<X className="w-5 h-5"/>:<Sparkles className="w-5 h-5"/>}</span>
     </button>
@@ -10559,7 +10559,7 @@ function PrinterSettings({settings,setSettings}){
         {dt.enabled&&<label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={dt.showLabels!==false} onChange={e=>setDt({showLabels:e.target.checked})}/>Show field labels</label>}
       </div>
       {dt.enabled&&<>
-        <p className="text-[11px] text-stone-500 -mt-1">The carrier prints a plain 4×6 shipping label; Shipping Hub adds <b>your</b> designed tab (below) on the taller stock. FedEx has no separate fillable tab of its own — its reference block is just part of the 4×6 label — so the tab you design here is the only tab. Turn this off to print a plain 4×6 with no tab.</p>
+        <p className="text-[11px] text-stone-500 -mt-1">The carrier prints a plain 4×6 shipping label; ShippingHub adds <b>your</b> designed tab (below) on the taller stock. FedEx has no separate fillable tab of its own — its reference block is just part of the 4×6 label — so the tab you design here is the only tab. Turn this off to print a plain 4×6 with no tab.</p>
         <Field label="Doc-tab position on label stock">
           <Select value={dt.stock||"trailing"} onChange={e=>setDt({stock:e.target.value})}>
             <option value="trailing">Trailing (bottom of label)</option>
@@ -12254,7 +12254,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
       </div>
       <label className="block text-sm text-stone-700 mt-1">Company logo size <span className="text-[11px] text-stone-400">· {c.companyLogoScale||100}% — your uploaded logo, shown top-right in the header</span>
         <input type="range" min="50" max="250" step="5" value={c.companyLogoScale||100} onChange={e=>set("companyLogoScale",+e.target.value)} className="mt-1 w-full"/></label>
-      <label className="block text-sm text-stone-700 mt-1">Brand logo size <span className="text-[11px] text-stone-400">· {c.logoScale||100}% — the {BRAND.fw?"Freightwire Shipping Hub":"ShippingCloud"} mark on the left</span>
+      <label className="block text-sm text-stone-700 mt-1">Brand logo size <span className="text-[11px] text-stone-400">· {c.logoScale||100}% — the {BRAND.fw?"Freightwire ShippingHub":"ShippingCloud"} mark on the left</span>
         <input type="range" min="50" max="250" step="5" value={c.logoScale||100} onChange={e=>set("logoScale",+e.target.value)} className="mt-1 w-full"/></label>
       <div className="text-[11px] text-stone-400">Shows in the header next to the brand — the live preview above is exactly the size it will render.</div>
     </Panel>}

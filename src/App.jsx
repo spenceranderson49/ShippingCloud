@@ -6417,7 +6417,7 @@ function AppInner(){
      brands only — Freightwire keeps its own mark). Falls back to the brand blue when no accent. */
   useEffect(()=>{ try{ if(BRAND.fw)return; const link=document.querySelector('link[rel="icon"]'); if(!link)return;
     const col=(srf.accent||custom.accent||"#0086E0").replace("#","%23");
-    link.href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 50 50'%3E%3Crect width='50' height='50' rx='11' fill='white'/%3E%3Cpath transform='translate(0 7)' d='M15 31h22a9 9 0 0 0 2.7-17.6A12.5 12.5 0 0 0 15.5 9 9.8 9.8 0 0 0 15 31Z' fill='"+col+"'/%3E%3C/svg%3E";
+    link.href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='3.75 0.4 42.8 31.1'%3E%3Cpath d='M15 31h22a9 9 0 0 0 2.7-17.6A12.5 12.5 0 0 0 15.5 9 9.8 9.8 0 0 0 15 31Z' fill='"+col+"'/%3E%3C/svg%3E";
   }catch(e){} },[custom.accent,srf.accent]);
   useEffect(()=>{ const st=custom.startTab; if(st&&st!=="ship"&&ALL_TABS.some(x=>x[0]===st))setTab(st); },[]);   // land on the user's chosen start page
   const [hkHelp,setHkHelp]=useState(false);

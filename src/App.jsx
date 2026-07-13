@@ -70,26 +70,26 @@ const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK
    ever deploys to every login by accident. */
 /* Customer Settings sections (id,label) — mirrored by the `secs` array inside Settings.
    The admin portal uses this list for the per-customer hide/lock controls (featureFlags._secPolicy). */
-const SETTINGS_SEC_LIST=[["general","General"],["customize","Customizations"],["reports","Reports"],["shipscreen","Ship screen"],["orderspage","Orders"],["carriers","Carrier accounts"],["warehouses","Warehouses"],["boxes","Package sizes"],["boxlogic","Box logic"],["catalog","Product catalog"],["reference","Reference Fields"],["printer","Print settings"],["cieditor","Commercial invoice"],["cihistory","CI history"],["otherdocs","Other documents"],["manifests","Manifests"],["integrations","Integrations"],["notifications","Email automation"],["checkout","Checkout rates"],["billing","Billing"],["subscription","Subscription"]];
+const SETTINGS_SEC_LIST=[["general","General"],["customize","Customizations"],["reports","Reports"],["shipscreen","Ship screen"],["orderspage","Orders"],["carriers","Carrier accounts"],["warehouses","Warehouses"],["boxes","Package sizes"],["boxlogic","Box logic"],["catalog","Product catalog"],["reference","Reference Fields"],["printer","Print settings"],["cieditor","Commercial invoice"],["otherdocs","Other documents"],["manifests","Manifests"],["integrations","Integrations"],["notifications","Email automation"],["checkout","Checkout rates"],["billing","Billing"],["subscription","Subscription"]];
 const FEATURE_CATALOG=[
   {id:"orders",label:"Orders",desc:"Order import & fulfillment",default:true},
   {id:"shipments",label:"Shipments",desc:"Shipment history & tracking",default:true},
   {id:"drafts",label:"Drafts",desc:"Saved unfinished shipments",default:true},
   {id:"returns",label:"Returns",desc:"Return labels",default:true},
   {id:"dashboard",label:"Dashboard",desc:"Spend & volume overview",default:true},
-  {id:"addresses",label:"Address Book",desc:"Saved contacts",default:true},
+  {id:"addresses",label:"Address book",desc:"Saved contacts",default:true},
   {id:"pickups",label:"Pickups",desc:"Schedule carrier pickups",default:true},
   {id:"batch",label:"Batch",desc:"Rate & print in bulk",default:true},
   {id:"invoices",label:"Invoice Audit",desc:"Carrier invoice auditing",default:false},   /* off unless the admin grants it per login */
   {id:"pickupCosts",label:"Pickup fee display",desc:"Show pickup fee estimates on the Pickups tab",default:true},
-  {id:"rules",label:"Autopilot",desc:"Autopilot Mode — automation rules",default:true},
+  {id:"rules",label:"Autopilot",desc:"Autopilot mode — automation rules",default:true},
   {id:"scan",label:"Scan",desc:"Barcode scan station",default:true},
   {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:true},
   {id:"seeCosts",label:"See costs & spend",desc:"Rates, order totals, batch totals and Reports dollars. Turn OFF to hide all money from this customer's logins",default:true},
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own carrier accounts on the Connections page (England always shows; admins always have this)",default:false},
 ];
 const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All logins"],["rates","Rates & dim divisors"],["labelcert","FedEx labels"],["customizations","Features & access"],["branding","Branding"],["apiadmin","API"],["billing","Billing & invoices"],["domains","Domains"],["backups","Backups & restore"]];
-const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,labelcert:Printer,customizations:Sliders,branding:Sparkles,platforms:Truck,domains:ExternalLink,backups:RotateCcw};
+const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,labelcert:Printer,customizations:Sliders,branding:Sparkles,apiadmin:Plug,billing:Receipt,domains:ExternalLink,backups:RotateCcw};
 /* A restricted admin ALWAYS keeps access to "users" — without it there is no self-service way
    to ever fix a permission set that’s missing something, for yourself or anyone else. A wrong
    restriction otherwise becomes a permanent lockout with no way back in. */
@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v493";
+const BUILD_TAG="addr-v497";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2873,7 +2873,7 @@ const CUSTOM_DEFAULTS={
   confetti:"page",seasonal:false,loginBg:"",appBg:"",headerBg:"",pageBg:"",navBg:"",
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
-const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
+const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
 const SLIP_OPTS={thanks:"",footer:""};   // synced from settings by AppInner; read by packingSlipHTML
 const CI_OPTS={taxId:"",logo:""};                 // Tax ID / EIN printed on commercial invoices, from Settings → General
 const fireConfetti=()=>{try{window.dispatchEvent(new CustomEvent("sc-confetti"));}catch(e){}};
@@ -4488,7 +4488,7 @@ function RatesAdmin({clients=[],brand}){
           <div className="text-[11px] text-stone-500">Excel/CSV/TSV — first column weight (lb), one column per zone (headers = zone numbers). Same format as FedEx base-cost imports.</div>
           <textarea value={ccImp.text} onChange={e=>setCcImp(p=>({...p,text:e.target.value}))} rows={8} spellCheck={false} placeholder={"Weight\t2\t3\t4\t5\t6\t7\t8\n1\t4.10\t4.25\t…"} className="w-full bg-white border border-stone-200 rounded-lg p-2.5 font-mono text-[12px] outline-none focus:border-[#0099FF] resize-y"/>
           <div className="flex gap-2">
-            <button onClick={()=>{const r2=parseRateTable(ccImp.text);if(r2.error)return window.alert(r2.error);setRules(r=>({...DEFAULT_RATE_RULES,...r,baseCosts:{...(r.baseCosts||{}),["cc:"+ccImp.key]:r2}}));setCcImp(null);say("Rate card staged — press Save rates to make it live.");}} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium">Stage rate card</button>
+            <button onClick={()=>{const r2=parseRateTable(ccImp.text);if(r2.error)return window.alert(r2.error);setRules(r=>({...DEFAULT_RATE_RULES,...r,baseCosts:{...(r.baseCosts||{}),["cc:"+ccImp.key]:r2}}));setCcImp(null);setImpMsg({ok:"Rate card staged — press Save rates to make it live."});}} className="text-sm bg-stone-900 text-white rounded-lg px-3.5 py-2 font-medium">Stage rate card</button>
             <button onClick={()=>setCcImp(null)} className="text-sm text-stone-500 px-3 py-2 hover:bg-stone-100 rounded-lg">Cancel</button>
           </div>
         </div>}
@@ -5585,6 +5585,8 @@ function CloudAuth({onDone,initialMode,intake}){
   const [showPw,setShowPw]=useState(false);
   const [inv,setInv]=useState(null); // {name,type,data(base64)}
   const [err,setErr]=useState("");const [busy,setBusy]=useState(false);
+  const [need2fa,setNeed2fa]=useState(null);   // null | "totp" | "email"
+  const [code,setCode]=useState("");const [sentTo,setSentTo]=useState("");
   const pickFile=(e)=>{
     const file=e.target.files&&e.target.files[0]; e.target.value=""; if(!file)return;
     if(file.size>3*1024*1024){setErr("That file is over 3 MB — one recent invoice (PDF/CSV/Excel/photo) is perfect.");return;}
@@ -5594,8 +5596,10 @@ function CloudAuth({onDone,initialMode,intake}){
   };
   const signin=async()=>{
     if(busy)return; setBusy(true);setErr("");
-    let res=await cloudCall({action:"login",email:f.email,password:f.pw});
-    if(res&&res.network) res=await cloudCall({action:"login",email:f.email,password:f.pw});   // retry a network blip before blaming the password
+    let res=await cloudCall({action:"login",email:f.email,password:f.pw,code:code.trim()});
+    if(res&&res.network) res=await cloudCall({action:"login",email:f.email,password:f.pw,code:code.trim()});   // retry a network blip before blaming the password
+    if(res&&res.needsEmailCode){ setBusy(false); setNeed2fa("email"); if(res.sentTo)setSentTo(res.sentTo); setErr(code?String(res.error||"That code isn't right."):""); return; }
+    if(res&&res.needsTotp){ setBusy(false); setNeed2fa("totp"); setErr(code?String(res.error||"That code isn't right."):""); return; }
     if(!res||!res.ok){setBusy(false);setErr(res&&res.network?"Couldn't reach the sign-in server — your password was never checked. Wait a moment and try again.":((res&&res.error)||"Could not reach the server."));return;}
     CLOUD.token=res.token; lsSet("cloud.token",res.token);
     const uid=String(res.user.id||res.user.email); clearScratchFor(uid);
@@ -5646,6 +5650,10 @@ function CloudAuth({onDone,initialMode,intake}){
         </div>}</>}
         <input value={f.email} onChange={e=>setF({...f,email:e.target.value})} placeholder="Email" className={inp} autoFocus/>
         <div className="relative"><input value={f.pw} onChange={e=>setF({...f,pw:e.target.value})} onKeyDown={e=>e.key==="Enter"&&(mode==="signin"?signin():request())} placeholder={mode==="request"?"Choose a password":"Password"} type={showPw?"text":"password"} className={inp+" pr-9"}/><button type="button" onClick={()=>setShowPw(v=>!v)} tabIndex={-1} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">{showPw?<EyeOff className="w-4 h-4"/>:<Eye className="w-4 h-4"/>}</button></div>
+        {mode==="signin"&&need2fa&&<div className="space-y-1">
+          <input value={code} onChange={e=>setCode(e.target.value.replace(/[^0-9A-Za-z-]/g,"").slice(0,9))} onKeyDown={e=>e.key==="Enter"&&signin()} placeholder="6-digit code" autoFocus className={inp+" tracking-[0.3em] text-center"}/>
+          <div className="text-[11px] text-stone-400">{need2fa==="email"?("We emailed a 6-digit code"+(sentTo?" to "+sentTo:"")+" — enter it to finish signing in."):"Enter the 6-digit code from your authenticator app (or a backup code)."}</div>
+        </div>}
       </div>
       {err&&<div className="text-xs text-red-600">{err}</div>}
       <button onClick={mode==="signin"?signin:request} disabled={busy} className="w-full bg-stone-900 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"One moment…":(mode==="signin"?"Sign in":"Create account")}</button>
@@ -5791,7 +5799,7 @@ function Landing({onAuth}){
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <F icon={DollarSign} title="Industry-leading FedEx rates">The pricing big shippers get, from day one. No volume commitments, no negotiating.</F>
         <F icon={BarChart3} title="Transit dashboard & detailed reporting">Track every shipment end to end and see spend, transit times, and delivery performance at a glance — with reports you can act on.</F>
-        <F icon={Zap} title="Autopilot Mode">Set your rules once, then let the platform do all the work. Orders arrive rated, boxed, and ready to print — you just hit go.</F>
+        <F icon={Zap} title="Autopilot mode">Set your rules once, then let the platform do all the work. Orders arrive rated, boxed, and ready to print — you just hit go.</F>
         <F icon={Cog} title="Customization">We adapt to your flow, not the other way around. Need something the platform doesn’t do? Tell us. We’ll build it.</F>
         <F icon={Users} title="Built by shipping people, supported by tech people">We’ve stood at the shipping desk — the reweighs, the surprise surcharges, the reps who never call back. We know the problems firsthand, and we have the tech team to fix them.</F>
         <F icon={Boxes} title="Box logic and live cart rates">We know your products and your boxes, so your store shows the real cost to ship — and you never pay to ship empty space.</F>
@@ -6645,6 +6653,11 @@ function AppInner(){
   if(BRAND.admin&&currentUser.role!=="admin"&&!lsGet("adminReturn",null)) return (<div className="min-h-screen bg-stone-100 flex items-center justify-center p-4"><div className="bg-white border border-stone-200 rounded-xl p-8 text-center max-w-sm"><ShieldCheck className="w-8 h-8 text-stone-300 mx-auto mb-3"/><div className="font-semibold text-stone-800">Administrators only</div><p className="text-sm text-stone-500 mt-1">This portal is the admin HQ. Your account works on shippingcloud.net and freightwireship.com.</p><button onClick={()=>{lsDel("session");window.location.reload();}} className="mt-4 text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Sign out</button></div></div>);
 
   const [fedexPrompt,setFedexPrompt]=usePersist("fedexPrompt",{seen:false});
+  // The "Get your own FedEx account" welcome popup is for BRAND-NEW signups only —
+  // never nag an existing login with it. Accounts carry a createdAt at signup; a
+  // recent one means new, a missing/old one means an established (or legacy) login.
+  const _acctAgeDays=currentUser&&currentUser.createdAt?(Date.now()-new Date(currentUser.createdAt).getTime())/86400000:Infinity;
+  const isNewAccount=_acctAgeDays<=14;
   const adminReturn=lsGet("adminReturn",null);
   const exitImpersonation=()=>{ lsSet("session",adminReturn); lsDel("adminReturn"); window.location.reload(); };
   /* shell */
@@ -6660,7 +6673,7 @@ function AppInner(){
         <button onClick={()=>{lsSet("postDemo","request");lsSet("session",null);window.location.reload();}} className="bg-white/20 hover:bg-white/30 rounded-lg px-2.5 py-1 text-xs font-semibold">Create your real account</button>
         <button onClick={()=>{lsSet("session",null);window.location.reload();}} className="bg-white/10 hover:bg-white/20 rounded-lg px-2.5 py-1 text-xs">Exit demo</button>
       </div>}
-      {!isDemo&&!isAdmin&&!adminReturn&&CLOUD.mode==="cloud"&&!fedexPrompt.seen&&<FirstRunFedEx user={currentUser} onClose={()=>setFedexPrompt({seen:true})}/>}
+      {!isDemo&&!isAdmin&&!adminReturn&&CLOUD.mode==="cloud"&&!fedexPrompt.seen&&isNewAccount&&<FirstRunFedEx user={currentUser} onClose={()=>setFedexPrompt({seen:true})}/>}
       <AssistantChat who={isDemo?"demo":isAdmin?"admin":"customer"} getContext={assistantContext} onAction={onAssistantAction}/>
       {shopPush&&<div className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] max-w-lg w-[92vw] sm:w-auto rounded-xl shadow-2xl border px-4 py-3 text-sm flex items-start gap-2.5 ${shopPush.ok?"bg-emerald-50 border-emerald-300 text-emerald-800":"bg-rose-50 border-rose-300 text-rose-800"}`}>
         {shopPush.ok?<CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5"/>:<AlertTriangle className="w-5 h-5 shrink-0 mt-0.5"/>}
@@ -6785,6 +6798,16 @@ function shipDateDefault(settings){
   // local-date ISO (avoid UTC shifting the day)
   const off=d.getTimezoneOffset();
   return new Date(d.getTime()-off*60000).toISOString().slice(0,10);
+}
+/* Numbered step marker for the Ship screen — gives the dense form a clear, professional
+   1-2-3 flow (Ship from & to → Packages & options → Service & rate) without moving any
+   of the price-interdependent inputs around. */
+function StepHead({n,label}){
+  return (<div className="flex items-center gap-2 pt-1">
+    <span className="flex items-center justify-center w-5 h-5 rounded-full bg-[#0086E0] text-white text-[10px] font-bold shrink-0">{n}</span>
+    <span className="text-[11px] font-semibold uppercase tracking-widest text-stone-500">{label}</span>
+    <span className="flex-1 h-px bg-stone-200"/>
+  </div>);
 }
 function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,drafts,setDrafts,prefill,clearPrefill,onShipped,onPending,logEmail,onQuickQuote,onRefresh,syncing,currentUser,setUsers,setCurrentUser,clients=[],priceAs="",setPriceAs=null}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 rate database — global, follows the customer's profile
@@ -7356,7 +7379,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(hfArmed!==selectedOrder)return {t:"info",m:custom.hideShipOrders?"this order was already on screen when the page loaded — scan it and it will book itself":"this order was already on screen when the page loaded — click it in the sidebar (or scan it) and it will book itself"};
     if(!ready)return {t:"info",m:"waiting for a valid destination ZIP and weight"};
     if(rateSrc.loading)return {t:"info",m:"waiting for live rates…"};
-    if(!rateSrc.live)return {t:"warn",m:"live rates aren't coming back (these are estimates) — hands-free never books on an estimate. Check the carrier account under Settings → FedEx Account"};
+    if(!rateSrc.live)return {t:"warn",m:"live rates aren't coming back (these are estimates) — hands-free never books on an estimate. Check the carrier account under Settings → FedEx account"};
     if(!addrClassified)return {t:"info",m:"waiting for FedEx to classify the address (residential vs commercial)…"};
     if(!matched||matched.src!=="autopilot"){
       const _rc=liveRuleMatch?canonSvc(groundFamilySwap(liveRuleMatch,addrClassified?residential:null)):"";
@@ -7486,6 +7509,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}
           </div>
         </div>
+        <StepHead n="1" label="Ship from & to"/>
         <div className="relative grid lg:grid-cols-3 gap-4">
           <div className="min-w-0"><AddressCard title="Sender" data={sender} set={setSender} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} hideAddr23={custom.hideAddr23}/></div>
           <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-1/3 top-11 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-4 h-4"/></button>
@@ -7495,12 +7519,13 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             {scanMsg&&<span className="absolute right-2 top-2">{scanMsg.ok?<CheckCircle2 className="w-4 h-4 text-emerald-500"/>:<AlertTriangle className="w-4 h-4 text-rose-400"/>}</span>}
           </div>} contactFallback={{phone:sender.phone,email:sender.email}} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }} hideAddr23={custom.hideAddr23} reqOverrides={{phone:custom.phoneRequired!==false,email:custom.emailRequired!==false}} side={addressCheck}/></div>
         </div>
-        {!(sender.name||sender.company||sender.address1||sender.zip)&&<div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No sender on file — fill in the Sender card above, or set your default sender in Settings → Company.</div>}
+        {!(sender.name||sender.company||sender.address1||sender.zip)&&<div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2 flex-wrap"><span className="flex-1 min-w-[180px]">No sender on file — fill in the Sender card above, or set a default sender.</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"settings"}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1">Set default sender →</button></div>}
         {billTo==="third"&&thirdAcct&&<div className="flex flex-wrap items-center gap-2 text-xs -mt-1">
           <span className="flex items-center gap-1.5 text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-1.5"><CreditCard className="w-3.5 h-3.5"/>Auto-billing to third-party account <b className="font-mono">{thirdAcct}</b><button onClick={()=>{setBillTo("sender");setThirdAcct("");}} className="ml-1 text-[#0086E0] hover:text-[#006FBF] underline">bill sender instead</button></span>
         </div>}
         {intl&&<div className="flex items-center gap-2 text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2"><MapPin className="w-4 h-4"/>International shipment to <b>{receiver.country}</b> — FedEx &amp; DHL rates shown, customs info required below.</div>}
 
+        <StepHead n="2" label="Packages & options"/>
         <div className="bg-stone-100 border border-stone-200 rounded-lg p-3 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <datalist id="sc-ref-list">{[...((settings.fieldLists||{}).department||[]),...((settings.fieldLists||{}).reference||[])].map(v=><option key={v} value={v}/>)}</datalist>
@@ -7631,6 +7656,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <Printer className="w-3.5 h-3.5 shrink-0"/>
           <span><b>Hands-free:</b> {hfWait.m}</span>
         </div>}
+        <StepHead n="3" label="Service & rate"/>
         <ServiceList quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${orBox?orBox.code:""}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
         {intl&&(
           <div className="border border-[#99D6FF] bg-[#E6F4FF]/40 rounded-lg p-3 space-y-3">
@@ -8220,7 +8246,7 @@ function LiveEstRate({o,client,settings,rateRules,ruleset}){
   return <span className="text-stone-600 font-mono whitespace-nowrap" title={v.label+(v.ruled?" — picked by your Autopilot rule":"")}>{money(v.sell)}<span className="text-stone-300 font-sans"> {v.live?"live":"est."}</span>{v.ruled&&<Zap className="w-3 h-3 inline ml-0.5 text-[#0086E0]" />}</span>;
 }
 function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,openOrderId=null,onOpenedOrder,showMoney=true}){
-  const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // Est. Rate shows the SELL estimate — raw carrier cost must never render in a customer-visible table
+  const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // Est. rate shows the SELL estimate — raw carrier cost must never render in a customer-visible table
   const [ruleset]=usePersist("ruleset",SEED_RULESET);              // Autopilot rules drive the service the rate column prices
   useEffect(()=>{ if(!openOrderId)return; const found=orders.find(o=>o.id===openOrderId); if(found)setOpen(found); if(onOpenedOrder)onOpenedOrder(); },[openOrderId,orders]);
   const custom=cz(settings||{});
@@ -8340,7 +8366,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
                     {!hideCol.has("recipient")&&<th className="text-left font-medium px-3 py-2">Recipient</th>}
                     {!hideCol.has("requested")&&<th className="text-left font-medium px-3 py-2 whitespace-nowrap">Requested</th>}
                     {filter!=="fulfilled"&&custom.autopilotPreview&&!hideCol.has("autopilot")&&<th className="text-left font-medium px-3 py-2 whitespace-nowrap"><span className="inline-flex items-center gap-1"><Zap className="w-3 h-3 text-violet-500"/>Autopilot</span></th>}
-                    {filter!=="fulfilled"&&!hideCol.has("estRate")&&<th className="text-right font-medium px-3 py-2 whitespace-nowrap">Est. Rate</th>}
+                    {filter!=="fulfilled"&&!hideCol.has("estRate")&&<th className="text-right font-medium px-3 py-2 whitespace-nowrap">Est. rate</th>}
                     {!hideCol.has("qty")&&<th className="text-right font-medium px-3 py-2">Qty</th>}
                     {!hideCol.has("total")&&<th className="text-right font-medium px-3 py-2 whitespace-nowrap">Order total</th>}
                     {!hideCol.has("status")&&<th className="text-left font-medium px-3 py-2">Status</th>}
@@ -10195,7 +10221,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
      policy/fallback logic unchanged. */
   const SEC_GROUPS=[
     ["Workspace",[["general","General",Cog],["customize","Customizations",Sliders]]],
-    ["Shipping",[["shipscreen","Ship screen",Truck],["orderspage","Orders",ShoppingBag],["carriers",BRAND.fw?"FedEx Account":"Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["catalog","Product catalog",Boxes],["reference","Reference Fields",Receipt]]],
+    ["Shipping",[["shipscreen","Ship screen",Truck],["orderspage","Orders",ShoppingBag],["carriers",BRAND.fw?"FedEx account":"Carrier accounts",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package sizes",Package],["boxlogic","Box logic",Layers],["catalog","Product catalog",Boxes],["reference","Reference fields",Receipt]]],
     ["Documents & printing",[["printer","Print settings",Printer],["cieditor","Commercial invoice",Receipt],["otherdocs","Other documents",FileText],["manifests","Manifests",FileText]]],
     ["Automation & integrations",[["integrations","Integrations",Layers],["notifications","Email automation",Mail],["checkout","Checkout rates",ShoppingBag]]],
     ["Account",[["reports","Reports",TrendingUp],["billing","Billing",CreditCard],["subscription","Subscription",Star]]],
@@ -10243,7 +10269,6 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="notifications"&&<Notifications settings={settings} setSettings={setSettings} emails={emails}/>}
         {sec==="general"&&<GeneralSettings settings={settings} setSettings={setSettings} goSec={setSec} audit={audit} currentUser={currentUser} setCurrentUser={setCurrentUser}/>}
         {sec==="cieditor"&&<div className="space-y-6"><CIEditor settings={settings} setSettings={setSettings} shipments={shipments}/><div className="border-t border-stone-200 pt-6"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-3">Commercial invoice history</div><CIHistory settings={settings} setSettings={setSettings}/></div></div>}
-        {sec==="cihistory"&&<div className="space-y-6"><CIEditor settings={settings} setSettings={setSettings} shipments={shipments}/><div className="border-t border-stone-200 pt-6"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-3">Commercial invoice history</div><CIHistory settings={settings} setSettings={setSettings}/></div></div>}
         {sec==="otherdocs"&&<OtherDocs settings={settings} setSettings={setSettings}/>}
         {sec==="customize"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])}/>}
         {sec==="shipscreen"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="ship"/>}
@@ -10977,7 +11002,7 @@ function PrinterSettings({settings,setSettings}){
         {dt.enabled&&<label className="flex items-center gap-2 text-sm text-stone-600"><input type="checkbox" checked={dt.showLabels!==false} onChange={e=>setDt({showLabels:e.target.checked})}/>Show field labels</label>}
       </div>
       {dt.enabled&&<>
-        <p className="text-[11px] text-stone-500 -mt-1">The carrier prints a plain 4×6 shipping label; ShippingHub adds <b>your</b> designed tab (below) on the taller stock. FedEx has no separate fillable tab of its own — its reference block is just part of the 4×6 label — so the tab you design here is the only tab. Turn this off to print a plain 4×6 with no tab.</p>
+        <p className="text-[11px] text-stone-500 -mt-1">The carrier prints a plain 4×6 shipping label; {BRAND.product} adds <b>your</b> designed tab (below) on the taller stock. FedEx has no separate fillable tab of its own — its reference block is just part of the 4×6 label — so the tab you design here is the only tab. Turn this off to print a plain 4×6 with no tab.</p>
         <Field label="Doc-tab position on label stock">
           <Select value={dt.stock||"trailing"} onChange={e=>setDt({stock:e.target.value})}>
             <option value="trailing">Trailing (bottom of label)</option>
@@ -11975,7 +12000,7 @@ function Integrations({settings,setSettings,orders,setOrders}){
 }
 function Billing({settings,setSettings}){
   const [n,setN]=useState({carrier:"FedEx",account:"",label:""});
-  const add=()=>{ if(!n.account)return; setSettings({...settings,thirdPartyAccts:[...settings.thirdPartyAccts,{id:"tp"+Date.now(),...n}]}); setN({carrier:"FedEx",account:"",label:""}); };
+  const add=()=>{ if(!n.account)return; setSettings({...settings,thirdPartyAccts:[...(settings.thirdPartyAccts||[]),{id:"tp"+Date.now(),...n}]}); setN({carrier:"FedEx",account:"",label:""}); };
   const prepaid=settings.prepaid||{balance:0,autoRecharge:false,rechargeAt:25,rechargeAmount:100,history:[]};
   const setPrepaid=(patch)=>setSettings({...settings,prepaid:{...prepaid,...patch}});
   const [amt,setAmt]=useState("100");
@@ -12004,7 +12029,7 @@ function Billing({settings,setSettings}){
     </Panel>
     <Panel title="Third-party carrier accounts">
       <p className="text-xs text-stone-400">Bill shipping to someone else's FedEx account number.</p>
-      {settings.thirdPartyAccts.map(t=>(<div key={t.id} className="flex items-center gap-2 text-sm border border-stone-200 rounded px-3 py-2"><span className={`text-xs font-bold ${CARRIER_TINT[t.carrier]}`}>{t.carrier}</span><span className="flex-1 font-mono">{t.account}</span><span className="text-stone-400">{t.label}</span><button onClick={()=>setSettings({...settings,thirdPartyAccts:settings.thirdPartyAccts.filter(x=>x.id!==t.id)})} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button></div>))}
+      {(settings.thirdPartyAccts||[]).map(t=>(<div key={t.id} className="flex items-center gap-2 text-sm border border-stone-200 rounded px-3 py-2"><span className={`text-xs font-bold ${CARRIER_TINT[t.carrier]}`}>{t.carrier}</span><span className="flex-1 font-mono">{t.account}</span><span className="text-stone-400">{t.label}</span><button onClick={()=>setSettings({...settings,thirdPartyAccts:settings.thirdPartyAccts.filter(x=>x.id!==t.id)})} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button></div>))}
       <div className="grid grid-cols-3 gap-2"><Select value={n.carrier} onChange={e=>setN({...n,carrier:e.target.value})}><option>FedEx</option></Select><Input placeholder="Account #" value={n.account} onChange={e=>setN({...n,account:e.target.value})}/><Input placeholder="Label" value={n.label} onChange={e=>setN({...n,label:e.target.value})}/></div>
       <button onClick={add} className="text-sm bg-stone-900 text-white rounded-lg px-4 py-2 font-medium">Add account</button>
     </Panel>
@@ -12375,13 +12400,18 @@ function TwoFactorPanel(){
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState(null);              // {t:"ok"|"err",m}
   const [codes,setCodes]=useState(null);          // freshly-issued backup codes to show ONCE
+  const [e2,setE2]=useState(null);                // email-2FA status {enabled} | null (loading)
+  const [e2sent,setE2sent]=useState(false);const [e2code,setE2code]=useState("");
   const cloud=CLOUD.mode==="cloud"&&!!CLOUD.token;
-  const load=async()=>{ if(!cloud){setStatus({enabled:false,pending:false,backupLeft:0});return;} const r=await cloudCall({action:"totpStatus",token:CLOUD.token}); setStatus(r&&r.ok?{enabled:!!r.enabled,pending:!!r.pending,backupLeft:r.backupLeft||0}:{enabled:false,pending:false,backupLeft:0}); };
+  const load=async()=>{ if(!cloud){setStatus({enabled:false,pending:false,backupLeft:0});setE2({enabled:false});return;} const r=await cloudCall({action:"totpStatus",token:CLOUD.token}); setStatus(r&&r.ok?{enabled:!!r.enabled,pending:!!r.pending,backupLeft:r.backupLeft||0}:{enabled:false,pending:false,backupLeft:0}); const r2=await cloudCall({action:"email2faStatus",token:CLOUD.token}); setE2(r2&&r2.ok?{enabled:!!r2.enabled}:{enabled:false}); };
   useEffect(()=>{load();},[]);
   const begin=async()=>{ setBusy(true); setMsg(null); const r=await cloudCall({action:"totpBegin",token:CLOUD.token}); setBusy(false); if(r&&r.ok){setSetup({secret:r.secret,otpauth:r.otpauth});setCode("");}else setMsg({t:"err",m:(r&&r.error)||"Could not start setup."}); };
   const enable=async()=>{ setBusy(true); setMsg(null); const r=await cloudCall({action:"totpEnable",token:CLOUD.token,code:code.trim()}); setBusy(false); if(r&&r.ok){setSetup(null);setCode("");setMsg({t:"ok",m:"Two-factor authentication is now ON."});if(r.backupCodes)setCodes(r.backupCodes);load();}else setMsg({t:"err",m:(r&&r.error)||"Could not turn on 2FA."}); };
   const disable=async()=>{ const c=window.prompt("Turn OFF two-factor. Enter a current 6-digit code from your authenticator app (or leave blank and use your password on the next prompt):",""); if(c===null)return; let pw=""; if(!String(c).trim()){ pw=window.prompt("Enter your account password to turn off 2FA:","")||""; if(!pw)return; } setBusy(true); setMsg(null); const r=await cloudCall({action:"totpDisable",token:CLOUD.token,code:String(c).trim(),password:pw}); setBusy(false); if(r&&r.ok){setMsg({t:"ok",m:"Two-factor authentication is off."});setCodes(null);load();}else setMsg({t:"err",m:(r&&r.error)||"Could not turn off 2FA."}); };
   const regen=async()=>{ const c=window.prompt("Make a new set of backup codes? This invalidates any old ones. Enter a current 6-digit code (or leave blank to use your password):",""); if(c===null)return; let pw=""; if(!String(c).trim()){ pw=window.prompt("Enter your account password:","")||""; if(!pw)return; } setBusy(true); setMsg(null); const r=await cloudCall({action:"totpBackupRegen",token:CLOUD.token,code:String(c).trim(),password:pw}); setBusy(false); if(r&&r.ok){setCodes(r.backupCodes||[]);setMsg({t:"ok",m:"New backup codes generated — save them now."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not make new codes."}); };
+  const e2begin=async()=>{ setBusy(true);setMsg(null); const r=await cloudCall({action:"email2faBegin",token:CLOUD.token}); setBusy(false); if(r&&r.ok){setE2sent(true);setE2code("");setMsg({t:"ok",m:"We emailed a 6-digit code"+(r.sentTo?" to "+r.sentTo:"")+" — enter it below to turn it on."});}else setMsg({t:"err",m:(r&&r.error)||"Could not send the code."}); };
+  const e2enable=async()=>{ setBusy(true);setMsg(null); const r=await cloudCall({action:"email2faEnable",token:CLOUD.token,code:e2code.trim()}); setBusy(false); if(r&&r.ok){setE2sent(false);setE2code("");setMsg({t:"ok",m:"Email verification is now ON for sign-in."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not enable."}); };
+  const e2disable=async()=>{ const pw=window.prompt("Enter your account password to turn off email verification:","")||""; if(!pw)return; setBusy(true);setMsg(null); const r=await cloudCall({action:"email2faDisable",token:CLOUD.token,password:pw}); setBusy(false); if(r&&r.ok){setMsg({t:"ok",m:"Email verification is off."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not disable."}); };
   if(!cloud) return null;
   const codesText=(codes||[]).join("\n");
   return (<Panel title="Two-factor authentication (2FA)">
@@ -12423,6 +12453,18 @@ function TwoFactorPanel(){
         <button onClick={()=>setCodes(null)} className="text-[11px] rounded px-2 py-1 bg-stone-800 text-white hover:bg-stone-700">I’ve saved them</button>
       </div>
     </div>}
+    <div className="mt-4 pt-4 border-t border-stone-100">
+      <div className="text-sm font-semibold text-stone-800">Or verify by email</div>
+      <p className="text-xs text-stone-500 mt-0.5 mb-2">Prefer not to use an authenticator app? Turn on email verification and we'll email you a 6-digit code each time you sign in. (If both are on, the authenticator app is used.)</p>
+      {e2===null&&<div className="text-sm text-stone-400">Checking…</div>}
+      {e2&&e2.enabled&&<div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm text-emerald-700"><Check className="w-4 h-4"/>Email verification is <b>on</b>.</div><button disabled={busy} onClick={e2disable} className="text-xs rounded px-2.5 py-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200 disabled:opacity-50">Turn off</button></div>}
+      {e2&&!e2.enabled&&!e2sent&&<button disabled={busy} onClick={e2begin} className="text-sm bg-stone-900 text-white rounded-lg px-3 py-2 font-medium hover:bg-stone-800 disabled:opacity-50">{busy?"Sending…":"Turn on email verification"}</button>}
+      {e2&&!e2.enabled&&e2sent&&<div className="flex items-center gap-2">
+        <input value={e2code} onChange={e=>setE2code(e.target.value.replace(/\D/g,"").slice(0,6))} onKeyDown={e=>e.key==="Enter"&&e2enable()} placeholder="123456" inputMode="numeric" className="w-32 border border-stone-300 rounded-lg px-3 py-2 text-sm tracking-[0.3em] text-center outline-none focus:border-[#0099FF]"/>
+        <button disabled={busy||e2code.length!==6} onClick={e2enable} className="text-sm bg-emerald-600 text-white rounded-lg px-3 py-2 font-medium hover:bg-emerald-700 disabled:opacity-50">Confirm code</button>
+        <button disabled={busy} onClick={()=>{setE2sent(false);setE2code("");}} className="text-xs text-stone-400 hover:text-stone-600">Cancel</button>
+      </div>}
+    </div>
     {msg&&<div className={`text-sm mt-2 ${msg.t==="ok"?"text-emerald-700":"text-rose-600"}`}>{msg.m}</div>}
   </Panel>);
 }
@@ -12562,11 +12604,11 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
   const togTab=(k)=>{const nx=new Set(hiddenTabs); nx.has(k)?nx.delete(k):nx.add(k); set("hiddenTabs",[...nx]);};
   const order=(c.tabOrder&&c.tabOrder.length)?c.tabOrder:tabChoices.map(x=>x[0]);
   const move=(k,dir)=>{const a=[...order];const i=a.indexOf(k);const j=i+dir;if(i<0||j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];set("tabOrder",a);};
-  const [cs,setCs]=useState(only||"services");
+  const [cs,setCs]=useState(only||(deployMode?"services":"appearance"));
   /* Ship screen is its own top-level Settings section now (v376). It still shows as a tab in
      deployMode so the admin team-deploy screen keeps every option in one place. `only` renders a
      single panel with no tab bar — used by Settings → Ship screen. */
-  const CTABS=[["services","Services"],...(deployMode?[["ship","Ship screen"],["orders","Orders & lists"]]:[]),["appearance","Appearance"]];   // Ship screen + Orders are their own top-level Settings sections now (still tabs in deployMode so team-deploy keeps every option in one place). Packing-slip message/footer moved to Settings → Print settings → Packing slip (v393). Autopilot toggles → Print settings (v355). Labels & printing → Printer settings (v281).
+  const CTABS=[...(deployMode?[["services","Services"],["ship","Ship screen"],["orders","Orders & lists"]]:[]),["appearance","Appearance"]];   // Services (rate view + service on/off) moved under Settings → Ship screen; Customizations keeps Appearance/tabs/branding   // Ship screen + Orders are their own top-level Settings sections now (still tabs in deployMode so team-deploy keeps every option in one place). Packing-slip message/footer moved to Settings → Print settings → Packing slip (v393). Autopilot toggles → Print settings (v355). Labels & printing → Printer settings (v281).
   return (<div className="max-w-2xl space-y-4">
     <DraftBar dirty={_cd.dirty} onSave={_cd.save} onUndo={_cd.undo} onReset={()=>{ if(window.confirm("Reset all customizations to their defaults? You'll still need to click Save to keep it.")) _cd.reset(); }} resetLabel="Reset to defaults" savedNote="Customizations saved"/>
     {!deployMode&&!only&&<div className="text-sm text-stone-500">Make {BRAND.product} yours. Every option here changes the app immediately for <b>your login only</b>.</div>}
@@ -12605,7 +12647,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
       </div>
     </Panel>}
 
-    {cs==="services"&&<Panel title="Rates & services">
+    {(cs==="services"||only==="ship")&&<Panel title="Rates & services">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         {Sel({k:"defaultView",label:"Default rate view",opts:[["cheapest","Cheapest first"],["carrier","Grouped by carrier"]]})}
         {(isAdmin||deployMode)&&<div className="rounded-lg border border-blue-100 bg-blue-50/40 p-2.5"><div className="text-[10px] uppercase tracking-widest text-blue-400 mb-1.5 flex items-center gap-1"><ShieldCheck className="w-3 h-3"/>Admin only</div>{Tog({k:"showRateViewToggle",label:"Show the Cheapest / By carrier switch on Ship",hint:"Off = the rate list just uses the default view above, with no toggle or 'enter ZIP & weight' hint shown. Only you (admin) can turn this on."})}</div>}
@@ -12628,12 +12670,12 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
     {cs==="orders"&&<Panel title="Orders page">
       <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Columns — untick to hide completely</div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-        {[["age","Age"],["date","Order date"],["items","Items"],["recipient","Recipient"],["requested","Requested"],["estRate","Est. Rate"],["qty","Qty"],["total","Order total"],["status","Status"],...(c.autopilotPreview?[["autopilot","Autopilot"]]:[])].map(([k,l])=>{
+        {[["age","Age"],["date","Order date"],["items","Items"],["recipient","Recipient"],["requested","Requested"],["estRate","Est. rate"],["qty","Qty"],["total","Order total"],["status","Status"],...(c.autopilotPreview?[["autopilot","Autopilot"]]:[])].map(([k,l])=>{
           const hidden=(c.orderCols||[]).includes(k);
           return <label key={k} className="flex items-center gap-1.5 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!hidden} onChange={()=>{const nx=new Set(c.orderCols||[]);hidden?nx.delete(k):nx.add(k);set("orderCols",[...nx]);}} className="accent-[#0086E0]"/><span className={hidden?"text-stone-300":""}>{l}</span></label>;
         })}
       </div>
-      <div className="text-[11px] text-stone-400 mt-1.5">Order # and actions always show. Shipped orders never show Autopilot or Est. Rate — those only mean something before the label is booked.</div>
+      <div className="text-[11px] text-stone-400 mt-1.5">Order # and actions always show. Shipped orders never show Autopilot or Est. rate — those only mean something before the label is booked.</div>
       <div className="border-t border-stone-100 mt-3 pt-3 grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         {Tog({k:"autopilotPreview",label:"Show an Autopilot preview column",hint:"Adds a column showing what your Autopilot rules would pick for each order — the service, a hold, or 'no rule matches' — before you ship. Runs your real rules, updates live."})}
         {Sel({k:"density",label:"List density",opts:[["comfortable","Comfortable"],["compact","Compact — more rows per screen"]]})}
@@ -13435,7 +13477,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
         <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400"/>
         <input value={q} onChange={e=>{setQ(e.target.value);setOpen(true);}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder={(addresses&&addresses.length)?`Address book — ${addresses.length} saved…`:"Search address book…"} className="w-full bg-white border border-stone-200 rounded pl-8 pr-8 py-1.5 text-[13px] outline-none focus:border-[#0099FF] placeholder-stone-300"/>
         <button type="button" onMouseDown={(e)=>{e.preventDefault();setOpen(o=>!o);}} className="absolute right-2 top-1.5 text-stone-400 hover:text-[#0086E0]" title="Show all saved addresses"><ChevronDown className={`w-4 h-4 transition-transform ${open?"rotate-180":""}`}/></button>
-        {open&&matches.length===0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg px-3 py-2.5 text-xs text-stone-400">{(addresses&&addresses.length)?"No matches — try fewer letters.":"Nothing saved yet. Fill in an address and hit “Save to Address Book” — it’ll be one click next time."}</div>}
+        {open&&matches.length===0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg px-3 py-2.5 text-xs text-stone-400">{(addresses&&addresses.length)?"No matches — try fewer letters.":"Nothing saved yet. Fill in an address and hit “Save to Address book” — it’ll be one click next time."}</div>}
         {open&&matches.length>0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-64 overflow-auto">
           <div className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50 border-b border-stone-100 sticky top-0">{q.trim()?`${matches.length} match${matches.length===1?"":"es"}`:`${addresses.length} saved address${addresses.length===1?"":"es"}`}</div>
           <div className="divide-y divide-stone-100">

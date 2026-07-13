@@ -167,7 +167,7 @@ function consumeBackup(list, code) {
 const backupLeft = (list) => (Array.isArray(list) ? list : []).filter((e) => e && !e.used).length;
 
 /* ── users store hygiene: hashes never leave; plaintext never stored ── */
-const stripUsers = (arr) => (Array.isArray(arr) ? arr : []).map((u) => ({ ...u, password: "", passHash: undefined, totp: u && u.totp ? { enabled: !!u.totp.enabled, backupLeft: backupLeft(u.totp.backup) } : undefined }));
+const stripUsers = (arr) => (Array.isArray(arr) ? arr : []).map((u) => ({ ...u, password: "", passHash: undefined, totp: u && u.totp ? { enabled: !!u.totp.enabled, backupLeft: backupLeft(u.totp.backup) } : undefined, email2fa: u && u.email2fa ? { enabled: !!u.email2fa.enabled } : undefined }));
 function mergeUsersForWrite(incoming, current) {
   const cur = Array.isArray(current) ? current : [];
   // Match on the STABLE id first (fall back to email) so renaming a user's email doesn't lose
@@ -184,8 +184,31 @@ function mergeUsersForWrite(incoming, current) {
     // 2FA secret is never sent to the client (stripUsers removes it) — a store write must NOT wipe it.
     if (existing && existing.totp) out.totp = existing.totp;
     else delete out.totp;
+    // Email 2FA is server-managed like the TOTP secret — a client store write must NOT enable/disable it.
+    if (existing && existing.email2fa) out.email2fa = existing.email2fa;
+    else delete out.email2fa;
     return out;
   });
+}
+
+/* ── email 2FA helpers: a 6-digit code emailed at sign-in (alternative to the authenticator app) ── */
+const otpHash = (c) => crypto.createHash("sha256").update("otp:" + String(c)).digest("hex");
+const maskEmail = (e) => { const s = String(e || ""); const at = s.indexOf("@"); if (at < 1) return s; return s[0] + "***" + s.slice(at); };
+async function sendOtpCode(event, to, code) {
+  const key = (process.env.RESEND_API_KEY || "").trim();
+  if (!key) return { ok: false, configured: false };
+  const reqOrigin = String((event.headers && (event.headers.origin || event.headers.Origin)) || "").replace(/\/+$/, "");
+  const BRANDS = { "https://shippingcloud.net": "ShippingCloud", "https://www.shippingcloud.net": "ShippingCloud", "https://freightwireship.com": "Freightwire", "https://www.freightwireship.com": "Freightwire", "https://admin.freightwireship.com": "Freightwire Admin" };
+  const product = BRANDS[reqOrigin] || "ShippingCloud";
+  const appUrl = BRANDS[reqOrigin] ? reqOrigin : (process.env.APP_URL || "").replace(/\/+$/, "");
+  const isFw = product !== "ShippingCloud";
+  const brandName = isFw ? "Freightwire ShippingHub" : "ShippingCloud";
+  const header = isFw ? ('<img src="' + appUrl + '/fw-logo.png" alt="Freightwire" style="height:30px;vertical-align:middle;border:0;"> <span style="font-size:16px;font-weight:800;vertical-align:middle;color:#1F1B18;">SHIPPING<span style="color:#0086E0;">HUB</span></span>') : 'Shipping<span style="color:#0086E0;">Cloud</span>';
+  const baseFrom = (process.env.EMAIL_FROM || "ShippingCloud <notify@shippingcloud.net>").trim();
+  const fromAddr = (baseFrom.match(/<([^>]+)>/) || [null, baseFrom])[1];
+  const from = product.replace(" Admin", "") + " <" + fromAddr + ">";
+  const html = `<body style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1c1917;"><div style="max-width:420px;margin:0 auto;padding:24px 20px;text-align:center;"><div style="font-size:18px;font-weight:800;color:#0c4a6e;">${header}</div><p style="font-size:14px;color:#57534e;margin-top:16px;">Your sign-in verification code:</p><div style="font-size:32px;font-weight:800;letter-spacing:8px;color:#0c4a6e;margin:10px 0;">${code}</div><p style="font-size:12px;color:#a8a29e;">Expires in 10 minutes. If you didn't try to sign in, ignore this email and change your password.</p></div></body>`;
+  try { const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key }, body: JSON.stringify({ from, to: [to], subject: code + " is your " + brandName + " sign-in code", html }) }); return { ok: r.ok }; } catch (e) { return { ok: false }; }
 }
 
 /* ── uploaded files (UPS invoices from signup) live in Netlify Blobs ── */
@@ -297,6 +320,28 @@ exports.handler = async (event) => {
           if (!bw.ok) return J({ ok: false, needsTotp: true, error: "Couldn't verify your backup code just now — try again in a moment." });
         }
       }
+      /* Email 2FA (opt-in alternative to the authenticator app). Only when TOTP is NOT enabled.
+         No code on the request → email a fresh one and ask for it; a wrong/expired code re-prompts. */
+      if (u.email2fa && u.email2fa.enabled && !(u.totp && u.totp.enabled)) {
+        const raw = String(body.code || "").replace(/\s+/g, "");
+        const p = u.email2fa.pending;
+        const sendFresh = async (msg) => {
+          const code = String(Math.floor(100000 + Math.random() * 900000));
+          await putStores({ users: users.map((x) => x && x.id === u.id ? { ...x, email2fa: { enabled: true, pending: { hash: otpHash(code), exp: Date.now() + 10 * 60 * 1000, tries: 0 } } } : x) });
+          const s = await sendOtpCode(event, u.email, code);
+          return J({ ok: false, needsEmailCode: true, sentTo: maskEmail(u.email), error: s.ok ? msg : "Couldn't send your sign-in code email — try again in a moment." });
+        };
+        if (!raw) return await sendFresh("We emailed a 6-digit code to " + maskEmail(u.email) + ".");
+        if (!p || !p.hash || !p.exp || Date.now() > p.exp) return await sendFresh("That code expired — we sent a new one.");
+        if ((p.tries || 0) >= 6) return await sendFresh("Too many tries — we sent a fresh code.");
+        let match = false;
+        try { const a = Buffer.from(otpHash(raw), "hex"), b = Buffer.from(p.hash, "hex"); match = a.length === b.length && crypto.timingSafeEqual(a, b); } catch (e) { match = false; }
+        if (!match) {
+          await putStores({ users: users.map((x) => x && x.id === u.id ? { ...x, email2fa: { enabled: true, pending: { ...p, tries: (p.tries || 0) + 1 } } } : x) });
+          return J({ ok: false, needsEmailCode: true, error: "That code isn't right — check the latest email." });
+        }
+        await putStores({ users: users.map((x) => x && x.id === u.id ? { ...x, email2fa: { enabled: true } } : x) });   // valid — clear the used code
+      }
       if ((u.role || "customer") === "customer") {
         const curC = await getStore("clients");
         if (curC.ok) {
@@ -304,7 +349,7 @@ exports.handler = async (event) => {
           if (healed) u = { ...u, clientId: healed.clientId };
         }
       }
-      return J({ ok: true, token: makeToken(u), user: { ...u, password: "", passHash: undefined, totp: u.totp ? { enabled: !!u.totp.enabled, backupLeft: backupLeft(u.totp.backup) } : undefined } });
+      return J({ ok: true, token: makeToken(u), user: { ...u, password: "", passHash: undefined, totp: u.totp ? { enabled: !!u.totp.enabled, backupLeft: backupLeft(u.totp.backup) } : undefined, email2fa: u.email2fa ? { enabled: !!u.email2fa.enabled } : undefined } });
     }
 
     /* ── request access (no auth): stores a pending signup for admin approval ── */
@@ -404,9 +449,11 @@ exports.handler = async (event) => {
       const reqOrigin = String((event.headers && (event.headers.origin || event.headers.Origin)) || "").replace(/\/+$/, "");
       const appUrl = ORIGIN_BRANDS[reqOrigin] ? reqOrigin : (process.env.APP_URL || "").replace(/\/+$/, "");
       const product = ORIGIN_BRANDS[reqOrigin] || "ShippingCloud";
-      const wordmark = product === "ShippingCloud"
-        ? 'Shipping<span style="color:#0086E0;">Cloud</span>'
-        : ('Freight<span style="color:#0086E0;">wire</span>' + (product === "Freightwire Admin" ? ' <span style="font-weight:600;color:#78716c;font-size:13px;">Admin</span>' : ''));
+      const isFw = product !== "ShippingCloud";
+      const brandName = isFw ? "Freightwire ShippingHub" : "ShippingCloud";
+      const wordmark = isFw
+        ? ('<img src="' + appUrl + '/fw-logo.png" alt="Freightwire" style="height:34px;vertical-align:middle;border:0;"> <span style="font-size:17px;font-weight:800;letter-spacing:.04em;vertical-align:middle;color:#1F1B18;">SHIPPING<span style="color:#0086E0;">HUB</span></span>' + (product === "Freightwire Admin" ? ' <span style="font-weight:600;color:#78716c;font-size:13px;">Admin</span>' : ''))
+        : 'Shipping<span style="color:#0086E0;">Cloud</span>';
       const link = appUrl + "/?reset=" + encodeURIComponent(rtoken);
       const key = (process.env.RESEND_API_KEY || "").trim();
       if (!key) { console.log("[requestReset] NOT SENT — RESEND_API_KEY is missing on this site. Set it (as a normal, non-secret var) and redeploy."); return J({ ...generic, configured: false }); }
@@ -417,7 +464,7 @@ exports.handler = async (event) => {
       const from = product.replace(" Admin", "") + " <" + _fromAddr + ">";
       try {
         const rr = await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
-          body: JSON.stringify({ from, to: [email], subject: isWelcome ? ("Welcome to " + product + " — set your password") : ("Reset your " + product + " password"),
+          body: JSON.stringify({ from, to: [email], subject: isWelcome ? ("Welcome to " + brandName + " — set your password") : ("Reset your " + brandName + " password"),
             html: `<body style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;"><div style="max-width:480px;margin:0 auto;padding:28px 20px;"><div style="font-size:20px;font-weight:800;color:#0c4a6e;">${wordmark}</div>${isWelcome?`<p style="font-size:14px;color:#57534e;">An account was created for you. Click below to choose your password and sign in. This link works for 72 hours.</p>`:`<p style="font-size:14px;color:#57534e;">Someone (hopefully you) asked to reset the password for this account. This link works for 1 hour.</p>`}<a href="${link}" style="display:inline-block;background:#0086E0;color:#fff;text-decoration:none;font-weight:600;border-radius:8px;padding:10px 18px;font-size:14px;">${isWelcome?"Set my password":"Choose a new password"}</a>${isWelcome?"":`<p style="font-size:11px;color:#a8a29e;margin-top:16px;">Didn\u2019t ask for this? Ignore this email \u2014 nothing changes.</p>`}</div></body>` }) });
         const rt = await rr.text().catch(() => "");
         if (rr.ok) console.log("[requestReset] sent OK via Resend from <" + from + "> (origin " + (reqOrigin || "none") + ")");
@@ -509,6 +556,46 @@ exports.handler = async (event) => {
         const merged = allUsers.map((x) => x && x.id === auth.uid ? { ...x, totp: undefined } : x);
         const w = await putStores({ users: merged });
         if (!w.ok) return J({ ok: false, error: "Could not turn off 2FA — try again." });
+        return J({ ok: true, enabled: false });
+      }
+    }
+
+    /* ── email 2FA management (self-service): send a code to your own email, confirm, enable/disable ── */
+    if (action === "email2faBegin" || action === "email2faEnable" || action === "email2faDisable" || action === "email2faStatus") {
+      const curU = await getStore("users");
+      if (!curU.ok) return J({ ok: false, error: "Database error reading accounts." });
+      const allUsers = Array.isArray(curU.value) ? curU.value : [];
+      const me = allUsers.find((x) => x && x.id === auth.uid) || null;
+      if (!me) return J({ ok: false, error: "Account not found." });
+      if (action === "email2faStatus") return J({ ok: true, enabled: !!(me.email2fa && me.email2fa.enabled), email: maskEmail(me.email) });
+      if (action === "email2faBegin") {
+        if (!me.email) return J({ ok: false, error: "Your account has no email on file." });
+        const code = String(Math.floor(100000 + Math.random() * 900000));
+        const merged = allUsers.map((x) => x && x.id === auth.uid ? { ...x, email2fa: { ...(x.email2fa || {}), pending: { hash: otpHash(code), exp: Date.now() + 10 * 60 * 1000, tries: 0 } } } : x);
+        const w = await putStores({ users: merged });
+        if (!w.ok) return J({ ok: false, error: "Could not start setup — try again." });
+        const s = await sendOtpCode(event, me.email, code);
+        if (!s.ok) return J({ ok: false, error: s.configured === false ? "Email sending isn't set up on this site yet (RESEND_API_KEY)." : "Couldn't send the code email — try again." });
+        return J({ ok: true, sentTo: maskEmail(me.email) });
+      }
+      if (action === "email2faEnable") {
+        const p = me.email2fa && me.email2fa.pending;
+        if (!p || !p.exp || Date.now() > p.exp) return J({ ok: false, error: "That code expired — start again." });
+        const raw = String(body.code || "").replace(/\s+/g, "");
+        let match = false;
+        try { const a = Buffer.from(otpHash(raw), "hex"), b = Buffer.from(p.hash, "hex"); match = a.length === b.length && crypto.timingSafeEqual(a, b); } catch (e) { match = false; }
+        if (!match) return J({ ok: false, error: "That code isn't right — check the latest email." });
+        const merged = allUsers.map((x) => x && x.id === auth.uid ? { ...x, email2fa: { enabled: true } } : x);
+        const w = await putStores({ users: merged });
+        if (!w.ok) return J({ ok: false, error: "Could not enable — try again." });
+        return J({ ok: true, enabled: true });
+      }
+      if (action === "email2faDisable") {
+        const pw = String(body.password || "");
+        if (!(pw && checkPw(pw, me.passHash))) return J({ ok: false, error: "Enter your password to turn off email verification." });
+        const merged = allUsers.map((x) => x && x.id === auth.uid ? { ...x, email2fa: undefined } : x);
+        const w = await putStores({ users: merged });
+        if (!w.ok) return J({ ok: false, error: "Could not disable — try again." });
         return J({ ok: true, enabled: false });
       }
     }

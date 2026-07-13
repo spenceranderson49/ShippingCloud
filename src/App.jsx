@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v514";
+const BUILD_TAG="addr-v515";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2875,7 +2875,7 @@ const CUSTOM_DEFAULTS={
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
   logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,skipBookedSummary:false,autoRulesOnShip:true,autoRulesInBatch:false,autoBookBatch:false,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],theme:"light",accent:"",
   refRequired:false,invRequired:false,poRequired:false,deptRequired:false,refLocked:false,invLocked:false,poLocked:false,deptLocked:false,hideDept:false,
-  confetti:"page",seasonal:false,loginBg:"",appBg:"",headerBg:"",pageBg:"",navBg:"",
+  confetti:"page",seasonal:false,
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
 const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
@@ -3014,7 +3014,7 @@ function Login({users,onLogin,brand}){
     setMode("signin");
   };
   return (
-    <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4" style={{fontFamily:"Inter,system-ui,sans-serif",...(lsGet("loginBg","")?{backgroundImage:`url(${lsGet("loginBg","")})`,backgroundSize:"cover",backgroundPosition:"center"}:{})}}>
+    <div className="min-h-screen bg-stone-100 flex items-center justify-center p-4" style={{fontFamily:"Inter,system-ui,sans-serif"}}>
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center gap-2 mb-6">
           <div className="flex items-center gap-2">
@@ -5756,7 +5756,7 @@ function Landing({onAuth}){
     <div className="font-semibold text-stone-900 text-[15px] mb-1.5">{title}</div>
     <div className="text-[13.5px] text-stone-500 leading-relaxed">{children}</div>
   </div>);
-  if(BRAND.fw) return (<div className="min-h-screen relative overflow-hidden flex flex-col items-center justify-center px-5 py-10" style={{background:"#faf8f4",...(lsGet("loginBg","")?{backgroundImage:`url(${lsGet("loginBg","")})`,backgroundSize:"cover",backgroundPosition:"center"}:{})}}>
+  if(BRAND.fw) return (<div className="min-h-screen relative overflow-hidden flex flex-col items-center justify-center px-5 py-10" style={{background:"#faf8f4"}}>
     <style>{`@keyframes fwRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}@keyframes fwDrift{0%,100%{transform:translate(-50%,0)}50%{transform:translate(calc(-50% + 18px),-12px)}}`}</style>
     <div className="absolute inset-0 pointer-events-none" style={{background:"repeating-linear-gradient(-35deg,transparent 0 70px,rgba(30,155,240,.05) 70px 72px)"}}/>
     <div className="absolute pointer-events-none" style={{width:640,height:640,borderRadius:"50%",top:-180,left:"50%",background:"radial-gradient(circle,rgba(30,155,240,.14),transparent 65%)",animation:"fwDrift 12s ease-in-out infinite"}}/>
@@ -6399,22 +6399,26 @@ function AppInner(){
   },[settingsRaw,deployedCustom]);
   const setSettings=(v)=>setSettingsRaw(p=>scrubLegacyDefaults(typeof v==="function"?v(scrubLegacyDefaults(p)):v));
   const custom=cz(settings);
-  /* Live look preview: while the Appearance editor is open it broadcasts its DRAFT surface colors
-     + accent over the sc-look-preview event, so the real header/nav/page (and the brand logo tint)
-     update as you pick — not only after Save. srf falls back to committed settings otherwise. */
+  /* Live look preview: while the Appearance editor is open it broadcasts its DRAFT accent over the
+     sc-look-preview event, so the brand logo tint updates as you pick — not only after Save.
+     srf falls back to committed settings otherwise. */
   const [lookPreview,setLookPreview]=useState(null);
   useEffect(()=>{ const h=(e)=>{ const d=e&&e.detail; setLookPreview(d&&typeof d==="object"?d:null); }; window.addEventListener("sc-look-preview",h); return ()=>window.removeEventListener("sc-look-preview",h); },[]);
   const srf=lookPreview||custom;
   useEffect(()=>{ try{document.documentElement.style.fontSize=(custom.fontScale&&custom.fontScale!==100)?(custom.fontScale/100*16)+"px":"";}catch(e){} },[custom.fontScale]);
   useEffect(()=>{ SLIP_OPTS.thanks=custom.slipThanks||""; SLIP_OPTS.footer=custom.slipFooter||""; CI_OPTS.taxId=settings.taxId||""; },[custom.slipThanks,custom.slipFooter,settings.taxId]);
-  useEffect(()=>{ try{ if(custom.loginBg)lsSet("loginBg",custom.loginBg); }catch(e){} },[custom.loginBg]);
   useEffect(()=>{ try{ const el=document.documentElement;
     el.classList.toggle("dark",custom.theme==="dark");
     el.classList.toggle("grey",custom.theme==="grey");
-    el.classList.toggle("hasbg",!!custom.appBg);
     if(custom.accent){ el.setAttribute("data-accent","1"); el.style.setProperty("--acc",custom.accent); el.style.setProperty("--accD",shadeHex(custom.accent,-0.14)); el.style.setProperty("--accL",shadeHex(custom.accent,0.18)); }
     else { el.removeAttribute("data-accent"); el.style.removeProperty("--acc"); }
   }catch(e){} },[custom.theme,custom.accent]);
+  /* Browser-tab icon = the same cloud as the header logo, repainted to the accent (ShippingCloud
+     brands only — Freightwire keeps its own mark). Falls back to the brand blue when no accent. */
+  useEffect(()=>{ try{ if(BRAND.fw)return; const link=document.querySelector('link[rel="icon"]'); if(!link)return;
+    const col=(srf.accent||custom.accent||"#0086E0").replace("#","%23");
+    link.href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 50 50'%3E%3Crect width='50' height='50' rx='11' fill='white'/%3E%3Cpath transform='translate(0 7)' d='M15 31h22a9 9 0 0 0 2.7-17.6A12.5 12.5 0 0 0 15.5 9 9.8 9.8 0 0 0 15 31Z' fill='"+col+"'/%3E%3C/svg%3E";
+  }catch(e){} },[custom.accent,srf.accent]);
   useEffect(()=>{ const st=custom.startTab; if(st&&st!=="ship"&&ALL_TABS.some(x=>x[0]===st))setTab(st); },[]);   // land on the user's chosen start page
   const [hkHelp,setHkHelp]=useState(false);
   useEffect(()=>{ if(custom.hotkeys===false)return;
@@ -6782,7 +6786,7 @@ function AppInner(){
       </div>}
       <ConfettiHost mode={custom.confetti||"page"}/>
       <SaveToast/>
-      <header style={srf.headerBg?{background:srf.headerBg}:undefined} className={"border-b border-stone-200 sticky z-30 backdrop-blur "+(srf.headerBg?"":"bg-white/90 ")+((adminReturn||isDemo)?"top-9":"top-0")}>
+      <header className={"border-b border-stone-200 sticky z-30 backdrop-blur bg-white/90 "+((adminReturn||isDemo)?"top-9":"top-0")}>
         <div className="px-3 sm:px-4 h-14 flex items-center gap-2 sm:gap-3 relative">
           <button onClick={()=>setNavOpen(true)} className="md:hidden p-2 -ml-1 rounded-lg hover:bg-stone-100 text-stone-600" aria-label="Menu"><Layers className="w-5 h-5"/></button>
 
@@ -6791,7 +6795,7 @@ function AppInner(){
               <FreightwireShipHub logoH={Math.round(30*((custom.logoScale||100)/100))} sub={false} accent={srf.accent||""}/>
             </button>
           </>):(
-          <button onClick={()=>setTab("ship")} title="Back to Ship" className="cursor-pointer flex items-center shrink-0">{(!brand.name1||brand.name1==="Shipping")&&(!brand.name2||brand.name2==="Cloud")?<ShipCloudLogo size={Math.round(22*((custom.logoScale||100)/100))}/>:<span className="font-extrabold tracking-tight text-[20px] sm:text-[26px]" style={{color:(custom.theme==="dark"||custom.theme==="grey")?"#F5F5F4":brand.dark}}>{brand.name1}<span style={{color:custom.accent||brand.primary}}>{brand.name2}</span></span>}</button>)}
+          <button onClick={()=>setTab("ship")} title="Back to Ship" className="cursor-pointer flex items-center shrink-0">{(!brand.name1||brand.name1==="Shipping")&&(!brand.name2||brand.name2==="Cloud")?<ShipCloudLogo size={Math.round(22*((custom.logoScale||100)/100))} accent={srf.accent||custom.accent||"#0086E0"} dark={(custom.theme==="dark"||custom.theme==="grey")?"#F5F5F4":undefined}/>:<span className="font-extrabold tracking-tight text-[20px] sm:text-[26px]" style={{color:(custom.theme==="dark"||custom.theme==="grey")?"#F5F5F4":brand.dark}}>{brand.name1}<span style={{color:custom.accent||brand.primary}}>{brand.name2}</span></span>}</button>)}
           {custom.seasonal!==false&&seasonalEmoji()&&<span className="text-base select-none shrink-0 -ml-0.5" title="Seasonal touch — turn off in Customizations">{seasonalEmoji()}</span>}
           {brand.showLogo&&brand.logo&&<span className="hidden sm:flex items-center gap-1.5 text-stone-400 text-xs"><span className="w-px h-5 bg-stone-200"/>{brand.partnerLabel}<img src={brand.logo} alt="partner" className="h-3 w-auto object-contain"/></span>}
           <div className="flex-1"/>
@@ -6807,7 +6811,7 @@ function AppInner(){
       {appLabel&&<LabelPreviewModal data={appLabel} settings={settings} onClose={()=>setAppLabel(null)}/>}
       {navOpen&&<div className="md:hidden fixed inset-0 z-40 flex" role="dialog">
         <div className="absolute inset-0 bg-stone-900/40" onClick={()=>setNavOpen(false)}/>
-        <aside style={srf.navBg?{background:srf.navBg}:undefined} className={`relative w-64 ${srf.navBg?"":"bg-white"} h-full shadow-xl overflow-y-auto`}>
+        <aside className="relative w-64 bg-white h-full shadow-xl overflow-y-auto">
           <div className="flex items-center justify-between px-4 h-14 border-b border-stone-200"><button onClick={()=>{setTab("ship");setNavOpen(false);}} title="Back to Ship" className="font-extrabold tracking-tight flex items-center gap-2" style={{color:brand.dark}}>{BRAND.fw?<><img src={FW_LOGO} alt="Freightwire" className="h-6 w-7 object-cover object-left" draggable={false}/><span className="w-px h-5 bg-stone-300"/><span className="text-[15px] leading-none text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></span></>:<span>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></span>}</button><button onClick={()=>setNavOpen(false)} className="p-1.5 rounded hover:bg-stone-100"><X className="w-5 h-5 text-stone-500"/></button></div>
           <nav className="p-2 space-y-0.5">
             {TABS.map(([id,l,Icon])=>(
@@ -6823,7 +6827,7 @@ function AppInner(){
         </aside>
       </div>}
       <div className="flex flex-1">
-        <aside style={srf.navBg?{background:srf.navBg}:undefined} className={`hidden md:block w-52 shrink-0 border-r border-stone-200 ${srf.navBg?"":"bg-white"} min-h-screen`}>
+        <aside className="hidden md:block w-52 shrink-0 border-r border-stone-200 bg-white min-h-screen">
           <nav className="p-2 space-y-0.5 sticky top-14">
             {TABS.map(([id,l,Icon])=>(
               <React.Fragment key={id}>
@@ -6836,7 +6840,7 @@ function AppInner(){
             {!isAdmin&&!isDemo&&!isCompanyAdmin&&CLOUD.mode==="cloud"&&<CompanyAdminRequestButton currentUser={currentUser}/>}
           </nav>
         </aside>
-        <main className="flex-1 min-w-0 overflow-x-clip px-3 sm:px-6 py-4 sm:py-6" style={(srf.appBg||srf.pageBg)?{...(srf.pageBg?{backgroundColor:srf.pageBg}:{}),...(srf.appBg?{backgroundImage:`url(${srf.appBg})`,backgroundSize:"cover",backgroundPosition:"center",backgroundAttachment:"fixed"}:{})}:undefined}>
+        <main className="flex-1 min-w-0 overflow-x-clip px-3 sm:px-6 py-4 sm:py-6">
           <TabBoundary key={tab} name={tab}>
           {tab==="dashboard"&&<Dashboard shipments={shipments} orders={orders} returns={returns} goTab={setTab}/>}
           {tab==="ship"&&<Ship client={client} priceAs={adminPriceAs} setPriceAs={setAdminPriceAs} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={ruleset} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders} currentUser={currentUser} setUsers={setUsers} setCurrentUser={setCurrentUser} clients={clients}/>}
@@ -12681,10 +12685,10 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
   }catch(e){} };
   useEffect(()=>{ _applyLook(c||{}); },[c&&c.theme,c&&c.accent,c&&c.fontScale]);
   useEffect(()=>()=>{ _applyLook(_commitRef.current||{}); },[]);
-  /* Broadcast draft surface colors + accent so the live app chrome (header/nav/page + logo tint)
-     previews them before Save. Only the main Customizations editor drives this — not the admin
-     deploy editor or the trimmed Ship-screen section. Cleared on unmount so nothing sticks. */
-  useEffect(()=>{ if(only||deployMode)return; try{ window.dispatchEvent(new CustomEvent("sc-look-preview",{detail:{headerBg:c.headerBg||"",navBg:c.navBg||"",pageBg:c.pageBg||"",appBg:c.appBg||"",accent:c.accent||""}})); }catch(e){} },[only,deployMode,c&&c.headerBg,c&&c.navBg,c&&c.pageBg,c&&c.appBg,c&&c.accent]);
+  /* Broadcast the draft accent so the live app chrome (logo tint + tab icon) previews it before
+     Save. Only the main Customizations editor drives this — not the admin deploy editor or the
+     trimmed Ship-screen section. Cleared on unmount so nothing sticks. */
+  useEffect(()=>{ if(only||deployMode)return; try{ window.dispatchEvent(new CustomEvent("sc-look-preview",{detail:{accent:c.accent||""}})); }catch(e){} },[only,deployMode,c&&c.accent]);
   useEffect(()=>()=>{ if(only||deployMode)return; try{ window.dispatchEvent(new CustomEvent("sc-look-preview",{detail:null})); }catch(e){} },[]);
   /* called as {Tog({...})} like Num/Sel — an inline component type remounts per toggle */
   const Tog=({k,label,hint,invert})=>(<label className="flex items-start gap-2 text-sm text-stone-700 cursor-pointer">
@@ -12840,7 +12844,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
       <div className="mt-3 rounded-xl border border-stone-200 bg-white p-3">
         <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Live preview — updates as you click & drag; hit Save to keep it</div>
         <div className="flex items-center gap-3 flex-wrap border border-stone-100 rounded-lg px-3 py-2 bg-stone-50">
-          {BRAND.fw?<FreightwireShipHub logoH={Math.round(30*((c.logoScale||100)/100))} sub={false} accent={c.accent||""}/>:<ShipCloudLogo size={Math.round(22*((c.logoScale||100)/100))}/>}
+          {BRAND.fw?<FreightwireShipHub logoH={Math.round(30*((c.logoScale||100)/100))} sub={false} accent={c.accent||""}/>:<ShipCloudLogo size={Math.round(22*((c.logoScale||100)/100))} accent={c.accent||"#0086E0"}/>}
           {settings.companyLogo&&<img src={settings.companyLogo} alt="Company logo preview" style={{height:Math.round(28*((c.companyLogoScale||100)/100))+"px"}} className="w-auto max-w-[160px] object-contain"/>}
           <span className="flex-1"/>
           <button type="button" className="text-xs text-white rounded-lg px-3 py-1.5 font-semibold pointer-events-none" style={{background:c.accent||"#0086E0"}}>Accent button</button>
@@ -12848,7 +12852,10 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
         </div>
       </div>
       <div className="border-t border-stone-100 mt-3 pt-3">
-        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Accent color</div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400">Accent color</div>
+          <button onClick={()=>set("accent","")} className="text-[11px] text-stone-500 hover:text-rose-600 flex items-center gap-1 border border-stone-200 rounded-lg px-2 py-1"><RotateCcw className="w-3 h-3"/>Reset accent</button>
+        </div>
         <div className="flex items-center gap-2 flex-wrap">
           {[["","#0086E0"],["#7C3AED","#7C3AED"],["#059669","#059669"],["#DC2626","#DC2626"],["#EA580C","#EA580C"],["#0F766E","#0F766E"],["#DB2777","#DB2777"]].map(([v,hex])=>(
             <button key={hex+v} onClick={()=>set("accent",v)} title={v?v:"Default blue"} className={`w-7 h-7 rounded-full border-2 ${((c.accent||"")===v)?"border-stone-800 scale-110":"border-white shadow"}`} style={{background:hex}}/>
@@ -12871,48 +12878,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
           </div>
           <div className="text-[11px] text-stone-400">Drag the rainbow for the hue, the second bar for light/dark — or use a preset above.</div>
         </div>);})()}
-      <div className="border-t border-stone-100 mt-3 pt-3">
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-[10px] uppercase tracking-widest text-stone-400">Surface colors</div>
-          <button onClick={()=>{set("accent","");set("headerBg","");set("navBg","");set("pageBg","");}} className="text-[11px] text-stone-500 hover:text-rose-600 flex items-center gap-1 border border-stone-200 rounded-lg px-2 py-1"><RotateCcw className="w-3 h-3"/>Reset accent &amp; surfaces</button>
-        </div>
-        <div className="grid sm:grid-cols-3 gap-3">
-          {[["headerBg","Header fill"],["navBg","Left tabs"],["pageBg","Page background"]].map(([k,l])=>(
-            <div key={k} className="flex items-center justify-between gap-2 text-sm text-stone-700 border border-stone-200 rounded-lg px-2.5 py-2">
-              <span>{l}</span>
-              <span className="flex items-center gap-1.5">
-                <input type="color" value={c[k]||"#ffffff"} onChange={e=>set(k,e.target.value)} className="w-7 h-7 rounded border border-stone-200 bg-white p-0.5 cursor-pointer"/>
-                {c[k]&&<button onClick={()=>set(k,"")} title="Back to default" className="text-stone-300 hover:text-rose-500 leading-none">×</button>}
-              </span>
-            </div>))}
-        </div>
-        <div className="text-[11px] text-stone-400 mt-1.5">Tip: pick light shades in light theme (dark text stays dark). × resets a surface to the theme default.</div>
-      </div>
-      {!deployMode&&<div className="border-t border-stone-100 mt-3 pt-3 grid sm:grid-cols-2 gap-4">
-        {[["appBg","App background","Shows behind your pages — panels stay solid on top."],["loginBg","Login background","Shows on this device's sign-in screen after your next sign-out."]].map(([k,l,hint])=>(
-          <div key={k}>
-            <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">{l}</div>
-            <div className="flex items-center gap-3">
-              {c[k]?<img src={c[k]} alt={l} className="h-12 w-20 object-cover rounded-lg border border-stone-200"/>:<span className="text-[11px] text-stone-300 border border-dashed border-stone-300 rounded-lg px-3 py-3">None</span>}
-              <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload
-                <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={e=>{
-                  const f=e.target.files&&e.target.files[0]; if(!f)return;
-                  const rd=new FileReader();
-                  rd.onload=()=>{ const img=new Image(); img.onload=()=>{ try{
-                    const maxW=1600,sc=Math.min(1,maxW/img.width);
-                    const cv=document.createElement("canvas"); cv.width=Math.round(img.width*sc); cv.height=Math.round(img.height*sc);
-                    cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);
-                    set(k,cv.toDataURL("image/jpeg",0.72));
-                  }catch(_){ set(k,String(rd.result)); } }; img.src=String(rd.result); };
-                  rd.readAsDataURL(f); e.target.value="";
-                }}/>
-              </label>
-              {c[k]&&<button onClick={()=>{set(k,"");if(k==="loginBg")try{lsSet("loginBg","");}catch(e){}}} className="text-[11px] text-stone-400 hover:text-rose-600">Remove</button>}
-            </div>
-            <div className="text-[11px] text-stone-400 mt-1">{hint}</div>
-          </div>))}
-      </div>}
-        <div className="text-[11px] text-stone-400 mt-1.5">Recolors buttons, links, active tabs and highlights across the app.</div>
+        <div className="text-[11px] text-stone-400 mt-1.5">Recolors buttons, links, active tabs and highlights across the app — the cloud logo and browser-tab icon follow it too.</div>
       </div>
       <div className="border-t border-stone-100 mt-3 pt-3 grid sm:grid-cols-2 gap-6">
         <div>

@@ -386,19 +386,23 @@ exports.handler = async (event) => {
          at an attacker's domain. Unknown origins fall back to APP_URL (retail). */
       const ORIGIN_BRANDS = {
         "https://shippingcloud.net": "ShippingCloud", "https://www.shippingcloud.net": "ShippingCloud",
-        "https://freightwireship.com": "ShipHub", "https://www.freightwireship.com": "ShipHub",
-        "https://admin.freightwireship.com": "ShipHub Admin"
+        "https://freightwireship.com": "Freightwire", "https://www.freightwireship.com": "Freightwire",
+        "https://admin.freightwireship.com": "Freightwire Admin"
       };
       const reqOrigin = String((event.headers && (event.headers.origin || event.headers.Origin)) || "").replace(/\/+$/, "");
       const appUrl = ORIGIN_BRANDS[reqOrigin] ? reqOrigin : (process.env.APP_URL || "").replace(/\/+$/, "");
       const product = ORIGIN_BRANDS[reqOrigin] || "ShippingCloud";
       const wordmark = product === "ShippingCloud"
         ? 'Shipping<span style="color:#0086E0;">Cloud</span>'
-        : ('Ship<span style="color:#0086E0;">Hub</span>' + (product === "ShipHub Admin" ? ' <span style="font-weight:600;color:#78716c;font-size:13px;">Admin</span>' : '') + '<div style="font-size:11px;color:#a8a29e;font-weight:600;margin-top:2px;">by Freightwire</div>');
+        : ('Freight<span style="color:#0086E0;">wire</span>' + (product === "Freightwire Admin" ? ' <span style="font-weight:600;color:#78716c;font-size:13px;">Admin</span>' : ''));
       const link = appUrl + "/?reset=" + encodeURIComponent(rtoken);
       const key = (process.env.RESEND_API_KEY || "").trim();
       if (!key) { console.log("[requestReset] NOT SENT — RESEND_API_KEY is missing on this site. Set it (as a normal, non-secret var) and redeploy."); return J({ ...generic, configured: false }); }
-      const from = (process.env.EMAIL_FROM || "ShippingCloud <notify@shippingcloud.net>").trim();
+      /* sender name follows the brand the request came from (Freightwire vs ShippingCloud),
+         keeping the verified from-address from EMAIL_FROM so deliverability is unchanged */
+      const baseFrom = (process.env.EMAIL_FROM || "ShippingCloud <notify@shippingcloud.net>").trim();
+      const _fromAddr = (baseFrom.match(/<([^>]+)>/) || [null, baseFrom])[1];
+      const from = product.replace(" Admin", "") + " <" + _fromAddr + ">";
       try {
         const rr = await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
           body: JSON.stringify({ from, to: [email], subject: isWelcome ? ("Welcome to " + product + " — set your password") : ("Reset your " + product + " password"),

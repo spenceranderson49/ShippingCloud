@@ -2867,7 +2867,7 @@ const SEED_EMAILS=[];
 const NOTIFY_DEFAULTS={orderConfirm:true,shipped:true,delivered:true,returnLabel:true,exception:true};
 /* v153: user customizations — every knob here is wired to a real behavior */
 const CUSTOM_DEFAULTS={
-  hideInvoice:false,hidePO:false,hideAddr23:false,hideOz:false,hideInsure:false,
+  hideInvoice:false,hidePO:false,hideAddr23:false,hideOz:false,hideInsure:false,hideFromOrderBox:false,hideBillingBox:false,
   phoneRequired:true,emailRequired:true,
   defaultSignature:"none",autoInsurePct:0,autoInsureValue:0,autoSigValue:0,autoSigType:"indirect",shipDateCutoff:"",fallbackService:"",autoPackSlip:false,packSlipPrinterId:"",
   defaultView:"cheapest",showRateViewToggle:false,hiddenServices:[],priceWarn:0,transitStyle:"date",aliases:{},matchedOnly:false,
@@ -7835,7 +7835,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                    in the icon color (green = good), not in three different tinted strips. ── */}
             {(()=>{
               const so=selectedOrder&&orders.find(o=>o.id===selectedOrder);
-              const showOrder=(handsFree||selectedOrder)&&(handsFree||(so&&(so.shippingService||so.source)));
+              const showOrder=!custom.hideFromOrderBox&&(handsFree||selectedOrder)&&(handsFree||(so&&(so.shippingService||so.source)));
               const showAp=!handsFree&&liveRuleStatus&&!custom.hideAutopilotBox;
               const showRates=!custom.hideRateSrcBar;
               if(!showOrder&&!showAp&&!showRates)return null;
@@ -7868,14 +7868,14 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 </div>}
               </div>;
             })()}
-            <div className="border border-stone-200 rounded-lg bg-white p-3 space-y-2">
+            {!custom.hideBillingBox&&<div className="border border-stone-200 rounded-lg bg-white p-3 space-y-2">
               <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5"/>Billing &amp; Third-Party</div>
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-stone-500">Bill to</span>
                 <select value={billTo} onChange={e=>setBillTo(e.target.value)} className="flex-1 bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="sender">Sender (You)</option><option value="receiver">Receiver</option><option value="third">Third-Party Acct</option></select>
               </div>
               {billTo==="third"&&<input value={thirdAcct} onChange={e=>setThirdAcct(e.target.value)} placeholder="3rd-party acct #" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>}
-            </div>
+            </div>}
             {!custom.hideNotifyBox&&<div className="border border-stone-200 rounded-lg bg-white p-3 space-y-2">
               <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><Send className="w-3.5 h-3.5"/>Send Label &amp; Notify</div>
               <div>
@@ -12955,9 +12955,11 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         {Tog({k:"hideShipSteps",label:"Hide the numbered 1-2-3 step headers",hint:"Removes the ‘1 Ship from & to · 2 Package details · 3 Service & rate’ headers from the Ship screen. Hidden by default — uncheck to show them."})}
         {Tog({k:"hideAssistant",label:"Hide the AI assistant button",hint:"Removes the floating assistant button in the bottom-right corner everywhere in the app."})}
-        {Tog({k:"hideRateSrcBar",label:"Hide the rate-source banner",hint:"Removes the ‘Live rates from your FedEx account / Estimated rates’ strip above the service list."})}
-        {Tog({k:"hideAutopilotBox",label:"Hide the Autopilot match banner",hint:"Removes the ‘Autopilot rule matched…’ box above Select service. Rules still run and still pre-highlight the service."})}
-        {Tog({k:"hideNotifyBox",label:"Hide the Send label & notify box",hint:"Removes the email panel at the bottom of the Ship tab. Automated notifications in Settings → Email automation still send."})}
+        {Tog({k:"hideRateSrcBar",label:"Hide the rate-source line",hint:"Removes the ‘Live rates from your FedEx account / Estimated rates’ line from the This Shipment card beside the rate list."})}
+        {Tog({k:"hideAutopilotBox",label:"Hide the Autopilot match line",hint:"Removes the ‘Autopilot rule matched…’ line from the This Shipment card. Rules still run and still pre-highlight the service."})}
+        {Tog({k:"hideFromOrderBox",label:"Hide the From Order line",hint:"Removes the ‘Order #### — buyer requested…’ line from the This Shipment card beside the rate list."})}
+        {Tog({k:"hideBillingBox",label:"Hide the Billing & Third-Party box",hint:"Removes the Bill-to card beside the rate list. Shipments bill to your Settings → General default."})}
+        {Tog({k:"hideNotifyBox",label:"Hide the Send Label & Notify box",hint:"Removes the email card beside the rate list. Automated notifications in Settings → Email automation still send."})}
         {Tog({k:"hideShipOrders",label:"Hide the orders list on the Ship screen",hint:"Removes the orders sidebar (and its collapsed tab) from the Ship screen completely — ship by scanning or typing shipments in manually. Orders still live on the Orders tab."})}
         {Tog({k:"hideLabeledOrders",label:"Hide orders that already have a label",hint:"On (recommended): once an order has a label, it drops off the Ship-screen orders list so you don't accidentally re-ship it. Uncheck to keep already-labeled orders in the list."})}
         {Tog({k:"scanAutoFocus",label:"Scan mode — keep the scan box ready",hint:"The cursor lives in the scan box: it's focused when the Ship tab opens, re-arms after every scan and booking, and returns after you click orders, services or buttons. It only steps aside while you're typing in another field (like editing the shipping information), then comes back on your next click."})}

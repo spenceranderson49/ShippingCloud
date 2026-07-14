@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v542";
+const BUILD_TAG="addr-v543";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7617,10 +7617,10 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         </div>
         {/* six matching boxes, two per row, everything centered (Spencer-approved layout) */}
         <div className="grid grid-cols-2 gap-1.5">
-          <input value={orderQ} onChange={e=>setOrderQ(e.target.value)} placeholder="Search orders" className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF] placeholder-stone-400"/>
+          <input value={orderQ} onChange={e=>setOrderQ(e.target.value)} placeholder="Search orders" className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF] placeholder-stone-600"/>
           <div className="relative min-w-0"><select value={storeFilter} onChange={e=>setStoreFilter(e.target.value)} style={{textAlignLast:"center"}} className="appearance-none h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-6 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF]"><option value="all">All stores</option>{storesPresent.map(s=><option key={s} value={s}>{s}</option>)}</select><ChevronDown className="w-3.5 h-3.5 absolute right-1.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"/></div>
           <div className="relative min-w-0"><select value={orderSort} onChange={e=>setOrderSort(e.target.value)} style={{textAlignLast:"center"}} className="appearance-none h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-6 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="oldest">Oldest</option><option value="total">Order value</option><option value="customer">Customer A–Z</option></select><ChevronDown className="w-3.5 h-3.5 absolute right-1.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"/></div>
-          <button onClick={()=>{const t=new Date().toISOString().slice(0,10);if(dateFrom===t&&dateTo===t){setDateFrom("");setDateTo("");}else{setDateFrom(t);setDateTo(t);}}} className={`h-7 w-full rounded-lg px-2 text-[12px] font-medium border ${(()=>{const t=new Date().toISOString().slice(0,10);return dateFrom===t&&dateTo===t;})()?"bg-[#0099FF] text-white border-[#0099FF]":"bg-white text-stone-600 border-stone-200 hover:bg-stone-50"}`}>Today</button>
+          <button onClick={()=>{const t=new Date().toISOString().slice(0,10);if(dateFrom===t&&dateTo===t){setDateFrom("");setDateTo("");}else{setDateFrom(t);setDateTo(t);}}} className={`h-7 w-full rounded-lg px-2 text-[12px] border ${(()=>{const t=new Date().toISOString().slice(0,10);return dateFrom===t&&dateTo===t;})()?"bg-[#0099FF] text-white border-[#0099FF]":"bg-white text-stone-600 border-stone-200 hover:bg-stone-50"}`}>Today</button>
           <div className="relative col-span-2 grid grid-cols-2 gap-1.5">
             <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF]"/>
             <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[9px] text-stone-400 pointer-events-none">–</span>

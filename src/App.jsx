@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v539";
+const BUILD_TAG="addr-v540";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7608,7 +7608,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     </div>
   );
   return (
-    <div className="relative flex flex-row gap-4 items-start">
+    <div className="relative flex flex-row gap-4 items-start pt-2.5">
       {!custom.hideShipOrders&&(ordersOpen?(
       <aside className="w-60 shrink-0 space-y-2">
         <div className="flex items-center gap-1.5">

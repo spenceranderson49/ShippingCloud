@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v521";
+const BUILD_TAG="addr-v522";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7164,6 +7164,22 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     }
     if(custom.autoSigValue>0&&o.total&&(+o.total||0)>=custom.autoSigValue){ const t=custom.autoSigType||"indirect"; setSigOption(t); setSig(t!=="none"); }   // auto-add signature when the order value meets the $ threshold
   };
+  /* Work-in-progress keeper: leaving the Ship tab used to throw away a half-built shipment.
+     A ref mirrors the form every render; on unmount it's saved (per login) unless the form is
+     empty or the label was just booked. Restored on the next mount when no prefill wants the slot. */
+  const _wipRef=React.useRef(null);
+  _wipRef.current={sender,receiver,reference,invoiceNo,poNo,department,pieces,residential,sigOption,billTo,thirdAcct,insurance,selectedOrder,customs};
+  useEffect(()=>()=>{ try{
+    const w=_wipRef.current||{};
+    const has=(w.receiver&&(w.receiver.name||w.receiver.zip||w.receiver.address1))||w.reference||(w.pieces||[]).some(p=>(+p.weight||0)>0);
+    if(has&&justBookedRef.current==null)lsSet("shipWip",w); else lsDel("shipWip");
+  }catch(e){} },[]);
+  useEffect(()=>{ if(prefill)return;   // an explicit prefill (order, draft, refulfill) outranks the leftover form
+    try{ const s=lsGet("shipWip",null); if(!s)return; lsDel("shipWip");
+      setSender(s.sender||empty);setReceiver(s.receiver||{...empty,zip:""});setReference(s.reference||"");setInvoiceNo(s.invoiceNo||"");setPoNo(s.poNo||"");setDepartment(s.department||"");
+      setPieces((s.pieces&&s.pieces.length)?s.pieces:[{weight:3,L:12,W:9,H:4}]);setRes(s.residential!==false);setSigOption(s.sigOption||"none");setSig((s.sigOption||"none")!=="none");
+      setBillTo(s.billTo||"sender");setThirdAcct(s.thirdAcct||"");setInsurance(s.insurance||"");setSelectedOrder(s.selectedOrder||null);if(s.customs)setCustoms(s.customs);
+    }catch(e){} },[]);
   useEffect(()=>{ if(!prefill)return;
     if(prefill.draft){const s=prefill.draft;setSender(s.sender);setReceiver(s.receiver);setReference(s.reference||"");setInvoiceNo(s.invoiceNo||"");setPoNo(s.poNo||"");setPieces(s.pieces||[{weight:3,L:12,W:9,H:4}]);setRes(s.residential);setSigOption(s.sigOption||"none");setSig((s.sigOption||"none")!=="none");setDepartment(s.department||"");setBillTo(s.billTo);setThirdAcct(s.thirdAcct||"");setInsurance(s.insurance||"");setSelectedOrder(s.selectedOrder||null);if(s.customs)setCustoms(s.customs);clearPrefill();return;}
     if(prefill.receiver)setReceiver({...empty,...prefill.receiver}); if(prefill.weight)setPieces([{weight:prefill.weight,L:12,W:9,H:4}]); if(prefill.reference)setReference(prefill.reference); setSelectedOrder(prefill.fromOrderId||null); if(prefill.fromOrderId&&!prefill.refulfill)setHfArmed(prefill.fromOrderId); /* a RE-label opens un-armed so hands-free can't book it before you've made your changes */ clearPrefill();
@@ -7562,7 +7578,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const saveDraft=()=>{setDraftName(reference||receiver.name||receiver.city||"");setNaming(true);};
   /* box-logic explanation banner shown while a packed order is loaded */
   const PackNote=()=>packNote?(<div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800 flex items-center gap-2"><Boxes className="w-3.5 h-3.5 shrink-0"/><span className="flex-1">Box logic packed this order: <b>{packNote.boxNames}</b> · {packNote.totalWt} lb billable{packNote.unresolved.length?` · ${packNote.unresolved.length} item${packNote.unresolved.length===1?"":"s"} not in your catalog (weight may be low)`:""} — dims are editable below.</span><button onClick={()=>setPackNote(null)} className="text-emerald-500 hover:text-emerald-700"><X className="w-3.5 h-3.5"/></button></div>):null;
-  const newShipment=()=>{justBookedRef.current=null;setSwapMuted(false);setHfArmed(null);setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setDepartment("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setDvEach(false);setRes(true);setResTouched(false);setSig(custom.defaultSignature&&custom.defaultSignature!=="none");setSigOption(custom.defaultSignature||"none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");setShipDate(shipDateDefault(settings));};
+  const newShipment=()=>{justBookedRef.current=null;setSwapMuted(false);try{lsDel("shipWip");}catch(e){}setHfArmed(null);setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setDepartment("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setDvEach(false);setRes(true);setResTouched(false);setSig(custom.defaultSignature&&custom.defaultSignature!=="none");setSigOption(custom.defaultSignature||"none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");setShipDate(shipDateDefault(settings));};
   const addressCheck=(
     <div className="text-xs space-y-2">
       <div className="text-[10px] uppercase tracking-widest text-stone-500 font-semibold flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5"/>Address check</div>
@@ -7596,21 +7612,21 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       {!custom.hideShipOrders&&(ordersOpen?(
       <aside className="w-60 shrink-0 space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <button onClick={()=>setOrdersOpen(false)} className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-stone-500 hover:text-stone-700"><ChevronDown className="w-4 h-4"/><ShoppingBag className="w-4 h-4"/>Orders{ordersToShow.length?<span className="text-stone-400 normal-case font-normal">· {ordersToShow.length}</span>:""}</button>
+          <button onClick={()=>setOrdersOpen(false)} className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-stone-500 hover:text-stone-700"><ChevronDown className="w-4 h-4 shrink-0"/><ShoppingBag className="w-4 h-4 shrink-0"/><span className="whitespace-nowrap">Orders{ordersToShow.length?<span className="text-stone-400 normal-case font-normal"> · {ordersToShow.length}</span>:""}</span></button>
           <div className="flex items-center gap-1">
             {onRefresh&&shopifyConnected(settings)&&<button onClick={onRefresh} disabled={syncing} title="Refresh orders" className="text-stone-400 hover:text-[#0086E0] disabled:opacity-40 p-1">{syncing?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<RotateCcw className="w-3.5 h-3.5"/>}</button>}
-            <select value={orderSort} onChange={e=>setOrderSort(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-1.5 py-1 text-[11px] outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="oldest">Oldest</option><option value="total">Order value</option><option value="customer">Customer A–Z</option></select>
+            <select value={orderSort} onChange={e=>setOrderSort(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-1 py-0.5 text-[11px] outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="oldest">Oldest</option><option value="total">Order value</option><option value="customer">Customer A–Z</option></select>
           </div>
         </div>
-        <div className="relative"><Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400"/><input value={orderQ} onChange={e=>setOrderQ(e.target.value)} placeholder="Search orders" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/></div>
+        <div className="relative"><Search className="w-3 h-3 absolute left-2 top-[7px] text-stone-400"/><input value={orderQ} onChange={e=>setOrderQ(e.target.value)} placeholder="Search orders" className="w-full bg-white border border-stone-200 rounded-lg pl-6 pr-2 py-0.5 text-[12px] outline-none focus:border-[#0099FF]"/></div>
         <div className="flex items-center gap-1.5">
-          <select value={storeFilter} onChange={e=>setStoreFilter(e.target.value)} className="flex-1 bg-white border border-stone-200 rounded-lg px-1.5 py-1 text-[11px] outline-none focus:border-[#0099FF]"><option value="all">All stores</option>{storesPresent.map(s=><option key={s} value={s}>{s}</option>)}</select>
-          <button onClick={()=>{const t=new Date().toISOString().slice(0,10);if(dateFrom===t&&dateTo===t){setDateFrom("");setDateTo("");}else{setDateFrom(t);setDateTo(t);}}} className={`text-[11px] font-medium rounded px-2 py-1 border shrink-0 ${(()=>{const t=new Date().toISOString().slice(0,10);return dateFrom===t&&dateTo===t;})()?"bg-[#0099FF] text-white border-[#0099FF]":"bg-white text-stone-600 border-stone-200 hover:bg-stone-50"}`}>Today</button>
+          <select value={storeFilter} onChange={e=>setStoreFilter(e.target.value)} className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-1 py-0.5 text-[11px] outline-none focus:border-[#0099FF]"><option value="all">All stores</option>{storesPresent.map(s=><option key={s} value={s}>{s}</option>)}</select>
+          <button onClick={()=>{const t=new Date().toISOString().slice(0,10);if(dateFrom===t&&dateTo===t){setDateFrom("");setDateTo("");}else{setDateFrom(t);setDateTo(t);}}} className={`text-[11px] font-medium rounded px-2 py-0.5 border shrink-0 ${(()=>{const t=new Date().toISOString().slice(0,10);return dateFrom===t&&dateTo===t;})()?"bg-[#0099FF] text-white border-[#0099FF]":"bg-white text-stone-600 border-stone-200 hover:bg-stone-50"}`}>Today</button>
         </div>
         <div className="flex items-center gap-1 text-[10px] text-stone-400">
-          <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} className="flex-1 bg-white border border-stone-200 rounded-lg px-1.5 py-1 text-[11px] text-stone-600 outline-none focus:border-[#0099FF]"/>
+          <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} className="flex-1 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-1 py-0.5 text-[11px] text-stone-600 outline-none focus:border-[#0099FF]"/>
           <span>–</span>
-          <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} className="flex-1 bg-white border border-stone-200 rounded-lg px-1.5 py-1 text-[11px] text-stone-600 outline-none focus:border-[#0099FF]"/>
+          <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} className="flex-1 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-1 py-0.5 text-[11px] text-stone-600 outline-none focus:border-[#0099FF]"/>
           {(dateFrom||dateTo||storeFilter!=="all")&&<button onClick={()=>{setDateFrom("");setDateTo("");setStoreFilter("all");}} className="text-stone-400 hover:text-stone-700 shrink-0"><X className="w-3.5 h-3.5"/></button>}
         </div>
         <div className="space-y-2 max-h-[calc(100vh-220px)] overflow-auto pr-0.5">
@@ -7639,7 +7655,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         </div>
         <div className="relative grid lg:grid-cols-3 gap-4">
           <div className="min-w-0"><AddressCard title="Sender" data={sender} set={setSender} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} hideAddr23={custom.hideAddr23}/></div>
-          <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-1/3 top-10 -translate-x-1/2 z-10 items-center justify-center w-7 h-7 rounded-full bg-white border border-stone-200 shadow-sm text-stone-400 hover:text-[#0086E0] hover:border-[#99D6FF]"><ArrowLeftRight className="w-4 h-4"/></button>
+          <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-1/3 top-11 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-3.5 h-3.5"/></button>
           <div className="min-w-0 lg:col-span-2"><AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} scanSlot={<div className="relative">
             <ScanLine className="w-4 h-4 text-[#0086E0] absolute left-2.5 top-2.5 pointer-events-none"/>
             <input ref={scanRef} value={scanVal} onChange={e=>setScanVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();scanApply(scanVal);}}} placeholder="Scan order # / SKU" title={scanMsg&&!scanMsg.ok?scanMsg.t:undefined} className={`w-full border border-dashed rounded-lg pl-8 pr-7 py-1.5 text-sm outline-none placeholder:text-stone-400 ${scanMsg?(scanMsg.ok?"border-emerald-300 bg-emerald-50":"border-rose-300 bg-rose-50"):"border-[#66C2FF] bg-[#E6F4FF]/50 focus:border-[#0086E0] focus:bg-white"}`}/>
@@ -9238,9 +9254,9 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
   const setPriceAs=(v)=>{setPriceAsShared&&setPriceAsShared(v);};
   const effClient=client;
   const [fromZip,setFromZip]=useState(senderZip||client?.origin||"");
-  /* The whole quote form PERSISTS per login — close Quick quote, come back, and the shipment
-     you were pricing is still there. The Clear button wipes it back to blank. */
-  const [qqForm,setQqForm]=usePersist("qqForm",QQ_BLANK);
+  /* Quick quote always OPENS BLANK — it's a scratchpad, not a saved form. (It used to persist
+     per login and pre-fill from the Ship tab; both surprised people with stale numbers.) */
+  const [qqForm,setQqForm]=useState(QQ_BLANK);
   const F=qqForm&&typeof qqForm==="object"?qqForm:QQ_BLANK;
   const upF=(patch)=>setQqForm(f=>({...QQ_BLANK,...(f||{}),...patch}));
   const toZip=F.toZip||"";const setToZip=(v)=>upF({toZip:v});
@@ -9250,22 +9266,7 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
   const sigOption=F.sigOption||"none";const setSigOption=(v)=>upF({sigOption:v});
   const saturday=!!F.saturday;const setSaturday=(v)=>upF({saturday:v});
   const insurance=F.insurance||"";const setInsurance=(v)=>upF({insurance:v});
-  const clearQuote=()=>setQqForm(f=>({...QQ_BLANK,_seedFrom:(f&&f._seedFrom)||undefined,pieces:[{weight:"",L:"",W:"",H:"",oz:""}]}));   /* keep the seed marker or the next open re-fills from Ship */
-  /* Pre-fill from the Ship tab: if anything is typed there (a box weight/dims or a destination
-     ZIP), pull it in on open. A snapshot is only applied ONCE per Ship edit (_seedFrom ts), so
-     reopening Quick quote without touching Ship keeps whatever you changed here; an untouched
-     Ship form leaves Quick quote exactly as it was (blank or your last quote). */
-  useEffect(()=>{ try{
-    const s=typeof window!=="undefined"?window.__scShipSnap:null;
-    if(!s||!s.ts)return;
-    if(qqForm&&qqForm._seedFrom===s.ts)return;   // this Ship edit already pulled in
-    const hasPiece=(s.pieces||[]).some(p=>p&&((+p.weight||0)>0||(+p.oz||0)>0||(+p.L||0)>0||(+p.W||0)>0||(+p.H||0)>0));
-    const hasZip=/^\d{5}/.test(String(s.toZip||""));
-    if(!hasPiece&&!hasZip)return;   // nothing typed on Ship — leave Quick quote alone
-    setQqForm({...QQ_BLANK,_seedFrom:s.ts,toZip:s.toZip||"",residential:s.residential!==false,sigOption:s.sigOption||"none",saturday:!!s.saturday,insurance:s.insurance||"",
-      pieces:(s.pieces&&s.pieces.length?s.pieces:[{}]).map(p=>({weight:p.weight??"",oz:p.oz??"",L:p.L??"",W:p.W??"",H:p.H??""}))});
-    if(s.fromZip)setFromZip(s.fromZip);
-  }catch(e){} },[]);
+  const clearQuote=()=>setQqForm({...QQ_BLANK,pieces:[{weight:"",L:"",W:"",H:"",oz:""}]});
   const pw=(p)=>Math.round(((+p.weight||0)+(+p.oz||0)/16)*1000)/1000;
   const setPiece=(i,patch)=>setPieces(ps=>ps.map((p,j)=>j===i?{...p,...patch}:p));
   const addPiece=()=>setPieces(ps=>[...ps,{weight:"",L:"",W:"",H:"",oz:""}]);

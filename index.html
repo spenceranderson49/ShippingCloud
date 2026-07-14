@@ -28,6 +28,8 @@
       /* accent tints the required-field highlight (address cells + refs) */
       html[data-accent] .bg-\[\#E6F4FF\]{background-color:color-mix(in srgb,var(--acc) 12%,#fff)!important}
       html[data-accent] .border-\[\#99D6FF\]{border-color:color-mix(in srgb,var(--acc) 45%,#fff)!important}
+      /* date inputs in the orders rail: no calendar glyph — type or click to edit */
+      .sc-date-plain::-webkit-calendar-picker-indicator{display:none}
       /* ── booking confetti ── */
       .sc-conf{position:absolute;width:8px;height:13px;border-radius:2px;opacity:.95;will-change:transform}
       .sc-conf-fall{animation-name:scFall;animation-timing-function:cubic-bezier(.2,.6,.4,1);animation-fill-mode:forwards}

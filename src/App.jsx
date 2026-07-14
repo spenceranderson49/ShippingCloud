@@ -8209,6 +8209,10 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
       if(famKey)r=quotes.filter(q=>svcFamilyKey(q.label)===famKey).slice(0,1); }
     if(!r.length&&lastMatchFamRef.current)r=quotes.filter(q=>svcFamilyKey(q.label)===lastMatchFamRef.current).slice(0,1);
     if(!r.length)r=[...quotes].filter(q=>(q.sell??q.cost)!=null).sort((a,b)=>(((a.sell??a.cost)||1e9))-(((b.sell??b.cost)||1e9))).slice(0,1);
+    /* Fresh screen (nothing typed yet): nothing matches and nothing is priced, but the service area
+       must not be empty — keep ONE placeholder box (first ladder service, blank price) above the
+       Show All Services expander so the screen always shows where rates will appear. */
+    if(!r.length&&quotes.length)r=[[...quotes].sort(ladderSort)[0]];
     if(r.length)lastRowsRef.current=r;                       // remember a good row…
     else if(lastRowsRef.current.length)r=lastRowsRef.current; // …and reuse it while the list is momentarily empty
     return r;
@@ -8282,6 +8286,11 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
             return <button onClick={(e)=>{e.stopPropagation();if(!unavailable)action(q);}} disabled={!ready||!hasPrice||unavailable} title={unavailable?"FedEx isn't offering this service for this shipment (size/weight/destination).":!hasPrice&&q._oneRate?"No One Rate flat price came back — pick a priced service.":undefined} className={`shrink-0 w-32 text-sm rounded px-3 py-2 font-medium flex items-center justify-center gap-1.5 disabled:cursor-not-allowed ${unavailable?"bg-rose-50 text-rose-600 border border-rose-200":bought===q.key?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8] disabled:opacity-40"}`}>{unavailable?<>Unavailable</>:bought===q.key?<><Check className="w-4 h-4"/>{doneLabel}</>:!hasPrice&&q._oneRate?<>No quote</>:<><Printer className="w-4 h-4"/>{label}</>}</button>;})()}
         </div>
         {isOpen&&ready&&hasPrice&&<div className="px-4 pb-3 pt-1 border-t border-stone-100">
+          {/* The whole breakdown hugs the RIGHT side, ending under the price column (the 8.75rem
+              right margin is the Print-label button width + gap), so each label sits beside its
+              amount instead of across the box. No button (Quick Quote) → no offset; small screens
+              drop it too so nothing overflows. */}
+          <div className={"max-w-[300px] ml-auto mr-0"+(action?" sm:mr-[8.75rem]":"")}>
           <div className="flex items-center justify-between mb-1.5">
             <div className="text-[10px] uppercase tracking-widest text-stone-400">Rate breakdown</div>
             {perBox&&perBox.length>1&&<div className="flex bg-stone-100 rounded-lg p-0.5 text-[11px]">
@@ -8338,15 +8347,17 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
             })()}
           {/* One quiet line when dimensional weight governs — no calculator, no math lesson */}
           {((billing&&!q._oneRate&&(q.dimWeight||billing.dimApplies))||(!billing&&q.dimWeight))&&(()=>{const _bw=q.quotedWeight||(billing&&billing.billed)||null;return <div className="text-[11px] text-stone-500 mt-2">Billed at {_bw?<b>{_bw} lb</b>:null} dim weight.</div>;})()}
+          </div>
         </div>}
       </div>
     );
   };
   return (
-    /* Capped width: on wide screens full-bleed rows put an airfield of blank space between the
-       service name and its price/button. ~3xl keeps every row's name, price and Print label close
-       together; narrower containers (Quick Quote, modals) are unaffected. */
-    <div className="max-w-3xl">
+    /* Capped width + centered: on wide screens full-bleed rows put an airfield of blank space
+       between the service name and its price/button. ~3xl keeps every row's name, price and Print
+       label close together, and mx-auto centers the block on the page; narrower containers
+       (Quick Quote, modals) are unaffected. */
+    <div className="max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-2">
         {oneRateWarning&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-2">{oneRateWarning}</div>}
         {hideTitle?<span/>:<h2 className="text-sm font-semibold text-stone-700">Select service</h2>}

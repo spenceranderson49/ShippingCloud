@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v528";
+const BUILD_TAG="addr-v529";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7621,10 +7621,10 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <select value={orderSort} onChange={e=>setOrderSort(e.target.value)} style={{textAlignLast:"center"}} className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="oldest">Oldest</option><option value="total">Order value</option><option value="customer">Customer A–Z</option></select>
           <select value={storeFilter} onChange={e=>setStoreFilter(e.target.value)} style={{textAlignLast:"center"}} className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF]"><option value="all">All stores</option>{storesPresent.map(s=><option key={s} value={s}>{s}</option>)}</select>
           <button onClick={()=>{const t=new Date().toISOString().slice(0,10);if(dateFrom===t&&dateTo===t){setDateFrom("");setDateTo("");}else{setDateFrom(t);setDateTo(t);}}} className={`h-7 w-full rounded-lg px-2 text-[12px] font-medium border ${(()=>{const t=new Date().toISOString().slice(0,10);return dateFrom===t&&dateTo===t;})()?"bg-[#0099FF] text-white border-[#0099FF]":"bg-white text-stone-600 border-stone-200 hover:bg-stone-50"}`}>Today</button>
-          <div className="col-span-2 flex items-center gap-1 text-[10px] text-stone-400">
-            <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF] flex-1"/>
-            <span>–</span>
-            <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF] flex-1"/>
+          <div className="relative col-span-2 grid grid-cols-2 gap-1.5">
+            <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF]"/>
+            <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[9px] text-stone-400 pointer-events-none">–</span>
+            <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF]"/>
           </div>
         </div>
         {(dateFrom||dateTo||storeFilter!=="all")&&<button onClick={()=>{setDateFrom("");setDateTo("");setStoreFilter("all");}} className="text-[11px] text-stone-400 hover:text-stone-700 flex items-center gap-1"><X className="w-3 h-3"/>Clear filters</button>}
@@ -7654,15 +7654,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}
           </div>
         </div>}
-        {custom.hideShipSteps&&<div className="lg:hidden flex flex-wrap items-center justify-end gap-2">
+        {custom.hideShipSteps&&<div className="flex flex-wrap items-center justify-end gap-2 -mb-1">
           <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New shipment</button>
           {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}
         </div>}
         <div className="relative grid lg:grid-cols-3 gap-4">
-          {custom.hideShipSteps&&<div className="hidden lg:flex absolute -top-1 right-0 z-10 items-center gap-2">
-            <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New shipment</button>
-            {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}
-          </div>}
           <div className="min-w-0"><AddressCard title="Sender" data={sender} set={setSender} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} hideAddr23={custom.hideAddr23}/></div>
           <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-[calc(33.333%-3px)] top-8 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-3.5 h-3.5"/></button>
           <div className="min-w-0 lg:col-span-2"><AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} scanSlot={<div className="relative">
@@ -7809,7 +7805,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <span><b>Hands-free:</b> {hfWait.m}</span>
         </div>}
         {!custom.hideShipSteps&&<StepHead n="3" label="Service & rate"/>}
-        <ServiceList hideTitle={!custom.hideShipSteps} quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
+        <ServiceList hideTitle={true} quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
         {intl&&(
           <div className="border border-[#99D6FF] bg-[#E6F4FF]/40 rounded-lg p-3 space-y-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-[#006FBF]"><FileText className="w-4 h-4"/>Customs · Commercial invoice</div>

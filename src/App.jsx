@@ -8368,7 +8368,7 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
         </div>}
       </div>
       {view==="cheapest"
-        ? <div className="space-y-1">{(collapse?collapsedRows():rowsForView(quotes)).map(Row)}{collapse&&<button onClick={()=>setShowAll(true)} className="w-full text-xs text-stone-500 hover:text-stone-700 border border-dashed border-stone-300 rounded-lg py-1.5 flex items-center justify-center gap-1">Show All Services <ChevronRight className="w-3.5 h-3.5 rotate-90"/></button>}</div>
+        ? <div className="space-y-1">{(collapse?collapsedRows():rowsForView(quotes)).map(Row)}{collapse&&<button onClick={()=>setShowAll(true)} className="w-full text-xs text-stone-500 hover:text-stone-700 border border-dashed border-stone-300 rounded-lg py-1.5 flex items-center justify-center gap-1">Show All Services <ChevronRight className="w-3.5 h-3.5 rotate-90"/></button>}{collapsible&&custom.matchedOnly&&showAll&&<button onClick={()=>setShowAll(false)} className="w-full text-xs text-stone-500 hover:text-stone-700 border border-dashed border-stone-300 rounded-lg py-1.5 flex items-center justify-center gap-1">Hide All Services <ChevronRight className="w-3.5 h-3.5 -rotate-90"/></button>}</div>
         : CARRIER_ORDER.map(c=>{const list=(collapse?collapsedRows():rowsForView(quotes)).filter(q=>q.carrier===c);if(!list.length)return null;return (<div key={c} className="mb-4"><div className="mb-2 pb-1.5 border-b border-stone-200"><CarrierMark carrier={c}/></div><div className="space-y-1.5">{list.map(Row)}</div></div>);})}
     </div>
   );

@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v545";
+const BUILD_TAG="addr-v546";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9130,10 +9130,10 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
         <div key={s.id} id={"ship-row-"+s.id}>
           <div onClick={()=>setOpen(open===s.id?null:s.id)} className={`flex items-center gap-3 px-4 ${custom.density==="compact"?"py-1.5":"py-3"} hover:bg-stone-50 cursor-pointer ${stuck(s)?"border-l-2 border-amber-400":""}`} title={stuck(s)?"No delivery after "+custom.stuckDays+"+ days in transit — possibly stuck":undefined}>
             <button className="text-stone-400"><ChevronRight className={`w-4 h-4 transition-transform ${open===s.id?"rotate-90":""}`}/></button>
-            <div className="w-24"><div className="text-sm font-mono text-stone-500">{s.date}</div><div className="text-[10px] text-stone-400">{s.time||""}</div></div>
+            <div className="w-24"><div className="text-sm text-stone-500">{s.date}</div><div className="text-[10px] text-stone-400">{s.time||""}</div></div>
             <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{s.recipient?.name||"—"}</div><div className="text-[11px] text-stone-400 truncate">{s.service}</div></div>
             <div className="w-52 hidden lg:block min-w-0"><div className="text-xs text-stone-600 truncate">{s.recipient?.address1||"—"}</div><div className="text-[11px] text-stone-400 truncate">{s.recipient?.city}{s.recipient?.state?", "+s.recipient.state:""} {s.recipient?.zip||""}</div></div>
-            <div className="w-24 hidden xl:block text-xs text-stone-500 font-mono truncate">{s.reference||"—"}</div>
+            <div className="w-24 hidden xl:block text-xs text-stone-500 truncate">{s.reference||"—"}</div>
             <div className="w-40 hidden md:block"><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" onClick={e=>e.stopPropagation()} className="text-[#0086E0] underline font-mono text-xs flex items-center gap-1 truncate">{s.tracking}<ExternalLink className="w-3 h-3 shrink-0"/></a></div>
             <div className="w-24 text-right"><Badge tone={tone(s.status)}>{s.status}</Badge></div>
           </div>
@@ -10983,6 +10983,10 @@ function PrinterSettings({settings:settingsLive,setSettings:commitSettings}){
             </select>
           </label>
           <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
+            <span>Run rules on newly imported orders<span className="block text-[11px] text-stone-400">Every new or synced order runs through your enabled Autopilot rules automatically — service, tags and holds get written on, no labels are booked. (This was the toggle on the Autopilot tab.)</span></span>
+            <input type="checkbox" checked={!!settings.autoRunRules} onChange={e=>setSettings(p=>({...p,autoRunRules:e.target.checked}))} className="accent-[#0086E0] w-4 h-4 shrink-0"/>
+          </label>
+          <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
             <span>On the Batch screen<span className="block text-[11px] text-stone-400">Apply rules across the whole batch.</span></span>
             <select value={!cust.autoRulesInBatch?"off":(cust.autoBookBatch?"auto":"fill")} onChange={e=>{const v=e.target.value;setCust("autoRulesInBatch",v!=="off");setCust("autoBookBatch",v==="auto");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] shrink-0">
               <option value="off">Do nothing</option>
@@ -11697,6 +11701,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
   const [apEditRow,setApEditRow]=useState(null);   // order being edited inline (Save-gated)
   const [apProg,setApProg]=useState(null);
   const [apResults,setApResults]=useState(null);
+  const [fbShowAll,setFbShowAll]=useState({});   // per-dimension "+N more" chip expansion
   const ords=orders||[];
   const originZip=(settings&&settings.sender&&settings.sender.zip)||"";
   const warehouses=(settings&&settings.warehouses)||[];
@@ -11840,9 +11845,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
         <p className="text-sm text-stone-500 mt-0.5">Tell {BRAND.product} how you ship — it handles the rest.</p>
       </div>
       <div className="flex items-center gap-2">
-        {setSettings&&<button onClick={()=>setSettings(s=>({...s,autoRunRules:!autoRun}))} title="When on, newly imported/synced orders are run through enabled rules automatically" className={`text-sm rounded-lg px-3 py-2 font-medium flex items-center gap-1.5 border ${autoRun?"bg-emerald-50 border-emerald-300 text-emerald-800":"bg-white border-stone-200 text-stone-600 hover:bg-stone-100"}`}><span className={`w-8 h-4 rounded-full relative transition ${autoRun?"bg-emerald-500":"bg-stone-300"}`}><span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${autoRun?"left-4":"left-0.5"}`}/></span>Auto-run on import</button>}
         <button onClick={exportJSON} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-100 flex items-center gap-1.5"><Download className="w-4 h-4"/>Export JSON</button>
-        <button onClick={applyToOrders} disabled={run.summary.touched===0} title="Write rule outcomes onto matching orders without creating labels" className="text-sm bg-white border border-stone-200 text-stone-600 rounded-lg px-3 py-2 font-medium hover:bg-stone-100 disabled:opacity-40 flex items-center gap-1.5"><Check className="w-4 h-4"/>Apply only</button>
         <button onClick={()=>setFbOpen(v=>!v)} title="Batch by criteria — the Batch tab's filters, right here" className={`text-sm rounded-lg px-3 py-2 font-medium border flex items-center gap-1.5 ${fbOpen?"bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF]":"bg-white border-stone-200 text-stone-700 hover:bg-stone-100"}`}><ClipboardList className="w-4 h-4"/>Filter &amp; batch</button>
         <button onClick={newRule} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium flex items-center gap-1.5 hover:bg-stone-100"><Plus className="w-4 h-4"/>New rule</button>
         <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Fallback</span><select value={cz(settings).fallbackService||""} onChange={e=>setSettings&&setSettings(s=>({...s,custom:{...(s.custom||{}),fallbackService:e.target.value}}))} title="Service used for orders that match no rule" className="text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded-lg px-2 outline-none focus:border-emerald-500"><option value="">No fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx Ground Economy">FedEx Ground Economy</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
@@ -11862,8 +11865,8 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
       {[["state","State"],["zone","Zone"],["source","Source"],["sku","SKU"]].map(([d,label])=>{ const vals=fbVals(d); if(!vals.length)return null; const key={state:"states",zone:"zones",source:"sources",sku:"skus"}[d]; return (
         <div key={d} className="flex flex-wrap items-center gap-1.5">
           <span className="text-[10px] uppercase tracking-widest text-stone-400 w-14 shrink-0">{label}</span>
-          {vals.slice(0,14).map(([v,n])=><button key={v} onClick={()=>fbToggle(d,v)} className={`text-xs rounded-full px-2.5 py-1 border ${fb[key].has(v)?"bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF] font-semibold":"bg-white border-stone-200 text-stone-600 hover:bg-stone-50"}`}>{d==="zone"?"Z"+v:v} <span className="opacity-60">{n}</span></button>)}
-          {vals.length>14&&<span className="text-[11px] text-stone-400">+{vals.length-14} more</span>}
+          {vals.slice(0,fbShowAll[d]?vals.length:14).map(([v,n])=><button key={v} onClick={()=>fbToggle(d,v)} className={`text-xs rounded-full px-2.5 py-1 border ${fb[key].has(v)?"bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF] font-semibold":"bg-white border-stone-200 text-stone-600 hover:bg-stone-50"}`}>{d==="zone"?"Z"+v:v} <span className="opacity-60">{n}</span></button>)}
+          {vals.length>14&&<button onClick={()=>setFbShowAll(m=>({...m,[d]:!m[d]}))} className="text-[11px] text-[#0086E0] hover:underline">{fbShowAll[d]?"show less":`+${vals.length-14} more`}</button>}
         </div>);})}
       <div className="flex flex-wrap items-center gap-2 pt-1">
         <span className="text-[10px] uppercase tracking-widest text-stone-400 w-14 shrink-0">Ranges</span>
@@ -11873,8 +11876,6 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
         <input value={fb.tMin} onChange={e=>setFb(f=>({...f,tMin:e.target.value}))} placeholder="min" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>–<input value={fb.tMax} onChange={e=>setFb(f=>({...f,tMax:e.target.value}))} placeholder="max" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>
         <span className="text-xs text-stone-500 ml-2">Age</span>
         <select value={fb.age} onChange={e=>setFb(f=>({...f,age:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"><option value="any">Any</option><option value="today">Today</option><option value="2">≤ 2 days</option><option value="7">≤ 7 days</option><option value="old">Over 7 days</option></select>
-        <span className="text-xs text-stone-500 ml-2">Ship with</span>
-        <select value={fb.service} onChange={e=>setFb(f=>({...f,service:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF] max-w-[220px]"><option value="">Rule / requested service</option>{RULE_SERVICES.map(x=><option key={x} value={x}>{x}</option>)}</select>
       </div>
       <div className="flex flex-wrap items-center gap-3 pt-1">
         <button onClick={fbSend} disabled={!fbCount} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5"><Layers className="w-4 h-4"/>Send {fbCount} order{fbCount!==1?"s":""} to Batch</button>

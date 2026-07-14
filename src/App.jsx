@@ -8279,18 +8279,17 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
           {matched===q.key&&<span className="text-[10px] font-semibold uppercase tracking-wide bg-[#E6F4FF] text-[#0086E0] border border-[#99D6FF] rounded px-1.5 py-0.5 shrink-0 inline-flex items-center gap-1">{matchedSrc==="autopilot"&&<Zap className="w-3 h-3"/>}{matchedSrc==="autopilot"?"Autopilot":"Requested"}</span>}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2"><span className="text-sm truncate">{(custom.aliases&&custom.aliases[canonSvc(q.label)])||q.label}</span></div>
-            <div className="text-[11px] text-stone-500 flex items-center gap-1"><Calendar className="w-3 h-3"/>Transit Time: {days?(custom.transitStyle==="days"?<>{days} business day{days>1?"s":""}</>:<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}</div>
+            <div className="text-[12.5px] text-stone-900 flex items-center gap-1"><Calendar className="w-3.5 h-3.5"/>Transit Time: {days?(custom.transitStyle==="days"?<>{days} business day{days>1?"s":""}</>:<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}</div>
           </div>
           <div className="text-right">{!!(custom.priceWarn>0&&ready&&hasPrice&&sell>custom.priceWarn)&&<div className="text-[10px] text-amber-600 flex items-center justify-end gap-0.5" title={"Above your $"+custom.priceWarn+" price alert"}><AlertTriangle className="w-3 h-3"/>over limit</div>}<div className="text-base font-semibold text-stone-900">{!ready?<span className="text-stone-300">—</span>:(live||fxLive)?(hasPrice?money(sell):<span className="text-stone-300">—</span>):loading?<span className="text-[11px] font-normal text-stone-400">pricing…</span>:(hasPrice?money(sell):<span className="text-stone-300">—</span>)}</div></div>
           {action&&(()=>{const unavailable=q._unavailable||(!hasPrice&&!loading&&live);
             return <button onClick={(e)=>{e.stopPropagation();if(!unavailable)action(q);}} disabled={!ready||!hasPrice||unavailable} title={unavailable?"FedEx isn't offering this service for this shipment (size/weight/destination).":!hasPrice&&q._oneRate?"No One Rate flat price came back — pick a priced service.":undefined} className={`shrink-0 w-32 text-sm rounded px-3 py-2 font-medium flex items-center justify-center gap-1.5 disabled:cursor-not-allowed ${unavailable?"bg-rose-50 text-rose-600 border border-rose-200":bought===q.key?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8] disabled:opacity-40"}`}>{unavailable?<>Unavailable</>:bought===q.key?<><Check className="w-4 h-4"/>{doneLabel}</>:!hasPrice&&q._oneRate?<>No quote</>:<><Printer className="w-4 h-4"/>{label}</>}</button>;})()}
         </div>
         {isOpen&&ready&&hasPrice&&<div className="px-4 pb-3 pt-1 border-t border-stone-100">
-          {/* The whole breakdown hugs the RIGHT side, ending under the price column (the 8.75rem
-              right margin is the Print-label button width + gap), so each label sits beside its
-              amount instead of across the box. No button (Quick Quote) → no offset; small screens
-              drop it too so nothing overflows. */}
-          <div className={"max-w-[300px] ml-auto mr-0"+(action?" sm:mr-[8.75rem]":"")}>
+          {/* Compact breakdown table lined up under the service name and its transit line (ml-6 on
+              top of the panel's px-4 lands at the same 40px indent as the name), max-w keeps every
+              label right beside its amount instead of stretched across the box. */}
+          <div className="max-w-[300px] ml-6">
           <div className="flex items-center justify-between mb-1.5">
             <div className="text-[10px] uppercase tracking-widest text-stone-400">Rate breakdown</div>
             {perBox&&perBox.length>1&&<div className="flex bg-stone-100 rounded-lg p-0.5 text-[11px]">

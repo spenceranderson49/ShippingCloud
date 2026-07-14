@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v525";
+const BUILD_TAG="addr-v526";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7643,14 +7643,24 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         <button onClick={()=>setOrdersOpen(true)} title="Show orders" className="shrink-0 self-start flex flex-col items-center gap-1 text-stone-500 hover:text-stone-700 hover:border-stone-300 border border-stone-200 bg-white rounded-lg px-1.5 py-2 w-9"><ChevronRight className="w-4 h-4"/><ShoppingBag className="w-4 h-4"/>{ordersToShow.length?<span className="text-[10px] font-bold text-[#0086E0] leading-none">{ordersToShow.length}</span>:null}</button>
       ))}
       <div className="flex-1 min-w-0 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          {custom.hideShipSteps?<span className="flex-1"/>:<div className="flex-1 min-w-[220px]"><StepHead n="1" label="Ship from & to"/></div>}
+        {/* Steps ON: actions share the step-1 header row. Steps OFF: that row disappears and the
+            actions float beside the Sender/Receiver headings so the cards start at the very top. */}
+        {!custom.hideShipSteps&&<div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex-1 min-w-[220px]"><StepHead n="1" label="Ship from & to"/></div>
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New shipment</button>
             {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}
           </div>
-        </div>
+        </div>}
+        {custom.hideShipSteps&&<div className="lg:hidden flex flex-wrap items-center justify-end gap-2">
+          <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New shipment</button>
+          {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}
+        </div>}
         <div className="relative grid lg:grid-cols-3 gap-4">
+          {custom.hideShipSteps&&<div className="hidden lg:flex absolute -top-1 right-0 z-10 items-center gap-2">
+            <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New shipment</button>
+            {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}
+          </div>}
           <div className="min-w-0"><AddressCard title="Sender" data={sender} set={setSender} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} hideAddr23={custom.hideAddr23}/></div>
           <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-[calc(33.333%-3px)] top-8 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-3.5 h-3.5"/></button>
           <div className="min-w-0 lg:col-span-2"><AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} scanSlot={<div className="relative">

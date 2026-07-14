@@ -783,6 +783,26 @@ exports.handler = async (event) => {
           if (c && !_haveC.has(c.id) && c.createdAt && Date.parse(c.createdAt) > _cutC) toWrite.clients.push(c);
         }
       }
+      /* MASS-LOSS GUARD (users + clients): deleting is done one record at a time in the admin UI,
+         so a write missing TWO OR MORE existing rows is a stale tab flushing an old copy — not a
+         delete. Re-add everything it "forgot". (This exact failure erased two customer logins
+         twice on 2026-07-13.) A single missing row is still treated as a legitimate delete. */
+      for (const storeKey of ["users", "clients"]) {
+        if (!(storeKey in toWrite) || !Array.isArray(toWrite[storeKey])) continue;
+        const curS = await getStore(storeKey);
+        const curRows = (curS.ok && Array.isArray(curS.value)) ? curS.value.filter((x) => x && x.id != null) : [];
+        const haveS = new Set(toWrite[storeKey].map((x) => x && x.id));
+        const missing = curRows.filter((x) => !haveS.has(x.id));
+        if (missing.length >= 2) toWrite[storeKey] = [...toWrite[storeKey], ...missing];
+      }
+      /* FEATURE-FLAGS MERGE: flags are saved as one object keyed by login id. Merge per login so a
+         stale tab can change the logins it knows about but can never ERASE entries added after it
+         loaded (this wiped a login's byoCarrier entry on 2026-07-13). */
+      if ("featureFlags" in toWrite && toWrite.featureFlags && typeof toWrite.featureFlags === "object" && !Array.isArray(toWrite.featureFlags)) {
+        const curF = await getStore("featureFlags");
+        const curV = (curF.ok && curF.value && typeof curF.value === "object" && !Array.isArray(curF.value)) ? curF.value : {};
+        toWrite.featureFlags = { ...curV, ...toWrite.featureFlags };
+      }
       /* ── DATA-LOSS GUARDS on the business-critical global stores ──
          1. A write that would WIPE a non-empty store (empty array / rateRules with zero
             profiles) is refused — a stale tab or a race can never nuke the admin's rates,

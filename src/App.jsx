@@ -4238,7 +4238,8 @@ function RatesAdmin({clients=[],brand}){
   const [shAccs,setShAccs]=useState({});
   const _sheetStyles="body{font-family:system-ui,Segoe UI,Arial;padding:28px;color:#1c1917}table{border-collapse:collapse;width:100%;font-size:12px;margin:10px 0 22px}th,td{border:1px solid #e5e5e5;padding:6px 8px;text-align:right}th{background:#f5f5f4}h1{font-size:16px;margin:18px 0 2px}.sub{color:#78716c;font-size:12px}td:first-child,th:first-child{text-align:left}";
   const escS=(s)=>String(s==null?"":s).replace(/[&<>"]/g,(ch)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));   /* names on printable sheets are markup-inert */
-  const _sheetLogo=()=>BRAND.fw?('<img src="'+FW_LOGO+'" style="height:42px"/>'):('<div style="font:800 22px system-ui;letter-spacing:.02em">'+escS(brandWordmark())+'</div>');
+  /* FW sheets carry the full ShippingHub lockup (same as the sign-in emails), not the bare Freightwire mark */
+  const _sheetLogo=()=>BRAND.fw?('<span style="display:inline-flex;align-items:center;gap:10px"><img src="'+FW_LOGO+'" style="height:42px"/><span style="font:800 21px system-ui;letter-spacing:.06em;color:#1F1B18">SHIPPING<span style="color:#0086E0">HUB</span></span></span>'):('<div style="font:800 22px system-ui;letter-spacing:.02em">'+escS(brandWordmark())+'</div>');
   const printSheetsMulti=()=>{
     const keys=RATE_SERVICES.fedex.filter(sv=>!sv.or&&shSvcs[sv.k]).map(sv=>sv.k);
     if(!keys.length)return;
@@ -4288,7 +4289,7 @@ function RatesAdmin({clients=[],brand}){
   };
   const printSheet=()=>{
     if(!sheetData||sheetData.empty||!sheet)return;
-    const logo=BRAND.fw?('<img src="'+FW_LOGO+'" style="height:42px"/>'):('<div style="font:800 22px system-ui;letter-spacing:.02em">'+escS(brandWordmark())+'</div>');
+    const logo=_sheetLogo();
     const head="<tr><th style='text-align:left'>Weight (lb)</th>"+sheetData.zones.map(z=>"<th>Zone "+z+"</th>").join("")+"</tr>";
     const body=sheetData.rows.map(r=>"<tr><td style='text-align:left;font-weight:600'>"+r.w+"</td>"+r.cells.map(c=>{
       if(c.c==null)return "<td>—</td>";

@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v541";
+const BUILD_TAG="addr-v542";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7661,9 +7661,9 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New shipment</button>
           {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}
         </div>}
-        {custom.hideShipSteps&&<div className="hidden lg:flex absolute -top-6 right-0 z-10 items-center gap-2">
-          <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New shipment</button>
-          {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}
+        {custom.hideShipSteps&&<div className="hidden lg:flex absolute -top-7 right-0 z-10 items-center gap-2 lg:w-[250px] xl:w-[290px]">
+          <button onClick={newShipment} className="flex-1 flex items-center justify-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New shipment</button>
+          {onQuickQuote&&<button onClick={onQuickQuote} className="flex-1 flex items-center justify-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}
         </div>}
         <div className="relative grid lg:grid-cols-3 gap-4 lg:!mt-0">
           <div className="min-w-0"><AddressCard title="Sender" data={sender} set={setSender} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} hideAddr23={custom.hideAddr23}/></div>

@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v548";
+const BUILD_TAG="addr-v549";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9959,7 +9959,6 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
   );};
   return (
     <div className="space-y-3">
-      {presetBar()}
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Layers className="w-4 h-4"/>Batch shipping</h2>
         <span className="text-[11px] text-stone-400">{pool.length} open order{pool.length===1?"":"s"}</span>
@@ -10054,6 +10053,8 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
           <span className="text-[11px] text-stone-400 w-full">Saved rules appear in the Autopilot tab too — same pipeline, one source of truth.</span>
         </div>}
       </div>
+
+      {presetBar()}
 
       {apMsg&&<div className="bg-violet-50 border border-violet-200 text-violet-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><Zap className="w-4 h-4"/>Autopilot routed {apMsg.routed} order{apMsg.routed!==1?"s":""}{apMsg.held?` and held ${apMsg.held} for review (unchecked below)`:""}. Service picks are marked with a ⚡ — override any of them with the dropdowns.</div>}
 

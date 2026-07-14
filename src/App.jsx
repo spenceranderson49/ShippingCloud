@@ -7831,34 +7831,43 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             <ServiceList hideTitle={true} quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
           </div>
           <div className="w-full lg:w-80 lg:shrink-0 space-y-3">
-            {(handsFree||selectedOrder)&&(()=>{const so=selectedOrder&&orders.find(o=>o.id===selectedOrder);
-              if(!handsFree&&!(so&&(so.shippingService||so.source)))return null;
-              /* hands-free: this card is ALWAYS here (fixed slot) — only its text changes */
+            {/* ── Card 1: THIS SHIPMENT — read-only status, one card, one row per fact. State lives
+                   in the icon color (green = good), not in three different tinted strips. ── */}
+            {(()=>{
+              const so=selectedOrder&&orders.find(o=>o.id===selectedOrder);
+              const showOrder=(handsFree||selectedOrder)&&(handsFree||(so&&(so.shippingService||so.source)));
+              const showAp=!handsFree&&liveRuleStatus&&!custom.hideAutopilotBox;
+              const showRates=!custom.hideRateSrcBar;
+              if(!showOrder&&!showAp&&!showRates)return null;
+              const apFired=liveRuleStatus&&liveRuleStatus.state==="fired";
               return <div className="border border-stone-200 rounded-lg bg-white p-3 space-y-2">
-                <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><Truck className="w-3.5 h-3.5"/>From Order</div>
-                <div className="text-xs text-stone-600">{so?<>Order <b>{so.name}</b>{so.source?` (${so.source})`:""} — buyer requested <b>{so.shippingService||"Standard"}</b>.</>:<span className="text-stone-400">No order loaded — scan an order (or pick one) and it fills in here.</span>}</div>
-              </div>;})()}
-            {!handsFree&&liveRuleStatus&&!custom.hideAutopilotBox&&<div className={`text-[11px] rounded-lg px-3 py-2 flex items-start gap-1.5 ${liveRuleStatus.state==="fired"?"bg-emerald-50 border border-emerald-200 text-emerald-800":liveRuleStatus.state==="error"?"bg-rose-50 border border-rose-200 text-rose-700":"bg-stone-50 border border-stone-200 text-stone-500"}`}>
-              <Zap className="w-3.5 h-3.5 shrink-0 mt-0.5"/>
-              {liveRuleStatus.state==="fired"&&(()=>{const _sw=groundFamilySwap(liveRuleStatus.service,addrClassified?residential:null);return <span>Autopilot rule <b>"{liveRuleStatus.rule}"</b> matched this order — highlighted <b>{_sw}</b> in the list{_sw!==liveRuleStatus.service&&<span> (rule says {liveRuleStatus.service}, but FedEx classified this address {residential?"residential, so Home Delivery applies":"commercial, so Ground applies"})</span>}.</span>;})()}
-              {liveRuleStatus.state==="no-order"&&<span>Autopilot is on, but no order is loaded on this screen — it only checks orders pulled in from the sidebar, not manually-typed shipments.</span>}
-              {liveRuleStatus.state==="no-rules"&&<span>Autopilot is on, but no rules are turned on — open the Autopilot tab and enable a rule.</span>}
-              {liveRuleStatus.state==="no-match"&&<span>Autopilot is on — none of your rules matched this order, so nothing was auto-selected.</span>}
-              {liveRuleStatus.state==="error"&&<span>Autopilot hit an error checking this order: {liveRuleStatus.msg}</span>}
-            </div>}
-            {/* Rate-source chip — ALWAYS mounted when enabled (fixed slot, only the text swaps). Hideable in Settings → Ship screen. */}
-            {!custom.hideRateSrcBar&&<div className={`flex items-start gap-2 text-xs rounded-lg px-3 py-2 min-h-[36px] ${(currentUser&&currentUser.demo)?"bg-amber-50 text-amber-800 border border-amber-200":!ready?"bg-stone-50 text-stone-400 border border-stone-100":rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
-              {(currentUser&&currentUser.demo)?<><Eye className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span>Demo — example rates only. Labels can't be created in the demo; create a free account for real pricing.</span></>
-              :!ready?<><Calculator className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span>Enter a destination ZIP and weight — rates price automatically</span></>
-              :rateSrc.loading?<><Loader2 className="w-3.5 h-3.5 shrink-0 mt-0.5 animate-spin"/><span>Fetching live rates…</span></>
-              :rateSrc.live?<><Wifi className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span>Live rates from your FedEx account</span></>
-              :<><Calculator className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""}{currentUser&&currentUser.role==="admin"?" — turn on live rates in Settings → Carrier accounts":" — live pricing isn't connected right now"}</span></>}
-            </div>}
-            {/* Rate-plumbing diagnostic — ADMIN ONLY: it names the cost source and credential state,
-                which no customer (or demo visitor) should ever see. */}
-            {ready&&!custom.hideRateSrcBar&&!rateSrc.live&&!rateSrc.loading&&rateSrc.diag&&currentUser&&currentUser.role==="admin"&&<div className="text-[11px] text-stone-400 -mt-1.5 px-1">
-              Tried England on your <b>{rateSrc.diag.src==="customer"?"customer's":"main"}</b> account · from ZIP {rateSrc.diag.fromZip} · customer ID {rateSrc.diag.cust} · key {rateSrc.diag.key} · {rateSrc.diag.enabled?"live toggle ON":"live toggle OFF"}{!rateSrc.diag.hasKey?" · no API key found":""}{!rateSrc.diag.hasCust?" · no customer ID found":""}{rateSrc.diag.fromZip==="(none)"?" — no origin ZIP: set your sender ZIP or the customer's origin.":""}{rateSrc.error&&/401|invalid/i.test(rateSrc.error)?" — England rejected this key/ID pair. Re-enter it in Settings → Carrier accounts and Test again.":""}
-            </div>}
+                <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">This Shipment</div>
+                {showOrder&&<div className="flex items-start gap-2 text-xs text-stone-600">
+                  <Truck className="w-3.5 h-3.5 shrink-0 mt-0.5 text-stone-400"/>
+                  <span>{so?<>Order <b>{so.name}</b>{so.source?` (${so.source})`:""} — buyer requested <b>{so.shippingService||"Standard"}</b>.</>:<span className="text-stone-400">No order loaded — scan an order (or pick one) and it fills in here.</span>}</span>
+                </div>}
+                {showAp&&<div className={`flex items-start gap-2 text-xs ${liveRuleStatus.state==="error"?"text-rose-600":apFired?"text-emerald-700":"text-stone-500"}`}>
+                  <Zap className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${apFired?"text-emerald-600":liveRuleStatus.state==="error"?"text-rose-500":"text-stone-400"}`}/>
+                  {liveRuleStatus.state==="fired"&&(()=>{const _sw=groundFamilySwap(liveRuleStatus.service,addrClassified?residential:null);return <span>Autopilot rule <b>"{liveRuleStatus.rule}"</b> matched — highlighted <b>{_sw}</b> in the list{_sw!==liveRuleStatus.service&&<span> (rule says {liveRuleStatus.service}, but FedEx classified this address {residential?"residential, so Home Delivery applies":"commercial, so Ground applies"})</span>}.</span>;})()}
+                  {liveRuleStatus.state==="no-order"&&<span>Autopilot is on, but no order is loaded — it only checks orders pulled in from the sidebar.</span>}
+                  {liveRuleStatus.state==="no-rules"&&<span>Autopilot is on, but no rules are turned on — enable one on the Autopilot tab.</span>}
+                  {liveRuleStatus.state==="no-match"&&<span>Autopilot: no rule matched this order — pick the service yourself.</span>}
+                  {liveRuleStatus.state==="error"&&<span>Autopilot hit an error checking this order: {liveRuleStatus.msg}</span>}
+                </div>}
+                {showRates&&<div className={`flex items-start gap-2 text-xs ${(currentUser&&currentUser.demo)?"text-amber-700":!ready?"text-stone-400":rateSrc.loading?"text-stone-500":rateSrc.live?"text-emerald-700":"text-[#006FBF]"}`}>
+                  {(currentUser&&currentUser.demo)?<><Eye className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span>Demo — example rates only. Labels can't be created in the demo; create a free account for real pricing.</span></>
+                  :!ready?<><Calculator className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span>Enter a destination ZIP and weight — rates price automatically</span></>
+                  :rateSrc.loading?<><Loader2 className="w-3.5 h-3.5 shrink-0 mt-0.5 animate-spin"/><span>Fetching live rates…</span></>
+                  :rateSrc.live?<><Wifi className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-600"/><span>Live rates from your FedEx account</span></>
+                  :<><Calculator className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""}{currentUser&&currentUser.role==="admin"?" — turn on live rates in Settings → Carrier accounts":" — live pricing isn't connected right now"}</span></>}
+                </div>}
+                {/* Rate-plumbing diagnostic — ADMIN ONLY: it names the cost source and credential state,
+                    which no customer (or demo visitor) should ever see. */}
+                {ready&&showRates&&!rateSrc.live&&!rateSrc.loading&&rateSrc.diag&&currentUser&&currentUser.role==="admin"&&<div className="text-[11px] text-stone-400 pl-5">
+                  Tried England on your <b>{rateSrc.diag.src==="customer"?"customer's":"main"}</b> account · from ZIP {rateSrc.diag.fromZip} · customer ID {rateSrc.diag.cust} · key {rateSrc.diag.key} · {rateSrc.diag.enabled?"live toggle ON":"live toggle OFF"}{!rateSrc.diag.hasKey?" · no API key found":""}{!rateSrc.diag.hasCust?" · no customer ID found":""}{rateSrc.diag.fromZip==="(none)"?" — no origin ZIP: set your sender ZIP or the customer's origin.":""}{rateSrc.error&&/401|invalid/i.test(rateSrc.error)?" — England rejected this key/ID pair. Re-enter it in Settings → Carrier accounts and Test again.":""}
+                </div>}
+              </div>;
+            })()}
             <div className="border border-stone-200 rounded-lg bg-white p-3 space-y-2">
               <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5"/>Billing &amp; Third-Party</div>
               <div className="flex items-center gap-2 text-sm">

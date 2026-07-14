@@ -5828,7 +5828,6 @@ function Landing({onAuth}){
         {pub&&pub.showLogo&&<div className="flex items-center gap-1.5 text-[11px] text-stone-500 mt-1 ml-[56px]">by <img src={FW_LOGO} alt="Freightwire" className="h-3.5 w-auto object-contain"/></div>}
       </button>
       <div className="flex flex-wrap items-center gap-1.5">
-        <NavTab label="Take a peek" onClick={enterDemo}/>
         <NavTab label="Features" onClick={()=>setPage("home","features")}/>
         <NavTab label="Rates" onClick={()=>setPage("home","rates")}/>
         <NavTab label="About" onClick={()=>setPage("about")}/>
@@ -5846,7 +5845,6 @@ function Landing({onAuth}){
       <div className="mt-9 flex flex-wrap gap-3 justify-center">
         <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0072BE] text-white font-semibold rounded-xl px-8 py-4 text-[15px] shadow-lg shadow-[#0086E0]/20 transition-colors">Create Your Account</button>
         <button onClick={()=>onAuth("fedex")} className="border border-stone-300 bg-white hover:border-[#0086E0]/50 hover:text-[#0086E0] text-stone-700 font-semibold rounded-xl px-8 py-4 text-[15px] flex items-center gap-2 transition-colors"><Truck className="w-4 h-4"/>Get your own FedEx account</button>
-        <button onClick={enterDemo} className="text-[15px] text-stone-500 hover:text-stone-900 flex items-center gap-1.5 px-3 py-4 transition-colors"><Eye className="w-4 h-4"/>Take a Peek First</button>
       </div>
     </div>
     {/* features */}
@@ -5909,7 +5907,6 @@ function Landing({onAuth}){
           </div>
         </div>
         <div className="mt-7 flex flex-wrap items-center gap-4">
-          <button onClick={enterDemo} className="inline-flex items-center gap-2 bg-white text-stone-900 font-semibold rounded-lg px-6 py-3 hover:bg-stone-200"><Eye className="w-4 h-4"/>Try It In the Demo</button>
           <span className="inline-flex items-center gap-1.5 text-[13px] text-stone-500"><ShieldCheck className="w-4 h-4 text-[#0086E0]"/>It stages, you approve — {AI_NAME} never prints a label without you.</span>
         </div>
       </div>
@@ -7895,6 +7892,12 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               </div>
               <p className="text-[11px] text-stone-400">Emails the buyer a tracking link or a printable label PDF. Logged under Settings → Email automation.</p>
             </div>}
+            {/* form actions live at the bottom of this column so they line up with the cards */}
+            <div className="flex flex-wrap justify-end gap-2">
+              <button onClick={()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);printPackingSlips([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:(shipStatus&&shipStatus.tracking)||"",service:""}]);}} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-200"><FileText className="w-4 h-4"/>Packing Slip</button>
+              <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-300"><Plus className="w-4 h-4"/>New Shipment</button>
+              <button onClick={saveDraft} className={`flex items-center gap-1.5 text-sm rounded px-4 py-2 font-medium ${saved?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{saved?<><Check className="w-4 h-4"/>Saved to drafts</>:<><FileText className="w-4 h-4"/>Save Draft</>}</button>
+            </div>
           </div>
         </div>
         {intl&&(
@@ -7994,12 +7997,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           {shipStatus.state==="error"&&<><AlertTriangle className="w-4 h-4"/>{shipStatus.msg}</>}
         </div>}
 
-        {/* Billing & third-party + Send label & notify moved beside the service list (right column of the rates row). */}
-        <div className="flex justify-end gap-2 pt-1">
-          <button onClick={()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);printPackingSlips([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:(shipStatus&&shipStatus.tracking)||"",service:""}]);}} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-200"><FileText className="w-4 h-4"/>Packing Slip</button>
-          <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-300"><Plus className="w-4 h-4"/>New Shipment</button>
-          <button onClick={saveDraft} className={`flex items-center gap-1.5 text-sm rounded px-4 py-2 font-medium ${saved?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{saved?<><Check className="w-4 h-4"/>Saved to drafts</>:<><FileText className="w-4 h-4"/>Save draft</>}</button>
-        </div>
+        {/* Billing & third-party + Send label & notify + form actions moved beside the service list (right column of the rates row). */}
       </div>
     </div>
   );

@@ -7775,10 +7775,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
 
         {/* "No customer assigned" banner removed: logins self-heal into a customer automatically
             (see the App-shell effect) — customers must never see markup mechanics or the client list. */}
-                {(handsFree||selectedOrder)&&(()=>{const so=selectedOrder&&orders.find(o=>o.id===selectedOrder);
-                  if(!handsFree&&!(so&&(so.shippingService||so.source)))return null;
-                  /* hands-free: this box is ALWAYS here (fixed height) — only its text changes */
-                  return <div className="flex items-center gap-2 text-xs text-stone-600 bg-stone-100 border border-stone-200 rounded-lg px-3 py-2 min-h-[38px]"><Truck className="w-3.5 h-3.5 text-stone-400 shrink-0"/><span className="truncate">{so?<>From order <b>{so.name}</b>{so.source?` (${so.source})`:""} — buyer requested <b>{so.shippingService||"Standard"}</b>.</>:<span className="text-stone-400">No order loaded — scan an order (or pick one) and it fills in here.</span>}</span></div>;})()}
+        {/* The "From order …" card moved beside the service list (right column) — see the rates row below. */}
         {currentUser&&currentUser.role==="admin"&&setPriceAs&&clients.length>0&&<div className="flex flex-wrap items-center gap-2 text-xs bg-violet-50 border border-violet-200 rounded-lg px-3 py-2">
           <span className="uppercase tracking-widest text-[10px] text-violet-500 font-semibold shrink-0">Price as</span>
           <select value={priceAs} onChange={e=>setPriceAs(e.target.value)} className="bg-white border border-violet-200 rounded px-2 py-1 text-xs outline-none">
@@ -7848,7 +7845,30 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <span><b>Hands-free:</b> {hfWait.m}</span>
         </div>}
         {!custom.hideShipSteps&&<StepHead n="3" label="Service & rate"/>}
-        <ServiceList hideTitle={true} quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
+        {/* Rates row: service list on the left, a slim info column (From order · Billing & third-party)
+            fills the space to its right. Wraps to a normal stack on narrow screens. */}
+        <div className="flex flex-wrap items-start gap-3">
+          <div className="flex-1 min-w-[300px] max-w-[52rem]">
+            <ServiceList hideTitle={true} quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
+          </div>
+          <div className="w-full lg:w-80 lg:shrink-0 space-y-3">
+            {(handsFree||selectedOrder)&&(()=>{const so=selectedOrder&&orders.find(o=>o.id===selectedOrder);
+              if(!handsFree&&!(so&&(so.shippingService||so.source)))return null;
+              /* hands-free: this card is ALWAYS here (fixed slot) — only its text changes */
+              return <div className="border border-stone-200 rounded-lg bg-white p-3 space-y-2">
+                <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><Truck className="w-3.5 h-3.5"/>From Order</div>
+                <div className="text-xs text-stone-600">{so?<>Order <b>{so.name}</b>{so.source?` (${so.source})`:""} — buyer requested <b>{so.shippingService||"Standard"}</b>.</>:<span className="text-stone-400">No order loaded — scan an order (or pick one) and it fills in here.</span>}</div>
+              </div>;})()}
+            <div className="border border-stone-200 rounded-lg bg-white p-3 space-y-2">
+              <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5"/>Billing &amp; Third-Party</div>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-stone-500">Bill to</span>
+                <select value={billTo} onChange={e=>setBillTo(e.target.value)} className="flex-1 bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="sender">Sender (You)</option><option value="receiver">Receiver</option><option value="third">Third-Party Acct</option></select>
+              </div>
+              {billTo==="third"&&<input value={thirdAcct} onChange={e=>setThirdAcct(e.target.value)} placeholder="3rd-party acct #" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>}
+            </div>
+          </div>
+        </div>
         {intl&&(
           <div className="border border-[#99D6FF] bg-[#E6F4FF]/40 rounded-lg p-3 space-y-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-[#006FBF]"><FileText className="w-4 h-4"/>Customs · Commercial invoice</div>
@@ -7946,17 +7966,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           {shipStatus.state==="error"&&<><AlertTriangle className="w-4 h-4"/>{shipStatus.msg}</>}
         </div>}
 
-        <div className="border border-stone-200 rounded-lg bg-white p-3 space-y-3">
-          <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">Billing &amp; third-party</div>
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-stone-500 flex items-center gap-1"><CreditCard className="w-3.5 h-3.5"/>Bill to</span>
-              <select value={billTo} onChange={e=>setBillTo(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="sender">Sender (You)</option><option value="receiver">Receiver</option><option value="third">Third-Party Acct</option></select>
-              {billTo==="third"&&<input value={thirdAcct} onChange={e=>setThirdAcct(e.target.value)} placeholder="3rd-party acct #" className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm w-40 outline-none focus:border-[#0099FF]"/>}
-            </div>
-          </div>
-        </div>
-
+        {/* Billing & third-party moved beside the service list (right column of the rates row). */}
         {!custom.hideNotifyBox&&<div className="border border-stone-200 rounded-lg bg-white p-3 space-y-3">
           <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><Send className="w-3.5 h-3.5"/>Send label &amp; notify</div>
           <div className="flex flex-wrap items-end gap-3">
@@ -8272,11 +8282,14 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
     }
     comps=[...comps,...acc.map(a=>({label:a.label,amount:a.amount}))];
     const hasPrice=sell!=null;
+    /* rendered twice: for real in the row, and invisible in the expanded panel so the breakdown
+       indents past it and lines up under the service name even when the badge shifts the name */
+    const matchBadge=matched===q.key?(<span className="text-[10px] font-semibold uppercase tracking-wide bg-[#E6F4FF] text-[#0086E0] border border-[#99D6FF] rounded px-1.5 py-0.5 shrink-0 inline-flex items-center gap-1">{matchedSrc==="autopilot"&&<Zap className="w-3 h-3"/>}{matchedSrc==="autopilot"?"Autopilot":"Requested"}</span>):null;
     return (
       <div key={q.key||svcFamilyKey(q.label)} className={"border rounded-lg bg-white transition-all duration-200 "+(matched===q.key?"border-[#0086E0] ring-1 ring-[#0086E0]":"border-stone-200")}>
         <div onClick={()=>{setOpen(isOpen?null:q.key); if(q._oneRate&&q.packageTypeCode&&onOneRate)onOneRate(q.packageTypeCode);}} className="px-3 py-2 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
           <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isOpen?"rotate-90":""}`}/>
-          {matched===q.key&&<span className="text-[10px] font-semibold uppercase tracking-wide bg-[#E6F4FF] text-[#0086E0] border border-[#99D6FF] rounded px-1.5 py-0.5 shrink-0 inline-flex items-center gap-1">{matchedSrc==="autopilot"&&<Zap className="w-3 h-3"/>}{matchedSrc==="autopilot"?"Autopilot":"Requested"}</span>}
+          {matchBadge}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2"><span className="text-sm font-semibold text-stone-900 truncate">{(custom.aliases&&custom.aliases[canonSvc(q.label)])||q.label}</span></div>
             <div className="text-[12.5px] text-stone-900 flex items-center gap-1"><Calendar className="w-3.5 h-3.5"/>Transit Time: {days?(custom.transitStyle==="days"?<>{days} business day{days>1?"s":""}</>:<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}</div>
@@ -8285,11 +8298,15 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
           {action&&(()=>{const unavailable=q._unavailable||(!hasPrice&&!loading&&live);
             return <button onClick={(e)=>{e.stopPropagation();if(!unavailable)action(q);}} disabled={!ready||!hasPrice||unavailable} title={unavailable?"FedEx isn't offering this service for this shipment (size/weight/destination).":!hasPrice&&q._oneRate?"No One Rate flat price came back — pick a priced service.":undefined} className={`shrink-0 w-32 text-sm rounded px-3 py-2 font-medium flex items-center justify-center gap-1.5 disabled:cursor-not-allowed ${unavailable?"bg-rose-50 text-rose-600 border border-rose-200":bought===q.key?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8] disabled:opacity-40"}`}>{unavailable?<>Unavailable</>:bought===q.key?<><Check className="w-4 h-4"/>{doneLabel}</>:!hasPrice&&q._oneRate?<>No quote</>:<><Printer className="w-4 h-4"/>{label}</>}</button>;})()}
         </div>
-        {isOpen&&ready&&hasPrice&&<div className="px-4 pb-3 pt-1 border-t border-stone-100">
-          {/* Compact breakdown table lined up under the service name and its transit line (ml-6 on
-              top of the panel's px-4 lands at the same 40px indent as the name), max-w keeps every
-              label right beside its amount instead of stretched across the box. */}
-          <div className="max-w-[300px] ml-6">
+        {isOpen&&ready&&hasPrice&&<div className="px-3 pb-3 pt-1 border-t border-stone-100">
+          {/* Compact breakdown table lined up under the service name and its transit line. The
+              spacer + invisible badge mirror the row's chevron and Autopilot/Requested chip, so
+              the indent tracks the name exactly whether or not a badge is present; max-w keeps
+              every label right beside its amount instead of stretched across the box. */}
+          <div className="flex gap-3">
+          <span className="w-4 shrink-0"/>
+          {matchBadge&&<span className="invisible shrink-0" aria-hidden="true">{matchBadge}</span>}
+          <div className="max-w-[300px] flex-1 min-w-0">
           <div className="flex items-center justify-between mb-1.5">
             <div className="text-[10px] uppercase tracking-widest text-stone-400">Rate breakdown</div>
             {perBox&&perBox.length>1&&<div className="flex bg-stone-100 rounded-lg p-0.5 text-[11px]">
@@ -8346,6 +8363,7 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
             })()}
           {/* One quiet line when dimensional weight governs — no calculator, no math lesson */}
           {((billing&&!q._oneRate&&(q.dimWeight||billing.dimApplies))||(!billing&&q.dimWeight))&&(()=>{const _bw=q.quotedWeight||(billing&&billing.billed)||null;return <div className="text-[11px] text-stone-500 mt-2">Billed at {_bw?<b>{_bw} lb</b>:null} dim weight.</div>;})()}
+          </div>
           </div>
         </div>}
       </div>

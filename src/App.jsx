@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v547";
+const BUILD_TAG="addr-v548";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -11842,7 +11842,6 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Zap className="w-5 h-5 text-[#0086E0]"/>Autopilot</h2>
-        <p className="text-sm text-stone-500 mt-0.5">Tell {BRAND.product} how you ship — it handles the rest.</p>
       </div>
       <div className="flex items-center gap-2">
         <button onClick={exportJSON} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-100 flex items-center gap-1.5"><Download className="w-4 h-4"/>Export JSON</button>

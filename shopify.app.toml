@@ -1,0 +1,32 @@
+# ShippingCloud — public app configuration
+# Deploy with: shopify app deploy
+# This mirrors the released PublicV1 exactly, plus the three mandatory
+# privacy/compliance webhooks the dev-dashboard UI has no fields for.
+
+client_id = "1ffaf48bb94f9fc56e2ba6a56f327fc7"
+name = "ShippingCloud"
+application_url = "https://shippingcloud.net/"
+embedded = false
+
+[access_scopes]
+scopes = "read_orders,read_products,write_shipping,read_fulfillments,write_fulfillments,read_assigned_fulfillment_orders,write_assigned_fulfillment_orders,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders"
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [
+  "https://shippingcloud.net/.netlify/functions/shopify-auth",
+  "https://www.shippingcloud.net/.netlify/functions/shopify-auth",
+  "https://freightwireship.com/.netlify/functions/shopify-auth",
+  "https://www.freightwireship.com/.netlify/functions/shopify-auth",
+  "https://shiphub-staging.netlify.app/.netlify/functions/shopify-auth"
+]
+
+[webhooks]
+api_version = "2026-07"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+  uri = "https://shippingcloud.net/.netlify/functions/shopify-compliance"
+
+[pos]
+embedded = false

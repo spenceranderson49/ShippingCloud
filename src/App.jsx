@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v524";
+const BUILD_TAG="addr-v525";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7644,7 +7644,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       ))}
       <div className="flex-1 min-w-0 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          {custom.hideShipSteps?<h1 className="text-base font-semibold text-stone-800 flex items-center gap-2 whitespace-nowrap"><Package className="w-4 h-4 text-[#0086E0]"/>Create shipment</h1>:<div className="flex-1 min-w-[220px]"><StepHead n="1" label="Ship from & to"/></div>}
+          {custom.hideShipSteps?<span className="flex-1"/>:<div className="flex-1 min-w-[220px]"><StepHead n="1" label="Ship from & to"/></div>}
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New shipment</button>
             {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}

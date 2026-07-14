@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v554";
+const BUILD_TAG="addr-v555";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3150,7 +3150,7 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
         <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
           <div className="sm:w-28"><Field label="Label"><Input value={b.partnerLabel} onChange={e=>set("partnerLabel",e.target.value)} placeholder="by"/></Field></div>
           <div className="flex items-center gap-3">
-            <label className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#006db8] cursor-pointer"><Upload className="w-4 h-4"/>Upload logo<input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={upload} className="hidden"/></label>
+            <label className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] cursor-pointer"><Upload className="w-4 h-4"/>Upload logo<input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={upload} className="hidden"/></label>
             {b.logo&&<><img src={b.logo} alt="logo" className="h-7 w-auto object-contain border border-stone-100 rounded px-1 bg-white"/><button onClick={()=>set("logo","")} className="text-xs text-stone-400 hover:text-rose-500 underline">remove</button></>}
           </div>
         </div>
@@ -3408,7 +3408,7 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection,cli
           <table className="w-full text-[13px] min-w-[760px]">
             <thead className="sticky top-0 bg-stone-50 z-10"><tr className="text-[10px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal px-3 py-2">Time</th><th className="text-left font-normal px-3 py-2">Customer</th><th className="text-left font-normal px-3 py-2">Carrier</th><th className="text-left font-normal px-3 py-2">Tracking #</th><th className="text-left font-normal px-3 py-2">Service</th><th className="text-right font-normal px-3 py-2">Est. Margin</th><th className="text-right font-normal px-3 py-2">Quote</th></tr></thead>
             <tbody>
-              {inP.length===0&&<tr><td colSpan={7} className="px-3 py-10 text-center text-stone-400">{feedQ?"Nothing matches your search in this period.":"No shipments in this period yet."}</td></tr>}
+              {inP.length===0&&<tr><td colSpan={7} className="px-3 py-8 text-center text-stone-400">{feedQ?"Nothing matches your search in this period.":"No shipments in this period yet."}</td></tr>}
               {inP.slice(0,400).map((x,i)=>(<tr key={i} className={"border-t border-stone-100 "+(x.status==="Voided"?"opacity-45":"")}>
                 <td className="px-3 py-1.5 whitespace-nowrap text-stone-500">{timeOf(x)}</td>
                 <td className="px-3 py-1.5 max-w-[220px]">{(()=>{const _cid=cidOf(x);return _cid&&openCustomer?<button onClick={()=>openCustomer(_cid)} className="truncate font-medium text-[#0086E0] hover:underline text-left block max-w-full">{custOf(x)}</button>:<div className="truncate font-medium text-stone-800">{custOf(x)}</div>;})()}<div className="text-[10px] text-stone-400 truncate">{uEmail(x._uid)}</div></td>
@@ -3542,7 +3542,7 @@ function BackupsAdmin({clients=[],setClients,users=[],setUsers}){
     {pick&&createPortal(<div className="fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center p-4" onClick={()=>setPick(null)}>
       <div onClick={e=>e.stopPropagation()} className="bg-white rounded-2xl max-w-lg w-full max-h-[82vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-stone-100">
-          <div className="text-sm font-semibold text-stone-800">Restore {pick.kind==="users"?"logins":"customers"} — snapshot from {parseTs(pick.ts)}</div>
+          <div className="text-base font-semibold text-stone-800">Restore {pick.kind==="users"?"logins":"customers"} — snapshot from {parseTs(pick.ts)}</div>
           <button onClick={()=>setPick(null)} className="text-stone-400 hover:text-stone-600"><X className="w-5 h-5"/></button>
         </div>
         <div className="px-5 py-2.5 text-[12px] text-stone-500 border-b border-stone-100">Missing customers are pre-checked. Checking one that still exists will overwrite it with this backup's version. Nothing else in your current list is touched.</div>
@@ -4027,7 +4027,7 @@ function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureF
       <Field label="Search customers & logins"><Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Company, contact, login name or email…" className="w-64"/></Field>
       <Field label="Sort by"><Select value={sort} onChange={e=>setSort(e.target.value)}><option value="name">Name</option><option value="logins">Most logins</option><option value="markup">Highest markup</option><option value="profile">Rate profile</option><option value="status">Status</option></Select></Field>
       <span className="flex-1"/>
-      <button onClick={()=>setAdding(a=>!a)} className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#006db8]"><Plus className="w-4 h-4"/>New customer</button>
+      <button onClick={()=>setAdding(a=>!a)} className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8]"><Plus className="w-4 h-4"/>New customer</button>
     </div>
     {adding&&<div className="border border-stone-200 rounded-lg bg-white p-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
       <Field label="Company"><Input value={nf.name} onChange={e=>setNf({...nf,name:e.target.value})}/></Field>
@@ -4369,7 +4369,7 @@ function RatesAdmin({clients=[],brand}){
         </div></Field>
         <Field label="Pricing for customer"><Select value={custView} onChange={e=>setCustView(e.target.value)}><option value="">All customers on this profile</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>
         <Field label="Quick set"><Select value="" onChange={e=>{quickSet(e.target.value);e.target.value="";}}><option value="">Rate action…</option><option value="listpct">Everything → FedEx list − %…</option><option value="pct:70">Every service → 70%</option><option value="pct:65">Every service → 65%</option><option value="pct:55">Every service → 55%</option><option value="pct:50">Every service → 50%</option><option value="clearmin">Clear all minimums</option><option value="clearzones">Clear all zone overrides</option></Select></Field>
-        <button onClick={()=>setAssignOpen(a=>!a)} className={`text-sm rounded-lg px-3 py-2 font-medium ${assignOpen?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>Assign customers ({assignedTo(prof.id).length})</button>
+        <button onClick={()=>setAssignOpen(a=>!a)} className={`text-sm rounded-lg px-3 py-1.5 font-medium ${assignOpen?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>Assign customers ({assignedTo(prof.id).length})</button>
       </div>
       {custView&&<div className="border border-sky-200 bg-sky-50/60 rounded-lg px-3 py-2 text-sm flex flex-wrap items-center gap-2">
         <span className="font-medium text-stone-800">{custName(custView)}</span><span className="text-stone-500">ships on profile</span>
@@ -6130,7 +6130,7 @@ function CompanyAddressDeploy({companyUsers,companyFlags,setCompanyFlags,adminSe
     {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
     <div className="flex flex-wrap items-center gap-2">
       <button onClick={()=>deploy(false)} disabled={busy||!book.length} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<BookUser className="w-4 h-4"/>}Share to {mode==="all"?"everyone":`${targets.length} selected`}</button>
-      <button onClick={()=>deploy(true)} disabled={busy} className="text-sm border border-stone-300 text-stone-600 rounded-lg px-3 py-2 font-medium hover:bg-stone-50 disabled:opacity-40">Remove shared book</button>
+      <button onClick={()=>deploy(true)} disabled={busy} className="text-sm border border-stone-300 text-stone-600 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-50 disabled:opacity-40">Remove shared book</button>
     </div>
   </div>);
 }
@@ -8506,10 +8506,10 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
             <div className="flex items-center gap-1.5 text-sm"><span className="text-stone-500 hidden sm:inline">Sort</span><select value={sort} onChange={e=>setSort(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="total">Order total</option><option value="customer">Recipient</option><option value="state">Dest. state</option><option value="weight">Weight</option><option value="source">Store</option></select></div>
             <button onClick={()=>downloadCSV("shippingcloud-orders.csv",[["Order","Customer","Company","Address","City","State","ZIP","Country","Items","SKU","Weight","Total","Source","Date","Note"],...orders.map(o=>[o.name,o.customer,o.company||"",o.address1||"",o.city,o.state,o.zip,o.country||"US",o.items||"",o.sku||"",o.weight,o.total||"",o.source||"",o.date||"",o.note||""])])} title="Download every open order as CSV" className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 px-2 py-2"><Download className="w-4 h-4"/>Export</button>
             {setSettings&&(()=>{const on=custom.autoRulesOnShip!==false;const toggle=()=>setSettings(pp=>({...pp,custom:{...(pp.custom||{}),autoRulesOnShip:!on}}));
-              return <button onClick={toggle} title="When on, pulling an order into Ship pre-selects the service your Autopilot rules pick — applied as you ship." className={`flex items-center gap-1.5 text-sm rounded-lg px-3 py-2 font-medium border ${on?"bg-violet-50 border-violet-300 text-violet-700 hover:bg-violet-100":"bg-white border-stone-200 text-stone-500 hover:bg-stone-50"}`}><Zap className="w-4 h-4"/>Autopilot as I ship<span className={`ml-0.5 w-8 h-4 rounded-full flex items-center px-0.5 transition-colors ${on?"bg-violet-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-3 h-3 bg-white rounded-full"/></span></button>;
+              return <button onClick={toggle} title="When on, pulling an order into Ship pre-selects the service your Autopilot rules pick — applied as you ship." className={`flex items-center gap-1.5 text-sm rounded-lg px-3 py-1.5 font-medium border ${on?"bg-violet-50 border-violet-300 text-violet-700 hover:bg-violet-100":"bg-white border-stone-200 text-stone-500 hover:bg-stone-50"}`}><Zap className="w-4 h-4"/>Autopilot as I ship<span className={`ml-0.5 w-8 h-4 rounded-full flex items-center px-0.5 transition-colors ${on?"bg-violet-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-3 h-3 bg-white rounded-full"/></span></button>;
             })()}
-            {orderSources.length>0&&<button onClick={syncAll} disabled={syncing} title={orderSources.length>1?`Syncs: ${orderSources.map(s=>s.name).join(", ")}`:undefined} className="flex items-center gap-1.5 text-sm border border-[#0086E0]/30 bg-[#E6F4FF] text-[#006FBF] rounded-lg px-3 py-2 font-medium hover:bg-[#CDE9FF] disabled:opacity-40">{syncing?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>{syncLabel}</>}</button>}
-            <button onClick={()=>setAdding(true)} className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#006db8]"><Plus className="w-4 h-4"/>New order</button>
+            {orderSources.length>0&&<button onClick={syncAll} disabled={syncing} title={orderSources.length>1?`Syncs: ${orderSources.map(s=>s.name).join(", ")}`:undefined} className="flex items-center gap-1.5 text-sm border border-[#0086E0]/30 bg-[#E6F4FF] text-[#006FBF] rounded-lg px-3 py-1.5 font-medium hover:bg-[#CDE9FF] disabled:opacity-40">{syncing?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>{syncLabel}</>}</button>}
+            <button onClick={()=>setAdding(true)} className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8]"><Plus className="w-4 h-4"/>New order</button>
           </div>
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
             {views.map(v=>(<span key={v.id} className="group inline-flex items-center gap-1 bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-full pl-2.5 pr-1.5 py-1 font-medium">
@@ -10079,8 +10079,8 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         <span className="text-stone-500 hidden sm:inline"><b className="text-stone-800">{Math.round(totals.wt*10)/10}</b> lb</span>
         {showMoney&&<span className="text-stone-500">est. <b className="text-stone-800">{money(totals.sell)}</b></span>}
         {svcMixSel.length>0&&<span className="hidden lg:flex items-center gap-1.5">{svcMixSel.map(([l,n])=><Badge key={l} tone="stone">{l.replace(/^FedEx /,"")} ×{n}</Badge>)}</span>}
-        <button onClick={()=>printPackingSlips(rows.map(r=>slipFromOrder(r.o,settings.sender)))} disabled={rows.length===0} title="Print a packing slip for every selected order" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5"><FileText className="w-4 h-4"/>Packing slips</button>
-        <button onClick={()=>printPickList(rows.map(r=>r.o))} disabled={rows.length===0} title="One sheet: every item in this batch aggregated by product, with checkboxes" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5"><ClipboardList className="w-4 h-4"/>Pick list</button>
+        <button onClick={()=>printPackingSlips(rows.map(r=>slipFromOrder(r.o,settings.sender)))} disabled={rows.length===0} title="Print a packing slip for every selected order" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5"><FileText className="w-4 h-4"/>Packing slips</button>
+        <button onClick={()=>printPickList(rows.map(r=>r.o))} disabled={rows.length===0} title="One sheet: every item in this batch aggregated by product, with checkboxes" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5"><ClipboardList className="w-4 h-4"/>Pick list</button>
         <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Fallback</span><select value={cz(settings).fallbackService||""} onChange={e=>setSettings&&setSettings(s=>({...s,custom:{...(s.custom||{}),fallbackService:e.target.value}}))} title="Service used for orders that match no rule" className="text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded-lg px-2 outline-none focus:border-[#0099FF]"><option value="">No fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx Ground Economy">FedEx Ground Economy</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
         <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Ship date</span><input type="date" value={batchShipDate} onChange={e=>setBatchShipDate(e.target.value)} className="text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded-lg px-2 outline-none focus:border-[#0099FF]"/></label>
         <button onClick={run} disabled={running||rows.length===0} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-semibold hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{running?<Loader2 className="w-4 h-4 animate-spin"/>:<Printer className="w-4 h-4"/>}{running?`Booking ${progress.n}/${progress.total}…`:`Create & print ${rows.length} label${rows.length!==1?"s":""}`}</button>
@@ -11097,7 +11097,7 @@ function PrinterSettings({settings:settingsLive,setSettings:commitSettings}){
                 {docVal(k)&&!knownPrinters.some(p=>p.id===docVal(k))&&<option value={docVal(k)}>Printer {docVal(k)}</option>}
               </select>
             </label>
-            {docVal(k)&&<button onClick={()=>pnTestTo(docVal(k))} disabled={pnBusy===("test"+docVal(k))} className="text-sm border border-stone-300 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5">{pnBusy===("test"+docVal(k))?<><Loader2 className="w-4 h-4 animate-spin"/>Sending…</>:<><Printer className="w-4 h-4"/>Test</>}</button>}
+            {docVal(k)&&<button onClick={()=>pnTestTo(docVal(k))} disabled={pnBusy===("test"+docVal(k))} className="text-sm border border-stone-300 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5">{pnBusy===("test"+docVal(k))?<><Loader2 className="w-4 h-4 animate-spin"/>Sending…</>:<><Printer className="w-4 h-4"/>Test</>}</button>}
           </div>))}
           {(pnc.savedPrinters||[]).length>0&&<div className="flex flex-wrap gap-1.5 pt-0.5">
             <span className="text-[11px] text-stone-400 w-full">Remembered printers:</span>
@@ -11623,7 +11623,7 @@ function RuleEditorModal({rule,onSave,onClose,onDelete,warehouses}){
           </label>
         </div>
         <div className="bg-white border-t border-stone-200 px-4 py-3 flex items-center justify-between shrink-0">
-          {!rule._isNew?<button onClick={()=>onDelete(r.id)} className="text-sm text-rose-600 hover:bg-rose-50 rounded-lg px-3 py-2 font-medium">Delete</button>:<span/>}
+          {!rule._isNew?<button onClick={()=>onDelete(r.id)} className="text-sm text-rose-600 hover:bg-rose-50 rounded-lg px-3 py-1.5 font-medium">Delete</button>:<span/>}
           <div className="flex items-center gap-2">
             <button onClick={onClose} className="text-sm text-stone-500 rounded px-3 py-2 hover:bg-stone-100">Cancel</button>
             <button onClick={()=>onSave(r)} disabled={!r.name} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40">Save rule</button>
@@ -11856,9 +11856,9 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
         <h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Zap className="w-5 h-5 text-[#0086E0]"/>Autopilot</h2>
       </div>
       <div className="flex items-center gap-2">
-        <button onClick={exportJSON} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-100 flex items-center gap-1.5"><Download className="w-4 h-4"/>Export JSON</button>
-        <button onClick={()=>setFbOpen(v=>!v)} title="Batch by criteria — the Batch tab's filters, right here" className={`text-sm rounded-lg px-3 py-2 font-medium border flex items-center gap-1.5 ${fbOpen?"bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF]":"bg-white border-stone-200 text-stone-700 hover:bg-stone-100"}`}><ClipboardList className="w-4 h-4"/>Filter &amp; batch</button>
-        <button onClick={newRule} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium flex items-center gap-1.5 hover:bg-stone-100"><Plus className="w-4 h-4"/>New rule</button>
+        <button onClick={exportJSON} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-100 flex items-center gap-1.5"><Download className="w-4 h-4"/>Export JSON</button>
+        <button onClick={()=>setFbOpen(v=>!v)} title="Batch by criteria — the Batch tab's filters, right here" className={`text-sm rounded-lg px-3 py-1.5 font-medium border flex items-center gap-1.5 ${fbOpen?"bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF]":"bg-white border-stone-200 text-stone-700 hover:bg-stone-100"}`}><ClipboardList className="w-4 h-4"/>Filter &amp; batch</button>
+        <button onClick={newRule} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium flex items-center gap-1.5 hover:bg-stone-100"><Plus className="w-4 h-4"/>New rule</button>
         <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Fallback</span><select value={cz(settings).fallbackService||""} onChange={e=>setSettings&&setSettings(s=>({...s,custom:{...(s.custom||{}),fallbackService:e.target.value}}))} title="Service used for orders that match no rule" className="text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded-lg px-2 outline-none focus:border-emerald-500"><option value="">No fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx Ground Economy">FedEx Ground Economy</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
         <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Ship date</span><input type="date" value={apShipDate} onChange={e=>setApShipDate(e.target.value)} className="text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded-lg px-2 outline-none focus:border-emerald-500"/></label>
         <button onClick={runAutopilot} disabled={apRunning||ords.filter(o=>o.status!=="fulfilled").length===0} title="Apply your rules and create labels for every unfulfilled order (held orders are skipped)" className="text-sm bg-emerald-600 text-white rounded-lg px-4 py-2.5 font-semibold hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-2 shadow-sm">{apRunning?<Loader2 className="w-4 h-4 animate-spin"/>:<Zap className="w-4 h-4"/>}Run Autopilot{!apRunning&&run?` — label ${run.results.filter(r=>r.order.status!=="fulfilled"&&!r.view.hold).length} orders`:""}</button>
@@ -11933,7 +11933,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
           <div className="text-stone-800 font-medium">No rules yet</div>
           <div className="text-sm text-stone-500 mt-1">Rules are simple "if this, do that" sentences — Autopilot runs them on every order.</div>
           <div className="mt-3 flex items-center justify-center gap-3">
-            <button onClick={addStarters} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#0072BE]">Add starter rules</button>
+            <button onClick={addStarters} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE]">Add starter rules</button>
             <button onClick={newRule} className="text-sm text-[#006FBF] font-medium">＋ Build your own</button>
           </div>
         </div>}
@@ -12044,7 +12044,7 @@ function AddressBook({settings,setSettings}){
   return (<div className="max-w-3xl space-y-3">
     <div className="flex flex-wrap items-center gap-3">
       <p className="text-sm text-stone-500 flex-1">Saved contacts for fast ship-to / ship-from. Import your whole list from a CSV.</p>
-      <label className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#006db8] cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
+      <label className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
     </div>
     {msg&&<div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{msg}</div>}
     <div className="text-[11px] text-stone-400">CSV columns recognized: name, company, address, city, state, zip, phone (header row optional).</div>
@@ -12219,7 +12219,7 @@ function Integrations({settings,setSettings,orders,setOrders}){
           <span className=" text-[12px] text-stone-600 truncate flex-1">{c.shop}</span>
           <button onClick={()=>disconnect(c.shop)} className="text-[11px] text-stone-400 hover:text-rose-600 shrink-0">Disconnect</button>
         </div>))}
-        <button onClick={sync} disabled={busy} className="mt-1 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>Sync all orders now</>}</button>
+        <button onClick={sync} disabled={busy} className="mt-1 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>Sync all orders now</>}</button>
       </div>}
       <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-stone-100 pt-3">
         <div className="flex-1 min-w-[220px]"><div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">{connected?"Connect another store":"Store domain"}</div><Input value={shop} onChange={e=>setShop(e.target.value)} placeholder="mystore.myshopify.com"/></div>
@@ -12646,7 +12646,7 @@ function AccountLoginPanel({currentUser,setCurrentUser}){
       <Field label="Email"><Input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@company.com"/></Field>
       {changed&&<Field label="Confirm with your current password"><Input type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&save()} placeholder="••••••••"/></Field>}
       <div className="flex items-center gap-2">
-        <button disabled={busy||!changed} onClick={save} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#006db8] disabled:opacity-50">{busy?"Saving…":"Update login email"}</button>
+        <button disabled={busy||!changed} onClick={save} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] disabled:opacity-50">{busy?"Saving…":"Update login email"}</button>
         {changed&&<button disabled={busy} onClick={()=>{setEmail(curEmail);setPw("");setMsg(null);}} className="text-xs text-stone-400 hover:text-stone-600">Cancel</button>}
       </div>
       {msg&&<div className={`text-sm ${msg.t==="ok"?"text-emerald-700":"text-rose-600"}`}>{msg.m}</div>}
@@ -12688,7 +12688,7 @@ function TwoFactorPanel(){
         <button disabled={busy} onClick={regen} className="rounded px-2.5 py-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200 disabled:opacity-50">New backup codes</button>
       </div>
     </div>}
-    {status&&!status.enabled&&!setup&&<button disabled={busy} onClick={begin} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#006db8] disabled:opacity-50">{busy?"One moment…":"Set up 2FA"}</button>}
+    {status&&!status.enabled&&!setup&&<button disabled={busy} onClick={begin} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] disabled:opacity-50">{busy?"One moment…":"Set up 2FA"}</button>}
     {setup&&<div className="space-y-3">
       <div className="text-sm text-stone-700">1. In your authenticator app, add an account and enter this key (or paste the setup link):</div>
       <div className="bg-stone-50 border border-stone-200 rounded-lg p-3 space-y-2">
@@ -12699,7 +12699,7 @@ function TwoFactorPanel(){
       <div className="text-sm text-stone-700">2. Enter the 6-digit code your app shows now:</div>
       <div className="flex items-center gap-2">
         <input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,"").slice(0,6))} onKeyDown={e=>e.key==="Enter"&&enable()} placeholder="123456" inputMode="numeric" className="w-32 border border-stone-300 rounded-lg px-3 py-2 text-sm tracking-[0.3em] text-center outline-none focus:border-[#0099FF]"/>
-        <button disabled={busy||code.length!==6} onClick={enable} className="text-sm bg-emerald-600 text-white rounded-lg px-3 py-2 font-medium hover:bg-emerald-700 disabled:opacity-50">Turn on 2FA</button>
+        <button disabled={busy||code.length!==6} onClick={enable} className="text-sm bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-emerald-700 disabled:opacity-50">Turn on 2FA</button>
         <button disabled={busy} onClick={()=>{setSetup(null);setCode("");setMsg(null);}} className="text-xs text-stone-400 hover:text-stone-600">Cancel</button>
       </div>
     </div>}
@@ -12719,10 +12719,10 @@ function TwoFactorPanel(){
       <p className="text-xs text-stone-500 mt-0.5 mb-2">Prefer not to use an authenticator app? Turn on email verification and we'll email you a 6-digit code each time you sign in. (If both are on, the authenticator app is used.)</p>
       {e2===null&&<div className="text-sm text-stone-400">Checking…</div>}
       {e2&&e2.enabled&&<div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm text-emerald-700"><Check className="w-4 h-4"/>Email verification is <b>on</b>.</div><button disabled={busy} onClick={e2disable} className="text-xs rounded px-2.5 py-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200 disabled:opacity-50">Turn off</button></div>}
-      {e2&&!e2.enabled&&!e2sent&&<button disabled={busy} onClick={e2begin} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#006db8] disabled:opacity-50">{busy?"Sending…":"Turn on email verification"}</button>}
+      {e2&&!e2.enabled&&!e2sent&&<button disabled={busy} onClick={e2begin} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] disabled:opacity-50">{busy?"Sending…":"Turn on email verification"}</button>}
       {e2&&!e2.enabled&&e2sent&&<div className="flex items-center gap-2">
         <input value={e2code} onChange={e=>setE2code(e.target.value.replace(/\D/g,"").slice(0,6))} onKeyDown={e=>e.key==="Enter"&&e2enable()} placeholder="123456" inputMode="numeric" className="w-32 border border-stone-300 rounded-lg px-3 py-2 text-sm tracking-[0.3em] text-center outline-none focus:border-[#0099FF]"/>
-        <button disabled={busy||e2code.length!==6} onClick={e2enable} className="text-sm bg-emerald-600 text-white rounded-lg px-3 py-2 font-medium hover:bg-emerald-700 disabled:opacity-50">Confirm code</button>
+        <button disabled={busy||e2code.length!==6} onClick={e2enable} className="text-sm bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-emerald-700 disabled:opacity-50">Confirm code</button>
         <button disabled={busy} onClick={()=>{setE2sent(false);setE2code("");}} className="text-xs text-stone-400 hover:text-stone-600">Cancel</button>
       </div>}
     </div>
@@ -12765,7 +12765,7 @@ function CompanyCustomDeploy({companyUsers,companyFlags,setCompanyFlags,adminSet
     </div>
     <div className="flex flex-wrap items-center gap-2">
       <button onClick={()=>deploy(false)} disabled={busy} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<ShieldCheck className="w-4 h-4"/>}Deploy to {mode==="all"?"everyone":`${targets.length} selected`}</button>
-      <button onClick={()=>deploy(true)} disabled={busy} className="text-sm bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40">Clear deployed customizations</button>
+      <button onClick={()=>deploy(true)} disabled={busy} className="text-sm bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40">Clear deployed customizations</button>
       {msg&&<span className={`text-xs ${msg.err?"text-rose-600":"text-emerald-700"}`}>{msg.err||msg.ok}</span>}
     </div>
   </div>);
@@ -13245,7 +13245,7 @@ function TransitAudit({shipments}){
       <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Clock className="w-4 h-4"/>Transit audit</h2>
       <p className="text-sm text-stone-500 mt-0.5">Upload a carrier invoice (PDF or CSV). We pull every tracking number on it, match them to your shipments, and grade how the carrier actually performed.</p>
     </div>
-    <label className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#006db8] cursor-pointer w-fit">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<Upload className="w-4 h-4"/>}Upload invoice<input type="file" accept=".pdf,.csv,application/pdf,text/csv" onChange={onFile} className="hidden" disabled={busy}/></label>
+    <label className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] cursor-pointer w-fit">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<Upload className="w-4 h-4"/>}Upload invoice<input type="file" accept=".pdf,.csv,application/pdf,text/csv" onChange={onFile} className="hidden" disabled={busy}/></label>
     {name&&!busy&&<div className="text-xs text-stone-400">{name}{trks?` · ${trks.length} tracking number${trks.length===1?"":"s"} found`:""}</div>}
     {err&&<div className="bg-rose-50 border border-rose-200 text-rose-600 rounded-lg px-3 py-2 text-sm">{err}</div>}
     {rep&&<>

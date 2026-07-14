@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v527";
+const BUILD_TAG="addr-v528";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7611,21 +7611,23 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     <div className="relative flex flex-row gap-4 items-start">
       {!custom.hideShipOrders&&(ordersOpen?(
       <aside className="w-60 shrink-0 space-y-2">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
           <button onClick={()=>setOrdersOpen(false)} className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-stone-500 hover:text-stone-700"><ChevronDown className="w-4 h-4 shrink-0"/><ShoppingBag className="w-4 h-4 shrink-0"/><span className="whitespace-nowrap">Orders{ordersToShow.length?<span className="text-stone-400 normal-case font-normal"> · {ordersToShow.length}</span>:""}</span></button>
           {onRefresh&&shopifyConnected(settings)&&<button onClick={onRefresh} disabled={syncing} title="Refresh orders" className="text-stone-400 hover:text-[#0086E0] disabled:opacity-40 p-1 shrink-0">{syncing?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<RotateCcw className="w-3.5 h-3.5"/>}</button>}
         </div>
-        <div className="flex items-center gap-1.5"><div className="relative flex-1 min-w-0"><Search className="w-3 h-3 absolute left-2 top-[7px] text-stone-400"/><input value={orderQ} onChange={e=>setOrderQ(e.target.value)} placeholder="Search orders" className="w-full bg-white border border-stone-200 rounded-lg pl-6 pr-2 py-0.5 text-[12px] outline-none focus:border-[#0099FF]"/></div><select value={orderSort} onChange={e=>setOrderSort(e.target.value)} className="shrink-0 bg-white border border-stone-200 rounded-lg px-1 py-0.5 text-[11px] outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="oldest">Oldest</option><option value="total">Order value</option><option value="customer">Customer A–Z</option></select></div>
-        <div className="flex items-center gap-1.5">
-          <select value={storeFilter} onChange={e=>setStoreFilter(e.target.value)} className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-1 py-0.5 text-[11px] outline-none focus:border-[#0099FF]"><option value="all">All stores</option>{storesPresent.map(s=><option key={s} value={s}>{s}</option>)}</select>
-          <button onClick={()=>{const t=new Date().toISOString().slice(0,10);if(dateFrom===t&&dateTo===t){setDateFrom("");setDateTo("");}else{setDateFrom(t);setDateTo(t);}}} className={`text-[11px] font-medium rounded px-2 py-0.5 border shrink-0 ${(()=>{const t=new Date().toISOString().slice(0,10);return dateFrom===t&&dateTo===t;})()?"bg-[#0099FF] text-white border-[#0099FF]":"bg-white text-stone-600 border-stone-200 hover:bg-stone-50"}`}>Today</button>
+        {/* six matching boxes, two per row, everything centered (Spencer-approved layout) */}
+        <div className="grid grid-cols-2 gap-1.5">
+          <input value={orderQ} onChange={e=>setOrderQ(e.target.value)} placeholder="Search orders" className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF] placeholder-stone-400"/>
+          <select value={orderSort} onChange={e=>setOrderSort(e.target.value)} style={{textAlignLast:"center"}} className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="oldest">Oldest</option><option value="total">Order value</option><option value="customer">Customer A–Z</option></select>
+          <select value={storeFilter} onChange={e=>setStoreFilter(e.target.value)} style={{textAlignLast:"center"}} className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF]"><option value="all">All stores</option>{storesPresent.map(s=><option key={s} value={s}>{s}</option>)}</select>
+          <button onClick={()=>{const t=new Date().toISOString().slice(0,10);if(dateFrom===t&&dateTo===t){setDateFrom("");setDateTo("");}else{setDateFrom(t);setDateTo(t);}}} className={`h-7 w-full rounded-lg px-2 text-[12px] font-medium border ${(()=>{const t=new Date().toISOString().slice(0,10);return dateFrom===t&&dateTo===t;})()?"bg-[#0099FF] text-white border-[#0099FF]":"bg-white text-stone-600 border-stone-200 hover:bg-stone-50"}`}>Today</button>
+          <div className="col-span-2 flex items-center gap-1 text-[10px] text-stone-400">
+            <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF] flex-1"/>
+            <span>–</span>
+            <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF] flex-1"/>
+          </div>
         </div>
-        <div className="flex items-center gap-1 text-[10px] text-stone-400">
-          <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} className="flex-1 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-1 py-0.5 text-[11px] text-stone-600 outline-none focus:border-[#0099FF]"/>
-          <span>–</span>
-          <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} className="flex-1 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-1 py-0.5 text-[11px] text-stone-600 outline-none focus:border-[#0099FF]"/>
-          {(dateFrom||dateTo||storeFilter!=="all")&&<button onClick={()=>{setDateFrom("");setDateTo("");setStoreFilter("all");}} className="text-stone-400 hover:text-stone-700 shrink-0"><X className="w-3.5 h-3.5"/></button>}
-        </div>
+        {(dateFrom||dateTo||storeFilter!=="all")&&<button onClick={()=>{setDateFrom("");setDateTo("");setStoreFilter("all");}} className="text-[11px] text-stone-400 hover:text-stone-700 flex items-center gap-1"><X className="w-3 h-3"/>Clear filters</button>}
         <div className="space-y-2 max-h-[calc(100vh-220px)] overflow-auto pr-0.5">
         {ordersFiltered.length===0?<div className="border border-dashed border-stone-300 rounded-lg p-4 text-center text-xs text-stone-400">{ordersToShow.length===0?"No unfulfilled orders.":"No orders match."}</div>:ordersFiltered.map(o=>(
           <button key={o.id} onClick={()=>applyOrder(o)} className={`w-full text-left border rounded-lg p-3 transition-colors ${selectedOrder===o.id?"border-[#33ABFF] bg-[#E6F4FF]":"border-stone-200 bg-white hover:border-stone-300"}`}>

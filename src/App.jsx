@@ -8215,10 +8215,12 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
   const [view,setView]=useState(custom.defaultView||"cheapest");
   const [open,setOpen]=useState(null);
   const [breakView,setBreakView]=useState("all");   // "all" = whole-shipment breakdown · "box" = per-box breakdown (multipiece)
-  /* STATIC service boxes: rows sit in a FIXED service-ladder order (never price-sorted mid-load,
-     never reordering as prices stream in) — only the text inside each box updates. A service that
-     was on screen and becomes unavailable for this shipment keeps its box with a red
-     "Unavailable" button instead of vanishing (tombstone per family, cleared when the list
+  /* Cheapest view = genuinely price-sorted (cheapest first; it's the view's name). Prices arrive
+     as one batch per quote pass, so the order is stable — no reshuffling as rates stream in.
+     Unpriced rows (skeletons while loading, unavailable tombstones) keep the service-ladder order
+     and sit below the priced ones. The By-carrier view keeps the ladder inside each carrier group.
+     A service that was on screen and becomes unavailable for this shipment keeps its box with a
+     red "Unavailable" button instead of vanishing (tombstone per family, cleared when the list
      empties for a new shipment). */
   const LADDER=["ground_economy","ground_family","express_saver","2day","2day_am","standard_overnight","priority_overnight","first_overnight"];
   const famRank=(l)=>{const k=svcFamilyKey(l);const base=k.replace(/^or_/,"");let i=LADDER.indexOf(base);if(i<0)i=LADDER.indexOf(k);const or=/one\s*rate/i.test(String(l))?0.5:0;return (i<0?50:i)+or;};   // One Rate sits right under its base service, not at the bottom
@@ -8236,7 +8238,9 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
     const seen=new Set(list.map(q=>svcFamilyKey(q.label)));
     if(!loading)for(const q of list)tombRef.current[svcFamilyKey(q.label)]=q;
     const tombs=Object.keys(tombRef.current).filter(k=>!seen.has(k)).map(k=>({...tombRef.current[k],sell:null,cost:null,_unavailable:!loading}));
-    return [...list,...tombs].sort(ladderSort);
+    const priceOf=(q)=>{const p=q.sell??q.cost;return (p!=null&&!q._unavailable)?p:null;};
+    const priceSort=(a,b)=>{const pa=priceOf(a),pb=priceOf(b);if(pa!=null&&pb!=null)return (pa-pb)||ladderSort(a,b);if(pa!=null)return -1;if(pb!=null)return 1;return ladderSort(a,b);};
+    return [...list,...tombs].sort(view==="cheapest"?priceSort:ladderSort);
   };
   const Row=(q)=>{
     const isOpen=open===q.key;
@@ -8338,7 +8342,10 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
     );
   };
   return (
-    <div>
+    /* Capped width: on wide screens full-bleed rows put an airfield of blank space between the
+       service name and its price/button. ~3xl keeps every row's name, price and Print label close
+       together; narrower containers (Quick Quote, modals) are unaffected. */
+    <div className="max-w-3xl">
       <div className="flex items-center justify-between mb-2">
         {oneRateWarning&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-2">{oneRateWarning}</div>}
         {hideTitle?<span/>:<h2 className="text-sm font-semibold text-stone-700">Select service</h2>}

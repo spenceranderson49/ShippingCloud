@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v522";
+const BUILD_TAG="addr-v523";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7655,7 +7655,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         </div>
         <div className="relative grid lg:grid-cols-3 gap-4">
           <div className="min-w-0"><AddressCard title="Sender" data={sender} set={setSender} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} hideAddr23={custom.hideAddr23}/></div>
-          <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-1/3 top-11 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-3.5 h-3.5"/></button>
+          <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-[calc(33.333%-3px)] top-8 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-3.5 h-3.5"/></button>
           <div className="min-w-0 lg:col-span-2"><AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} scanSlot={<div className="relative">
             <ScanLine className="w-4 h-4 text-[#0086E0] absolute left-2.5 top-2.5 pointer-events-none"/>
             <input ref={scanRef} value={scanVal} onChange={e=>setScanVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();scanApply(scanVal);}}} placeholder="Scan order # / SKU" title={scanMsg&&!scanMsg.ok?scanMsg.t:undefined} className={`w-full border border-dashed rounded-lg pl-8 pr-7 py-1.5 text-sm outline-none placeholder:text-stone-400 ${scanMsg?(scanMsg.ok?"border-emerald-300 bg-emerald-50":"border-rose-300 bg-rose-50"):"border-[#66C2FF] bg-[#E6F4FF]/50 focus:border-[#0086E0] focus:bg-white"}`}/>

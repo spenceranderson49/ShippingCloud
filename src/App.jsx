@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v520";
+const BUILD_TAG="addr-v521";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7169,7 +7169,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(prefill.receiver)setReceiver({...empty,...prefill.receiver}); if(prefill.weight)setPieces([{weight:prefill.weight,L:12,W:9,H:4}]); if(prefill.reference)setReference(prefill.reference); setSelectedOrder(prefill.fromOrderId||null); if(prefill.fromOrderId&&!prefill.refulfill)setHfArmed(prefill.fromOrderId); /* a RE-label opens un-armed so hands-free can't book it before you've made your changes */ clearPrefill();
   },[prefill]);
 
-  const swap=()=>{const s=sender;setSender(receiver);setReceiver(s);};
+  const [swapMuted,setSwapMuted]=useState(false);   // swapping sender<->receiver empties one card on purpose — mute the empty-sender nags until it's refilled or a new shipment starts
+  const swap=()=>{const s=sender;setSender(receiver);setReceiver(s);setSwapMuted(true);};
   const originZip=(String(sender.zip||"").match(/\d{5}/)||[])[0]||(String(client.origin||"").match(/\d{5}/)||[])[0]||(String((settings&&settings.sender&&settings.sender.zip)||"").match(/\d{5}/)||[])[0]||"";
   /* Autopilot, live: when the toggle is on and an order is loaded, run the SAME rule engine
      Autopilot uses — client-side, instantly, no batch step — and if a rule fires a "Set Service"
@@ -7226,11 +7227,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       if(L>119||W>119||H>119)probs.push(`${tag}'s longest side is over 119" — FedEx won't accept it as a parcel (Express max is 119", Ground 108").`);
       else if(L&&W&&H){const s=[L,W,H].sort((x,y)=>y-x);const lg=s[0]+2*(s[1]+s[2]);if(lg>165)probs.push(`${tag} is ${lg}" length-plus-girth — over FedEx's 165" limit, so it can't be quoted.`);}
     });
-    if(!String(originZip||"").trim())probs.push("Your ship-from ZIP is missing — add it under Settings → General → Default sender.");
+    if(!swapMuted&&!String(originZip||"").trim())probs.push("Your ship-from ZIP is missing — add it under Settings → General → Default sender.");
     // a brand-new blank form isn't an error state — stay quiet until they've started typing
     const started=!!(String(receiver.zip||"").trim()||receiver.address1||receiver.name||receiver.city||totalWeight>0);
     return started?probs:[];
-  },[receiver.zip,receiver.country,receiver.address1,receiver.name,receiver.city,JSON.stringify(pieces),originZip]);
+  },[receiver.zip,receiver.country,receiver.address1,receiver.name,receiver.city,JSON.stringify(pieces),originZip,swapMuted]);
   /* Service Guide heads-ups that DON'T block the quote but change price or service availability:
      Ground Oversize (>130" L+G bills at a 90-lb minimum), Unauthorized Package (over Ground's
      108" side limit — Express only or a hefty unauthorized charge), Ground Economy caps
@@ -7561,7 +7562,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const saveDraft=()=>{setDraftName(reference||receiver.name||receiver.city||"");setNaming(true);};
   /* box-logic explanation banner shown while a packed order is loaded */
   const PackNote=()=>packNote?(<div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800 flex items-center gap-2"><Boxes className="w-3.5 h-3.5 shrink-0"/><span className="flex-1">Box logic packed this order: <b>{packNote.boxNames}</b> · {packNote.totalWt} lb billable{packNote.unresolved.length?` · ${packNote.unresolved.length} item${packNote.unresolved.length===1?"":"s"} not in your catalog (weight may be low)`:""} — dims are editable below.</span><button onClick={()=>setPackNote(null)} className="text-emerald-500 hover:text-emerald-700"><X className="w-3.5 h-3.5"/></button></div>):null;
-  const newShipment=()=>{justBookedRef.current=null;setHfArmed(null);setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setDepartment("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setDvEach(false);setRes(true);setResTouched(false);setSig(custom.defaultSignature&&custom.defaultSignature!=="none");setSigOption(custom.defaultSignature||"none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");setShipDate(shipDateDefault(settings));};
+  const newShipment=()=>{justBookedRef.current=null;setSwapMuted(false);setHfArmed(null);setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setDepartment("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setDvEach(false);setRes(true);setResTouched(false);setSig(custom.defaultSignature&&custom.defaultSignature!=="none");setSigOption(custom.defaultSignature||"none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");setShipDate(shipDateDefault(settings));};
   const addressCheck=(
     <div className="text-xs space-y-2">
       <div className="text-[10px] uppercase tracking-widest text-stone-500 font-semibold flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5"/>Address check</div>
@@ -7638,14 +7639,14 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         </div>
         <div className="relative grid lg:grid-cols-3 gap-4">
           <div className="min-w-0"><AddressCard title="Sender" data={sender} set={setSender} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} hideAddr23={custom.hideAddr23}/></div>
-          <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-1/3 top-11 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-4 h-4"/></button>
+          <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-1/3 top-10 -translate-x-1/2 z-10 items-center justify-center w-7 h-7 rounded-full bg-white border border-stone-200 shadow-sm text-stone-400 hover:text-[#0086E0] hover:border-[#99D6FF]"><ArrowLeftRight className="w-4 h-4"/></button>
           <div className="min-w-0 lg:col-span-2"><AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} scanSlot={<div className="relative">
             <ScanLine className="w-4 h-4 text-[#0086E0] absolute left-2.5 top-2.5 pointer-events-none"/>
             <input ref={scanRef} value={scanVal} onChange={e=>setScanVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();scanApply(scanVal);}}} placeholder="Scan order # / SKU" title={scanMsg&&!scanMsg.ok?scanMsg.t:undefined} className={`w-full border border-dashed rounded-lg pl-8 pr-7 py-1.5 text-sm outline-none placeholder:text-stone-400 ${scanMsg?(scanMsg.ok?"border-emerald-300 bg-emerald-50":"border-rose-300 bg-rose-50"):"border-[#66C2FF] bg-[#E6F4FF]/50 focus:border-[#0086E0] focus:bg-white"}`}/>
             {scanMsg&&<span className="absolute right-2 top-2">{scanMsg.ok?<CheckCircle2 className="w-4 h-4 text-emerald-500"/>:<AlertTriangle className="w-4 h-4 text-rose-400"/>}</span>}
           </div>} contactFallback={{phone:sender.phone,email:sender.email}} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }} hideAddr23={custom.hideAddr23} reqOverrides={{phone:custom.phoneRequired!==false,email:custom.emailRequired!==false}} side={addressCheck}/></div>
         </div>
-        {!(sender.name||sender.company||sender.address1||sender.zip)&&<div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2 flex-wrap"><span className="flex-1 min-w-[180px]">No sender on file — fill in the Sender card above, or set a default sender.</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"settings"}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1">Set default sender →</button></div>}
+        {!swapMuted&&!(sender.name||sender.company||sender.address1||sender.zip)&&<div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2 flex-wrap"><span className="flex-1 min-w-[180px]">No sender on file — fill in the Sender card above, or set a default sender.</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"settings"}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1">Set default sender →</button></div>}
         {billTo==="third"&&thirdAcct&&<div className="flex flex-wrap items-center gap-2 text-xs -mt-1">
           <span className="flex items-center gap-1.5 text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-1.5"><CreditCard className="w-3.5 h-3.5"/>Auto-billing to third-party account <b className="font-mono">{thirdAcct}</b><button onClick={()=>{setBillTo("sender");setThirdAcct("");}} className="ml-1 text-[#0086E0] hover:text-[#006FBF] underline">bill sender instead</button></span>
         </div>}

@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v552";
+const BUILD_TAG="addr-v553";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6939,9 +6939,12 @@ function StepHead({n,label}){
 function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,drafts,setDrafts,prefill,clearPrefill,onShipped,onPending,logEmail,onQuickQuote,onRefresh,syncing,currentUser,setUsers,setCurrentUser,clients=[],priceAs="",setPriceAs=null}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 rate database — global, follows the customer's profile
   const empty={country:"United States",name:"",company:"",zip:"",state:"",city:"",address1:"",address2:"",address3:"",phone:"",email:""};
+  const _swapMutedRef=React.useRef(false);
   const [sender,setSender]=useState({country:"United States",...settings.sender,address2:"",address3:""});
   // Persist any sender edits made here back into saved settings, so the ship-from sticks across reloads/logins (no more reverting to the seed).
-  useEffect(()=>{ setSettings&&setSettings(s=>({...s,sender:{name:sender.name||"",company:sender.company||"",address1:sender.address1||"",city:sender.city||"",state:sender.state||"",zip:sender.zip||"",phone:sender.phone||"",email:sender.email||""}})); },[sender.name,sender.company,sender.address1,sender.city,sender.state,sender.zip,sender.phone,sender.email]);
+  useEffect(()=>{ if(_swapMutedRef.current)return;   // mid sender<->receiver swap — never let the rearranged card overwrite the saved default
+    if(!(sender.name||sender.company||sender.address1||sender.zip))return;   // an EMPTY card must never wipe the saved default sender (this erased it on 2026-07-14)
+    setSettings&&setSettings(s=>({...s,sender:{name:sender.name||"",company:sender.company||"",address1:sender.address1||"",city:sender.city||"",state:sender.state||"",zip:sender.zip||"",phone:sender.phone||"",email:sender.email||""}})); },[sender.name,sender.company,sender.address1,sender.city,sender.state,sender.zip,sender.phone,sender.email]);
   const [receiver,setReceiver]=usePersist("ship.receiver",empty);
   const [reference,setReference]=usePersist("ship.reference","");
   const [invoiceNo,setInvoiceNo]=usePersist("ship.invoiceNo","");
@@ -7189,7 +7192,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(prefill.receiver)setReceiver({...empty,...prefill.receiver}); if(prefill.weight)setPieces([{weight:prefill.weight,L:12,W:9,H:4}]); if(prefill.reference)setReference(prefill.reference); setSelectedOrder(prefill.fromOrderId||null); if(prefill.fromOrderId&&!prefill.refulfill)setHfArmed(prefill.fromOrderId); /* a RE-label opens un-armed so hands-free can't book it before you've made your changes */ clearPrefill();
   },[prefill]);
 
-  const [swapMuted,setSwapMuted]=useState(false);   // swapping sender<->receiver empties one card on purpose — mute the empty-sender nags until it's refilled or a new shipment starts
+  const [swapMuted,setSwapMuted]=useState(false);
+  _swapMutedRef.current=swapMuted;   // swapping sender<->receiver empties one card on purpose — mute the empty-sender nags until it's refilled or a new shipment starts
   const swap=()=>{const s=sender;setSender(receiver);setReceiver(s);setSwapMuted(true);};
   const originZip=(String(sender.zip||"").match(/\d{5}/)||[])[0]||(String(client.origin||"").match(/\d{5}/)||[])[0]||(String((settings&&settings.sender&&settings.sender.zip)||"").match(/\d{5}/)||[])[0]||"";
   /* Autopilot, live: when the toggle is on and an order is loaded, run the SAME rule engine
@@ -7670,7 +7674,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           {onQuickQuote&&<button onClick={onQuickQuote} className="flex-1 flex items-center justify-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}
         </div>}
         <div className="relative grid lg:grid-cols-3 gap-4 lg:!mt-0">
-          <div className="min-w-0"><AddressCard title="Sender" data={sender} set={setSender} required addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} hideAddr23={custom.hideAddr23}/></div>
+          <div className="min-w-0"><AddressCard title="Sender" data={sender} set={setSender} required defaultEntry={(settings.sender&&(settings.sender.zip||settings.sender.address1))?settings.sender:null} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} hideAddr23={custom.hideAddr23}/></div>
           <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-[calc(33.333%-3px)] top-8 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-3.5 h-3.5"/></button>
           <div className="min-w-0 lg:col-span-2"><AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} scanSlot={<><div className="relative">
             <ScanLine className="w-4 h-4 text-[#0086E0] absolute left-2.5 top-2.5 pointer-events-none"/>
@@ -9342,14 +9346,16 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
             <div className="space-y-2">
               <div className="flex items-center justify-between"><span className="text-[10px] uppercase tracking-widest text-stone-400">Packages · {pieces.length}</span><span className="text-[10px] uppercase tracking-widest text-stone-500">Total {totalWeight} lb</span></div>
               {pieces.map((p,i)=>(
-                <div key={i} className="flex flex-wrap items-end gap-1.5 bg-white border border-stone-200 rounded-lg px-2 py-2">
-                  <div className="text-[11px] text-stone-400 w-4">#{i+1}</div>
-                  <PkgInput label="L" req value={p.L} onChange={e=>setPiece(i,{L:e.target.value})}/>
-                  <PkgInput label="W" req value={p.W} onChange={e=>setPiece(i,{W:e.target.value})}/>
-                  <PkgInput label="H" req value={p.H} onChange={e=>setPiece(i,{H:e.target.value})}/>
-                  <PkgInput label="lb" req value={p.weight} onChange={e=>setPiece(i,{weight:e.target.value})}/>
-                  <PkgInput label="oz" value={p.oz} onChange={e=>setPiece(i,{oz:e.target.value})}/>
-                  {pieces.length>1&&<button onClick={()=>delPiece(i)} className="text-stone-300 hover:text-rose-500 mb-1"><Trash2 className="w-3.5 h-3.5"/></button>}
+                <div key={i} className="flex items-start gap-1.5 bg-white border border-stone-200 rounded-lg px-2 py-2">
+                  <div className="text-[11px] text-stone-400 w-4 pt-6">#{i+1}</div>
+                  <div className="grid grid-cols-3 gap-1.5 w-44">
+                    <PkgInput label="L" req w="w-full" value={p.L} onChange={e=>setPiece(i,{L:e.target.value})}/>
+                    <PkgInput label="W" req w="w-full" value={p.W} onChange={e=>setPiece(i,{W:e.target.value})}/>
+                    <PkgInput label="H" req w="w-full" value={p.H} onChange={e=>setPiece(i,{H:e.target.value})}/>
+                    <PkgInput label="lb" req w="w-full" value={p.weight} onChange={e=>setPiece(i,{weight:e.target.value})}/>
+                    <PkgInput label="oz" w="w-full" value={p.oz} onChange={e=>setPiece(i,{oz:e.target.value})}/>
+                  </div>
+                  {pieces.length>1&&<button onClick={()=>delPiece(i)} className="text-stone-300 hover:text-rose-500 self-end mb-1"><Trash2 className="w-3.5 h-3.5"/></button>}
                 </div>
               ))}
               <button onClick={addPiece} className="flex items-center gap-1 text-xs bg-stone-200 hover:bg-stone-300 rounded-lg px-2.5 py-1.5 font-medium text-stone-700"><Plus className="w-3.5 h-3.5"/>Add package</button>
@@ -13565,7 +13571,7 @@ function parseAddressBlob(raw){
   if(out.address1&&out.city) out.address1=stripTrailingCity(out.address1,out.city);
   return out;
 }
-function AddressCard({title,data,set,required,residential,setResidential,addresses,onPick,onSave,errorFields=[],contactFallback,side,hideAddr23,reqOverrides={},headerExtra=null,scanSlot=null}){
+function AddressCard({title,data,set,required,residential,setResidential,addresses,onPick,onSave,errorFields=[],contactFallback,side,hideAddr23,reqOverrides={},headerExtra=null,scanSlot=null,defaultEntry=null}){
   const f=(k,v)=>set({...data,[k]:v});
   // Smart paste: if the pasted text parses into 2+ fields, distribute it across the whole form instead of one field
   const onSmartPaste=(e)=>{
@@ -13674,8 +13680,8 @@ function AddressCard({title,data,set,required,residential,setResidential,address
         <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400"/>
         <input value={q} onChange={e=>{setQ(e.target.value);setOpen(true);}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder={(addresses&&addresses.length)?`Address book — ${addresses.length} saved…`:"Search address book…"} className="w-full bg-white border border-stone-200 rounded pl-8 pr-8 py-1.5 text-[13px] outline-none focus:border-[#0099FF] placeholder-stone-300"/>
         <button type="button" onMouseDown={(e)=>{e.preventDefault();setOpen(o=>!o);}} className="absolute right-2 top-1.5 text-stone-400 hover:text-[#0086E0]" title="Show all saved addresses"><ChevronDown className={`w-4 h-4 transition-transform ${open?"rotate-180":""}`}/></button>
-        {open&&matches.length===0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg px-3 py-2.5 text-xs text-stone-400">{(addresses&&addresses.length)?"No matches — try fewer letters.":"Nothing saved yet. Fill in an address and hit “Save to Address book” — it’ll be one click next time."}</div>}
-        {open&&matches.length>0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-64 overflow-auto">
+        {open&&matches.length===0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg overflow-hidden">{defaultEntry&&<button onMouseDown={()=>pick(defaultEntry)} className="w-full text-left px-3 py-2 bg-[#F0F9FF] hover:bg-[#E6F4FF] border-b border-stone-100 flex items-center gap-2"><Home className="w-3.5 h-3.5 text-[#0086E0] shrink-0"/><span className="text-sm font-medium text-[#006FBF]">Default sender</span><span className="text-[11px] text-stone-400 truncate">{[defaultEntry.name||defaultEntry.company,defaultEntry.city].filter(Boolean).join(" · ")}</span></button>}<div className="px-3 py-2.5 text-xs text-stone-400">{(addresses&&addresses.length)?"No matches — try fewer letters.":"Nothing saved yet. Fill in an address and hit “Save to Address book” — it’ll be one click next time."}</div></div>}
+        {open&&matches.length>0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-64 overflow-auto">{defaultEntry&&<button onMouseDown={()=>pick(defaultEntry)} className="w-full text-left px-3 py-2 bg-[#F0F9FF] hover:bg-[#E6F4FF] border-b border-stone-100 flex items-center gap-2"><Home className="w-3.5 h-3.5 text-[#0086E0] shrink-0"/><span className="text-sm font-medium text-[#006FBF]">Default sender</span><span className="text-[11px] text-stone-400 truncate">{[defaultEntry.name||defaultEntry.company,defaultEntry.city].filter(Boolean).join(" · ")}</span></button>}
           <div className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50 border-b border-stone-100 sticky top-0">{q.trim()?`${matches.length} match${matches.length===1?"":"es"}`:`${addresses.length} saved address${addresses.length===1?"":"es"}`}</div>
           <div className="divide-y divide-stone-100">
           {matches.map(a=><button key={a.id} onMouseDown={()=>pick(a)} className="w-full text-left px-3 py-2 hover:bg-[#E6F4FF]"><div className="text-sm font-medium text-stone-800">{a.name}{a.company?` · ${a.company}`:""}</div><div className="text-[11px] text-stone-400">{a.address1}{a.address1?", ":""}{a.city} {a.state} {a.zip}{a.acctNum?` · bill ${a.acctCarrier||""} ${a.acctNum}`:""}</div></button>)}

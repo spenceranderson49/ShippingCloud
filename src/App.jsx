@@ -6818,7 +6818,7 @@ function AppInner(){
   useEffect(()=>{ try{ document.documentElement.style.setProperty("--sc-stickoff",(adminReturn||isDemo)?"92px":"56px"); }catch(e){} },[adminReturn,isDemo]);
   /* shell */
   return (
-    <div className="min-h-screen flex flex-col bg-stone-50 text-stone-800" style={{fontFamily:"Inter,system-ui,sans-serif"}}><SandboxBanner/>
+    <div className="min-h-screen flex flex-col bg-[#f1f5f9] text-stone-800" style={{fontFamily:"Inter,system-ui,sans-serif"}}><SandboxBanner/>
       {adminReturn&&<div className="bg-[#0086E0] text-white text-[13px] px-4 py-2 flex items-center justify-center gap-3 sticky top-0 z-40">
         <ShieldCheck className="w-4 h-4 shrink-0"/>
         <span>Admin preview — you’re seeing {BRAND.product} exactly as <b>{currentUser&&(currentUser.name||currentUser.email)}</b> sees it. Anything you change here changes their account.</span>

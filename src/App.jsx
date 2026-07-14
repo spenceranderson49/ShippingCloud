@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v518";
+const BUILD_TAG="addr-v519";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6125,6 +6125,8 @@ function CompanyAddressDeploy({companyUsers,companyFlags,setCompanyFlags,adminSe
 /* ════════ ASSISTANT CHAT ════════ */
 function AssistantChat({who,getContext,onAction}){
   const [open,setOpen]=useState(false);
+  /* the little X on the fab hides the assistant for THIS session only (sessionStorage, not a setting) */
+  const [gone,setGone]=useState(()=>{try{return sessionStorage.getItem("scAiGone")==="1";}catch(e){return false;}});
   const [msgs,setMsgs]=useState([{role:"assistant",content:who==="demo"?`Hi, I’m ${AI_NAME}! Ask me anything about ${BRAND.product} — how a tab works, what Autopilot does, shipping advice, whatever. Everything in this demo is sample data, so click around freely.`:`Hi, I’m ${AI_NAME}! Ask me anything about ${BRAND.product} — how features work, or general shipping advice.`}]);
   const [input,setInput]=useState("");
   const [busy,setBusy]=useState(false);
@@ -6159,6 +6161,7 @@ function AssistantChat({who,getContext,onAction}){
     :ctxTab==="orders"?["Batch all open orders as cheapest ground","Which orders are getting stale?","Batch the Shopify orders","Make a rule: orders over $500 ship Priority Overnight"]
     :ctxTab==="addresses"?["Save this address: ","Ship 3 lb to ","How do I import my address book?","Take me to the Ship tab"]
     :["Batch all Shopify orders under 5 lb as cheapest ground","Make a rule: orders over $500 ship Priority Overnight","Run my Autopilot rules",who==="admin"?"Which orders are getting stale?":"How does the Batch tab work?"];
+  if(gone)return null;   // X'd away for this session — all hooks above ran, so this is safe
   return (<>
     {open&&<div className="fixed bottom-20 right-4 sm:right-5 w-[min(92vw,370px)] h-[480px] max-h-[70vh] bg-white border border-stone-200 rounded-2xl shadow-2xl z-40 flex flex-col overflow-hidden">
       <div className="px-4 py-3 border-b border-stone-200 bg-stone-50 flex items-center gap-2">
@@ -6182,9 +6185,18 @@ function AssistantChat({who,getContext,onAction}){
       </div>
       <div className="text-center text-[10px] text-stone-500 pb-1.5 -mt-0.5">Powered by {AI_NAME}</div>
     </div>}
-    <button onClick={()=>setOpen(v=>!v)} title={"Ask "+AI_NAME+" about "+BRAND.product} className="fixed bottom-4 right-4 sm:bottom-5 sm:right-5 z-40 w-14 h-14 rounded-full bg-[#0086E0] hover:bg-[#0072BE] text-white shadow-lg flex items-center justify-center">
-      <span>{open?<X className="w-5 h-5"/>:<Sparkles className="w-5 h-5"/>}</span>
-    </button>
+    <div className="fixed bottom-4 right-4 sm:bottom-5 sm:right-5 z-40 w-14 h-14">
+      <button onClick={()=>setOpen(v=>!v)} title={"Ask "+AI_NAME+" about "+BRAND.product} className="relative w-14 h-14 rounded-full bg-[#0086E0] hover:bg-[#0072BE] text-white shadow-lg flex items-center justify-center">
+        <span>{open?<X className="w-5 h-5"/>:<Sparkles className="w-5 h-5"/>}</span>
+        {/* the assistant's name wrapped around the top of the circle */}
+        {!open&&<svg viewBox="0 0 56 56" className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
+          <defs><path id="sc-ai-arc" d="M 8 30 A 20 20 0 0 1 48 30" fill="none"/></defs>
+          <text fill="#ffffff" style={{fontSize:"6px",fontWeight:700,letterSpacing:"0.3px"}}><textPath href="#sc-ai-arc" startOffset="50%" textAnchor="middle">{AI_NAME.toUpperCase()}</textPath></text>
+        </svg>}
+      </button>
+      {/* dismiss for this session — e.g. when the button covers something you need to see */}
+      {!open&&<button onClick={()=>{setGone(true);try{sessionStorage.setItem("scAiGone","1");}catch(e){}}} title="Hide until your next sign-in / reload" className="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full bg-white border border-stone-300 text-stone-500 hover:text-rose-600 hover:border-rose-300 shadow flex items-center justify-center"><X className="w-3 h-3"/></button>}
+    </div>
   </>);
 }
 
@@ -6785,7 +6797,7 @@ function AppInner(){
         <button onClick={()=>{lsSet("session",null);window.location.reload();}} className="bg-white/10 hover:bg-white/20 rounded-lg px-2.5 py-1 text-xs">Exit demo</button>
       </div>}
       {!isDemo&&!isAdmin&&!adminReturn&&CLOUD.mode==="cloud"&&!fedexPrompt.seen&&isNewAccount&&<FirstRunFedEx user={currentUser} onClose={()=>setFedexPrompt({seen:true})}/>}
-      <AssistantChat who={isDemo?"demo":isAdmin?"admin":"customer"} getContext={assistantContext} onAction={onAssistantAction}/>
+      {!custom.hideAssistant&&<AssistantChat who={isDemo?"demo":isAdmin?"admin":"customer"} getContext={assistantContext} onAction={onAssistantAction}/>}
       {shopPush&&<div className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] max-w-lg w-[92vw] sm:w-auto rounded-xl shadow-2xl border px-4 py-3 text-sm flex items-start gap-2.5 ${shopPush.ok?"bg-emerald-50 border-emerald-300 text-emerald-800":"bg-rose-50 border-rose-300 text-rose-800"}`}>
         {shopPush.ok?<CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5"/>:<AlertTriangle className="w-5 h-5 shrink-0 mt-0.5"/>}
         <div className="min-w-0">
@@ -7516,8 +7528,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     const list=orders.filter(o=>o.status==="unfulfilled"&&!(hideLabeled&&o.name&&labeledRefs.has(String(o.name).toLowerCase())));return [...list].sort((a,b)=>{
     if(orderSort==="total")return parseFloat(b.total||0)-parseFloat(a.total||0);
     if(orderSort==="customer")return (a.customer||"").localeCompare(b.customer||"");
-    if(orderSort==="state")return (a.state||"").localeCompare(b.state||"");
-    if(orderSort==="weight")return (b.weight||0)-(a.weight||0);
+    if(orderSort==="oldest")return String(a.id).localeCompare(String(b.id));
     return String(b.id).localeCompare(String(a.id));
   });},[orders,orderSort,labeledRefs,custom.hideLabeledOrders]);
   const orderTime=(o)=>{const d=o&&o.date||"";let t=Date.parse(d);if(isNaN(t)){const m=String(d).match(/^(\d{1,2})\/(\d{1,2})/);if(m)t=new Date(new Date().getFullYear(),+m[1]-1,+m[2]).getTime();}return isNaN(t)?0:t;};
@@ -7587,13 +7598,13 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <button onClick={()=>setOrdersOpen(false)} className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-stone-500 hover:text-stone-700"><ChevronDown className="w-4 h-4"/><ShoppingBag className="w-4 h-4"/>Orders{ordersToShow.length?<span className="text-stone-400 normal-case font-normal">· {ordersToShow.length}</span>:""}</button>
           <div className="flex items-center gap-1">
             {onRefresh&&shopifyConnected(settings)&&<button onClick={onRefresh} disabled={syncing} title="Refresh orders" className="text-stone-400 hover:text-[#0086E0] disabled:opacity-40 p-1">{syncing?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<RotateCcw className="w-3.5 h-3.5"/>}</button>}
-            <select value={orderSort} onChange={e=>setOrderSort(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-1.5 py-1 text-[11px] outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="total">Total</option><option value="customer">Name</option><option value="state">State</option><option value="weight">Weight</option></select>
+            <select value={orderSort} onChange={e=>setOrderSort(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-1.5 py-1 text-[11px] outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="oldest">Oldest</option><option value="total">Order value</option><option value="customer">Customer A–Z</option></select>
           </div>
         </div>
         <div className="relative"><Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400"/><input value={orderQ} onChange={e=>setOrderQ(e.target.value)} placeholder="Search orders" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/></div>
         <div className="flex items-center gap-1.5">
           <select value={storeFilter} onChange={e=>setStoreFilter(e.target.value)} className="flex-1 bg-white border border-stone-200 rounded-lg px-1.5 py-1 text-[11px] outline-none focus:border-[#0099FF]"><option value="all">All stores</option>{storesPresent.map(s=><option key={s} value={s}>{s}</option>)}</select>
-          <button onClick={()=>{const t=new Date().toISOString().slice(0,10);if(dateFrom===t&&dateTo===t){setDateFrom("");setDateTo("");}else{setDateFrom(t);setDateTo(t);}}} className={`text-[11px] font-medium rounded px-2 py-1 border shrink-0 ${(()=>{const t=new Date().toISOString().slice(0,10);return dateFrom===t&&dateTo===t;})()?"bg-[#0099FF] text-white border-[#0099FF]":"bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF] hover:bg-[#D6ECFF]"}`}>Today</button>
+          <button onClick={()=>{const t=new Date().toISOString().slice(0,10);if(dateFrom===t&&dateTo===t){setDateFrom("");setDateTo("");}else{setDateFrom(t);setDateTo(t);}}} className={`text-[11px] font-medium rounded px-2 py-1 border shrink-0 ${(()=>{const t=new Date().toISOString().slice(0,10);return dateFrom===t&&dateTo===t;})()?"bg-[#0099FF] text-white border-[#0099FF]":"bg-white text-stone-600 border-stone-200 hover:bg-stone-50"}`}>Today</button>
         </div>
         <div className="flex items-center gap-1 text-[10px] text-stone-400">
           <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} className="flex-1 bg-white border border-stone-200 rounded-lg px-1.5 py-1 text-[11px] text-stone-600 outline-none focus:border-[#0099FF]"/>
@@ -7619,13 +7630,13 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       ))}
       <div className="flex-1 min-w-0 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-base font-semibold text-stone-800 flex items-center gap-2 whitespace-nowrap"><Package className="w-4 h-4 text-[#0086E0]"/>Create shipment</h1>
+          {custom.hideShipSteps?<h1 className="text-base font-semibold text-stone-800 flex items-center gap-2 whitespace-nowrap"><Package className="w-4 h-4 text-[#0086E0]"/>Create shipment</h1>:<span/>}
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New shipment</button>
             {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}
           </div>
         </div>
-        <StepHead n="1" label="Ship from & to"/>
+        {!custom.hideShipSteps&&<StepHead n="1" label="Ship from & to"/>}
         <div className="relative grid lg:grid-cols-3 gap-4">
           <div className="min-w-0"><AddressCard title="Sender" data={sender} set={setSender} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} hideAddr23={custom.hideAddr23}/></div>
           <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-1/3 top-11 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-4 h-4"/></button>
@@ -7641,7 +7652,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         </div>}
         {intl&&<div className="flex items-center gap-2 text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2"><MapPin className="w-4 h-4"/>International shipment to <b>{receiver.country}</b> — FedEx &amp; DHL rates shown, customs info required below.</div>}
 
-        <StepHead n="2" label="Package details"/>
+        {!custom.hideShipSteps&&<StepHead n="2" label="Package details"/>}
         <div className="bg-stone-100 border border-stone-200 rounded-lg p-3 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <datalist id="sc-ref-list">{[...((settings.fieldLists||{}).department||[]),...((settings.fieldLists||{}).reference||[])].map(v=><option key={v} value={v}/>)}</datalist>
@@ -7650,10 +7661,10 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             <datalist id="sc-dept-list">{(((settings.fieldLists||{}).department)||[]).map(v=><option key={v} value={v}/>)}</datalist>
             <div className="flex flex-wrap items-center gap-3">
               <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">Packages · {pieces.length}</div>
-              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Ship date</span><input type="date" value={shipDate} onChange={e=>setShipDate(e.target.value)} className="text-sm font-mono text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-[#0099FF]"/></div>
+              <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Ship date</span><input type="date" value={shipDate} onChange={e=>setShipDate(e.target.value)} className="text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded-lg px-2 outline-none focus:border-[#0099FF]" style={{fontFamily:"inherit"}}/></div>
               <div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Ref #</span>{(custom.refLocked&&(((settings.fieldLists||{}).department||[]).length+(((settings.fieldLists||{}).reference)||[]).length)>0)
-                ?<select value={reference} onChange={e=>setReference(e.target.value)} className={`w-44 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] ${custom.refRequired&&!reference?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}><option value="">— select —</option>{[...((settings.fieldLists||{}).department||[]),...(((settings.fieldLists||{}).reference)||[])].map(v=><option key={v} value={v}>{v}</option>)}</select>
-                :<input value={reference} onChange={e=>setReference(e.target.value)} list="sc-ref-list" placeholder="order / ref" className={`w-44 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 ${custom.refRequired&&!reference?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}/>}</div>
+                ?<select value={reference} onChange={e=>setReference(e.target.value)} className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] ${custom.refRequired&&!reference?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}><option value="">— select —</option>{[...((settings.fieldLists||{}).department||[]),...(((settings.fieldLists||{}).reference)||[])].map(v=><option key={v} value={v}>{v}</option>)}</select>
+                :<input value={reference} onChange={e=>setReference(e.target.value)} list="sc-ref-list" placeholder="order / ref" className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 ${custom.refRequired&&!reference?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}/>}</div>
               {!custom.hideInvoice&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Invoice #</span>{(custom.invLocked&&(((settings.fieldLists||{}).invoice)||[]).length>0)
                 ?<select value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] ${custom.invRequired&&!invoiceNo?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}><option value="">— select —</option>{(((settings.fieldLists||{}).invoice)||[]).map(v=><option key={v} value={v}>{v}</option>)}</select>
                 :<input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} list="sc-inv-list" placeholder="INV-…" className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 ${custom.invRequired&&!invoiceNo?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}/>}</div>}
@@ -7772,8 +7783,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <Printer className="w-3.5 h-3.5 shrink-0"/>
           <span><b>Hands-free:</b> {hfWait.m}</span>
         </div>}
-        <StepHead n="3" label="Service & rate"/>
-        <ServiceList quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
+        {!custom.hideShipSteps&&<StepHead n="3" label="Service & rate"/>}
+        <ServiceList hideTitle={!custom.hideShipSteps} quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
         {intl&&(
           <div className="border border-[#99D6FF] bg-[#E6F4FF]/40 rounded-lg p-3 space-y-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-[#006FBF]"><FileText className="w-4 h-4"/>Customs · Commercial invoice</div>
@@ -8109,7 +8120,7 @@ function matchRequestedService(quotes,requested,res=null){
   const hit=quotes.find(q=>canonSvc(q.label)===c&&(q.sell??q.cost)!=null);
   return hit?hit.key:null;
 }
-function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,custom=CUSTOM_DEFAULTS,matched=null,matchedSrc=null,collapsible=false,oneRateWarning=null,billing=null,live=false,loading=false,addrClassified=true,perBox=null,resetKey=""}){
+function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,custom=CUSTOM_DEFAULTS,matched=null,matchedSrc=null,collapsible=false,oneRateWarning=null,billing=null,live=false,loading=false,addrClassified=true,perBox=null,resetKey="",hideTitle=false}){
   const [showAll,setShowAll]=useState(false);
   /* "Hide other services" mode shows ONE service box. It must stay a single box at all times —
      switching orders and the Ground<->Home Delivery swap (FedEx address classification, which also
@@ -8267,7 +8278,7 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
     <div>
       <div className="flex items-center justify-between mb-2">
         {oneRateWarning&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-2">{oneRateWarning}</div>}
-        <h2 className="text-sm font-semibold text-stone-700">Select service</h2>
+        {hideTitle?<span/>:<h2 className="text-sm font-semibold text-stone-700">Select service</h2>}
         {custom.showRateViewToggle&&<div className="flex items-center gap-2">
           {!ready&&<span className="text-[11px] text-stone-400">enter ZIP &amp; weight to see rates</span>}
           <div className="flex bg-stone-100 rounded-lg p-0.5 text-xs">
@@ -8453,7 +8464,6 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
             <div className="flex-1 relative min-w-[160px]"><Search className="w-4 h-4 absolute left-2.5 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search orders, items, recipient…" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-3 py-2 text-sm outline-none focus:border-[#0099FF]"/></div>
             <div className="flex items-center gap-1.5 text-sm"><span className="text-stone-500 hidden sm:inline">Sort</span><select value={sort} onChange={e=>setSort(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="total">Order total</option><option value="customer">Recipient</option><option value="state">Dest. state</option><option value="weight">Weight</option><option value="source">Store</option></select></div>
             <button onClick={()=>downloadCSV("shippingcloud-orders.csv",[["Order","Customer","Company","Address","City","State","ZIP","Country","Items","SKU","Weight","Total","Source","Date","Note"],...orders.map(o=>[o.name,o.customer,o.company||"",o.address1||"",o.city,o.state,o.zip,o.country||"US",o.items||"",o.sku||"",o.weight,o.total||"",o.source||"",o.date||"",o.note||""])])} title="Download every open order as CSV" className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 px-2 py-2"><Download className="w-4 h-4"/>Export</button>
-            <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Batch "}}))} title="e.g. ‘batch everything going to Texas under 5 lb as cheapest ground’" className="flex items-center gap-1.5 text-sm bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-3 py-2 font-medium hover:bg-[#CCEAFF]"><Sparkles className="w-4 h-4"/>Ask {AI_NAME} to batch these</button>
             {setSettings&&(()=>{const on=custom.autoRulesOnShip!==false;const toggle=()=>setSettings(pp=>({...pp,custom:{...(pp.custom||{}),autoRulesOnShip:!on}}));
               return <button onClick={toggle} title="When on, pulling an order into Ship pre-selects the service your Autopilot rules pick — applied as you ship." className={`flex items-center gap-1.5 text-sm rounded-lg px-3 py-2 font-medium border ${on?"bg-violet-50 border-violet-300 text-violet-700 hover:bg-violet-100":"bg-white border-stone-200 text-stone-500 hover:bg-stone-50"}`}><Zap className="w-4 h-4"/>Autopilot as I ship<span className={`ml-0.5 w-8 h-4 rounded-full flex items-center px-0.5 transition-colors ${on?"bg-violet-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-3 h-3 bg-white rounded-full"/></span></button>;
             })()}
@@ -9080,7 +9090,6 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
       {chkMsg&&<div className={`text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${chkMsg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{chkMsg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{chkMsg.err||chkMsg.ok}</div>}
       <div className="flex items-center gap-2">
       <div className="relative flex-1"><Search className="w-4 h-4 absolute left-3 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by name, tracking, order, reference or PO #" className="w-full bg-white border border-stone-200 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:border-[#0099FF]"/></div>
-      <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude"))} title="e.g. ‘how many delivered this week?’ or ‘anything stuck in transit?’" className="flex items-center gap-1.5 text-sm bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-3 py-2 font-medium hover:bg-[#CCEAFF] shrink-0"><Sparkles className="w-4 h-4"/><span className="hidden sm:inline">Ask {AI_NAME} about shipments</span><span className="sm:hidden">Ask {AI_NAME}</span></button>
       </div>
       <div className="border border-stone-200 rounded-lg overflow-hidden bg-white divide-y divide-stone-100">
         <div className="flex items-center gap-3 px-4 py-2 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50"><div className="w-4"/><div className="w-24">Created</div><div className="flex-1">Recipient</div><div className="w-52 hidden lg:block">Ship-to address</div><div className="w-24 hidden xl:block">Reference</div><div className="w-40 hidden md:block">Tracking</div><div className="w-24 text-right">Status</div></div>
@@ -9527,7 +9536,6 @@ function Dashboard({shipments,orders,returns,goTab}){
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <button onClick={()=>goTab("orders")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><ShoppingBag className="w-4 h-4"/><span className="font-semibold">{unful} orders to ship</span></div><div className="text-[11px] text-stone-400 mt-1">Open the queue →</div></button>
         <button onClick={()=>goTab("rules")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><Zap className="w-4 h-4"/><span className="font-semibold">Run Autopilot</span></div><div className="text-[11px] text-stone-400 mt-1">Rules → labels, one click →</div></button>
-        <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude"))} className="border border-[#99D6FF] rounded-2xl bg-[#E6F4FF] p-4 text-left hover:border-[#0086E0] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#006FBF]"><Sparkles className="w-4 h-4"/><span className="font-semibold">Ask {AI_NAME}</span></div><div className="text-[11px] text-[#006FBF]/70 mt-1">Batch, rule &amp; route by chat →</div></button>
         <button onClick={()=>goTab("returns")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><Undo2 className="w-4 h-4"/><span className="font-semibold">{returns.length} open returns</span></div><div className="text-[11px] text-stone-400 mt-1">Manage RMAs →</div></button>
       </div>
     </div>
@@ -9995,7 +10003,6 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
           <div className="flex-1"/>
           <button onClick={applyAutopilot} disabled={!(ruleset||[]).some(r=>r.enabled)||!visible.length} title="Run your Autopilot rules on the orders below: routes services, applies holds" className="text-sm bg-violet-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-violet-700 disabled:opacity-40 flex items-center gap-1.5"><Zap className="w-4 h-4"/>Apply Autopilot rules</button>
           <button onClick={()=>setQrOpen(v=>!v)} className={`text-sm rounded-lg px-3 py-1.5 font-medium border flex items-center gap-1.5 ${qrOpen?"bg-violet-50 border-violet-300 text-violet-700":"bg-white border-stone-200 text-stone-600 hover:bg-stone-100"}`}><Plus className="w-3.5 h-3.5"/>Quick rule</button>
-          <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Batch "}}))} title={"Tell "+AI_NAME+" what to batch in plain English — e.g. ‘batch the camp mugs to Texas as cheapest ground’"} className="text-sm rounded-lg px-3 py-1.5 font-medium border bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF] hover:bg-[#CCEAFF] flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/>Ask {AI_NAME} to batch</button>
           {(Object.keys(svcOv).length>0||Object.keys(holds).length>0)&&<button onClick={clearAutopilot} className="text-xs text-stone-400 hover:text-stone-600 underline">reset routing</button>}
         </div>
         {qrOpen&&<div className="border-t border-stone-100 pt-3 flex flex-wrap items-center gap-2 text-sm">
@@ -11732,7 +11739,6 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
         <button onClick={applyToOrders} disabled={run.summary.touched===0} title="Write rule outcomes onto matching orders without creating labels" className="text-sm bg-white border border-stone-200 text-stone-600 rounded-lg px-3 py-2 font-medium hover:bg-stone-100 disabled:opacity-40 flex items-center gap-1.5"><Check className="w-4 h-4"/>Apply only</button>
         <button onClick={()=>setFbOpen(v=>!v)} title="Batch by criteria — the Batch tab's filters, right here" className={`text-sm rounded-lg px-3 py-2 font-medium border flex items-center gap-1.5 ${fbOpen?"bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF]":"bg-white border-stone-200 text-stone-700 hover:bg-stone-100"}`}><ClipboardList className="w-4 h-4"/>Filter &amp; batch</button>
         <button onClick={newRule} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium flex items-center gap-1.5 hover:bg-stone-100"><Plus className="w-4 h-4"/>New rule</button>
-        <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Make a rule: "}}))} title={"Describe a rule in plain English — "+AI_NAME+" writes it into the pipeline"} className="text-sm rounded-lg px-3 py-2 font-medium border bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF] hover:bg-[#CCEAFF] flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5"/>Ask {AI_NAME} to write a rule</button>
         <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Fallback</span><select value={cz(settings).fallbackService||""} onChange={e=>setSettings&&setSettings(s=>({...s,custom:{...(s.custom||{}),fallbackService:e.target.value}}))} title="Service used for orders that match no rule" className="text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-emerald-500"><option value="">No fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx Ground Economy">FedEx Ground Economy</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
         <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Ship date</span><input type="date" value={apShipDate} onChange={e=>setApShipDate(e.target.value)} className="text-sm font-mono text-stone-800 py-1 bg-white border border-stone-300 rounded px-2 outline-none focus:border-emerald-500"/></label>
         <button onClick={runAutopilot} disabled={apRunning||ords.filter(o=>o.status!=="fulfilled").length===0} title="Apply your rules and create labels for every unfulfilled order (held orders are skipped)" className="text-sm bg-emerald-600 text-white rounded-lg px-4 py-2.5 font-semibold hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-2 shadow-sm">{apRunning?<Loader2 className="w-4 h-4 animate-spin"/>:<Zap className="w-4 h-4"/>}Run Autopilot{!apRunning&&run?` — label ${run.results.filter(r=>r.order.status!=="fulfilled"&&!r.view.hold).length} orders`:""}</button>
@@ -11919,7 +11925,6 @@ function AddressBook({settings,setSettings}){
   return (<div className="max-w-3xl space-y-3">
     <div className="flex flex-wrap items-center gap-3">
       <p className="text-sm text-stone-500 flex-1">Saved contacts for fast ship-to / ship-from. Import your whole list from a CSV.</p>
-      <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-ask-claude",{detail:{prefill:"Save this address: "}}))} title={"Dictate a contact and "+AI_NAME+" saves it"} className="flex items-center gap-1.5 text-sm bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-3 py-2 font-medium hover:bg-[#CCEAFF]"><Sparkles className="w-4 h-4"/>Ask {AI_NAME} to add one</button>
       <label className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#006db8] cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
     </div>
     {msg&&<div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{msg}</div>}
@@ -12756,6 +12761,8 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
 
     {cs==="ship"&&<Panel title="Ship screen">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
+        {Tog({k:"hideShipSteps",label:"Hide the numbered 1-2-3 step headers",hint:"Turns off the ‘1 Ship from & to · 2 Package details · 3 Service & rate’ headers; the classic ‘Create shipment’ and ‘Select service’ titles come back instead."})}
+        {Tog({k:"hideAssistant",label:"Hide the AI assistant button",hint:"Removes the floating assistant button in the bottom-right corner everywhere in the app."})}
         {Tog({k:"hideRateSrcBar",label:"Hide the rate-source banner",hint:"Removes the ‘Live rates from your FedEx account / Estimated rates’ strip above the service list."})}
         {Tog({k:"hideAutopilotBox",label:"Hide the Autopilot match banner",hint:"Removes the ‘Autopilot rule matched…’ box above Select service. Rules still run and still pre-highlight the service."})}
         {Tog({k:"hideNotifyBox",label:"Hide the Send label & notify box",hint:"Removes the email panel at the bottom of the Ship tab. Automated notifications in Settings → Email automation still send."})}

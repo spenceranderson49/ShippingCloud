@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v519";
+const BUILD_TAG="addr-v520";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7630,13 +7630,12 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       ))}
       <div className="flex-1 min-w-0 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          {custom.hideShipSteps?<h1 className="text-base font-semibold text-stone-800 flex items-center gap-2 whitespace-nowrap"><Package className="w-4 h-4 text-[#0086E0]"/>Create shipment</h1>:<span/>}
+          {custom.hideShipSteps?<h1 className="text-base font-semibold text-stone-800 flex items-center gap-2 whitespace-nowrap"><Package className="w-4 h-4 text-[#0086E0]"/>Create shipment</h1>:<div className="flex-1 min-w-[220px]"><StepHead n="1" label="Ship from & to"/></div>}
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New shipment</button>
             {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}
           </div>
         </div>
-        {!custom.hideShipSteps&&<StepHead n="1" label="Ship from & to"/>}
         <div className="relative grid lg:grid-cols-3 gap-4">
           <div className="min-w-0"><AddressCard title="Sender" data={sender} set={setSender} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} hideAddr23={custom.hideAddr23}/></div>
           <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-1/3 top-11 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-4 h-4"/></button>
@@ -7677,7 +7676,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             </div>
             <div className="flex flex-wrap items-center gap-4">
               <span className="text-[11px] text-stone-400 font-mono">total {totalWeight} lb</span>
-              {!custom.hideInsure&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">{pieces.length>1?"Insure $/box":"Insure $"}</span><input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} disabled={pieces.length>1&&dvEach} placeholder="0" title={pieces.length>1&&!dvEach?"Declared value applied to every box":undefined} className="w-16 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm font-mono outline-none focus:border-[#0099FF] placeholder-stone-300 disabled:opacity-40"/>{pieces.length>1&&<label className="flex items-center gap-1 text-[11px] text-stone-500 cursor-pointer ml-0.5" title="Enter a different declared value on each box below"><input type="checkbox" checked={dvEach} onChange={e=>setDvEach(e.target.checked)} className="accent-[#0086E0]"/>per box</label>}</div>}
+              {!custom.hideInsure&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">{pieces.length>1?"Insure $/box":"Insure $"}</span><input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} disabled={pieces.length>1&&dvEach} placeholder="0" title={pieces.length>1&&!dvEach?"Declared value applied to every box":undefined} className="w-16 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 disabled:opacity-40"/>{pieces.length>1&&<label className="flex items-center gap-1 text-[11px] text-stone-500 cursor-pointer ml-0.5" title="Enter a different declared value on each box below"><input type="checkbox" checked={dvEach} onChange={e=>setDvEach(e.target.checked)} className="accent-[#0086E0]"/>per box</label>}</div>}
               <div className="flex items-center gap-1.5"><span className="text-[10px] uppercase tracking-widest text-stone-500">Signature</span><select value={sigOption} onChange={e=>{setSigOption(e.target.value);setSig(e.target.value!=="none");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="none">None</option><option value="direct">Direct signature</option><option value="indirect">Indirect signature</option><option value="adult">Adult signature</option></select></div>
               {quotes.some(q=>{const l=String(q.label||"").toLowerCase();return l.includes("fedex")&&/(overnight|2\s?day|express saver)/.test(l);})&&<label className="flex items-center gap-1.5 text-[11px] text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSat(e.target.checked)} className="accent-[#0086E0]"/><span className="uppercase tracking-widest text-stone-500">Saturday delivery <span className="normal-case text-stone-400">(Express only)</span></span></label>}
             </div>
@@ -8992,17 +8991,17 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
                       <div>{lbl("Department")}<input value={department} onChange={e=>setDepartment(e.target.value)} placeholder="DEPT-…" className={inC+" w-full"}/></div>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
-                      <div>{lbl("Weight (lb)")}<input type="number" value={weight} onChange={e=>{setWeight(e.target.value);upd({weight:+e.target.value});}} className={inC+" w-full font-mono"}/></div>
-                      <div>{lbl("oz")}<input type="number" value={oz} onChange={e=>setOz(e.target.value)} placeholder="0" className={inC+" w-full font-mono"}/></div>
+                      <div>{lbl("Weight (lb)")}<input type="number" value={weight} onChange={e=>{setWeight(e.target.value);upd({weight:+e.target.value});}} className={inC+" w-full"}/></div>
+                      <div>{lbl("oz")}<input type="number" value={oz} onChange={e=>setOz(e.target.value)} placeholder="0" className={inC+" w-full"}/></div>
                       <div>{lbl("Package")}<select value={orPkg?("or_"+orPkg):String(boxIdx)} onChange={e=>{const v=e.target.value;if(v.indexOf("or_")===0){applyORBox(v.slice(3));}else{setOrPkg("");pickBox(+v);}}} className={inC+" w-full"}><option value="-1">Custom</option>{boxes.map((b,j)=><option key={b.id} value={j}>{b.name}</option>)}<optgroup label="FedEx One Rate">{ONERATE_BOXES.map(b=><option key={b.code} value={"or_"+b.code}>{"FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,"")}</option>)}</optgroup></select></div>
                     </div>
-                    <div>{lbl("Size (in)")}<div className="grid grid-cols-3 gap-2">{["L","W","H"].map(d=><input key={d} type="number" value={dims[d]} onChange={e=>{setDims(v=>({...v,[d]:e.target.value}));setBoxIdx(-1);setOrPkg("");}} placeholder={d} className={inC+" w-full font-mono"}/>)}</div></div>
+                    <div>{lbl("Size (in)")}<div className="grid grid-cols-3 gap-2">{["L","W","H"].map(d=><input key={d} type="number" value={dims[d]} onChange={e=>{setDims(v=>({...v,[d]:e.target.value}));setBoxIdx(-1);setOrPkg("");}} placeholder={d} className={inC+" w-full"}/>)}</div></div>
                     <div className="flex flex-wrap items-center gap-3">
                       <label className="flex items-center gap-1.5 text-[13px] text-stone-600"><input type="checkbox" checked={sat} onChange={e=>setSat(e.target.checked)} className="accent-[#0086E0]"/>Saturday delivery</label>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>{lbl("Signature")}<select value={sigOption} onChange={e=>setSigOption(e.target.value)} className={inC+" w-full"}><option value="none">None</option><option value="direct">Direct</option><option value="indirect">Indirect</option><option value="adult">Adult</option></select></div>
-                      <div>{lbl("Insurance $")}<input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0" className={inC+" w-full font-mono"}/></div>
+                      <div>{lbl("Insurance $")}<input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0" className={inC+" w-full"}/></div>
                     </div>
                   </>)}
                 </div>
@@ -13589,7 +13588,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
     </div>
   </div>);
 }
-function PkgInput({label,w,req,...p}){const ww=w||"w-14";const on=req&&!String(p.value??"").trim();return <div className={ww}><div className={`text-[10px] uppercase tracking-widest text-center ${on?"text-[#0086E0]":"text-stone-500"}`}>{label}</div><input placeholder="0" {...p} type="number" className={`w-full border rounded px-2 py-1 text-sm font-mono text-stone-900 outline-none focus:border-[#0099FF] placeholder-stone-300 text-center ${on?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}/></div>;}
+function PkgInput({label,w,req,...p}){const ww=w||"w-14";const on=req&&!String(p.value??"").trim();return <div className={ww}><div className={`text-[10px] uppercase tracking-widest text-center ${on?"text-[#0086E0]":"text-stone-500"}`}>{label}</div><input placeholder="0" {...p} type="number" className={`w-full border rounded px-2 py-1 text-sm text-stone-900 outline-none focus:border-[#0099FF] placeholder-stone-300 text-center ${on?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}/></div>;}
 function Panel({title,children}){return <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3"><div className="text-[10px] uppercase tracking-widest text-stone-400">{title}</div>{children}</div>;}
 function Field({label,children}){return <label className="block space-y-1"><span className="text-[11px] text-stone-500">{label}</span>{children}</label>;}
 function Input({className="",...p}){return <input {...p} className={`w-full bg-white border border-stone-200 rounded px-2.5 py-2 text-sm font-mono text-stone-900 focus:border-[#0099FF] outline-none ${className}`}/>;}

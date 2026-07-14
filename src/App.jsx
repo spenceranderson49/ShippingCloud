@@ -7867,6 +7867,25 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               </div>
               {billTo==="third"&&<input value={thirdAcct} onChange={e=>setThirdAcct(e.target.value)} placeholder="3rd-party acct #" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>}
             </div>
+            {!custom.hideNotifyBox&&<div className="border border-stone-200 rounded-lg bg-white p-3 space-y-2">
+              <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><Send className="w-3.5 h-3.5"/>Send Label &amp; Notify</div>
+              <div>
+                <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Send to email</div>
+                <input value={emailTo} onChange={e=>setEmailTo(e.target.value)} placeholder={receiver.email||"customer@example.com"} className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <button onClick={sendLabel} className={`w-full flex items-center justify-center gap-1.5 text-sm rounded px-3 py-2 font-medium ${sent==="label"?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{sent==="label"?<><Check className="w-4 h-4"/>Label Sent</>:<><Printer className="w-4 h-4"/>Send Shipping Label</>}</button>
+                <button onClick={sendEmail} className={`w-full flex items-center justify-center gap-1.5 text-sm rounded px-3 py-2 font-medium ${sent==="email"?"bg-emerald-600 text-white":"bg-stone-200 text-stone-700 hover:bg-stone-300"}`}>{sent==="email"?<><Check className="w-4 h-4"/>Email Sent</>:<><Mail className="w-4 h-4"/>Send Tracking Email</>}</button>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-[10px] uppercase tracking-widest text-stone-400">Message to customer</div>
+                  <button onClick={saveMsgDefault} className={`text-[11px] font-medium ${msgSaved?"text-emerald-600":"text-[#0086E0] hover:text-[#006FBF]"}`}>{msgSaved?"✓ Saved as default":"Save as default"}</button>
+                </div>
+                <textarea value={emailMsg} onChange={e=>{emailMsgTouched.current=true;setEmailMsg(e.target.value);}} rows={3} placeholder="Add a custom note to include in the email — or save a default that's always pre-filled here." className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 resize-y"/>
+              </div>
+              <p className="text-[11px] text-stone-400">Emails the buyer a tracking link or a printable label PDF. Logged under Settings → Email automation.</p>
+            </div>}
           </div>
         </div>
         {intl&&(
@@ -7966,23 +7985,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           {shipStatus.state==="error"&&<><AlertTriangle className="w-4 h-4"/>{shipStatus.msg}</>}
         </div>}
 
-        {/* Billing & third-party moved beside the service list (right column of the rates row). */}
-        {!custom.hideNotifyBox&&<div className="border border-stone-200 rounded-lg bg-white p-3 space-y-3">
-          <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><Send className="w-3.5 h-3.5"/>Send label &amp; notify</div>
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex-1 min-w-0"><div className="text-[10px] uppercase tracking-widest text-stone-400">Send to email</div><input value={emailTo} onChange={e=>setEmailTo(e.target.value)} placeholder={receiver.email||"customer@example.com"} className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></div>
-            <button onClick={sendLabel} className={`flex items-center gap-1.5 text-sm rounded px-3 py-2 font-medium ${sent==="label"?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{sent==="label"?<><Check className="w-4 h-4"/>Label sent</>:<><Printer className="w-4 h-4"/>Send shipping label</>}</button>
-            <button onClick={sendEmail} className={`flex items-center gap-1.5 text-sm rounded px-3 py-2 font-medium ${sent==="email"?"bg-emerald-600 text-white":"bg-stone-200 text-stone-700 hover:bg-stone-300"}`}>{sent==="email"?<><Check className="w-4 h-4"/>Email sent</>:<><Mail className="w-4 h-4"/>Send tracking email</>}</button>
-          </div>
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <div className="text-[10px] uppercase tracking-widest text-stone-400">Message to customer</div>
-              <button onClick={saveMsgDefault} className={`text-[11px] font-medium ${msgSaved?"text-emerald-600":"text-[#0086E0] hover:text-[#006FBF]"}`}>{msgSaved?"✓ Saved as default":"Save as default"}</button>
-            </div>
-            <textarea value={emailMsg} onChange={e=>{emailMsgTouched.current=true;setEmailMsg(e.target.value);}} rows={3} placeholder="Add a custom note to include in the email — or save a default that's always pre-filled here." className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 resize-y"/>
-          </div>
-          <p className="text-[11px] text-stone-400">Emails the buyer a tracking link or a printable label PDF. Logged under Settings → Email automation.</p>
-        </div>}
+        {/* Billing & third-party + Send label & notify moved beside the service list (right column of the rates row). */}
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);printPackingSlips([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:(shipStatus&&shipStatus.tracking)||"",service:""}]);}} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-200"><FileText className="w-4 h-4"/>Packing Slip</button>
           <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-300"><Plus className="w-4 h-4"/>New Shipment</button>

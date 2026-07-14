@@ -167,7 +167,7 @@ function consumeBackup(list, code) {
 const backupLeft = (list) => (Array.isArray(list) ? list : []).filter((e) => e && !e.used).length;
 
 /* ── users store hygiene: hashes never leave; plaintext never stored ── */
-const stripUsers = (arr) => (Array.isArray(arr) ? arr : []).map((u) => ({ ...u, password: "", passHash: undefined, totp: u && u.totp ? { enabled: !!u.totp.enabled, backupLeft: backupLeft(u.totp.backup) } : undefined, email2fa: u && u.email2fa ? { enabled: !!u.email2fa.enabled } : undefined }));
+const stripUsers = (arr) => (Array.isArray(arr) ? arr : []).map((u) => ({ ...u, password: "", passHash: undefined, totp: u && u.totp ? { enabled: !!u.totp.enabled, backupLeft: backupLeft(u.totp.backup) } : undefined, email2fa: u && u.email2fa ? { enabled: !!u.email2fa.enabled } : undefined, trustedDevices: undefined }));
 function mergeUsersForWrite(incoming, current) {
   const cur = Array.isArray(current) ? current : [];
   // Match on the STABLE id first (fall back to email) so renaming a user's email doesn't lose
@@ -187,12 +187,21 @@ function mergeUsersForWrite(incoming, current) {
     // Email 2FA is server-managed like the TOTP secret — a client store write must NOT enable/disable it.
     if (existing && existing.email2fa) out.email2fa = existing.email2fa;
     else delete out.email2fa;
+    // Trusted-device tokens (skip-2FA-for-N-days) are server-managed too — never sent to the
+    // client (stripUsers removes them), so a store write must not wipe or forge them.
+    if (existing && existing.trustedDevices) out.trustedDevices = existing.trustedDevices;
+    else delete out.trustedDevices;
     return out;
   });
 }
 
 /* ── email 2FA helpers: a 6-digit code emailed at sign-in (alternative to the authenticator app) ── */
 const otpHash = (c) => crypto.createHash("sha256").update("otp:" + String(c)).digest("hex");
+/* Trusted devices: after a successful 2FA sign-in the user can choose to trust the browser for
+   30/60/90 days. Only the sha256 of the random token is stored; the raw token lives in that
+   browser's localStorage. Presenting a valid, unexpired token skips the 2FA challenge. */
+const devHash = (t) => crypto.createHash("sha256").update("dev:" + String(t)).digest("hex");
+const TRUST_DAY_CHOICES = [30, 60, 90];
 const maskEmail = (e) => { const s = String(e || ""); const at = s.indexOf("@"); if (at < 1) return s; return s[0] + "***" + s.slice(at); };
 async function sendOtpCode(event, to, code) {
   const key = (process.env.RESEND_API_KEY || "").trim();
@@ -297,12 +306,24 @@ exports.handler = async (event) => {
         const nh = hashPw(password);
         const merged = users.map((x) => x && x.id === u.id ? { ...x, password: "", passHash: nh } : x);
         await putStores({ users: merged });
+        users = merged;   // later writes in this request must not revert the migrated hash
         u = { ...u, passHash: nh };
       }
       if (!u || !checkPw(password, u.passHash)) return J({ ok: false, error: "Incorrect email or password." });
       if (u.status && u.status !== "active") return J({ ok: false, error: "This account is inactive. Contact your administrator." });
+      /* Trusted device: a browser that already finished 2FA can be remembered for 30/60/90 days.
+         Expired entries are pruned on every login; a matching token skips the code below. */
+      const deviceTok = String(body.device || "").slice(0, 200);
+      const trustDaysReq = TRUST_DAY_CHOICES.includes(Number(body.trustDays)) ? Number(body.trustDays) : 0;
+      const devList = (Array.isArray(u.trustedDevices) ? u.trustedDevices : []).filter((d) => d && d.hash && d.exp > Date.now());
+      let deviceTrusted = false;
+      if (deviceTok) {
+        const want = devHash(deviceTok);
+        for (const d of devList) { try { if (crypto.timingSafeEqual(Buffer.from(want, "hex"), Buffer.from(String(d.hash), "hex"))) { deviceTrusted = true; break; } } catch (e) { /* malformed entry — skip */ } }
+      }
+      let secondFactorPassed = false;
       // Two-factor: only enforced once the user has fully enabled it (opt-in). Password is already verified here.
-      if (u.totp && u.totp.enabled) {
+      if (!deviceTrusted && u.totp && u.totp.enabled) {
         // Fail CLOSED if the record is enabled but somehow missing its secret (corruption) — an
         // admin can clear 2FA to recover. Never let a broken record downgrade to password-only.
         if (!u.totp.secret) return J({ ok: false, needsTotp: true, error: "Two-factor is on but not set up correctly for this account — ask your administrator to reset it." });
@@ -318,11 +339,13 @@ exports.handler = async (event) => {
           const merged = users.map((x) => x && x.id === u.id ? { ...x, totp: { ...u.totp, backup: bc.list } } : x);
           const bw = await putStores({ users: merged });
           if (!bw.ok) return J({ ok: false, needsTotp: true, error: "Couldn’t verify your backup code just now — try again in a moment." });
+          users = merged;   // keep the local copy current so later writes in this request don't resurrect the used code
         }
+        secondFactorPassed = true;
       }
       /* Email 2FA (opt-in alternative to the authenticator app). Only when TOTP is NOT enabled.
          No code on the request → email a fresh one and ask for it; a wrong/expired code re-prompts. */
-      if (u.email2fa && u.email2fa.enabled && !(u.totp && u.totp.enabled)) {
+      if (!deviceTrusted && u.email2fa && u.email2fa.enabled && !(u.totp && u.totp.enabled)) {
         const raw = String(body.code || "").replace(/\s+/g, "");
         const p = u.email2fa.pending;
         const sendFresh = async (msg) => {
@@ -340,7 +363,23 @@ exports.handler = async (event) => {
           await putStores({ users: users.map((x) => x && x.id === u.id ? { ...x, email2fa: { enabled: true, pending: { ...p, tries: (p.tries || 0) + 1 } } } : x) });
           return J({ ok: false, needsEmailCode: true, error: "That code isn’t right — check the latest email." });
         }
-        await putStores({ users: users.map((x) => x && x.id === u.id ? { ...x, email2fa: { enabled: true } } : x) });   // valid — clear the used code
+        const mergedE = users.map((x) => x && x.id === u.id ? { ...x, email2fa: { enabled: true } } : x);
+        await putStores({ users: mergedE });   // valid — clear the used code
+        users = mergedE;
+        secondFactorPassed = true;
+      }
+      /* Trust this device: only after a code was actually verified on THIS request (never for
+         password-only accounts, never when the challenge was skipped by an existing trust). */
+      let newDeviceToken = null, newDeviceExp = 0;
+      if (secondFactorPassed && trustDaysReq) {
+        newDeviceToken = crypto.randomBytes(24).toString("hex");
+        newDeviceExp = Date.now() + trustDaysReq * 24 * 3600 * 1000;
+        const keep = devList.slice(-9);   // pruned of expired above; cap at 10 trusted browsers per account
+        keep.push({ hash: devHash(newDeviceToken), exp: newDeviceExp, created: Date.now(), days: trustDaysReq });
+        const mergedD = users.map((x) => x && x.id === u.id ? { ...x, trustedDevices: keep } : x);
+        const dw = await putStores({ users: mergedD });
+        if (!dw || !dw.ok) { newDeviceToken = null; newDeviceExp = 0; }   // sign-in still succeeds; the browser just isn't remembered
+        else users = mergedD;
       }
       if ((u.role || "customer") === "customer") {
         const curC = await getStore("clients");
@@ -349,7 +388,7 @@ exports.handler = async (event) => {
           if (healed) u = { ...u, clientId: healed.clientId };
         }
       }
-      return J({ ok: true, token: makeToken(u), user: { ...u, password: "", passHash: undefined, totp: u.totp ? { enabled: !!u.totp.enabled, backupLeft: backupLeft(u.totp.backup) } : undefined, email2fa: u.email2fa ? { enabled: !!u.email2fa.enabled } : undefined } });
+      return J({ ok: true, token: makeToken(u), deviceToken: newDeviceToken || undefined, deviceExp: newDeviceExp || undefined, user: { ...u, password: "", passHash: undefined, totp: u.totp ? { enabled: !!u.totp.enabled, backupLeft: backupLeft(u.totp.backup) } : undefined, email2fa: u.email2fa ? { enabled: !!u.email2fa.enabled } : undefined, trustedDevices: undefined } });
     }
 
     /* ── request access (no auth): stores a pending signup for admin approval ── */
@@ -553,7 +592,8 @@ exports.handler = async (event) => {
           const okPw = pw && checkPw(pw, me.passHash);
           if (!okCode && !okPw) return J({ ok: false, error: "Enter a current 6-digit code (or your password) to turn off 2FA." });
         }
-        const merged = allUsers.map((x) => x && x.id === auth.uid ? { ...x, totp: undefined } : x);
+        // if this leaves no second factor, trusted-device tokens are meaningless — drop them
+        const merged = allUsers.map((x) => x && x.id === auth.uid ? { ...x, totp: undefined, trustedDevices: (x.email2fa && x.email2fa.enabled) ? x.trustedDevices : undefined } : x);
         const w = await putStores({ users: merged });
         if (!w.ok) return J({ ok: false, error: "Could not turn off 2FA — try again." });
         return J({ ok: true, enabled: false });
@@ -593,7 +633,8 @@ exports.handler = async (event) => {
       if (action === "email2faDisable") {
         const pw = String(body.password || "");
         if (!(pw && checkPw(pw, me.passHash))) return J({ ok: false, error: "Enter your password to turn off email verification." });
-        const merged = allUsers.map((x) => x && x.id === auth.uid ? { ...x, email2fa: undefined } : x);
+        // if this leaves no second factor, trusted-device tokens are meaningless — drop them
+        const merged = allUsers.map((x) => x && x.id === auth.uid ? { ...x, email2fa: undefined, trustedDevices: (x.totp && x.totp.enabled) ? x.trustedDevices : undefined } : x);
         const w = await putStores({ users: merged });
         if (!w.ok) return J({ ok: false, error: "Could not disable — try again." });
         return J({ ok: true, enabled: false });
@@ -1027,7 +1068,7 @@ exports.handler = async (event) => {
       const users = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
       const idx = users.findIndex((x) => x && String(x.email || "").toLowerCase() === email);
       if (idx < 0) return J({ ok: false, error: "No user with that email." });
-      users[idx] = { ...users[idx], totp: undefined };
+      users[idx] = { ...users[idx], totp: undefined, trustedDevices: (users[idx].email2fa && users[idx].email2fa.enabled) ? users[idx].trustedDevices : undefined };
       const w = await putStores({ users });
       if (!w.ok) return J({ ok: false, error: "Save failed." });
       return J({ ok: true });

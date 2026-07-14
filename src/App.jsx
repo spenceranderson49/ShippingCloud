@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import qrcodegen from "qrcode-generator";
 import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, Pause, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, EyeOff, MessageCircle, Sparkles, ClipboardList, Ban, Tag, Copy, Sliders, Save} from "lucide-react";
 const FW_BLUE="#0099FF";
 const FW_DARK="#111418";
@@ -107,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v558";
+const BUILD_TAG="addr-v559";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2875,7 +2876,7 @@ const CUSTOM_DEFAULTS={
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
   logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,skipBookedSummary:false,autoRulesOnShip:true,autoRulesInBatch:false,autoBookBatch:false,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],accent:"",
   refRequired:false,invRequired:false,poRequired:false,deptRequired:false,refLocked:false,invLocked:false,poLocked:false,deptLocked:false,hideDept:false,
-  confetti:"page",seasonal:false,hideShipSteps:true,
+  confetti:"page",seasonal:false,hideShipSteps:true,hideLabeledOrders:true,
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
 const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
@@ -2954,6 +2955,20 @@ const HTS_SUGGEST=[
 ];
 
 /* ════════ AUTH ════════ */
+/* Trusted device: after a verified 2FA code the server can hand back a long-lived device token
+   (user picks 30/60/90 days). It's stored per login email in this browser only; presenting it on
+   the next sign-in skips the code. The server stores just a hash and expiry. */
+const trustKey=(em)=>"trustdev."+String(em||"").trim().toLowerCase();
+const trustTokenFor=(em)=>{ try{ const v=lsGet(trustKey(em),null); if(v&&v.t&&v.exp&&v.exp>Date.now())return String(v.t); if(v)lsDel(trustKey(em)); }catch(e){} return ""; };
+const rememberTrust=(em,d)=>{ try{ if(d&&d.deviceToken)lsSet(trustKey(em),{t:String(d.deviceToken),exp:d.deviceExp||0}); }catch(e){} };
+/* The 30/60/90-day picker shown under the code box on both sign-in forms. Module-level component,
+   so its identity is stable and the select never remounts mid-interaction. */
+const TrustDeviceRow=({trustDays,setTrustDays})=>(<div className="flex items-center justify-between gap-3">
+  <span className="text-sm text-stone-700">Trust This Device<span className="block text-[11px] text-stone-400">Skip the code on this browser for a while.</span></span>
+  <select value={trustDays} onChange={e=>setTrustDays(e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">
+    <option value="0">Don’t Trust</option><option value="30">30 Days</option><option value="60">60 Days</option><option value="90">90 Days</option>
+  </select>
+</div>);
 function Login({users,onLogin,brand}){
   const B={...DEFAULT_BRAND,...(brand||{})};
   const [mode,setMode]=useState("signin");
@@ -2966,7 +2981,9 @@ function Login({users,onLogin,brand}){
   const [note,setNote]=useState("");
   const [busy,setBusy]=useState(false);
   const [code,setCode]=useState("");        // 2FA one-time code
-  const [needTotp,setNeedTotp]=useState(false);
+  const [need2fa,setNeed2fa]=useState(null);   // null | "totp" | "email"
+  const [sentTo,setSentTo]=useState("");
+  const [trustDays,setTrustDays]=useState("0");
   /* Forgot-password flow — same server actions CloudAuth uses (db.js requestReset /
      resetPassword), so it works identically on ShippingCloud, ShipHub, and the admin HQ. */
   const [fp,setFp]=useState(null);          // null | "ask" | "sent" | {reset:token} | "done"
@@ -2990,15 +3007,16 @@ function Login({users,onLogin,brand}){
        • a definitive server verdict (wrong password / inactive) is shown as-is
        • transient trouble retries once, then says the server was unreachable — never "incorrect" */
     const attempt=async(ms)=>{ const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(),ms);
-      try{ const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"login",email:email.trim(),password:pw,code:code.trim()}),signal:ctrl.signal});
+      try{ const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"login",email:email.trim(),password:pw,code:code.trim(),device:trustTokenFor(email),trustDays:code.trim()?(+trustDays||0):0}),signal:ctrl.signal});
         clearTimeout(t); const d=await r.json().catch(()=>null); return d||{_net:true};
       }catch(e){ clearTimeout(t); return {_net:true}; } };
     const transient=(d)=>!!(d&&(d._net||(!d.ok&&/database error|unreachable|timed out|network/i.test(String(d.error||"")))));
     let d=await attempt(14000);
     if(transient(d)) d=await attempt(14000);   // one automatic retry before giving up
-    if(d&&d.ok&&d.user){ try{CLOUD.token=d.token;lsSet("cloud.token",d.token);}catch(e){} setBusy(false); onLogin(d.user); return; }
-    // 2FA: password was right, now ask for the authenticator code (or re-ask if it was wrong).
-    if(d&&d.needsTotp){ setBusy(false); setNeedTotp(true); setErr(code?String(d.error||"That code isn't right."):""); return; }
+    if(d&&d.ok&&d.user){ try{CLOUD.token=d.token;lsSet("cloud.token",d.token);}catch(e){} rememberTrust(email,d); setBusy(false); onLogin(d.user); return; }
+    // 2FA: password was right, now ask for the authenticator / emailed code (or re-ask if it was wrong).
+    if(d&&d.needsTotp){ setBusy(false); setNeed2fa("totp"); setErr(code?String(d.error||"That code isn't right."):""); return; }
+    if(d&&d.needsEmailCode){ setBusy(false); setNeed2fa("email"); if(d.sentTo)setSentTo(d.sentTo); setErr(code?String(d.error||"That code isn't right."):""); return; }
     const serverVerdict=(d&&!d.ok&&d.error&&!transient(d))?String(d.error):null;
     // local fallback for legacy/local-mode accounts (cloud accounts carry blank local passwords, so this can't pass or fail for them)
     const u=users.find(x=>x.email.toLowerCase()===email.trim().toLowerCase()&&x.password===pw&&x.password!=="");
@@ -3029,7 +3047,8 @@ function Login({users,onLogin,brand}){
           {mode==="signup"&&<><Field label="Your name"><Input value={name} onChange={e=>setName(e.target.value)}/></Field><Field label="Company"><Input value={company} onChange={e=>setCompany(e.target.value)}/></Field></>}
           <Field label="Email"><Input value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&mode==="signin")signin();}} placeholder="you@company.com"/></Field>
           <Field label="Password"><div className="relative"><Input type={showPw?"text":"password"} value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")mode==="signin"?signin():signup();}} placeholder="••••••••" className="pr-9"/><button type="button" onClick={()=>setShowPw(v=>!v)} tabIndex={-1} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">{showPw?<EyeOff className="w-4 h-4"/>:<Eye className="w-4 h-4"/>}</button></div></Field>
-          {mode==="signin"&&needTotp&&<Field label="Authenticator code"><Input value={code} onChange={e=>setCode(e.target.value.replace(/[^0-9A-Za-z-]/g,"").toUpperCase().slice(0,9))} onKeyDown={e=>{if(e.key==="Enter")signin();}} placeholder="123456" inputMode="text" autoFocus className="tracking-[0.2em] text-center"/><div className="text-[11px] text-stone-400 mt-1">Enter the current 6-digit code from your authenticator app — or one of your backup codes if you don’t have your phone.</div></Field>}
+          {mode==="signin"&&need2fa&&<><Field label={need2fa==="email"?"Email verification code":"Authenticator code"}><Input value={code} onChange={e=>setCode(e.target.value.replace(/[^0-9A-Za-z-]/g,"").toUpperCase().slice(0,9))} onKeyDown={e=>{if(e.key==="Enter")signin();}} placeholder="123456" inputMode="text" autoFocus className="tracking-[0.2em] text-center"/><div className="text-[11px] text-stone-400 mt-1">{need2fa==="email"?("We emailed a 6-digit code"+(sentTo?" to "+sentTo:"")+" — enter it to finish signing in."):"Enter the current 6-digit code from your authenticator app — or one of your backup codes if you don’t have your phone."}</div></Field>
+          <TrustDeviceRow trustDays={trustDays} setTrustDays={setTrustDays}/></>}
           {err&&<div className="text-sm text-rose-600 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4"/>{err}</div>}
           {note&&<div className="text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2">{note}</div>}
           <button onClick={mode==="signin"?signin:signup} className="w-full bg-[#0086E0] text-white rounded-lg px-4 py-2.5 font-medium hover:bg-[#006db8] disabled:opacity-50" disabled={busy}>{busy?"One moment…":(mode==="signin"?"Sign in":"Request account")}</button>
@@ -5621,6 +5640,7 @@ function CloudAuth({onDone,initialMode,intake}){
   const [err,setErr]=useState("");const [busy,setBusy]=useState(false);
   const [need2fa,setNeed2fa]=useState(null);   // null | "totp" | "email"
   const [code,setCode]=useState("");const [sentTo,setSentTo]=useState("");
+  const [trustDays,setTrustDays]=useState("0");
   const pickFile=(e)=>{
     const file=e.target.files&&e.target.files[0]; e.target.value=""; if(!file)return;
     if(file.size>3*1024*1024){setErr("That file is over 3 MB — one recent invoice (PDF/CSV/Excel/photo) is perfect.");return;}
@@ -5630,12 +5650,13 @@ function CloudAuth({onDone,initialMode,intake}){
   };
   const signin=async()=>{
     if(busy)return; setBusy(true);setErr("");
-    let res=await cloudCall({action:"login",email:f.email,password:f.pw,code:code.trim()});
-    if(res&&res.network) res=await cloudCall({action:"login",email:f.email,password:f.pw,code:code.trim()});   // retry a network blip before blaming the password
+    const loginBody={action:"login",email:f.email,password:f.pw,code:code.trim(),device:trustTokenFor(f.email),trustDays:code.trim()?(+trustDays||0):0};
+    let res=await cloudCall(loginBody);
+    if(res&&res.network) res=await cloudCall(loginBody);   // retry a network blip before blaming the password
     if(res&&res.needsEmailCode){ setBusy(false); setNeed2fa("email"); if(res.sentTo)setSentTo(res.sentTo); setErr(code?String(res.error||"That code isn't right."):""); return; }
     if(res&&res.needsTotp){ setBusy(false); setNeed2fa("totp"); setErr(code?String(res.error||"That code isn't right."):""); return; }
     if(!res||!res.ok){setBusy(false);setErr(res&&res.network?"Couldn't reach the sign-in server — your password was never checked. Wait a moment and try again.":((res&&res.error)||"Could not reach the server."));return;}
-    CLOUD.token=res.token; lsSet("cloud.token",res.token);
+    CLOUD.token=res.token; lsSet("cloud.token",res.token); rememberTrust(f.email,res);
     const uid=String(res.user.id||res.user.email); clearScratchFor(uid);
     if(intake&&(intake.volume||intake.carrier||intake.invoice)){
       await cloudCall({action:"fedexRequest",token:res.token,name:res.user.name||"",volume:intake.volume,carrier:intake.carrier,invoice:intake.invoice||undefined});
@@ -5684,9 +5705,10 @@ function CloudAuth({onDone,initialMode,intake}){
         </div>}</>}
         <input value={f.email} onChange={e=>setF({...f,email:e.target.value})} placeholder="Email" className={inp} autoFocus/>
         <div className="relative"><input value={f.pw} onChange={e=>setF({...f,pw:e.target.value})} onKeyDown={e=>e.key==="Enter"&&(mode==="signin"?signin():request())} placeholder={mode==="request"?"Choose a password":"Password"} type={showPw?"text":"password"} className={inp+" pr-9"}/><button type="button" onClick={()=>setShowPw(v=>!v)} tabIndex={-1} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">{showPw?<EyeOff className="w-4 h-4"/>:<Eye className="w-4 h-4"/>}</button></div>
-        {mode==="signin"&&need2fa&&<div className="space-y-1">
+        {mode==="signin"&&need2fa&&<div className="space-y-2">
           <input value={code} onChange={e=>setCode(e.target.value.replace(/[^0-9A-Za-z-]/g,"").slice(0,9))} onKeyDown={e=>e.key==="Enter"&&signin()} placeholder="6-digit code" autoFocus className={inp+" tracking-[0.3em] text-center"}/>
           <div className="text-[11px] text-stone-400">{need2fa==="email"?("We emailed a 6-digit code"+(sentTo?" to "+sentTo:"")+" — enter it to finish signing in."):"Enter the 6-digit code from your authenticator app (or a backup code)."}</div>
+          <TrustDeviceRow trustDays={trustDays} setTrustDays={setTrustDays}/>
         </div>}
       </div>
       {err&&<div className="text-xs text-red-600">{err}</div>}
@@ -6901,7 +6923,7 @@ function AppInner(){
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
           {tab==="companyadmin"&&isCompanyAdmin&&<CompanyAdmin currentUser={currentUser} companyUsers={companyUsers} setCompanyUsers={setCompanyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} settings={settings}/>}
           {(tab==="admin"||tab.startsWith("admin:"))&&isAdmin&&<AdminPortal activeSection={tab.startsWith("admin:")?tab.slice(6):null} clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} publicBrand={publicBrand} setPublicBrand={setPublicBrand} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
-          {tab==="settings"&&<Settings showMoney={showMoney} secPolicy={(myFlags&&myFlags._secPolicy)||{}} isAdmin={isAdmin} uid={currentUser&&currentUser.id} currentUser={currentUser} setCurrentUser={setCurrentUser} audit={audit} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
+          {tab==="settings"&&<Settings showMoney={showMoney} secPolicy={(myFlags&&myFlags._secPolicy)||{}} isAdmin={isAdmin} uid={currentUser&&currentUser.id} currentUser={currentUser} setCurrentUser={setCurrentUser} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
           </TabBoundary>
         </main>
       </div>
@@ -7702,7 +7724,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             <datalist id="sc-dept-list">{(((settings.fieldLists||{}).department)||[]).map(v=><option key={v} value={v}/>)}</datalist>
             <div className="flex flex-wrap items-center gap-3">
               <div className="w-24 shrink-0 text-[10px] uppercase tracking-widest text-stone-600 font-semibold">Packages · {pieces.length}</div>
-              <div className="flex items-center gap-1"><span className="w-[72px] shrink-0 text-[10px] uppercase tracking-widest text-stone-500">Ship Date</span><input type="date" value={shipDate} onChange={e=>setShipDate(e.target.value)} className="w-40 text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded-lg px-2 outline-none focus:border-[#0099FF]" style={{fontFamily:"inherit"}}/></div>
+              <div className="flex items-center gap-1"><span className="w-[72px] shrink-0 text-[10px] uppercase tracking-widest text-stone-500">Ship Date</span><input type="date" value={shipDate} onChange={e=>setShipDate(e.target.value)} className="w-36 text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded-lg px-2 outline-none focus:border-[#0099FF]" style={{fontFamily:"inherit"}}/></div>
               <div className="flex items-center gap-1"><span className="w-12 shrink-0 text-[10px] uppercase tracking-widest text-stone-500">Ref #</span>{(custom.refLocked&&(((settings.fieldLists||{}).department||[]).length+(((settings.fieldLists||{}).reference)||[]).length)>0)
                 ?<select value={reference} onChange={e=>setReference(e.target.value)} className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] ${custom.refRequired&&!reference?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}><option value="">— select —</option>{[...((settings.fieldLists||{}).department||[]),...(((settings.fieldLists||{}).reference)||[])].map(v=><option key={v} value={v}>{v}</option>)}</select>
                 :<input value={reference} onChange={e=>setReference(e.target.value)} list="sc-ref-list" placeholder="Order / Ref" className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 ${custom.refRequired&&!reference?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}/>}</div>
@@ -7718,7 +7740,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <span className="w-24 shrink-0 text-[10px] uppercase tracking-widest text-stone-500">Total {totalWeight} lb</span>
-              <div className="flex items-center gap-1"><span className="w-[72px] shrink-0 text-[10px] uppercase tracking-widest text-stone-500">Signature</span><select value={sigOption} onChange={e=>{setSigOption(e.target.value);setSig(e.target.value!=="none");}} className="w-40 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="none">None</option><option value="direct">Direct Signature</option><option value="indirect">Indirect Signature</option><option value="adult">Adult Signature</option></select></div>
+              <div className="flex items-center gap-1"><span className="w-[72px] shrink-0 text-[10px] uppercase tracking-widest text-stone-500">Signature</span><select value={sigOption} onChange={e=>{setSigOption(e.target.value);setSig(e.target.value!=="none");}} className="w-36 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="none">None</option><option value="direct">Direct Signature</option><option value="indirect">Indirect Signature</option><option value="adult">Adult Signature</option></select></div>
               {!custom.hideInsure&&<div className="flex items-center gap-1"><span className="w-12 shrink-0 text-[10px] uppercase tracking-widest text-stone-500">{pieces.length>1?"Insure/box":"Insure"}</span><input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} disabled={pieces.length>1&&dvEach} placeholder="0" title={pieces.length>1&&!dvEach?"Declared value applied to every box":undefined} className="w-36 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 disabled:opacity-40"/>{pieces.length>1&&<label className="flex items-center gap-1 text-[11px] text-stone-500 cursor-pointer ml-0.5" title="Enter a different declared value on each box below"><input type="checkbox" checked={dvEach} onChange={e=>setDvEach(e.target.checked)} className="accent-[#0086E0]"/>Per Box</label>}</div>}
               {quotes.some(q=>{const l=String(q.label||"").toLowerCase();return l.includes("fedex")&&/(overnight|2\s?day|express saver)/.test(l);})&&<label className="flex items-center gap-1.5 text-[11px] text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSat(e.target.checked)} className="accent-[#0086E0]"/><span className="uppercase tracking-widest text-stone-500">Saturday Delivery <span className="normal-case text-stone-400">(Express only)</span></span></label>}
             </div>
@@ -10387,7 +10409,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
 }
 
 /* ════════ SETTINGS ════════ */
-function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,audit=[],isAdmin=false,showMoney=true,secPolicy={},currentUser=null,setCurrentUser=null}){
+function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,isAdmin=false,showMoney=true,secPolicy={},currentUser=null,setCurrentUser=null}){
   /* Remember which Settings sub-section you were on, so leaving Settings and coming back returns you to
      the same panel instead of resetting to General. Persisted so it survives a full reload too. */
   const [sec,setSecRaw]=useState("general");   // always open Settings on General
@@ -10444,7 +10466,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="manifests"&&<Manifests shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} settings={settings}/>}
         {sec==="reports"&&<Reports shipments={shipments} showMoney={showMoney}/>}
         {sec==="notifications"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Email automation saved">{(s,ss)=><Notifications settings={s} setSettings={ss} emails={emails}/>}</SettingsDraftWrap>}
-        {sec==="general"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="General settings saved">{(s,ss)=><GeneralSettings settings={s} setSettings={ss} goSec={setSec} audit={audit} currentUser={currentUser} setCurrentUser={setCurrentUser}/>}</SettingsDraftWrap>}
+        {sec==="general"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="General settings saved">{(s,ss)=><GeneralSettings settings={s} setSettings={ss} goSec={setSec} currentUser={currentUser} setCurrentUser={setCurrentUser}/>}</SettingsDraftWrap>}
         {sec==="cieditor"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Commercial invoice saved">{(s,ss)=><div className="space-y-6"><CIEditor settings={s} setSettings={ss} shipments={shipments}/><div className="border-t border-stone-200 pt-6"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-3">Commercial invoice history</div><CIHistory settings={s} setSettings={ss}/></div></div>}</SettingsDraftWrap>}
         {sec==="otherdocs"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Documents saved">{(s,ss)=><OtherDocs settings={s} setSettings={ss}/>}</SettingsDraftWrap>}
         {sec==="customize"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])}/>}
@@ -12568,7 +12590,7 @@ function OtherDocs({settings,setSettings}){
   </div>);
 }
 
-function GeneralSettings({settings,setSettings,goSec,audit=[],currentUser,setCurrentUser}){
+function GeneralSettings({settings,setSettings,goSec,currentUser,setCurrentUser}){
   const set=(k,v)=>setSettings(p=>({...p,[k]:v}));
   const sn=settings.sender||{};
   const setSn=(k,v)=>setSettings(p=>({...p,sender:{...(p.sender||{}),[k]:v}}));
@@ -12604,13 +12626,6 @@ function GeneralSettings({settings,setSettings,goSec,audit=[],currentUser,setCur
     <Panel title="Shipping defaults">
       <label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>Bill shipments to</span>
         <select value={settings.defaultBillTo||"sender"} onChange={e=>set("defaultBillTo",e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="sender">My account (sender)</option><option value="third">Third-Party Account</option></select></label>
-    </Panel>
-    <Panel title="Activity log">
-      <p className="text-xs text-stone-500 -mt-1 mb-2">Who did what — label bookings and voids, newest first (last 200).</p>
-      <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100 max-h-80 overflow-y-auto">
-        {audit.length===0&&<div className="p-4 text-sm text-stone-400">No activity yet.</div>}
-        {audit.map((a,i)=><div key={i} className="px-3 py-2 text-xs flex items-baseline gap-2"><span className="text-stone-400 shrink-0 w-36">{a.ts}</span><span className="font-medium text-stone-700 shrink-0">{a.action}</span><span className="text-stone-500 truncate">{a.detail}</span><span className="ml-auto text-stone-300 shrink-0">{a.user}</span></div>)}
-      </div>
     </Panel>
     <AccountLoginPanel currentUser={currentUser} setCurrentUser={setCurrentUser}/>
     <TwoFactorPanel/>
@@ -12673,6 +12688,9 @@ function TwoFactorPanel(){
   const e2begin=async()=>{ setBusy(true);setMsg(null); const r=await cloudCall({action:"email2faBegin",token:CLOUD.token}); setBusy(false); if(r&&r.ok){setE2sent(true);setE2code("");setMsg({t:"ok",m:"We emailed a 6-digit code"+(r.sentTo?" to "+r.sentTo:"")+" — enter it below to turn it on."});}else setMsg({t:"err",m:(r&&r.error)||"Could not send the code."}); };
   const e2enable=async()=>{ setBusy(true);setMsg(null); const r=await cloudCall({action:"email2faEnable",token:CLOUD.token,code:e2code.trim()}); setBusy(false); if(r&&r.ok){setE2sent(false);setE2code("");setMsg({t:"ok",m:"Email verification is now ON for sign-in."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not enable."}); };
   const e2disable=async()=>{ const pw=await uiPrompt("Enter your account password to turn off email verification:","",{title:"Turn off email verification"})||""; if(!pw)return; setBusy(true);setMsg(null); const r=await cloudCall({action:"email2faDisable",token:CLOUD.token,password:pw}); setBusy(false); if(r&&r.ok){setMsg({t:"ok",m:"Email verification is off."});load();}else setMsg({t:"err",m:(r&&r.error)||"Could not disable."}); };
+  /* QR of the otpauth:// link so the authenticator app can just scan it — generated locally,
+     the secret never leaves the page. Falls back to the manual key if encoding ever fails. */
+  const qrUrl=useMemo(()=>{ if(!setup||!setup.otpauth)return ""; try{ const q=qrcodegen(0,"M"); q.addData(setup.otpauth); q.make(); return q.createDataURL(5,4); }catch(e){ return ""; } },[setup&&setup.otpauth]);
   if(!cloud) return null;
   const codesText=(codes||[]).join("\n");
   return (<Panel title="Two-factor authentication (2FA)">
@@ -12690,11 +12708,17 @@ function TwoFactorPanel(){
     </div>}
     {status&&!status.enabled&&!setup&&<button disabled={busy} onClick={begin} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] disabled:opacity-50">{busy?"One moment…":"Set up 2FA"}</button>}
     {setup&&<div className="space-y-3">
-      <div className="text-sm text-stone-700">1. In your authenticator app, add an account and enter this key (or paste the setup link):</div>
-      <div className="bg-stone-50 border border-stone-200 rounded-lg p-3 space-y-2">
-        <div className="flex items-center gap-2"><code className=" text-sm tracking-wider break-all flex-1">{setup.secret}</code>
-          <button onClick={()=>{try{navigator.clipboard.writeText(setup.secret);setMsg({t:"ok",m:"Key copied."});}catch(e){}}} className="text-[11px] rounded px-2 py-1 bg-white border border-stone-300 hover:bg-stone-100 shrink-0">Copy Key</button></div>
-        <button onClick={()=>{try{navigator.clipboard.writeText(setup.otpauth);setMsg({t:"ok",m:"Setup link copied."});}catch(e){}}} className="text-[11px] text-[#0086E0] underline underline-offset-2">Copy setup link (otpauth://)</button>
+      <div className="text-sm text-stone-700">1. Scan this QR code with your authenticator app — or enter the key manually:</div>
+      <div className="bg-stone-50 border border-stone-200 rounded-lg p-3">
+        <div className="flex flex-wrap items-start gap-3">
+          {qrUrl&&<span className="bg-white border border-stone-200 rounded-lg p-2 shrink-0"><img src={qrUrl} alt="2FA setup QR code" className="w-36 h-36" style={{imageRendering:"pixelated"}} draggable={false}/></span>}
+          <div className="space-y-2 flex-1 min-w-[200px]">
+            <div className="text-[11px] text-stone-400">Can’t scan? Add an account in the app and type this key instead:</div>
+            <div className="flex items-center gap-2"><code className=" text-sm tracking-wider break-all flex-1">{setup.secret}</code>
+              <button onClick={()=>{try{navigator.clipboard.writeText(setup.secret);setMsg({t:"ok",m:"Key copied."});}catch(e){}}} className="text-[11px] rounded px-2 py-1 bg-white border border-stone-300 hover:bg-stone-100 shrink-0">Copy Key</button></div>
+            <button onClick={()=>{try{navigator.clipboard.writeText(setup.otpauth);setMsg({t:"ok",m:"Setup link copied."});}catch(e){}}} className="text-[11px] text-[#0086E0] underline underline-offset-2">Copy setup link (otpauth://)</button>
+          </div>
+        </div>
       </div>
       <div className="text-sm text-stone-700">2. Enter the 6-digit code your app shows now:</div>
       <div className="flex items-center gap-2">
@@ -12880,13 +12904,13 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
 
     {cs==="ship"&&<Panel title="Ship screen">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
-        {Tog({k:"hideShipSteps",invert:true,label:"Show the numbered 1-2-3 step headers",hint:"Adds ‘1 Ship from & to · 2 Package details · 3 Service & rate’ headers to the Ship screen. Off by default."})}
+        {Tog({k:"hideShipSteps",label:"Hide the numbered 1-2-3 step headers",hint:"Removes the ‘1 Ship from & to · 2 Package details · 3 Service & rate’ headers from the Ship screen. Hidden by default — uncheck to show them."})}
         {Tog({k:"hideAssistant",label:"Hide the AI assistant button",hint:"Removes the floating assistant button in the bottom-right corner everywhere in the app."})}
         {Tog({k:"hideRateSrcBar",label:"Hide the rate-source banner",hint:"Removes the ‘Live rates from your FedEx account / Estimated rates’ strip above the service list."})}
         {Tog({k:"hideAutopilotBox",label:"Hide the Autopilot match banner",hint:"Removes the ‘Autopilot rule matched…’ box above Select service. Rules still run and still pre-highlight the service."})}
         {Tog({k:"hideNotifyBox",label:"Hide the Send label & notify box",hint:"Removes the email panel at the bottom of the Ship tab. Automated notifications in Settings → Email automation still send."})}
         {Tog({k:"hideShipOrders",label:"Hide the orders list on the Ship screen",hint:"Removes the orders sidebar (and its collapsed tab) from the Ship screen completely — ship by scanning or typing shipments in manually. Orders still live on the Orders tab."})}
-        {Tog({k:"hideLabeledOrders",invert:true,label:"Show orders that already have a label",hint:"Off (recommended): once an order has a label, it drops off the Ship-screen orders list so you don't accidentally re-ship it. Turn on to keep already-labeled orders in the list."})}
+        {Tog({k:"hideLabeledOrders",label:"Hide orders that already have a label",hint:"On (recommended): once an order has a label, it drops off the Ship-screen orders list so you don't accidentally re-ship it. Uncheck to keep already-labeled orders in the list."})}
         {Tog({k:"scanAutoFocus",label:"Scan mode — keep the scan box ready",hint:"The cursor lives in the scan box: it's focused when the Ship tab opens, re-arms after every scan and booking, and returns after you click orders, services or buttons. It only steps aside while you're typing in another field (like editing the shipping information), then comes back on your next click."})}
         {Tog({k:"hideInvoice",label:"Hide Invoice # field"})}
         {Tog({k:"hidePO",label:"Hide PO # field"})}
@@ -12913,7 +12937,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
     {(cs==="services"||only==="ship")&&<Panel title="Rates & services">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         {Sel({k:"defaultView",label:"Default rate view",opts:[["cheapest","Cheapest First"],["carrier","Grouped by Carrier"]]})}
-        {(isAdmin||deployMode)&&<div className="rounded-lg border border-blue-100 bg-blue-50/40 p-2.5"><div className="text-[10px] uppercase tracking-widest text-blue-400 mb-1.5 flex items-center gap-1"><ShieldCheck className="w-3 h-3"/>Admin only</div>{Tog({k:"showRateViewToggle",label:"Show the Cheapest / By carrier switch on Ship",hint:"Off = the rate list just uses the default view above, with no toggle or 'enter ZIP & weight' hint shown. Only you (admin) can turn this on."})}</div>}
+        {(isAdmin||deployMode)&&<div className="rounded-lg border border-blue-100 bg-blue-50/40 p-2.5"><div className="text-[10px] uppercase tracking-widest text-blue-400 mb-1.5 flex items-center gap-1"><ShieldCheck className="w-3 h-3"/>Admin only</div>{Tog({k:"showRateViewToggle",invert:true,label:"Hide the Cheapest / By carrier switch on Ship",hint:"Hidden = the rate list just uses the default view above, with no toggle or 'enter ZIP & weight' hint shown. Only you (admin) can change this."})}</div>}
         {Sel({k:"transitStyle",label:"Transit display",opts:[["date","Days + Arrival Date"],["days","Day Count Only"]]})}
         {Num({k:"priceWarn",label:"Price alert",hint:"Flag any rate above this amount. 0 = off",step:"1",suffix:"$"})}
       </div>

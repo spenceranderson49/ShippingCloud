@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v543";
+const BUILD_TAG="addr-v544";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2875,7 +2875,7 @@ const CUSTOM_DEFAULTS={
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
   logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,skipBookedSummary:false,autoRulesOnShip:true,autoRulesInBatch:false,autoBookBatch:false,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],accent:"",
   refRequired:false,invRequired:false,poRequired:false,deptRequired:false,refLocked:false,invLocked:false,poLocked:false,deptLocked:false,hideDept:false,
-  confetti:"page",seasonal:false,
+  confetti:"page",seasonal:false,hideShipSteps:true,
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
 const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
@@ -3463,7 +3463,7 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection,cli
    those snapshots with a date + entry count + a sample of what's inside, and restores any
    one in a click. Restore snapshots the CURRENT value first, so it's reversible. After a
    restore we reload immediately so this tab can't overwrite the recovered data. Admin only. */
-function BackupsAdmin({clients=[],setClients}){
+function BackupsAdmin({clients=[],setClients,users=[],setUsers}){
   const cloud=CLOUD.mode==="cloud";
   const [rows,setRows]=useState(null);   // null = loading
   const [busy,setBusy]=useState("");
@@ -3478,6 +3478,8 @@ function BackupsAdmin({clients=[],setClients}){
   const LABEL={clients:"Customers",rateRules:"Rates & profiles",users:"Logins",featureFlags:"Feature settings",invoicesIssued:"Invoices",salesReps:"Sales reps",proposalReports:"Proposal reports"};
   const parseTs=(ts)=>{const m=/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/.exec(String(ts||""));if(!m)return ts||"—";const d=new Date(`${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z`);return isNaN(d)?ts:d.toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});};
   const curIds=new Set((clients||[]).map(c=>c&&c.id));
+  const curUserIds=new Set((users||[]).map(u=>u&&u.id));
+  const hereIds=(kind)=>kind==="users"?curUserIds:curIds;
   const restore=async(bk)=>{
     if(!await uiConfirm("Restore ALL of "+(LABEL[bk.orig]||bk.orig)+" to the version from "+parseTs(bk.ts)+" ("+bk.count+" "+(bk.count===1?"entry":"entries")+")?\n\nThis replaces the whole list with that snapshot. Your current version is backed up first, so it's reversible. The page reloads afterward.\n\nTip: close any other admin tabs first so they don't overwrite it."))return;
     setBusy(bk.key);setMsg("");
@@ -3492,18 +3494,20 @@ function BackupsAdmin({clients=[],setClients}){
     const r=await cloudCall({action:"getBackup",token:CLOUD.token,key:bk.key});
     setBusy("");
     if(!r||!r.ok||!Array.isArray(r.value)){setMsg((r&&r.error)||"Couldn't open that backup.");return;}
+    const kind=bk.orig;   // "clients" or "users" — both use the same pick-and-merge flow
     const list=r.value.filter(c=>c&&c.id);
-    const missing=new Set(list.filter(c=>!curIds.has(c.id)).map(c=>c.id));   // pre-check the ones that are gone
-    setPick({key:bk.key,ts:bk.ts,list,chosen:missing});
+    const missing=new Set(list.filter(c=>!hereIds(kind).has(c.id)).map(c=>c.id));   // pre-check the ones that are gone
+    setPick({kind,key:bk.key,ts:bk.ts,list,chosen:missing});
   };
   const toggle=(id)=>setPick(p=>{const s=new Set(p.chosen);s.has(id)?s.delete(id):s.add(id);return {...p,chosen:s};});
   const doRestoreSelected=()=>{
     const chosen=pick.list.filter(c=>pick.chosen.has(c.id));
     if(!chosen.length){return;}
-    if(!setClients){setMsg("Can't merge here — use Restore all instead.");return;}
-    setClients(cur=>{const map=new Map((cur||[]).map(c=>[c.id,c]));chosen.forEach(c=>map.set(c.id,c));return Array.from(map.values());});   // upsert selected snapshot customers into the current list (add missing, refresh chosen)
+    const setter=pick.kind==="users"?setUsers:setClients;
+    if(!setter){setMsg("Can't merge here — use Restore all instead.");return;}
+    setter(cur=>{const map=new Map((cur||[]).map(c=>[c.id,c]));chosen.forEach(c=>map.set(c.id,c));return Array.from(map.values());});   // upsert selected snapshot customers into the current list (add missing, refresh chosen)
     const n=chosen.length;setPick(null);
-    setMsg("Restored "+n+" customer"+(n===1?"":"s")+" into your list — they'll appear under Customers. (This is saved; your list before was snapshotted too.)");
+    setMsg("Restored "+n+" "+(pick.kind==="users"?"login":"customer")+(n===1?"":"s")+" into your list — they'll appear under Customers. (This is saved; your list before was snapshotted too.)");
   };
   const groups={};(rows||[]).forEach(b=>{(groups[b.orig]=groups[b.orig]||[]).push(b);});
   const order=["clients","rateRules","users","featureFlags","invoicesIssued","salesReps","proposalReports"];
@@ -3527,7 +3531,7 @@ function BackupsAdmin({clients=[],setClients}){
               <td className="py-2 text-right font-mono font-medium">{b.count}</td>
               <td className="py-2 pl-4 text-stone-500 truncate max-w-[340px]">{(b.sample||[]).join(", ")||"—"}</td>
               <td className="py-2 text-right whitespace-nowrap">
-                {k==="clients"&&<button disabled={!!busy} onClick={()=>openPick(b)} className="text-xs border border-stone-300 text-stone-600 rounded px-2.5 py-1.5 hover:bg-stone-50 disabled:opacity-40 inline-flex items-center gap-1.5 mr-1.5">{busy===b.key?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<Users className="w-3.5 h-3.5"/>}Pick customers…</button>}
+                {(k==="clients"||k==="users")&&<button disabled={!!busy} onClick={()=>openPick(b)} className="text-xs border border-stone-300 text-stone-600 rounded px-2.5 py-1.5 hover:bg-stone-50 disabled:opacity-40 inline-flex items-center gap-1.5 mr-1.5">{busy===b.key?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<Users className="w-3.5 h-3.5"/>}Pick customers…</button>}
                 <button disabled={!!busy} onClick={()=>restore(b)} className="text-xs border border-[#0086E0]/50 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 disabled:opacity-40 inline-flex items-center gap-1.5"><RotateCcw className="w-3.5 h-3.5"/>{k==="clients"?"Restore all":"Restore"}</button>
               </td>
             </tr>))}
@@ -3538,16 +3542,16 @@ function BackupsAdmin({clients=[],setClients}){
     {pick&&createPortal(<div className="fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center p-4" onClick={()=>setPick(null)}>
       <div onClick={e=>e.stopPropagation()} className="bg-white rounded-2xl max-w-lg w-full max-h-[82vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-stone-100">
-          <div className="text-sm font-semibold text-stone-800">Restore customers — snapshot from {parseTs(pick.ts)}</div>
+          <div className="text-sm font-semibold text-stone-800">Restore {pick.kind==="users"?"logins":"customers"} — snapshot from {parseTs(pick.ts)}</div>
           <button onClick={()=>setPick(null)} className="text-stone-400 hover:text-stone-600"><X className="w-5 h-5"/></button>
         </div>
         <div className="px-5 py-2.5 text-[12px] text-stone-500 border-b border-stone-100">Missing customers are pre-checked. Checking one that still exists will overwrite it with this backup's version. Nothing else in your current list is touched.</div>
         <div className="overflow-y-auto px-3 py-1 flex-1">
           {pick.list.length===0&&<div className="px-2 py-6 text-center text-stone-400 text-sm">This snapshot has no customers in it.</div>}
-          {pick.list.map(c=>{const here=curIds.has(c.id);const on=pick.chosen.has(c.id);return (
+          {pick.list.map(c=>{const here=hereIds(pick.kind).has(c.id);const on=pick.chosen.has(c.id);return (
             <label key={c.id} className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-stone-50 cursor-pointer">
               <input type="checkbox" checked={on} onChange={()=>toggle(c.id)} className="w-4 h-4 accent-[#0086E0]"/>
-              <div className="min-w-0 flex-1"><div className="text-[13px] font-medium text-stone-800 truncate">{c.name||"(no name)"}</div><div className="text-[11px] text-stone-400 truncate">{c.email||c.contact||c.id}</div></div>
+              <div className="min-w-0 flex-1"><div className="text-[13px] font-medium text-stone-800 truncate">{pick.kind==="users"?(c.email||c.name||"(no email)"):(c.name||"(no name)")}</div><div className="text-[11px] text-stone-400 truncate">{pick.kind==="users"?[c.name,c.company].filter(Boolean).join(" · ")||c.id:(c.email||c.contact||c.id)}</div></div>
               {here?<Badge tone="stone">already here</Badge>:<Badge tone="green">missing</Badge>}
             </label>);})}
         </div>
@@ -4947,7 +4951,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
       {k==="overview"&&<AdminDashboard platform={platform} loginStats={loginStats} uEmail={uEmail} openCustomer={openCustomer} openSection={openSection} clients={clients}/>}
       {k==="apiadmin"&&<ApiAdmin clients={clients} platform={platform} openCustomer={openCustomer}/>}
       {k==="billing"&&<BillingAdmin clients={clients} platform={platform} openCustomer={openCustomer}/>}
-      {k==="backups"&&<BackupsAdmin clients={clients} setClients={setClients}/>}
+      {k==="backups"&&<BackupsAdmin clients={clients} setClients={setClients} users={users} setUsers={setUsers}/>}
   </>);
   return (
     <div className="-mt-2">
@@ -7704,9 +7708,9 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 :<input value={department} onChange={e=>setDepartment(e.target.value)} list="sc-dept-list" placeholder="Dept…" className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 ${custom.deptRequired&&!department?"bg-[#E6F4FF] border-[#99D6FF]":"bg-white border-stone-300"}`}/>}</div>}
             </div>
             <div className="flex flex-wrap items-center gap-4">
-              <span className="text-[11px] text-stone-400 font-mono">total {totalWeight} lb</span>
-              {!custom.hideInsure&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">{pieces.length>1?"Insure $/box":"Insure $"}</span><input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} disabled={pieces.length>1&&dvEach} placeholder="0" title={pieces.length>1&&!dvEach?"Declared value applied to every box":undefined} className="w-16 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 disabled:opacity-40"/>{pieces.length>1&&<label className="flex items-center gap-1 text-[11px] text-stone-500 cursor-pointer ml-0.5" title="Enter a different declared value on each box below"><input type="checkbox" checked={dvEach} onChange={e=>setDvEach(e.target.checked)} className="accent-[#0086E0]"/>per box</label>}</div>}
-              <div className="flex items-center gap-1.5"><span className="text-[10px] uppercase tracking-widest text-stone-500">Signature</span><select value={sigOption} onChange={e=>{setSigOption(e.target.value);setSig(e.target.value!=="none");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="none">None</option><option value="direct">Direct signature</option><option value="indirect">Indirect signature</option><option value="adult">Adult signature</option></select></div>
+              <span className="text-[10px] uppercase tracking-widest text-stone-500">Total {totalWeight} lb</span>
+              {!custom.hideInsure&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">{pieces.length>1?"Insure $/box":"Insure $"}</span><input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} disabled={pieces.length>1&&dvEach} placeholder="0" title={pieces.length>1&&!dvEach?"Declared value applied to every box":undefined} className="w-36 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 disabled:opacity-40"/>{pieces.length>1&&<label className="flex items-center gap-1 text-[11px] text-stone-500 cursor-pointer ml-0.5" title="Enter a different declared value on each box below"><input type="checkbox" checked={dvEach} onChange={e=>setDvEach(e.target.checked)} className="accent-[#0086E0]"/>per box</label>}</div>}
+              <div className="flex items-center gap-1.5"><span className="text-[10px] uppercase tracking-widest text-stone-500">Signature</span><select value={sigOption} onChange={e=>{setSigOption(e.target.value);setSig(e.target.value!=="none");}} className="w-36 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="none">None</option><option value="direct">Direct signature</option><option value="indirect">Indirect signature</option><option value="adult">Adult signature</option></select></div>
               {quotes.some(q=>{const l=String(q.label||"").toLowerCase();return l.includes("fedex")&&/(overnight|2\s?day|express saver)/.test(l);})&&<label className="flex items-center gap-1.5 text-[11px] text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSat(e.target.checked)} className="accent-[#0086E0]"/><span className="uppercase tracking-widest text-stone-500">Saturday delivery <span className="normal-case text-stone-400">(Express only)</span></span></label>}
             </div>
           </div>
@@ -9336,7 +9340,7 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
             <div className="grid grid-cols-2 gap-3"><Field label="From ZIP"><Input value={fromZip} onChange={e=>setFromZip(e.target.value)}/></Field><Field label="To ZIP"><Input value={toZip} onChange={e=>setToZip(e.target.value)}/></Field></div>
             <div className="flex items-center justify-between"><Toggle on={residential} set={setResidential} label="Residential"/><button onClick={clearQuote} className="text-[11px] text-stone-400 hover:text-rose-600 underline underline-offset-2">Clear quote</button></div>
             <div className="space-y-2">
-              <div className="flex items-center justify-between"><span className="text-[10px] uppercase tracking-widest text-stone-400">Packages · {pieces.length}</span><span className="text-[11px] text-stone-400 font-mono">total {totalWeight} lb</span></div>
+              <div className="flex items-center justify-between"><span className="text-[10px] uppercase tracking-widest text-stone-400">Packages · {pieces.length}</span><span className="text-[10px] uppercase tracking-widest text-stone-500">Total {totalWeight} lb</span></div>
               {pieces.map((p,i)=>(
                 <div key={i} className="flex flex-wrap items-end gap-1.5 bg-white border border-stone-200 rounded-lg px-2 py-2">
                   <div className="text-[11px] text-stone-400 font-mono w-4">#{i+1}</div>
@@ -9451,6 +9455,27 @@ function Dashboard({shipments,orders,returns,goTab}){
   </div>))}</div>);
   return (
     <div className="space-y-5">
+      {/* morning digest — yesterday at a glance, read-only */}
+      {(()=>{try{
+        const y=new Date(Date.now()-864e5).toLocaleDateString();
+        const t=new Date().toLocaleDateString();
+        const live=(shipments||[]).filter(s=>s&&s.status!=="Voided");
+        const ys=live.filter(s=>s.date===y), ts=live.filter(s=>s.date===t);
+        const spend=ys.reduce((a2,s)=>a2+(+s.sell||+s.cost||0),0);
+        const svc={};ys.forEach(s=>{const k=String(s.service||"").replace(/®/g,"").replace(/^FedEx\s*/,"");if(k)svc[k]=(svc[k]||0)+1;});
+        const top=Object.entries(svc).sort((p,q)=>q[1]-p[1])[0];
+        const transit=live.filter(s=>/transit|picked|label created/i.test(s.status||"")).length;
+        const Cell=({k,v})=>(<span className="flex items-baseline gap-1.5"><span className="text-[10px] uppercase tracking-widest text-stone-400">{k}</span><span className="text-sm font-semibold text-stone-800">{v}</span></span>);
+        return (<div className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 flex flex-wrap items-center gap-x-7 gap-y-1.5">
+          <span className="text-[10px] uppercase tracking-widest text-[#0086E0] font-semibold flex items-center gap-1.5"><Clock className="w-3.5 h-3.5"/>Yesterday</span>
+          <Cell k="Labels" v={ys.length}/>
+          <Cell k="Spend" v={"$"+spend.toFixed(2)}/>
+          <Cell k="Top service" v={top?top[0]:"—"}/>
+          <span className="w-px h-4 bg-stone-200 hidden sm:block"/>
+          <Cell k="Today so far" v={ts.length}/>
+          <Cell k="In transit" v={transit}/>
+        </div>);
+      }catch(e){return null;}})()}
       {/* hero band */}
       <div className="rounded-2xl bg-gradient-to-br from-[#00518C] via-[#006FBF] to-[#0099FF] text-white p-5 sm:p-6 shadow-lg relative overflow-hidden">
         <Cloud className="absolute -right-6 -top-8 w-44 h-44 text-white/10" strokeWidth={1}/>
@@ -11593,6 +11618,74 @@ function RuleEditorModal({rule,onSave,onClose,onDelete,warehouses}){
   );
 }
 
+/* ── Rule tester: pick an order, see which rule fires and why — condition by condition ── */
+function RuleTesterPanel({rules,orders,originZip}){
+  const [openT,setOpenT]=useState(false);
+  const [oid,setOid]=useState("");
+  const cand=(orders||[]).filter(o=>o&&o.status!=="fulfilled").slice(0,300);
+  const order=cand.find(o=>String(o.id)===String(oid))||null;
+  const res=useMemo(()=>{
+    if(!order)return null;
+    try{
+      const ov=ruleOrderView(order,originZip);
+      const run=runRuleEngine((rules||[]),[order],originZip);
+      const r0=run.results&&run.results[0];
+      const rows=(rules||[]).map(r=>{
+        const conds=(r.conditions||[]).map(c=>{
+          const meta=RULE_PROPERTIES[c.property]||{};
+          const actual=meta.key!=null?ov[meta.key]:undefined;
+          return {c,pass:!!ruleEval(c,ov),actual:actual==null?"—":Array.isArray(actual)?actual.join(", "):String(actual)};
+        });
+        const matched=r.enabled&&(conds.length===0||(r.match==="any"?conds.some(x=>x.pass):conds.every(x=>x.pass)));
+        return {r,conds,matched};
+      });
+      return {ov,rows,fires:(r0&&r0.fires)||[],view:(r0&&r0.view)||null};
+    }catch(e){ return {error:(e&&e.message)||"rule engine error"}; }
+  },[order,rules,originZip]);
+  return (<div className="border border-stone-200 rounded-lg bg-white">
+    <button onClick={()=>setOpenT(v=>!v)} className="w-full flex items-center gap-2 px-4 py-3 text-left">
+      <Zap className="w-4 h-4 text-[#0086E0]"/>
+      <span className="text-sm font-semibold text-stone-800">Rule tester</span>
+      <span className="text-[12px] text-stone-400">— pick an order and see exactly which rule fires, and why</span>
+      <span className="flex-1"/>
+      <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${openT?"rotate-180":""}`}/>
+    </button>
+    {openT&&<div className="px-4 pb-4 space-y-3 border-t border-stone-100 pt-3">
+      <select value={oid} onChange={e=>setOid(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] max-w-md w-full">
+        <option value="">Pick an order to test…</option>
+        {cand.map(o=><option key={o.id} value={o.id}>{o.name} — {o.customer||"?"} · {o.state||""} · ${o.total||"?"}</option>)}
+      </select>
+      {res&&res.error&&<div className="text-sm text-rose-600">{res.error}</div>}
+      {res&&!res.error&&<>
+        <div className={`rounded-lg px-3 py-2 text-sm border ${res.fires.length?"bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF]":"bg-amber-50 border-amber-200 text-amber-800"}`}>
+          {res.fires.length
+            ?<span><b>{res.fires.map(f=>f.ruleName).join(", ")}</b> fire{res.fires.length===1?"s":""}{res.view&&res.view.selectedService?<> → service <b>{res.view.selectedService}</b></>:null}{res.view&&res.view.hold?<> · HOLD: {res.view.hold}</>:null}</span>
+            :<span>No rule matches this order — it stays unset unless you set a fallback service (Settings → Ship screen).</span>}
+        </div>
+        <div className="space-y-2">
+          {res.rows.map(({r,conds,matched},i)=>(
+            <div key={r.id||i} className={`rounded-lg border px-3 py-2 ${!r.enabled?"border-stone-100 opacity-50":matched?"border-emerald-200 bg-emerald-50/40":"border-stone-200"}`}>
+              <div className="flex items-center gap-2 text-[13px]">
+                {matched?<CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0"/>:<X className="w-4 h-4 text-stone-300 shrink-0"/>}
+                <span className="font-medium text-stone-800 truncate">{r.name||"(unnamed rule)"}</span>
+                {!r.enabled&&<Badge tone="stone">disabled</Badge>}
+                {r.stop&&matched&&<Badge tone="amber">stops here</Badge>}
+                <span className="text-[11px] text-stone-400 ml-auto shrink-0">{(r.match==="any"?"ANY":"ALL")} of {conds.length||"no"} condition{conds.length===1?"":"s"}</span>
+              </div>
+              {r.enabled&&conds.length>0&&<div className="mt-1.5 space-y-0.5">
+                {conds.map(({c,pass,actual},j)=>(
+                  <div key={j} className="flex items-center gap-2 text-[12px]">
+                    {pass?<CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0"/>:<X className="w-3.5 h-3.5 text-rose-400 shrink-0"/>}
+                    <span className="text-stone-600">{c.property} <span className="font-mono">{c.operator}</span> “{c.value}”</span>
+                    <span className="text-stone-400">· order’s value: <span className="font-mono text-stone-500">{actual}</span></span>
+                  </div>))}
+              </div>}
+            </div>))}
+        </div>
+      </>}
+    </div>}
+  </div>);
+}
 function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,onShipped}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
   const [editing,setEditing]=useState(null);
@@ -11763,6 +11856,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
       <span className="flex items-center gap-2"><span className="w-5 h-5 rounded-full bg-[#E6F4FF] text-[#006FBF] text-[11px] font-bold flex items-center justify-center">2</span>The preview below shows exactly what will happen — live, on your real orders</span>
       <span className="flex items-center gap-2"><span className="w-5 h-5 rounded-full bg-[#E6F4FF] text-[#006FBF] text-[11px] font-bold flex items-center justify-center">3</span>Hit <b>Run Autopilot</b> — every open order gets its label; anything held waits for you</span>
     </div>
+    <RuleTesterPanel rules={rules} orders={ords} originZip={originZip}/>
     {fbOpen&&<div className="border border-stone-200 rounded-lg bg-white p-4 space-y-2.5">
       <div className="flex flex-wrap items-center gap-2"><ClipboardList className="w-4 h-4 text-[#0086E0]"/><span className="text-sm font-semibold text-stone-800">Filter &amp; batch</span><span className="text-[11px] text-stone-400">— the same criteria as the Batch tab. Build a selection here, then send it to Batch in one click.</span></div>
       {[["state","State"],["zone","Zone"],["source","Source"],["sku","SKU"]].map(([d,label])=>{ const vals=fbVals(d); if(!vals.length)return null; const key={state:"states",zone:"zones",source:"sources",sku:"skus"}[d]; return (
@@ -12774,7 +12868,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
 
     {cs==="ship"&&<Panel title="Ship screen">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
-        {Tog({k:"hideShipSteps",label:"Hide the numbered 1-2-3 step headers",hint:"Turns off the ‘1 Ship from & to · 2 Package details · 3 Service & rate’ headers; the classic ‘Create shipment’ and ‘Select service’ titles come back instead."})}
+        {Tog({k:"hideShipSteps",invert:true,label:"Show the numbered 1-2-3 step headers",hint:"Adds ‘1 Ship from & to · 2 Package details · 3 Service & rate’ headers to the Ship screen. Off by default."})}
         {Tog({k:"hideAssistant",label:"Hide the AI assistant button",hint:"Removes the floating assistant button in the bottom-right corner everywhere in the app."})}
         {Tog({k:"hideRateSrcBar",label:"Hide the rate-source banner",hint:"Removes the ‘Live rates from your FedEx account / Estimated rates’ strip above the service list."})}
         {Tog({k:"hideAutopilotBox",label:"Hide the Autopilot match banner",hint:"Removes the ‘Autopilot rule matched…’ box above Select service. Rules still run and still pre-highlight the service."})}

@@ -70,7 +70,7 @@ const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK
    ever deploys to every login by accident. */
 /* Customer Settings sections (id,label) — mirrored by the `secs` array inside Settings.
    The admin portal uses this list for the per-customer hide/lock controls (featureFlags._secPolicy). */
-const SETTINGS_SEC_LIST=[["general","General"],["customize","Customizations"],["reports","Reports"],["shipscreen","Ship screen"],["orderspage","Orders"],["carriers","Carrier accounts"],["warehouses","Warehouses"],["boxes","Package sizes"],["boxlogic","Box logic"],["catalog","Product catalog"],["reference","Reference Fields"],["printer","Print settings"],["cieditor","Commercial invoice"],["otherdocs","Other documents"],["manifests","Manifests"],["integrations","Integrations"],["notifications","Email automation"],["checkout","Checkout rates"],["billing","Billing"],["subscription","Subscription"]];
+const SETTINGS_SEC_LIST=[["general","General"],["customize","Customizations"],["reports","Reports"],["shipscreen","Ship Screen"],["orderspage","Orders"],["carriers","Carrier Accounts"],["warehouses","Warehouses"],["boxes","Package Sizes"],["boxlogic","Box Logic"],["catalog","Product Catalog"],["reference","Reference Fields"],["printer","Print Settings"],["cieditor","Commercial Invoice"],["otherdocs","Other Documents"],["manifests","Manifests"],["integrations","Integrations"],["notifications","Email Automation"],["checkout","Checkout Rates"],["billing","Billing"],["subscription","Subscription"]];
 const FEATURE_CATALOG=[
   {id:"orders",label:"Orders",desc:"Order import & fulfillment",default:true},
   {id:"shipments",label:"Shipments",desc:"Shipment history & tracking",default:true},
@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v555";
+const BUILD_TAG="addr-v556";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3682,7 +3682,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
           <button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }} title="Open the app exactly as this person sees it" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Log in as</button>
           <button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,status:x.status==="disabled"?"active":"disabled"}:x))} className={`text-[11px] rounded px-2 py-1 ${u.status==="disabled"?"bg-rose-100 text-rose-600":"bg-emerald-50 text-emerald-700"}`}>{u.status==="disabled"?"disabled":"active"}</button>
           <RowMenu title={"More actions for "+(u.name||u.email)} items={[
-            {label:"Company admin",title:u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins",active:!!u.companyAdmin,onClick:()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))},
+            {label:"Company Admin",title:u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins",active:!!u.companyAdmin,onClick:()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))},
             {label:"Set password…",title:"Reset password",onClick:()=>setPw(u)},
             CLOUD.mode==="cloud"&&{label:"Send reset email",title:"Email them a choose-a-new-password link (valid 1 hour)",onClick:()=>sendReset(u)},
             u.id!==currentUser.id&&{label:"Delete login…",danger:true,onClick:async()=>{if(await uiConfirm("Delete "+u.email+"'s login? They won't be able to sign in anymore. The customer account and its data are not touched."))setUsers(us=>us.filter(x=>x.id!==u.id));}},
@@ -4919,7 +4919,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
     {label:"Accounts",items:[["customers","Customers",Building2],["users","All Logins",Users]]},
     {label:"Pricing",items:[["rates","Rates & dim divisors",DollarSign],["labelcert","FedEx labels",Printer]]},
     {label:"Experience",items:[["customizations","Features & access",Sliders],["branding","Branding",Sparkles],["apiadmin","API",Plug],["billing","Billing & invoices",Receipt],["domains","Domains",ExternalLink]]},
-    {label:"Data",items:[["backups","Backups & restore",RotateCcw]]},
+    {label:"Data",items:[["backups","Backups & Restore",RotateCcw]]},
   ];
   const SECTION_META={};NAV_GROUPS.forEach(g=>g.items.forEach(([v,l,Icon])=>{SECTION_META[v]={label:l,Icon};}));
   SECTION_META.rates={label:"Advanced rates — tables & sheets",Icon:DollarSign};   // off the sidebar (customers each have a Rates tab now); reachable from a customer record for shared imports, zones, weight breaks, and printable rate sheets
@@ -5186,7 +5186,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
             <RowMenu title={"More actions for "+(u.name||u.email)} items={[
               u.role==="admin"&&u.id!=="u1"&&!isBuiltInAdmin(u.email)&&u.id!==currentUser.id&&fullAdmin&&{label:"Portal access…",title:"Which Admin sections this login can open",active:accessOpen===u.id,onClick:()=>setAccessOpen(accessOpen===u.id?null:u.id)},
               u.role!=="admin"&&u.clientId&&{label:"Rates: "+rateProfileName(rateRules,u.clientId),title:"Which rate profile this company prices from — applies to every login of the company",active:rpOpen===u.id,onClick:()=>setRpOpen(rpOpen===u.id?null:u.id)},
-              u.role!=="admin"&&{label:"Company admin",title:u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins",active:!!u.companyAdmin,onClick:()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))},
+              u.role!=="admin"&&{label:"Company Admin",title:u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins",active:!!u.companyAdmin,onClick:()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))},
               u.role!=="admin"&&{label:"Tabs & logo…",title:"Features for this login",active:featOpen===u.id,onClick:()=>setFeatOpen(featOpen===u.id?null:u.id)},
               CLOUD.mode==="cloud"&&(u.role!=="admin"||fullAdmin)&&{label:"Set password…",title:"Reset password",onClick:async()=>{const np=await uiPrompt("New password for "+u.email+" (min 4 characters):","",{title:"Reset password"});if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});uiAlert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}},
               CLOUD.mode==="cloud"&&u.role!=="admin"&&{label:"Send reset email",title:"Email them a choose-a-new-password link (valid 1 hour)",onClick:async()=>{const r=await cloudCall({action:"requestReset",email:u.email,token:CLOUD.token});uiAlert(r&&r.configured===false?"Email sending isn't set up on this site yet (RESEND_API_KEY).":"Password reset link sent to "+u.email+" (valid 1 hour).");}},
@@ -6052,7 +6052,7 @@ function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,set
   const CATALOG=FEATURE_CATALOG.filter(c=>c.id!=="byoCarrier");
   return (<div className="max-w-4xl space-y-4">
     <div>
-      <h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Building2 className="w-5 h-5 text-[#0086E0]"/>Company admin</h2>
+      <h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Building2 className="w-5 h-5 text-[#0086E0]"/>Company Admin</h2>
       <p className="text-sm text-stone-500 mt-0.5">Create logins for your team and choose which tabs each person can use. Changes apply the next time they load the app.</p>
     </div>
     {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
@@ -6777,7 +6777,7 @@ function AppInner(){
     if(BRAND.admin)return adminSectionsFor(currentUser).map(([k,l])=>["admin:"+k,l,ADMIN_SECTION_ICONS[k]||ShieldCheck]);
     if(isAdmin)return applyPrefs(ALL_TABS);
     const t=ALL_TABS.filter(x=>x[0]!=="admin"&&(x[0]==="ship"||featureOn(x[0],currentUser,myFlags)));
-    if(isCompanyAdmin){const entry=["companyadmin","Company admin",Building2];const i=t.findIndex(x=>x[0]==="settings");i>=0?t.splice(i,0,entry):t.push(entry);}
+    if(isCompanyAdmin){const entry=["companyadmin","Company Admin",Building2];const i=t.findIndex(x=>x[0]==="settings");i>=0?t.splice(i,0,entry):t.push(entry);}
     return applyPrefs(t);
   },[isAdmin,isCompanyAdmin,currentUser,myFlags,custom.hiddenTabs,custom.tabOrder]);
   const unfulfilled=orders.filter(o=>o.status==="unfulfilled").length;
@@ -7632,8 +7632,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {/* six matching boxes, two per row, everything centered (Spencer-approved layout) */}
         <div className="grid grid-cols-2 gap-1.5">
           <input value={orderQ} onChange={e=>setOrderQ(e.target.value)} placeholder="Search orders" className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF] placeholder-stone-600"/>
-          <div className="relative min-w-0"><select value={storeFilter} onChange={e=>setStoreFilter(e.target.value)} style={{textAlignLast:"center"}} className="appearance-none h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-6 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF]"><option value="all">All stores</option>{storesPresent.map(s=><option key={s} value={s}>{s}</option>)}</select><ChevronDown className="w-3.5 h-3.5 absolute right-1.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"/></div>
-          <div className="relative min-w-0"><select value={orderSort} onChange={e=>setOrderSort(e.target.value)} style={{textAlignLast:"center"}} className="appearance-none h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-6 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="oldest">Oldest</option><option value="total">Order value</option><option value="customer">Customer A–Z</option></select><ChevronDown className="w-3.5 h-3.5 absolute right-1.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"/></div>
+          <div className="relative min-w-0"><select value={storeFilter} onChange={e=>setStoreFilter(e.target.value)} style={{textAlignLast:"center"}} className="appearance-none h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-6 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF]"><option value="all">All Stores</option>{storesPresent.map(s=><option key={s} value={s}>{s}</option>)}</select><ChevronDown className="w-3.5 h-3.5 absolute right-1.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"/></div>
+          <div className="relative min-w-0"><select value={orderSort} onChange={e=>setOrderSort(e.target.value)} style={{textAlignLast:"center"}} className="appearance-none h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-6 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="oldest">Oldest</option><option value="total">Order Value</option><option value="customer">Customer A–Z</option></select><ChevronDown className="w-3.5 h-3.5 absolute right-1.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"/></div>
           <button onClick={()=>{const t=new Date().toISOString().slice(0,10);if(dateFrom===t&&dateTo===t){setDateFrom("");setDateTo("");}else{setDateFrom(t);setDateTo(t);}}} className={`h-7 w-full rounded-lg px-2 text-[12px] border ${(()=>{const t=new Date().toISOString().slice(0,10);return dateFrom===t&&dateTo===t;})()?"bg-[#0099FF] text-white border-[#0099FF]":"bg-white text-stone-600 border-stone-200 hover:bg-stone-50"}`}>Today</button>
           <div className="relative col-span-2 grid grid-cols-2 gap-1.5">
             <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF]"/>
@@ -7641,7 +7641,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF]"/>
           </div>
         </div>
-        {(dateFrom||dateTo||storeFilter!=="all")&&<button onClick={()=>{setDateFrom("");setDateTo("");setStoreFilter("all");}} className="text-[11px] text-stone-400 hover:text-stone-700 flex items-center gap-1"><X className="w-3 h-3"/>Clear filters</button>}
+        {(dateFrom||dateTo||storeFilter!=="all")&&<button onClick={()=>{setDateFrom("");setDateTo("");setStoreFilter("all");}} className="text-[11px] text-stone-400 hover:text-stone-700 flex items-center gap-1"><X className="w-3 h-3"/>Clear Filters</button>}
         <div className="space-y-2 max-h-[calc(100vh-220px)] overflow-auto pr-0.5">
         {ordersFiltered.length===0?<div className="border border-dashed border-stone-300 rounded-lg p-4 text-center text-xs text-stone-400">{ordersToShow.length===0?"No unfulfilled orders.":"No orders match."}</div>:ordersFiltered.map(o=>(
           <button key={o.id} onClick={()=>applyOrder(o)} className={`w-full text-left border rounded-lg p-3 transition-colors ${selectedOrder===o.id?"border-[#33ABFF] bg-[#E6F4FF]":"border-stone-200 bg-white hover:border-stone-300"}`}>
@@ -7664,20 +7664,20 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {!custom.hideShipSteps&&<div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex-1 min-w-[220px]"><StepHead n="1" label="Ship from & to"/></div>
           <div className="flex flex-wrap items-center gap-2">
-            <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New shipment</button>
-            {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}
+            <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New Shipment</button>
+            {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick Quote</button>}
           </div>
         </div>}
         {/* steps off: compact actions tuck into the empty strip beside the Sender/Receiver headings on
             large screens (that strip is the heading line — the scan box starts below it); small
             screens keep a normal row. */}
         {custom.hideShipSteps&&<div className="lg:hidden flex flex-wrap items-center justify-end gap-2">
-          <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New shipment</button>
-          {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}
+          <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New Shipment</button>
+          {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick Quote</button>}
         </div>}
         {custom.hideShipSteps&&<div className="hidden lg:flex absolute -top-7 right-0 z-10 items-center gap-2 lg:w-[250px] xl:w-[290px]">
-          <button onClick={newShipment} className="flex-1 flex items-center justify-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New shipment</button>
-          {onQuickQuote&&<button onClick={onQuickQuote} className="flex-1 flex items-center justify-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick quote</button>}
+          <button onClick={newShipment} className="flex-1 flex items-center justify-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New Shipment</button>
+          {onQuickQuote&&<button onClick={onQuickQuote} className="flex-1 flex items-center justify-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick Quote</button>}
         </div>}
         <div className="relative grid lg:grid-cols-3 gap-4 lg:!mt-0">
           <div className="min-w-0"><AddressCard title="Sender" data={sender} set={setSender} required defaultEntry={(settings.sender&&(settings.sender.zip||settings.sender.address1))?settings.sender:null} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} hideAddr23={custom.hideAddr23}/></div>
@@ -7732,7 +7732,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                mode it flashed behind the booked summary before the form cleared. The booked summary
                already offers reprint/details, so suppress this banner entirely post-booking. */
             if(justBookedRef.current!=null)return null;
-            return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex flex-wrap items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="flex-1 min-w-[180px]">Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}).</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:d.tracking}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><FileText className="w-3 h-3"/>See details</button><button onClick={()=>setLabelPreview({rec:d,tracking:d.tracking,service:d.service,carrier:d.carrier,pdf:d.labelPdf||d.pdf||null,fromExisting:true})} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><Printer className="w-3 h-3"/>Reprint</button><button onClick={newShipment} className="shrink-0 text-[11px] font-semibold text-white bg-[#0086E0] hover:bg-[#006db8] border border-[#0086E0] rounded-lg px-2.5 py-1 flex items-center gap-1"><Plus className="w-3 h-3"/>New shipment</button></div>:null;})()}
+            return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex flex-wrap items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="flex-1 min-w-[180px]">Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}).</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:d.tracking}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><FileText className="w-3 h-3"/>See details</button><button onClick={()=>setLabelPreview({rec:d,tracking:d.tracking,service:d.service,carrier:d.carrier,pdf:d.labelPdf||d.pdf||null,fromExisting:true})} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><Printer className="w-3 h-3"/>Reprint</button><button onClick={newShipment} className="shrink-0 text-[11px] font-semibold text-white bg-[#0086E0] hover:bg-[#006db8] border border-[#0086E0] rounded-lg px-2.5 py-1 flex items-center gap-1"><Plus className="w-3 h-3"/>New Shipment</button></div>:null;})()}
           {pieces.map((p,i)=>(
             <div key={i} className="flex flex-wrap items-end gap-2 bg-white border border-stone-200 rounded-lg px-2 py-2">
               <div className="text-[11px] text-stone-400 w-6">#{i+1}</div>
@@ -7744,7 +7744,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               {!custom.hideOz&&<PkgInput label="oz" value={p.oz} onChange={e=>setPiece(i,{oz:e.target.value})}/>}
               {!custom.hideInsure&&pieces.length>1&&dvEach&&<PkgInput label="Insure $" value={p.dv} onChange={e=>setPiece(i,{dv:e.target.value})} w="w-20"/>}
               {pieces.length>1&&<button onClick={()=>delPiece(i)} className="text-stone-300 hover:text-rose-500 mb-1"><Trash2 className="w-4 h-4"/></button>}
-              {i===pieces.length-1&&<button onClick={addPiece} className="flex items-center gap-1 text-xs bg-stone-200 hover:bg-stone-300 rounded-lg px-2.5 py-1.5 font-medium text-stone-700 ml-1"><Plus className="w-3.5 h-3.5"/>Add package</button>}
+              {i===pieces.length-1&&<button onClick={addPiece} className="flex items-center gap-1 text-xs bg-stone-200 hover:bg-stone-300 rounded-lg px-2.5 py-1.5 font-medium text-stone-700 ml-1"><Plus className="w-3.5 h-3.5"/>Add Package</button>}
             </div>
           ))}
         </div>
@@ -7928,7 +7928,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <div className="flex items-center gap-2 text-sm">
               <span className="text-stone-500 flex items-center gap-1"><CreditCard className="w-3.5 h-3.5"/>Bill to</span>
-              <select value={billTo} onChange={e=>setBillTo(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="sender">Sender (you)</option><option value="receiver">Receiver</option><option value="third">Third-party acct</option></select>
+              <select value={billTo} onChange={e=>setBillTo(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="sender">Sender (You)</option><option value="receiver">Receiver</option><option value="third">Third-Party Acct</option></select>
               {billTo==="third"&&<input value={thirdAcct} onChange={e=>setThirdAcct(e.target.value)} placeholder="3rd-party acct #" className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm w-40 outline-none focus:border-[#0099FF]"/>}
             </div>
           </div>
@@ -7952,7 +7952,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         </div>}
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);printPackingSlips([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:(shipStatus&&shipStatus.tracking)||"",service:""}]);}} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-200"><FileText className="w-4 h-4"/>Packing slip</button>
-          <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-300"><Plus className="w-4 h-4"/>New shipment</button>
+          <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-300"><Plus className="w-4 h-4"/>New Shipment</button>
           <button onClick={saveDraft} className={`flex items-center gap-1.5 text-sm rounded px-4 py-2 font-medium ${saved?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{saved?<><Check className="w-4 h-4"/>Saved to drafts</>:<><FileText className="w-4 h-4"/>Save draft</>}</button>
         </div>
       </div>
@@ -8119,7 +8119,7 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
           <button onClick={doPrint} className={autoPrintOff&&!hasPrinted?"text-sm px-4 py-2 rounded bg-[#0086E0] hover:bg-[#0072BE] text-white font-semibold flex items-center gap-1.5":"text-sm px-4 py-2 rounded border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 flex items-center gap-1.5"}><Printer className="w-4 h-4"/>{autoPrintOff?(hasPrinted?"Print again":"Print label"):"Reprint label"}</button>
           <button onClick={()=>setShowDetails(v=>!v)} className="text-sm px-3 py-2 rounded border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"><FileText className="w-4 h-4"/>See details</button>
           {data.tracking&&<button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:data.tracking}}));}catch(e){} onClose();}} className="text-sm px-3 py-2 rounded border border-[#99D6FF] text-[#006FBF] bg-[#E6F4FF] hover:bg-[#CCEAFF] flex items-center gap-1.5"><Truck className="w-4 h-4"/>Go to shipment</button>}
-          {onNewShipment&&<button onClick={()=>{onNewShipment();onClose();}} className="text-sm px-4 py-2 rounded bg-[#0086E0] text-white hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>New shipment</button>}
+          {onNewShipment&&<button onClick={()=>{onNewShipment();onClose();}} className="text-sm px-4 py-2 rounded bg-[#0086E0] text-white hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>New Shipment</button>}
         </div>
         {showDetails&&(()=>{ const r=data.rec||{}; const ins=parseFloat(r.insurance||0)||0;
           const D=({k,v})=>v?(<div className="flex justify-between py-0.5"><span className="text-stone-400">{k}</span><span className="text-stone-700 text-right">{v}</span></div>):null;
@@ -9363,7 +9363,7 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
                   {pieces.length>1&&<button onClick={()=>delPiece(i)} className="text-stone-300 hover:text-rose-500 self-end mb-1"><Trash2 className="w-3.5 h-3.5"/></button>}
                 </div>
               ))}
-              <button onClick={addPiece} className="flex items-center gap-1 text-xs bg-stone-200 hover:bg-stone-300 rounded-lg px-2.5 py-1.5 font-medium text-stone-700"><Plus className="w-3.5 h-3.5"/>Add package</button>
+              <button onClick={addPiece} className="flex items-center gap-1 text-xs bg-stone-200 hover:bg-stone-300 rounded-lg px-2.5 py-1.5 font-medium text-stone-700"><Plus className="w-3.5 h-3.5"/>Add Package</button>
             </div>
             <Field label="Signature"><Select value={sigOption} onChange={e=>setSigOption(e.target.value)}><option value="none">None</option><option value="direct">Direct Signature</option><option value="indirect">Indirect Signature</option><option value="adult">Adult Signature</option></Select></Field>
             <Field label={pieces.length>1?"Insure $/box":"Insurance $"}><Input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0"/></Field>
@@ -9617,7 +9617,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
   const presetBar=()=>(
     <div className="flex flex-wrap items-center gap-2 bg-white border border-stone-200 rounded-lg px-3 py-2">
       <Zap className="w-3.5 h-3.5 text-[#0086E0]"/>
-      <span className="text-xs font-semibold text-stone-700">Saved batches</span>
+      <span className="text-xs font-semibold text-stone-700">Saved Batches</span>
       <select value={presetSel} onChange={e=>{setPresetSel(e.target.value);const p=(presets||[]).find(x=>x.id===e.target.value);if(p)applyPreset(p);}} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF] min-w-[180px]">
         <option value="">— pick a saved batch —</option>
         {(presets||[]).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
@@ -9971,7 +9971,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-        <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Layers className="w-4 h-4"/>Batch shipping</h2>
+        <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Layers className="w-4 h-4"/>Batch Shipping</h2>
         <span className="text-[11px] text-stone-400">{pool.length} open order{pool.length===1?"":"s"}</span>
         <div className="flex-1"/>
         <label className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-300 cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
@@ -10035,7 +10035,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
           </>}
           <label className="flex items-center gap-1.5 ml-2 bg-white border border-stone-200 rounded-lg pl-2.5 pr-1 py-1">
             <Layers className="w-3.5 h-3.5 text-stone-400"/>
-            <span className="text-[11px] font-medium text-stone-500">Group by</span>
+            <span className="text-[11px] font-medium text-stone-500">Group By</span>
             <select value={groupBy} onChange={e=>setGroupBy(e.target.value)} className="bg-transparent text-sm font-medium text-stone-700 outline-none cursor-pointer py-0.5 pr-1">
               <option value="none">Nothing (flat list)</option>
               <option value="day">Ship day</option>
@@ -11216,7 +11216,7 @@ function PrinterSettings({settings:settingsLive,setSettings:commitSettings}){
             <Select value={z.size||9} onChange={e=>setZone(z.id,{size:+e.target.value})} className="!w-auto">{[7,8,9,10,11,12,14].map(n=><option key={n} value={n}>{n}pt</option>)}</Select>
             <button onClick={()=>delZone(z.id)} className="text-stone-300 hover:text-rose-500 ml-auto"><Trash2 className="w-3.5 h-3.5"/></button>
           </div>))}
-          <button onClick={addZone} className="text-xs text-[#0086E0] font-medium flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add zone</button>
+          <button onClick={addZone} className="text-xs text-[#0086E0] font-medium flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add Zone</button>
         </div>
         <div className="rounded-lg border border-stone-200 bg-stone-50/60 p-3">
           <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Label preview — what actually prints</div>
@@ -11661,7 +11661,7 @@ function RuleTesterPanel({rules,orders,originZip}){
   return (<div className="border border-stone-200 rounded-lg bg-white">
     <button onClick={()=>setOpenT(v=>!v)} className="w-full flex items-center gap-2 px-4 py-3 text-left">
       <Zap className="w-4 h-4 text-[#0086E0]"/>
-      <span className="text-sm font-semibold text-stone-800">Rule tester</span>
+      <span className="text-sm font-semibold text-stone-800">Rule Tester</span>
       <span className="text-[12px] text-stone-400">— pick an order and see exactly which rule fires, and why</span>
       <span className="flex-1"/>
       <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${openT?"rotate-180":""}`}/>
@@ -11858,7 +11858,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
       <div className="flex items-center gap-2">
         <button onClick={exportJSON} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-100 flex items-center gap-1.5"><Download className="w-4 h-4"/>Export JSON</button>
         <button onClick={()=>setFbOpen(v=>!v)} title="Batch by criteria — the Batch tab's filters, right here" className={`text-sm rounded-lg px-3 py-1.5 font-medium border flex items-center gap-1.5 ${fbOpen?"bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF]":"bg-white border-stone-200 text-stone-700 hover:bg-stone-100"}`}><ClipboardList className="w-4 h-4"/>Filter &amp; batch</button>
-        <button onClick={newRule} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium flex items-center gap-1.5 hover:bg-stone-100"><Plus className="w-4 h-4"/>New rule</button>
+        <button onClick={newRule} className="text-sm bg-white border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium flex items-center gap-1.5 hover:bg-stone-100"><Plus className="w-4 h-4"/>New Rule</button>
         <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Fallback</span><select value={cz(settings).fallbackService||""} onChange={e=>setSettings&&setSettings(s=>({...s,custom:{...(s.custom||{}),fallbackService:e.target.value}}))} title="Service used for orders that match no rule" className="text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded-lg px-2 outline-none focus:border-emerald-500"><option value="">No fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx Ground Economy">FedEx Ground Economy</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
         <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Ship date</span><input type="date" value={apShipDate} onChange={e=>setApShipDate(e.target.value)} className="text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded-lg px-2 outline-none focus:border-emerald-500"/></label>
         <button onClick={runAutopilot} disabled={apRunning||ords.filter(o=>o.status!=="fulfilled").length===0} title="Apply your rules and create labels for every unfulfilled order (held orders are skipped)" className="text-sm bg-emerald-600 text-white rounded-lg px-4 py-2.5 font-semibold hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-2 shadow-sm">{apRunning?<Loader2 className="w-4 h-4 animate-spin"/>:<Zap className="w-4 h-4"/>}Run Autopilot{!apRunning&&run?` — label ${run.results.filter(r=>r.order.status!=="fulfilled"&&!r.view.hold).length} orders`:""}</button>
@@ -11872,7 +11872,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
     </div>
     <RuleTesterPanel rules={rules} orders={ords} originZip={originZip}/>
     {fbOpen&&<div className="border border-stone-200 rounded-lg bg-white p-4 space-y-2.5">
-      <div className="flex flex-wrap items-center gap-2"><ClipboardList className="w-4 h-4 text-[#0086E0]"/><span className="text-sm font-semibold text-stone-800">Filter &amp; batch</span><span className="text-[11px] text-stone-400">— the same criteria as the Batch tab. Build a selection here, then send it to Batch in one click.</span></div>
+      <div className="flex flex-wrap items-center gap-2"><ClipboardList className="w-4 h-4 text-[#0086E0]"/><span className="text-sm font-semibold text-stone-800">Filter &amp; Batch</span><span className="text-[11px] text-stone-400">— the same criteria as the Batch tab. Build a selection here, then send it to Batch in one click.</span></div>
       {[["state","State"],["zone","Zone"],["source","Source"],["sku","SKU"]].map(([d,label])=>{ const vals=fbVals(d); if(!vals.length)return null; const key={state:"states",zone:"zones",source:"sources",sku:"skus"}[d]; return (
         <div key={d} className="flex flex-wrap items-center gap-1.5">
           <span className="text-[10px] uppercase tracking-widest text-stone-400 w-14 shrink-0">{label}</span>
@@ -11891,7 +11891,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
       <div className="flex flex-wrap items-center gap-3 pt-1">
         <button onClick={fbSend} disabled={!fbCount} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5"><Layers className="w-4 h-4"/>Send {fbCount} order{fbCount!==1?"s":""} to Batch</button>
         <span className="text-[11px] text-stone-400">Opens Batch with these orders pre-selected{fb.service?" and the service applied":""} — review, then Create labels.</span>
-        <button onClick={()=>setFb({states:new Set(),zones:new Set(),sources:new Set(),skus:new Set(),wMin:"",wMax:"",tMin:"",tMax:"",age:"any",service:""})} className="text-xs text-stone-400 hover:underline">Clear filters</button>
+        <button onClick={()=>setFb({states:new Set(),zones:new Set(),sources:new Set(),skus:new Set(),wMin:"",wMax:"",tMin:"",tMax:"",age:"any",service:""})} className="text-xs text-stone-400 hover:underline">Clear Filters</button>
       </div>
     </div>}
     {applied&&<div className="text-xs rounded px-3 py-2 flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200"><CheckCircle2 className="w-3.5 h-3.5"/>{applied.n?`Applied to ${applied.n} order${applied.n!==1?"s":""} — service preference, tags, holds and shipping options written onto those orders.`:"No matching orders to apply right now."}</div>}
@@ -12283,7 +12283,7 @@ function Billing({settings,setSettings}){
       {prepaid.history&&prepaid.history.length>0&&<div className="border border-stone-200 rounded-lg divide-y divide-stone-100 mt-1">{prepaid.history.slice(0,5).map(h=><div key={h.id} className="flex items-center justify-between px-3 py-1.5 text-[13px]"><span className="text-stone-500">Added funds</span><span className=" text-emerald-600">+{money(h.amount)}</span><span className="text-[11px] text-stone-400 w-28 text-right">{h.when}</span></div>)}</div>}
     </Panel>
     <Panel title="Default billing">
-      <Field label="Bill shipments to"><Select value={settings.defaultBillTo} onChange={e=>setSettings({...settings,defaultBillTo:e.target.value})}><option value="sender">Sender (you)</option><option value="receiver">Receiver</option><option value="third">Third-party account</option></Select></Field>
+      <Field label="Bill shipments to"><Select value={settings.defaultBillTo} onChange={e=>setSettings({...settings,defaultBillTo:e.target.value})}><option value="sender">Sender (You)</option><option value="receiver">Receiver</option><option value="third">Third-Party Account</option></Select></Field>
     </Panel>
     <Panel title="Third-party carrier accounts">
       <p className="text-xs text-stone-400">Bill shipping to someone else's FedEx account number.</p>
@@ -12578,7 +12578,7 @@ function GeneralSettings({settings,setSettings,goSec,audit=[],currentUser,setCur
   const F=({k,label,ph,hint,type})=>(<label key={k} className="block text-sm text-stone-700">{label}
     <input type={type||"text"} value={settings[k]||""} onChange={e=>set(k,e.target.value)} placeholder={ph} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
     {hint&&<span className="block text-[11px] text-stone-400 mt-0.5">{hint}</span>}</label>);
-  const links=[["shipscreen","Ship screen","Scan mode, hidden fields & Ship-tab options"],["customize","Customizations","Services, appearance, tabs & packing slips"],["reference","Reference Fields","Dropdown values, required & locked fields"],["carriers",BRAND.fw?"FedEx Account":"Carrier accounts",BRAND.fw?"Your FedEx connection":"FedEx & DHL connections"],["boxes","Package sizes","Your box library"],["printer","Print settings","Labels, printing, doc tabs & automation"],["notifications","Email automation","Customer notifications"],["integrations","Integrations","Stores & order sources"]];
+  const links=[["shipscreen","Ship Screen","Scan mode, hidden fields & Ship-tab options"],["customize","Customizations","Services, appearance, tabs & packing slips"],["reference","Reference Fields","Dropdown values, required & locked fields"],["carriers",BRAND.fw?"FedEx Account":"Carrier Accounts",BRAND.fw?"Your FedEx connection":"FedEx & DHL connections"],["boxes","Package Sizes","Your box library"],["printer","Print Settings","Labels, printing, doc tabs & automation"],["notifications","Email Automation","Customer notifications"],["integrations","Integrations","Stores & order sources"]];
   return (<div className="max-w-2xl space-y-4">
     <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Cog className="w-4 h-4"/>General</h2>
     <Panel title="Your company">
@@ -12603,7 +12603,7 @@ function GeneralSettings({settings,setSettings,goSec,audit=[],currentUser,setCur
     </Panel>
     <Panel title="Shipping defaults">
       <label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>Bill shipments to</span>
-        <select value={settings.defaultBillTo||"sender"} onChange={e=>set("defaultBillTo",e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="sender">My account (sender)</option><option value="third">Third-party account</option></select></label>
+        <select value={settings.defaultBillTo||"sender"} onChange={e=>set("defaultBillTo",e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="sender">My account (sender)</option><option value="third">Third-Party Account</option></select></label>
     </Panel>
     <Panel title="Activity log">
       <p className="text-xs text-stone-500 -mt-1 mb-2">Who did what — label bookings and voids, newest first (last 200).</p>

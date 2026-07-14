@@ -8278,7 +8278,7 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
           <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isOpen?"rotate-90":""}`}/>
           {matched===q.key&&<span className="text-[10px] font-semibold uppercase tracking-wide bg-[#E6F4FF] text-[#0086E0] border border-[#99D6FF] rounded px-1.5 py-0.5 shrink-0 inline-flex items-center gap-1">{matchedSrc==="autopilot"&&<Zap className="w-3 h-3"/>}{matchedSrc==="autopilot"?"Autopilot":"Requested"}</span>}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2"><span className="text-sm truncate">{(custom.aliases&&custom.aliases[canonSvc(q.label)])||q.label}</span></div>
+            <div className="flex items-center gap-2"><span className="text-sm font-semibold text-stone-900 truncate">{(custom.aliases&&custom.aliases[canonSvc(q.label)])||q.label}</span></div>
             <div className="text-[12.5px] text-stone-900 flex items-center gap-1"><Calendar className="w-3.5 h-3.5"/>Transit Time: {days?(custom.transitStyle==="days"?<>{days} business day{days>1?"s":""}</>:<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}</div>
           </div>
           <div className="text-right">{!!(custom.priceWarn>0&&ready&&hasPrice&&sell>custom.priceWarn)&&<div className="text-[10px] text-amber-600 flex items-center justify-end gap-0.5" title={"Above your $"+custom.priceWarn+" price alert"}><AlertTriangle className="w-3 h-3"/>over limit</div>}<div className="text-base font-semibold text-stone-900">{!ready?<span className="text-stone-300">—</span>:(live||fxLive)?(hasPrice?money(sell):<span className="text-stone-300">—</span>):loading?<span className="text-[11px] font-normal text-stone-400">pricing…</span>:(hasPrice?money(sell):<span className="text-stone-300">—</span>)}</div></div>
@@ -8355,8 +8355,9 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
     /* Capped width, left-aligned: on wide screens full-bleed rows put an airfield of blank space
        between the service name and its price/button. ~3xl keeps every row's name, price and Print
        label close together; narrower containers (Quick Quote, modals) are unaffected.
-       (Centering was tried and rejected — Spencer prefers the list on the left.) */
-    <div className="max-w-3xl">
+       (Centering was tried and rejected — Spencer prefers the list on the left. 52rem: 3xl read
+       too compact, 4xl too wide.) */
+    <div className="max-w-[52rem]">
       <div className="flex items-center justify-between mb-2">
         {oneRateWarning&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-2">{oneRateWarning}</div>}
         {hideTitle?<span/>:<h2 className="text-sm font-semibold text-stone-700">Select service</h2>}

@@ -8352,11 +8352,11 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
     );
   };
   return (
-    /* Capped width + centered: on wide screens full-bleed rows put an airfield of blank space
+    /* Capped width, left-aligned: on wide screens full-bleed rows put an airfield of blank space
        between the service name and its price/button. ~3xl keeps every row's name, price and Print
-       label close together, and mx-auto centers the block on the page; narrower containers
-       (Quick Quote, modals) are unaffected. */
-    <div className="max-w-3xl mx-auto">
+       label close together; narrower containers (Quick Quote, modals) are unaffected.
+       (Centering was tried and rejected — Spencer prefers the list on the left.) */
+    <div className="max-w-3xl">
       <div className="flex items-center justify-between mb-2">
         {oneRateWarning&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-2">{oneRateWarning}</div>}
         {hideTitle?<span/>:<h2 className="text-sm font-semibold text-stone-700">Select service</h2>}

@@ -7830,7 +7830,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <div className="flex-1 min-w-[300px] max-w-[52rem]">
             <ServiceList hideTitle={true} quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
           </div>
-          <div className="w-full lg:w-80 lg:shrink-0 space-y-3">
+          <div className="w-full lg:flex-1 lg:min-w-[280px] space-y-3">
             {/* ── Card 1: THIS SHIPMENT — read-only status, one card, one row per fact. State lives
                    in the icon color (green = good), not in three different tinted strips. ── */}
             {(()=>{

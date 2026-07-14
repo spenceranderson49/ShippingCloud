@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v553";
+const BUILD_TAG="addr-v554";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -4096,6 +4096,15 @@ function useSettingsDraft(settings,setSettings){
   const undo=React.useCallback(()=>setPend([]),[]);
   return {view,stage,save,undo,dirty:pend.length>0};
 }
+/* Wrap a whole Settings section in one draft + pinned Save bar (same behavior as Print settings):
+   edits stage locally and commit on the green Save. children is a render fn (view, stage) => JSX. */
+function SettingsDraftWrap({settings,setSettings,note,children}){
+  const _pd=useSettingsDraft(settings,setSettings);
+  return (<div className="space-y-4">
+    <DraftBar dirty={_pd.dirty} onSave={_pd.save} onUndo={_pd.undo} savedNote={note}/>
+    {children(_pd.view,_pd.stage)}
+  </div>);
+}
 /* Sticky action bar shown while a draft has unsaved edits. */
 function DraftBar({dirty,onSave,onUndo,onReset,resetLabel,savedNote,saveLabel}){
   // Track the CLOUD result of the last save so the admin knows for certain it persisted (not just locally).
@@ -6939,12 +6948,11 @@ function StepHead({n,label}){
 function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,drafts,setDrafts,prefill,clearPrefill,onShipped,onPending,logEmail,onQuickQuote,onRefresh,syncing,currentUser,setUsers,setCurrentUser,clients=[],priceAs="",setPriceAs=null}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 rate database — global, follows the customer's profile
   const empty={country:"United States",name:"",company:"",zip:"",state:"",city:"",address1:"",address2:"",address3:"",phone:"",email:""};
-  const _swapMutedRef=React.useRef(false);
   const [sender,setSender]=useState({country:"United States",...settings.sender,address2:"",address3:""});
   // Persist any sender edits made here back into saved settings, so the ship-from sticks across reloads/logins (no more reverting to the seed).
-  useEffect(()=>{ if(_swapMutedRef.current)return;   // mid sender<->receiver swap — never let the rearranged card overwrite the saved default
-    if(!(sender.name||sender.company||sender.address1||sender.zip))return;   // an EMPTY card must never wipe the saved default sender (this erased it on 2026-07-14)
-    setSettings&&setSettings(s=>({...s,sender:{name:sender.name||"",company:sender.company||"",address1:sender.address1||"",city:sender.city||"",state:sender.state||"",zip:sender.zip||"",phone:sender.phone||"",email:sender.email||""}})); },[sender.name,sender.company,sender.address1,sender.city,sender.state,sender.zip,sender.phone,sender.email]);
+  /* The ship form NEVER writes to the saved default sender (Settings → General → Default sender).
+     The auto-save that used to live here twice erased Spencer's saved sender via the swap button
+     (2026-07-14). In-progress sender edits survive tab switches via the shipWip keeper instead. */
   const [receiver,setReceiver]=usePersist("ship.receiver",empty);
   const [reference,setReference]=usePersist("ship.reference","");
   const [invoiceNo,setInvoiceNo]=usePersist("ship.invoiceNo","");
@@ -7193,7 +7201,6 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   },[prefill]);
 
   const [swapMuted,setSwapMuted]=useState(false);
-  _swapMutedRef.current=swapMuted;   // swapping sender<->receiver empties one card on purpose — mute the empty-sender nags until it's refilled or a new shipment starts
   const swap=()=>{const s=sender;setSender(receiver);setReceiver(s);setSwapMuted(true);};
   const originZip=(String(sender.zip||"").match(/\d{5}/)||[])[0]||(String(client.origin||"").match(/\d{5}/)||[])[0]||(String((settings&&settings.sender&&settings.sender.zip)||"").match(/\d{5}/)||[])[0]||"";
   /* Autopilot, live: when the toggle is on and an order is loaded, run the SAME rule engine
@@ -7251,11 +7258,10 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       if(L>119||W>119||H>119)probs.push(`${tag}'s longest side is over 119" — FedEx won't accept it as a parcel (Express max is 119", Ground 108").`);
       else if(L&&W&&H){const s=[L,W,H].sort((x,y)=>y-x);const lg=s[0]+2*(s[1]+s[2]);if(lg>165)probs.push(`${tag} is ${lg}" length-plus-girth — over FedEx's 165" limit, so it can't be quoted.`);}
     });
-    if(!swapMuted&&!String(originZip||"").trim())probs.push("Your ship-from ZIP is missing — add it under Settings → General → Default sender.");
     // a brand-new blank form isn't an error state — stay quiet until they've started typing
     const started=!!(String(receiver.zip||"").trim()||receiver.address1||receiver.name||receiver.city||totalWeight>0);
     return started?probs:[];
-  },[receiver.zip,receiver.country,receiver.address1,receiver.name,receiver.city,JSON.stringify(pieces),originZip,swapMuted]);
+  },[receiver.zip,receiver.country,receiver.address1,receiver.name,receiver.city,JSON.stringify(pieces),originZip]);
   /* Service Guide heads-ups that DON'T block the quote but change price or service availability:
      Ground Oversize (>130" L+G bills at a 90-lb minimum), Unauthorized Package (over Ground's
      108" side limit — Express only or a hefty unauthorized charge), Ground Economy caps
@@ -7596,11 +7602,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           ?<div className="flex items-center gap-1.5 text-stone-400"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Checking with FedEx…</div>
           :<div className="space-y-1.5">
             {resTouched
-              ?<span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium border ${residential?"text-[#006FBF] bg-[#E6F4FF] border-[#99D6FF]":"text-stone-700 bg-stone-100 border-stone-200"}`} title="Manually overridden classification">{residential?<Home className="w-3.5 h-3.5"/>:<Building2 className="w-3.5 h-3.5"/>}{residential?"Residential":"Commercial"} · manual</span>
+              ?<span className={`w-32 inline-flex items-center justify-center gap-1.5 rounded-full px-2.5 py-1 font-medium border ${residential?"text-[#006FBF] bg-[#E6F4FF] border-[#99D6FF]":"text-stone-700 bg-stone-100 border-stone-200"}`} title="Manually overridden classification">{residential?<Home className="w-3.5 h-3.5"/>:<Building2 className="w-3.5 h-3.5"/>}{residential?"Residential":"Commercial"} · manual</span>
               :(verify.type
-                ?<span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium border ${verify.type==="Residential"?"text-[#006FBF] bg-[#E6F4FF] border-[#99D6FF]":"text-stone-700 bg-stone-100 border-stone-200"}`} title={"FedEx classifies this as a "+verify.type.toLowerCase()+" address"}>{verify.type==="Residential"?<Home className="w-3.5 h-3.5"/>:<Building2 className="w-3.5 h-3.5"/>}{verify.type}</span>
-                :<span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium border text-stone-400 bg-stone-50 border-stone-200" title="FedEx didn’t classify this address — use Override to set it">Type unknown</span>)}
-            {verify.deliverable===true&&<div><span className="inline-flex items-center gap-1.5 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1 font-medium" title="FedEx verified this is a deliverable address"><CheckCircle2 className="w-3.5 h-3.5"/>Verified</span></div>}
+                ?<span className={`w-32 inline-flex items-center justify-center gap-1.5 rounded-full px-2.5 py-1 font-medium border ${verify.type==="Residential"?"text-[#006FBF] bg-[#E6F4FF] border-[#99D6FF]":"text-stone-700 bg-stone-100 border-stone-200"}`} title={"FedEx classifies this as a "+verify.type.toLowerCase()+" address"}>{verify.type==="Residential"?<Home className="w-3.5 h-3.5"/>:<Building2 className="w-3.5 h-3.5"/>}{verify.type}</span>
+                :<span className="w-32 inline-flex items-center justify-center gap-1.5 rounded-full px-2.5 py-1 font-medium border text-stone-400 bg-stone-50 border-stone-200" title="FedEx didn’t classify this address — use Override to set it">Type unknown</span>)}
+            {verify.deliverable===true&&<div><span className="w-32 inline-flex items-center justify-center gap-1.5 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1 font-medium" title="FedEx verified this is a deliverable address"><CheckCircle2 className="w-3.5 h-3.5"/>Verified</span></div>}
             {verify.deliverable===false&&<div className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 font-medium leading-snug" title="FedEx couldn’t verify this address"><span className="inline-flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>Not verified</span>{verify.issues&&<div className="font-normal mt-0.5">{verify.issues.join(" · ")}</div>}</div>}
             {verify.deliverable==null&&verify.error&&<div className="text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5 font-medium leading-snug" title={verify.error}><span className="inline-flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>FedEx error</span><div className="font-normal mt-0.5">{String(verify.error).slice(0,80)}</div></div>}
             {suggestDiffers&&<button onClick={applySuggestion} className="w-full text-left text-[#0086E0] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF] leading-snug" title="Click to use FedEx’s standardized version of this address"><span className="inline-flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5"/>Use FedEx suggested</span><div className="font-normal mt-0.5">{suggestion}</div></button>}
@@ -7682,7 +7688,6 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             {scanMsg&&<span className="absolute right-2 top-2">{scanMsg.ok?<CheckCircle2 className="w-4 h-4 text-emerald-500"/>:<AlertTriangle className="w-4 h-4 text-rose-400"/>}</span>}
           </div></>} contactFallback={{phone:sender.phone,email:sender.email}} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }} hideAddr23={custom.hideAddr23} reqOverrides={{phone:custom.phoneRequired!==false,email:custom.emailRequired!==false}} side={addressCheck}/></div>
         </div>
-        {!swapMuted&&!(sender.name||sender.company||sender.address1||sender.zip)&&<div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2 flex-wrap"><span className="flex-1 min-w-[180px]">No sender on file — fill in the Sender card above, or set a default sender.</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"settings"}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1">Set default sender →</button></div>}
         {billTo==="third"&&thirdAcct&&<div className="flex flex-wrap items-center gap-2 text-xs -mt-1">
           <span className="flex items-center gap-1.5 text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-1.5"><CreditCard className="w-3.5 h-3.5"/>Auto-billing to third-party account <b className="">{thirdAcct}</b><button onClick={()=>{setBillTo("sender");setThirdAcct("");}} className="ml-1 text-[#0086E0] hover:text-[#006FBF] underline">bill sender instead</button></span>
         </div>}
@@ -10429,19 +10434,19 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {secLocked&&<div className="mb-3 flex items-center gap-2 text-[13px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"><Ban className="w-4 h-4 shrink-0"/>This page is locked by your administrator — you can look, but changes are disabled.</div>}
         <div className={secLocked?"pointer-events-none opacity-60 select-none":""} aria-disabled={secLocked||undefined}>
         {sec==="carriers"&&<CarrierAccounts accounts={accounts} setAccounts={setAccounts} settings={settings} setSettings={setSettings} clients={clients} byoCarrier={byoCarrier} isAdmin={isAdmin}/>}
-        {sec==="warehouses"&&<Warehouses settings={settings} setSettings={setSettings}/>}
+        {sec==="warehouses"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Warehouses saved">{(s,ss)=><Warehouses settings={s} setSettings={ss}/>}</SettingsDraftWrap>}
         {sec==="catalog"&&<ProductCatalog settings={settings} setSettings={setSettings}/>}
-        {sec==="boxes"&&<BoxesSettings settings={settings} setSettings={setSettings}/>}
-        {sec==="boxlogic"&&<BoxLogic settings={settings} setSettings={setSettings}/>}
-        {sec==="reference"&&<div className="space-y-6"><ReferenceFields settings={settings} setSettings={setSettings}/><FieldLists settings={settings} setSettings={setSettings}/></div>}
+        {sec==="boxes"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Package sizes saved">{(s,ss)=><BoxesSettings settings={s} setSettings={ss}/>}</SettingsDraftWrap>}
+        {sec==="boxlogic"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Box logic saved">{(s,ss)=><BoxLogic settings={s} setSettings={ss}/>}</SettingsDraftWrap>}
+        {sec==="reference"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Reference fields saved">{(s,ss)=><div className="space-y-6"><ReferenceFields settings={s} setSettings={ss}/><FieldLists settings={s} setSettings={ss}/></div>}</SettingsDraftWrap>}
         {sec==="printer"&&<PrinterSettings settings={settings} setSettings={setSettings}/>}
-        {sec==="checkout"&&<CheckoutRates settings={settings} setSettings={setSettings} client={client} uid={uid}/>}
+        {sec==="checkout"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Checkout rates saved">{(s,ss)=><CheckoutRates settings={s} setSettings={ss} client={client} uid={uid}/>}</SettingsDraftWrap>}
         {sec==="manifests"&&<Manifests shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} settings={settings}/>}
         {sec==="reports"&&<Reports shipments={shipments} showMoney={showMoney}/>}
-        {sec==="notifications"&&<Notifications settings={settings} setSettings={setSettings} emails={emails}/>}
-        {sec==="general"&&<GeneralSettings settings={settings} setSettings={setSettings} goSec={setSec} audit={audit} currentUser={currentUser} setCurrentUser={setCurrentUser}/>}
-        {sec==="cieditor"&&<div className="space-y-6"><CIEditor settings={settings} setSettings={setSettings} shipments={shipments}/><div className="border-t border-stone-200 pt-6"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-3">Commercial invoice history</div><CIHistory settings={settings} setSettings={setSettings}/></div></div>}
-        {sec==="otherdocs"&&<OtherDocs settings={settings} setSettings={setSettings}/>}
+        {sec==="notifications"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Email automation saved">{(s,ss)=><Notifications settings={s} setSettings={ss} emails={emails}/>}</SettingsDraftWrap>}
+        {sec==="general"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="General settings saved">{(s,ss)=><GeneralSettings settings={s} setSettings={ss} goSec={setSec} audit={audit} currentUser={currentUser} setCurrentUser={setCurrentUser}/>}</SettingsDraftWrap>}
+        {sec==="cieditor"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Commercial invoice saved">{(s,ss)=><div className="space-y-6"><CIEditor settings={s} setSettings={ss} shipments={shipments}/><div className="border-t border-stone-200 pt-6"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-3">Commercial invoice history</div><CIHistory settings={s} setSettings={ss}/></div></div>}</SettingsDraftWrap>}
+        {sec==="otherdocs"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Documents saved">{(s,ss)=><OtherDocs settings={s} setSettings={ss}/>}</SettingsDraftWrap>}
         {sec==="customize"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])}/>}
         {sec==="shipscreen"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="ship"/>}
         {sec==="orderspage"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="orders"/>}

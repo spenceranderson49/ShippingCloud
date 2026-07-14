@@ -107,7 +107,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v526";
+const BUILD_TAG="addr-v527";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -12792,9 +12792,9 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
         {Num({k:"autoInsurePct",label:"Auto-insure orders (% of value)",hint:"Insures this percent of the order's value automatically. Ignored if the dollar threshold above is set. 0 = off.",suffix:"%"})}
         {Num({k:"autoSigValue",label:"Auto-add signature over",hint:"When you load an order worth this much or more, a signature is added automatically. 0 = off. Uses the signature type below.",prefix:"$"})}
         {Sel({k:"autoSigType",label:"Signature type to auto-add",opts:[["indirect","Indirect"],["direct","Direct"],["adult","Adult"]]})}
-        <label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>Ship-date cutoff time<span className="block text-[11px] text-stone-400">After this local time, new shipments default to the NEXT day's ship date. Leave blank to always use today.</span></span>
+        <label className="sm:col-span-2 flex flex-wrap items-center justify-between gap-x-6 gap-y-1 text-sm text-stone-700"><span className="flex-1 min-w-[240px]">Ship-date cutoff time<span className="block text-[11px] text-stone-400">After this local time, new shipments default to the NEXT day's ship date. Leave blank to always use today.</span></span>
           <span className="flex items-center gap-1"><input type="time" value={c.shipDateCutoff||""} onChange={e=>set("shipDateCutoff",e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"/>{c.shipDateCutoff&&<button onClick={()=>set("shipDateCutoff","")} className="text-[11px] text-stone-400 hover:text-rose-500">clear</button>}</span></label>
-        <label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>Fallback service when no rule matches<span className="block text-[11px] text-stone-400">In Batch &amp; Autopilot, orders that don't match any of your rules use this service instead of being left unset. Blank = leave unset (no fallback).</span></span>
+        <label className="sm:col-span-2 flex flex-wrap items-center justify-between gap-x-6 gap-y-1 text-sm text-stone-700"><span className="flex-1 min-w-[240px]">Fallback service when no rule matches<span className="block text-[11px] text-stone-400">In Batch &amp; Autopilot, orders that don't match any of your rules use this service instead of being left unset. Blank = leave unset (no fallback).</span></span>
           <select value={c.fallbackService||""} onChange={e=>set("fallbackService",e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"><option value="">No fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx Ground Economy">FedEx Ground Economy</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
       </div>
     </Panel>}

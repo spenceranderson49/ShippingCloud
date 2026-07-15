@@ -203,6 +203,24 @@ const otpHash = (c) => crypto.createHash("sha256").update("otp:" + String(c)).di
 const devHash = (t) => crypto.createHash("sha256").update("dev:" + String(t)).digest("hex");
 const TRUST_DAY_CHOICES = [30, 60, 90];
 const maskEmail = (e) => { const s = String(e || ""); const at = s.indexOf("@"); if (at < 1) return s; return s[0] + "***" + s.slice(at); };
+/* Owner alert: email whenever a new login lands in the users store, whatever the path
+   (admin portal create, company-admin create, signup approval). Fire-and-forget — a mail
+   hiccup must never fail the actual write. Restores/bulk merges send one summary line. */
+async function notifyLoginCreated(created, via) {
+  try {
+    const key = (process.env.RESEND_API_KEY || "").trim(); if (!key || !created || !created.length) return;
+    const to = (process.env.LOGIN_ALERT_EMAIL || "spencer@freightwire.com").trim();
+    const from = (process.env.EMAIL_FROM || "ShippingCloud <notify@shippingcloud.net>").trim();
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    const many = created.length > 5;
+    const rows = many
+      ? "<li>" + created.length + " logins added in one write (likely a restore/merge)</li>"
+      : created.map((u) => "<li><b>" + esc(u.name || "(no name)") + "</b> — " + esc(u.email || "") + (u.role === "admin" ? " · <b>ADMIN</b>" : "") + (u.clientId ? " · company " + esc(u.clientId) : "") + "</li>").join("");
+    const subject = many ? created.length + " logins added (" + via + ")" : "New login created: " + created.map((u) => u.email).join(", ").slice(0, 120);
+    const html = '<body style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1c1917"><div style="max-width:480px;margin:0 auto;padding:20px"><div style="font-size:15px;font-weight:700;margin-bottom:8px">New login' + (created.length > 1 ? "s" : "") + ' created</div><ul style="font-size:13px;line-height:1.7">' + rows + '</ul><div style="color:#78716c;font-size:12px">Created via ' + esc(via) + " · " + new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC</div></div></body>";
+    await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key }, body: JSON.stringify({ from, to: [to], subject, html }) });
+  } catch (e) {}
+}
 async function sendOtpCode(event, to, code) {
   const key = (process.env.RESEND_API_KEY || "").trim();
   if (!key) return { ok: false, configured: false };
@@ -739,6 +757,7 @@ exports.handler = async (event) => {
         const merged = mergeUsersForWrite([...allUsers, nu], allUsers);
         const w = await putStores({ users: merged });
         if (!w.ok) return J({ ok: false, error: "Could not create the login — try again." });
+        await notifyLoginCreated([nu], "Company Admin (" + maskEmail(auth.email || auth.uid) + ")");
         return J({ ok: true, user: { id: nu.id, name, email, status: "active", companyAdmin: false, lastLogin: "—" } });
       }
 
@@ -802,9 +821,12 @@ exports.handler = async (event) => {
         if (SYNC_BLOCK[key] || !canWriteKey(auth, key)) { rejected.push(key); continue; }
         toWrite[key] = incoming[key];
       }
+      let _newLogins = [];
       if ("users" in toWrite) {
         const cur = await getStore("users");
+        const _hadEmails = new Set((cur.ok && Array.isArray(cur.value) ? cur.value : []).map((u) => u && String(u.email || "").toLowerCase()).filter(Boolean));
         toWrite.users = mergeUsersForWrite(toWrite.users, cur.ok ? cur.value : []);
+        _newLogins = (toWrite.users || []).filter((u) => u && u.email && !_hadEmails.has(String(u.email).toLowerCase()));
         /* STALE-TAB GUARD: an admin tab opened before a signup holds an old copy of this array;
            its next save (whole-array) would silently DELETE the fresh login. Re-add any current
            row the incoming write is missing that was created in the last 15 minutes — a tab that
@@ -911,6 +933,7 @@ exports.handler = async (event) => {
       if (!Object.keys(toWrite).length) return J({ ok: false, rejectedOnly: true, rejected, error: "Nothing saved — " + rejected.join("; ") });
       const w = await putStores(toWrite);
       if (!w.ok) return J({ ok: false, error: "Save failed: " + ((w.err && w.err.text) || "").slice(0, 200) });
+      if (_newLogins.length) await notifyLoginCreated(_newLogins, "admin portal (" + maskEmail(auth.email || auth.uid) + ")");
       return J({ ok: true, saved: Object.keys(toWrite), rejected });
     }
 
@@ -1130,6 +1153,7 @@ exports.handler = async (event) => {
       const newUser = { id: "u" + Date.now() + Math.floor(Math.random() * 1000), name: req.name, email: req.email, company: req.company || "", role: String(body.role || "customer") === "admin" ? "admin" : "customer", clientId: body.clientId || null, status: "active", password: "", passHash: req.passHash, lastLogin: "—" };
       const w = await putStores({ users: [...users, newUser], signupRequests: remaining });
       if (!w.ok) return J({ ok: false, error: "Save failed." });
+      await notifyLoginCreated([newUser], "signup approval");
       return J({ ok: true, users: stripUsers([...users, newUser]), requests: stripUsers(remaining) });
     }
 

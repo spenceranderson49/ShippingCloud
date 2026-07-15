@@ -108,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v563";
+const BUILD_TAG="addr-v564";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -354,11 +354,13 @@ function englandFor(client,settings){
   // Single-account model: everything ships on the one account entered in
   // Settings → Carrier accounts. Per-customer England fields are ignored so a stray
   // customer entry can never shadow the working account.
-  // fedexAccount is the ONE per-customer override: the FedEx account number the
-  // direct FedEx quote/ship functions rate and book on (customer's England-provisioned
-  // account). Falls back to the Settings override, then the FEDEX_ACCOUNT env default.
+  // fedexAccount is the ONE per-customer override: the FedEx account number the direct FedEx
+  // quote/ship functions rate and book on. A number typed on the login's own FedEx Account
+  // settings page wins (so what the customer sees in that field is always what actually
+  // applies), then the company default the admin set on Customers → FedEx Account, then the
+  // FEDEX_ACCOUNT env default.
   const g=(settings&&settings.england)||{};
-  return {...g,_src:"main",fedexAccount:(client&&client.fedex&&String(client.fedex.accountNumber||"").trim())||g.fedexAccount||""};
+  return {...g,_src:"main",fedexAccount:String(g.fedexAccount||"").trim()||(client&&client.fedex&&String(client.fedex.accountNumber||"").trim())||""};
 }
 /* ── shared per-order shipping helpers (used by Orders individual ship + Batch) ── */
 async function ratesForOrder(o,opts,eng){
@@ -6321,6 +6323,9 @@ export default function App(){
     if(res.ok){ setPhase("ready"); return; }
     if(res.authFailed){ lsDel("cloud.token"); CLOUD.token=null; setPhase("login"); return; }
     CLOUD.offline=true; setPhase("ready"); setBootMsg("Offline — showing this device’s saved data; changes sync when the connection returns.");
+    /* Self-heal: a boot that raced a deploy/cold start stuck this tab in offline mode until a
+       manual reload. Quietly retry every 30s and clear the banner the moment the cloud answers. */
+    const t=setInterval(async()=>{ try{ const r=await cloudLoadAll(); if(r&&r.ok){ CLOUD.offline=false; clearInterval(t); setBootMsg(""); } }catch(e){} },30000);
   };
   useEffect(()=>{start();},[]);
   if(phase==="boot"||phase==="loading") return <div className="min-h-screen bg-neutral-950 flex items-center justify-center"><div className="text-stone-400 text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>Loading your workspace…</div></div>;
@@ -6343,7 +6348,10 @@ function AppInner(){
   const [companyUsers,setCompanyUsers]=usePersist("companyUsers",[]);
   const [companyFlags,setCompanyFlags]=usePersist("companyFlags",{});
   const [companyAdminRequests,setCompanyAdminRequests]=usePersist("companyAdminRequests",[]);
-  const [tab,setTab]=useState(()=>BRAND.admin&&!lsGet("adminReturn",null)?"admin":"ship");   /* impersonating on Admin HQ lands on the customer's Ship tab, not a blank admin body */
+  /* Admin HQ boots straight into a SECTION ("admin:overview") — plain "admin" made AdminPortal
+     render its own internal sidebar next to the HQ rail (the "same tabs twice" screenshot).
+     Impersonating on Admin HQ lands on the customer's Ship tab. */
+  const [tab,setTab]=useState(()=>BRAND.admin?(lsGet("adminReturn",null)?"ship":"admin:overview"):"ship");
   const [pendingOpenOrderId,setPendingOpenOrderId]=useState(null);
   const [pendingOpenShipTracking,setPendingOpenShipTracking]=useState(null);
   useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};if(d.tab)setTab(d.tab);if(d.openOrderId)setPendingOpenOrderId(d.openOrderId);if(d.openShipTracking)setPendingOpenShipTracking(d.openShipTracking);if(d.batchCmd)setBatchCmd({...d.batchCmd,ts:Date.now()});};window.addEventListener("sc-nav",h);return()=>window.removeEventListener("sc-nav",h);},[]);
@@ -7360,7 +7368,13 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         if(res&&res.live&&res.rates&&res.rates.length) setRateSrc({rates:res.rates,live:true,loading:false,error:null,diag,dvPriced:res.dvPriced,oneRateError:res.oneRateRequested&&!res.oneRateOk?res.oneRateError:null});
         else setRateSrc({rates:[],live:false,loading:false,error:(res&&res.error)||"FedEx returned no rates",diag});   // NO estimate fallback with a live account — an error shows instead of a guessed price
       });
-    } else setRateSrc({rates:localQuotes(),live:false,loading:false,error:null,diag});
+    } else {
+      /* NO estimates without an account: guessed prices with no FedEx account connected read
+         as real rates. Demo sandbox keeps estimates (it exists to show the product). */
+      const hasAcct=!!(eng&&eng.fedexAccount);
+      if(hasAcct||(currentUser&&currentUser.demo)) setRateSrc({rates:localQuotes(),live:false,loading:false,error:null,diag});
+      else setRateSrc({rates:[],live:false,loading:false,error:"Connect your FedEx account to see rates — add your account number under Settings → FedEx Account.",diag});
+    }
     return ()=>{cancel=true;};
   },[JSON.stringify(pieces),receiver.zip,receiver.country,sender.zip,residential,signature,sigOption,saturday,insurance,dvEach,intl,settings.england,client&&client.england]);
   // address classified yet? only then do we hide the non-matching ground product
@@ -7813,7 +7827,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {ready&&rateSrc.live&&rateSrc.dvPriced===false&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-2 text-xs text-rose-700 flex items-start gap-2">
           <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span><b>Double-check your coverage:</b> you asked for declared-value coverage over $100, but it isn't showing as a separate line in FedEx's pricing yet. Make sure the total below includes coverage before you book — if this keeps happening, let us know.</span>
         </div>}
-        {ready&&!rateSrc.loading&&!rateSrc.live&&rateSrc.error&&rateSrc.diag&&rateSrc.diag.enabled&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-2 text-xs text-rose-700">
+        {ready&&!rateSrc.loading&&!rateSrc.live&&rateSrc.error&&rateSrc.diag&&(rateSrc.diag.enabled||!(rateSrc.rates||[]).length)&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 mb-2 text-xs text-rose-700">
           <div className="font-semibold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Live FedEx rates didn't come back — no prices are shown (we never guess).</div>
           <div className="mt-1">{String(rateSrc.error).slice(0,300)}</div>
           <div className="mt-1 text-rose-500">Fix the issue (or adjust the shipment) and rates re-quote automatically.</div>
@@ -9435,9 +9449,9 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
       setRateSrc(p=>({...p,loading:true}));
       getLiveRates(ship,england).then(res=>{ if(cancel)return;
         if(res&&res.live&&res.rates&&res.rates.length) setRateSrc({rates:res.rates,live:true,loading:false,error:null,dvPriced:res.dvPriced});
-        else setRateSrc({rates:quoteRates(ship),live:false,loading:false,error:(res&&res.error)||null});
+        else {const _ha=!!(england&&england.fedexAccount)||demo;setRateSrc({rates:_ha?quoteRates(ship):[],live:false,loading:false,error:(res&&res.error)||(_ha?null:"Connect your FedEx account to see rates — add your account number under Settings → FedEx Account.")});}
       });
-    } else setRateSrc({rates:quoteRates(ship),live:false,loading:false,error:null});
+    } else {const _ha=!!(england&&england.fedexAccount)||demo;setRateSrc({rates:_ha?quoteRates(ship):[],live:false,loading:false,error:_ha?null:"Connect your FedEx account to see rates — add your account number under Settings → FedEx Account."});}
     return ()=>{cancel=true;};
   },[fromZip,toZip,residential,JSON.stringify(pieces),sigOption,saturday,insurance,england]);
   const qqOrRates=useMemo(()=>qqOrBox?oneRateQuotes(qqOrBox,{rules:rateRules,client:effClient}):[],[qqOrBox&&qqOrBox.code,rateRules,effClient]);
@@ -9486,7 +9500,7 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
             <Field label={pieces.length>1?"Insure $/box":"Insurance $"}><Input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} placeholder="0"/></Field>
             {hasExpress&&<label className="flex items-center gap-1.5 text-sm text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSaturday(e.target.checked)} className="accent-[#0086E0]"/>Saturday Delivery <span className="text-stone-400 text-xs">(Express only)</span></label>}
             <div className="grid grid-cols-2 gap-px bg-stone-200 border border-stone-200 rounded overflow-hidden text-center"><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">zone</div><div className="font-semibold">{ready?zoneEst(fromZip,toZip):"—"}</div></div><div className="bg-white py-2"><div className="text-[10px] uppercase text-stone-400">billable</div><div className="font-semibold">{ready?billable(pieces[0].L,pieces[0].W,pieces[0].H,totalWeight)+" lb":"—"}</div></div></div>
-            {rateSrc.live&&rateSrc.dvPriced===false&&<div className="text-[11px] rounded px-2 py-1.5 mb-1 bg-rose-50 text-rose-700 border border-rose-200">Declared-value coverage isn't itemized right now — this total may not include it.</div>}{demo?<div className="text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 bg-amber-50 text-amber-800 border border-amber-200"><Eye className="w-3 h-3"/>Demo — example rates only; labels can't be created</div>:ready&&<div className={`text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700":"bg-[#E6F4FF] text-[#006FBF]"}`}>{rateSrc.loading?<><Loader2 className="w-3 h-3 animate-spin"/>Fetching…</>:rateSrc.live?<><Wifi className="w-3 h-3"/>Live rates</>:<><Calculator className="w-3 h-3"/>Estimated</>}</div>}
+            {rateSrc.live&&rateSrc.dvPriced===false&&<div className="text-[11px] rounded px-2 py-1.5 mb-1 bg-rose-50 text-rose-700 border border-rose-200">Declared-value coverage isn't itemized right now — this total may not include it.</div>}{demo?<div className="text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 bg-amber-50 text-amber-800 border border-amber-200"><Eye className="w-3 h-3"/>Demo — example rates only; labels can't be created</div>:ready&&<div className={`text-[11px] rounded px-2 py-1.5 flex items-center gap-1.5 ${rateSrc.loading?"bg-stone-100 text-stone-500":rateSrc.live?"bg-emerald-50 text-emerald-700":"bg-[#E6F4FF] text-[#006FBF]"}`}>{rateSrc.loading?<><Loader2 className="w-3 h-3 animate-spin"/>Fetching…</>:rateSrc.live?<><Wifi className="w-3 h-3"/>Live rates</>:(rateSrc.error&&!(rateSrc.rates||[]).length)?<><AlertTriangle className="w-3 h-3 shrink-0"/>{rateSrc.error}</>:<><Calculator className="w-3 h-3"/>Estimated</>}</div>}
           </Panel></div>
           <div className="flex-1 min-w-0"><ServiceList quotes={quotes} ready={ready} live={rateSrc.live} loading={rateSrc.loading} resetKey={`${fromZip}|${toZip}|${residential}|${pieces.length}|${((effClient&&effClient.blockedServices)||[]).join(",")}`}/></div>
         </div>
@@ -10559,7 +10573,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
       <div className="flex-1 min-w-0">
         {secLocked&&<div className="mb-3 flex items-center gap-2 text-[13px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"><Ban className="w-4 h-4 shrink-0"/>This page is locked by your administrator — you can look, but changes are disabled.</div>}
         <div className={secLocked?"pointer-events-none opacity-60 select-none":""} aria-disabled={secLocked||undefined}>
-        {sec==="carriers"&&<CarrierAccounts accounts={accounts} setAccounts={setAccounts} settings={settings} setSettings={setSettings} clients={clients} byoCarrier={byoCarrier} isAdmin={isAdmin}/>}
+        {sec==="carriers"&&<CarrierAccounts accounts={accounts} setAccounts={setAccounts} settings={settings} setSettings={setSettings} clients={clients} byoCarrier={byoCarrier} isAdmin={isAdmin} client={client}/>}
         {sec==="warehouses"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Warehouses saved">{(s,ss)=><Warehouses settings={s} setSettings={ss}/>}</SettingsDraftWrap>}
         {sec==="catalog"&&<ProductCatalog settings={settings} setSettings={setSettings}/>}
         {sec==="boxes"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Package sizes saved">{(s,ss)=><BoxesSettings settings={s} setSettings={ss}/>}</SettingsDraftWrap>}
@@ -13182,7 +13196,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
 
 /* ════════ CARRIER ACCOUNTS (platform + own) ════════ */
 const PROVIDERS=[{id:"england",name:"Managed FedEx (platform)"},{id:"fedex",name:"FedEx · direct"}];
-function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoCarrier=false,isAdmin=false}){
+function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoCarrier=false,isAdmin=false,client=null}){
   const [adding,setAdding]=useState(false);
   const [d,setD]=useState({label:"",provider:"england",account:"",apiKey:"",secret:"",customerId:""});
   const plat=settings.platforms||PLATFORM_DEFAULTS;
@@ -13269,7 +13283,9 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
           <Field label="Integration ID (for printing labels)"><Input value={eng.integrationId||""} onChange={e=>setEng({integrationId:e.target.value})} placeholder="e.g. 3214"/></Field>
           <Field label="Provider account ID (for booking)"><Input value={eng.providerAccountId||""} onChange={e=>setEng({providerAccountId:e.target.value})} placeholder="auto-filled by Check booking access"/></Field>
           <Field label="API base URL"><Input value={eng.base} onChange={e=>setEng({base:e.target.value})}/></Field></>}
-          <Field label="FedEx account # (optional override)"><Input value={eng.fedexAccount||""} onChange={e=>setEng({fedexAccount:e.target.value.replace(/[^0-9]/g,"")})} placeholder="Optional"/></Field>
+          {/* Shows the number that actually applies: this login's own entry first, else the
+              company number the admin set (Customers → FedEx Account). Typing here always wins. */}
+          <Field label="FedEx account #"><Input value={String(eng.fedexAccount||"").trim()||((client&&client.fedex&&client.fedex.accountNumber)||"")} onChange={e=>setEng({fedexAccount:e.target.value.replace(/[^0-9]/g,"")})} placeholder="9-digit account"/></Field>
         </div>
         {SHOW_ENGLAND&&isAdmin&&<p className="text-[11px] text-stone-400 -mt-1">The Integration ID enables real label printing. In Webship: gear/settings → eCommerce Integrations → Add → Rest API → Save New Integration → copy the ID. Turn on auto-ship for that integration so labels book automatically. The Provider account ID tells England which carrier account to ship on — click <b>Check booking access</b> to auto-fill it, or paste it manually if England hasn't opened that endpoint on your key.</p>}
         <div className="flex flex-wrap items-center gap-3">

@@ -6818,8 +6818,8 @@ function AppInner(){
   useEffect(()=>{ try{ document.documentElement.style.setProperty("--sc-stickoff",(adminReturn||isDemo)?"92px":"56px"); }catch(e){} },[adminReturn,isDemo]);
   /* shell */
   return (
-    /* Background: "Ice" (option 13) — a cool, blue-leaning tint of the brand accent. */
-    <div className="min-h-screen flex flex-col bg-[#e8f2fa] text-stone-800" style={{fontFamily:"Inter,system-ui,sans-serif"}}><SandboxBanner/>
+    /* Background: "Barely Ice" (B3) — the faintest blue-leaning tint of the brand accent. */
+    <div className="min-h-screen flex flex-col bg-[#f6fafd] text-stone-800" style={{fontFamily:"Inter,system-ui,sans-serif"}}><SandboxBanner/>
       {adminReturn&&<div className="bg-[#0086E0] text-white text-[13px] px-4 py-2 flex items-center justify-center gap-3 sticky top-0 z-40">
         <ShieldCheck className="w-4 h-4 shrink-0"/>
         <span>Admin preview — you’re seeing {BRAND.product} exactly as <b>{currentUser&&(currentUser.name||currentUser.email)}</b> sees it. Anything you change here changes their account.</span>
@@ -6889,9 +6889,9 @@ function AppInner(){
       <div className="flex flex-1">
         {/* nav blends into the Ice background instead of sitting as a bright white slab (Spencer:
             "the banner on the left pops too much") — active item keeps its highlight */}
-        <aside className="hidden md:block w-52 shrink-0 border-r border-[#d8e6f2] bg-transparent min-h-screen">
+        <aside className="hidden md:block w-48 shrink-0 border-r border-[#9dc2dc] bg-transparent min-h-screen">
           {/* pt nudges the first tab down so "Ship" sits level with the Sender/ORDERS line in the content */}
-          <nav className="px-2 pb-2 pt-[26px] space-y-0.5 sticky top-14">
+          <nav className="px-2 pb-2 pt-[32px] space-y-0.5 sticky top-14">
             {TABS.map(([id,l,Icon])=>(
               <React.Fragment key={id}>
               {(id==="admin"||id==="companyadmin")&&<div className="mt-3 mb-2 border-t border-stone-200"/>}

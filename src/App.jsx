@@ -7686,7 +7686,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         </div>
         {/* the rail's own panel: Barely-Ice fill running header-to-bottom between the nav line and
             its right border — the orders are a true box now, not cards floating on the page */}
-        <span aria-hidden="true" className="absolute right-0 -left-3 sm:-left-4 -top-[26px] sm:-top-[34px] -bottom-4 sm:-bottom-6 bg-[#f6fafd] border-r border-[#cbd5e1] -z-10 !mt-0"/>
+        <span aria-hidden="true" className="absolute right-0 -left-3 sm:-left-4 -top-[26px] sm:-top-[34px] -bottom-4 sm:-bottom-6 border-r border-[#cbd5e1] -z-10 !mt-0"/>
       </aside>
       ):(
         <button onClick={()=>setOrdersOpen(true)} title="Show orders" className="shrink-0 self-start flex flex-col items-center gap-1 text-stone-500 hover:text-stone-700 hover:border-stone-300 border border-stone-200 bg-white rounded-lg px-1.5 py-2 w-9"><ChevronRight className="w-4 h-4"/><ShoppingBag className="w-4 h-4"/>{ordersToShow.length?<span className="text-[10px] font-bold text-[#0086E0] leading-none">{ordersToShow.length}</span>:null}</button>

@@ -108,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v562";
+const BUILD_TAG="addr-v563";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9164,6 +9164,18 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   );
 }
 
+/* Tiny copy-to-clipboard button that sits beside a tracking-number link. */
+function CopyTrackBtn({tn,className=""}){
+  const [ok,setOk]=useState(false);
+  const copy=async(e)=>{ e.stopPropagation(); e.preventDefault(); const t=String(tn||""); if(!t)return;
+    try{ await navigator.clipboard.writeText(t); }
+    catch(err){ try{ const ta=document.createElement("textarea");ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove(); }catch(e2){} }
+    setOk(true); setTimeout(()=>setOk(false),1600);
+  };
+  if(!tn)return null;
+  return <button onClick={copy} title={ok?"Copied!":"Copy tracking number"} className={`shrink-0 p-0.5 rounded ${ok?"text-emerald-600":"text-stone-400 hover:text-stone-700 hover:bg-stone-100"} ${className}`}>{ok?<CheckCircle2 className="w-3.5 h-3.5"/>:<Copy className="w-3.5 h-3.5"/>}</button>;
+}
+
 function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,settings,labels={},isAdmin=false,openShipTracking=null,onOpenedShip,showMoney=true}){
   /* Packing-slip composer for MANUAL shipments (no store integration → no line items):
      type the items, print, and they're saved onto the shipment so reprints match. */
@@ -9245,14 +9257,14 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
             <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{s.recipient?.name||"—"}</div><div className="text-[11px] text-stone-400 truncate">{s.service}</div></div>
             <div className="w-52 hidden lg:block min-w-0"><div className="text-xs text-stone-600 truncate">{s.recipient?.address1||"—"}</div><div className="text-[11px] text-stone-400 truncate">{s.recipient?.city}{s.recipient?.state?", "+s.recipient.state:""} {s.recipient?.zip||""}</div></div>
             <div className="w-24 hidden xl:block text-xs text-stone-500 truncate">{s.reference||"—"}</div>
-            <div className="w-40 hidden md:block"><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" onClick={e=>e.stopPropagation()} className="text-[#0086E0] underline text-xs flex items-center gap-1 truncate">{s.tracking}<ExternalLink className="w-3 h-3 shrink-0"/></a></div>
+            <div className="w-40 hidden md:flex items-center gap-0.5"><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" onClick={e=>e.stopPropagation()} className="text-[#0086E0] underline text-xs flex items-center gap-1 truncate min-w-0">{s.tracking}<ExternalLink className="w-3 h-3 shrink-0"/></a><CopyTrackBtn tn={s.tracking}/></div>
             <div className="w-24 text-right"><Badge tone={tone(s.status)}>{s.status}</Badge></div>
           </div>
           {open===s.id&&(
             <div className="px-12 pb-4 pt-1 bg-stone-50/60 text-sm">
               <div className="grid sm:grid-cols-2 gap-x-8 gap-y-1 mb-3">
                 <Info k="Carrier / service" v={s.service}/>
-                <Info k="Tracking" v={<a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" className="text-[#0086E0] underline">{s.tracking} ↗</a>}/>
+                <Info k="Tracking" v={<span className="inline-flex items-center gap-1"><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" className="text-[#0086E0] underline">{s.tracking} ↗</a><CopyTrackBtn tn={s.tracking}/></span>}/>
                 <Info k="To" v={`${s.recipient?.name||""}${s.recipient?.company?" · "+s.recipient.company:""} — ${s.recipient?.address1||""}, ${s.recipient?.city||""}, ${s.recipient?.state||""} ${s.recipient?.zip||""}`}/>
                 <Info k="Reference" v={s.reference||"—"}/>
                 <div className="flex items-end gap-2"><button onClick={(e)=>{e.stopPropagation();printPackingSlips([slipFromShipment(s)]);}} className="text-xs bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing Slip</button><button onClick={(e)=>{e.stopPropagation();openSlipEdit(s);}} title="Type the items for this slip — perfect for manual shipments with no store connected. Items are saved for reprints." className="text-xs bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF] flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5"/>Slip With Items</button>

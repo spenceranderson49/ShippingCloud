@@ -4039,7 +4039,7 @@ function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureF
       status:(a,b)=>String(a.status||"active").localeCompare(String(b.status||"active"))}[sort];
     return [...cs].sort(cmp||(()=>0));
   },[clients,users,q,sort,rules]);
-  const createCustomer=()=>{if(!nf.name)return;const id="c"+Date.now();setClients(p=>[...p,{id,name:nf.name,contact:nf.contact,email:nf.email,phone:nf.phone,origin:nf.origin,markup:+nf.markup||0,status:"active",since:new Date().toISOString().slice(0,7),plan:"Standard",blockedServices:[...DEFAULT_BLOCKED_SERVICES]}]);setNf({name:"",contact:"",email:"",phone:"",origin:"",markup:15});setAdding(false);onOpenCustomer&&onOpenCustomer(id);};
+  const createCustomer=()=>{if(!nf.name)return;const id="c"+Date.now();setClients(p=>[...p,{id,name:nf.name,contact:nf.contact,email:nf.email,phone:nf.phone,origin:nf.origin,markup:+nf.markup||0,status:"active",since:new Date().toISOString().slice(0,7),plan:"Standard",blockedServices:[...DEFAULT_BLOCKED_SERVICES],createdAt:new Date().toISOString()}]);setNf({name:"",contact:"",email:"",phone:"",origin:"",markup:15});setAdding(false);onOpenCustomer&&onOpenCustomer(id);};
   const moveLogin=(uid,cid)=>setUsers(us=>us.map(x=>x.id===uid?{...x,clientId:cid||null}:x));
   return (<div className="space-y-3">
     <div className="flex flex-wrap items-end gap-3">
@@ -5113,7 +5113,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
   };
   const [f,setF]=useState({name:"",email:"",role:"customer",clientId:clients[0]?clients[0].id:"",password:"",full:true,perms:ADMIN_SECTIONS.map(x=>x[0])});
   const [added,setAdded]=useState(false);
-  const create=()=>{if(!f.name||!f.email||!f.password)return;const adminPerms=(f.role==="admin"&&!f.full)?{sections:f.perms}:null;setUsers(p=>[...p,{id:"u"+Date.now(),name:f.name,email:f.email,role:f.role,clientId:f.role==="customer"?f.clientId:null,adminPerms,status:"active",password:f.password,lastLogin:"—"}]);setF({name:"",email:"",role:"customer",clientId:clients[0]?clients[0].id:"",password:"",full:true,perms:ADMIN_SECTIONS.map(x=>x[0])});setAdded(true);setTimeout(()=>setAdded(false),1600);};
+  const create=()=>{if(!f.name||!f.email||!f.password)return;const adminPerms=(f.role==="admin"&&!f.full)?{sections:f.perms}:null;setUsers(p=>[...p,{id:"u"+Date.now(),name:f.name,email:f.email,role:f.role,clientId:f.role==="customer"?f.clientId:null,adminPerms,status:"active",password:f.password,lastLogin:"—",createdAt:new Date().toISOString()}]);setF({name:"",email:"",role:"customer",clientId:clients[0]?clients[0].id:"",password:"",full:true,perms:ADMIN_SECTIONS.map(x=>x[0])});setAdded(true);setTimeout(()=>setAdded(false),1600);};
   const toggle=(id)=>setUsers(us=>us.map(u=>u.id===id?{...u,status:u.status==="active"?"inactive":"active"}:u));
   const del=(id)=>setUsers(us=>us.filter(u=>u.id!==id));
   return (<div className="space-y-3">

@@ -6343,7 +6343,7 @@ function AppInner(){
   const [companyUsers,setCompanyUsers]=usePersist("companyUsers",[]);
   const [companyFlags,setCompanyFlags]=usePersist("companyFlags",{});
   const [companyAdminRequests,setCompanyAdminRequests]=usePersist("companyAdminRequests",[]);
-  const [tab,setTab]=useState(BRAND.admin?"admin":"ship");
+  const [tab,setTab]=useState(()=>BRAND.admin&&!lsGet("adminReturn",null)?"admin":"ship");   /* impersonating on Admin HQ lands on the customer's Ship tab, not a blank admin body */
   const [pendingOpenOrderId,setPendingOpenOrderId]=useState(null);
   const [pendingOpenShipTracking,setPendingOpenShipTracking]=useState(null);
   useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};if(d.tab)setTab(d.tab);if(d.openOrderId)setPendingOpenOrderId(d.openOrderId);if(d.openShipTracking)setPendingOpenShipTracking(d.openShipTracking);if(d.batchCmd)setBatchCmd({...d.batchCmd,ts:Date.now()});};window.addEventListener("sc-nav",h);return()=>window.removeEventListener("sc-nav",h);},[]);
@@ -6797,7 +6797,10 @@ function AppInner(){
       if(ord.length){ const rank=(k)=>{const i2=ord.indexOf(k);return i2<0?999:i2;}; out=[...out].sort((a,b)=>rank(a[0])-rank(b[0])); }
       return out;
     };
-    if(BRAND.admin)return adminSectionsFor(currentUser).map(([k,l])=>["admin:"+k,l,ADMIN_SECTION_ICONS[k]||ShieldCheck]);
+    /* Admin HQ shows the admin rail only for a REAL admin. While impersonating ("Log In As")
+       the shell must show the customer's own tabs — the admin rail with a customer session
+       rendered an admin nav over a permanently blank body (isAdmin gates every admin body). */
+    if(BRAND.admin&&isAdmin)return adminSectionsFor(currentUser).map(([k,l])=>["admin:"+k,l,ADMIN_SECTION_ICONS[k]||ShieldCheck]);
     if(isAdmin)return applyPrefs(ALL_TABS);
     const t=ALL_TABS.filter(x=>x[0]!=="admin"&&(x[0]==="ship"||featureOn(x[0],currentUser,myFlags)));
     if(isCompanyAdmin){const entry=["companyadmin","Company Admin",Building2];const i=t.findIndex(x=>x[0]==="settings");i>=0?t.splice(i,0,entry):t.push(entry);}

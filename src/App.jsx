@@ -6846,7 +6846,7 @@ function AppInner(){
       </div>}
       <ConfettiHost mode={custom.confetti||"page"}/>
       <SaveToast/>
-      <header className={"border-b border-stone-200 sticky z-30 backdrop-blur bg-white/90 "+((adminReturn||isDemo)?"top-9":"top-0")}>
+      <header className={"border-b border-[#cbd5e1] sticky z-30 backdrop-blur bg-[#f6fafd]/90 "+((adminReturn||isDemo)?"top-9":"top-0")}>
         <div className="px-3 sm:px-4 h-14 flex items-center gap-2 sm:gap-3 relative">
           <button onClick={()=>setNavOpen(true)} className="md:hidden p-2 -ml-1 rounded-lg hover:bg-stone-100 text-stone-600" aria-label="Menu"><Layers className="w-5 h-5"/></button>
 
@@ -6889,7 +6889,7 @@ function AppInner(){
       <div className="flex flex-1">
         {/* nav blends into the Ice background instead of sitting as a bright white slab (Spencer:
             "the banner on the left pops too much") — active item keeps its highlight */}
-        <aside className="hidden md:block w-48 shrink-0 border-r border-[#cbd5e1] bg-transparent min-h-screen">
+        <aside className="hidden md:block w-48 shrink-0 border-r border-[#cbd5e1] bg-[#f6fafd] min-h-screen">
           {/* pt nudges the first tab down so "Ship" sits level with the Sender/ORDERS line in the content */}
           <nav className="px-2 pb-2 pt-[32px] space-y-0.5 sticky top-14">
             {TABS.map(([id,l,Icon])=>(

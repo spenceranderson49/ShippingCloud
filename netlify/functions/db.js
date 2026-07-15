@@ -374,7 +374,7 @@ exports.handler = async (event) => {
       if (secondFactorPassed && trustDaysReq) {
         newDeviceToken = crypto.randomBytes(24).toString("hex");
         newDeviceExp = Date.now() + trustDaysReq * 24 * 3600 * 1000;
-        const keep = devList.slice(-9);   // pruned of expired above; cap at 10 trusted browsers per account
+        const keep = devList.slice(-29);   // pruned of expired above; cap at 30 trusted browsers per account — shared warehouse logins run 16+ stations (LAgence), so the cap must clear that with room
         keep.push({ hash: devHash(newDeviceToken), exp: newDeviceExp, created: Date.now(), days: trustDaysReq });
         const mergedD = users.map((x) => x && x.id === u.id ? { ...x, trustedDevices: keep } : x);
         const dw = await putStores({ users: mergedD });

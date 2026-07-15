@@ -6910,7 +6910,7 @@ function AppInner(){
         <main className="flex-1 min-w-0 overflow-x-clip px-3 sm:px-6 py-4 sm:py-6">
           <TabBoundary key={tab} name={tab}>
           {tab==="dashboard"&&<Dashboard shipments={shipments} orders={orders} returns={returns} goTab={setTab}/>}
-          {tab==="ship"&&<Ship client={client} priceAs={adminPriceAs} setPriceAs={setAdminPriceAs} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={ruleset} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders} currentUser={currentUser} setUsers={setUsers} setCurrentUser={setCurrentUser} clients={clients}/>}
+          {tab==="ship"&&<Ship client={client} priceAs={adminPriceAs} setPriceAs={setAdminPriceAs} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={ruleset} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders} currentUser={currentUser} setUsers={setUsers} setCurrentUser={setCurrentUser} clients={clients} labels={labelStore}/>}
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
           {tab==="orders"&&<Orders showMoney={showMoney} orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} setSettings={setSettings} onShipped={onShipped} openOrderId={pendingOpenOrderId} onOpenedOrder={()=>setPendingOpenOrderId(null)}/>}
           {tab==="batch"&&<Batch showMoney={showMoney} orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} setSettings={setSettings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
@@ -6973,7 +6973,7 @@ function StepHead({n,label}){
     <span className="flex-1 h-px bg-stone-200"/>
   </div>);
 }
-function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,drafts,setDrafts,prefill,clearPrefill,onShipped,onPending,logEmail,onQuickQuote,onRefresh,syncing,currentUser,setUsers,setCurrentUser,clients=[],priceAs="",setPriceAs=null}){
+function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,drafts,setDrafts,prefill,clearPrefill,onShipped,onPending,logEmail,onQuickQuote,onRefresh,syncing,currentUser,setUsers,setCurrentUser,clients=[],priceAs="",setPriceAs=null,labels={}}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 rate database — global, follows the customer's profile
   const empty={country:"United States",name:"",company:"",zip:"",state:"",city:"",address1:"",address2:"",address3:"",phone:"",email:""};
   const [sender,setSender]=useState({country:"United States",...settings.sender,address2:"",address3:""});
@@ -7576,8 +7576,12 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     return {t:"info",m:"booking now…"};
   },[handsFree,custom.autoRulesOnShip,custom.hideShipOrders,selectedOrder,hfArmed,ready,rateSrc.live,rateSrc.loading,addrClassified,matched,quotes,bought,shipStatus,client,settings,liveRuleMatch,JSON.stringify(pieces)]);
 
-  const sendEmail=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Tracking for your ${settings.company||BRAND.product} shipment`,type:"Shipped",body:emailMsg});setSent("email");setTimeout(()=>setSent(""),1800);};
-  const sendLabel=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Your shipping label from ${settings.company||BRAND.product}`,type:"Label",body:emailMsg});setSent("label");setTimeout(()=>setSent(""),1800);};
+  /* both notify buttons ship the ACTUAL tracking number (the email template renders it) and
+     stay disabled until a label is booked — they used to "send ✓" a tracking email with no
+     tracking in it, before anything was booked */
+  const _sentTracking=lastTracking||(shipStatus&&shipStatus.tracking)||"";
+  const sendEmail=()=>{if(!_sentTracking)return;const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Tracking for your ${settings.company||BRAND.product} shipment`,type:"Shipped",body:emailMsg,tracking:_sentTracking});setSent("email");setTimeout(()=>setSent(""),1800);};
+  const sendLabel=()=>{if(!_sentTracking)return;const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Your shipping label from ${settings.company||BRAND.product}`,type:"Label",body:emailMsg,tracking:_sentTracking});setSent("label");setTimeout(()=>setSent(""),1800);};
   const saveMsgDefault=()=>{setSettings&&setSettings(s=>({...s,emailMessage:emailMsg}));setMsgSaved(true);setTimeout(()=>setMsgSaved(false),1600);};
 
   /* References that already have a (non-voided) label — used to keep already-processed orders
@@ -7769,7 +7773,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                mode it flashed behind the booked summary before the form cleared. The booked summary
                already offers reprint/details, so suppress this banner entirely post-booking. */
             if(justBookedRef.current!=null)return null;
-            return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex flex-wrap items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="flex-1 min-w-[180px]">Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}).</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:d.tracking}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><FileText className="w-3 h-3"/>See Details</button><button onClick={()=>setLabelPreview({rec:d,tracking:d.tracking,service:d.service,carrier:d.carrier,pdf:d.labelPdf||d.pdf||null,fromExisting:true})} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><Printer className="w-3 h-3"/>Reprint</button><button onClick={newShipment} className="shrink-0 text-[11px] font-semibold text-white bg-[#0086E0] hover:bg-[#006db8] border border-[#0086E0] rounded-lg px-2.5 py-1 flex items-center gap-1"><Plus className="w-3 h-3"/>New Shipment</button></div>:null;})()}
+            return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex flex-wrap items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="flex-1 min-w-[180px]">Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}).</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:d.tracking}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><FileText className="w-3 h-3"/>See Details</button><button onClick={()=>setLabelPreview({rec:d,tracking:d.tracking,service:d.service,carrier:d.carrier,pdf:(labels[d.id]&&labels[d.id].pdf)||d.labelPdf||d.pdf||null,fromExisting:true})} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><Printer className="w-3 h-3"/>Reprint</button><button onClick={newShipment} className="shrink-0 text-[11px] font-semibold text-white bg-[#0086E0] hover:bg-[#006db8] border border-[#0086E0] rounded-lg px-2.5 py-1 flex items-center gap-1"><Plus className="w-3 h-3"/>New Shipment</button></div>:null;})()}
           {pieces.map((p,i)=>(
             <div key={i} className="flex flex-wrap items-end gap-2 bg-white border border-stone-200 rounded-lg px-2 py-2">
               <div className="text-[11px] text-stone-400 w-6">#{i+1}</div>
@@ -7903,8 +7907,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 <input value={emailTo} onChange={e=>setEmailTo(e.target.value)} placeholder={receiver.email||"customer@example.com"} className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
               </div>
               <div className="flex flex-col gap-1.5">
-                <button onClick={sendLabel} className={`w-full flex items-center justify-center gap-1.5 text-sm rounded px-3 py-2 font-medium ${sent==="label"?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{sent==="label"?<><Check className="w-4 h-4"/>Label Sent</>:<><Printer className="w-4 h-4"/>Send Shipping Label</>}</button>
-                <button onClick={sendEmail} className={`w-full flex items-center justify-center gap-1.5 text-sm rounded px-3 py-2 font-medium ${sent==="email"?"bg-emerald-600 text-white":"bg-stone-200 text-stone-700 hover:bg-stone-300"}`}>{sent==="email"?<><Check className="w-4 h-4"/>Email Sent</>:<><Mail className="w-4 h-4"/>Send Tracking Email</>}</button>
+                <button onClick={sendLabel} disabled={!_sentTracking} title={_sentTracking?"":"Book the label first — the email carries its tracking number"} className={`w-full flex items-center justify-center gap-1.5 text-sm rounded px-3 py-2 font-medium disabled:opacity-40 ${sent==="label"?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{sent==="label"?<><Check className="w-4 h-4"/>Label Sent</>:<><Printer className="w-4 h-4"/>Send Shipping Label</>}</button>
+                <button onClick={sendEmail} disabled={!_sentTracking} title={_sentTracking?"":"Book the label first — the email carries its tracking number"} className={`w-full flex items-center justify-center gap-1.5 text-sm rounded px-3 py-2 font-medium disabled:opacity-40 ${sent==="email"?"bg-emerald-600 text-white":"bg-stone-200 text-stone-700 hover:bg-stone-300"}`}>{sent==="email"?<><Check className="w-4 h-4"/>Email Sent</>:<><Mail className="w-4 h-4"/>Send Tracking Email</>}</button>
               </div>
               <div>
                 <div className="flex items-center justify-between mb-1">
@@ -7913,7 +7917,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 </div>
                 <textarea value={emailMsg} onChange={e=>{emailMsgTouched.current=true;setEmailMsg(e.target.value);}} rows={3} placeholder="Add a custom note to include in the email — or save a default that's always pre-filled here." className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 resize-y"/>
               </div>
-              <p className="text-[11px] text-stone-400">Emails the buyer a tracking link or a printable label PDF. Logged under Settings → Email automation.</p>
+              <p className="text-[11px] text-stone-400">Emails the buyer their tracking number once the label is booked. Logged under Settings → Email automation.</p>
             </div>}
             {/* form actions: an even 3-across grid so the column bottom lines up flush with the cards */}
             <div className="grid grid-cols-3 gap-2">

@@ -7836,7 +7836,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               const showOrder=!custom.hideFromOrderBox&&(handsFree||selectedOrder)&&(handsFree||(so&&(so.shippingService||so.source)));
               const showAp=!handsFree&&liveRuleStatus&&!custom.hideAutopilotBox;
               const showRates=!custom.hideRateSrcBar;
-              if(!showOrder&&!showAp&&!showRates)return null;
+              if(!showOrder&&!showAp&&!showRates&&!handsFree)return null;
               const apFired=liveRuleStatus&&liveRuleStatus.state==="fired";
               return <div className="border border-[#cbd5e1] shadow-sm rounded-lg bg-white p-3 space-y-2">
                 <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">This Shipment</div>
@@ -7858,6 +7858,12 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                   :rateSrc.loading?<><Loader2 className="w-3.5 h-3.5 shrink-0 mt-0.5 animate-spin"/><span>Fetching live rates…</span></>
                   :rateSrc.live?<><Wifi className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-600"/><span>Live rates from your FedEx account</span></>
                   :<><Calculator className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""}{currentUser&&currentUser.role==="admin"?" — turn on live rates in Settings → Carrier accounts":" — live pricing isn't connected right now"}</span></>}
+                </div>}
+                {/* Hands-free caution: when auto-book/print is armed, say so loudly right where they
+                    work — a scan on this screen books and prints without another click. */}
+                {handsFree&&<div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+                  <Printer className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-600"/>
+                  <span><b>Hands-Free Mode is ON</b> — scanned orders book and print automatically. Scan carefully.</span>
                 </div>}
                 {/* Rate-plumbing diagnostic — ADMIN ONLY: it names the cost source and credential state,
                     which no customer (or demo visitor) should ever see. */}
@@ -7893,11 +7899,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               </div>
               <p className="text-[11px] text-stone-400">Emails the buyer a tracking link or a printable label PDF. Logged under Settings → Email automation.</p>
             </div>}
-            {/* form actions live at the bottom of this column so they line up with the cards */}
-            <div className="flex flex-wrap justify-end gap-2">
-              <button onClick={()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);printPackingSlips([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:(shipStatus&&shipStatus.tracking)||"",service:""}]);}} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-200"><FileText className="w-4 h-4"/>Packing Slip</button>
-              <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-300"><Plus className="w-4 h-4"/>New Shipment</button>
-              <button onClick={saveDraft} className={`flex items-center gap-1.5 text-sm rounded px-4 py-2 font-medium ${saved?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{saved?<><Check className="w-4 h-4"/>Saved to drafts</>:<><FileText className="w-4 h-4"/>Save Draft</>}</button>
+            {/* form actions: an even 3-across grid so the column bottom lines up flush with the cards */}
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);printPackingSlips([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:(shipStatus&&shipStatus.tracking)||"",service:""}]);}} className="w-full flex items-center justify-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2 py-2 font-medium hover:bg-stone-200 whitespace-nowrap"><FileText className="w-4 h-4"/>Packing Slip</button>
+              <button onClick={newShipment} className="w-full flex items-center justify-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2 py-2 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New Shipment</button>
+              <button onClick={saveDraft} className={`w-full flex items-center justify-center gap-1.5 text-sm rounded px-2 py-2 font-medium whitespace-nowrap ${saved?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{saved?<><Check className="w-4 h-4"/>Saved</>:<><FileText className="w-4 h-4"/>Save Draft</>}</button>
             </div>
           </div>
         </div>

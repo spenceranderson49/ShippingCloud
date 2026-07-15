@@ -6895,8 +6895,8 @@ function AppInner(){
             {TABS.map(([id,l,Icon])=>(
               <React.Fragment key={id}>
               {(id==="admin"||id==="companyadmin")&&<div className="mt-3 mb-2 border-t border-stone-200"/>}
-              <button onClick={()=>setTab(id)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[15px] ${tab===id?"bg-[#E6F4FF] text-[#006FBF] font-medium":"text-stone-600 hover:bg-stone-100"}`}>
-                <Icon className="w-[18px] h-[18px] shrink-0"/><span className="flex-1 text-left">{l}</span>{id==="orders"&&unfulfilled>0&&<span className="text-[10px] bg-[#0086E0] text-white rounded-full px-1.5 py-0.5 leading-none">{unfulfilled}</span>}
+              <button onClick={()=>setTab(id)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[14px] ${tab===id?"bg-[#E6F4FF] text-[#006FBF] font-medium":"text-stone-600 hover:bg-stone-100"}`}>
+                <Icon className="w-4 h-4 shrink-0"/><span className="flex-1 text-left">{l}</span>{id==="orders"&&unfulfilled>0&&<span className="text-[10px] bg-[#0086E0] text-white rounded-full px-1.5 py-0.5 leading-none">{unfulfilled}</span>}
               </button>
               </React.Fragment>
             ))}

@@ -6891,12 +6891,12 @@ function AppInner(){
             "the banner on the left pops too much") — active item keeps its highlight */}
         <aside className="hidden md:block w-48 shrink-0 border-r border-[#cbd5e1] bg-white min-h-screen">
           {/* pt nudges the first tab down so "Ship" sits level with the Sender/ORDERS line in the content */}
-          <nav className="px-2 pb-2 pt-[34px] space-y-0.5 sticky top-14">
+          <nav className="px-2 pb-2 pt-[30px] space-y-0.5 sticky top-14">
             {TABS.map(([id,l,Icon])=>(
               <React.Fragment key={id}>
               {(id==="admin"||id==="companyadmin")&&<div className="mt-3 mb-2 border-t border-stone-200"/>}
-              <button onClick={()=>setTab(id)} className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] ${tab===id?"bg-[#E6F4FF] text-[#006FBF] font-medium":"text-stone-600 hover:bg-stone-100"}`}>
-                <Icon className="w-3.5 h-3.5 shrink-0"/><span className="flex-1 text-left">{l}</span>{id==="orders"&&unfulfilled>0&&<span className="text-[10px] bg-[#0086E0] text-white rounded-full px-1.5 py-0.5 leading-none">{unfulfilled}</span>}
+              <button onClick={()=>setTab(id)} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[15px] ${tab===id?"bg-[#E6F4FF] text-[#006FBF] font-medium":"text-stone-600 hover:bg-stone-100"}`}>
+                <Icon className="w-[18px] h-[18px] shrink-0"/><span className="flex-1 text-left">{l}</span>{id==="orders"&&unfulfilled>0&&<span className="text-[10px] bg-[#0086E0] text-white rounded-full px-1.5 py-0.5 leading-none">{unfulfilled}</span>}
               </button>
               </React.Fragment>
             ))}
@@ -7654,7 +7654,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
          The collapsed tab (below) stays line-free. */
       /* equal-gap geometry: nav line →16px(-ml-2 offsets the page's 24px pad)→ cards →16px(pr-4)→
          rail line →16px(row gap-4)→ Sender. Line centered between sections, cards centered between lines. */
-      <aside className="relative w-60 shrink-0 space-y-2 pr-3 sm:pr-4 sm:-ml-2 self-stretch">
+      <aside className="relative isolate w-60 shrink-0 space-y-2 pr-3 sm:pr-4 sm:-ml-2 self-stretch">
         <div className="flex items-center gap-1.5">
           <button onClick={()=>setOrdersOpen(false)} className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-stone-500 hover:text-stone-700"><ChevronDown className="w-4 h-4 shrink-0"/><ShoppingBag className="w-4 h-4 shrink-0"/><span className="whitespace-nowrap">Orders{ordersToShow.length?<span className="text-stone-400 normal-case font-normal"> · {ordersToShow.length}</span>:""}</span></button>
           {onRefresh&&shopifyConnected(settings)&&<button onClick={onRefresh} disabled={syncing} title="Refresh orders" className="text-stone-400 hover:text-[#0086E0] disabled:opacity-40 p-1 shrink-0">{syncing?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<RotateCcw className="w-3.5 h-3.5"/>}</button>}

@@ -6889,7 +6889,7 @@ function AppInner(){
       <div className="flex flex-1">
         {/* nav blends into the Ice background instead of sitting as a bright white slab (Spencer:
             "the banner on the left pops too much") — active item keeps its highlight */}
-        <aside className="hidden md:block w-48 shrink-0 border-r border-[#9dc2dc] bg-transparent min-h-screen">
+        <aside className="hidden md:block w-48 shrink-0 border-r border-[#cbd5e1] bg-transparent min-h-screen">
           {/* pt nudges the first tab down so "Ship" sits level with the Sender/ORDERS line in the content */}
           <nav className="px-2 pb-2 pt-[32px] space-y-0.5 sticky top-14">
             {TABS.map(([id,l,Icon])=>(

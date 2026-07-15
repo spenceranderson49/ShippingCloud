@@ -5926,7 +5926,7 @@ function Landing({onAuth}){
     {page==="about"&&<div className="max-w-3xl mx-auto px-5 py-14">
       <h1 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-3xl sm:text-4xl font-bold text-stone-900">About {BRAND.product}</h1>
       <p className="mt-6 text-stone-500 leading-relaxed text-lg">We’re shipping people. We’ve run the shipping desks, eaten the surprise surcharges, argued the reweighs, and waited on hold with carriers who never called back. {BRAND.product} exists because we got tired of choosing between good rates and good software — and tired of platforms that make you work their way.</p>
-      <p className="mt-4 text-stone-500 leading-relaxed text-lg">So we built both sides of it: enterprise FedEx and DHL pricing from day one, and a platform with real humans behind it who answer the phone and build what you need. When a customer says “I wish it did this,” our answer is usually “give us a week.”</p>
+      <p className="mt-4 text-stone-500 leading-relaxed text-lg">When a customer says “I wish it did this,” our answer is usually “give us a week.”</p>
       <p className="mt-4 text-stone-500 leading-relaxed text-lg">We’re not trying to be the biggest shipping platform. We’re trying to be <span className="text-stone-900 font-medium">your</span> shipping platform — the last one you’ll need to switch to.</p>
       <div className="mt-8 flex flex-wrap gap-3">
         <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0072BE] text-white font-semibold rounded-lg px-6 py-3">Create {BRAND.product} account</button>

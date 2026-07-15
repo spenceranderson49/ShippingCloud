@@ -3038,7 +3038,7 @@ function Login({users,onLogin,brand}){
           <div className="flex items-center gap-2">
             {BRAND.fw?<FreightwireShipHub logoH={46} subText={BRAND.admin?"Admin HQ":"Customer Portal"}/>:(!B.name1||B.name1==="Shipping")&&(!B.name2||B.name2==="Cloud")?<ShipCloudLogo size={28}/>:<><BrandCloud className="h-10 w-auto" color={B.primary}/><span className="font-extrabold tracking-tight text-3xl" style={{color:B.dark}}>{B.name1}<span style={{color:B.primary}}>{B.name2}</span></span></>}
           </div>
-          {B.showLogo&&B.logo&&<div className="flex items-center gap-1.5 text-stone-400 text-xs">{B.partnerLabel}<img src={B.logo} alt="partner" className="h-3.5 w-auto object-contain"/></div>}
+          {B.showLogo&&B.logo&&B.logo!==FW_LOGO&&<div className="flex items-center gap-1.5 text-stone-400 text-xs">{B.partnerLabel}<img src={B.logo} alt="partner" className="h-3.5 w-auto object-contain"/></div>}
         </div>
         <div className="bg-white border border-stone-200 rounded-xl shadow-sm p-6 space-y-3">
           <div className="flex bg-stone-100 rounded-lg p-0.5 text-sm mb-1">
@@ -3141,7 +3141,7 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
       <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400">Live preview</div>
       <div className="p-5 flex items-center gap-3">
         {(!b.name1||b.name1==="Shipping")&&(!b.name2||b.name2==="Cloud")?<ShipCloudLogo size={24}/>:<><BrandCloud className="h-10 w-auto" color={b.primary}/><span className="font-extrabold tracking-tight text-[26px]" style={{color:b.dark}}>{b.name1}<span style={{color:b.primary}}>{b.name2}</span></span></>}
-        {b.showLogo&&b.logo&&<span className="flex items-center gap-1.5 text-stone-400 text-xs"><span className="w-px h-5 bg-stone-200"/>{b.partnerLabel}<img src={b.logo} alt="partner" className="h-3.5 w-auto object-contain"/></span>}
+        {b.showLogo&&b.logo&&b.logo!==FW_LOGO&&<span className="flex items-center gap-1.5 text-stone-400 text-xs"><span className="w-px h-5 bg-stone-200"/>{b.partnerLabel}<img src={b.logo} alt="partner" className="h-3.5 w-auto object-contain"/></span>}
       </div>
     </div>
 
@@ -5825,7 +5825,7 @@ function Landing({onAuth}){
     <div className="max-w-6xl mx-auto px-5 py-5 flex flex-wrap items-center justify-between gap-y-3">
       <button onClick={()=>setPage("home")} className="text-left">
         <div className="flex items-center"><ShipCloudLogo size={30}/></div>
-        {pub&&pub.showLogo&&<div className="flex items-center gap-1.5 text-[11px] text-stone-500 mt-1 ml-[56px]">by <img src={FW_LOGO} alt="Freightwire" className="h-3.5 w-auto object-contain"/></div>}
+        {/* "by Freightwire" partner strip removed everywhere on ShippingCloud (Spencer, Shopify-launch day) */}
       </button>
       <div className="flex flex-wrap items-center gap-1.5">
         <NavTab label="Features" onClick={()=>setPage("home","features")}/>
@@ -6856,7 +6856,7 @@ function AppInner(){
           </>):(
           <button onClick={()=>setTab("ship")} title="Back to Ship" className="cursor-pointer flex items-center shrink-0">{(!brand.name1||brand.name1==="Shipping")&&(!brand.name2||brand.name2==="Cloud")?<ShipCloudLogo size={Math.round(22*((custom.logoScale||100)/100))} accent={srf.accent||custom.accent||"#0086E0"}/>:<span className="font-extrabold tracking-tight text-[20px] sm:text-[26px]" style={{color:brand.dark}}>{brand.name1}<span style={{color:custom.accent||brand.primary}}>{brand.name2}</span></span>}</button>)}
           {custom.seasonal!==false&&seasonalEmoji()&&<span className="text-base select-none shrink-0 -ml-0.5" title="Seasonal touch — turn off in Customizations">{seasonalEmoji()}</span>}
-          {brand.showLogo&&brand.logo&&<span className="hidden sm:flex items-center gap-1.5 text-stone-400 text-xs"><span className="w-px h-5 bg-stone-200"/>{brand.partnerLabel}<img src={brand.logo} alt="partner" className="h-3 w-auto object-contain"/></span>}
+          {brand.showLogo&&brand.logo&&brand.logo!==FW_LOGO&&<span className="hidden sm:flex items-center gap-1.5 text-stone-400 text-xs"><span className="w-px h-5 bg-stone-200"/>{brand.partnerLabel}<img src={brand.logo} alt="partner" className="h-3 w-auto object-contain"/></span>}
           <div className="flex-1"/>
           <div className="flex items-center gap-2 sm:gap-3">
             {(()=>{const cl=settings.companyLogo||(myFlags&&myFlags._logoB64)||"";return cl?<span className="flex items-center min-w-0 shrink"><img src={cl} alt={settings.company||"Company logo"} style={{height:Math.round(28*((custom.companyLogoScale||100)/100))+"px"}} className="w-auto max-w-[100px] sm:max-w-[160px] object-contain block" draggable={false}/><span className="w-px h-6 bg-stone-200 shrink-0 mx-2.5 sm:mx-3 hidden sm:block"/></span>:null;})()}

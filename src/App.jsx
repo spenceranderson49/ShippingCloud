@@ -108,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v560";
+const BUILD_TAG="addr-v561";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3657,8 +3657,11 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
   const dedicated=()=>{const id="p"+Date.now();upRules({profiles:[...profiles,{id,name:c.name,services:JSON.parse(JSON.stringify(prof.services||{})),surcharges:JSON.parse(JSON.stringify(prof.surcharges||{}))}],assign:{...assign,[cid]:id}});say("Dedicated profile created.");};
   const companyFeatureState=(fid)=>{if(!lg.length)return "none";const on=lg.filter(u=>featureOn(fid,u,featureFlags[u.id])).length;return on===0?"off":on===lg.length?"on":"mixed";};
   const setCompanyFeature=(fid,val)=>{setFeatureFlags&&setFeatureFlags(ff=>{const next={...ff};lg.forEach(u=>{next[u.id]={...(next[u.id]||{}),[fid]:val};});return next;});say((val?"Enabled":"Disabled")+" for all logins.");};
-  /* Settings-section policy (per customer, applied to every login): on / locked (view-only, greyed) / off (hidden). */
-  const secPolicyState=(sid)=>{ if(!lg.length)return "on"; const vals=lg.map(u=>String(((featureFlags[u.id]||{})._secPolicy||{})[sid]||"on")); return vals.every(v=>v===vals[0])?vals[0]:"mixed"; };
+  /* Settings-section policy (per customer, applied to every login): on / locked (view-only, greyed) / off (hidden).
+     Subscription is the one section that starts Hidden — the app hides it unless a policy is set, so the
+     unset default here must read "off" to match what the customer actually sees. */
+  const secPolicyDefault=(sid)=>sid==="subscription"?"off":"on";
+  const secPolicyState=(sid)=>{ if(!lg.length)return secPolicyDefault(sid); const vals=lg.map(u=>String(((featureFlags[u.id]||{})._secPolicy||{})[sid]||secPolicyDefault(sid))); return vals.every(v=>v===vals[0])?vals[0]:"mixed"; };
   const setCompanySecPolicy=(sid,val)=>{ setFeatureFlags&&setFeatureFlags(ff=>{ const next={...ff}; lg.forEach(u=>{ const cur=next[u.id]||{}; next[u.id]={...cur,_secPolicy:{...(cur._secPolicy||{}),[sid]:val}}; }); return next; }); say("Settings pages updated for all logins."); };
   const supplies=pf.supplies||{};
   const TABS=[["profile","Profile"],["logins","Logins ("+lg.length+")"],["rates","Rates"],["carriers","Carriers"],["services","Services"],["fedex","FedEx tier"],["shipments","Shipments"],["features","Features"],["notes","Notes"]];   /* write-only tabs (Address/Label prefs/Supplies/Credentials) removed — nothing read them (audit-admin-portal §2) */
@@ -3967,7 +3970,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         </div>
         <div className="pt-2">
           <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Settings pages — what their Settings tab shows</div>
-          <p className="text-[11px] text-stone-500 mb-2">Per page: <b>On</b> = normal · <b>View only</b> = they can open it but everything is greyed out and un-editable · <b>Hidden</b> = gone from their Settings sidebar. Applies to every login under {c.name}.</p>
+          <p className="text-[11px] text-stone-500 mb-2">Per page: <b>On</b> = normal · <b>View only</b> = they can open it but everything is greyed out and un-editable · <b>Hidden</b> = gone from their Settings sidebar. Applies to every login under {c.name}. Subscription starts Hidden for everyone — switch it On here when a customer should see it.</p>
           <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">{SETTINGS_SEC_LIST.map(([sid,sl])=>{const st=secPolicyState(sid);return (
             <div key={sid} className="flex items-center gap-3 px-3 py-1.5 text-sm">
               <div className="flex-1 font-medium text-stone-700">{sl}{st==="mixed"&&<span className="text-[10px] text-amber-600 ml-2">mixed</span>}</div>
@@ -5851,7 +5854,7 @@ function Landing({onAuth}){
     <div id="features" className="max-w-6xl mx-auto px-5 pb-16 scroll-mt-6">
       <div className="text-center mb-10"><h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-2xl sm:text-3xl font-bold text-stone-900">A shipping platform built around how you actually ship</h2></div>
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <F icon={DollarSign} title="Industry-leading FedEx rates">The pricing big shippers get, from day one. No volume commitments, no negotiating.</F>
+        <F icon={DollarSign} title="Get your own FedEx account">Get the pricing that the big shippers get.</F>
         <F icon={BarChart3} title="Transit dashboard & detailed reporting">Track every shipment end to end and see spend, transit times, and delivery performance at a glance — with reports you can act on.</F>
         <F icon={Zap} title="Autopilot mode">Set your rules once, then let the platform do all the work. Orders arrive rated, boxed, and ready to print — you just hit go.</F>
         <F icon={Cog} title="Customization">We adapt to your flow, not the other way around. Need something the platform doesn’t do? Tell us. We’ll build it.</F>
@@ -5865,7 +5868,7 @@ function Landing({onAuth}){
         <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/10 blur-2xl"/>
         <div className="absolute -bottom-20 -left-10 w-64 h-64 rounded-full bg-white/10 blur-2xl"/>
         <div className="relative">
-          <h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-3xl sm:text-4xl font-bold text-white leading-tight">Save 10–15% switching to our FedEx rates.</h2>
+          <h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-3xl sm:text-4xl font-bold text-white leading-tight">Save 10–15% by switching to FedEx.</h2>
           <p className="mt-4 text-white/85 max-w-2xl mx-auto text-[15px] leading-relaxed">Send us a recent carrier invoice and get a line-by-line comparison back — the same day. No jargon, no pressure.</p>
           <div className="mt-7 flex flex-wrap gap-3 justify-center">
             <button onClick={()=>onAuth("fedex")} className="bg-white text-[#0064B0] font-semibold rounded-lg px-7 py-3.5 text-[15px] hover:bg-stone-100 transition-colors">Get your own FedEx account</button>
@@ -5891,14 +5894,14 @@ function Landing({onAuth}){
       <div className="rounded-2xl p-8 sm:p-12 border border-[#0086E0]/25 bg-gradient-to-br from-[#0086E0]/10 via-white/40 to-transparent">
         <div className="flex items-center gap-2 text-[#0086E0] font-semibold text-sm"><Sparkles className="w-4 h-4"/>Built-in assistant · {AI_NAME}</div>
         <h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="mt-3 text-3xl sm:text-4xl font-bold text-stone-900 leading-tight max-w-3xl">Let {AI_NAME} do the shipping busywork for you.</h2>
-        <p className="mt-4 text-stone-600 max-w-2xl text-[15px] leading-relaxed">{BRAND.product} has {AI_NAME} built right in — not a canned help bot, but an assistant that actually works your account. Ask in plain English and it sets things up for you to approve.</p>
+        <p className="mt-4 text-stone-600 max-w-2xl text-[15px] leading-relaxed">{BRAND.product} has {AI_NAME} built right in — not a canned help bot, but an assistant that actually works your account. Ask in your own words and it sets things up for you to approve.</p>
         <div className="mt-8 grid sm:grid-cols-3 gap-4 max-w-4xl">
           <div className="bg-white border border-stone-200/80 rounded-xl p-5">
-            <div className="flex items-center gap-2 text-stone-900 font-semibold"><Layers className="w-4 h-4 text-[#0086E0]"/>Batch by voice</div>
+            <div className="flex items-center gap-2 text-stone-900 font-semibold"><Layers className="w-4 h-4 text-[#0086E0]"/>Batch in one sentence</div>
             <p className="mt-2 text-[13px] text-stone-500 leading-relaxed">“Batch every Shopify order under 5 lb to Texas as cheapest ground.” {AI_NAME} filters, selects, and stages the whole run.</p>
           </div>
           <div className="bg-white border border-stone-200/80 rounded-xl p-5">
-            <div className="flex items-center gap-2 text-stone-900 font-semibold"><Zap className="w-4 h-4 text-[#0086E0]"/>Rules in plain English</div>
+            <div className="flex items-center gap-2 text-stone-900 font-semibold"><Zap className="w-4 h-4 text-[#0086E0]"/>Rules in simple terms</div>
             <p className="mt-2 text-[13px] text-stone-500 leading-relaxed">“Orders over $500 ship Priority Overnight.” It writes the automation rule into Autopilot and can run it on the spot.</p>
           </div>
           <div className="bg-white border border-stone-200/80 rounded-xl p-5">
@@ -5914,7 +5917,7 @@ function Landing({onAuth}){
     {/* partner, not just a platform */}
     <div className="max-w-6xl mx-auto px-5 pb-16 pt-8">
       <div className="bg-gradient-to-br from-[#0086E0]/15 to-transparent border border-[#0086E0]/25 rounded-2xl p-8 sm:p-10 text-center">
-        <h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-2xl sm:text-3xl font-bold text-stone-900 leading-snug">Real people answer the phone.</h2>
+        <h2 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-2xl sm:text-3xl font-bold text-stone-900 leading-snug">Run by real people, supported by AI.</h2>
         <p className="mt-3 text-stone-500 max-w-xl mx-auto">{AI_NAME} handles the busywork inside the app — but when you need a human, you get one. No week-old tickets, no runaround. One call covers your shipping and your tech, from someone who knows your account.</p>
         {PHONE_REAL&&<a href={"tel:"+CONTACT_PHONE_TEL} className="mt-6 inline-flex items-center gap-2 bg-white text-stone-900 font-semibold rounded-lg px-6 py-3 hover:bg-stone-200"><Phone className="w-4 h-4"/>{CONTACT_PHONE}</a>}
       </div>
@@ -10497,6 +10500,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
      whole page out read-only. Admins are never restricted. */
   const polFor=(id)=>{ if(isAdmin)return "on";
     if(currentUser&&currentUser.demo&&(id==="billing"||id==="subscription"))return "off";   // demo: no plans/pricing/card surfaces
+    if(id==="subscription"&&!(secPolicy&&secPolicy.subscription))return "off";   // hidden unless the admin portal explicitly turns it on for this customer
     if(id==="carriers"&&!byoCarrier)return "off";   // platform carrier plumbing is not the customer's to touch — only shown to accounts connecting their OWN carrier account
     return String((secPolicy&&secPolicy[id])||"on"); };
   const visibleSecs=secs.filter(([id])=>polFor(id)!=="off");

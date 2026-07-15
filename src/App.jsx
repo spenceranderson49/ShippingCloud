@@ -11664,6 +11664,7 @@ function RuleEditorModal({rule,onSave,onClose,onDelete,warehouses}){
       case "Set From Address": return (warehouses&&warehouses.length)
         ? <select value={a.fromAddress||""} onChange={e=>setAct(i,{fromAddress:e.target.value})} className={inC+" flex-1 min-w-0"}><option value="">— pick warehouse —</option>{warehouses.map(w=><option key={w.name} value={w.name}>{w.name}</option>)}</select>
         : <input value={a.fromAddress||""} onChange={e=>setAct(i,{fromAddress:e.target.value})} placeholder="Ship-From Label / Address" className={inC+" flex-1 min-w-0"}/>;
+      case "Route to Printer": return <input value={a.value||""} onChange={e=>setAct(i,{value:e.target.value})} placeholder="Printer Name (Exactly As It Appears In Print Settings)" className={inC+" flex-1 min-w-0"}/>;
       default: return <div className="flex-1 text-[13px] text-stone-400 italic">no options</div>;
     }
   };
@@ -11703,7 +11704,7 @@ function RuleEditorModal({rule,onSave,onClose,onDelete,warehouses}){
             <div className="space-y-2">
               {(r.actions||[]).map((a,i)=>(
                 <div key={a.id} className="flex items-center gap-2">
-                  <select value={a.type} onChange={e=>setAct(i,{type:e.target.value,service:undefined,pkg:undefined,tag:undefined,amount:undefined,hold:undefined,weight:undefined,fromAddress:undefined,sig:undefined})} className={inC+" w-44 shrink-0"}>{RULE_ACTION_TYPES.map(t=><option key={t}>{t}</option>)}</select>
+                  <select value={a.type} onChange={e=>setAct(i,{type:e.target.value,service:undefined,pkg:undefined,tag:undefined,amount:undefined,hold:undefined,weight:undefined,fromAddress:undefined,sig:undefined,value:undefined})} className={inC+" w-44 shrink-0"}>{RULE_ACTION_TYPES.map(t=><option key={t}>{t}</option>)}</select>
                   {actFields(a,i)}
                   <button onClick={()=>delAct(i)} className="text-stone-300 hover:text-rose-500 shrink-0"><Trash2 className="w-4 h-4"/></button>
                 </div>
@@ -11926,7 +11927,6 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
     setApPrintBusy(true);
     try{ await printImagePagesBatch(pdfs,settings); }finally{ setApPrintBusy(false); }
   };
-  const addStarters=()=>setRules(rs=>[...rs,...SEED_RULESET.map((r,i)=>({...JSON.parse(JSON.stringify(r)),id:"r"+Date.now()+i}))]);
   const newRule=()=>setEditing({_isNew:true,id:"r"+Date.now(),name:"",enabled:true,stop:false,match:"all",conditions:[],actions:[{id:"a"+Date.now(),type:"Set Service",service:"ANY - Cheapest"}]});
   const saveRule=(r)=>{ const clean={id:r.id,name:r.name,enabled:r.enabled,stop:r.stop,match:r.match||"all",conditions:r.conditions,actions:r.actions};
     setRules(rs=>{ const i=rs.findIndex(x=>x.id===r.id); if(i>=0){const c=[...rs];c[i]=clean;return c;} return [...rs,clean]; });
@@ -12027,8 +12027,9 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
           <div className="text-stone-800 font-medium">No rules yet</div>
           <div className="text-sm text-stone-500 mt-1">Rules are simple "if this, do that" sentences — Autopilot runs them on every order.</div>
           <div className="mt-3 flex items-center justify-center gap-3">
-            <button onClick={addStarters} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE]">Add Starter Rules</button>
-            <button onClick={newRule} className="text-sm text-[#006FBF] font-medium">＋ Build your own</button>
+            {/* "Add Starter Rules" removed — SEED_RULESET is intentionally empty (real accounts
+                start with zero Autopilot rules), so the button silently added nothing. */}
+            <button onClick={newRule} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE]">＋ Build Your First Rule</button>
           </div>
         </div>}
         {rules.map((r,i)=>{

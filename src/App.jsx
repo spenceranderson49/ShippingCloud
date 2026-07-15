@@ -3664,7 +3664,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
   const secPolicyState=(sid)=>{ if(!lg.length)return secPolicyDefault(sid); const vals=lg.map(u=>String(((featureFlags[u.id]||{})._secPolicy||{})[sid]||secPolicyDefault(sid))); return vals.every(v=>v===vals[0])?vals[0]:"mixed"; };
   const setCompanySecPolicy=(sid,val)=>{ setFeatureFlags&&setFeatureFlags(ff=>{ const next={...ff}; lg.forEach(u=>{ const cur=next[u.id]||{}; next[u.id]={...cur,_secPolicy:{...(cur._secPolicy||{}),[sid]:val}}; }); return next; }); say("Settings pages updated for all logins."); };
   const supplies=pf.supplies||{};
-  const TABS=[["profile","Profile"],["logins","Logins ("+lg.length+")"],["rates","Rates"],["carriers","Carriers"],["services","Services"],["fedex","FedEx tier"],["shipments","Shipments"],["features","Features"],["notes","Notes"]];   /* write-only tabs (Address/Label prefs/Supplies/Credentials) removed — nothing read them (audit-admin-portal §2) */
+  const TABS=[["profile","Profile"],["logins","Logins ("+lg.length+")"],["rates","Rates"],["carriers","Carriers"],["services","Services"],["fedex","FedEx Account"],["shipments","Shipments"],["features","Features"],["notes","Notes"]];   /* write-only tabs (Address/Label prefs/Supplies/Credentials) removed — nothing read them (audit-admin-portal §2) */
   const svcQuick=RATE_SERVICES.fedex.filter(s=>!s.or);
   return (<div className="space-y-4">
     <div className="flex flex-wrap items-center gap-3">

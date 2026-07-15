@@ -71,7 +71,7 @@ const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK
    ever deploys to every login by accident. */
 /* Customer Settings sections (id,label) — mirrored by the `secs` array inside Settings.
    The admin portal uses this list for the per-customer hide/lock controls (featureFlags._secPolicy). */
-const SETTINGS_SEC_LIST=[["general","General"],["customize","Customizations"],["reports","Reports"],["shipscreen","Ship Screen"],["orderspage","Orders"],["carriers","Carrier Accounts"],["warehouses","Warehouses"],["boxes","Package Sizes"],["boxlogic","Box Logic"],["catalog","Product Catalog"],["reference","Reference Fields"],["printer","Print Settings"],["cieditor","Commercial Invoice"],["otherdocs","Other Documents"],["manifests","Manifests"],["integrations","Integrations"],["notifications","Email Automation"],["checkout","Checkout Rates"],["billing","Billing"],["subscription","Subscription"]];
+const SETTINGS_SEC_LIST=[["general","General"],["customize","Customizations"],["reports","Reports"],["shipscreen","Ship Screen"],["orderspage","Orders"],["carriers","FedEx Account"],["warehouses","Warehouses"],["boxes","Package Sizes"],["boxlogic","Box Logic"],["catalog","Product Catalog"],["reference","Reference Fields"],["printer","Print Settings"],["cieditor","Commercial Invoice"],["otherdocs","Other Documents"],["manifests","Manifests"],["integrations","Integrations"],["notifications","Email Automation"],["checkout","Checkout Rates"],["billing","Billing"],["subscription","Subscription"]];
 const FEATURE_CATALOG=[
   {id:"orders",label:"Orders",desc:"Order import & fulfillment",default:true},
   {id:"shipments",label:"Shipments",desc:"Shipment history & tracking",default:true},
@@ -87,7 +87,7 @@ const FEATURE_CATALOG=[
   {id:"scan",label:"Scan",desc:"Barcode scan station",default:true},
   {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:true},
   {id:"seeCosts",label:"See costs & spend",desc:"Rates, order totals, batch totals and Reports dollars. Turn OFF to hide all money from this customer's logins",default:true},
-  {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own carrier accounts on the Connections page (England always shows; admins always have this)",default:false},
+  {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own NON-FedEx carrier accounts (the FedEx Account settings page always shows for every customer; admins always have this)",default:false},
 ];
 const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All Logins"],["rates","Rates & Dim Divisors"],["labelcert","FedEx Labels"],["customizations","Features & Access"],["branding","Branding"],["apiadmin","API"],["billing","Billing & Invoices"],["domains","Domains"],["backups","Backups & Restore"]];
 const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,labelcert:Printer,customizations:Sliders,branding:Sparkles,apiadmin:Plug,billing:Receipt,domains:ExternalLink,backups:RotateCcw};
@@ -108,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v561";
+const BUILD_TAG="addr-v562";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10504,7 +10504,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
      policy/fallback logic unchanged. */
   const SEC_GROUPS=[
     ["Workspace",[["general","General",Cog],["customize","Customizations",Sliders]]],
-    ["Shipping",[["shipscreen","Ship Screen",Truck],["orderspage","Orders",ShoppingBag],["carriers",BRAND.fw?"FedEx Account":"Carrier Accounts",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package Sizes",Package],["boxlogic","Box Logic",Layers],["catalog","Product Catalog",Boxes],["reference","Reference Fields",Receipt]]],
+    ["Shipping",[["shipscreen","Ship Screen",Truck],["orderspage","Orders",ShoppingBag],["carriers","FedEx Account",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package Sizes",Package],["boxlogic","Box Logic",Layers],["catalog","Product Catalog",Boxes],["reference","Reference Fields",Receipt]]],
     ["Documents & Printing",[["printer","Print Settings",Printer],["cieditor","Commercial Invoice",Receipt],["otherdocs","Other Documents",FileText],["manifests","Manifests",FileText]]],
     ["Automation & Integrations",[["integrations","Integrations",Layers],["notifications","Email Automation",Mail],["checkout","Checkout Rates",ShoppingBag]]],
     ["Account",[["reports","Reports",TrendingUp],["billing","Billing",CreditCard],["subscription","Subscription",Star]]],
@@ -10516,7 +10516,11 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
   const polFor=(id)=>{ if(isAdmin)return "on";
     if(currentUser&&currentUser.demo&&(id==="billing"||id==="subscription"))return "off";   // demo: no plans/pricing/card surfaces
     if(id==="subscription"&&!(secPolicy&&secPolicy.subscription))return "off";   // hidden unless the admin portal explicitly turns it on for this customer
-    if(id==="carriers"&&!byoCarrier)return "off";   // platform carrier plumbing is not the customer's to touch — only shown to accounts connecting their OWN carrier account
+    /* The FedEx Account page shows for EVERY customer (Spencer 2026-07-15: "I want FedEx in
+       there always") — the panel itself renders only the FedEx pieces for non-admins; the
+       England/platform plumbing stays admin-only inside it. The byoCarrier feature flag now
+       gates only OTHER own-carrier connections, not this page. Admins can still hide it for
+       a specific customer via the per-customer section policy below. */
     return String((secPolicy&&secPolicy[id])||"on"); };
   const visibleSecs=secs.filter(([id])=>polFor(id)!=="off");
   const secLocked=polFor(sec)==="locked";

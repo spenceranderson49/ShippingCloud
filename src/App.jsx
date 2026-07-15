@@ -10911,7 +10911,7 @@ function LabelStockPreview({size,zones,showLabels,tabStock}){
       <div className="absolute left-0 right-0 overflow-hidden" style={{top:geo.labelY+"px",height:regionPx+"px"}}>
         <div className="absolute inset-0 p-2 flex flex-col" style={{fontSize:"7px",lineHeight:1.35}}>
           <div className="flex justify-between text-stone-500"><span>ORIGIN ID:JDYA</span><span>SHIP DATE: 08JUL26</span></div>
-          <div className="text-stone-700 font-semibold mt-0.5">LAGENCE · BELL, CA 90201</div>
+          <div className="text-stone-700 font-semibold mt-0.5">YOUR COMPANY · SALT LAKE CITY, UT 84101</div>
           <div className="mt-1.5 border-t border-stone-300 pt-1.5"><span className="text-stone-400">TO </span><span className="font-bold text-stone-900" style={{fontSize:"11px"}}>JANE DOE</span></div>
           <div className="font-bold text-stone-900" style={{fontSize:"10px"}}>123 MAIN ST</div>
           <div className="font-bold text-stone-900" style={{fontSize:"11px"}}>AUSTIN TX 78701</div>

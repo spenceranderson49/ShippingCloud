@@ -7,7 +7,7 @@
      2) CUSTOMER SETUP QA — flags customers missing a login, or with no rates/markup set.
      2b) DRIFT / FACTORY-RULE SCAN — flags any real customer login still carrying the built-in
         demo Autopilot rules (names use a "→" arrow). Left behind by a migration, these can
-        silently reroute real shipments — this is the alarm for the LAgence-style drift.
+        silently reroute real shipments — this is the alarm for that silent-drift failure mode.
      3) OFF-SITE BACKUP — writes a full JSON snapshot of everything, keeps the last ~14 in the
         database, EMAILS it as ONE message to a single recipient (attachment) — from PRODUCTION
         only, so you never get duplicate nightly emails — and UPLOADS it to Google Drive if

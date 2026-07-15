@@ -7648,9 +7648,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   return (
     <div className="relative flex flex-row gap-4 items-start pt-2.5">
       {!custom.hideShipOrders&&(ordersOpen?(
-      /* open rail gets the same #cbd5e1 divider as the nav so it reads as its own panel;
-         the collapsed tab (below) stays line-free */
-      <aside className="w-60 shrink-0 space-y-2 border-r border-[#cbd5e1] pr-4 self-stretch">
+      /* open rail gets the same #cbd5e1 divider as the nav so it reads as its own panel; the line
+         is an absolute rule extended through the page padding so it runs header-to-bottom, and
+         pr matches the page's left padding so the cards sit centered between the two lines.
+         The collapsed tab (below) stays line-free. */
+      <aside className="relative w-60 shrink-0 space-y-2 pr-3 sm:pr-6 self-stretch">
         <div className="flex items-center gap-1.5">
           <button onClick={()=>setOrdersOpen(false)} className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-stone-500 hover:text-stone-700"><ChevronDown className="w-4 h-4 shrink-0"/><ShoppingBag className="w-4 h-4 shrink-0"/><span className="whitespace-nowrap">Orders{ordersToShow.length?<span className="text-stone-400 normal-case font-normal"> · {ordersToShow.length}</span>:""}</span></button>
           {onRefresh&&shopifyConnected(settings)&&<button onClick={onRefresh} disabled={syncing} title="Refresh orders" className="text-stone-400 hover:text-[#0086E0] disabled:opacity-40 p-1 shrink-0">{syncing?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<RotateCcw className="w-3.5 h-3.5"/>}</button>}
@@ -7680,6 +7682,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           </button>
         ))}
         </div>
+        <span aria-hidden="true" className="absolute right-0 w-px bg-[#cbd5e1] -top-[26px] sm:-top-[34px] -bottom-4 sm:-bottom-6 !mt-0"/>
       </aside>
       ):(
         <button onClick={()=>setOrdersOpen(true)} title="Show orders" className="shrink-0 self-start flex flex-col items-center gap-1 text-stone-500 hover:text-stone-700 hover:border-stone-300 border border-stone-200 bg-white rounded-lg px-1.5 py-2 w-9"><ChevronRight className="w-4 h-4"/><ShoppingBag className="w-4 h-4"/>{ordersToShow.length?<span className="text-[10px] font-bold text-[#0086E0] leading-none">{ordersToShow.length}</span>:null}</button>

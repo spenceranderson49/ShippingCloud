@@ -3163,7 +3163,7 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
 
     <Panel title="Partner / “powered by” logo">
       <div className="flex items-center gap-2 mb-1"><Toggle on={b.showLogo} set={v=>set("showLogo",v)} label={b.showLogo?"Showing partner logo in the app":"Partner logo hidden in the app"}/></div>
-      <div className="flex items-center gap-2 mb-1"><Toggle on={!!(publicBrand&&publicBrand.showLogo)} set={v=>setPublicBrand&&setPublicBrand({showLogo:v})} label={(publicBrand&&publicBrand.showLogo)?"Showing on the public welcome page":"Hidden on the public welcome page"}/></div>
+      <div className="flex items-center gap-2 mb-1"><Toggle on={!!(publicBrand&&publicBrand.showLogo)} set={v=>setPublicBrand&&setPublicBrand(p=>({...(p||{}),showLogo:v}))} label={(publicBrand&&publicBrand.showLogo)?"Showing on the public welcome page":"Hidden on the public welcome page"}/></div>
       <p className="text-[11px] text-stone-400 mb-2">Top toggle: the shipping portal and sign-in screen. Bottom toggle: shippingcloud.net before anyone signs in — takes effect within a minute of saving.</p>
       {b.showLogo&&<>
         <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
@@ -4042,7 +4042,7 @@ function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureF
       status:(a,b)=>String(a.status||"active").localeCompare(String(b.status||"active"))}[sort];
     return [...cs].sort(cmp||(()=>0));
   },[clients,users,q,sort,rules]);
-  const createCustomer=()=>{if(!nf.name)return;const id="c"+Date.now();setClients(p=>[...p,{id,name:nf.name,contact:nf.contact,email:nf.email,phone:nf.phone,origin:nf.origin,markup:+nf.markup||0,status:"active",since:new Date().toISOString().slice(0,7),plan:"Standard",blockedServices:[...DEFAULT_BLOCKED_SERVICES]}]);setNf({name:"",contact:"",email:"",phone:"",origin:"",markup:15});setAdding(false);onOpenCustomer&&onOpenCustomer(id);};
+  const createCustomer=()=>{if(!nf.name)return;const id="c"+Date.now();setClients(p=>[...p,{id,name:nf.name,contact:nf.contact,email:nf.email,phone:nf.phone,origin:nf.origin,markup:+nf.markup||0,status:"active",since:new Date().toISOString().slice(0,7),plan:"Standard",blockedServices:[...DEFAULT_BLOCKED_SERVICES],createdAt:new Date().toISOString()}]);setNf({name:"",contact:"",email:"",phone:"",origin:"",markup:15});setAdding(false);onOpenCustomer&&onOpenCustomer(id);};
   const moveLogin=(uid,cid)=>setUsers(us=>us.map(x=>x.id===uid?{...x,clientId:cid||null}:x));
   return (<div className="space-y-3">
     <div className="flex flex-wrap items-end gap-3">
@@ -5116,7 +5116,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
   };
   const [f,setF]=useState({name:"",email:"",role:"customer",clientId:clients[0]?clients[0].id:"",password:"",full:true,perms:ADMIN_SECTIONS.map(x=>x[0])});
   const [added,setAdded]=useState(false);
-  const create=()=>{if(!f.name||!f.email||!f.password)return;const adminPerms=(f.role==="admin"&&!f.full)?{sections:f.perms}:null;setUsers(p=>[...p,{id:"u"+Date.now(),name:f.name,email:f.email,role:f.role,clientId:f.role==="customer"?f.clientId:null,adminPerms,status:"active",password:f.password,lastLogin:"—"}]);setF({name:"",email:"",role:"customer",clientId:clients[0]?clients[0].id:"",password:"",full:true,perms:ADMIN_SECTIONS.map(x=>x[0])});setAdded(true);setTimeout(()=>setAdded(false),1600);};
+  const create=()=>{if(!f.name||!f.email||!f.password)return;const adminPerms=(f.role==="admin"&&!f.full)?{sections:f.perms}:null;setUsers(p=>[...p,{id:"u"+Date.now(),name:f.name,email:f.email,role:f.role,clientId:f.role==="customer"?f.clientId:null,adminPerms,status:"active",password:f.password,lastLogin:"—",createdAt:new Date().toISOString()}]);setF({name:"",email:"",role:"customer",clientId:clients[0]?clients[0].id:"",password:"",full:true,perms:ADMIN_SECTIONS.map(x=>x[0])});setAdded(true);setTimeout(()=>setAdded(false),1600);};
   const toggle=(id)=>setUsers(us=>us.map(u=>u.id===id?{...u,status:u.status==="active"?"inactive":"active"}:u));
   const del=(id)=>setUsers(us=>us.filter(u=>u.id!==id));
   return (<div className="space-y-3">
@@ -5212,7 +5212,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
               u.role!=="admin"&&{label:"Company Admin",title:u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins",active:!!u.companyAdmin,onClick:()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))},
               u.role!=="admin"&&{label:"Tabs & logo…",title:"Features for this login",active:featOpen===u.id,onClick:()=>setFeatOpen(featOpen===u.id?null:u.id)},
               CLOUD.mode==="cloud"&&(u.role!=="admin"||fullAdmin)&&{label:"Set password…",title:"Reset password",onClick:async()=>{const np=await uiPrompt("New password for "+u.email+" (min 4 characters):","",{title:"Reset password"});if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});uiAlert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}},
-              CLOUD.mode==="cloud"&&u.role!=="admin"&&{label:"Send reset email",title:"Email them a choose-a-new-password link (valid 1 hour)",onClick:async()=>{const r=await cloudCall({action:"requestReset",email:u.email,token:CLOUD.token});uiAlert(r&&r.configured===false?"Email sending isn't set up on this site yet (RESEND_API_KEY).":"Password reset link sent to "+u.email+" (valid 1 hour).");}},
+              CLOUD.mode==="cloud"&&u.role!=="admin"&&{label:"Send reset email",title:"Email them a choose-a-new-password link (valid 1 hour)",onClick:async()=>{const r=await cloudCall({action:"requestReset",email:u.email,token:CLOUD.token});uiAlert(r&&r.configured===false?"Email sending isn't set up on this site yet (RESEND_API_KEY).":(r&&r.found===false)?"That login isn't in the cloud yet (or is disabled) — no email was sent.":"Password reset link sent to "+u.email+" (valid 1 hour).");}},
               CLOUD.mode==="cloud"&&u.totp&&u.totp.enabled&&{label:"Reset 2FA",title:"Lost-phone recovery: turn off this user's 2FA",onClick:async()=>{if(!await uiConfirm("Turn OFF two-factor for "+u.email+"? Use this only if they lost their authenticator — they'll sign in with just their password afterward."))return;const r=await cloudCall({action:"clearTotp",token:CLOUD.token,email:u.email});uiAlert(r&&r.ok?"2FA turned off for "+u.email+".":((r&&r.error)||"Could not reset 2FA."));}},
               u.id!==currentUser.id&&!isBuiltInAdmin(u.email)&&(u.role!=="admin"||(fullAdmin&&u.id!=="u1"))&&{label:"Delete login…",danger:true,onClick:async()=>{if(await uiConfirm("Delete "+(u.name||u.email)+"'s login? They won't be able to sign in anymore. Their customer account and its data are not touched."))del(u.id);}},
             ]}/>
@@ -5353,7 +5353,7 @@ function makeDemoData(){
 
   // returns — FedEx only
   const returns=[
-    {id:8101,rma:"RMA-4821",customer:"Mia Thompson",order:"#1146",reason:"Wrong size",carrier:"FedEx",tracking:newTracking("FedEx"),status:"In transit",date:demoDaysAgo(2)},
+    {id:8101,rma:"RMA-4821",customer:"Mia Thompson",order:"#1146",reason:"Wrong Size",carrier:"FedEx",tracking:newTracking("FedEx"),status:"In transit",date:demoDaysAgo(2)},
     {id:8102,rma:"RMA-4809",customer:"Liam Chen",order:"#1143",reason:"Changed mind",carrier:"FedEx",tracking:newTracking("FedEx"),status:"Label created",date:demoDaysAgo(4)},
     {id:8103,rma:"RMA-4790",customer:"Olivia Reed",order:"#1138",reason:"Damaged in transit",carrier:"FedEx",tracking:newTracking("FedEx"),status:"Received",date:demoDaysAgo(9)},
     {id:8104,rma:"RMA-4771",customer:"Harper Nguyen",order:"#1131",reason:"Ordered twice",carrier:"FedEx",tracking:newTracking("FedEx"),status:"Received",date:demoDaysAgo(15)}
@@ -6126,7 +6126,7 @@ function CompanyAddressDeploy({companyUsers,companyFlags,setCompanyFlags,adminSe
   const [picked,setPicked]=useState({});
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState(null);
-  const users=(companyUsers||[]).filter(u=>u.status!=="deactivated");
+  const users=(companyUsers||[]).filter(u=>u.status!=="disabled"&&u.status!=="deactivated");   /* server writes "disabled" */
   const targets=mode==="all"?users:users.filter(u=>picked[u.id]);
   const book=(adminSettings&&adminSettings.addresses)||[];
   const deploy=async(clear)=>{
@@ -6217,7 +6217,7 @@ function AssistantChat({who,getContext,onAction}){
       </div>
       <div className="border-t border-stone-200 p-2 flex items-end gap-2">
         <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}} rows={1} placeholder="Ask About the Platform…" className="flex-1 resize-none text-sm border border-stone-300 rounded-lg px-3 py-2 focus:outline-none focus:border-[#0099FF] max-h-24"/>
-        <button onClick={send} disabled={busy||!input.trim()} className="bg-[#0086E0] hover:bg-[#0072BE] disabled:opacity-40 text-white rounded-lg p-2.5"><Send className="w-4 h-4"/></button>
+        <button onClick={()=>send()} disabled={busy||!input.trim()} className="bg-[#0086E0] hover:bg-[#0072BE] disabled:opacity-40 text-white rounded-lg p-2.5"><Send className="w-4 h-4"/></button>
       </div>
       <div className="text-center text-[10px] text-stone-500 pb-1.5 -mt-0.5">Powered by {AI_NAME}</div>
     </div>}
@@ -6805,9 +6805,10 @@ function AppInner(){
   },[isAdmin,isCompanyAdmin,currentUser,myFlags,custom.hiddenTabs,custom.tabOrder]);
   const unfulfilled=orders.filter(o=>o.status==="unfulfilled").length;
 
-  if(!currentUser) return <Login users={users} brand={{...DEFAULT_BRAND,...(settings.brand||{})}} onLogin={(u)=>{ const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }}/>;
-  if(BRAND.admin&&currentUser.role!=="admin"&&!lsGet("adminReturn",null)) return (<div className="min-h-screen bg-stone-100 flex items-center justify-center p-4"><div className="bg-white border border-stone-200 rounded-xl p-8 text-center max-w-sm"><ShieldCheck className="w-8 h-8 text-stone-300 mx-auto mb-3"/><div className="font-semibold text-stone-800">Administrators only</div><p className="text-sm text-stone-500 mt-1">This portal is the admin HQ. Your account works on shippingcloud.net and freightwireship.com.</p><button onClick={()=>{lsDel("session");window.location.reload();}} className="mt-4 text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium">Sign Out</button></div></div>);
-
+  /* ALL hooks run before any early return — a hook below a conditional return crashes React
+     ("Rendered fewer hooks than expected") the moment currentUser flips across renders, which
+     really happens: signing out in ANOTHER tab clears the shared "session" key and the storage
+     listener re-renders this tab with currentUser=null. */
   const [fedexPrompt,setFedexPrompt]=usePersist("fedexPrompt",{seen:false});
   // The "Get your own FedEx account" welcome popup is for BRAND-NEW signups only —
   // never nag an existing login with it. Accounts carry a createdAt at signup; a
@@ -6819,6 +6820,9 @@ function AppInner(){
   /* Sticky-bar offset for DraftBar & friends: the app header is sticky (h-14, +36px when the
      admin-preview/demo strip shows), so anything else sticky must pin below it, not at top-0. */
   useEffect(()=>{ try{ document.documentElement.style.setProperty("--sc-stickoff",(adminReturn||isDemo)?"92px":"56px"); }catch(e){} },[adminReturn,isDemo]);
+
+  if(!currentUser) return <Login users={users} brand={{...DEFAULT_BRAND,...(settings.brand||{})}} onLogin={(u)=>{ const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }}/>;
+  if(BRAND.admin&&currentUser.role!=="admin"&&!lsGet("adminReturn",null)) return (<div className="min-h-screen bg-stone-100 flex items-center justify-center p-4"><div className="bg-white border border-stone-200 rounded-xl p-8 text-center max-w-sm"><ShieldCheck className="w-8 h-8 text-stone-300 mx-auto mb-3"/><div className="font-semibold text-stone-800">Administrators only</div><p className="text-sm text-stone-500 mt-1">This portal is the admin HQ. Your account works on shippingcloud.net and freightwireship.com.</p><button onClick={()=>{lsDel("session");window.location.reload();}} className="mt-4 text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium">Sign Out</button></div></div>);
   /* shell */
   return (
     /* Background: "Ice, fainter" (B2) — a soft blue-leaning tint of the brand accent. */
@@ -6909,7 +6913,7 @@ function AppInner(){
         <main className="flex-1 min-w-0 overflow-x-clip px-3 sm:px-6 py-4 sm:py-6">
           <TabBoundary key={tab} name={tab}>
           {tab==="dashboard"&&<Dashboard shipments={shipments} orders={orders} returns={returns} goTab={setTab}/>}
-          {tab==="ship"&&<Ship client={client} priceAs={adminPriceAs} setPriceAs={setAdminPriceAs} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={ruleset} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders} currentUser={currentUser} setUsers={setUsers} setCurrentUser={setCurrentUser} clients={clients}/>}
+          {tab==="ship"&&<Ship client={client} priceAs={adminPriceAs} setPriceAs={setAdminPriceAs} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={ruleset} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders} currentUser={currentUser} setUsers={setUsers} setCurrentUser={setCurrentUser} clients={clients} labels={labelStore}/>}
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
           {tab==="orders"&&<Orders showMoney={showMoney} orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} setSettings={setSettings} onShipped={onShipped} openOrderId={pendingOpenOrderId} onOpenedOrder={()=>setPendingOpenOrderId(null)}/>}
           {tab==="batch"&&<Batch showMoney={showMoney} orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} setSettings={setSettings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
@@ -6972,7 +6976,7 @@ function StepHead({n,label}){
     <span className="flex-1 h-px bg-stone-200"/>
   </div>);
 }
-function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,drafts,setDrafts,prefill,clearPrefill,onShipped,onPending,logEmail,onQuickQuote,onRefresh,syncing,currentUser,setUsers,setCurrentUser,clients=[],priceAs="",setPriceAs=null}){
+function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,drafts,setDrafts,prefill,clearPrefill,onShipped,onPending,logEmail,onQuickQuote,onRefresh,syncing,currentUser,setUsers,setCurrentUser,clients=[],priceAs="",setPriceAs=null,labels={}}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 rate database — global, follows the customer's profile
   const empty={country:"United States",name:"",company:"",zip:"",state:"",city:"",address1:"",address2:"",address3:"",phone:"",email:""};
   const [sender,setSender]=useState({country:"United States",...settings.sender,address2:"",address3:""});
@@ -7192,7 +7196,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
 
   const [packNote,setPackNote]=useState(null);
   const applyOrder=(o)=>{if(justBookedRef.current!==o.id)justBookedRef.current=null;   // picking a DIFFERENT order re-arms the "already has a label" banner (it stayed suppressed all session after any booking)
-    setHfArmed(o.id);setSelectedOrder(o.id);setReference(o.name);setInvoiceNo("");setPoNo("");setDepartment("");setPieces(ps=>ps.map((p,j)=>j===0?{...p,orBox:undefined}:p));setReceiver({...empty,name:o.customer||"",company:o.company||"",zip:o.zip||"",state:o.state||"",city:o.city||"",address1:o.address1||"",phone:o.phone||"",email:o.email||""});
+    setHfArmed(o.id);setSelectedOrder(o.id);setReference(o.name);setInvoiceNo("");setPoNo("");setDepartment("");setPieces(ps=>ps.map((p,j)=>j===0?{...p,orBox:undefined}:p));setReceiver({...empty,name:o.customer||"",company:o.company||"",zip:o.zip||"",state:o.state||"",city:o.city||"",address1:o.address1||"",phone:o.phone||"",email:o.email||"",country:o.country||empty.country});
     /* RESET the per-shipment extras BEFORE the auto rules run — otherwise the previous order's
        declared value / signature silently carry into this order (and hands-free would book it
        with the wrong coverage, no click, no warning). */
@@ -7575,8 +7579,12 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     return {t:"info",m:"booking now…"};
   },[handsFree,custom.autoRulesOnShip,custom.hideShipOrders,selectedOrder,hfArmed,ready,rateSrc.live,rateSrc.loading,addrClassified,matched,quotes,bought,shipStatus,client,settings,liveRuleMatch,JSON.stringify(pieces)]);
 
-  const sendEmail=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Tracking for your ${settings.company||BRAND.product} shipment`,type:"Shipped",body:emailMsg});setSent("email");setTimeout(()=>setSent(""),1800);};
-  const sendLabel=()=>{const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Your shipping label from ${settings.company||BRAND.product}`,type:"Label",body:emailMsg});setSent("label");setTimeout(()=>setSent(""),1800);};
+  /* both notify buttons ship the ACTUAL tracking number (the email template renders it) and
+     stay disabled until a label is booked — they used to "send ✓" a tracking email with no
+     tracking in it, before anything was booked */
+  const _sentTracking=lastTracking||(shipStatus&&shipStatus.tracking)||"";
+  const sendEmail=()=>{if(!_sentTracking)return;const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Tracking for your ${settings.company||BRAND.product} shipment`,type:"Shipped",body:emailMsg,tracking:_sentTracking});setSent("email");setTimeout(()=>setSent(""),1800);};
+  const sendLabel=()=>{if(!_sentTracking)return;const to=emailTo||receiver.email||"customer@example.com";logEmail&&logEmail({to,subject:`Your shipping label from ${settings.company||BRAND.product}`,type:"Label",body:emailMsg,tracking:_sentTracking});setSent("label");setTimeout(()=>setSent(""),1800);};
   const saveMsgDefault=()=>{setSettings&&setSettings(s=>({...s,emailMessage:emailMsg}));setMsgSaved(true);setTimeout(()=>setMsgSaved(false),1600);};
 
   /* References that already have a (non-voided) label — used to keep already-processed orders
@@ -7768,7 +7776,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                mode it flashed behind the booked summary before the form cleared. The booked summary
                already offers reprint/details, so suppress this banner entirely post-booking. */
             if(justBookedRef.current!=null)return null;
-            return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex flex-wrap items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="flex-1 min-w-[180px]">Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}).</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:d.tracking}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><FileText className="w-3 h-3"/>See Details</button><button onClick={()=>setLabelPreview({rec:d,tracking:d.tracking,service:d.service,carrier:d.carrier,pdf:d.labelPdf||d.pdf||null,fromExisting:true})} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><Printer className="w-3 h-3"/>Reprint</button><button onClick={newShipment} className="shrink-0 text-[11px] font-semibold text-white bg-[#0086E0] hover:bg-[#006db8] border border-[#0086E0] rounded-lg px-2.5 py-1 flex items-center gap-1"><Plus className="w-3 h-3"/>New Shipment</button></div>:null;})()}
+            return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex flex-wrap items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="flex-1 min-w-[180px]">Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}).</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:d.tracking}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><FileText className="w-3 h-3"/>See Details</button><button onClick={()=>setLabelPreview({rec:d,tracking:d.tracking,service:d.service,carrier:d.carrier,pdf:(labels[d.id]&&labels[d.id].pdf)||d.labelPdf||d.pdf||null,fromExisting:true})} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><Printer className="w-3 h-3"/>Reprint</button><button onClick={newShipment} className="shrink-0 text-[11px] font-semibold text-white bg-[#0086E0] hover:bg-[#006db8] border border-[#0086E0] rounded-lg px-2.5 py-1 flex items-center gap-1"><Plus className="w-3 h-3"/>New Shipment</button></div>:null;})()}
           {pieces.map((p,i)=>(
             <div key={i} className="flex flex-wrap items-end gap-2 bg-white border border-stone-200 rounded-lg px-2 py-2">
               <div className="text-[11px] text-stone-400 w-6">#{i+1}</div>
@@ -7902,8 +7910,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 <input value={emailTo} onChange={e=>setEmailTo(e.target.value)} placeholder={receiver.email||"customer@example.com"} className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
               </div>
               <div className="flex flex-col gap-1.5">
-                <button onClick={sendLabel} className={`w-full flex items-center justify-center gap-1.5 text-sm rounded px-3 py-2 font-medium ${sent==="label"?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{sent==="label"?<><Check className="w-4 h-4"/>Label Sent</>:<><Printer className="w-4 h-4"/>Send Shipping Label</>}</button>
-                <button onClick={sendEmail} className={`w-full flex items-center justify-center gap-1.5 text-sm rounded px-3 py-2 font-medium ${sent==="email"?"bg-emerald-600 text-white":"bg-stone-200 text-stone-700 hover:bg-stone-300"}`}>{sent==="email"?<><Check className="w-4 h-4"/>Email Sent</>:<><Mail className="w-4 h-4"/>Send Tracking Email</>}</button>
+                <button onClick={sendLabel} disabled={!_sentTracking} title={_sentTracking?"":"Book the label first — the email carries its tracking number"} className={`w-full flex items-center justify-center gap-1.5 text-sm rounded px-3 py-2 font-medium disabled:opacity-40 ${sent==="label"?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{sent==="label"?<><Check className="w-4 h-4"/>Label Sent</>:<><Printer className="w-4 h-4"/>Send Shipping Label</>}</button>
+                <button onClick={sendEmail} disabled={!_sentTracking} title={_sentTracking?"":"Book the label first — the email carries its tracking number"} className={`w-full flex items-center justify-center gap-1.5 text-sm rounded px-3 py-2 font-medium disabled:opacity-40 ${sent==="email"?"bg-emerald-600 text-white":"bg-stone-200 text-stone-700 hover:bg-stone-300"}`}>{sent==="email"?<><Check className="w-4 h-4"/>Email Sent</>:<><Mail className="w-4 h-4"/>Send Tracking Email</>}</button>
               </div>
               <div>
                 <div className="flex items-center justify-between mb-1">
@@ -7912,7 +7920,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 </div>
                 <textarea value={emailMsg} onChange={e=>{emailMsgTouched.current=true;setEmailMsg(e.target.value);}} rows={3} placeholder="Add a custom note to include in the email — or save a default that's always pre-filled here." className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 resize-y"/>
               </div>
-              <p className="text-[11px] text-stone-400">Emails the buyer a tracking link or a printable label PDF. Logged under Settings → Email automation.</p>
+              <p className="text-[11px] text-stone-400">Emails the buyer their tracking number once the label is booked. Logged under Settings → Email automation.</p>
             </div>}
             {/* form actions: an even 3-across grid so the column bottom lines up flush with the cards */}
             <div className="grid grid-cols-3 gap-2">
@@ -8536,7 +8544,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
     if(sort==="source")return (a.source||"").localeCompare(b.source||"");
     return String(b.id).localeCompare(String(a.id)); // date / newest
   }),[filtered,sort]);
-  const ship=(o)=>goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},weight:o.weight,reference:o.name,fromOrderId:o.id,refulfill:o.status==="fulfilled"});
+  const ship=(o)=>goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email,country:o.country||"United States"},weight:o.weight,reference:o.name,fromOrderId:o.id,refulfill:o.status==="fulfilled"});
   const [syncing,setSyncing]=useState(false);
   const [syncMsg,setSyncMsg]=useState(null);
   // Every connected platform that can supply orders (Shopify + token/OAuth connectors flagged orders:true)
@@ -8669,9 +8677,11 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
 }
 function NewOrderForm({onClose,onCreate}){
   const [f,setF]=useState({customer:"",company:"",address1:"",city:"",state:"",zip:"",phone:"",email:"",items:"",weight:1,total:"",source:"Manual"});
+  const [err,setErr]=useState("");
   const set=(k,v)=>setF({...f,[k]:v});
   const create=()=>{
-    if(!f.customer&&!f.zip)return;
+    if(!f.customer&&!f.zip){setErr("Enter at least a customer name or a ZIP to create the order.");return;}
+    setErr("");
     const n=Math.floor(1000+Math.random()*9000);
     onCreate({id:Date.now(),name:"#"+n,...f,weight:+f.weight||1,total:f.total||"0.00",status:"unfulfilled",date:new Date().toLocaleDateString(undefined,{month:"numeric",day:"numeric"})});
   };
@@ -8693,6 +8703,7 @@ function NewOrderForm({onClose,onCreate}){
         <Field label="Source"><Select value={f.source} onChange={e=>set("source",e.target.value)}>{["Manual","Shopify",...CONNECTORS.filter(c=>c.orders).map(c=>c.name)].map(s=><option key={s}>{s}</option>)}</Select></Field>
       </div>
       <button onClick={create} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8]">Create Order</button>
+      {err&&<div className="text-xs text-rose-500">{err}</div>}
     </div>
   );
 }
@@ -9488,7 +9499,7 @@ function Scan({orders,goShip,goTab}){
     if(!o){setErr(`No order found for “${code}”.`);setLog(l=>[{code,when:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"}),ok:false},...l].slice(0,12));setTimeout(()=>setErr(""),2500);return;}
     setErr("");
     setLog(l=>[{code,when:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"}),ok:true,order:o.name},...l].slice(0,12));
-    goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},weight:o.weight,reference:o.name,fromOrderId:o.id});
+    goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email,country:o.country||"United States"},weight:o.weight,reference:o.name,fromOrderId:o.id});
   };
   return (
     <div className="max-w-2xl space-y-4">
@@ -9803,7 +9814,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
   };
   const ratesById=useMemo(()=>{const m={};pool.forEach(o=>{m[o.id]=computeRate(o);});return m;},[orders,packs,settings,client,rateRules,svcOv,rule,specSvc,specCarrier]);
   const rateFor=(o)=>(o&&ratesById[o.id])||computeRate(o);
-  const zoneOf=(o)=>String(zoneEst(client.origin,o.zip));
+  const zoneOf=(o)=>String(zoneEst(originZip,o.zip));   /* originZip = sender.zip || client.origin — client.origin alone renders "ZNaN" when unset */
   const prodOf=(o)=>o.product||o.items||"—";
   const ageDays=(o)=>{const t=Date.parse(o.date||"");return isNaN(t)?null:Math.max(0,Math.floor((Date.now()-t)/86400000));};
   const dimOf=(o,d)=>d==="state"?(o.state||"—").toUpperCase():d==="zone"?"Z"+zoneOf(o):d==="source"?(o.source||"Manual"):d==="sku"?(o.sku||"—"):d==="service"?(o.shippingService||"—"):d==="carrier"?carrierOf(rateFor(o).label):prodOf(o);
@@ -10235,9 +10246,9 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
 /* ════════ RETURNS / RMA ════════ */
 function Returns({returns,setReturns,orders,settings,logEmail}){
   const [creating,setCreating]=useState(false);
-  const [f,setF]=useState({customer:"",order:"",reason:"Wrong size",carrier:"FedEx"});
+  const [f,setF]=useState({customer:"",order:"",reason:"Wrong Size",carrier:"FedEx"});
   const fulfilled=orders.filter(o=>o.status==="fulfilled");
-  const create=()=>{if(!f.customer)return;const tracking=newTracking(f.carrier);setReturns(r=>[{id:Date.now(),rma:"RMA-"+rnd(4),customer:f.customer,order:f.order,reason:f.reason,carrier:f.carrier,tracking,status:"Label created",date:new Date().toLocaleDateString()},...r]);if(settings?.notify?.returnLabel&&logEmail)logEmail({to:"customer@example.com",subject:`Your return label for ${f.order||"your order"} is ready`,type:"Return label"});setCreating(false);setF({customer:"",order:"",reason:"Wrong size",carrier:"FedEx"});};
+  const create=()=>{if(!f.customer)return;const tracking=newTracking(f.carrier);setReturns(r=>[{id:Date.now(),rma:"RMA-"+rnd(4),customer:f.customer,order:f.order,reason:f.reason,carrier:f.carrier,tracking,status:"Label created",date:new Date().toLocaleDateString()},...r]);if(settings?.notify?.returnLabel&&logEmail)logEmail({to:"customer@example.com",subject:`Your return label for ${f.order||"your order"} is ready`,type:"Return label"});setCreating(false);setF({customer:"",order:"",reason:"Wrong Size",carrier:"FedEx"});};
   const tone=s=>s==="Delivered"?"green":s==="In transit"?"amber":"blue";
   return (
     <div className="space-y-3">
@@ -10358,6 +10369,7 @@ function ReportTable({title,head,rows}){return (<div className="border border-st
 /* ════════ CHECKOUT RATES (Shopify) ════════ */
 const CHECKOUT_SERVICES=Object.keys(RATES).filter(k=>!RATES[k].intl&&RATES[k].carrier!=="DHL");
 function CheckoutRates({settings,setSettings,client,uid}){
+  const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // checkout buyer prices ride on the account's SELL price (same engine as Ship) — preview must match the live callback
   const [cs,setCs]=useState(null);
   const [cBusy,setCBusy]=useState("");
   const shopConn=(settings.conn||{}).shopify||{};
@@ -10385,7 +10397,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
   const pack=items.length?pickBox(items,boxes):null;
   const enabled=CHECKOUT_SERVICES.filter(k=>ck.services[k]);
   const pieces=pack?Array.from({length:pack.count}).map(()=>({weight:pack.billWt/pack.count,L:pack.box.L,W:pack.box.W,H:pack.box.H})):[{weight:1,L:8,W:6,H:4}];
-  const quotes=useMemo(()=>quoteRates({fromZip:client.origin,toZip:zip,pieces,residential:true}).filter(q=>enabled.includes(q.key)).map(q=>({...q,buyer:Math.round((q.cost*(1+((ck.markup!=null?+ck.markup:20))/100)+(+ck.handling||0))*100)/100})).sort((a,b)=>a.buyer-b.buyer),[zip,JSON.stringify(pieces),JSON.stringify(ck),client.markup]);
+  const quotes=useMemo(()=>quoteRates({fromZip:client.origin,toZip:zip,pieces,residential:true}).filter(q=>enabled.includes(q.key)).map(q=>{const _bs=new Set((client&&client.blockedServices)||[]);if(_bs.has(canonSvc(q.label)))return null;let sell=q.cost;try{const s=rateSellFor(q.cost,q.label,{rules:rateRules,client,fromZip:client.origin,toZip:zip,weight:ruleWeightFor(pieces,q.label)});if(s!=null&&!isNaN(+s))sell=+s;}catch(e){}return {...q,sell,buyer:Math.round((sell*(1+((ck.markup!=null?+ck.markup:20))/100)+(+ck.handling||0))*100)/100};}).filter(Boolean).sort((a,b)=>a.buyer-b.buyer),[zip,JSON.stringify(pieces),JSON.stringify(ck),client.markup,rateRules]);
   const tierOf=q=>q.maxDays<=1?"Express":q.maxDays<=3?"Standard":"Economy";
   let display=quotes;
   if(ck.presentation==="tiers"){const bt={};quotes.forEach(q=>{const t=tierOf(q);if(!bt[t]||q.buyer<bt[t].buyer)bt[t]={...q,shown:t};});display=["Express","Standard","Economy"].map(t=>bt[t]).filter(Boolean);}
@@ -10404,7 +10416,9 @@ function CheckoutRates({settings,setSettings,client,uid}){
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded bg-stone-100 flex items-center justify-center"><ShoppingBag className="w-4 h-4 text-stone-600"/></div>
             <div className="flex-1"><div className="font-medium">Shopify · CarrierService</div><div className="text-[11px] text-stone-400 break-all">{endpoint}</div></div>
-            <Badge tone={ck.registered?"green":"stone"}>{ck.registered?"registered":"off"}</Badge>
+            {/* badge reflects the LAST REAL status check — the old ck.registered default was
+                always-true/always-green, even with no Shopify connected */}
+            <Badge tone={cs&&cs.installed!=null?(cs.installed?"green":"amber"):"stone"}>{cs&&cs.installed!=null?(cs.installed?"registered":"not installed"):"not checked"}</Badge>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button onClick={()=>carrierCall("carrierStatus")} disabled={!!cBusy} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5">{cBusy==="carrierStatus"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<Search className="w-3.5 h-3.5"/>}Check status</button>
@@ -10422,6 +10436,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
             <Field label="Handling fee ($ per order)"><Input type="number" value={ck.handling} onChange={e=>setCk({handling:e.target.value})}/></Field>
             <Field label="Free shipping over ($)"><Input type="number" value={ck.freeThreshold} onChange={e=>setCk({freeThreshold:e.target.value})}/></Field>
           </div>
+          <p className="text-[11px] text-stone-500">Buyer markup rides on top of <b>your account rate</b> — the price your rate profile sells the label at — not the raw carrier cost. Set it to 0 and buyers pay exactly your rate.</p>
         </Panel>
         <Panel title="Services offered at checkout">
           <div className="space-y-1">{CHECKOUT_SERVICES.map(k=>(
@@ -11662,6 +11677,7 @@ function RuleEditorModal({rule,onSave,onClose,onDelete,warehouses}){
       case "Set From Address": return (warehouses&&warehouses.length)
         ? <select value={a.fromAddress||""} onChange={e=>setAct(i,{fromAddress:e.target.value})} className={inC+" flex-1 min-w-0"}><option value="">— pick warehouse —</option>{warehouses.map(w=><option key={w.name} value={w.name}>{w.name}</option>)}</select>
         : <input value={a.fromAddress||""} onChange={e=>setAct(i,{fromAddress:e.target.value})} placeholder="Ship-From Label / Address" className={inC+" flex-1 min-w-0"}/>;
+      case "Route to Printer": return <input value={a.value||""} onChange={e=>setAct(i,{value:e.target.value})} placeholder="Printer Name (Exactly As It Appears In Print Settings)" className={inC+" flex-1 min-w-0"}/>;
       default: return <div className="flex-1 text-[13px] text-stone-400 italic">no options</div>;
     }
   };
@@ -11701,7 +11717,7 @@ function RuleEditorModal({rule,onSave,onClose,onDelete,warehouses}){
             <div className="space-y-2">
               {(r.actions||[]).map((a,i)=>(
                 <div key={a.id} className="flex items-center gap-2">
-                  <select value={a.type} onChange={e=>setAct(i,{type:e.target.value,service:undefined,pkg:undefined,tag:undefined,amount:undefined,hold:undefined,weight:undefined,fromAddress:undefined,sig:undefined})} className={inC+" w-44 shrink-0"}>{RULE_ACTION_TYPES.map(t=><option key={t}>{t}</option>)}</select>
+                  <select value={a.type} onChange={e=>setAct(i,{type:e.target.value,service:undefined,pkg:undefined,tag:undefined,amount:undefined,hold:undefined,weight:undefined,fromAddress:undefined,sig:undefined,value:undefined})} className={inC+" w-44 shrink-0"}>{RULE_ACTION_TYPES.map(t=><option key={t}>{t}</option>)}</select>
                   {actFields(a,i)}
                   <button onClick={()=>delAct(i)} className="text-stone-300 hover:text-rose-500 shrink-0"><Trash2 className="w-4 h-4"/></button>
                 </div>
@@ -11924,7 +11940,6 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
     setApPrintBusy(true);
     try{ await printImagePagesBatch(pdfs,settings); }finally{ setApPrintBusy(false); }
   };
-  const addStarters=()=>setRules(rs=>[...rs,...SEED_RULESET.map((r,i)=>({...JSON.parse(JSON.stringify(r)),id:"r"+Date.now()+i}))]);
   const newRule=()=>setEditing({_isNew:true,id:"r"+Date.now(),name:"",enabled:true,stop:false,match:"all",conditions:[],actions:[{id:"a"+Date.now(),type:"Set Service",service:"ANY - Cheapest"}]});
   const saveRule=(r)=>{ const clean={id:r.id,name:r.name,enabled:r.enabled,stop:r.stop,match:r.match||"all",conditions:r.conditions,actions:r.actions};
     setRules(rs=>{ const i=rs.findIndex(x=>x.id===r.id); if(i>=0){const c=[...rs];c[i]=clean;return c;} return [...rs,clean]; });
@@ -12025,8 +12040,9 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
           <div className="text-stone-800 font-medium">No rules yet</div>
           <div className="text-sm text-stone-500 mt-1">Rules are simple "if this, do that" sentences — Autopilot runs them on every order.</div>
           <div className="mt-3 flex items-center justify-center gap-3">
-            <button onClick={addStarters} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE]">Add Starter Rules</button>
-            <button onClick={newRule} className="text-sm text-[#006FBF] font-medium">＋ Build your own</button>
+            {/* "Add Starter Rules" removed — SEED_RULESET is intentionally empty (real accounts
+                start with zero Autopilot rules), so the button silently added nothing. */}
+            <button onClick={newRule} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE]">＋ Build Your First Rule</button>
           </div>
         </div>}
         {rules.map((r,i)=>{
@@ -12118,14 +12134,16 @@ function AddressBook({settings,setSettings}){
     const reader=new FileReader();
     reader.onload=(ev)=>{
       const text=String(ev.target.result||"");
-      const lines=text.split(/\r?\n/).filter(l=>l.trim());
-      if(!lines.length){setMsg("Empty file");return;}
-      const head=lines[0].split(",").map(h=>h.trim().toLowerCase().replace(/"/g,""));
+      /* RFC-4180 parser (same one the Product Catalog import uses) — a naive comma split
+         garbles any quoted field with a comma ("Acme, Inc." / "123 Main St, Suite 4") */
+      const all=parseCSVText(text).filter(r=>r.some(x=>String(x||"").trim()));
+      if(!all.length){setMsg("Empty file");return;}
+      const head=all[0].map(h=>String(h||"").trim().toLowerCase());
       const col=(names)=>head.findIndex(h=>names.includes(h));
       const idx={name:col(["name","contact","full name"]),company:col(["company","business"]),address1:col(["address","address1","street","address 1"]),city:col(["city","town"]),state:col(["state","province","region"]),zip:col(["zip","postal","postal code","zipcode","zip code"]),phone:col(["phone","telephone"])};
       const hasHeader=idx.name>=0||idx.zip>=0||idx.address1>=0;
-      const rows=hasHeader?lines.slice(1):lines;
-      const parsed=rows.map((line,i)=>{const c=line.split(",").map(x=>x.trim().replace(/^"|"$/g,""));const g=(k,d)=>idx[k]>=0?c[idx[k]]||"":(c[d]||"");return {id:"ab"+Date.now()+i,name:g("name",0),company:g("company",1),address1:g("address1",2),city:g("city",3),state:g("state",4),zip:g("zip",5),phone:g("phone",6)};}).filter(r=>r.name||r.address1||r.zip);
+      const rows=hasHeader?all.slice(1):all;
+      const parsed=rows.map((c,i)=>{const g=(k,d)=>{const v=idx[k]>=0?c[idx[k]]:c[d];return String(v==null?"":v).trim();};return {id:"ab"+Date.now()+i,name:g("name",0),company:g("company",1),address1:g("address1",2),city:g("city",3),state:g("state",4),zip:g("zip",5),phone:g("phone",6)};}).filter(r=>r.name||r.address1||r.zip);
       setSettings(s=>({...s,addresses:[...parsed,...(s.addresses||[])]}));
       setMsg(`Imported ${parsed.length} address${parsed.length===1?"":"es"}.`);
       setTimeout(()=>setMsg(""),3000);
@@ -12830,7 +12848,7 @@ function CompanyCustomDeploy({companyUsers,companyFlags,setCompanyFlags,adminSet
   const [picked,setPicked]=useState({});
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState(null);
-  const users=(companyUsers||[]).filter(u=>u.status!=="deactivated");
+  const users=(companyUsers||[]).filter(u=>u.status!=="disabled"&&u.status!=="deactivated");   /* server writes "disabled" */
   const targets=mode==="all"?users:users.filter(u=>picked[u.id]);
   const deploy=async(clear)=>{
     if(!targets.length){setMsg({err:"Pick at least one user."});return;}

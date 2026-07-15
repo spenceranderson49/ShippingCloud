@@ -5,19 +5,25 @@
    Flow:  Shopify → this function
             1) verify ?uid & ?key   (key = HMAC(uid, SESSION_SECRET) — no DB lookup needed)
             2) load that account's settings from Supabase (products, boxes, boxLogic, checkout)
+               plus the shared rateRules / clients / users stores
             3) cartonize the cart: catalog dims by SKU, ships-alone items, smallest-fit box,
                grams fallback for items not in the catalog (Shopify always sends grams)
             4) price: live England quote via our own /quote function (shared cache),
                fall back to the built-in estimator if England is slow/down
-            5) apply checkout config: enabled services, buyer markup + handling,
-               free-shipping threshold, named vs tier presentation
-            6) answer in Shopify's carrier-service shape with min/max delivery dates.
+            5) raw carrier cost → the merchant's SELL price through the same rate engine the
+               portal uses (profile service rules, surcharge rules, account markup — via
+               api-engine rateSellFor), so Admin → Rates edits move checkout prices too;
+               admin-blocked services never show at checkout
+            6) apply checkout config on top of the SELL: enabled services, buyer markup +
+               handling, free-shipping threshold, named vs tier presentation
+            7) answer in Shopify's carrier-service shape with min/max delivery dates.
 
    Register via shopify-sync.js action "installCarrier". Requires the store's custom app
    to have the write_shipping scope, and third-party carrier-calculated rates enabled on
    the store's Shopify plan. */
 
 const crypto = require("crypto");
+const E = require("./api-engine.js");   // shared pricing engine — same math as the portal
 
 const J = (code, obj) => ({ statusCode: code, headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) });
 
@@ -26,18 +32,29 @@ const keyFor = (uid) => crypto.createHmac("sha256", process.env.SESSION_SECRET |
 const scSecret = () => { const s = (process.env.SESSION_SECRET || "").trim(); if (s) return s; const k = (process.env.SUPABASE_SERVICE_KEY || "").trim(); return k ? crypto.createHash("sha256").update("sc1|" + k).digest("hex") : ""; };
 const scInternalKey = () => { const s = scSecret(); return s ? crypto.createHmac("sha256", s).update("internal:carrier").digest("hex") : ""; };
 
-/* ── settings loader (Supabase REST, service key) ── */
-async function loadSettings(uid) {
+/* ── store loader (Supabase REST, service key) — one query for the account's settings plus
+      the shared pricing stores (rateRules / clients / users) so checkout prices through the
+      merchant's real rate profile ── */
+async function loadStores(uid) {
   const base = (process.env.SUPABASE_URL || "").replace(/\/+$/, "");
   const svc = process.env.SUPABASE_SERVICE_KEY || "";
-  if (!base || !svc) return null;
-  const key = "u/" + uid + "/settings";
-  const r = await fetch(base + "/rest/v1/app_stores?tenant=eq.main&key=eq." + encodeURIComponent(key) + "&select=value", {
+  if (!base || !svc) return { settings: null, rules: null, client: null };
+  const sKey = "u/" + uid + "/settings";
+  const keys = [sKey, "rateRules", "clients", "users"].map((k) => '"' + k + '"').join(",");
+  const r = await fetch(base + "/rest/v1/app_stores?tenant=eq.main&key=in.(" + encodeURIComponent(keys) + ")&select=key,value", {
     headers: { apikey: svc, Authorization: "Bearer " + svc }
   });
-  if (!r.ok) return null;
+  if (!r.ok) return { settings: null, rules: null, client: null };
   const rows = await r.json().catch(() => null);
-  return (Array.isArray(rows) && rows[0] && rows[0].value) || null;
+  const val = (k) => { const row = Array.isArray(rows) ? rows.find((x) => x && x.key === k) : null; return row ? row.value : null; };
+  const settings = val(sKey);
+  const rules = val("rateRules");
+  const users = Array.isArray(val("users")) ? val("users") : [];
+  const clients = Array.isArray(val("clients")) ? val("clients") : [];
+  /* uid is String(user.id || user.email) — match either, then the user's company record */
+  const u = users.find((x) => x && (String(x.id) === uid || String(x.email || "").toLowerCase() === uid.toLowerCase())) || null;
+  const client = (u && u.clientId) ? (clients.find((c) => c && c.id === u.clientId) || null) : null;
+  return { settings, rules, client };
 }
 
 /* ── box logic (server port of the app's engine) ── */
@@ -167,7 +184,9 @@ async function liveQuotes(fromZip, dest, pieces) {
     });
     const d = await r.json().catch(() => null);
     if (d && d.live && Array.isArray(d.rates) && d.rates.length) {
-      return d.rates.map((q) => ({ key: labelKey(q.label), label: q.label, cost: +q.cost || 0, days: null })).filter((q) => q.key && q.cost > 0);
+      /* keep list/listBase/surcharges so the rate engine can price List−% rules and
+         per-fee accessorial rules exactly like the portal does */
+      return d.rates.map((q) => ({ key: labelKey(q.label), label: q.label, cost: +q.cost || 0, list: q.list, listBase: q.listBase, surcharges: q.surcharges, days: null })).filter((q) => q.key && q.cost > 0);
     }
     return null;
   } catch (e) { return null; }
@@ -190,7 +209,11 @@ exports.handler = async (event) => {
     const items = Array.isArray(rate.items) ? rate.items : [];
     if (!dest.postal_code || !items.length) return J(200, { rates: [] });
 
-    const settings = (await loadSettings(uid)) || {};
+    const loaded = await loadStores(uid);
+    const settings = loaded.settings || {};
+    const rules = (loaded.rules && typeof loaded.rules === "object") ? loaded.rules : null;
+    const client = loaded.client;
+    if (rules) { try { E.setDimCfg(rules.dimDivisors); } catch {} }
     const ck = settings.checkout || {};
     const services = ck.services || { fedex_ground: true, fedex_home: true, fedex_2day: true };
     const markup = (ck.markup != null ? +ck.markup : 20);
@@ -208,13 +231,28 @@ exports.handler = async (event) => {
     let source = "live";
     if (!quotes || !quotes.length) { quotes = fallbackQuotes(fromZip, destN.zip, pieces); source = "estimate"; }
 
-    // enabled services only, buyer price = cost*(1+markup%) + handling
+    // admin-blocked services never show at checkout (same enforcement as the portal + API)
+    const blocked = new Set(((client && client.blockedServices) || []).map(String));
+
+    // enabled services only; buyer price = the merchant's SELL price (raw cost run through
+    // the same rate engine as the portal: profile rules, surcharge rules, account markup)
+    // ×(1+checkout markup%) + handling. With no rules/client loaded, sell = cost — identical
+    // to the old behavior.
+    const sellFor = (q) => {
+      if (!rules) return q.cost;
+      try {
+        const wt = E.ruleWeightFor(pieces.map((p) => ({ weight: +p.weight || 0, L: p.L, W: p.W, H: p.H })), q.label);
+        const s = E.rateSellFor(q.cost, q.label, { rules, client, list: q.list, listBase: q.listBase, surcharges: q.surcharges, fromZip, toZip: destN.zip, weight: wt });
+        return (s != null && !isNaN(+s)) ? +s : q.cost;
+      } catch { return q.cost; }
+    };
     let priced = quotes
-      .filter((q) => services[q.key])
+      .filter((q) => services[q.key] && !blocked.has(E.canonSvc(q.label)))
       .map((q) => {
-        const buyer = Math.round((q.cost * (1 + markup / 100) + handling) * 100) / 100;
+        const sell = sellFor(q);
+        const buyer = Math.round((sell * (1 + markup / 100) + handling) * 100) / 100;
         const dd = q.days || daysFor(q.label, fromZip, destN.zip);
-        return { ...q, buyer, dmin: dd[0], dmax: dd[1] };
+        return { ...q, sell, buyer, dmin: dd[0], dmax: dd[1] };
       })
       .sort((a, b) => a.buyer - b.buyer);
     if (!priced.length) return J(200, { rates: [] });

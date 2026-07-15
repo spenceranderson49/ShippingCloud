@@ -7648,8 +7648,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   return (
     <div className="relative flex flex-row gap-4 items-start pt-2.5">
       {!custom.hideShipOrders&&(ordersOpen?(
-      {/* open rail gets the same #cbd5e1 divider as the nav so it reads as its own panel;
-          the collapsed tab (below) stays line-free */}
+      /* open rail gets the same #cbd5e1 divider as the nav so it reads as its own panel;
+         the collapsed tab (below) stays line-free */
       <aside className="w-60 shrink-0 space-y-2 border-r border-[#cbd5e1] pr-4 self-stretch">
         <div className="flex items-center gap-1.5">
           <button onClick={()=>setOrdersOpen(false)} className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-stone-500 hover:text-stone-700"><ChevronDown className="w-4 h-4 shrink-0"/><ShoppingBag className="w-4 h-4 shrink-0"/><span className="whitespace-nowrap">Orders{ordersToShow.length?<span className="text-stone-400 normal-case font-normal"> · {ordersToShow.length}</span>:""}</span></button>

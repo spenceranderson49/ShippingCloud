@@ -6214,7 +6214,7 @@ function AssistantChat({who,getContext,onAction}){
       </div>
       <div className="border-t border-stone-200 p-2 flex items-end gap-2">
         <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}} rows={1} placeholder="Ask About the Platform…" className="flex-1 resize-none text-sm border border-stone-300 rounded-lg px-3 py-2 focus:outline-none focus:border-[#0099FF] max-h-24"/>
-        <button onClick={send} disabled={busy||!input.trim()} className="bg-[#0086E0] hover:bg-[#0072BE] disabled:opacity-40 text-white rounded-lg p-2.5"><Send className="w-4 h-4"/></button>
+        <button onClick={()=>send()} disabled={busy||!input.trim()} className="bg-[#0086E0] hover:bg-[#0072BE] disabled:opacity-40 text-white rounded-lg p-2.5"><Send className="w-4 h-4"/></button>
       </div>
       <div className="text-center text-[10px] text-stone-500 pb-1.5 -mt-0.5">Powered by {AI_NAME}</div>
     </div>}
@@ -6802,9 +6802,10 @@ function AppInner(){
   },[isAdmin,isCompanyAdmin,currentUser,myFlags,custom.hiddenTabs,custom.tabOrder]);
   const unfulfilled=orders.filter(o=>o.status==="unfulfilled").length;
 
-  if(!currentUser) return <Login users={users} brand={{...DEFAULT_BRAND,...(settings.brand||{})}} onLogin={(u)=>{ const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }}/>;
-  if(BRAND.admin&&currentUser.role!=="admin"&&!lsGet("adminReturn",null)) return (<div className="min-h-screen bg-stone-100 flex items-center justify-center p-4"><div className="bg-white border border-stone-200 rounded-xl p-8 text-center max-w-sm"><ShieldCheck className="w-8 h-8 text-stone-300 mx-auto mb-3"/><div className="font-semibold text-stone-800">Administrators only</div><p className="text-sm text-stone-500 mt-1">This portal is the admin HQ. Your account works on shippingcloud.net and freightwireship.com.</p><button onClick={()=>{lsDel("session");window.location.reload();}} className="mt-4 text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium">Sign Out</button></div></div>);
-
+  /* ALL hooks run before any early return — a hook below a conditional return crashes React
+     ("Rendered fewer hooks than expected") the moment currentUser flips across renders, which
+     really happens: signing out in ANOTHER tab clears the shared "session" key and the storage
+     listener re-renders this tab with currentUser=null. */
   const [fedexPrompt,setFedexPrompt]=usePersist("fedexPrompt",{seen:false});
   // The "Get your own FedEx account" welcome popup is for BRAND-NEW signups only —
   // never nag an existing login with it. Accounts carry a createdAt at signup; a
@@ -6816,6 +6817,9 @@ function AppInner(){
   /* Sticky-bar offset for DraftBar & friends: the app header is sticky (h-14, +36px when the
      admin-preview/demo strip shows), so anything else sticky must pin below it, not at top-0. */
   useEffect(()=>{ try{ document.documentElement.style.setProperty("--sc-stickoff",(adminReturn||isDemo)?"92px":"56px"); }catch(e){} },[adminReturn,isDemo]);
+
+  if(!currentUser) return <Login users={users} brand={{...DEFAULT_BRAND,...(settings.brand||{})}} onLogin={(u)=>{ const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }}/>;
+  if(BRAND.admin&&currentUser.role!=="admin"&&!lsGet("adminReturn",null)) return (<div className="min-h-screen bg-stone-100 flex items-center justify-center p-4"><div className="bg-white border border-stone-200 rounded-xl p-8 text-center max-w-sm"><ShieldCheck className="w-8 h-8 text-stone-300 mx-auto mb-3"/><div className="font-semibold text-stone-800">Administrators only</div><p className="text-sm text-stone-500 mt-1">This portal is the admin HQ. Your account works on shippingcloud.net and freightwireship.com.</p><button onClick={()=>{lsDel("session");window.location.reload();}} className="mt-4 text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium">Sign Out</button></div></div>);
   /* shell */
   return (
     /* Background: "Ice, fainter" (B2) — a soft blue-leaning tint of the brand accent. */
@@ -7189,7 +7193,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
 
   const [packNote,setPackNote]=useState(null);
   const applyOrder=(o)=>{if(justBookedRef.current!==o.id)justBookedRef.current=null;   // picking a DIFFERENT order re-arms the "already has a label" banner (it stayed suppressed all session after any booking)
-    setHfArmed(o.id);setSelectedOrder(o.id);setReference(o.name);setInvoiceNo("");setPoNo("");setDepartment("");setPieces(ps=>ps.map((p,j)=>j===0?{...p,orBox:undefined}:p));setReceiver({...empty,name:o.customer||"",company:o.company||"",zip:o.zip||"",state:o.state||"",city:o.city||"",address1:o.address1||"",phone:o.phone||"",email:o.email||""});
+    setHfArmed(o.id);setSelectedOrder(o.id);setReference(o.name);setInvoiceNo("");setPoNo("");setDepartment("");setPieces(ps=>ps.map((p,j)=>j===0?{...p,orBox:undefined}:p));setReceiver({...empty,name:o.customer||"",company:o.company||"",zip:o.zip||"",state:o.state||"",city:o.city||"",address1:o.address1||"",phone:o.phone||"",email:o.email||"",country:o.country||empty.country});
     /* RESET the per-shipment extras BEFORE the auto rules run — otherwise the previous order's
        declared value / signature silently carry into this order (and hands-free would book it
        with the wrong coverage, no click, no warning). */
@@ -8533,7 +8537,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
     if(sort==="source")return (a.source||"").localeCompare(b.source||"");
     return String(b.id).localeCompare(String(a.id)); // date / newest
   }),[filtered,sort]);
-  const ship=(o)=>goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},weight:o.weight,reference:o.name,fromOrderId:o.id,refulfill:o.status==="fulfilled"});
+  const ship=(o)=>goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email,country:o.country||"United States"},weight:o.weight,reference:o.name,fromOrderId:o.id,refulfill:o.status==="fulfilled"});
   const [syncing,setSyncing]=useState(false);
   const [syncMsg,setSyncMsg]=useState(null);
   // Every connected platform that can supply orders (Shopify + token/OAuth connectors flagged orders:true)
@@ -9485,7 +9489,7 @@ function Scan({orders,goShip,goTab}){
     if(!o){setErr(`No order found for “${code}”.`);setLog(l=>[{code,when:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"}),ok:false},...l].slice(0,12));setTimeout(()=>setErr(""),2500);return;}
     setErr("");
     setLog(l=>[{code,when:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"}),ok:true,order:o.name},...l].slice(0,12));
-    goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email},weight:o.weight,reference:o.name,fromOrderId:o.id});
+    goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email,country:o.country||"United States"},weight:o.weight,reference:o.name,fromOrderId:o.id});
   };
   return (
     <div className="max-w-2xl space-y-4">

@@ -6891,7 +6891,7 @@ function AppInner(){
             "the banner on the left pops too much") — active item keeps its highlight */}
         <aside className="hidden md:block w-52 shrink-0 border-r border-[#d8e6f2] bg-transparent min-h-screen">
           {/* pt nudges the first tab down so "Ship" sits level with the Sender/ORDERS line in the content */}
-          <nav className="px-2 pb-2 pt-[18px] space-y-0.5 sticky top-14">
+          <nav className="px-2 pb-2 pt-[26px] space-y-0.5 sticky top-14">
             {TABS.map(([id,l,Icon])=>(
               <React.Fragment key={id}>
               {(id==="admin"||id==="companyadmin")&&<div className="mt-3 mb-2 border-t border-stone-200"/>}

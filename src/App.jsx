@@ -10355,6 +10355,7 @@ function ReportTable({title,head,rows}){return (<div className="border border-st
 /* ════════ CHECKOUT RATES (Shopify) ════════ */
 const CHECKOUT_SERVICES=Object.keys(RATES).filter(k=>!RATES[k].intl&&RATES[k].carrier!=="DHL");
 function CheckoutRates({settings,setSettings,client,uid}){
+  const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // checkout buyer prices ride on the account's SELL price (same engine as Ship) — preview must match the live callback
   const [cs,setCs]=useState(null);
   const [cBusy,setCBusy]=useState("");
   const shopConn=(settings.conn||{}).shopify||{};
@@ -10382,7 +10383,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
   const pack=items.length?pickBox(items,boxes):null;
   const enabled=CHECKOUT_SERVICES.filter(k=>ck.services[k]);
   const pieces=pack?Array.from({length:pack.count}).map(()=>({weight:pack.billWt/pack.count,L:pack.box.L,W:pack.box.W,H:pack.box.H})):[{weight:1,L:8,W:6,H:4}];
-  const quotes=useMemo(()=>quoteRates({fromZip:client.origin,toZip:zip,pieces,residential:true}).filter(q=>enabled.includes(q.key)).map(q=>({...q,buyer:Math.round((q.cost*(1+((ck.markup!=null?+ck.markup:20))/100)+(+ck.handling||0))*100)/100})).sort((a,b)=>a.buyer-b.buyer),[zip,JSON.stringify(pieces),JSON.stringify(ck),client.markup]);
+  const quotes=useMemo(()=>quoteRates({fromZip:client.origin,toZip:zip,pieces,residential:true}).filter(q=>enabled.includes(q.key)).map(q=>{const _bs=new Set((client&&client.blockedServices)||[]);if(_bs.has(canonSvc(q.label)))return null;let sell=q.cost;try{const s=rateSellFor(q.cost,q.label,{rules:rateRules,client,fromZip:client.origin,toZip:zip,weight:ruleWeightFor(pieces,q.label)});if(s!=null&&!isNaN(+s))sell=+s;}catch(e){}return {...q,sell,buyer:Math.round((sell*(1+((ck.markup!=null?+ck.markup:20))/100)+(+ck.handling||0))*100)/100};}).filter(Boolean).sort((a,b)=>a.buyer-b.buyer),[zip,JSON.stringify(pieces),JSON.stringify(ck),client.markup,rateRules]);
   const tierOf=q=>q.maxDays<=1?"Express":q.maxDays<=3?"Standard":"Economy";
   let display=quotes;
   if(ck.presentation==="tiers"){const bt={};quotes.forEach(q=>{const t=tierOf(q);if(!bt[t]||q.buyer<bt[t].buyer)bt[t]={...q,shown:t};});display=["Express","Standard","Economy"].map(t=>bt[t]).filter(Boolean);}
@@ -10419,6 +10420,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
             <Field label="Handling fee ($ per order)"><Input type="number" value={ck.handling} onChange={e=>setCk({handling:e.target.value})}/></Field>
             <Field label="Free shipping over ($)"><Input type="number" value={ck.freeThreshold} onChange={e=>setCk({freeThreshold:e.target.value})}/></Field>
           </div>
+          <p className="text-[11px] text-stone-500">Buyer markup rides on top of <b>your account rate</b> — the price your rate profile sells the label at — not the raw carrier cost. Set it to 0 and buyers pay exactly your rate.</p>
         </Panel>
         <Panel title="Services offered at checkout">
           <div className="space-y-1">{CHECKOUT_SERVICES.map(k=>(

@@ -6818,8 +6818,8 @@ function AppInner(){
   useEffect(()=>{ try{ document.documentElement.style.setProperty("--sc-stickoff",(adminReturn||isDemo)?"92px":"56px"); }catch(e){} },[adminReturn,isDemo]);
   /* shell */
   return (
-    {/* "Big Clouds" sky (background option 29): soft white puffs over a daylight gradient.
-        background-attachment fixed pins the sky to the viewport so it doesn't re-run on scroll. */}
+    /* "Big Clouds" sky (background option 29): soft white puffs over a daylight gradient.
+       background-attachment fixed pins the sky to the viewport so it doesn't re-run on scroll. */
     <div className="min-h-screen flex flex-col bg-[#eef6fc] text-stone-800" style={{fontFamily:"Inter,system-ui,sans-serif",backgroundImage:"radial-gradient(480px 150px at 18% 18%, rgba(255,255,255,.85), transparent 70%), radial-gradient(300px 110px at 27% 12%, rgba(255,255,255,.8), transparent 70%), radial-gradient(560px 170px at 68% 30%, rgba(255,255,255,.7), transparent 70%), radial-gradient(380px 120px at 82% 8%, rgba(255,255,255,.75), transparent 70%), radial-gradient(640px 200px at 40% 60%, rgba(255,255,255,.65), transparent 70%), radial-gradient(520px 170px at 92% 55%, rgba(255,255,255,.6), transparent 70%), linear-gradient(180deg,#bcdcf5,#e2eff9 70%,#eef6fc)",backgroundAttachment:"fixed"}}><SandboxBanner/>
       {adminReturn&&<div className="bg-[#0086E0] text-white text-[13px] px-4 py-2 flex items-center justify-center gap-3 sticky top-0 z-40">
         <ShieldCheck className="w-4 h-4 shrink-0"/>

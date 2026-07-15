@@ -3163,7 +3163,7 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
 
     <Panel title="Partner / “powered by” logo">
       <div className="flex items-center gap-2 mb-1"><Toggle on={b.showLogo} set={v=>set("showLogo",v)} label={b.showLogo?"Showing partner logo in the app":"Partner logo hidden in the app"}/></div>
-      <div className="flex items-center gap-2 mb-1"><Toggle on={!!(publicBrand&&publicBrand.showLogo)} set={v=>setPublicBrand&&setPublicBrand({showLogo:v})} label={(publicBrand&&publicBrand.showLogo)?"Showing on the public welcome page":"Hidden on the public welcome page"}/></div>
+      <div className="flex items-center gap-2 mb-1"><Toggle on={!!(publicBrand&&publicBrand.showLogo)} set={v=>setPublicBrand&&setPublicBrand(p=>({...(p||{}),showLogo:v}))} label={(publicBrand&&publicBrand.showLogo)?"Showing on the public welcome page":"Hidden on the public welcome page"}/></div>
       <p className="text-[11px] text-stone-400 mb-2">Top toggle: the shipping portal and sign-in screen. Bottom toggle: shippingcloud.net before anyone signs in — takes effect within a minute of saving.</p>
       {b.showLogo&&<>
         <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
@@ -5209,7 +5209,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
               u.role!=="admin"&&{label:"Company Admin",title:u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins",active:!!u.companyAdmin,onClick:()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))},
               u.role!=="admin"&&{label:"Tabs & logo…",title:"Features for this login",active:featOpen===u.id,onClick:()=>setFeatOpen(featOpen===u.id?null:u.id)},
               CLOUD.mode==="cloud"&&(u.role!=="admin"||fullAdmin)&&{label:"Set password…",title:"Reset password",onClick:async()=>{const np=await uiPrompt("New password for "+u.email+" (min 4 characters):","",{title:"Reset password"});if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});uiAlert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}},
-              CLOUD.mode==="cloud"&&u.role!=="admin"&&{label:"Send reset email",title:"Email them a choose-a-new-password link (valid 1 hour)",onClick:async()=>{const r=await cloudCall({action:"requestReset",email:u.email,token:CLOUD.token});uiAlert(r&&r.configured===false?"Email sending isn't set up on this site yet (RESEND_API_KEY).":"Password reset link sent to "+u.email+" (valid 1 hour).");}},
+              CLOUD.mode==="cloud"&&u.role!=="admin"&&{label:"Send reset email",title:"Email them a choose-a-new-password link (valid 1 hour)",onClick:async()=>{const r=await cloudCall({action:"requestReset",email:u.email,token:CLOUD.token});uiAlert(r&&r.configured===false?"Email sending isn't set up on this site yet (RESEND_API_KEY).":(r&&r.found===false)?"That login isn't in the cloud yet (or is disabled) — no email was sent.":"Password reset link sent to "+u.email+" (valid 1 hour).");}},
               CLOUD.mode==="cloud"&&u.totp&&u.totp.enabled&&{label:"Reset 2FA",title:"Lost-phone recovery: turn off this user's 2FA",onClick:async()=>{if(!await uiConfirm("Turn OFF two-factor for "+u.email+"? Use this only if they lost their authenticator — they'll sign in with just their password afterward."))return;const r=await cloudCall({action:"clearTotp",token:CLOUD.token,email:u.email});uiAlert(r&&r.ok?"2FA turned off for "+u.email+".":((r&&r.error)||"Could not reset 2FA."));}},
               u.id!==currentUser.id&&!isBuiltInAdmin(u.email)&&(u.role!=="admin"||(fullAdmin&&u.id!=="u1"))&&{label:"Delete login…",danger:true,onClick:async()=>{if(await uiConfirm("Delete "+(u.name||u.email)+"'s login? They won't be able to sign in anymore. Their customer account and its data are not touched."))del(u.id);}},
             ]}/>
@@ -5350,7 +5350,7 @@ function makeDemoData(){
 
   // returns — FedEx only
   const returns=[
-    {id:8101,rma:"RMA-4821",customer:"Mia Thompson",order:"#1146",reason:"Wrong size",carrier:"FedEx",tracking:newTracking("FedEx"),status:"In transit",date:demoDaysAgo(2)},
+    {id:8101,rma:"RMA-4821",customer:"Mia Thompson",order:"#1146",reason:"Wrong Size",carrier:"FedEx",tracking:newTracking("FedEx"),status:"In transit",date:demoDaysAgo(2)},
     {id:8102,rma:"RMA-4809",customer:"Liam Chen",order:"#1143",reason:"Changed mind",carrier:"FedEx",tracking:newTracking("FedEx"),status:"Label created",date:demoDaysAgo(4)},
     {id:8103,rma:"RMA-4790",customer:"Olivia Reed",order:"#1138",reason:"Damaged in transit",carrier:"FedEx",tracking:newTracking("FedEx"),status:"Received",date:demoDaysAgo(9)},
     {id:8104,rma:"RMA-4771",customer:"Harper Nguyen",order:"#1131",reason:"Ordered twice",carrier:"FedEx",tracking:newTracking("FedEx"),status:"Received",date:demoDaysAgo(15)}
@@ -6123,7 +6123,7 @@ function CompanyAddressDeploy({companyUsers,companyFlags,setCompanyFlags,adminSe
   const [picked,setPicked]=useState({});
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState(null);
-  const users=(companyUsers||[]).filter(u=>u.status!=="deactivated");
+  const users=(companyUsers||[]).filter(u=>u.status!=="disabled"&&u.status!=="deactivated");   /* server writes "disabled" */
   const targets=mode==="all"?users:users.filter(u=>picked[u.id]);
   const book=(adminSettings&&adminSettings.addresses)||[];
   const deploy=async(clear)=>{
@@ -8670,9 +8670,11 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
 }
 function NewOrderForm({onClose,onCreate}){
   const [f,setF]=useState({customer:"",company:"",address1:"",city:"",state:"",zip:"",phone:"",email:"",items:"",weight:1,total:"",source:"Manual"});
+  const [err,setErr]=useState("");
   const set=(k,v)=>setF({...f,[k]:v});
   const create=()=>{
-    if(!f.customer&&!f.zip)return;
+    if(!f.customer&&!f.zip){setErr("Enter at least a customer name or a ZIP to create the order.");return;}
+    setErr("");
     const n=Math.floor(1000+Math.random()*9000);
     onCreate({id:Date.now(),name:"#"+n,...f,weight:+f.weight||1,total:f.total||"0.00",status:"unfulfilled",date:new Date().toLocaleDateString(undefined,{month:"numeric",day:"numeric"})});
   };
@@ -8694,6 +8696,7 @@ function NewOrderForm({onClose,onCreate}){
         <Field label="Source"><Select value={f.source} onChange={e=>set("source",e.target.value)}>{["Manual","Shopify",...CONNECTORS.filter(c=>c.orders).map(c=>c.name)].map(s=><option key={s}>{s}</option>)}</Select></Field>
       </div>
       <button onClick={create} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8]">Create Order</button>
+      {err&&<div className="text-xs text-rose-500">{err}</div>}
     </div>
   );
 }
@@ -9804,7 +9807,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
   };
   const ratesById=useMemo(()=>{const m={};pool.forEach(o=>{m[o.id]=computeRate(o);});return m;},[orders,packs,settings,client,rateRules,svcOv,rule,specSvc,specCarrier]);
   const rateFor=(o)=>(o&&ratesById[o.id])||computeRate(o);
-  const zoneOf=(o)=>String(zoneEst(client.origin,o.zip));
+  const zoneOf=(o)=>String(zoneEst(originZip,o.zip));   /* originZip = sender.zip || client.origin — client.origin alone renders "ZNaN" when unset */
   const prodOf=(o)=>o.product||o.items||"—";
   const ageDays=(o)=>{const t=Date.parse(o.date||"");return isNaN(t)?null:Math.max(0,Math.floor((Date.now()-t)/86400000));};
   const dimOf=(o,d)=>d==="state"?(o.state||"—").toUpperCase():d==="zone"?"Z"+zoneOf(o):d==="source"?(o.source||"Manual"):d==="sku"?(o.sku||"—"):d==="service"?(o.shippingService||"—"):d==="carrier"?carrierOf(rateFor(o).label):prodOf(o);
@@ -10236,9 +10239,9 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
 /* ════════ RETURNS / RMA ════════ */
 function Returns({returns,setReturns,orders,settings,logEmail}){
   const [creating,setCreating]=useState(false);
-  const [f,setF]=useState({customer:"",order:"",reason:"Wrong size",carrier:"FedEx"});
+  const [f,setF]=useState({customer:"",order:"",reason:"Wrong Size",carrier:"FedEx"});
   const fulfilled=orders.filter(o=>o.status==="fulfilled");
-  const create=()=>{if(!f.customer)return;const tracking=newTracking(f.carrier);setReturns(r=>[{id:Date.now(),rma:"RMA-"+rnd(4),customer:f.customer,order:f.order,reason:f.reason,carrier:f.carrier,tracking,status:"Label created",date:new Date().toLocaleDateString()},...r]);if(settings?.notify?.returnLabel&&logEmail)logEmail({to:"customer@example.com",subject:`Your return label for ${f.order||"your order"} is ready`,type:"Return label"});setCreating(false);setF({customer:"",order:"",reason:"Wrong size",carrier:"FedEx"});};
+  const create=()=>{if(!f.customer)return;const tracking=newTracking(f.carrier);setReturns(r=>[{id:Date.now(),rma:"RMA-"+rnd(4),customer:f.customer,order:f.order,reason:f.reason,carrier:f.carrier,tracking,status:"Label created",date:new Date().toLocaleDateString()},...r]);if(settings?.notify?.returnLabel&&logEmail)logEmail({to:"customer@example.com",subject:`Your return label for ${f.order||"your order"} is ready`,type:"Return label"});setCreating(false);setF({customer:"",order:"",reason:"Wrong Size",carrier:"FedEx"});};
   const tone=s=>s==="Delivered"?"green":s==="In transit"?"amber":"blue";
   return (
     <div className="space-y-3">
@@ -10406,7 +10409,9 @@ function CheckoutRates({settings,setSettings,client,uid}){
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded bg-stone-100 flex items-center justify-center"><ShoppingBag className="w-4 h-4 text-stone-600"/></div>
             <div className="flex-1"><div className="font-medium">Shopify · CarrierService</div><div className="text-[11px] text-stone-400 break-all">{endpoint}</div></div>
-            <Badge tone={ck.registered?"green":"stone"}>{ck.registered?"registered":"off"}</Badge>
+            {/* badge reflects the LAST REAL status check — the old ck.registered default was
+                always-true/always-green, even with no Shopify connected */}
+            <Badge tone={cs&&cs.installed!=null?(cs.installed?"green":"amber"):"stone"}>{cs&&cs.installed!=null?(cs.installed?"registered":"not installed"):"not checked"}</Badge>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button onClick={()=>carrierCall("carrierStatus")} disabled={!!cBusy} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5">{cBusy==="carrierStatus"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<Search className="w-3.5 h-3.5"/>}Check status</button>
@@ -12121,14 +12126,16 @@ function AddressBook({settings,setSettings}){
     const reader=new FileReader();
     reader.onload=(ev)=>{
       const text=String(ev.target.result||"");
-      const lines=text.split(/\r?\n/).filter(l=>l.trim());
-      if(!lines.length){setMsg("Empty file");return;}
-      const head=lines[0].split(",").map(h=>h.trim().toLowerCase().replace(/"/g,""));
+      /* RFC-4180 parser (same one the Product Catalog import uses) — a naive comma split
+         garbles any quoted field with a comma ("Acme, Inc." / "123 Main St, Suite 4") */
+      const all=parseCSVText(text).filter(r=>r.some(x=>String(x||"").trim()));
+      if(!all.length){setMsg("Empty file");return;}
+      const head=all[0].map(h=>String(h||"").trim().toLowerCase());
       const col=(names)=>head.findIndex(h=>names.includes(h));
       const idx={name:col(["name","contact","full name"]),company:col(["company","business"]),address1:col(["address","address1","street","address 1"]),city:col(["city","town"]),state:col(["state","province","region"]),zip:col(["zip","postal","postal code","zipcode","zip code"]),phone:col(["phone","telephone"])};
       const hasHeader=idx.name>=0||idx.zip>=0||idx.address1>=0;
-      const rows=hasHeader?lines.slice(1):lines;
-      const parsed=rows.map((line,i)=>{const c=line.split(",").map(x=>x.trim().replace(/^"|"$/g,""));const g=(k,d)=>idx[k]>=0?c[idx[k]]||"":(c[d]||"");return {id:"ab"+Date.now()+i,name:g("name",0),company:g("company",1),address1:g("address1",2),city:g("city",3),state:g("state",4),zip:g("zip",5),phone:g("phone",6)};}).filter(r=>r.name||r.address1||r.zip);
+      const rows=hasHeader?all.slice(1):all;
+      const parsed=rows.map((c,i)=>{const g=(k,d)=>{const v=idx[k]>=0?c[idx[k]]:c[d];return String(v==null?"":v).trim();};return {id:"ab"+Date.now()+i,name:g("name",0),company:g("company",1),address1:g("address1",2),city:g("city",3),state:g("state",4),zip:g("zip",5),phone:g("phone",6)};}).filter(r=>r.name||r.address1||r.zip);
       setSettings(s=>({...s,addresses:[...parsed,...(s.addresses||[])]}));
       setMsg(`Imported ${parsed.length} address${parsed.length===1?"":"es"}.`);
       setTimeout(()=>setMsg(""),3000);
@@ -12833,7 +12840,7 @@ function CompanyCustomDeploy({companyUsers,companyFlags,setCompanyFlags,adminSet
   const [picked,setPicked]=useState({});
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState(null);
-  const users=(companyUsers||[]).filter(u=>u.status!=="deactivated");
+  const users=(companyUsers||[]).filter(u=>u.status!=="disabled"&&u.status!=="deactivated");   /* server writes "disabled" */
   const targets=mode==="all"?users:users.filter(u=>picked[u.id]);
   const deploy=async(clear)=>{
     if(!targets.length){setMsg({err:"Pick at least one user."});return;}

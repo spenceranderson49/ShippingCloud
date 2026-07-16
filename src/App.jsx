@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v607";
+const BUILD_TAG="addr-v608";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3817,22 +3817,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
           <span className="text-[10px] text-stone-400">Dim weight = L×W×H ÷ divisor; FedEx bills the higher of dim and actual. Saves with the green Save rates button.</span>
         </div>
       </div>
-      {/* Each account is priced individually below. Copy pulls THIS account's whole rate setup
-          (per-service rules, breaks, accessorial rules, account markup) into a code you can
-          paste onto another customer to clone every discount. */}
-      <div className="border border-stone-200 rounded-lg bg-stone-50/60 p-3 space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium text-stone-700 flex-1">Copy these rates to another customer</span>
-          <button onClick={()=>{const blob={v:1,markup:mk.markup,markupMin:mk.markupMin,listYear:prof.listYear||"",services:prof.services||{},surcharges:prof.surcharges||{}};const code=btoa(unescape(encodeURIComponent(JSON.stringify(blob))));setRateCode(code);try{navigator.clipboard.writeText(code);}catch(e){}say("Rates copied — paste the code onto another customer.");}} className="text-xs bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Copy className="w-3.5 h-3.5"/>Copy {c.name}'s Rates</button>
-        </div>
-        {rateCode&&<textarea readOnly value={rateCode} onFocus={e=>e.target.select()} className="w-full h-16 text-[11px] font-mono bg-white border border-stone-200 rounded p-2 outline-none" placeholder="Copied code appears here"/>}
-        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-stone-200">
-          <span className="text-sm font-medium text-stone-700 flex-1">Paste rates from another customer</span>
-          <button onClick={async()=>{if(!ratePaste.trim())return say("Paste a copied rates code first.");let blob;try{blob=JSON.parse(decodeURIComponent(escape(atob(ratePaste.trim()))));}catch(e){return uiAlert("That doesn't look like a rates code — copy one from another customer's Copy button.");}if(!blob||!blob.services)return uiAlert("That code has no rate data.");if(!await uiConfirm("Apply these rates and discounts to "+c.name+"? Their current per-service rules, accessorial rules, and account markup will be replaced."))return;setMk({markup:blob.markup===undefined?"":blob.markup,markupMin:blob.markupMin===undefined?"":blob.markupMin});upClient({markup:blob.markup===""||blob.markup==null?"":+blob.markup,markupMin:blob.markupMin===""||blob.markupMin==null?"":+blob.markupMin});upProfField(prof.id,{services:JSON.parse(JSON.stringify(blob.services||{})),surcharges:JSON.parse(JSON.stringify(blob.surcharges||{})),listYear:blob.listYear||prof.listYear});setRatePaste("");say("Rates applied to "+c.name+" — press Save rates to make it live.");}} className="text-xs bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-emerald-700 flex items-center gap-1.5"><Check className="w-3.5 h-3.5"/>Apply to {c.name}</button>
-        </div>
-        <textarea value={ratePaste} onChange={e=>setRatePaste(e.target.value)} className="w-full h-16 text-[11px] font-mono bg-white border border-stone-200 rounded p-2 outline-none focus:border-[#0086E0]" placeholder="Paste a copied rates code here, then Apply"/>
-        <span className="text-[11px] text-stone-400">Everything below prices <b>{c.name}</b> only — edits never touch another customer.</span>
-      </div>
+      <div className="text-[11px] text-stone-400 px-1">Everything below prices <b>{c.name}</b> only — edits never touch another customer.</div>
       {(()=>{
         const svcHiddenMap=rules.svcHidden||{};
         const full=RATE_SERVICES.fedex;
@@ -3929,6 +3914,21 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
             return out;
           })()}
         </tbody></table></div>
+      </div>
+      {/* Clone THIS account's whole rate setup (per-service rules, breaks, accessorial rules, markup)
+          into a code you can paste onto another customer. Lives at the BOTTOM so pricing is the focus. */}
+      <div className="border border-stone-200 rounded-lg bg-stone-50/60 p-3 space-y-2">
+        <div className="text-[10px] uppercase tracking-widest text-stone-400">Copy rates between customers</div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium text-stone-700 flex-1">Copy these rates to another customer</span>
+          <button onClick={()=>{const blob={v:1,markup:mk.markup,markupMin:mk.markupMin,listYear:prof.listYear||"",services:prof.services||{},surcharges:prof.surcharges||{}};const code=btoa(unescape(encodeURIComponent(JSON.stringify(blob))));setRateCode(code);try{navigator.clipboard.writeText(code);}catch(e){}say("Rates copied — paste the code onto another customer.");}} className="text-xs bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Copy className="w-3.5 h-3.5"/>Copy {c.name}'s Rates</button>
+        </div>
+        {rateCode&&<textarea readOnly value={rateCode} onFocus={e=>e.target.select()} className="w-full h-16 text-[11px] font-mono bg-white border border-stone-200 rounded p-2 outline-none" placeholder="Copied code appears here"/>}
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-stone-200">
+          <span className="text-sm font-medium text-stone-700 flex-1">Paste rates from another customer</span>
+          <button onClick={async()=>{if(!ratePaste.trim())return say("Paste a copied rates code first.");let blob;try{blob=JSON.parse(decodeURIComponent(escape(atob(ratePaste.trim()))));}catch(e){return uiAlert("That doesn't look like a rates code — copy one from another customer's Copy button.");}if(!blob||!blob.services)return uiAlert("That code has no rate data.");if(!await uiConfirm("Apply these rates and discounts to "+c.name+"? Their current per-service rules, accessorial rules, and account markup will be replaced."))return;setMk({markup:blob.markup===undefined?"":blob.markup,markupMin:blob.markupMin===undefined?"":blob.markupMin});upClient({markup:blob.markup===""||blob.markup==null?"":+blob.markup,markupMin:blob.markupMin===""||blob.markupMin==null?"":+blob.markupMin});upProfField(prof.id,{services:JSON.parse(JSON.stringify(blob.services||{})),surcharges:JSON.parse(JSON.stringify(blob.surcharges||{})),listYear:blob.listYear||prof.listYear});setRatePaste("");say("Rates applied to "+c.name+" — press Save rates to make it live.");}} className="text-xs bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-emerald-700 flex items-center gap-1.5"><Check className="w-3.5 h-3.5"/>Apply to {c.name}</button>
+        </div>
+        <textarea value={ratePaste} onChange={e=>setRatePaste(e.target.value)} className="w-full h-16 text-[11px] font-mono bg-white border border-stone-200 rounded p-2 outline-none focus:border-[#0086E0]" placeholder="Paste a copied rates code here, then Apply"/>
       </div>
       <div className="flex items-center justify-end gap-3 pt-2 border-t border-stone-200">
         {ratesDirty?<span className="text-[12px] text-amber-700 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>You have unsaved rate changes — nothing is live until you save</span>:<span className="text-[12px] text-stone-400">All rate changes saved</span>}

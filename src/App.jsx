@@ -109,7 +109,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v586";
+const BUILD_TAG="addr-v587";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2923,7 +2923,7 @@ const CUSTOM_DEFAULTS={
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
   logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,skipBookedSummary:false,autoRulesOnShip:false,autoRulesInBatch:false,autoBookBatch:false,hotkeys:true,orderCols:[],orderViews:[],accent:"",
   refRequired:false,invRequired:false,poRequired:false,deptRequired:false,refLocked:false,invLocked:false,poLocked:false,deptLocked:false,hideDept:false,
-  confetti:"page",seasonal:false,hideShipSteps:true,hideLabeledOrders:true,
+  confetti:"page",seasonal:false,hideShipSteps:false,hideLabeledOrders:true,
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
 const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
@@ -3792,9 +3792,8 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
           <div className="text-sm font-semibold text-stone-800">Dim divisors <span className="font-normal text-[11px] text-stone-400">(platform-wide — every customer)</span></div>
           {[["express","Express"],["ground","Ground & Home Delivery"],["ground_economy","Ground Economy"]].map(([k,l])=>(
             <label key={k} className="text-xs text-stone-600 flex items-center gap-1.5">{l}
-              <input type="number" min="50" max="300" defaultValue={(rules.dimDivisors&&rules.dimDivisors[k])||139} key={cid+k+((rules.dimDivisors&&rules.dimDivisors[k])||139)}
-                onChange={e=>{const raw=e.target.value;if(raw==="")return;const n=+raw;if(!isNaN(n))setRules(r=>({...DEFAULT_RATE_RULES,...r,dimDivisors:{express:139,ground:139,ground_economy:139,...(r.dimDivisors||{}),[k]:n}}));}}
-                onBlur={e=>{const v=Math.max(50,Math.min(300,+e.target.value||139));e.target.value=v;setRules(r=>({...DEFAULT_RATE_RULES,...r,dimDivisors:{express:139,ground:139,ground_economy:139,...(r.dimDivisors||{}),[k]:v}}));}}
+              <NumBox value={(rules.dimDivisors&&rules.dimDivisors[k])||139} min={50} max={300} fallback={139}
+                onCommit={n=>setRules(r=>({...DEFAULT_RATE_RULES,...r,dimDivisors:{express:139,ground:139,ground_economy:139,...(r.dimDivisors||{}),[k]:n}}))}
                 className="w-20 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"/>
             </label>))}
           <span className="text-[10px] text-stone-400">Dim weight = L×W×H ÷ divisor; FedEx bills the higher of dim and actual. Saves with the green Save rates button.</span>
@@ -4517,8 +4516,8 @@ function RatesAdmin({clients=[],brand}){
           <div className="flex flex-wrap gap-6">
             {[["express","Express"],["ground","Ground & Home Delivery"],["ground_economy","Ground Economy"]].map(([k,l])=>(
               <label key={k} className="text-sm text-stone-700 font-medium">{l}
-                <input type="number" min="50" max="300" value={(rules.dimDivisors&&rules.dimDivisors[k])||139}
-                  onChange={e=>{const v=Math.max(50,Math.min(300,+e.target.value||139));setRules(r=>({...DEFAULT_RATE_RULES,...r,dimDivisors:{express:139,ground:139,ground_economy:139,...(r.dimDivisors||{}),[k]:v}}));}}
+                <NumBox value={(rules.dimDivisors&&rules.dimDivisors[k])||139} min={50} max={300} fallback={139}
+                  onCommit={n=>setRules(r=>({...DEFAULT_RATE_RULES,...r,dimDivisors:{express:139,ground:139,ground_economy:139,...(r.dimDivisors||{}),[k]:n}}))}
                   className="mt-1.5 block w-32 bg-white border border-stone-300 rounded-lg px-3 py-2 text-base outline-none focus:border-[#0099FF]"/>
               </label>))}
           </div>
@@ -14131,6 +14130,21 @@ function PkgInput({label,w,req,...p}){const ww=w||"w-14";const on=req&&!String(p
 function Panel({title,children}){return <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3"><div className="text-[10px] uppercase tracking-widest text-stone-400">{title}</div>{children}</div>;}
 function Field({label,children}){return <label className="block space-y-1"><span className="text-[11px] text-stone-500">{label}</span>{children}</label>;}
 function Input({className="",...p}){return <input {...p} className={`w-full bg-white border border-stone-200 rounded px-2.5 py-2 text-sm text-stone-900 focus:border-[#0099FF] outline-none ${className}`}/>;}
+/* Freely-typeable numeric box: type any number, it commits raw as you go and only clamps to
+   [min,max] on blur. Local string state means the caret never jumps and you're never limited to
+   one digit at a time (the old clamp-on-every-keystroke bug). External value changes sync in
+   only while the box is NOT focused, so a background refresh can't clobber your typing. */
+function NumBox({value,onCommit,min,max,fallback,className="",...rest}){
+  const [txt,setTxt]=React.useState(value==null?"":String(value));
+  const [focus,setFocus]=React.useState(false);
+  React.useEffect(()=>{ if(!focus)setTxt(value==null?"":String(value)); },[value,focus]);
+  const clamp=(n)=>{ let v=n; if(min!=null)v=Math.max(min,v); if(max!=null)v=Math.min(max,v); return v; };
+  return <input type="number" inputMode="numeric" value={txt}
+    onFocus={()=>setFocus(true)}
+    onChange={e=>{ const raw=e.target.value; setTxt(raw); if(raw===""||raw==="-")return; const n=+raw; if(!isNaN(n))onCommit&&onCommit(n); }}
+    onBlur={e=>{ setFocus(false); let n=+e.target.value; if(e.target.value===""||isNaN(n))n=(fallback!=null?fallback:(min!=null?min:0)); n=clamp(n); setTxt(String(n)); onCommit&&onCommit(n); }}
+    className={className||"w-full bg-white border border-stone-200 rounded px-2.5 py-2 text-sm text-stone-900 focus:border-[#0099FF] outline-none"} {...rest}/>;
+}
 function Select({children,...p}){return <select {...p} className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm focus:border-[#0099FF] outline-none">{children}</select>;}
 function Toggle({on,set,label}){return <button onClick={()=>set(!on)} className={`flex items-center gap-1.5 text-xs rounded px-2.5 py-1.5 border ${on?"bg-[#E6F4FF] border-[#99D6FF] text-[#0086E0]":"bg-white border-stone-200 text-stone-400"}`}><span className={`w-2 h-2 rounded-full ${on?"bg-[#0086E0]":"bg-stone-300"}`}/>{label}</button>;}
 function Badge({children,tone="stone"}){const t={stone:"bg-stone-100 text-stone-500 border-stone-200",green:"bg-emerald-50 text-emerald-700 border-emerald-200",amber:"bg-amber-50 text-amber-700 border-amber-200",blue:"bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]",rose:"bg-rose-50 text-rose-600 border-rose-200",violet:"bg-violet-50 text-violet-700 border-violet-200"}[tone]||"bg-stone-100 text-stone-500 border-stone-200";return <span className={`text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 border ${t}`}>{children}</span>;}

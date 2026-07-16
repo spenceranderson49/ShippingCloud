@@ -94,7 +94,7 @@ exports.handler = async (event) => {
     let b = {}; try { b = JSON.parse(event.body || "{}"); } catch { return J({ ok: false, error: "Bad JSON" }); }
     const c = { refreshToken: S(b.refreshToken).trim(), lwaClientId: S(b.lwaClientId).trim(), lwaClientSecret: S(b.lwaClientSecret).trim(), region: S(b.region).trim() || "na", marketplaceId: S(b.marketplaceId).trim() };
     if (!c.refreshToken || !c.lwaClientId || !c.lwaClientSecret) return J({ ok: false, error: "Missing refreshToken / lwaClientId / lwaClientSecret." });
-    if (b.action === "confirm") return J(await confirmShipment(c, b));
+    if (b.action === "confirm" || b.action === "fulfill") return J(await confirmShipment(c, b));
     return J(await syncOrders(c));
   } catch (e) { return J({ ok: false, error: "Function error: " + (e && e.message ? e.message : String(e)) }); }
 };

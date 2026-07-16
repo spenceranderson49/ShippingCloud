@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v590";
+const BUILD_TAG="addr-v591";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7776,7 +7776,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const saveDraft=()=>{setDraftName(reference||receiver.name||receiver.city||"");setNaming(true);};
   /* box-logic explanation banner shown while a packed order is loaded */
   const PackNote=()=>packNote?(<div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800 flex items-center gap-2"><Boxes className="w-3.5 h-3.5 shrink-0"/><span className="flex-1">Box logic packed this order: <b>{packNote.boxNames}</b> · {packNote.totalWt} lb billable{packNote.unresolved.length?` · ${packNote.unresolved.length} item${packNote.unresolved.length===1?"":"s"} not in your catalog (weight may be low)`:""} — dims are editable below.</span><button onClick={()=>setPackNote(null)} className="text-emerald-500 hover:text-emerald-700"><X className="w-3.5 h-3.5"/></button></div>):null;
-  const newShipment=()=>{justBookedRef.current=null;setSwapMuted(false);try{lsDel("shipWip");}catch(e){}setHfArmed(null);setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setDepartment("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setDvEach(false);setRes(true);setResTouched(false);setSig(custom.defaultSignature&&custom.defaultSignature!=="none");setSigOption(custom.defaultSignature||"none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");setShipDate(shipDateDefault(settings));};
+  const newShipment=()=>{justBookedRef.current=null;setSwapMuted(false);try{lsDel("shipWip");}catch(e){}setHfArmed(null);setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setDepartment("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setDvEach(false);setRes(true);setResTouched(false);setSig(custom.defaultSignature&&custom.defaultSignature!=="none");setSigOption(custom.defaultSignature||"none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");setLastTracking("");setSent("");setShipDate(shipDateDefault(settings));};
   const addressCheck=(
     <div className="text-xs space-y-2">
       <div className="text-[10px] uppercase tracking-widest text-stone-500 font-semibold flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5"/>Address check</div>
@@ -9368,7 +9368,30 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
     </div>
   ):null;
   if(!shipments.length)return (<div className="space-y-3"><PendingBar/>{chkMsg&&<div className={`text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${chkMsg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{chkMsg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{chkMsg.err||chkMsg.ok}</div>}<Empty icon={Truck} title="No shipments yet" body="Print a label on the Ship tab and it lands here with tracking, edit & reship."/></div>);
-  const voidS=id=>setShipments(s=>s.map(x=>x.id===id?{...x,status:"Voided"}:x));
+  const [voiding,setVoiding]=useState(null);   // shipment id currently being cancelled with the carrier
+  const voidLabel=async(e,s)=>{ e&&e.stopPropagation();
+    if(!await uiConfirm("Void this label?\n\nWe'll ask "+(s.carrier||"the carrier")+" to cancel it and request the refund, then mark it Voided here (excluded from audits and duplicate checks)."))return;
+    setVoiding(s.id);
+    let msg="";
+    if((s.carrier||"FedEx")==="FedEx"&&s.tracking){
+      try{ const r=await fedexCall({action:"cancelShipment",trackingNumber:s.tracking,account:s.account||s.shipAccount||""});
+        msg=r&&r.ok?"FedEx accepted the cancellation. The refund posts back to your account within a few billing days.":("FedEx couldn't cancel it automatically"+((r&&r.error)?" ("+r.error+")":"")+". It's marked Voided here — cancel it directly in FedEx to be sure the refund is issued.");
+      }catch(err){ msg="Couldn't reach FedEx to cancel automatically — it's marked Voided here, but cancel it directly in FedEx to be sure the refund is issued."; }
+    } else { msg="Marked Voided here. Cancel it with "+(s.carrier||"your carrier")+" to get any refund."; }
+    setShipments(list=>list.map(x=>x.id===s.id?{...x,status:"Voided",voidedAt:new Date().toLocaleString()}:x));
+    window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Voided label",detail:(s.reference||"")+" · "+(s.tracking||"")}}));
+    setVoiding(null); uiAlert(msg);
+  };
+  const [trackModal,setTrackModal]=useState(null);   // {s, loading, events, status, estDelivery, error}
+  const openTrack=(s)=>{
+    const cached=(s.trackEvents&&s.trackEvents.length)?s.trackEvents:null;
+    setTrackModal({s,loading:true,events:cached||[],status:s.status,estDelivery:s.estDelivery||null,error:null});
+    (async()=>{ try{ const r=await fedexCall({action:"track",trackingNumber:s.tracking});
+      if(r&&r.ok){ setTrackModal(m=>m&&m.s.id===s.id?{...m,loading:false,events:(r.events&&r.events.length)?r.events:(m.events||[]),status:r.status||m.status,estDelivery:r.estDelivery||m.estDelivery,error:null}:m);
+        if(r.events&&r.events.length)setShipments(list=>list.map(x=>x.id===s.id?{...x,trackEvents:r.events,estDelivery:r.estDelivery||x.estDelivery,trackedAt:new Date().toISOString()}:x)); }
+      else { setTrackModal(m=>m&&m.s.id===s.id?{...m,loading:false,error:(r&&r.error)||"FedEx didn't return tracking detail."}:m); }
+    }catch(err){ setTrackModal(m=>m&&m.s.id===s.id?{...m,loading:false,error:"Couldn't reach FedEx for live tracking."}:m); } })();
+  };
   const reship=s=>goShip({receiver:s.recipient,weight:s.weight,reference:s.reference});
   const tone=st=>st==="Delivered"?"green":st==="Voided"?"rose":st==="Exception"?"rose":st==="Out for delivery"?"amber":st==="In transit"?"amber":"blue";   /* Voided reads as a problem, not neutral — red like exceptions */
   const term=q.trim().toLowerCase();
@@ -9404,8 +9427,8 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
         <div className="flex items-center gap-3 px-4 py-2 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50"><div className="w-4"/><div className="w-24 shrink-0">Created</div><div className="flex-1">Recipient</div><div className="flex-1 hidden lg:block">Company</div><div className="w-56 hidden md:block">Service</div><div className="w-40 hidden md:block">Tracking</div><div className="flex-1 hidden lg:block">Ship-to address</div><div className="w-28 hidden xl:block">Reference</div><div className="w-28 shrink-0 text-right">Status</div></div>
         {list.length===0&&<div className="p-8 text-center text-sm text-stone-400">No shipments match “{q}”.</div>}
         {list.map(s=>(
-        <div key={s.id} id={"ship-row-"+s.id}>
-          <div onClick={()=>setOpen(open===s.id?null:s.id)} className={`flex items-center gap-3 px-4 ${custom.density==="compact"?"py-1.5":"py-3"} hover:bg-stone-50 cursor-pointer ${stuck(s)?"border-l-2 border-amber-400":""}`} title={stuck(s)?"No delivery after "+custom.stuckDays+"+ days in transit — possibly stuck":undefined}>
+        <div key={s.id} id={"ship-row-"+s.id} className={open===s.id?"relative z-10 my-1.5 rounded-xl ring-2 ring-[#0086E0]/25 bg-white shadow-sm overflow-hidden":""}>
+          <div onClick={()=>setOpen(open===s.id?null:s.id)} className={`flex items-center gap-3 px-4 ${custom.density==="compact"?"py-1.5":"py-3"} hover:bg-stone-50 cursor-pointer ${open===s.id?"bg-stone-50":""} ${stuck(s)?"border-l-2 border-amber-400":""}`} title={stuck(s)?"No delivery after "+custom.stuckDays+"+ days in transit — possibly stuck":undefined}>
             <button className="text-stone-400"><ChevronRight className={`w-4 h-4 transition-transform ${open===s.id?"rotate-90":""}`}/></button>
             <div className="w-24"><div className="text-sm text-stone-500">{s.date}</div><div className="text-[10px] text-stone-400">{s.time||""}</div></div>
             <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{s.recipient?.name||"—"}</div>{s.recipient?.company&&s.recipient.company!==s.recipient.name&&<div className="text-[11px] text-stone-400 truncate lg:hidden">{s.recipient.company}</div>}<div className="text-[11px] text-stone-400 truncate md:hidden">{s.service}</div></div>
@@ -9414,7 +9437,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
             <div className="w-40 hidden md:flex items-center gap-0.5"><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" onClick={e=>e.stopPropagation()} className="text-[#0086E0] underline text-xs flex items-center gap-1 truncate min-w-0">{s.tracking}<ExternalLink className="w-3 h-3 shrink-0"/></a><CopyTrackBtn tn={s.tracking}/></div>
             <div className="flex-1 hidden lg:block min-w-0"><div className="text-xs text-stone-600 truncate">{s.recipient?.address1||"—"}</div><div className="text-[11px] text-stone-400 truncate">{s.recipient?.city}{s.recipient?.state?", "+s.recipient.state:""} {s.recipient?.zip||""}</div></div>
             <div className="w-28 hidden xl:block text-xs text-stone-500 truncate">{s.reference||"—"}</div>
-            <div className="w-28 shrink-0 text-right whitespace-nowrap"><Badge tone={tone(s.status)}>{s.status}</Badge></div>
+            <div className="w-28 shrink-0 text-right whitespace-nowrap">{s.tracking?<button onClick={(e)=>{e.stopPropagation();openTrack(s);}} title="See the FedEx scan history + estimated delivery" className="inline-flex items-center gap-1 hover:opacity-80"><Badge tone={tone(s.status)}>{s.status}</Badge><MapPin className="w-3 h-3 text-stone-400"/></button>:<Badge tone={tone(s.status)}>{s.status}</Badge>}</div>
           </div>
           {open===s.id&&(
             <div className="px-12 pb-4 pt-1 bg-stone-50/60 text-sm">
@@ -9423,8 +9446,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                 <Info k="Tracking" v={<span className="inline-flex items-center gap-1"><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" className="text-[#0086E0] underline">{s.tracking} ↗</a><CopyTrackBtn tn={s.tracking}/></span>}/>
                 <Info k="To" v={`${s.recipient?.name||""}${s.recipient?.company?" · "+s.recipient.company:""} — ${s.recipient?.address1||""}, ${s.recipient?.city||""}, ${s.recipient?.state||""} ${s.recipient?.zip||""}`}/>
                 <Info k="Reference" v={s.reference||"—"}/>
-                <div className="flex items-end gap-2"><button onClick={(e)=>{e.stopPropagation();window.dispatchEvent(new CustomEvent("sc-slip-compose",{detail:{slips:[slipFromShipment(s)]}}));}} className="text-xs bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing Slip</button><button onClick={(e)=>{e.stopPropagation();openSlipEdit(s);}} title="Type the items for this slip — perfect for manual shipments with no store connected. Items are saved for reprints." className="text-xs bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF] flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5"/>Create Packing Slip</button>
-                {s.status!=="Voided"&&s.status!=="Delivered"&&<button onClick={async(e)=>{e.stopPropagation();if(!await uiConfirm("Void this label?\n\nIt will be marked Voided here and excluded from audits and duplicate checks. The carrier refund is processed automatically — contact support if you don't see it within a few days."))return;setShipments(list=>list.map(x=>x.id===s.id?{...x,status:"Voided",voidedAt:new Date().toLocaleString()}:x));window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Voided label",detail:(s.reference||"")+" · "+(s.tracking||"")}}));}} className="text-xs bg-rose-50 border border-rose-200 text-rose-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-rose-100 flex items-center gap-1.5"><Ban className="w-3.5 h-3.5"/>Void Label</button>}</div>
+                <div className="flex items-end gap-2"><button onClick={(e)=>{e.stopPropagation();window.dispatchEvent(new CustomEvent("sc-slip-compose",{detail:{slips:[slipFromShipment(s)]}}));}} className="text-xs bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing Slip</button><button onClick={(e)=>{e.stopPropagation();openSlipEdit(s);}} title="Type the items for this slip — perfect for manual shipments with no store connected. Items are saved for reprints." className="text-xs bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF] flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5"/>Create Packing Slip</button></div>
                 <Info k="Created" v={`${s.date}${s.time?" · "+s.time:""}`}/>
                 <Info k="From ZIP" v={s.fromZip}/>
                 <Info k="Packages" v={`${s.pieces?.length||1} pkg · ${s.weight} lb total`}/>
@@ -9435,7 +9457,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                   <button onClick={(e)=>{e.stopPropagation();setRateOpen(rateOpen===s.id?null:s.id);}} className="flex items-center gap-1.5 text-left group">
                     <ChevronRight className={`w-3.5 h-3.5 text-stone-400 transition-transform ${rateOpen===s.id?"rotate-90":""}`}/>
                     <span className="text-[11px] uppercase tracking-wider text-stone-400">Rate</span>
-                    <span className="text-sm font-semibold text-stone-800">{showMoney?money(s.sell):"—"}</span>
+                    <span className="text-sm font-semibold text-stone-800">{(()=>{const rv=s.sell!=null?s.sell:(s.cost!=null?s.cost:null);return (showMoney&&rv!=null)?money(rv):"—";})()}</span>
                     <span className="text-[11px] text-stone-400 group-hover:text-stone-600">· view breakdown</span>
                   </button>
                   {showMoney&&rateOpen===s.id&&(()=>{
@@ -9444,14 +9466,16 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                     const accs=(s.rateAccessorials||[]);
                     const sumSur=surs.reduce((a,x)=>a+(+x.amount||0),0);
                     const sumAcc=accs.reduce((a,x)=>a+(+x.amount||0),0);
-                    const base=s.rateBase!=null?+s.rateBase:Math.max(0,(+s.sell||0)-sumSur-sumAcc-ins);
+                    const sellV=s.sell!=null?+s.sell:(s.cost!=null?+s.cost:0);
+                    const base=s.rateBase!=null?+s.rateBase:Math.max(0,sellV-sumSur-sumAcc-ins);
                     const Row=({label,amt,strong})=>(<div className={`flex justify-between py-0.5 ${strong?"font-semibold text-stone-800 border-t border-stone-200 mt-1 pt-1":"text-stone-600"}`}><span>{label}</span><span className="">{money(amt)}</span></div>);
                     return (<div className="mt-2 ml-5 max-w-sm bg-white border border-stone-200 rounded-lg px-3 py-2 text-[13px]">
                       <Row label={s.oneRate?"One Rate (flat)":"Base rate"} amt={base}/>
                       {surs.map((x,i)=><Row key={"s"+i} label={x.label||"Surcharge"} amt={+x.amount||0}/>)}
                       {accs.map((x,i)=><Row key={"a"+i} label={x.label||"Accessorial"} amt={+x.amount||0}/>)}
                       {ins>0&&<Row label="Insurance / declared value" amt={ins}/>}
-                      <Row label="Total charged" amt={s.sell} strong/>
+                      {s.sell==null&&s.cost!=null&&<div className="text-[10px] text-stone-400 italic pt-0.5">shown at cost — no sell price recorded</div>}
+                      <Row label="Total charged" amt={sellV} strong/>
                       {isAdmin&&s.cost!=null&&<div className="mt-1.5 pt-1.5 border-t border-dashed border-stone-200 text-[11px] text-stone-400 flex justify-between"><span>Your cost → margin</span><span className="">{money(s.cost)} → +{money(Math.max(0,(s.sell||0)-(s.cost||0)))}</span></div>}
                     </div>);
                   })()}
@@ -9460,7 +9484,8 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
               <div className="flex flex-wrap gap-2">
                 <button onClick={()=>reship(s)} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><RotateCcw className="w-3.5 h-3.5"/>Edit &amp; reship</button>
                 <button onClick={(e)=>{e.stopPropagation();doReprint(s);}} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 flex items-center gap-1.5"><Printer className="w-3.5 h-3.5"/>Reprint</button>
-                {s.status!=="Voided"&&<button onClick={()=>voidS(s.id)} className="text-sm text-rose-600 hover:bg-rose-50 rounded-lg px-3 py-1.5 font-medium flex items-center gap-1.5"><X className="w-3.5 h-3.5"/>Void Label</button>}
+                {s.tracking&&<button onClick={(e)=>{e.stopPropagation();openTrack(s);}} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5"/>Track</button>}
+                {s.status!=="Voided"&&s.status!=="Delivered"&&<button onClick={(e)=>voidLabel(e,s)} className="text-sm text-rose-600 hover:bg-rose-50 rounded-lg px-3 py-1.5 font-medium flex items-center gap-1.5"><Ban className="w-3.5 h-3.5"/>Void Label</button>}
               </div>
             </div>
           )}
@@ -9468,6 +9493,35 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
       ))}
       </div>
       {reprintLp&&<LabelPreviewModal data={reprintLp} onClose={()=>setReprintLp(null)} settings={settings}/>}
+      {trackModal&&createPortal(<div className="fixed inset-0 z-[9998] bg-black/40 flex items-center justify-center p-4" onClick={()=>setTrackModal(null)}>
+        <div onClick={e=>e.stopPropagation()} className="bg-white rounded-xl border border-stone-200 shadow-xl w-full max-w-md max-h-[85vh] flex flex-col">
+          <div className="px-5 py-3.5 border-b border-stone-100 flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-stone-800 flex items-center gap-2"><MapPin className="w-4 h-4 text-[#0086E0]"/>Tracking</div>
+              <div className="text-[12px] text-stone-500 truncate mt-0.5">{trackModal.s.recipient?.name||"—"} · {trackModal.s.service||trackModal.s.carrier||"FedEx"}</div>
+              <a href={TRACK_URL[trackModal.s.carrier||"FedEx"](trackModal.s.tracking)} target="_blank" rel="noopener" className="text-[12px] text-[#0086E0] underline inline-flex items-center gap-1 mt-0.5">{trackModal.s.tracking}<ExternalLink className="w-3 h-3"/></a>
+            </div>
+            <button onClick={()=>setTrackModal(null)} className="text-stone-400 hover:text-stone-700"><X className="w-4 h-4"/></button>
+          </div>
+          <div className="px-5 py-3 border-b border-stone-100 flex items-center gap-3 flex-wrap">
+            <Badge tone={tone(trackModal.status)}>{trackModal.status||"—"}</Badge>
+            {trackModal.estDelivery&&<span className="text-[12px] text-stone-600">Est. delivery <b className="text-stone-800">{(()=>{try{return new Date(trackModal.estDelivery).toLocaleDateString([],{weekday:"short",month:"short",day:"numeric"});}catch(e){return String(trackModal.estDelivery).slice(0,10);}})()}</b></span>}
+            {trackModal.loading&&<span className="text-[11px] text-stone-400 inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin"/>refreshing from FedEx…</span>}
+          </div>
+          <div className="px-5 py-4 overflow-y-auto">
+            {trackModal.error&&!trackModal.events.length&&<div className="text-[13px] text-stone-500 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2.5">{trackModal.error}</div>}
+            {!trackModal.events.length&&!trackModal.error&&!trackModal.loading&&<div className="text-[13px] text-stone-400 text-center py-4">No scans recorded yet — FedEx posts the first scan once the package is picked up.</div>}
+            {trackModal.events.length>0&&<div className="relative pl-4">
+              <div className="absolute left-[5px] top-1 bottom-1 w-px bg-stone-200"/>
+              {trackModal.events.map((ev,i)=>(<div key={i} className="relative pb-3 last:pb-0">
+                <div className={`absolute -left-4 top-1 w-2.5 h-2.5 rounded-full border-2 border-white ${i===0?"bg-[#0086E0]":"bg-stone-300"}`}/>
+                <div className={`text-[13px] ${i===0?"font-semibold text-stone-800":"text-stone-700"}`}>{ev.status||"Scan"}</div>
+                <div className="text-[11px] text-stone-400">{ev.location||""}{ev.location&&ev.time?" · ":""}{ev.time?(()=>{try{return new Date(ev.time).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});}catch(e){return String(ev.time);}})():""}</div>
+              </div>))}
+            </div>}
+          </div>
+        </div>
+      </div>,document.body)}
     </div>
   );
 }

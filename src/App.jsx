@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v595";
+const BUILD_TAG="addr-v596";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3169,7 +3169,7 @@ function Domains({settings,setSettings,clients}){
           <div className=" text-sm text-stone-800 truncate flex items-center gap-2">{d.full}<button onClick={()=>copy(d.full)} className="text-stone-300 hover:text-[#0086E0]" title="Copy">{copied===d.full?<Check className="w-3.5 h-3.5 text-emerald-600"/>:<ExternalLink className="w-3.5 h-3.5"/>}</button></div>
           <div className="text-[11px] text-stone-400">{d.label?d.label+" · ":""}added {d.created}</div>
         </div>
-        <button onClick={()=>mark(d.id,d.status==="live"?"pending":"live")} className="shrink-0">{d.status==="live"?<Badge tone="green">live</Badge>:<Badge tone="amber">pending DNS</Badge>}</button>
+        <button onClick={()=>mark(d.id,d.status==="live"?"pending":"live")} title={d.status==="live"?"Marked live — click to set back to pending DNS":"Manual marker — click to mark live once your DNS resolves"} className="shrink-0 flex items-center gap-1 hover:opacity-75">{d.status==="live"?<Badge tone="green">live</Badge>:<Badge tone="amber">pending DNS</Badge>}<Edit3 className="w-3 h-3 text-stone-300"/></button>
         <button onClick={()=>del(d.id)} className="text-stone-300 hover:text-rose-500 shrink-0"><Trash2 className="w-4 h-4"/></button>
       </div>))}
     </div>
@@ -6435,8 +6435,8 @@ export default function App(){
   };
   useEffect(()=>{start();},[]);
   if(phase==="boot"||phase==="loading") return (<div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f2f8fd] via-white to-[#e6f4ff] relative overflow-hidden">
-    <Cloud className="absolute -right-16 -top-16 w-80 h-80 text-[#0086E0]/5" strokeWidth={1}/>
-    <Cloud className="absolute -left-20 -bottom-20 w-96 h-96 text-[#0086E0]/5" strokeWidth={1}/>
+    {!BRAND.fw&&<><Cloud className="absolute -right-16 -top-16 w-80 h-80 text-[#0086E0]/5" strokeWidth={1}/>
+    <Cloud className="absolute -left-20 -bottom-20 w-96 h-96 text-[#0086E0]/5" strokeWidth={1}/></>}
     <div className="relative flex flex-col items-center gap-5">
       <div className="relative">
         <span className="absolute inset-0 rounded-full bg-[#0086E0]/15 blur-xl animate-pulse"/>
@@ -7657,7 +7657,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       carrierCode:q.carrierCode,serviceCode:q.serviceCode,packageTypeCode:(/one\s*rate/i.test(String(q.label||""))?(q.packageTypeCode||(orBox?orBox.code:"")):""),
       shippingService:q.label,shippingTotal:String(q.sell??"0.00"),contentDescription:"Merchandise",
       signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null,residential,
-      billingParty:billTo==="third"?"third_party":(billTo==="receiver"?"receiver":"sender"),billingAccount:billTo==="third"?(thirdAcct||null):null,
+      billingParty:billTo==="third"?"third_party":(billTo==="receiver"?"receiver":"sender"),billingAccount:(billTo==="third"||billTo==="receiver")?(thirdAcct||null):null,
       fedexAccount:ruleAcct||undefined,   // Autopilot "Book on FedEx Account" rule override
       providerAccountId:eng.providerAccountId||null,
       sender:{...sender,country:sender.country||"US"},receiver:{...receiver,country:receiver.country||"US"},
@@ -7999,7 +7999,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {/* Rates row: service list on the left, a slim info column (From order · Billing & third-party)
             fills the space to its right. Wraps to a normal stack on narrow screens. */}
         <div className="flex flex-wrap items-start gap-4">
-          <div className="flex-1 min-w-[300px] max-w-[64rem]">
+          <div className="flex-1 min-w-[300px]">
             <ServiceList hideTitle={true} quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
           </div>
           <div className="w-full lg:w-[320px] lg:shrink-0 space-y-3">
@@ -8052,7 +8052,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 <span className="text-stone-500">Bill to</span>
                 <select value={billTo} onChange={e=>setBillTo(e.target.value)} className="flex-1 bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="sender">Sender (You)</option><option value="receiver">Receiver</option><option value="third">Third-Party Acct</option></select>
               </div>
-              {billTo==="third"&&<input value={thirdAcct} onChange={e=>setThirdAcct(e.target.value)} placeholder="3rd-party acct #" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>}
+              {(billTo==="third"||billTo==="receiver")&&<input value={thirdAcct} onChange={e=>setThirdAcct(e.target.value)} placeholder={billTo==="receiver"?"Receiver's FedEx account #":"3rd-party account #"} className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>}
             </div>}
             {!custom.hideNotifyBox&&<div className="border border-[#b9c6d5] shadow-sm rounded-lg bg-white p-3 space-y-2">
               <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><Send className="w-3.5 h-3.5"/>Send Label &amp; Notify</div>
@@ -8478,7 +8478,7 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
     const matchBadge=matched===q.key?(<span className="text-[10px] font-semibold uppercase tracking-wide bg-[#E6F4FF] text-[#0086E0] border border-[#99D6FF] rounded px-1.5 py-0.5 shrink-0 inline-flex items-center gap-1">{matchedSrc==="autopilot"&&<Zap className="w-3 h-3"/>}{matchedSrc==="autopilot"?"Autopilot":"Requested"}</span>):null;
     return (
       <div key={q.key||svcFamilyKey(q.label)} className={"border rounded-lg bg-white shadow-sm transition-all duration-200 "+(matched===q.key?"border-[#0086E0] ring-1 ring-[#0086E0]":"border-[#b9c6d5]")}>
-        <div onClick={()=>{setOpen(isOpen?null:q.key); if(q._oneRate&&q.packageTypeCode&&onOneRate)onOneRate(q.packageTypeCode);}} className="px-3 py-2 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
+        <div onClick={()=>{setOpen(isOpen?null:q.key); if(q._oneRate&&q.packageTypeCode&&onOneRate)onOneRate(q.packageTypeCode);}} className="px-3 py-1.5 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
           <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isOpen?"rotate-90":""}`}/>
           {matchBadge}
           <div className="flex-1 min-w-0">
@@ -8487,7 +8487,7 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
           </div>
           <div className="text-right">{!!(custom.priceWarn>0&&ready&&hasPrice&&sell>custom.priceWarn)&&<div className="text-[10px] text-amber-600 flex items-center justify-end gap-0.5" title={"Above your $"+custom.priceWarn+" price alert"}><AlertTriangle className="w-3 h-3"/>over limit</div>}<div className="text-base font-semibold text-stone-900">{!ready?<span className="text-stone-300">—</span>:(live||fxLive)?(hasPrice?money(sell):<span className="text-stone-300">—</span>):loading?<span className="text-[11px] font-normal text-stone-400">pricing…</span>:(hasPrice?money(sell):<span className="text-stone-300">—</span>)}</div></div>
           {action&&(()=>{const unavailable=q._unavailable||(!hasPrice&&!loading&&live);
-            return <button onClick={(e)=>{e.stopPropagation();if(!unavailable)action(q);}} disabled={!ready||!hasPrice||unavailable} title={unavailable?"FedEx isn't offering this service for this shipment (size/weight/destination).":!hasPrice&&q._oneRate?"No One Rate flat price came back — pick a priced service.":undefined} className={`shrink-0 w-32 text-sm rounded px-3 py-2 font-medium flex items-center justify-center gap-1.5 disabled:cursor-not-allowed ${unavailable?"bg-rose-50 text-rose-600 border border-rose-200":bought===q.key?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8] disabled:opacity-40"}`}>{unavailable?<>Unavailable</>:bought===q.key?<><Check className="w-4 h-4"/>{doneLabel}</>:!hasPrice&&q._oneRate?<>No quote</>:<><Printer className="w-4 h-4"/>{label}</>}</button>;})()}
+            return <button onClick={(e)=>{e.stopPropagation();if(!unavailable)action(q);}} disabled={!ready||!hasPrice||unavailable} title={unavailable?"FedEx isn't offering this service for this shipment (size/weight/destination).":!hasPrice&&q._oneRate?"No One Rate flat price came back — pick a priced service.":undefined} className={`shrink-0 w-32 text-sm rounded-lg px-3 py-1.5 font-medium flex items-center justify-center gap-1.5 disabled:cursor-not-allowed ${unavailable?"bg-rose-50 text-rose-600 border border-rose-200":bought===q.key?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8] disabled:opacity-40"}`}>{unavailable?<>Unavailable</>:bought===q.key?<><Check className="w-4 h-4"/>{doneLabel}</>:!hasPrice&&q._oneRate?<>No quote</>:<><Printer className="w-4 h-4"/>{label}</>}</button>;})()}
         </div>
         {isOpen&&ready&&hasPrice&&<div className="px-3 pb-3 pt-1 border-t border-stone-100">
           {/* Compact breakdown table lined up under the service name and its transit line. The
@@ -9169,7 +9169,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
               <span className="text-[11px] text-stone-400">{navIdx+1}/{navList.length}</span>
               <button onClick={goNext} disabled={!navNext} className="p-1.5 rounded hover:bg-stone-100 disabled:opacity-30"><ChevronRight className="w-4 h-4"/></button>
             </div>}
-            {o.country&&!_isUSCountry(o.country)&&<button onClick={()=>printCommercialInvoice(o,(settings&&settings.products)||[],settings&&settings.sender,{...ciOpts,signature:ciOpts.signature||defaultSig(settings),senderTax:ciOpts.senderTax??((settings&&settings.taxId)||""),eei:ciOpts.eei??"NOEEI 30.37(a)",attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(ciOpts.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data}))})} className="text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Commercial Invoice</button>}
+            {o.country&&!_isUSCountry(o.country)&&<button onClick={()=>printCommercialInvoice(dest,(settings&&settings.products)||[],settings&&settings.sender,{...ciOpts,signature:ciOpts.signature||defaultSig(settings),senderTax:ciOpts.senderTax??((settings&&settings.taxId)||""),eei:ciOpts.eei??"NOEEI 30.37(a)",attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(ciOpts.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data}))})} className="text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Commercial Invoice</button>}
             <button onClick={()=>{goShip&&goShip(o);onClose&&onClose();}} className="text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/>{shipped?"New label (Ship tab)":"Open in Ship tab"}</button>
             <button onClick={onClose} className="text-stone-400 hover:text-stone-700 p-1"><X className="w-5 h-5"/></button>
           </div>
@@ -11750,13 +11750,15 @@ function PrinterSettings({settings:settingsLive,setSettings:commitSettings}){
 }
 function Notifications({settings,setSettings,emails}){
   const N=settings.notify||{};
-  const items=[["orderConfirm","Order confirmation","Sent to the customer when an order is placed"],["shipped","Shipment confirmation","Tracking link emailed when a label prints"],["delivered","Delivered notice","Sent when the carrier marks delivered"],["returnLabel","Return label","Emailed when an RMA label is created"],["exception","Delivery exception alert","Internal alert when a shipment hits a delivery exception"]];
+  /* live=true → actually sends today (shipped tracking email @6807, return @Returns). The rest are
+     not yet wired to a sender, so they're shown disabled ("Soon") instead of silently doing nothing. */
+  const items=[["shipped","Shipment confirmation","Tracking link emailed when a label prints",true],["returnLabel","Return label","Emailed when an RMA label is created",true],["orderConfirm","Order confirmation","Sent to the customer when an order is placed",false],["delivered","Delivered notice","Sent when the carrier marks delivered",false],["exception","Delivery exception alert","Internal alert when a shipment hits a delivery exception",false]];
   const toggle=k=>setSettings({...settings,notify:{...N,[k]:!N[k]}});
   return (<div className="space-y-4 max-w-2xl">
     <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Mail className="w-4 h-4"/>Email Automation</h2>
-    <p className="text-sm text-stone-500">Automated emails fire on shipping & warehouse events. Toggle what sends — the log below records every send.</p>
+    <p className="text-sm text-stone-500">Automated emails fire on shipping events. Toggle what sends — the log below records every send.</p>
     <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
-      {items.map(([k,l,d])=>(<div key={k} className="flex items-center gap-3 px-4 py-3"><div className="flex-1"><div className="text-sm font-medium">{l}</div><div className="text-[11px] text-stone-400">{d}</div></div><button onClick={()=>toggle(k)}><span className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${N[k]?"bg-[#0086E0] justify-end":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></span></button></div>))}
+      {items.map(([k,l,d,live])=>(<div key={k} className="flex items-center gap-3 px-4 py-3"><div className="flex-1"><div className="text-sm font-medium flex items-center gap-2">{l}{!live&&<span className="text-[9px] uppercase tracking-wide text-stone-400 bg-stone-100 rounded px-1.5 py-0.5">Soon</span>}</div><div className="text-[11px] text-stone-400">{d}</div></div><button disabled={!live} onClick={()=>toggle(k)} className={live?"":"opacity-40 cursor-not-allowed"}><span className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${live&&N[k]?"bg-[#0086E0] justify-end":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></span></button></div>))}
     </div>
     <div>
       <div className="text-xs font-semibold uppercase tracking-widest text-stone-500 mb-2 flex items-center gap-1.5"><Mail className="w-3.5 h-3.5"/>Email log</div>

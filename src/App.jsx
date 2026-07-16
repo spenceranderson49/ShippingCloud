@@ -49,7 +49,7 @@ function tintLogoDataUrl(src,accent,cb){
     img.src=src;
   }catch(e){cb(src);}
 }
-function FreightwireShipHub({logoH=44,sub=true,subText="Customer Portal",accent=""}){
+function FreightwireShipHub({logoH=44,sub=true,subText="Customer Portal",accent="",name1="Shipping",name2="Hub"}){
   const nameSize=Math.round(logoH*0.5);
   const [logoSrc,setLogoSrc]=useState(FW_LOGO);
   useEffect(()=>{ let dead=false; tintLogoDataUrl(FW_LOGO,String(accent||"").trim(),u=>{ if(!dead)setLogoSrc(u); }); return ()=>{dead=true;}; },[accent]);
@@ -57,11 +57,13 @@ function FreightwireShipHub({logoH=44,sub=true,subText="Customer Portal",accent=
     <img src={logoSrc} alt="Freightwire" style={{height:logoH}} className="w-auto shrink-0" draggable={false}/>
     <span style={{width:1,height:Math.round(logoH*0.82),background:"#d6d3ce"}} className="shrink-0"/>
     <span className="inline-flex flex-col" style={{gap:1}}>
-      <span style={{fontFamily:"Inter,system-ui,sans-serif",fontWeight:800,fontSize:nameSize,letterSpacing:"0.1em",lineHeight:1,color:"#1F1B18",textTransform:"uppercase"}}>Shipping<span style={{color:"var(--acc,#0198FF)"}}>Hub</span></span>
+      <span style={{fontFamily:"Inter,system-ui,sans-serif",fontWeight:800,fontSize:nameSize,letterSpacing:"0.1em",lineHeight:1,color:"#1F1B18",textTransform:"uppercase"}}>{name1}<span style={{color:"var(--acc,#0198FF)"}}>{name2}</span></span>
       {sub&&<span style={{fontFamily:"Inter,system-ui,sans-serif",fontSize:Math.max(9,Math.round(logoH*0.2)),letterSpacing:"0.12em",color:"#78716c",fontWeight:500,textTransform:"uppercase",lineHeight:1}}>{subText}</span>}
     </span>
   </span>);
 }
+/* Admin-HQ lockup: "ADMIN PORTAL / by ShippingHub" wherever the admin brand shows its mark */
+const AdminPortalLockup=(props)=><FreightwireShipHub name1="Admin" name2="Portal" subText="by ShippingHub" {...props} sub={true}/>;
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:false};
 /* ── Per-login feature catalog ──────────────────────────────────────────────
    Every capability is a per-login switch, managed in Admin → Users. Customers
@@ -124,7 +126,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v619";
+const BUILD_TAG="addr-v620";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -177,7 +179,7 @@ const APP_ORIGIN=(()=>{ try{ return (typeof window!=="undefined"&&window.locatio
    by scanning for the transparent gap before the wordmark) instead of the ShippingCloud cloud, plus
    the FreightwireShip tab title. Crop bounds verified against the shipped asset: mark = 78x78 at x5,y2. */
 if(typeof window!=="undefined"&&BRAND.fw){
-  try{ document.title=BRAND.admin?"Admin Portal — Freightwire":"ShippingHub — Freightwire"; }catch(e){}
+  try{ document.title=BRAND.admin?"Admin Portal by ShippingHub":"ShippingHub — Freightwire"; }catch(e){}
   try{
     const setIcon=(href)=>{ try{
       document.querySelectorAll('link[rel*="icon"]').forEach(l=>l.parentNode&&l.parentNode.removeChild(l));
@@ -3099,7 +3101,7 @@ function Login({users,onLogin,brand}){
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center gap-2 mb-6">
           <div className="flex items-center gap-2">
-            {BRAND.fw?<FreightwireShipHub logoH={46} subText={BRAND.admin?"Admin HQ":"Customer Portal"}/>:(!B.name1||B.name1==="Shipping")&&(!B.name2||B.name2==="Cloud")?<ShipCloudLogo size={28}/>:<><BrandCloud className="h-10 w-auto" color={B.primary}/><span className="font-extrabold tracking-tight text-3xl" style={{color:B.dark}}>{B.name1}<span style={{color:B.primary}}>{B.name2}</span></span></>}
+            {BRAND.fw?(BRAND.admin?<AdminPortalLockup logoH={46}/>:<FreightwireShipHub logoH={46} subText="Customer Portal"/>):(!B.name1||B.name1==="Shipping")&&(!B.name2||B.name2==="Cloud")?<ShipCloudLogo size={28}/>:<><BrandCloud className="h-10 w-auto" color={B.primary}/><span className="font-extrabold tracking-tight text-3xl" style={{color:B.dark}}>{B.name1}<span style={{color:B.primary}}>{B.name2}</span></span></>}
           </div>
           {B.showLogo&&B.logo&&B.logo!==FW_LOGO&&<div className="flex items-center gap-1.5 text-stone-400 text-xs">{B.partnerLabel}<img src={B.logo} alt="partner" className="h-3.5 w-auto object-contain"/></div>}
         </div>
@@ -6343,7 +6345,7 @@ function LandingGate({onDone}){
   const [auth,setAuth]=useState(()=>{const p=lsGet("postDemo",null);if(p){lsSet("postDemo",null);return "request";}return null;}); // null | "signin" | "request" | "fedex"
   const [intake,setIntake]=useState(null);
   if(BRAND.admin)return (<div className="min-h-screen bg-stone-100 flex flex-col items-center justify-center p-4 gap-4">
-    <div className="text-center flex flex-col items-center gap-2"><FreightwireShipHub logoH={40} subText="Admin Portal"/></div>
+    <div className="text-center flex flex-col items-center gap-2"><AdminPortalLockup logoH={40}/></div>
     <CloudAuth initialMode="signin" onDone={onDone}/>
   </div>);
   return (<div className="relative">
@@ -7067,7 +7069,7 @@ function AppInner(){
 
           {BRAND.fw?(<>
             <button onClick={()=>setTab("ship")} title="Back to Ship" className="flex items-center gap-2.5 cursor-pointer select-none shrink-0">
-              <FreightwireShipHub logoH={Math.round(30*((custom.logoScale||100)/100))} sub={false} accent={srf.accent||""}/>
+              {BRAND.admin?<AdminPortalLockup logoH={Math.round(30*((custom.logoScale||100)/100))} accent={srf.accent||""}/>:<FreightwireShipHub logoH={Math.round(30*((custom.logoScale||100)/100))} sub={false} accent={srf.accent||""}/>}
             </button>
           </>):(
           <button onClick={()=>setTab("ship")} title="Back to Ship" className="cursor-pointer flex items-center shrink-0">{(!brand.name1||brand.name1==="Shipping")&&(!brand.name2||brand.name2==="Cloud")?<ShipCloudLogo size={Math.round(22*((custom.logoScale||100)/100))} accent={srf.accent||custom.accent||"#0086E0"}/>:<span className="font-extrabold tracking-tight text-[20px] sm:text-[26px]" style={{color:brand.dark}}>{brand.name1}<span style={{color:custom.accent||brand.primary}}>{brand.name2}</span></span>}</button>)}

@@ -384,6 +384,49 @@ exports.handler = async (event) => {
         return J({ ok: true, status: st, code, events, estDelivery: est });
       } catch (e) { return J({ ok: false, error: (e && e.message) || "track failed" }); }
     }
+    if (body.action === "locations") {
+      /* FedEx Locations Search — nearest drop-off / pickup locations by ZIP or lat/long.
+         No account needed; runs on the main FEDEX_API_KEY project (Locations Search API). */
+      const loc = {};
+      if (body.lat != null && body.lng != null) loc.geographicCoordinates = String(body.lat) + "," + String(body.lng);
+      else loc.address = { postalCode: S(body.postalCode), countryCode: CC(body.country), stateOrProvinceCode: body.state ? ST(body.state) : undefined, city: body.city || undefined };
+      const radius = Math.min(100, Math.max(1, +body.distance || 25));
+      const payload = {
+        locationsSummaryRequestControlParameters: { distance: { units: "MI", value: radius }, maxResults: Math.min(25, +body.limit || 15) },
+        location: loc,
+      };
+      let r, t, d = null;
+      try {
+        r = await fetch(c.base + "/location/v1/locations", { method: "POST", headers: { Authorization: "Bearer " + tk, "Content-Type": "application/json", "X-locale": "en_US" }, body: JSON.stringify(payload) });
+        t = await r.text(); try { d = JSON.parse(t); } catch {}
+      } catch (e) { return J({ ok: false, error: "locations fetch failed: " + (e && e.message) }); }
+      if (!r.ok) {
+        const msg = (d && d.errors && d.errors[0] && d.errors[0].message) || (t ? t.slice(0, 160) : "HTTP " + r.status);
+        const notReady = /forbidden|authorize|permission/i.test(msg);
+        return J({ ok: false, error: notReady ? "FedEx location search isn't active on this account yet — it turns on automatically once FedEx finishes enabling the Locations API (usually within a few hours of adding it)." : msg });
+      }
+      const out = (d && d.output && d.output.locationDetailList || []).map((L) => {
+        const con = L.contactAndAddress || {};
+        const ad = con.address || {};
+        const dist = L.distance && L.distance.value != null ? Math.round(L.distance.value * 10) / 10 + " " + (L.distance.units === "KM" ? "km" : "mi") : "";
+        const hoursToday = (() => {
+          const oh = L.normalHours || L.storeHours || [];
+          const day = (oh[0] && oh[0].operationalHours && oh[0].operationalHours[0]) || null;
+          return day ? (day.begins + "–" + day.ends).replace(/:00/g, "") : "";
+        })();
+        return {
+          name: (con.contact && con.contact.companyName) || L.locationType || "FedEx location",
+          type: (L.locationType || "").replace(/_/g, " ").replace(/FEDEX /i, "").trim(),
+          address1: (ad.streetLines || []).join(" "),
+          city: ad.city, state: ad.stateOrProvinceCode, zip: ad.postalCode,
+          phone: (con.contact && con.contact.phoneNumber) || "",
+          distance: dist, hoursToday,
+          lat: L.geoPositionalCoordinates && L.geoPositionalCoordinates.latitude,
+          lng: L.geoPositionalCoordinates && L.geoPositionalCoordinates.longitude,
+        };
+      });
+      return J({ ok: true, locations: out });
+    }
     if (body.action === "pickup") {
       if (!c.account) return J({ ok: false, error: "Missing FedEx account number." });
       const out = await schedulePickup(c, body, tk);

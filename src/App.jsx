@@ -87,6 +87,7 @@ const FEATURE_CATALOG=[
   {id:"scan",label:"Scan",desc:"Barcode scan station",default:true},
   {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:true},
   {id:"seeCosts",label:"See costs & spend",desc:"Rates, order totals, batch totals and Reports dollars. Turn OFF to hide all money from this customer's logins",default:true},
+  {id:"fedexLocations",label:"FedEx Location Finder",desc:"Find nearest FedEx drop-off / pickup locations by ZIP or current location",default:true},
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own NON-FedEx carrier accounts (the FedEx Account settings page always shows for every customer; admins always have this)",default:false},
 ];
 const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All Logins"],["rates","Rates & Dim Divisors"],["labelcert","FedEx Labels"],["customizations","Features & Access"],["branding","Branding"],["apiadmin","API"],["billing","Billing & Invoices"],["domains","Domains"],["backups","Backups & Restore"]];
@@ -108,7 +109,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v584";
+const BUILD_TAG="addr-v585";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7023,7 +7024,7 @@ function AppInner(){
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
           {tab==="companyadmin"&&isCompanyAdmin&&<CompanyAdmin currentUser={currentUser} companyUsers={companyUsers} setCompanyUsers={setCompanyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} settings={settings} client={client} allowedTabs={featTabKeys}/>}
           {(tab==="admin"||tab.startsWith("admin:"))&&isAdmin&&<AdminPortal activeSection={tab.startsWith("admin:")?tab.slice(6):null} clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} publicBrand={publicBrand} setPublicBrand={setPublicBrand} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
-          {tab==="settings"&&<Settings showMoney={showMoney} secPolicy={(myFlags&&myFlags._secPolicy)||{}} isAdmin={isAdmin} uid={currentUser&&currentUser.id} currentUser={currentUser} setCurrentUser={setCurrentUser} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)} allowedTabs={featTabKeys}/>}
+          {tab==="settings"&&<Settings showMoney={showMoney} secPolicy={(myFlags&&myFlags._secPolicy)||{}} isAdmin={isAdmin} uid={currentUser&&currentUser.id} currentUser={currentUser} setCurrentUser={setCurrentUser} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)} allowedTabs={featTabKeys} fxLocOn={featureOn("fedexLocations",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
           </TabBoundary>
         </main>
       </div>
@@ -10639,7 +10640,64 @@ function CheckoutRates({settings,setSettings,client,uid}){
 }
 
 /* ════════ SETTINGS ════════ */
-function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,isAdmin=false,showMoney=true,secPolicy={},currentUser=null,setCurrentUser=null,allowedTabs=null}){
+function FedexLocations({settings}){
+  const [zip,setZip]=React.useState((settings.sender&&settings.sender.zip)||"");
+  const [radius,setRadius]=React.useState(25);
+  const [busy,setBusy]=React.useState(false);
+  const [err,setErr]=React.useState("");
+  const [locs,setLocs]=React.useState(null);
+  const [geoBusy,setGeoBusy]=React.useState(false);
+  const run=async(body)=>{
+    setBusy(true);setErr("");setLocs(null);
+    try{
+      const r=await fetch("/.netlify/functions/fedex",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"locations",distance:radius,...body})});
+      const d=await r.json();
+      if(d&&d.ok){ setLocs(d.locations||[]); }
+      else setErr((d&&d.error)||"Couldn't search right now.");
+    }catch(e){ setErr("Network error — try again."); }
+    setBusy(false);
+  };
+  const byZip=()=>{ const z=String(zip||"").trim(); if(!/^\d{5}/.test(z))return setErr("Enter a 5-digit ZIP."); run({postalCode:z,country:"US"}); };
+  const byGeo=()=>{
+    if(!navigator.geolocation)return setErr("This device can't share its location — search by ZIP instead.");
+    setGeoBusy(true);setErr("");
+    navigator.geolocation.getCurrentPosition(
+      (pos)=>{ setGeoBusy(false); run({lat:pos.coords.latitude,lng:pos.coords.longitude}); },
+      ()=>{ setGeoBusy(false); setErr("Couldn't get your location — allow location access or search by ZIP."); },
+      {enableHighAccuracy:false,timeout:8000}
+    );
+  };
+  return (<div className="max-w-2xl space-y-4">
+    <div>
+      <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><MapPin className="w-4 h-4 text-[#0086E0]"/>Find FedEx Locations</h2>
+      <p className="text-sm text-stone-500 mt-1">Nearest FedEx drop-off and pickup spots — search by ZIP or use your current location.</p>
+    </div>
+    <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label="ZIP code"><Input value={zip} onChange={e=>setZip(e.target.value.replace(/[^0-9]/g,"").slice(0,5))} onKeyDown={e=>{if(e.key==="Enter")byZip();}} placeholder="e.g. 84101" className="w-32"/></Field>
+        <Field label="Within"><Select value={radius} onChange={e=>setRadius(+e.target.value)} className="w-24">{[10,25,50,100].map(m=><option key={m} value={m}>{m} mi</option>)}</Select></Field>
+        <button onClick={byZip} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy&&!geoBusy?<Loader2 className="w-4 h-4 animate-spin"/>:<Search className="w-4 h-4"/>}Search</button>
+        <button onClick={byGeo} disabled={busy||geoBusy} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5">{geoBusy?<Loader2 className="w-4 h-4 animate-spin"/>:<MapPin className="w-4 h-4"/>}Use my location</button>
+      </div>
+      {err&&<div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded px-3 py-2">{err}</div>}
+    </div>
+    {locs&&(locs.length?<div className="space-y-2">
+      {locs.map((L,i)=>(<div key={i} className="border border-stone-200 rounded-lg bg-white p-3 flex items-start gap-3">
+        <div className="w-9 h-9 rounded-lg bg-[#E6F4FF] flex items-center justify-center shrink-0"><MapPin className="w-4 h-4 text-[#0086E0]"/></div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-stone-800">{L.name}{L.type?<span className="text-[11px] font-normal text-stone-400"> · {L.type}</span>:""}</div>
+          <div className="text-xs text-stone-600">{L.address1}, {L.city}, {L.state} {L.zip}</div>
+          <div className="text-[11px] text-stone-400 mt-0.5 flex flex-wrap gap-x-3">{L.hoursToday&&<span>Today {L.hoursToday}</span>}{L.phone&&<span>{L.phone}</span>}</div>
+        </div>
+        <div className="text-right shrink-0">
+          {L.distance&&<div className="text-sm font-semibold text-[#0086E0]">{L.distance}</div>}
+          {L.lat&&<a href={`https://www.google.com/maps/search/?api=1&query=${L.lat},${L.lng}`} target="_blank" rel="noreferrer" className="text-[11px] text-stone-500 hover:text-[#0086E0]">Map ↗</a>}
+        </div>
+      </div>))}
+    </div>:<div className="text-sm text-stone-400 text-center py-6">No FedEx locations found in that range — try a wider radius.</div>)}
+  </div>);
+}
+function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,isAdmin=false,showMoney=true,secPolicy={},currentUser=null,setCurrentUser=null,allowedTabs=null,fxLocOn=false}){
   /* Remember which Settings sub-section you were on, so leaving Settings and coming back returns you to
      the same panel instead of resetting to General. Persisted so it survives a full reload too. */
   const [sec,setSecRaw]=useState("general");   // always open Settings on General
@@ -10650,7 +10708,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
      policy/fallback logic unchanged. */
   const SEC_GROUPS=[
     ["Workspace",[["general","General",Cog],["customize","Customizations",Sliders]]],
-    ["Shipping",[["shipscreen","Ship Screen",Truck],["orderspage","Orders",ShoppingBag],["carriers","FedEx Account",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package Sizes",Package],["boxlogic","Box Logic",Layers],["catalog","Product Catalog",Boxes],["reference","Reference Fields",Receipt]]],
+    ["Shipping",[["shipscreen","Ship Screen",Truck],["orderspage","Orders",ShoppingBag],["carriers","FedEx Account",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package Sizes",Package],["boxlogic","Box Logic",Layers],["catalog","Product Catalog",Boxes],["reference","Reference Fields",Receipt],["fedexlocations","Find FedEx Locations",MapPin]]],
     ["Documents & Printing",[["printer","Print Settings",Printer],["cieditor","Commercial Invoice",Receipt],["otherdocs","Other Documents",FileText],["slips","Packing Slips",ClipboardList],["manifests","Manifests",FileText]]],
     ["Automation & Integrations",[["integrations","Integrations",Layers],["notifications","Email Automation",Mail],["checkout","Checkout Rates",ShoppingBag]]],
     ["Account",[["reports","Reports",TrendingUp],["billing","Billing",CreditCard],["subscription","Subscription",Star]]],
@@ -10662,6 +10720,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
   const polFor=(id)=>{ if(isAdmin)return "on";
     if(currentUser&&currentUser.demo&&(id==="billing"||id==="subscription"))return "off";   // demo: no plans/pricing/card surfaces
     if(id==="subscription"&&!(secPolicy&&secPolicy.subscription))return "off";   // hidden unless the admin portal explicitly turns it on for this customer
+    if(id==="fedexlocations"&&!fxLocOn)return "off";   // FedEx Location Finder feature (admin-toggleable, default on)
     /* The FedEx Account page shows for EVERY customer (Spencer 2026-07-15: "I want FedEx in
        there always") — the panel itself renders only the FedEx pieces for non-admins; the
        England/platform plumbing stays admin-only inside it. The byoCarrier feature flag now
@@ -10705,6 +10764,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="cieditor"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Commercial invoice saved">{(s,ss)=><div className="space-y-6"><CIEditor settings={s} setSettings={ss} shipments={shipments}/><div className="border-t border-stone-200 pt-6"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-3">Commercial invoice history</div><CIHistory settings={s} setSettings={ss}/></div></div>}</SettingsDraftWrap>}
         {sec==="otherdocs"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Documents saved">{(s,ss)=><OtherDocs settings={s} setSettings={ss}/>}</SettingsDraftWrap>}
         {sec==="slips"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Saved">{(s,ss)=><SlipSettings settings={s} setSettings={ss}/>}</SettingsDraftWrap>}
+        {sec==="fedexlocations"&&<FedexLocations settings={settings}/>}
         {sec==="customize"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} allowedTabs={allowedTabs}/>}
         {sec==="shipscreen"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="ship" allowedTabs={allowedTabs}/>}
         {sec==="orderspage"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="orders" allowedTabs={allowedTabs}/>}

@@ -108,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v564";
+const BUILD_TAG="addr-v565";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2876,7 +2876,7 @@ const CUSTOM_DEFAULTS={
   slipThanks:"",slipFooter:"",
   density:"comfortable",stuckDays:0,
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
-  logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,skipBookedSummary:false,autoRulesOnShip:true,autoRulesInBatch:false,autoBookBatch:false,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],accent:"",
+  logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,skipBookedSummary:false,autoRulesOnShip:false,autoRulesInBatch:false,autoBookBatch:false,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],accent:"",
   refRequired:false,invRequired:false,poRequired:false,deptRequired:false,refLocked:false,invLocked:false,poLocked:false,deptLocked:false,hideDept:false,
   confetti:"page",seasonal:false,hideShipSteps:true,hideLabeledOrders:true,
 };
@@ -6322,10 +6322,18 @@ export default function App(){
     const res=await cloudLoadAll();
     if(res.ok){ setPhase("ready"); return; }
     if(res.authFailed){ lsDel("cloud.token"); CLOUD.token=null; setPhase("login"); return; }
-    CLOUD.offline=true; setPhase("ready"); setBootMsg("Offline — showing this device’s saved data; changes sync when the connection returns.");
-    /* Self-heal: a boot that raced a deploy/cold start stuck this tab in offline mode until a
-       manual reload. Quietly retry every 30s and clear the banner the moment the cloud answers. */
-    const t=setInterval(async()=>{ try{ const r=await cloudLoadAll(); if(r&&r.ok){ CLOUD.offline=false; clearInterval(t); setBootMsg(""); } }catch(e){} },30000);
+    CLOUD.offline=true; setPhase("ready");
+    /* Grace before nagging: one slow/timed-out getAll (admin boots download a LOT) used to pin
+       the offline banner until a manual reload. Retry quietly at ~4s — the banner only appears
+       if that retry ALSO fails (genuinely offline), and a 30s loop keeps trying and clears it
+       the moment the cloud answers. The banner itself stays: it marks the tab as running on
+       stale device data, which is exactly the state the wipe-guards exist for. */
+    const _retry=async()=>{ try{ const r=await cloudLoadAll(); if(r&&r.ok){ CLOUD.offline=false; setBootMsg(""); return true; } }catch(e){} return false; };
+    setTimeout(async()=>{
+      if(await _retry())return;
+      setBootMsg("Offline — showing this device’s saved data; changes sync when the connection returns.");
+      const t=setInterval(async()=>{ if(await _retry())clearInterval(t); },30000);
+    },4000);
   };
   useEffect(()=>{start();},[]);
   if(phase==="boot"||phase==="loading") return <div className="min-h-screen bg-neutral-950 flex items-center justify-center"><div className="text-stone-400 text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>Loading your workspace…</div></div>;
@@ -7141,7 +7149,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const [customs,setCustoms]=useState({reason:"Sale",incoterm:INCOTERMS[1],dutiesBill:"sender",lines:[{desc:"",hts:"",origin:"United States",qty:1,value:"",weight:""}]});
   const [showCI,setShowCI]=useState(false);
 
-  const intl=!!receiver.country&&receiver.country!=="United States";
+  const intl=!!receiver.country&&!_isUSCountry(receiver.country);   /* "US"/"USA"/"U.S." are domestic — the strict string compare flagged Shopify's "US" as international (intl-only services, no rates) */
   const setPiece=(i,patch)=>setPieces(ps=>ps.map((p,j)=>j===i?{...p,...patch}:p));
   const addPiece=()=>setPieces(ps=>[...ps,{...(ps[ps.length-1]||{weight:"",L:"",W:"",H:""})}]);
   const delPiece=(i)=>{
@@ -7532,7 +7540,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       pieces:pieces.map(p=>({weight:Math.ceil(pw(p)||1),length:p.L,width:p.W,height:p.H,declaredValue:(pieces.length>1&&dvEach)?(+p.dv||null):(+insurance||null)}))};   // book at the rounded-up billing weight the quote priced · per-box declared value applies intl too (p.value never existed — intl DV was silently dropped)
     const res=await shipCall({action:"ship",account:acctOf(eng),order});
     if(!res||!res.ok){setShipStatus({state:"error",key:q.key,msg:(res&&res.error)||"Booking failed"});setBought(null);return;}
-    const done=(st)=>{ justBookedRef.current=selectedOrder||"manual"; const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,pdfAll:(st.labels&&st.labels.length>1)?st.labels:undefined,tracking:st.tracking,service:q.label,carrier,rec:_rec,forcePrint:!!q._confirmed},settings,setLabelPreview); if(cz(settings).autoPackSlip){ const so=selectedOrder&&orders.find(x=>x.id===selectedOrder); setTimeout(()=>{ try{ printPackingSlipAuto([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:st.tracking||"",service:q.label}],settings,!!q._confirmed); }catch(e){} },(!q._confirmed&&(cz(settings).previewBeforePrint!=null?cz(settings).previewBeforePrint:!(cz(settings).skipBookedSummary||cz(settings).directNoPreview)))?0:2500); }   /* label pipeline gets a head start — its dialog must always beat the slip fallback */ if(cz(settings).printFlowV2?cz(settings).resetAfterPrint:(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint)){ setTimeout(()=>{ try{newShipment();}catch(e){} },900); };} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&receiver.country!=="United States"&&receiver.country!=="US")setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
+    const done=(st)=>{ justBookedRef.current=selectedOrder||"manual"; const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,pdfAll:(st.labels&&st.labels.length>1)?st.labels:undefined,tracking:st.tracking,service:q.label,carrier,rec:_rec,forcePrint:!!q._confirmed},settings,setLabelPreview); if(cz(settings).autoPackSlip){ const so=selectedOrder&&orders.find(x=>x.id===selectedOrder); setTimeout(()=>{ try{ printPackingSlipAuto([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:st.tracking||"",service:q.label}],settings,!!q._confirmed); }catch(e){} },(!q._confirmed&&(cz(settings).previewBeforePrint!=null?cz(settings).previewBeforePrint:!(cz(settings).skipBookedSummary||cz(settings).directNoPreview)))?0:2500); }   /* label pipeline gets a head start — its dialog must always beat the slip fallback */ if(cz(settings).printFlowV2?cz(settings).resetAfterPrint:(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint)){ setTimeout(()=>{ try{newShipment();}catch(e){} },900); };} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&!_isUSCountry(receiver.country))setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
     if(res.booked){done(res);return;}
     setShipStatus({state:"pending",key:q.key,orderId:res.orderId});
     pollLabel(eng,res.orderId,done).then(r=>{ if(r&&r.timedOut){ onPending&&onPending({orderId:res.orderId,rec:buildRec(q,carrier,{}),service:q.label,carrier,orderRef:selectedOrder}); setShipStatus({state:"pending_timeout",key:q.key});setBought(null);} });
@@ -8913,7 +8921,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   const _selOr=orPkg?FEDEX_ONERATE.find(b=>b.code===orPkg):orBox;
   const selectedOrBox=(_selOr&&totalWeight<=(_selOr.maxLbs||50))?_selOr:null;   /* One Rate caps: Envelope 10 lb, everything else 50 lb — overweight never rides the request */
   const dest={...o,customer:rcv.name,company:rcv.company,address1:rcv.address1,address2:rcv.address2,city:rcv.city,state:rcv.state,zip:rcv.zip,country:rcv.country,phone:rcv.phone,email:rcv.email};
-  const _intl=!!(rcv.country&&rcv.country!=="United States"&&rcv.country!=="US");
+  const _intl=!!(rcv.country&&!_isUSCountry(rcv.country));
   const localOrderQuotes=()=>quoteRates({fromZip,toZip:rcv.zip,pieces:[{weight:totalWeight,L:box.L,W:box.W,H:box.H}],residential,intl:_intl}).filter(qq=>qq.carrier==="FedEx");
   // FedEx address verification + residential/commercial classification (parity with the Ship page)
   useEffect(()=>{
@@ -9032,13 +9040,13 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
               <span className="text-[11px] text-stone-400">{navIdx+1}/{navList.length}</span>
               <button onClick={goNext} disabled={!navNext} className="p-1.5 rounded hover:bg-stone-100 disabled:opacity-30"><ChevronRight className="w-4 h-4"/></button>
             </div>}
-            {o.country&&o.country!=="United States"&&o.country!=="US"&&<button onClick={()=>printCommercialInvoice(o,(settings&&settings.products)||[],settings&&settings.sender,{...ciOpts,signature:ciOpts.signature||defaultSig(settings),senderTax:ciOpts.senderTax??((settings&&settings.taxId)||""),eei:ciOpts.eei??"NOEEI 30.37(a)",attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(ciOpts.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data}))})} className="text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Commercial Invoice</button>}
+            {o.country&&!_isUSCountry(o.country)&&<button onClick={()=>printCommercialInvoice(o,(settings&&settings.products)||[],settings&&settings.sender,{...ciOpts,signature:ciOpts.signature||defaultSig(settings),senderTax:ciOpts.senderTax??((settings&&settings.taxId)||""),eei:ciOpts.eei??"NOEEI 30.37(a)",attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(ciOpts.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data}))})} className="text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Commercial Invoice</button>}
             <button onClick={()=>{goShip&&goShip(o);onClose&&onClose();}} className="text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/>{shipped?"New label (Ship tab)":"Open in Ship tab"}</button>
             <button onClick={onClose} className="text-stone-400 hover:text-stone-700 p-1"><X className="w-5 h-5"/></button>
           </div>
         </div>
         {shipped&&o.source==="Shopify"&&o.shopifyId&&<div className="bg-[#E6F4FF]/70 border-b border-[#99D6FF] px-4 py-2 text-xs text-[#006FBF] flex items-center gap-2 shrink-0"><RotateCcw className="w-3.5 h-3.5 shrink-0"/><span>Already shipped{o.tracking?<> — tracking <b className="">{o.tracking}</b></>:null}. Need to redo it? Book a new label and the <b>new tracking number replaces the old one on Shopify</b> — you'll choose whether to email the customer.</span></div>}
-        {o.country&&o.country!=="United States"&&o.country!=="US"&&<div className="border border-stone-200 rounded-lg p-3 mt-3 space-y-2 bg-stone-50/60">
+        {o.country&&!_isUSCountry(o.country)&&<div className="border border-stone-200 rounded-lg p-3 mt-3 space-y-2 bg-stone-50/60">
           <div className="text-[10px] uppercase tracking-widest text-stone-400">Commercial invoice options</div>
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <input value={ciOpts.reason} onChange={e=>setCiOpts(v=>({...v,reason:e.target.value}))} list="sc-export-reasons-m" placeholder="Reason for export" className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] w-36"/><datalist id="sc-export-reasons-m">{EXPORT_REASONS.map(r=><option key={r} value={r}/>)}</datalist>

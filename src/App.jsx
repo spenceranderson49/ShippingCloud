@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v609";
+const BUILD_TAG="addr-v610";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7628,7 +7628,15 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   },[matched,quotes]);
 
   const _orFRec=()=>{try{return orFillMerge({reference:reference||invoiceNo||"",invoiceNo,poNo,department},{}).department||department||"";}catch(e){return department||"";}};
-  const buildRec=(q,carrier,extra)=>({id:Date.now(),date:new Date().toLocaleDateString(),tracking:(extra&&extra.tracking)||newTracking(carrier),carrier,service:q.label,recipient:{...receiver},sender:{...sender},fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,pieces:pieces.map(p=>({...p})),dims:pieces[0],insurance,cost:q.cost,sell:q.sell,rateBase:q.base,rateSurcharges:q.surcharges||[],rateAccessorials:q.accessorials||[],oneRate:!!q._oneRate,billTo,thirdAcct,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference,invoiceNo,poNo,department:_orFRec(),residential,intl,bookNumber:extra&&extra.bookNumber,customs:intl?{...customs,total:customsTotal,ci:"CI-"+rnd(5)}:null});
+  const buildRec=(q,carrier,extra)=>{
+    /* Always persist a real price. Prefer the quote's stored sell/cost; if the quote had none
+       (e.g. One Rate on the England backend, which isn't quoted up front), use the carrier's
+       actual charged cost from the booking response and mark it up into sell. Never an estimate. */
+    const _bc=(extra&&extra.cost!=null&&!isNaN(+extra.cost))?+extra.cost:null;
+    const _cost=q.cost!=null?q.cost:_bc;
+    const _sell=q.sell!=null?q.sell:(_cost!=null?rateSellFor(_cost,q.label,{rules:rateRules,client,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}):null);
+    return {id:Date.now(),date:new Date().toLocaleDateString(),tracking:(extra&&extra.tracking)||newTracking(carrier),carrier,service:q.label,recipient:{...receiver},sender:{...sender},fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,pieces:pieces.map(p=>({...p})),dims:pieces[0],insurance,cost:_cost,sell:_sell,rateBase:q.base,rateSurcharges:q.surcharges||[],rateAccessorials:q.accessorials||[],oneRate:!!q._oneRate,billTo,thirdAcct,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference,invoiceNo,poNo,department:_orFRec(),residential,intl,bookNumber:extra&&extra.bookNumber,customs:intl?{...customs,total:customsTotal,ci:"CI-"+rnd(5)}:null};
+  };
   const print=async(q,force)=>{
     /* Re-label guard: an order that already has a label must be explicitly confirmed before a new
        one books — the new tracking OVERRIDES what's on Shopify/the store. Preview re-entry
@@ -9177,7 +9185,12 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
     const _orFM=orFillMerge({reference:reference||o.name,invoiceNo,poNo,department},orBoxRefFill(qq,settings.orBoxField,o.name));
     const res=await bookOrderLabel(dest,{quote:qq,box,weightLb:totalWeight,residential,signatureOption:sigOption,saturdayDelivery:sat,insuranceAmount:insurance||null,packageTypeCode:qq.packageTypeCode||"",sender:settings.sender,reference:_orFM.reference,invoiceNo:_orFM.invoiceNo,poNo:_orFM.poNo,department:_orFM.department||""},eng,settings.sender);
     if(!res||!res.ok){ setStatus({state:"error",msg:(res&&res.error)||"Booking failed"}); setBought(null); return; }
-    const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,...baseRec,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,bookNumber:res.bookNumber};
+    /* If the quote carried no price (One Rate on England), store the carrier's actual charged cost
+       from the booking response and mark it up into sell — a real stored price, never an estimate. */
+    const _bc=(res&&res.cost!=null&&!isNaN(+res.cost))?+res.cost:null;
+    const _cost=qq.cost!=null?qq.cost:_bc;
+    const _sell=qq.sell!=null?qq.sell:(_cost!=null?rateSellFor(_cost,qq.label,{rules:rateRules,client,fromZip,toZip:rcv.zip,weight:totalWeight}):null);
+    const rec={id:Date.now(),date:new Date().toLocaleDateString(),tracking:res.tracking||newTracking(carrier),carrier,...baseRec,cost:_cost,sell:_sell,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,bookNumber:res.bookNumber};
     onShipped(rec,o.id);
     if(res.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:rec.id,pdf:res.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:res.labelPdfBase64,tracking:res.tracking,service:qq.label,carrier,rec},settings,setLabelPreview);}
     setStatus({state:"booked",msg:"Label created — saved to Shipments."});fireConfetti();

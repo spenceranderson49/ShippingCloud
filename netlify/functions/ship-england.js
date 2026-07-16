@@ -226,7 +226,10 @@ exports.handler = async (event) => {
     const tracking = S(d && d.trackingNumber);
     if (!bookNumber) return J({ ok: false, error: "Booked but no bookNumber returned: " + (t ? t.slice(0, 200) : "") });
     const label = await fetchLabel(c, bookNumber);
-    return J({ ok: true, booked: true, bookNumber, tracking, zone: d && d.zone, prepayBalance: d && d.prepayBalance, labelPdfBase64: label.pdf || null, labelError: label.error || null });
+    // England's actual charged shipping cost — return it so the app stores a real price on the
+    // shipment (esp. One Rate, which England never quotes up front). Marked up into sell client-side.
+    const bookedCost = (d && (d.totalShippingCost != null ? +d.totalShippingCost : (d.shippingCost != null ? +d.shippingCost : (d.cost != null ? +d.cost : null))));
+    return J({ ok: true, booked: true, bookNumber, tracking, zone: d && d.zone, prepayBalance: d && d.prepayBalance, cost: (bookedCost != null && !isNaN(bookedCost)) ? bookedCost : null, labelPdfBase64: label.pdf || null, labelError: label.error || null });
   } catch (e) {
     return J({ ok: false, error: "Function error: " + (e && e.message ? e.message : String(e)) });
   }

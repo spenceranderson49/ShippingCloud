@@ -21,6 +21,20 @@ function CC(c){if(!c)return "US";const t=String(c).trim();if(t.length===2)return
 const DAYS = { ZERO_DAYS:0, ONE_DAY:1, TWO_DAYS:2, THREE_DAYS:3, FOUR_DAYS:4, FIVE_DAYS:5, SIX_DAYS:6, SEVEN_DAYS:7, EIGHT_DAYS:8, NINE_DAYS:9, TEN_DAYS:10, ELEVEN_DAYS:11, TWELVE_DAYS:12 };
 
 let _tok = null; // { token, exp }  in-memory cache across warm invocations
+let _trackTok = null; // separate cache for the Track/Visibility project (different OAuth app)
+/* FedEx Track/Visibility runs on its OWN project (FEDEX_TRACK_KEY/SECRET) — the default shipping
+   project isn't entitled for /track and returns 403. Use the Track creds here, falling back to the
+   main creds only if the dedicated ones aren't set. */
+async function trackToken(c) {
+  const key = (process.env.FEDEX_TRACK_KEY || process.env.FEDEX_API_KEY || "").trim();
+  const secret = (process.env.FEDEX_TRACK_SECRET || process.env.FEDEX_SECRET_KEY || "").trim();
+  if (_trackTok && _trackTok.key === key && _trackTok.exp > Date.now() + 30000) return _trackTok.token;
+  const r = await fetch(c.base + "/oauth/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: "grant_type=client_credentials&client_id=" + encodeURIComponent(key) + "&client_secret=" + encodeURIComponent(secret) });
+  const text = await r.text(); let d = null; try { d = JSON.parse(text); } catch {}
+  if (!r.ok || !d || !d.access_token) throw new Error("FedEx track auth HTTP " + r.status + (d && d.errors ? ": " + JSON.stringify(d.errors) : ""));
+  _trackTok = { token: d.access_token, exp: Date.now() + (Number(d.expires_in || 3500) * 1000), key };
+  return _trackTok.token;
+}
 
 function creds(body) {
   const a = body.account || {};
@@ -372,7 +386,8 @@ exports.handler = async (event) => {
       try {
         const tn = String(body.trackingNumber || "").replace(/\s/g, "");
         if (!tn) return J({ ok: false, error: "trackingNumber required" });
-        const r = await fetch(c.base + "/track/v1/trackingnumbers", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + tk, "x-locale": "en_US" }, body: JSON.stringify({ includeDetailedScans: true, trackingInfo: [{ trackingNumberInfo: { trackingNumber: tn } }] }) });
+        let ttk; try { ttk = await trackToken(c); } catch (e) { return J({ ok: false, error: (e && e.message) || "track auth failed" }); }
+        const r = await fetch(c.base + "/track/v1/trackingnumbers", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + ttk, "x-locale": "en_US" }, body: JSON.stringify({ includeDetailedScans: true, trackingInfo: [{ trackingNumberInfo: { trackingNumber: tn } }] }) });
         const j = await r.json().catch(() => ({}));
         if (!r.ok) return J({ ok: false, error: "FedEx track error " + r.status });
         const t = j.output && j.output.completeTrackResults && j.output.completeTrackResults[0] && j.output.completeTrackResults[0].trackResults && j.output.completeTrackResults[0].trackResults[0];

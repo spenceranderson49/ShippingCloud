@@ -12,6 +12,10 @@
 
 const J = (o) => ({ statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify(o) });
 const S = (v) => (v == null ? "" : String(v));
+/* FedEx wants the 2-letter code — a spelled-out state ("California") 400s the pickup API with
+   "StateOrProvinceCode is missing". Accept either form from saved addresses. */
+const US_STATES = { ALABAMA: "AL", ALASKA: "AK", ARIZONA: "AZ", ARKANSAS: "AR", CALIFORNIA: "CA", COLORADO: "CO", CONNECTICUT: "CT", DELAWARE: "DE", "DISTRICT OF COLUMBIA": "DC", FLORIDA: "FL", GEORGIA: "GA", HAWAII: "HI", IDAHO: "ID", ILLINOIS: "IL", INDIANA: "IN", IOWA: "IA", KANSAS: "KS", KENTUCKY: "KY", LOUISIANA: "LA", MAINE: "ME", MARYLAND: "MD", MASSACHUSETTS: "MA", MICHIGAN: "MI", MINNESOTA: "MN", MISSISSIPPI: "MS", MISSOURI: "MO", MONTANA: "MT", NEBRASKA: "NE", NEVADA: "NV", "NEW HAMPSHIRE": "NH", "NEW JERSEY": "NJ", "NEW MEXICO": "NM", "NEW YORK": "NY", "NORTH CAROLINA": "NC", "NORTH DAKOTA": "ND", OHIO: "OH", OKLAHOMA: "OK", OREGON: "OR", PENNSYLVANIA: "PA", "PUERTO RICO": "PR", "RHODE ISLAND": "RI", "SOUTH CAROLINA": "SC", "SOUTH DAKOTA": "SD", TENNESSEE: "TN", TEXAS: "TX", UTAH: "UT", VERMONT: "VT", VIRGINIA: "VA", WASHINGTON: "WA", "WEST VIRGINIA": "WV", WISCONSIN: "WI", WYOMING: "WY" };
+const ST = (s) => { const t = String(s || "").trim().toUpperCase(); if (t.length === 2) return t; return US_STATES[t] || t.slice(0, 2); };
 
 function CC(c){if(!c)return "US";const t=String(c).trim();if(t.length===2)return t.toUpperCase();const m={"united states":"US","united states of america":"US","usa":"US","u.s.":"US","u.s.a.":"US","canada":"CA","mexico":"MX","united kingdom":"GB","great britain":"GB","uk":"GB","england":"GB","puerto rico":"PR","australia":"AU","germany":"DE","france":"FR","italy":"IT","spain":"ES","netherlands":"NL","belgium":"BE","switzerland":"CH","austria":"AT","sweden":"SE","norway":"NO","denmark":"DK","finland":"FI","ireland":"IE","portugal":"PT","poland":"PL","czech republic":"CZ","czechia":"CZ","greece":"GR","hungary":"HU","romania":"RO","bulgaria":"BG","croatia":"HR","slovakia":"SK","slovenia":"SI","estonia":"EE","latvia":"LV","lithuania":"LT","luxembourg":"LU","iceland":"IS","japan":"JP","china":"CN","hong kong":"HK","taiwan":"TW","south korea":"KR","republic of korea":"KR","singapore":"SG","malaysia":"MY","thailand":"TH","vietnam":"VN","philippines":"PH","indonesia":"ID","india":"IN","israel":"IL","saudi arabia":"SA","united arab emirates":"AE","uae":"AE","qatar":"QA","kuwait":"KW","bahrain":"BH","oman":"OM","jordan":"JO","turkey":"TR","egypt":"EG","south africa":"ZA","nigeria":"NG","kenya":"KE","morocco":"MA","brazil":"BR","argentina":"AR","chile":"CL","colombia":"CO","peru":"PE","ecuador":"EC","uruguay":"UY","paraguay":"PY","bolivia":"BO","costa rica":"CR","panama":"PA","guatemala":"GT","honduras":"HN","el salvador":"SV","nicaragua":"NI","dominican republic":"DO","jamaica":"JM","bahamas":"BS","barbados":"BB","trinidad and tobago":"TT","new zealand":"NZ","ukraine":"UA"};return m[t.toLowerCase()]||"US";}
 const DAYS = { ZERO_DAYS:0, ONE_DAY:1, TWO_DAYS:2, THREE_DAYS:3, FOUR_DAYS:4, FIVE_DAYS:5, SIX_DAYS:6, SEVEN_DAYS:7, EIGHT_DAYS:8, NINE_DAYS:9, TEN_DAYS:10, ELEVEN_DAYS:11, TWELVE_DAYS:12 };
@@ -66,7 +70,7 @@ async function transit(c, body, tk) {
     // FedEx returns transit/commit data ONLY when asked here (per FedEx Rates & Transit Times API spec)
     rateRequestControlParameters: { returnTransitTimes: true },
     requestedShipment: {
-      shipper: { address: { postalCode: S(body.fromZip), countryCode: fromISO, stateOrProvinceCode: S(body.fromState) || undefined } },
+      shipper: { address: { postalCode: S(body.fromZip), countryCode: fromISO, stateOrProvinceCode: ST(body.fromState) || undefined } },
       recipient: { address: { postalCode: S(body.toZip), countryCode: toISO, residential: intl ? undefined : !!body.residential } },
       pickupType: "USE_SCHEDULED_PICKUP",
       shipDateStamp: body.shipDate || today,
@@ -155,7 +159,7 @@ async function rateClassify(c, a, fromZip, tk) {
     return { groundType, residentialSurcharge, services, surcharges };
   };
   // single full-address probe (kept to one rate call so the function stays well under Netlify's 10s limit)
-  const p = await probe({ streetLines: [a.address1].filter(Boolean).map(S), city: S(a.city), stateOrProvinceCode: S(a.state), postalCode: S(a.zip), countryCode: CC(a.country) });
+  const p = await probe({ streetLines: [a.address1].filter(Boolean).map(S), city: S(a.city), stateOrProvinceCode: ST(a.state), postalCode: S(a.zip), countryCode: CC(a.country) });
   // Residential surcharge is the most reliable signal; commercial ground product = business.
   let classification = "UNKNOWN";
   if (p.residentialSurcharge) classification = "RESIDENTIAL";
@@ -168,7 +172,7 @@ async function rateClassify(c, a, fromZip, tk) {
 // Address Validation API → deliverability + normalized address.
 async function validateDeliverability(c, a, tk) {
   const lines = [a.address1, a.address2].filter(Boolean).map(S);
-  const payload = { addressesToValidate: [{ address: { streetLines: lines.length ? lines : [""], city: S(a.city), stateOrProvinceCode: S(a.state), postalCode: S(a.zip), countryCode: CC(a.country) } }] };
+  const payload = { addressesToValidate: [{ address: { streetLines: lines.length ? lines : [""], city: S(a.city), stateOrProvinceCode: ST(a.state), postalCode: S(a.zip), countryCode: CC(a.country) } }] };
   let r, t, d = null;
   const doFetch = async () => {
     const rr = await fetch(c.base + "/address/v1/addresses/resolve", { method: "POST", headers: { "Authorization": "Bearer " + tk, "Content-Type": "application/json", "X-locale": "en_US" }, body: JSON.stringify(payload) });
@@ -235,7 +239,7 @@ async function pickupAvailability(c, body, tk) {
   const a = body.address || {};
   const payload = {
     associatedAccountNumber: { value: c.account },
-    pickupAddress: { streetLines: [a.address1].filter(Boolean).map(S), city: S(a.city), stateOrProvinceCode: S(a.state), postalCode: S(a.zip), countryCode: CC(a.country) },
+    pickupAddress: { streetLines: [a.address1].filter(Boolean).map(S), city: S(a.city), stateOrProvinceCode: ST(a.state), postalCode: S(a.zip), countryCode: CC(a.country) },
     pickupRequestType: ["SAME_DAY", "FUTURE_DAY"],
     dispatchDate: body.date || new Date().toISOString().slice(0, 10),
     packageReadyTime: body.readyTime || "10:00:00",
@@ -260,7 +264,7 @@ async function schedulePickup(c, body, tk) {
     originDetail: {
       pickupLocation: {
         contact: { personName: S(a.name) || "Shipping Dept", phoneNumber: S(a.phone) || "0000000000", companyName: S(a.company) || S(a.name) || "Shipper" },
-        address: { streetLines: [a.address1, a.address2].filter(Boolean).map(S), city: S(a.city), stateOrProvinceCode: S(a.state), postalCode: S(a.zip), countryCode: CC(a.country), residential: !!body.residential },
+        address: { streetLines: [a.address1, a.address2].filter(Boolean).map(S), city: S(a.city), stateOrProvinceCode: ST(a.state), postalCode: S(a.zip), countryCode: CC(a.country), residential: !!body.residential },
       },
       readyDateTimestamp: (body.date || new Date().toISOString().slice(0, 10)) + "T" + (body.readyTime || "10:00:00"),
       customerCloseTime: body.closeTime || "17:00:00",

@@ -108,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v571";
+const BUILD_TAG="addr-v572";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9400,7 +9400,10 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true,isAdmin
       <Panel title="Schedule a FedEx pickup">
         <Field label="Service"><Select value={f.carrierCode} onChange={e=>setF({...f,carrierCode:e.target.value})}><option value="FDXE">FedEx Express</option><option value="FDXG">FedEx Ground</option></Select></Field>
         <div className="grid grid-cols-2 gap-3"><Field label="Date"><Input type="date" value={f.date} onChange={e=>setF({...f,date:e.target.value})}/></Field><Field label="Packages"><Input type="number" value={f.count} onChange={e=>setF({...f,count:+e.target.value})}/></Field></div>
-        <div className="grid grid-cols-2 gap-3"><Field label="Ready time"><Input type="time" value={f.ready} onChange={e=>setF({...f,ready:e.target.value})}/></Field><Field label="Close time"><Input type="time" value={f.close} onChange={e=>setF({...f,close:e.target.value})}/></Field></div>
+        {/* half-hour picks only — a full minute picker is noise for a pickup window */}
+        <div className="grid grid-cols-2 gap-3">{(()=>{const opts=[];for(let h=6;h<=20;h++)for(const m of ["00","30"]){const v=String(h).padStart(2,"0")+":"+m;const ap=h>=12?"PM":"AM";const h12=h%12===0?12:h%12;opts.push([v,h12+":"+m+" "+ap]);}
+          const timeSel=(k,label)=><Field label={label}><Select value={f[k]} onChange={e=>setF({...f,[k]:e.target.value})}>{!opts.some(([v])=>v===f[k])&&<option value={f[k]}>{f[k]}</option>}{opts.map(([v,l])=><option key={v} value={v}>{l}</option>)}</Select></Field>;
+          return <>{timeSel("ready","Ready time")}{timeSel("close","Close time")}</>;})()}</div>
         <div className="grid grid-cols-2 gap-3"><Field label="Total weight (lb)"><Input type="number" value={f.weight} onChange={e=>setF({...f,weight:+e.target.value})}/></Field><Field label="Package location"><Select value={f.location} onChange={e=>setF({...f,location:e.target.value})}>{PKG_LOC.map(([v,l])=><option key={v} value={v}>{l}</option>)}</Select></Field></div>
         <div className="text-[11px] text-stone-400 flex items-center gap-1"><MapPin className="w-3.5 h-3.5"/>{addrReady?`${s.address1}, ${s.city} ${s.state} ${s.zip}`:"Set your pickup address in Settings → Company"}</div>
         {showCosts&&<div className="flex items-center justify-between text-sm bg-stone-50 border border-stone-200 rounded-lg px-3 py-2"><span className="text-stone-600">On-call pickup fee ({f.carrierCode==="FDXG"?"Ground":"Express"}){isAdmin&&<span className="block text-[10px] text-stone-400">{_pf.ruleDesc} — edit it on the Rates tab accessorials (Pickup &amp; returns)</span>}</span><span className=" font-semibold text-stone-900">{money(pickupFee)}</span></div>}

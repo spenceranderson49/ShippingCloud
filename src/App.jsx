@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v597";
+const BUILD_TAG="addr-v598";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9433,11 +9433,11 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
             <button className="text-stone-400"><ChevronRight className={`w-4 h-4 transition-transform ${open===s.id?"rotate-90":""}`}/></button>
             <div className="w-24"><div className="text-sm text-stone-500">{s.date}</div><div className="text-[10px] text-stone-400">{s.time||""}</div></div>
             <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{s.recipient?.name||"—"}</div>{s.recipient?.company&&s.recipient.company!==s.recipient.name&&<div className="text-[11px] text-stone-400 truncate lg:hidden">{s.recipient.company}</div>}<div className="text-[11px] text-stone-400 truncate md:hidden">{s.service}</div></div>
-            <div className="flex-1 hidden lg:block min-w-0 text-xs text-stone-600 truncate">{(s.recipient?.company&&s.recipient.company!==s.recipient.name)?s.recipient.company:""}</div>
-            <div className="w-56 hidden md:block min-w-0 text-xs text-stone-600 truncate">{s.service||"—"}</div>
-            <div className="w-40 hidden md:flex items-center gap-0.5"><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" onClick={e=>e.stopPropagation()} className="text-[#0086E0] underline text-xs flex items-center gap-1 truncate min-w-0">{s.tracking}<ExternalLink className="w-3 h-3 shrink-0"/></a><CopyTrackBtn tn={s.tracking}/></div>
-            <div className="flex-1 hidden lg:block min-w-0"><div className="text-xs text-stone-600 truncate">{s.recipient?.address1||"—"}</div><div className="text-[11px] text-stone-400 truncate">{s.recipient?.city}{s.recipient?.state?", "+s.recipient.state:""} {s.recipient?.zip||""}</div></div>
-            <div className="w-28 hidden xl:block text-xs text-stone-500 truncate">{s.reference||"—"}</div>
+            <div className="flex-1 hidden lg:block min-w-0 text-sm text-stone-600 truncate">{(s.recipient?.company&&s.recipient.company!==s.recipient.name)?s.recipient.company:""}</div>
+            <div className="w-56 hidden md:block min-w-0 text-sm text-stone-600 truncate">{s.service||"—"}</div>
+            <div className="w-40 hidden md:flex items-center gap-0.5"><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" onClick={e=>e.stopPropagation()} className="text-[#0086E0] underline text-sm flex items-center gap-1 truncate min-w-0">{s.tracking}<ExternalLink className="w-3 h-3 shrink-0"/></a><CopyTrackBtn tn={s.tracking}/></div>
+            <div className="flex-1 hidden lg:block min-w-0"><div className="text-sm text-stone-600 truncate">{s.recipient?.address1||"—"}</div><div className="text-[11px] text-stone-400 truncate">{s.recipient?.city}{s.recipient?.state?", "+s.recipient.state:""} {s.recipient?.zip||""}</div></div>
+            <div className="w-28 hidden xl:block text-sm text-stone-500 truncate">{s.reference||"—"}</div>
             <div className="w-28 shrink-0 text-right whitespace-nowrap">{s.tracking?<button onClick={(e)=>{e.stopPropagation();openTrack(s);}} title="See the FedEx scan history + estimated delivery" className="inline-flex items-center gap-1 hover:opacity-80"><Badge tone={tone(s.status)}>{s.status}</Badge><MapPin className="w-3 h-3 text-stone-400"/></button>:<Badge tone={tone(s.status)}>{s.status}</Badge>}</div>
           </div>
           {open===s.id&&(

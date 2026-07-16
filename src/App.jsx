@@ -108,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v570";
+const BUILD_TAG="addr-v571";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9309,7 +9309,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                 <Info k="Tracking" v={<span className="inline-flex items-center gap-1"><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" className="text-[#0086E0] underline">{s.tracking} ↗</a><CopyTrackBtn tn={s.tracking}/></span>}/>
                 <Info k="To" v={`${s.recipient?.name||""}${s.recipient?.company?" · "+s.recipient.company:""} — ${s.recipient?.address1||""}, ${s.recipient?.city||""}, ${s.recipient?.state||""} ${s.recipient?.zip||""}`}/>
                 <Info k="Reference" v={s.reference||"—"}/>
-                <div className="flex items-end gap-2"><button onClick={(e)=>{e.stopPropagation();printPackingSlips([slipFromShipment(s)]);}} className="text-xs bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing Slip</button><button onClick={(e)=>{e.stopPropagation();openSlipEdit(s);}} title="Type the items for this slip — perfect for manual shipments with no store connected. Items are saved for reprints." className="text-xs bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF] flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5"/>Slip With Items</button>
+                <div className="flex items-end gap-2"><button onClick={(e)=>{e.stopPropagation();printPackingSlips([slipFromShipment(s)]);}} className="text-xs bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing Slip</button><button onClick={(e)=>{e.stopPropagation();openSlipEdit(s);}} title="Type the items for this slip — perfect for manual shipments with no store connected. Items are saved for reprints." className="text-xs bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF] flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5"/>Create Packing Slip</button>
                 {s.status!=="Voided"&&s.status!=="Delivered"&&<button onClick={async(e)=>{e.stopPropagation();if(!await uiConfirm("Void this label?\n\nIt will be marked Voided here and excluded from audits and duplicate checks. The carrier refund is processed automatically — contact support if you don't see it within a few days."))return;setShipments(list=>list.map(x=>x.id===s.id?{...x,status:"Voided",voidedAt:new Date().toLocaleString()}:x));window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Voided label",detail:(s.reference||"")+" · "+(s.tracking||"")}}));}} className="text-xs bg-rose-50 border border-rose-200 text-rose-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-rose-100 flex items-center gap-1.5"><Ban className="w-3.5 h-3.5"/>Void Label</button>}</div>
                 <Info k="Created" v={`${s.date}${s.time?" · "+s.time:""}`}/>
                 <Info k="From ZIP" v={s.fromZip}/>

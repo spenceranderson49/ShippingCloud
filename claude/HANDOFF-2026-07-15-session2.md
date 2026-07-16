@@ -60,3 +60,23 @@ copy/UI commits). branch = staging = production(main) at **v569 / BUILD_TAG addr
 - Deploy convention observed today: Spencer directed production pushes repeatedly; every
   release verified live by polling the bundle tag (curl https://site/assets/index-*.js |
   grep addr-v5xx). All three prod sites build from main; *-staging sites from staging.
+
+## Evening additions (v570–v573, all in production)
+- **v570** Shipments columns balanced (Recipient/Company/Ship-to share flex, Company column
+  added, Service fits, status badge nowrap); track-sync: "In transit" needs a PHYSICAL scan —
+  FedEx OC (label acknowledgment) stays "Label created".
+- **v571** "Slip With Items" → "Create Packing Slip".
+- **v572** FedEx state names normalized to 2-letter codes on every FedEx address path (fixes
+  pickup HTTP 400 "StateOrProvinceCode is missing" for spelled-out states); pickup Ready/Close
+  times are half-hour dropdowns (6a–8p).
+- **v573** Company-admin deploy screens filtered: blocked services vanish (admin views keep
+  the greyed lock look), tab hide/order/start-page lists only offer feature-enabled tabs
+  (allowedTabs chain AppInner→Settings/CompanyAdmin→Customize). Checkout Rates: per-service
+  custom buyer names (ck.names — UI, preview, and shopify-rates.js all use them). Spending
+  cap removed entirely (setting, enforcement, default). Admin FedEx Account tab slimmed to
+  account # + tier + One Rate / Ground Economy / DHL checkboxes (old fx.* tier-economics data
+  stays stored, just not shown).
+- Duplicate-label banner (v567/568): also matches same street+ZIP within 1 day when no Ref #;
+  banner names the recipient when ref-less. Voided badge is rose.
+- Statuses do NOT move yet: FedEx **Track API product still not enabled** on the portal
+  project (verified 403). One click from Spencer turns the whole live-tracking pipeline on.

@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v602";
+const BUILD_TAG="addr-v603";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -5533,9 +5533,9 @@ function usePersist(key,initial){
    mode exactly as before. */
 const DB_ENDPOINT="/.netlify/functions/db";
 const CLOUD={mode:"unknown",token:lsGet("cloud.token",null),user:null,snapshot:null,baseline:{},queue:{},timer:null,offline:false};
-async function cloudCall(payload){
+async function cloudCall(payload,timeoutMs=15000){
   try{
-    const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),15000);
+    const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),timeoutMs);
     const r=await fetch(DB_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload),signal:ctrl.signal});
     clearTimeout(t);
     return await r.json();
@@ -5555,7 +5555,7 @@ async function cloudFlush(){
   const stores=CLOUD.queue; if(!Object.keys(stores).length)return;
   CLOUD.queue={};
   const keys=Object.keys(stores);
-  const res=await cloudCall({action:"putMany",token:CLOUD.token,stores});
+  const res=await cloudCall({action:"putMany",token:CLOUD.token,stores},30000);   // saves get 30s (admin payloads are big + cold functions) before a false "can't save"
   if(res&&res.ok){
     CLOUD.offline=false;
     try{ window.dispatchEvent(new CustomEvent("sc-saved",{detail:{keys}})); }catch(e){}
@@ -5619,6 +5619,9 @@ function startCloudPoll(){
   window.addEventListener("visibilitychange",()=>{ if(!document.hidden)cloudPollTick(true); });
   window.addEventListener("focus",()=>cloudPollTick(true));
 }
+/* Does this device already hold this user's data? (Any `u/<uid>/...` store cached in localStorage.)
+   If so we can paint the app instantly from cache and refresh in the background — no buffer page. */
+function hasCachedStores(uid){ try{ if(!LS_OK)return false; const p="sc_u/"+uid+"/"; for(let i=0;i<window.localStorage.length;i++){ const k=window.localStorage.key(i); if(k&&k.indexOf(p)===0)return true; } return false; }catch(e){ return false; } }
 async function cloudLoadAll(){
   const res=await cloudCall({action:"getAll",token:CLOUD.token});
   if(res&&res.ok&&res.stores){
@@ -5648,8 +5651,17 @@ async function cloudLoadAll(){
       }
     }catch(e){}
     CLOUD.snapshot=cloud;
-    CLOUD.baseline={}; for(const k in cloud)CLOUD.baseline[k]=JSON.stringify(cloud[k]);
-    for(const k in cloud)lsSet(k,cloud[k]);
+    CLOUD.baseline={};
+    for(const k in cloud){
+      const j=JSON.stringify(cloud[k]);
+      CLOUD.baseline[k]=j;
+      const prevRaw=lsRaw(k);
+      lsSet(k,cloud[k]);
+      /* When this load runs in the BACKGROUND (cache-first refresh), push changed values into any
+         already-mounted component so the UI updates without a reload — but never clobber a key the
+         user is mid-edit on (in the flush queue). Mirrors the 20s poll's safety. */
+      if(prevRaw!==j && !(k in CLOUD.queue)){ const bus=PERSIST_BUS[k]; if(bus&&bus.size)bus.forEach(fn=>{try{fn(cloud[k]);}catch(_){}}); }
+    }
     // re-queue recovered edits so they actually reach the server this session
     if(recovered.length){ for(const k of recovered){ delete CLOUD.baseline[k]; cloudQueue(k,cloud[k]); } }
     return {ok:true,recovered};
@@ -6393,6 +6405,31 @@ export default function App(){
   const [phase,setPhase]=useState("boot");
   const [bootMsg,setBootMsg]=useState("");
   const start=async()=>{
+    /* ── FAST REFRESH ── If this device already holds this user's data, paint the app INSTANTLY
+       from that cache and verify the session + pull fresh data in the BACKGROUND. No blocking
+       "loading" buffer, and the offline banner only appears if the background check truly fails —
+       a slow (but successful) admin load no longer looks like being offline. */
+    {
+      const _sess=lsGet("session",null);
+      if(CLOUD.token && _sess && _sess.id!=="demo" && hasCachedStores(String(_sess.id||_sess.email))){
+        CLOUD.mode="cloud";
+        setPhase("ready");
+        (async()=>{
+          const p=await cloudCall({action:"ping"});
+          if(!p||p.network){
+            CLOUD.offline=true; setBootMsg("Offline — showing this device’s saved data; changes sync when the connection returns.");
+            const t=setInterval(async()=>{ const p2=await cloudCall({action:"ping"}); if(p2&&p2.ok&&!p2.network){ clearInterval(t); const r=await cloudLoadAll(); if(r&&r.ok){ CLOUD.offline=false; setBootMsg(""); } } },15000);
+            return;
+          }
+          if(p.ok&&!p.configured)return;   // backend not configured (rare for a returning cloud user) — keep the cache
+          const r=await cloudLoadAll();
+          if(r&&r.ok){ CLOUD.offline=false; setBootMsg(""); }
+          else if(r&&r.authFailed){ lsDel("cloud.token"); CLOUD.token=null; window.location.reload(); }
+          else { CLOUD.offline=true; setTimeout(async()=>{ const r2=await cloudLoadAll(); if(r2&&r2.ok){ CLOUD.offline=false; setBootMsg(""); } else setBootMsg("Offline — showing this device’s saved data; changes sync when the connection returns."); },4000); }
+        })();
+        return;
+      }
+    }
     /* A single failed ping used to silently demote the whole session to local mode — on the
        admin portal that meant the legacy login against locally-cached users whose passwords
        are blanked by design, i.e. "my login just doesn't work" on any transient blip.
@@ -7058,7 +7095,7 @@ function AppInner(){
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
           {tab==="orders"&&<Orders showMoney={showMoney} orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} setSettings={setSettings} onShipped={onShipped} openOrderId={pendingOpenOrderId} onOpenedOrder={()=>setPendingOpenOrderId(null)}/>}
           {tab==="batch"&&<Batch showMoney={showMoney} orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} setSettings={setSettings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
-          {tab==="shipments"&&<Shipments showMoney={showMoney} openShipTracking={pendingOpenShipTracking} onOpenedShip={()=>setPendingOpenShipTracking(null)} isAdmin={isAdmin} labels={labelStore} shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels} settings={settings} client={client}/>}
+          {tab==="shipments"&&<Shipments showMoney={showMoney} openShipTracking={pendingOpenShipTracking} onOpenedShip={()=>setPendingOpenShipTracking(null)} isAdmin={isAdmin} labels={labelStore} shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels} settings={settings} client={client} clients={clients}/>}
           {hkHelp&&<div onClick={()=>setHkHelp(false)} className="fixed bottom-4 right-4 z-50 bg-stone-900 text-white rounded-xl shadow-lg p-4 text-xs space-y-1.5 cursor-pointer">
             <div className="font-semibold text-sm mb-1">Keyboard shortcuts</div>
             <div><span className=" bg-stone-700 rounded px-1">g</span> then <span className=" bg-stone-700 rounded px-1">s</span> Ship · <span className=" bg-stone-700 rounded px-1">o</span> Orders · <span className=" bg-stone-700 rounded px-1">h</span> Shipments</div>
@@ -8478,9 +8515,9 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
         <div onClick={()=>{setOpen(isOpen?null:q.key); if(q._oneRate&&q.packageTypeCode&&onOneRate)onOneRate(q.packageTypeCode);}} className="px-3 py-1.5 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
           <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isOpen?"rotate-90":""}`}/>
           {matchBadge}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2"><span className="text-sm font-semibold text-stone-900 truncate">{(custom.aliases&&custom.aliases[canonSvc(q.label)])||q.label}</span></div>
-            <div className="text-[12.5px] text-stone-900 flex items-center gap-1"><Calendar className="w-3.5 h-3.5"/>Transit Time: {days?(custom.transitStyle==="days"?<>{days} business day{days>1?"s":""}</>:<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}</div>
+          <div className="flex-1 min-w-0 flex items-baseline gap-x-3 gap-y-0.5 flex-wrap">
+            <span className="text-sm font-semibold text-stone-900">{(custom.aliases&&custom.aliases[canonSvc(q.label)])||q.label}</span>
+            <span className="text-[12.5px] text-stone-500 inline-flex items-center gap-1"><Calendar className="w-3.5 h-3.5"/>{days?(custom.transitStyle==="days"?<>{days} business day{days>1?"s":""}</>:<>{days} business day{days>1?"s":""}{eta?` · arrives ${fmtDeliv(eta)}`:""}</>):<span className="text-stone-300">—</span>}</span>
           </div>
           <div className="text-right">{!!(custom.priceWarn>0&&ready&&hasPrice&&sell>custom.priceWarn)&&<div className="text-[10px] text-amber-600 flex items-center justify-end gap-0.5" title={"Above your $"+custom.priceWarn+" price alert"}><AlertTriangle className="w-3 h-3"/>over limit</div>}<div className="text-base font-semibold text-stone-900">{!ready?<span className="text-stone-300">—</span>:(live||fxLive)?(hasPrice?money(sell):<span className="text-stone-300">—</span>):loading?<span className="text-[11px] font-normal text-stone-400">pricing…</span>:(hasPrice?money(sell):<span className="text-stone-300">—</span>)}</div></div>
           {action&&(()=>{const unavailable=q._unavailable||(!hasPrice&&!loading&&live);
@@ -9325,8 +9362,10 @@ function CopyTrackBtn({tn,className=""}){
   return <button onClick={copy} title={ok?"Copied!":"Copy tracking number"} className={`shrink-0 p-0.5 rounded ${ok?"text-emerald-600":"text-stone-400 hover:text-stone-700 hover:bg-stone-100"} ${className}`}>{ok?<CheckCircle2 className="w-3.5 h-3.5"/>:<Copy className="w-3.5 h-3.5"/>}</button>;
 }
 
-function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,settings,labels={},isAdmin=false,openShipTracking=null,onOpenedShip,showMoney=true,client=null}){
+function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,settings,labels={},isAdmin=false,openShipTracking=null,onOpenedShip,showMoney=true,client=null,clients=[]}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
+  // resolve a shipment's customer (by stored name) so its markup is applied, not the current view's
+  const clientFor=(s)=>{ if(s&&s.client){ const hit=(clients||[]).find(c=>c&&String(c.name||"").toLowerCase()===String(s.client).toLowerCase()); if(hit)return hit; } return client; };
   /* The quoted (sell) price is stored on every new booking. For older shipments that predate that,
      re-derive what the customer was quoted by running the STORED carrier cost back through their
      markup rules — never the raw cost. Returns null only when there's genuinely no price to show. */
@@ -9337,17 +9376,16 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
      (not recomputed on later rule changes). Only runs on a single-customer (non-admin) view, so the
      markup applied is always this customer's own; admin's mixed-customer feed is left untouched. */
   useEffect(()=>{
-    if(isAdmin||!client)return;
     let changed=false;
     const next=(shipments||[]).map(s=>{
       if(s&&s.sell==null&&s.cost!=null){
-        try{ const v=rateSellFor(+s.cost,s.service,{rules:rateRules,client,fromZip:s.fromZip,toZip:s.recipient&&s.recipient.zip,weight:s.weight}); if(v!=null){ changed=true; return {...s,sell:Math.round(v*100)/100}; } }catch(e){}
+        try{ const v=rateSellFor(+s.cost,s.service,{rules:rateRules,client:clientFor(s),fromZip:s.fromZip,toZip:s.recipient&&s.recipient.zip,weight:s.weight}); if(v!=null){ changed=true; return {...s,sell:Math.round(v*100)/100}; } }catch(e){}
       }
       return s;
     });
     if(changed)setShipments(next);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[]);
+  },[shipments.length,clients.length]);
   /* Packing-slip composer for MANUAL shipments (no store integration → no line items):
      type the items, print, and they're saved onto the shipment so reprints match. */
   const [slipEdit,setSlipEdit]=useState(null);   // {id,rows:[{name,qty}],note}

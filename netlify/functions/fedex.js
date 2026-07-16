@@ -92,6 +92,9 @@ async function transit(c, body, tk) {
       requestedPackageLineItems: (Array.isArray(body.pieces) && body.pieces.length ? body.pieces : [{ weight: body.weight || 1 }]).map((p) => ({ weight: { units: "LB", value: Number(p.weight || p.wt || 1) } })),
     },
   };
+  // Saturday Delivery: ask FedEx to commit a Saturday date. If the lane/service can't do Saturday,
+  // FedEx simply returns its normal weekday commit — so this never invents a date, it only asks.
+  if (body.saturdayDelivery) payload.requestedShipment.shipmentSpecialServices = { specialServiceTypes: ["SATURDAY_DELIVERY"] };
   if (intl) {
     const totalWt = (Array.isArray(body.pieces) && body.pieces.length ? body.pieces : [{ weight: body.weight || 1 }]).reduce((a, p) => a + Number(p.weight || p.wt || 1), 0);
     const declared = Math.max(1, +body.declaredValue || +body.insuranceAmount || 100);

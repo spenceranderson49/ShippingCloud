@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v608";
+const BUILD_TAG="addr-v609";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -1467,7 +1467,7 @@ function cleanServiceList(list,{intl=false,residential=null}={}){
   return out.filter(q=>byFam[famOf(q)]===q);
 }
 async function fedexTransit(s){
-  const body={fromZip:s.fromZip,toZip:s.toZip,fromCountry:s.fromCountry||"US",toCountry:s.toCountry||"US",residential:!!s.residential,pieces:(s.pieces||[]).map(p=>({weight:Math.ceil(+p.weight||1)}))};
+  const body={fromZip:s.fromZip,toZip:s.toZip,fromCountry:s.fromCountry||"US",toCountry:s.toCountry||"US",residential:!!s.residential,saturdayDelivery:!!s.saturdayDelivery,pieces:(s.pieces||[]).map(p=>({weight:Math.ceil(+p.weight||1)}))};
   const res=await fedexCall(body);
   if(!res||!res.ok||!Array.isArray(res.services)) return {};
   const map={};
@@ -7520,7 +7520,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(!ready){setFxTransit({});return;}
     fedexTransit(shipment).then(m=>{ if(!cancel) setFxTransit(m||{}); });
     return ()=>{cancel=true;};
-  },[receiver.zip,receiver.country,sender.zip,residential,JSON.stringify(pieces)]);
+  },[receiver.zip,receiver.country,sender.zip,residential,saturday,JSON.stringify(pieces)]);
   // FedEx One Rate box the shipment qualifies for — shown as a placeholder with a blank price (see oneRateQuotes).
   const orRates=useMemo(()=>orBox?oneRateQuotes(orBox,{rules:rateRules,client}):[],[orBox&&orBox.code,client.markup,rateRules]);
   useEffect(()=>{

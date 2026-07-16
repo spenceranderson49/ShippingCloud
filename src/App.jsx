@@ -108,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v574";
+const BUILD_TAG="addr-v575";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7725,7 +7725,9 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       ):(
         <button onClick={()=>setOrdersOpen(true)} title="Show orders" className="shrink-0 self-start flex flex-col items-center gap-1 text-stone-500 hover:text-stone-700 hover:border-stone-300 border border-stone-200 bg-white rounded-lg px-1.5 py-2 w-9"><ChevronRight className="w-4 h-4"/><ShoppingBag className="w-4 h-4"/>{ordersToShow.length?<span className="text-[10px] font-bold text-[#0086E0] leading-none">{ordersToShow.length}</span>:null}</button>
       ))}
-      <div className="relative flex-1 min-w-0 space-y-3">
+      {/* steps hidden = no numbered headers breaking up the page, so give the sections a touch
+          more breathing room (16px vs 12px); with steps on, the headers carry the rhythm */}
+      <div className={"relative flex-1 min-w-0 "+(custom.hideShipSteps?"space-y-4":"space-y-3")}>
         {/* Steps ON: actions share the step-1 header row. Steps OFF: that row disappears and the
             actions float beside the Sender/Receiver headings so the cards start at the very top. */}
         {!custom.hideShipSteps&&<div className="flex flex-wrap items-center justify-between gap-2">
@@ -7761,7 +7763,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {intl&&<div className="flex items-center gap-2 text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2"><MapPin className="w-4 h-4"/>International shipment to <b>{receiver.country}</b> — FedEx &amp; DHL rates shown, customs info required below.</div>}
 
         {!custom.hideShipSteps&&<StepHead n="2" label="Package details"/>}
-        <div className="bg-white border border-[#cbd5e1] shadow-sm rounded-lg p-3 space-y-2">
+        <div className="bg-white border border-[#b9c6d5] shadow-sm rounded-lg p-3 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <datalist id="sc-ref-list">{[...((settings.fieldLists||{}).department||[]),...((settings.fieldLists||{}).reference||[])].map(v=><option key={v} value={v}/>)}</datalist>
             <datalist id="sc-inv-list">{(((settings.fieldLists||{}).invoice)||[]).map(v=><option key={v} value={v}/>)}</datalist>
@@ -7884,7 +7886,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               const showRates=!custom.hideRateSrcBar;
               if(!showOrder&&!showAp&&!showRates&&!handsFree)return null;
               const apFired=liveRuleStatus&&liveRuleStatus.state==="fired";
-              return <div className="border border-[#cbd5e1] shadow-sm rounded-lg bg-white p-3 space-y-2">
+              return <div className="border border-[#b9c6d5] shadow-sm rounded-lg bg-white p-3 space-y-2">
                 <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">This Shipment</div>
                 {showOrder&&<div className="flex items-start gap-2 text-xs text-stone-600">
                   <Truck className="w-3.5 h-3.5 shrink-0 mt-0.5 text-stone-400"/>
@@ -7918,7 +7920,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 </div>}
               </div>;
             })()}
-            {!custom.hideBillingBox&&<div className="border border-[#cbd5e1] shadow-sm rounded-lg bg-white p-3 space-y-2">
+            {!custom.hideBillingBox&&<div className="border border-[#b9c6d5] shadow-sm rounded-lg bg-white p-3 space-y-2">
               <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5"/>Billing &amp; Third-Party</div>
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-stone-500">Bill to</span>
@@ -7926,7 +7928,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               </div>
               {billTo==="third"&&<input value={thirdAcct} onChange={e=>setThirdAcct(e.target.value)} placeholder="3rd-party acct #" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>}
             </div>}
-            {!custom.hideNotifyBox&&<div className="border border-[#cbd5e1] shadow-sm rounded-lg bg-white p-3 space-y-2">
+            {!custom.hideNotifyBox&&<div className="border border-[#b9c6d5] shadow-sm rounded-lg bg-white p-3 space-y-2">
               <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><Send className="w-3.5 h-3.5"/>Send Label &amp; Notify</div>
               <div>
                 <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Send to email</div>
@@ -13867,8 +13869,8 @@ function AddressCard({title,data,set,required,residential,setResidential,address
       </div>}
       </div>
     )}
-    <div className={side?"flex flex-col lg:flex-row border border-[#cbd5e1] shadow-sm rounded-lg overflow-hidden":""}>
-    <div className={side?"flex-1 min-w-0 grid grid-cols-6 gap-px bg-stone-200":"grid grid-cols-6 gap-px bg-stone-200 border border-[#cbd5e1] shadow-sm rounded-lg overflow-hidden"}>
+    <div className={side?"flex flex-col lg:flex-row border border-[#b9c6d5] shadow-sm rounded-lg overflow-hidden":""}>
+    <div className={side?"flex-1 min-w-0 grid grid-cols-6 gap-px bg-stone-200":"grid grid-cols-6 gap-px bg-stone-200 border border-[#b9c6d5] shadow-sm rounded-lg overflow-hidden"}>
       {cell("Country","country","col-span-6")}{cell("Name","name","col-span-6 sm:col-span-3",required)}{cell("Company","company","col-span-6 sm:col-span-3",reqOverrides.company===true)}{cell("Address 1","address1","col-span-6",required)}{cell(_fmt.zip,"zip","col-span-3 sm:col-span-2",required&&!_fmt.zipOpt)}{cell(_fmt.state,"state","col-span-3 sm:col-span-2",required&&!_fmt.stateOpt)}{cell("City","city","col-span-6 sm:col-span-2",required)}{!hideAddr23&&<>{cell("Address 2","address2","col-span-6 sm:col-span-3")}{cell("Address 3","address3","col-span-6 sm:col-span-3")}</>}{cell("Phone","phone","col-span-6 sm:col-span-3",required&&reqOverrides.phone!==false)}{cell("Email","email","col-span-6 sm:col-span-3",required&&reqOverrides.email!==false)}
     </div>
     {side&&<div className="lg:w-[250px] xl:w-[290px] shrink-0 bg-stone-50 border-t lg:border-t-0 lg:border-l border-stone-200 p-3">{side}</div>}

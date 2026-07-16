@@ -90,8 +90,8 @@ const FEATURE_CATALOG=[
   {id:"fedexLocations",label:"FedEx Location Finder",desc:"Find nearest FedEx drop-off / pickup locations by ZIP or current location",default:true},
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own NON-FedEx carrier accounts (the FedEx Account settings page always shows for every customer; admins always have this)",default:false},
 ];
-const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All Logins"],["rates","Rates & Dim Divisors"],["labelcert","FedEx Labels"],["customizations","Features & Access"],["branding","Branding"],["apiadmin","API"],["billing","Billing & Invoices"],["domains","Domains"],["backups","Backups & Restore"]];
-const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,labelcert:Printer,customizations:Sliders,branding:Sparkles,apiadmin:Plug,billing:Receipt,domains:ExternalLink,backups:RotateCcw};
+const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All Logins"],["rates","Rates & Dim Divisors"],["othercarriers","Other Carriers"],["labelcert","FedEx Labels"],["customizations","Features & Access"],["branding","Branding"],["apiadmin","API"],["billing","Billing & Invoices"],["domains","Domains"],["backups","Backups & Restore"]];
+const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,othercarriers:Truck,labelcert:Printer,customizations:Sliders,branding:Sparkles,apiadmin:Plug,billing:Receipt,domains:ExternalLink,backups:RotateCcw};
 /* A restricted admin ALWAYS keeps access to "users" — without it there is no self-service way
    to ever fix a permission set that’s missing something, for yourself or anyone else. A wrong
    restriction otherwise becomes a permanent lockout with no way back in. */
@@ -105,8 +105,8 @@ const adminSectionsFor=(user)=>{
    (every section, same as the owner). Presets store the exact section list; "custom" is any other set. */
 const ADMIN_LEVELS=[
   {id:"full",name:"Full access",desc:"Every Admin section — same as you",sections:null},
-  {id:"manager",name:"Manager",desc:"Everything except API, Domains & Backups",sections:["overview","customers","users","rates","labelcert","customizations","branding","billing"]},
-  {id:"support",name:"Support",desc:"Dashboard, Customers, Logins, Rates & Labels",sections:["overview","customers","users","rates","labelcert"]},
+  {id:"manager",name:"Manager",desc:"Everything except API, Domains & Backups",sections:["overview","customers","users","rates","othercarriers","labelcert","customizations","branding","billing"]},
+  {id:"support",name:"Support",desc:"Dashboard, Customers, Logins, Rates & Labels",sections:["overview","customers","users","rates","othercarriers","labelcert"]},
   {id:"billing",name:"Billing",desc:"Dashboard, Customers, Billing & Invoices",sections:["overview","customers","billing"]},
 ];
 const levelOf=(adminPerms)=>{
@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v618";
+const BUILD_TAG="addr-v619";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3942,7 +3942,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       <DraftBar dirty={ratesDirty} onSave={saveRates} onUndo={undoRates} savedNote={"Saved — live for "+c.name} saveLabel="Save carrier markups"/>
       <div className="border border-violet-200 bg-violet-50/40 rounded-lg p-3">
         <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><Truck className="w-4 h-4 text-violet-600"/>Other carriers — {c.name} only</div>
-        <p className="text-[11px] text-stone-500 mt-1">Turn on carriers beyond FedEx for <b>this customer</b>. They stay invisible to everyone until enabled here. Once on, they quote on {c.name}'s Quick quote, Ship screen and API — priced from the loaded cost card × your markup below. Load a carrier's cost card in <b>Admin → Rates → Other carriers</b>. Quote-only today (labels still print on FedEx). Enabling is instant; markups save with the green button.</p>
+        <p className="text-[11px] text-stone-500 mt-1">Turn on carriers beyond FedEx for <b>this customer</b>. They stay invisible to everyone until enabled here. Once on, they quote on {c.name}'s Quick quote, Ship screen and API — priced from the loaded cost card × your markup below. Load a carrier's cost card in <b>Admin → Other Carriers</b>. Quote-only today (labels still print on FedEx). Enabling is instant; markups save with the green button.</p>
       </div>
       {CUSTOM_CARRIERS.map(cc=>{
         const on=(c&&c.enabledCarriers)||[];
@@ -3957,7 +3957,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
             <button onClick={()=>upClient({enabledCarriers:en?on.filter(x=>x!==cc.id):[...on,cc.id]})} className={`text-sm rounded-lg px-3 py-1.5 font-medium ${en?"bg-violet-600 text-white hover:bg-violet-700":"bg-stone-100 text-stone-700 hover:bg-stone-200"}`}>{en?"Enabled ✓":"Enable"}</button>
           </div>
           {en&&<div className="border-t border-stone-100 px-4 py-3 space-y-2 bg-stone-50/40">
-            {!cardLoaded&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">No cost card loaded for {cc.name} yet — {c.name} won't see quotes until you load one under <b>Admin → Rates → Other carriers</b>.</div>}
+            {!cardLoaded&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">No cost card loaded for {cc.name} yet — {c.name} won't see quotes until you load one under <b>Admin → Other Carriers</b>.</div>}
             <div className="text-[11px] text-stone-500">Markup on each {cc.name} service for {c.name} — priced over the loaded cost. Blank = the account-wide markup on the Rates tab applies.</div>
             <div className="overflow-x-auto"><table className="w-full text-sm min-w-[440px]">
               <thead><tr className="text-[10px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal py-1">Service</th><th className="text-left font-normal py-1 pl-3">Markup</th><th className="text-right font-normal py-1">Value</th><th className="text-right font-normal py-1">Min $ / label</th></tr></thead>
@@ -4303,7 +4303,6 @@ function RatesAdmin({clients=[],brand}){
   const sheetData=useMemo(()=>sheet?buildSheet(sheet.k):null,[sheet,rules,profId]);
   const TIER=ENGLAND_TIERS.find(t=>t.id===rules.englandTier)||null;
   const [shSvcs,setShSvcs]=useState({});
-  const [ccImp,setCcImp]=useState(null);   /* other-carrier rate-card import panel */
   const [shAccs,setShAccs]=useState({});
   const _sheetStyles="body{font-family:system-ui,Segoe UI,Arial;padding:28px;color:#1c1917}table{border-collapse:collapse;width:100%;font-size:12px;margin:10px 0 22px}th,td{border:1px solid #e5e5e5;padding:6px 8px;text-align:right}th{background:#f5f5f4}h1{font-size:16px;margin:18px 0 2px}.sub{color:#78716c;font-size:12px}td:first-child,th:first-child{text-align:left}";
   const escS=(s)=>String(s==null?"":s).replace(/[&<>"]/g,(ch)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));   /* names on printable sheets are markup-inert */
@@ -4481,7 +4480,7 @@ function RatesAdmin({clients=[],brand}){
       <div className="flex flex-wrap items-center gap-1 border-b border-stone-200 pb-2 mb-3">
         {[["fedex","FedEx"],["dhl","DHL"]].map(([v,l])=><button key={v} onClick={()=>setCarrier(v)} className={`text-sm px-3 py-1.5 rounded-lg ${carrier===v?"bg-stone-900 text-white font-medium":"text-[#0086E0] hover:bg-stone-100"}`}>{l}</button>)}
         <span className="flex-1"/>
-        {[["services","Services"],["surcharges","Surcharges"],["dims","Dim divisors"],["base","Base costs"],["carriers","Other carriers"]].map(([v,l])=><button key={v} onClick={()=>setTab(v)} className={`text-sm px-3 py-1.5 rounded-lg ${tab===v?"bg-stone-100 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-50"}`}>{l}</button>)}
+        {[["services","Services"],["surcharges","Surcharges"],["dims","Dim divisors"],["base","Base costs"]].map(([v,l])=><button key={v} onClick={()=>setTab(v)} className={`text-sm px-3 py-1.5 rounded-lg ${tab===v?"bg-stone-100 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-50"}`}>{l}</button>)}
       </div>
 
       {tab==="services"&&<div className="overflow-x-auto">
@@ -4590,30 +4589,6 @@ function RatesAdmin({clients=[],brand}){
         {(()=>{const q=surQ.trim().toLowerCase();return q&&!FEDEX_SURCHARGES.some(su=>surMatches(su,q))?<div className="py-6 text-center text-sm text-stone-400">No surcharges match "{surQ}".</div>:null;})()}
       </div>}
 
-      {tab==="carriers"&&<div className="space-y-4 max-w-3xl">
-        <p className="text-sm text-stone-500">Load rate cards for carriers beyond FedEx — <b>admin-only</b>. Nothing appears for any customer until you enable the carrier on their record (Customers → open → Rates → Other carriers). Loaded services price through the same rule engine (percent / flat / breaks / zones / Min $ — add rules on the Services tab using these service keys). Quote-only for now: they show prices in Quick quote, the Ship screen and the API for enabled customers; label printing stays on carriers with a live connection.</p>
-        {CUSTOM_CARRIERS.map(cc=>(<div key={cc.id} className="border border-stone-200 rounded-xl bg-white p-4 space-y-2">
-          <div className="font-semibold text-stone-800">{cc.name}</div>
-          {cc.services.map(([k,l])=>{const t=(rules.baseCosts||{})["cc:"+k];return (
-            <div key={k} className="flex flex-wrap items-center gap-2 border-t border-stone-100 pt-2">
-              <span className="text-sm w-56 truncate">{l}</span>
-              <code className="text-[10px] text-stone-400">{k}</code>
-              <span className="flex-1"/>
-              {t&&t.rows&&t.rows.length?<Badge tone="green">{t.rows.length} weight rows · zones {t.zones&&t.zones.join(",")}</Badge>:<Badge tone="stone">no rate card</Badge>}
-              <button onClick={()=>setCcImp({key:k,label:l,text:""})} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">{t?"Replace card":"Load rate card"}</button>
-              {t&&<button onClick={async()=>{if(!await uiConfirm("Remove the "+l+" rate card?"))return;setRules(r=>{const bc={...(r.baseCosts||{})};delete bc["cc:"+k];return {...DEFAULT_RATE_RULES,...r,baseCosts:bc};});}} className="text-[11px] text-rose-500 hover:underline">Remove</button>}
-            </div>);})}
-        </div>))}
-        {ccImp&&<div className="border border-[#99D6FF] bg-[#F5FAFF] rounded-xl p-4 space-y-2">
-          <div className="text-sm font-semibold text-stone-800">Paste the {ccImp.label} rate card</div>
-          <div className="text-[11px] text-stone-500">Excel/CSV/TSV — first column weight (lb), one column per zone (headers = zone numbers). Same format as FedEx base-cost imports.</div>
-          <textarea value={ccImp.text} onChange={e=>setCcImp(p=>({...p,text:e.target.value}))} rows={8} spellCheck={false} placeholder={"Weight\t2\t3\t4\t5\t6\t7\t8\n1\t4.10\t4.25\t…"} className="w-full bg-white border border-stone-200 rounded-lg p-2.5 font-mono text-[12px] outline-none focus:border-[#0086E0] resize-y"/>
-          <div className="flex gap-2">
-            <button onClick={()=>{const r2=parseRateTable(ccImp.text);if(r2.error)return uiAlert(r2.error);setRules(r=>({...DEFAULT_RATE_RULES,...r,baseCosts:{...(r.baseCosts||{}),["cc:"+ccImp.key]:r2}}));setCcImp(null);setImpMsg({ok:"Rate card staged — press Save rates to make it live."});}} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium">Stage Rate Card</button>
-            <button onClick={()=>setCcImp(null)} className="text-sm text-stone-500 px-3 py-2 hover:bg-stone-100 rounded-lg">Cancel</button>
-          </div>
-        </div>}
-      </div>}
       {tab==="base"&&<div className="space-y-3">
         <p className="text-[11px] text-stone-500">Upload everything at once — an .xlsx workbook (one tab per service), a stack of CSVs, or one big paste. <b>FedEx list rates</b> drive the "FedEx list − %" basis: every live quote from the England API looks up the shipment's weight and zone in the list and sells at list minus your discount (the API's cost stays your cost — margin is list-minus-% over England's price). <b>England cost sheets</b> power printable rate sheets, margin analysis, and offline pricing. The <b>One Rate flat table</b> prices the One Rate services England never quotes.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -4968,6 +4943,52 @@ function MultiTabBanner(){
   if(!multi)return null;
   return (<div className="bg-amber-500 text-white text-[13px] px-4 py-2.5 flex items-center justify-center gap-2 text-center rounded-lg mb-3"><AlertTriangle className="w-4 h-4 shrink-0"/><span><b>Heads up:</b> the admin is open in more than one tab. An older tab can overwrite newer data when it saves — for safety, keep just one open. (Your data is guarded either way.)</span></div>);
 }
+/* ── Other Carriers (its own Admin sidebar section) ─────────────────────────
+   Load zone×weight rate cards for the table-rated carriers (CUSTOM_CARRIERS),
+   per service, and see which customers each carrier is live for. Cards write to
+   the SHARED rateRules.baseCosts under "cc:<serviceKey>" — the same store the
+   Advanced-rates page edits — so pricing flows through the normal rule engine.
+   Enabling stays per customer (Customers → open a customer → Carriers tab). */
+function OtherCarriersAdmin({clients=[]}){
+  const [storeRules,commitRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
+  const _d=useDraft(storeRules,commitRules,DEFAULT_RATE_RULES);
+  const rules=_d.draft; const setRules=_d.setDraft;
+  const [ccImp,setCcImp]=useState(null);
+  const [msg,setMsg]=useState(null);
+  const baseCosts=rules.baseCosts||{};
+  return (<div className="space-y-4 max-w-3xl">
+    <DraftBar dirty={_d.dirty} onSave={_d.save} onUndo={_d.undo} savedNote="Rate cards saved — live for every customer the carrier is enabled on" saveLabel="Save rate cards"/>
+    <p className="text-sm text-stone-500">Load a cost card for each service, then turn the carrier on per customer (<b>Customers → open a customer → Carriers</b>) — nothing shows anywhere until you enable it there. Enabled services quote in that customer's Quick quote, Ship screen and API, priced from the loaded cost × their markup (percent / flat / breaks / zones / Min $ rules all apply via the service keys shown). Quote-only for now — labels still print on carriers with a live connection.</p>
+    {msg&&msg.ok&&<div className="text-[12px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">{msg.ok}</div>}
+    {CUSTOM_CARRIERS.map(cc=>{
+      const enabledFor=clients.filter(c=>c&&Array.isArray(c.enabledCarriers)&&c.enabledCarriers.includes(cc.id));
+      const enNames=enabledFor.map(c=>c.name);
+      return (<div key={cc.id} className="border border-stone-200 rounded-xl bg-white p-4 space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="font-semibold text-stone-800">{cc.name}</div>
+          {enabledFor.length?<Badge tone="blue">live for {enNames.slice(0,3).join(", ")}{enNames.length>3?" +"+(enNames.length-3)+" more":""}</Badge>:<Badge tone="stone">not enabled for any customer yet</Badge>}
+        </div>
+        {cc.services.map(([k,l])=>{const t=baseCosts["cc:"+k];return (
+          <div key={k} className="flex flex-wrap items-center gap-2 border-t border-stone-100 pt-2">
+            <span className="text-sm w-56 truncate">{l}</span>
+            <code className="text-[10px] text-stone-400">{k}</code>
+            <span className="flex-1"/>
+            {t&&t.rows&&t.rows.length?<Badge tone="green">{t.rows.length} weight rows · zones {t.zones&&t.zones.join(",")}</Badge>:<Badge tone="stone">no rate card</Badge>}
+            <button onClick={()=>{setCcImp({key:k,label:l,text:""});setMsg(null);}} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">{t?"Replace card":"Load rate card"}</button>
+            {t&&<button onClick={async()=>{if(!await uiConfirm("Remove the "+l+" rate card?"))return;setRules(r=>{const bc={...(r.baseCosts||{})};delete bc["cc:"+k];return {...DEFAULT_RATE_RULES,...r,baseCosts:bc};});}} className="text-[11px] text-rose-500 hover:underline">Remove</button>}
+          </div>);})}
+      </div>);})}
+    {ccImp&&<div className="border border-[#99D6FF] bg-[#F5FAFF] rounded-xl p-4 space-y-2">
+      <div className="text-sm font-semibold text-stone-800">Paste the {ccImp.label} rate card</div>
+      <div className="text-[11px] text-stone-500">Excel/CSV/TSV — first column weight (lb), one column per zone (headers = zone numbers). Same format as FedEx base-cost imports.</div>
+      <textarea value={ccImp.text} onChange={e=>setCcImp(p=>({...p,text:e.target.value}))} rows={8} spellCheck={false} placeholder={"Weight\t2\t3\t4\t5\t6\t7\t8\n1\t4.10\t4.25\t…"} className="w-full bg-white border border-stone-200 rounded-lg p-2.5 font-mono text-[12px] outline-none focus:border-[#0086E0] resize-y"/>
+      <div className="flex gap-2">
+        <button onClick={()=>{const r2=parseRateTable(ccImp.text);if(r2.error)return uiAlert(r2.error);setRules(r=>({...DEFAULT_RATE_RULES,...r,baseCosts:{...(r.baseCosts||{}),["cc:"+ccImp.key]:r2}}));setCcImp(null);setMsg({ok:"Rate card staged — press Save rate cards (green bar above) to make it live."});}} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium">Stage Rate Card</button>
+        <button onClick={()=>setCcImp(null)} className="text-sm text-stone-500 px-3 py-2 hover:bg-stone-100 rounded-lg">Cancel</button>
+      </div>
+    </div>}
+  </div>);
+}
 function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,currentUser,settings,setSettings,brand,signupRequests,setSignupRequests,featureFlags,setFeatureFlags,customFeatures,setCustomFeatures,fedexRequests=[],setFedexRequests,publicBrand,setPublicBrand,companyAdminRequests=[],setCompanyAdminRequests,activeSection=null}){
   const sidebarDriven=!!activeSection;   // BRAND.admin: the left sidebar picks the section directly, so the internal top-tab bar/launcher is redundant and hidden
   const [sec,setSec]=useState(activeSection||(BRAND.admin?"customers":"overview"));
@@ -5006,7 +5027,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
   const NAV_GROUPS=[
     {label:"Overview",items:[["overview","Dashboard",BarChart3]]},
     {label:"Accounts",items:[["customers","Customers",Building2],["users","All Logins",Users]]},
-    {label:"Pricing",items:[["rates","Rates & dim divisors",DollarSign],["labelcert","FedEx labels",Printer]]},
+    {label:"Pricing",items:[["rates","Rates & dim divisors",DollarSign],["othercarriers","Other carriers",Truck],["labelcert","FedEx labels",Printer]]},
     {label:"Experience",items:[["customizations","Features & access",Sliders],["branding","Branding",Sparkles],["apiadmin","API",Plug],["billing","Billing & invoices",Receipt],["domains","Domains",ExternalLink]]},
     {label:"Data",items:[["backups","Backups & Restore",RotateCcw]]},
   ];
@@ -5041,6 +5062,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
   const sectionBody=(k)=>(<>
       {k==="customers"&&<CustomersMaster clients={clients} setClients={setClients} users={users} setUsers={setUsers} currentUser={currentUser} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} onOpenCustomer={openCustomer}/>}
       {k==="rates"&&<RatesAdmin clients={clients} brand={brand}/>}
+      {k==="othercarriers"&&<OtherCarriersAdmin clients={clients}/>}
       {k==="labelcert"&&<FedexCertLab settings={settings}/>}
       {k==="branding"&&<Branding settings={settings} setSettings={setSettings} brand={brand} publicBrand={publicBrand} setPublicBrand={setPublicBrand}/>}
       {k==="domains"&&<Domains settings={settings} setSettings={setSettings} clients={clients}/>}

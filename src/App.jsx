@@ -108,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v566";
+const BUILD_TAG="addr-v567";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -1870,10 +1870,18 @@ function orderHasHazmat(o,products){
   if(o&&o.sku&&bySku[String(o.sku).toLowerCase()])return true;
   return parseItemsList(o||{}).some(it=>byName[String(it.name).toLowerCase()]||bySku[String(it.name).toLowerCase()]);
 }
-function dupShipment(refName,shipments){
-  if(!refName)return null;
-  const cutoff=Date.now()-7*86400000;
-  return (shipments||[]).find(sh=>sh&&sh.reference===refName&&sh.status!=="Voided"&&(()=>{const d=new Date(sh.date);return isNaN(d)||d.getTime()>=cutoff;})())||null;
+function dupShipment(refName,shipments,rcv){
+  const fresh=(sh,days)=>{if(!sh||sh.status==="Voided")return false;const d=new Date(sh.date);return isNaN(d)||d.getTime()>=Date.now()-days*86400000;};
+  if(refName){const m=(shipments||[]).find(sh=>fresh(sh,7)&&sh.reference===refName);if(m)return m;}
+  /* Manual shipments usually carry no Ref # — without this, printing twice to the same address
+     raised no flag at all. Match the destination too (tight 2-day window: same street + ZIP a
+     week apart is a normal repeat customer, not a double-print). Only callers that pass the
+     receiver opt in — the hands-free booking BLOCKER stays reference-only on purpose. */
+  if(!rcv)return null;
+  const norm=(s)=>String(s||"").replace(/\s+/g," ").trim().toUpperCase();
+  const a1=norm(rcv.address1),zp=String(rcv.zip||"").slice(0,5);
+  if(!a1||!zp)return null;
+  return (shipments||[]).find(sh=>fresh(sh,2)&&sh.recipient&&norm(sh.recipient.address1)===a1&&String(sh.recipient.zip||"").slice(0,5)===zp)||null;
 }
 /* ── pick list: aggregate a batch by item so the puller walks the shelves once ── */
 function printPickList(orderList){
@@ -7802,13 +7810,13 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <PackNote/>
           {isPOBox(receiver.address1)&&<div className="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-xs text-rose-700 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>This looks like a PO Box — FedEx can’t deliver to PO Boxes. Use a street address (or USPS when available).</div>}
           {(()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);return so&&orderHasHazmat(so,settings.products||[])?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Contains a hazmat / lithium-battery item — ship ground only; air services aren’t allowed.</div>:null;})()}
-          {(()=>{const d=dupShipment(reference,shipments);
+          {(()=>{const d=dupShipment(reference,shipments,receiver);
             /* Never warn about the label we ourselves just booked this session — showing "this
                already has a label" for the label you just created is confusing, and in auto-advance
                mode it flashed behind the booked summary before the form cleared. The booked summary
                already offers reprint/details, so suppress this banner entirely post-booking. */
             if(justBookedRef.current!=null)return null;
-            return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex flex-wrap items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="flex-1 min-w-[180px]">Heads up — <b>{reference}</b> already has a label from {d.date} ({d.tracking}).</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:d.tracking}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><FileText className="w-3 h-3"/>See Details</button><button onClick={()=>setLabelPreview({rec:d,tracking:d.tracking,service:d.service,carrier:d.carrier,pdf:(labels[d.id]&&labels[d.id].pdf)||d.labelPdf||d.pdf||null,fromExisting:true})} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><Printer className="w-3 h-3"/>Reprint</button><button onClick={newShipment} className="shrink-0 text-[11px] font-semibold text-white bg-[#0086E0] hover:bg-[#006db8] border border-[#0086E0] rounded-lg px-2.5 py-1 flex items-center gap-1"><Plus className="w-3 h-3"/>New Shipment</button></div>:null;})()}
+            return d?<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 flex flex-wrap items-center gap-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="flex-1 min-w-[180px]">Heads up — <b>{reference||(d.recipient&&(d.recipient.name||d.recipient.address1))||"this address"}</b> already has a label from {d.date} ({d.tracking}).</span><button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:d.tracking}}));}catch(e){}}} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><FileText className="w-3 h-3"/>See Details</button><button onClick={()=>setLabelPreview({rec:d,tracking:d.tracking,service:d.service,carrier:d.carrier,pdf:(labels[d.id]&&labels[d.id].pdf)||d.labelPdf||d.pdf||null,fromExisting:true})} className="shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-2.5 py-1 flex items-center gap-1"><Printer className="w-3 h-3"/>Reprint</button><button onClick={newShipment} className="shrink-0 text-[11px] font-semibold text-white bg-[#0086E0] hover:bg-[#006db8] border border-[#0086E0] rounded-lg px-2.5 py-1 flex items-center gap-1"><Plus className="w-3 h-3"/>New Shipment</button></div>:null;})()}
           {pieces.map((p,i)=>(
             <div key={i} className="flex flex-wrap items-end gap-2 bg-white border border-stone-200 rounded-lg px-2 py-2">
               <div className="text-[11px] text-stone-400 w-6">#{i+1}</div>

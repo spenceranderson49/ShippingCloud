@@ -126,7 +126,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v620";
+const BUILD_TAG="addr-v621";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7769,38 +7769,6 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     autoBookedRef.current=selectedOrder;
     print(q);
   },[selectedOrder,hfArmed,matched,quotes,ready,rateSrc.live,rateSrc.loading,addrClassified,bought,shipStatus,handsFree,custom.autoRulesOnShip]);
-  /* Hands-free visibility: the auto-book above has eight silent guards, and when any one of
-     them blocks, the screen used to just… sit there, looking like a bug ("I still have to click
-     print"). This mirrors the guards IN ORDER and names the first blocker in plain language, so
-     the person (and a screenshot) can see exactly what hands-free is waiting on. */
-  const hfWait=useMemo(()=>{
-    if(!handsFree)return null;                                                   // hands-free off — nothing to say
-    if(bought||shipStatus)return null;                                           // booking / just booked — normal flow
-    if(selectedOrder&&autoBookedRef.current===selectedOrder){
-      // auto-book already fired for this order. If it actually booked, justBookedRef is set —
-      // stay quiet. If it BAILED (validation error, cancelled preview), say so instead of
-      // silently reading "ready" forever.
-      if(justBookedRef.current!=null)return null;
-      return {t:"warn",m:"auto-book already tried this order and stopped (see the error it showed) — fix the issue, then click the service to book it"};
-    }
-    if(!custom.autoRulesOnShip)return {t:"warn",m:"the service dropdown is set to “I choose the service” — switch it to a Pre-select option so hands-free can pick one"};
-    if(!selectedOrder)return {t:"info",m:custom.hideShipOrders?"no order loaded — scan an order and it books itself (manual shipments always wait for your click)":"no order loaded — hands-free only books orders opened from the sidebar or by scanning (manual shipments always wait for your click)"};
-    if(hfArmed!==selectedOrder)return {t:"info",m:custom.hideShipOrders?"this order was already on screen when the page loaded — scan it and it will book itself":"this order was already on screen when the page loaded — click it in the sidebar (or scan it) and it will book itself"};
-    if(!ready)return {t:"info",m:"waiting for a valid destination ZIP and weight"};
-    if(rateSrc.loading)return {t:"info",m:"waiting for live rates…"};
-    if(!rateSrc.live)return {t:"warn",m:"live rates aren't coming back (these are estimates) — hands-free never books on an estimate. Check the carrier account under Settings → FedEx account"};
-    if(!addrClassified)return {t:"info",m:"waiting for FedEx to classify the address (residential vs commercial)…"};
-    if(!matched||matched.src!=="autopilot"){
-      const _rc=liveRuleMatch?canonSvc(groundFamilySwap(liveRuleMatch,addrClassified?residential:null)):"";
-      if(_rc==="ground_economy"&&!groundEconOk(pieces))return {t:"warn",m:"your rule picked Ground Economy, but this shipment is over its limits (70 lb / 130\" per box) — set a fallback service in Autopilot, or pick a service yourself"};
-      return {t:"warn",m:"no Autopilot rule matched this order, so it's waiting for your click — add a rule that covers it (or set a fallback service) under Batch → Autopilot"};
-    }
-    const q=quotes.find(x=>x.key===matched.key);
-    if(!q||(q.sell??q.cost)==null)return {t:"info",m:"the matched service hasn't returned a live price yet…"};
-    const eng=englandFor(client,settings);
-    if(!(eng&&eng.enabled))return {t:"warn",m:"no carrier account is enabled on this login, so live booking is off — hands-free can't book here"};
-    return {t:"info",m:"booking now…"};
-  },[handsFree,custom.autoRulesOnShip,custom.hideShipOrders,selectedOrder,hfArmed,ready,rateSrc.live,rateSrc.loading,addrClassified,matched,quotes,bought,shipStatus,client,settings,liveRuleMatch,JSON.stringify(pieces)]);
 
   /* both notify buttons ship the ACTUAL tracking number (the email template renders it) and
      stay disabled until a label is booked — they used to "send ✓" a tracking email with no
@@ -8047,27 +8015,6 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {quoteAdvisories.length>0&&<div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2 text-xs text-amber-800 space-y-1">
           <div className="font-semibold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/>Heads up — FedEx rules that affect this shipment:</div>
           {quoteAdvisories.map((n2,i2)=><div key={i2} className="flex items-start gap-1.5"><span className="shrink-0">•</span><span>{n2}</span></div>)}
-        </div>}
-        {handsFree&&(()=>{ /* Hands-free: FIXED slim status strip, always rendered — only the text
-                   changes, so the screen never jumps when Autopilot/hands-free state updates. */
-          const fired=liveRuleStatus&&liveRuleStatus.state==="fired";
-          const _sw=fired?groundFamilySwap(liveRuleStatus.service,addrClassified?residential:null):null;
-          const ap=!liveRuleStatus?"waiting for an order…"
-            :fired?<>rule <b>“{liveRuleStatus.rule}”</b> → <b>{_sw}</b></>
-            :liveRuleStatus.state==="no-order"?"waiting for an order (open one from the sidebar or scan)"
-            :liveRuleStatus.state==="no-rules"?"on — but no rules are enabled"
-            :liveRuleStatus.state==="no-match"?"no rule matched this order — pick the service yourself"
-            :liveRuleStatus.state==="error"?("error: "+liveRuleStatus.msg)
-            :"—";
-          const hf=hfWait?hfWait.m:(shipStatus&&shipStatus.state==="booking"?"booking…":(shipStatus&&shipStatus.state==="booked"?"booked ✓":(bought?"printing…":"ready")));
-          return <div className="rounded-lg border border-stone-200 bg-stone-100 px-3 py-2 mb-2 text-xs leading-tight space-y-1 min-h-[38px]">
-            {!custom.hideAutopilotBox&&<div className="flex items-center gap-2 min-h-[18px]"><Zap className={`w-3.5 h-3.5 shrink-0 ${fired?"text-emerald-600":"text-stone-400"}`}/><span className={`truncate ${liveRuleStatus&&liveRuleStatus.state==="error"?"text-rose-600":fired?"text-emerald-700":"text-stone-600"}`}>Autopilot: {ap}</span></div>}
-            <div className="flex items-center gap-2 min-h-[18px]"><Printer className={`w-3.5 h-3.5 shrink-0 ${hfWait&&hfWait.t==="warn"?"text-amber-600":"text-stone-400"}`}/><span className={`truncate ${hfWait&&hfWait.t==="warn"?"text-amber-700":"text-stone-600"}`}>Hands-free: {hf}</span></div>
-          </div>;
-        })()}
-        {!handsFree&&hfWait&&<div className={`text-[11px] rounded px-3 py-2 mb-2 flex items-center gap-1.5 ${hfWait.t==="warn"?"bg-amber-50 border border-amber-200 text-amber-800":"bg-[#E6F4FF]/60 border border-[#99D6FF] text-[#006FBF]"}`}>
-          <Printer className="w-3.5 h-3.5 shrink-0"/>
-          <span><b>Hands-free:</b> {hfWait.m}</span>
         </div>}
         {!custom.hideShipSteps&&<StepHead n="3" label="Service & rate"/>}
         {/* Rates row: service list on the left, a slim info column (From order · Billing & third-party)

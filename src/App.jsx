@@ -108,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v577";
+const BUILD_TAG="addr-v578";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7744,7 +7744,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <button onClick={newShipment} className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New Shipment</button>
           {onQuickQuote&&<button onClick={onQuickQuote} className="flex items-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick Quote</button>}
         </div>}
-        {custom.hideShipSteps&&<div className="hidden lg:flex absolute -top-7 right-0 z-10 items-center gap-2 lg:w-[250px] xl:w-[290px]">
+        {custom.hideShipSteps&&<div className="hidden lg:flex absolute -top-7 right-0 z-10 items-center gap-2 lg:w-[280px] xl:w-[330px]">
           <button onClick={newShipment} className="flex-1 flex items-center justify-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New Shipment</button>
           {onQuickQuote&&<button onClick={onQuickQuote} className="flex-1 flex items-center justify-center gap-1.5 text-sm bg-stone-100 text-stone-700 border border-stone-200 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 whitespace-nowrap"><Calculator className="w-4 h-4"/>Quick Quote</button>}
         </div>}
@@ -13827,13 +13827,13 @@ function AddressCard({title,data,set,required,residential,setResidential,address
     <div key={k} className={`px-2 py-1.5 ${errorFields.includes(k)?"bg-rose-50 ring-1 ring-rose-300":(req&&!data[k]?"bg-white ring-1 ring-inset ring-[#42a7ef]":"bg-white")} ${span||""} ${k==="address1"?"relative":""}`}>
       {!(k==="country"||k==="address2"||k==="address3")&&<div className={`text-[10px] uppercase tracking-wide ${errorFields.includes(k)?"text-rose-600 font-semibold":(req&&!data[k]?"text-[#0086E0]":"text-stone-400")} flex items-center gap-1`}>{label}{errorFields.includes(k)?" • required":""}{k==="address1"&&acBusy&&<Loader2 className="w-2.5 h-2.5 animate-spin text-stone-400"/>}</div>}
       {k==="country"
-        ? <div className="flex items-center gap-2"><span className="text-[10px] uppercase tracking-wide text-stone-400 shrink-0">{label}</span><select value={data.country||"United States"} onChange={e=>f("country",e.target.value)} className="flex-1 bg-transparent text-[13px] text-stone-900 outline-none">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select></div>
+        ? <div className="flex items-center gap-2"><span className="text-[10px] uppercase tracking-wide text-stone-400 shrink-0">{label}</span><select value={data.country||"United States"} onChange={e=>f("country",e.target.value)} className="flex-1 bg-transparent text-[14px] leading-5 text-stone-900 outline-none">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select></div>
         : (k==="address2"||k==="address3")
-        ? <div className="flex items-center gap-2"><span className="text-[10px] uppercase tracking-wide text-stone-400 shrink-0">{label}</span><input value={data[k]||""} onChange={e=>f(k,e.target.value)} onPaste={onSmartPaste} autoComplete="off" className="flex-1 bg-transparent text-[13px] text-stone-900 outline-none placeholder-stone-300"/></div>
+        ? <div className="flex items-center gap-2"><span className="text-[10px] uppercase tracking-wide text-stone-400 shrink-0">{label}</span><input value={data[k]||""} onChange={e=>f(k,e.target.value)} onPaste={onSmartPaste} autoComplete="off" className="flex-1 bg-transparent text-[14px] leading-5 text-stone-900 outline-none placeholder-stone-300"/></div>
         : <input value={data[k]||""} onChange={e=>{const v=e.target.value;f(k,v);
             if((k==="name"||k==="company")&&Array.isArray(addresses)&&v.length>1){const hit=addresses.find(a=>(a.name&&a.name===v)||(a.company&&a.company===v));
               if(hit){set({...data,name:hit.name||"",company:hit.company||"",address1:hit.address1||"",address2:hit.address2||"",city:hit.city||"",state:hit.state||"",zip:hit.zip||"",country:hit.country||"United States",phone:hit.phone||data.phone||"",email:hit.email||data.email||""});if(onPick)onPick(hit);}}
-          }} list={(k==="name"||k==="company")&&Array.isArray(addresses)&&addresses.length?("sc-ab-"+k+"-"+(title||"").replace(/\s/g,"")):undefined} onPaste={onSmartPaste} onFocus={k==="address1"?()=>{acFocusRef.current=true;if(acSug.length)setAcOpen(true);}:undefined} onBlur={k==="address1"?()=>setTimeout(()=>{acFocusRef.current=false;setAcOpen(false);},150):undefined} autoComplete="off" className="w-full bg-transparent text-[13px] text-stone-900 outline-none mt-0.5 placeholder-stone-300"/>}
+          }} list={(k==="name"||k==="company")&&Array.isArray(addresses)&&addresses.length?("sc-ab-"+k+"-"+(title||"").replace(/\s/g,"")):undefined} onPaste={onSmartPaste} onFocus={k==="address1"?()=>{acFocusRef.current=true;if(acSug.length)setAcOpen(true);}:undefined} onBlur={k==="address1"?()=>setTimeout(()=>{acFocusRef.current=false;setAcOpen(false);},150):undefined} autoComplete="off" className="w-full bg-transparent text-[14px] leading-5 text-stone-900 outline-none mt-0.5 placeholder-stone-300"/>}
       {k==="address1"&&acOpen&&acSug.length>0&&<div className="absolute z-40 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-60 overflow-auto">
         <div className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50 border-b border-stone-100 flex items-center gap-1"><MapPin className="w-3 h-3"/>Google Maps suggestions</div>
         <div className="divide-y divide-stone-100">
@@ -13851,7 +13851,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
       </div>
     </div>
     {addresses!==undefined&&(
-      <div className="flex flex-col lg:flex-row gap-2 mb-1.5 items-start">
+      <div className="flex flex-col lg:flex-row gap-4 mb-1.5 items-start">
       <div className="flex-1 min-w-0 flex items-center gap-1.5">
       <div className="relative flex-1 min-w-0">
         <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400"/>
@@ -13867,18 +13867,18 @@ function AddressCard({title,data,set,required,residential,setResidential,address
       </div>
       {onSave&&<button type="button" onClick={saveToBook} disabled={!data.name&&!data.company} title={savedOk?"Saved to address book":"Save this address to your address book"} className={`shrink-0 h-[34px] w-[34px] flex items-center justify-center rounded-lg border ${savedOk?"bg-emerald-50 border-emerald-200 text-emerald-600":"bg-white border-stone-200 text-stone-400 hover:text-[#0086E0] hover:border-[#99D6FF] disabled:opacity-40"}`}>{savedOk?<Check className="w-4 h-4"/>:<Save className="w-4 h-4"/>}</button>}
       </div>
-      {scanSlot&&<div className={side?"lg:w-[250px] xl:w-[290px] shrink-0 flex flex-col gap-1.5":"flex flex-col gap-1.5"}>
+      {scanSlot&&<div className={side?"lg:w-[280px] xl:w-[330px] shrink-0 flex flex-col gap-1.5":"flex flex-col gap-1.5"}>
         {scanSlot}
       </div>}
       </div>
     )}
     {/* side (Address Check) is its OWN bordered box with a 12px gap — flex default stretch keeps
         both boxes' tops AND bottoms flush with the fields grid */}
-    <div className={side?"flex flex-col lg:flex-row gap-3":""}>
+    <div className={side?"flex flex-col lg:flex-row gap-4":""}>
     <div className={side?"flex-1 min-w-0 grid grid-cols-6 gap-px bg-stone-200 border border-[#b9c6d5] shadow-sm rounded-lg overflow-hidden":"grid grid-cols-6 gap-px bg-stone-200 border border-[#b9c6d5] shadow-sm rounded-lg overflow-hidden"}>
       {cell("Country","country","col-span-6")}{cell("Name","name","col-span-6 sm:col-span-3",required)}{cell("Company","company","col-span-6 sm:col-span-3",reqOverrides.company===true)}{cell("Address 1","address1","col-span-6",required)}{cell(_fmt.zip,"zip","col-span-3 sm:col-span-2",required&&!_fmt.zipOpt)}{cell(_fmt.state,"state","col-span-3 sm:col-span-2",required&&!_fmt.stateOpt)}{cell("City","city","col-span-6 sm:col-span-2",required)}{!hideAddr23&&<>{cell("Address 2","address2","col-span-6 sm:col-span-3")}{cell("Address 3","address3","col-span-6 sm:col-span-3")}</>}{cell("Phone","phone","col-span-6 sm:col-span-3",required&&reqOverrides.phone!==false)}{cell("Email","email","col-span-6 sm:col-span-3",required&&reqOverrides.email!==false)}
     </div>
-    {side&&<div className="lg:w-[250px] xl:w-[290px] shrink-0 bg-stone-50 border border-[#b9c6d5] shadow-sm rounded-lg p-3">{side}</div>}
+    {side&&<div className="lg:w-[280px] xl:w-[330px] shrink-0 bg-stone-50 border border-[#b9c6d5] shadow-sm rounded-lg p-3">{side}</div>}
     </div>
   </div>);
 }

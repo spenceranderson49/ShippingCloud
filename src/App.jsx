@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v612";
+const BUILD_TAG="addr-v613";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -8523,9 +8523,9 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
         <div onClick={()=>{setOpen(isOpen?null:q.key); if(q._oneRate&&q.packageTypeCode&&onOneRate)onOneRate(q.packageTypeCode);}} className="px-3 py-1.5 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
           <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isOpen?"rotate-90":""}`}/>
           {matchBadge}
-          <div className="flex-1 min-w-0 flex items-baseline gap-x-3 gap-y-0.5 flex-wrap">
-            <span className="text-sm font-semibold text-stone-900">{(custom.aliases&&custom.aliases[canonSvc(q.label)])||q.label}</span>
-            <span className="text-sm text-stone-600 inline-flex items-center gap-1.5"><Calendar className="w-4 h-4"/>{(()=>{
+          <div className="flex-1 min-w-0 flex items-center gap-x-4">
+            <span className="w-[248px] shrink-0 truncate text-[15px] font-semibold text-stone-900">{(custom.aliases&&custom.aliases[canonSvc(q.label)])||q.label}</span>
+            <span className="text-sm text-stone-600 inline-flex items-center gap-1.5 min-w-0 truncate"><Calendar className="w-4 h-4 shrink-0"/>{(()=>{
               /* ONLY ever FedEx's own committed transit — never a computed/business-day guess. If FedEx
                  didn't return transit for this lane, show nothing (or "checking…" while it loads). */
               const fd=(fxLive&&q.fxDays!=null)?q.fxDays:null;

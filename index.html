@@ -46,8 +46,15 @@
       }
     </style>
   </head>
-  <body class="bg-neutral-950">
-    <div id="root"></div>
+  <body class="bg-gradient-to-br from-[#f2f8fd] via-white to-[#e6f4ff]">
+    <!-- Static branded splash shown INSTANTLY (before any JS) so a refresh never flashes black.
+         React replaces #root on mount; on a fast cache-first refresh this is just a blink. -->
+    <div id="root">
+      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#f2f8fd,#ffffff 55%,#e6f4ff)">
+        <svg width="62" height="46" viewBox="3.75 0.4 42.8 31.1" style="filter:drop-shadow(0 8px 20px rgba(0,134,224,.18));animation:scFloat 2.4s ease-in-out infinite"><path d="M15 31h22a9 9 0 0 0 2.7-17.6A12.5 12.5 0 0 0 15.5 9 9.8 9.8 0 0 0 15 31Z" fill="#0086E0"/></svg>
+      </div>
+    </div>
+    <style>@keyframes scFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}</style>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

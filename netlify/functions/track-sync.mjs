@@ -73,7 +73,10 @@ function mapStatus(latest) {
   if (/\bDL\b|DELIVERED/.test(t)) return "Delivered";
   if (/\bOD\b|OUT_FOR_DELIVERY|OUT FOR DELIVERY/.test(t)) return "Out for delivery";
   if (/\bDE\b|\bSE\b|EXCEPTION|DELAY/.test(t)) return "Exception";
-  if (/\bIT\b|\bDP\b|\bAR\b|\bPU\b|\bOC\b|IN_TRANSIT|PICKED_UP|ARRIVED|DEPARTED/.test(t)) return "In transit";
+  /* "In transit" needs a PHYSICAL scan (pickup / arrived / departed). OC is only "shipment
+     information sent to FedEx" — the label acknowledgment — and must NOT flip the status. */
+  if (/\bIT\b|\bDP\b|\bAR\b|\bPU\b|IN_TRANSIT|PICKED_UP|ARRIVED|DEPARTED/.test(t)) return "In transit";
+  if (/\bOC\b|ORDER_CREATED|INITIATED|INFORMATION SENT/.test(t)) return "Label created";
   return null;
 }
 

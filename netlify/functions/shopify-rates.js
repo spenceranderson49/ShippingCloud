@@ -277,14 +277,14 @@ exports.handler = async (event) => {
       out = ["Express", "Standard", "Economy"].map((t) => best[t]).filter(Boolean);
     }
 
+    /* No delivery estimate is sent to buyers: this endpoint prices rates but does NOT pull FedEx's
+       transit-times API, so any "arrives in N days" here would be a guess. Per policy we only ever
+       surface FedEx-committed dates \u2014 so checkout shows the service + price only, never a guessed ETA. */
     const rates = out.map((q) => ({
       service_name: q.free ? "Free Shipping \u2014 " + q.label : q.label,
       service_code: (q.key || q.label).replace(/\W+/g, "_").toUpperCase(),
       total_price: String(Math.round(q.buyer * 100)),
       currency: "USD",
-      description: q.dmin === q.dmax ? `Arrives in ${q.dmax} business day${q.dmax === 1 ? "" : "s"}` : `Arrives in ${q.dmin}\u2013${q.dmax} business days`,
-      min_delivery_date: addBizDays(q.dmin),
-      max_delivery_date: addBizDays(q.dmax),
     }));
 
     console.log(`carrier-rates uid=${uid} items=${items.length} pieces=${pieces.length} source=${source} rates=${rates.length}`);

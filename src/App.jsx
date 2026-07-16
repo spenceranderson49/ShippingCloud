@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v606";
+const BUILD_TAG="addr-v607";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10827,7 +10827,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
               return (
                 <label key={q.key} className={`flex items-center gap-3 border rounded-lg px-3 py-2.5 cursor-pointer ${idx===0?"border-stone-900":"border-stone-200"}`}>
                   <span className={`w-4 h-4 rounded-full border-2 ${idx===0?"border-stone-900 bg-stone-900":"border-stone-300"}`}/>
-                  <div className="flex-1"><div className="text-sm font-medium text-stone-800">{q.shown}</div><div className="text-[11px] text-stone-400">{q.minDays===q.maxDays?`${q.minDays} business day${q.minDays>1?"s":""}`:`${q.minDays}–${q.maxDays} business days`}</div></div>
+                  <div className="flex-1"><div className="text-sm font-medium text-stone-800">{q.shown}</div></div>
                   <div className=" text-sm font-semibold">{isFree?<span className="text-emerald-600">FREE</span>:money(q.buyer)}</div>
                 </label>
               );

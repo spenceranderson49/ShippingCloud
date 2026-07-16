@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v616";
+const BUILD_TAG="addr-v617";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9508,7 +9508,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
       <div className="relative flex-1"><Search className="w-4 h-4 absolute left-3 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by name, tracking, order, reference or PO #" className="w-full bg-white border border-stone-200 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:border-[#0086E0]"/></div>
       </div>
       <div className="border border-stone-200 rounded-lg overflow-hidden bg-white divide-y divide-stone-100">
-        <div className="flex items-center gap-3 px-4 py-2 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50"><div className="w-4 shrink-0"/><div className="w-20 shrink-0">Created</div><div className="w-40 shrink-0">Recipient</div><div className="w-24 shrink-0 hidden lg:block">Company</div><div className="w-72 shrink-0">Service</div><div className="w-36 shrink-0 hidden md:block">Tracking</div><div className="w-44 shrink-0 hidden lg:block">Ship-to address</div><div className="w-24 shrink-0 hidden xl:block">Reference</div><div className="w-28 shrink-0 text-center">Status</div><div className="flex-1 min-w-0"/></div>
+        <div className="flex items-center gap-3 px-4 py-2 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50"><div className="w-4 shrink-0"/><div className="w-20 shrink-0">Created</div><div className="w-40 shrink-0">Recipient</div><div className="w-44 shrink-0 hidden lg:block">Company</div><div className="w-72 shrink-0">Service</div><div className="w-36 shrink-0 hidden md:block">Tracking</div><div className="w-44 shrink-0 hidden lg:block">Ship-to address</div><div className="w-24 shrink-0 hidden xl:block">Reference</div><div className="w-28 shrink-0 text-center">Status</div><div className="flex-1 min-w-0"/></div>
         {list.length===0&&<div className="p-8 text-center text-sm text-stone-400">No shipments match “{q}”.</div>}
         {list.map(s=>(
         <div key={s.id} id={"ship-row-"+s.id} className={open===s.id?"relative z-10 my-1.5 rounded-xl border-2 border-[#0086E0]/40 bg-white shadow-md overflow-hidden":""}>
@@ -9516,7 +9516,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
             <button className="text-stone-400"><ChevronRight className={`w-4 h-4 transition-transform ${open===s.id?"rotate-90":""}`}/></button>
             <div className="w-20 shrink-0"><div className="text-sm text-stone-500">{s.date}</div><div className="text-[10px] text-stone-400">{s.time||""}</div></div>
             <div className="w-40 shrink-0 min-w-0"><div className="text-sm text-stone-800 truncate">{s.recipient?.name||"—"}</div>{s.recipient?.company&&s.recipient.company!==s.recipient.name&&<div className="text-[11px] text-stone-400 truncate lg:hidden">{s.recipient.company}</div>}</div>
-            <div className="w-24 shrink-0 hidden lg:block min-w-0 text-sm text-stone-600 truncate">{(s.recipient?.company&&s.recipient.company!==s.recipient.name)?s.recipient.company:""}</div>
+            <div className="w-44 shrink-0 hidden lg:block min-w-0 text-sm text-stone-600 truncate">{(s.recipient?.company&&s.recipient.company!==s.recipient.name)?s.recipient.company:""}</div>
             <div className="w-72 shrink-0 min-w-0 text-sm text-stone-700 truncate">{s.service||"—"}</div>
             <div className="w-36 shrink-0 hidden md:flex items-center gap-0.5"><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" onClick={e=>e.stopPropagation()} className="text-[#0086E0] underline text-sm flex items-center gap-1 truncate min-w-0">{s.tracking}<ExternalLink className="w-3 h-3 shrink-0"/></a><CopyTrackBtn tn={s.tracking}/></div>
             <div className="w-44 shrink-0 hidden lg:block min-w-0"><div className="text-sm text-stone-600 truncate">{s.recipient?.address1||"—"}</div><div className="text-[11px] text-stone-400 truncate">{s.recipient?.city}{s.recipient?.state?", "+s.recipient.state:""} {s.recipient?.zip||""}</div></div>

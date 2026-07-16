@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v599";
+const BUILD_TAG="addr-v600";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3197,7 +3197,7 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
     </div>
   );
   return (<div className="max-w-3xl space-y-4">
-    <p className="text-sm text-stone-500">White-label the platform for another shipping company — set the product name, colors, and partner logo. Changes apply across the whole app and are saved on this browser.</p>
+    <p className="text-sm text-stone-500">White-label the platform for another shipping company — set the product name, colors, and partner logo. Changes apply across the whole app and sync to your account.</p>
 
     {/* Live preview */}
     <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
@@ -3236,7 +3236,7 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
             {b.logo&&<><img src={b.logo} alt="logo" className="h-7 w-auto object-contain border border-stone-100 rounded px-1 bg-white"/><button onClick={()=>set("logo","")} className="text-xs text-stone-400 hover:text-rose-500 underline">remove</button></>}
           </div>
         </div>
-        <div className="text-[11px] text-stone-400">PNG with transparent background works best. Stored on this browser only.</div>
+        <div className="text-[11px] text-stone-400">PNG with transparent background works best.</div>
       </>}
     </Panel>
 
@@ -5137,7 +5137,7 @@ function CustomizationsAdmin({users,clients,featureFlags={},setFeatureFlags,cust
   const customCat=customFeatures.map(c=>({...c}));
   return (<div className="space-y-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="text-sm text-stone-500 max-w-2xl">Every customization and platform feature, and exactly who has it. Blue chip = on for that login; click any chip to flip it. When we build something custom for one client, register it here — turning it on for the next client is one click.</div>
+      <div className="text-sm text-stone-500 max-w-2xl">Every customization and platform feature, and exactly who has it. Blue chip = on for that login; click any chip to flip it. Custom features you build for one customer register here — one click turns it on for another.</div>
       <button onClick={()=>setDraft({label:"",desc:"",clientNote:""})} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>Register Customization</button>
     </div>
     {draft&&<div className="border border-[#0086E0]/40 bg-blue-50/40 rounded-lg p-4 space-y-3">
@@ -5154,7 +5154,7 @@ function CustomizationsAdmin({users,clients,featureFlags={},setFeatureFlags,cust
     </div>}
     <div>
       <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Custom built</div>
-      {customCat.length===0?<div className="border border-dashed border-stone-300 rounded-lg p-5 text-sm text-stone-400 bg-white">Nothing registered yet. When we build something for a specific client — a report, a rule, an integration, a workflow tweak — it gets registered here with its own switch, off for everyone by default. Then rolling it out to any other login is one click on their chip.</div>:
+      {customCat.length===0?<div className="border border-dashed border-stone-300 rounded-lg p-5 text-sm text-stone-400 bg-white">Nothing registered yet. Custom features built for one customer register here with their own switch — off for everyone by default. Rolling one out to another login is one click on their chip.</div>:
       <div className="space-y-3">{customCat.map(f=><div key={f.id}>{FeatureRow({f,custom:true})}</div>)}</div>}
     </div>
     <div>
@@ -8068,7 +8068,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 </div>
                 <textarea value={emailMsg} onChange={e=>{emailMsgTouched.current=true;setEmailMsg(e.target.value);}} rows={3} placeholder="Add a custom note to include in the email — or save a default that's always pre-filled here." className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300 resize-y"/>
               </div>
-              <p className="text-[11px] text-stone-400">Emails the buyer their tracking number once the label is booked. Logged under Settings → Email automation.</p>
+              <p className="text-[11px] text-stone-400">Emailed to the buyer once the label is booked.</p>
             </div>}
             {/* form actions: an even 3-across grid so the column bottom lines up flush with the cards */}
             <div className="grid grid-cols-3 gap-2">
@@ -8280,7 +8280,7 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
       <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={cancel}>
         <div className="bg-white rounded-xl w-full max-w-md max-h-[92vh] flex flex-col overflow-hidden shadow-2xl" onClick={e=>e.stopPropagation()}>
           <div className="flex items-center justify-between px-4 py-3 border-b border-stone-200 shrink-0">
-            <div><div className="font-semibold text-stone-800 flex items-center gap-2"><Printer className="w-4 h-4 text-[#0086E0]"/>Review before booking</div><div className="text-[11px] text-stone-400">Nothing is booked yet — the label is created when you click Print label.</div></div>
+            <div><div className="font-semibold text-stone-800 flex items-center gap-2"><Printer className="w-4 h-4 text-[#0086E0]"/>Review before booking</div><div className="text-[11px] text-stone-400">Not booked yet — the label prints when you click Print label.</div></div>
             <button onClick={cancel} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button>
           </div>
           <div className="px-4 pt-3 overflow-y-auto">
@@ -9769,7 +9769,7 @@ function Scan({orders,goShip,goTab}){
         <button onClick={()=>submit(val)} className="text-sm bg-[#0086E0] text-white rounded-lg px-5 py-2 font-medium hover:bg-[#006db8]">Look Up</button>
         {err&&<div className="text-sm text-rose-600 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4"/>{err}</div>}
       </div>
-      <div className="text-[11px] text-stone-400">Tip: most barcode scanners act like a keyboard and send Enter automatically — just keep this box focused and scan.</div>
+      <div className="text-[11px] text-stone-400">Keep this box focused and scan.</div>
       {log.length>0&&<div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
         <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400">Recent scans</div>
         <div className="divide-y divide-stone-100">{log.map((e,i)=>(
@@ -9969,9 +9969,9 @@ function Dashboard({shipments,orders,returns,goTab}){
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <button onClick={()=>goTab("orders")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><ShoppingBag className="w-4 h-4"/><span className="font-semibold">{unful} orders to ship</span></div><div className="text-[11px] text-stone-400 mt-1">Open the queue →</div></button>
-        <button onClick={()=>goTab("rules")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><Zap className="w-4 h-4"/><span className="font-semibold">Run Autopilot</span></div><div className="text-[11px] text-stone-400 mt-1">Rules → labels, one click →</div></button>
-        <button onClick={()=>goTab("returns")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><Undo2 className="w-4 h-4"/><span className="font-semibold">{returns.length} open returns</span></div><div className="text-[11px] text-stone-400 mt-1">Manage RMAs →</div></button>
+        <button onClick={()=>goTab("orders")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><ShoppingBag className="w-4 h-4"/><span className="font-semibold">{unful} orders to ship</span></div></button>
+        <button onClick={()=>goTab("rules")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><Zap className="w-4 h-4"/><span className="font-semibold">Run Autopilot</span></div></button>
+        <button onClick={()=>goTab("returns")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><Undo2 className="w-4 h-4"/><span className="font-semibold">{returns.length} open returns</span></div></button>
       </div>
     </div>
   );
@@ -10391,7 +10391,6 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
           })}
           {activeFilters>0&&<div className="flex items-center gap-3 pt-1">
             <button onClick={()=>setSel(new Set(visible.filter(o=>!holds[o.id]).map(o=>o.id)))} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Check className="w-4 h-4"/>Select these {visible.filter(o=>!holds[o.id]).length}</button>
-            <span className="text-[11px] text-stone-400">Filters narrow the list → grab them all with one click → batch.</span>
           </div>}
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <span className="text-[10px] uppercase tracking-widest text-stone-400 w-14 shrink-0">Ranges</span>
@@ -10435,7 +10434,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
             </select>
           </label>
           <div className="flex-1"/>
-          <button onClick={applyAutopilot} disabled={!(ruleset||[]).some(r=>r.enabled)||!visible.length} title="Run your Autopilot rules on the orders below: routes services, applies holds" className="text-sm bg-violet-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-violet-700 disabled:opacity-40 flex items-center gap-1.5"><Zap className="w-4 h-4"/>Apply Autopilot rules</button>
+          <button onClick={applyAutopilot} disabled={!(ruleset||[]).some(r=>r.enabled)||!visible.length} title="Routes services and applies holds on the orders below" className="text-sm bg-violet-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-violet-700 disabled:opacity-40 flex items-center gap-1.5"><Zap className="w-4 h-4"/>Run Autopilot</button>
           <button onClick={()=>setQrOpen(v=>!v)} className={`text-sm rounded-lg px-3 py-1.5 font-medium border flex items-center gap-1.5 ${qrOpen?"bg-violet-50 border-violet-300 text-violet-700":"bg-white border-stone-200 text-stone-600 hover:bg-stone-100"}`}><Plus className="w-3.5 h-3.5"/>Quick Rule</button>
           {(Object.keys(svcOv).length>0||Object.keys(holds).length>0)&&<button onClick={clearAutopilot} className="text-xs text-stone-400 hover:text-stone-600 underline">Reset Routing</button>}
         </div>
@@ -11454,7 +11453,7 @@ function PrinterSettings({settings:settingsLive,setSettings:commitSettings}){
             </select>
           </label>
           <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
-            <span>Run rules on newly imported orders<span className="block text-[11px] text-stone-400">Every new or synced order runs through your enabled Autopilot rules automatically — service, tags and holds get written on, no labels are booked. (This was the toggle on the Autopilot tab.)</span></span>
+            <span>Run rules on newly imported orders<span className="block text-[11px] text-stone-400">Every new or synced order runs through your enabled Autopilot rules automatically — service, tags and holds get written on, no labels are booked.</span></span>
             <input type="checkbox" checked={!!settings.autoRunRules} onChange={e=>setSettings(p=>({...p,autoRunRules:e.target.checked}))} className="accent-[#0086E0] w-4 h-4 shrink-0"/>
           </label>
           <label className="flex items-center justify-between gap-3 text-sm text-stone-700">

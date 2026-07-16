@@ -80,3 +80,25 @@ copy/UI commits). branch = staging = production(main) at **v569 / BUILD_TAG addr
   banner names the recipient when ref-less. Voided badge is rose.
 - Statuses do NOT move yet: FedEx **Track API product still not enabled** on the portal
   project (verified 403). One click from Spencer turns the whole live-tracking pipeline on.
+
+## Late-night additions (v574–v580, all in production)
+- **v574** Autopilot match note shortened (rule → service + compact swap reason).
+- **v575–v576** Ship polish: 16px section gaps when 1-2-3 headers off; section + rate-card
+  borders #b9c6d5; rate list pixel-aligned with right column (hideTitle left an empty mb-2
+  header div = 8px offset). Pixel-measured via the scratchpad playwright flow (demo hook +
+  local tailwind route — cdn.tailwindcss.com must be route-fulfilled in headless).
+  ⚠️ Hit the handoff's git-checkout trap once (uncommitted edits eaten); commit BEFORE
+  temp screenshot builds — later runs did.
+- **v577–v578** Address Check = its own bordered box (gap matches Sender↔Receiver at 16px,
+  tops/bottoms flush, save icon right edge = receiver box right edge — all measured);
+  check column 280/330px (receiver correspondingly narrower); address text 13→14px with
+  pinned line-height; Sender/Receiver titles 15px.
+- **v579** Required-field blue: outer 1.5px paint covers the grid's grey gap lines (no
+  doubling), corner cells rounded so it hugs the box arc (wrappers lost overflow-hidden),
+  reverts to plain grey the moment the field has a value. Verified with before/after renders.
+- **v580** Packing slips v2: SLIP_OPTS carries settings.companyLogo + company; redesigned
+  slip (logo header / PACKING SLIP block / two-column ship-to + facts / zebra table /
+  ruled footer); pick list gets the logo; SlipComposerHost = edit-before-print modal
+  (contentEditable + insertImage, opened via window event "sc-slip-compose") wired to all
+  interactive Packing Slip buttons; batch/auto/PrintNode-routed slips keep the plain PDF
+  path (no logo there yet — candidate follow-up).

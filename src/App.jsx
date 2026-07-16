@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import qrcodegen from "qrcode-generator";
-import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, Pause, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, EyeOff, MessageCircle, Sparkles, ClipboardList, Ban, Tag, Copy, Sliders, Save} from "lucide-react";
+import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, Pause, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, EyeOff, MessageCircle, Sparkles, ClipboardList, Ban, Tag, Copy, Sliders, Save,Image as ImageIcon} from "lucide-react";
 const FW_BLUE="#0099FF";
 const FW_DARK="#111418";
 function BrandCloud({className,color,style}){return (
@@ -108,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v579";
+const BUILD_TAG="addr-v580";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -1644,32 +1644,51 @@ function slipFromShipment(sh){
     to:{name:r.name||"",company:r.company||"",address1:r.address1||"",city:r.city||"",state:r.state||"",zip:r.zip||""},
     items:parseItemsList({items:sh.items||"",lineItems:sh.lineItems}),note:sh.note||"",tracking:sh.tracking||"",service:sh.service||""};
 }
-function packingSlipHTML(slips){
-  /* custom thank-you + footer come from Settings → Customizations via SLIP_OPTS */
+const SLIP_CSS=`
+  .slip{padding:36px 40px;page-break-after:always;max-width:660px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;}
+  .slip .hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #1c1917;padding-bottom:12px;gap:16px;}
+  .slip .logo{max-height:46px;max-width:220px;object-fit:contain;display:block;margin-bottom:6px;}
+  .slip .brand{font-size:18px;font-weight:800;letter-spacing:.01em;}
+  .slip .doc{text-align:right;}
+  .slip .title{font-size:15px;font-weight:800;letter-spacing:.18em;color:#1c1917;}
+  .slip .meta{font-size:12px;color:#57534e;margin-top:3px;}
+  .slip .cols{display:flex;gap:28px;margin-top:18px;}
+  .slip .to{flex:1;font-size:14px;line-height:1.5;}
+  .slip .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:#a8a29e;margin-bottom:4px;font-weight:600;}
+  .slip .facts{font-size:12.5px;line-height:1.7;color:#44403c;text-align:right;}
+  .slip .facts b{color:#1c1917;}
+  .slip table{width:100%;border-collapse:collapse;margin-top:20px;font-size:13px;}
+  .slip th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#78716c;border-bottom:2px solid #1c1917;padding:7px 8px;font-weight:700;}
+  .slip td{padding:8px;border-bottom:1px solid #e7e5e4;}
+  .slip tbody tr:nth-child(even) td{background:#fafaf9;}
+  .slip .q{text-align:right;width:64px;}
+  .slip .note{margin-top:18px;border:1px solid #e7e5e4;border-radius:8px;padding:10px 12px;font-size:13px;}
+  .slip .ft{margin-top:26px;padding-top:10px;border-top:1px solid #e7e5e4;font-size:11px;color:#78716c;display:flex;justify-content:space-between;align-items:baseline;}
+  .slip .thanks{color:#1c1917;font-weight:700;font-size:12.5px;}
+  .slip .foot{margin-top:8px;font-size:10.5px;color:#78716c;}
+  @media print{.slip{padding:24px 8px;}}
+`;
+function packingSlipBody(slips){
   const esc=(x)=>String(x||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
   const one=(sl)=>`<div class="slip">
-    <div class="hd"><div class="brand">${esc(sl.company)}</div><div class="meta">${sl.orderName?"Order "+esc(sl.orderName)+" · ":""}${esc(sl.date)}</div></div>
-    <div class="to"><div class="lbl">Ship to</div><div>${esc(sl.to.name)}</div>${sl.to.company?`<div>${esc(sl.to.company)}</div>`:""}<div>${esc(sl.to.address1)}</div><div>${esc(sl.to.city)}, ${esc(sl.to.state)} ${esc(sl.to.zip)}</div></div>
+    <div class="hd">
+      <div>${SLIP_OPTS.logo?`<img class="logo" src="${SLIP_OPTS.logo}"/>`:""}<div class="brand">${esc(sl.company||SLIP_OPTS.company)}</div></div>
+      <div class="doc"><div class="title">PACKING SLIP</div><div class="meta">${sl.orderName?"Order "+esc(sl.orderName)+" · ":""}${esc(sl.date)}</div></div>
+    </div>
+    <div class="cols">
+      <div class="to"><div class="lbl">Ship To</div><div><b>${esc(sl.to.name)}</b></div>${sl.to.company?`<div>${esc(sl.to.company)}</div>`:""}<div>${esc(sl.to.address1)}</div><div>${esc(sl.to.city)}, ${esc(sl.to.state)} ${esc(sl.to.zip)}</div></div>
+      <div class="facts">${sl.orderName?`Order <b>${esc(sl.orderName)}</b><br/>`:""}${sl.service?`${esc(sl.service)}<br/>`:""}${sl.tracking?`Tracking <b>${esc(sl.tracking)}</b>`:""}</div>
+    </div>
     ${sl.items.length?`<table><thead><tr><th>Item</th><th class="q">Qty</th></tr></thead><tbody>${sl.items.map(it=>`<tr><td>${esc(it.name)}</td><td class="q">${it.qty}</td></tr>`).join("")}</tbody></table>`:""}
-    ${sl.note?`<div style="margin-top:16px;border:1px solid #e7e5e4;border-radius:8px;padding:10px 12px;font-size:13px;"><div style="font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#a8a29e;margin-bottom:3px;">Note</div>${esc(sl.note)}</div>`:""}
-    <div class="ft">${sl.tracking?"Tracking "+esc(sl.tracking):""}${sl.service?" · "+esc(sl.service):""}<span class="thanks">Thank you for your order!</span></div>
-  </div>
-    ${SLIP_OPTS.thanks?`<div class="thanks">${esc(SLIP_OPTS.thanks)}</div>`:""}
-    ${SLIP_OPTS.footer?`<div class="foot">${esc(SLIP_OPTS.footer)}</div>`:""}
-  `;
-  return `<!doctype html><html><head><title>Packing slips</title><style>
-    body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;margin:0;}
-    .slip{padding:36px 40px;page-break-after:always;max-width:640px;}
-    .hd{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid #1c1917;padding-bottom:10px;}
-    .brand{font-size:19px;font-weight:800;} .meta{font-size:12px;color:#57534e;}
-    .to{margin-top:18px;font-size:14px;line-height:1.45;} .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#a8a29e;margin-bottom:3px;}
-    table{width:100%;border-collapse:collapse;margin-top:18px;font-size:13px;}
-    th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#a8a29e;border-bottom:1px solid #e7e5e4;padding:6px 0;}
-    td{padding:7px 0;border-bottom:1px solid #f5f5f4;} .q{text-align:right;width:56px;}
-    .ft{margin-top:22px;font-size:11px;color:#78716c;display:flex;justify-content:space-between;} .thanks{color:#1c1917;font-weight:600;margin-top:14px;} .foot{margin-top:8px;font-size:10.5px;color:#78716c;border-top:1px solid #e7e5e4;padding-top:8px;}
-    @media print{.slip{padding:24px 8px;}}
-  </style></head><body>${slips.map(one).join("")}<script>window.onload=()=>window.print();</` + `script></body></html>`;
+    ${sl.note?`<div class="note"><div class="lbl">Note</div>${esc(sl.note)}</div>`:""}
+    <div class="ft"><span>${SLIP_OPTS.footer?esc(SLIP_OPTS.footer):""}</span><span class="thanks">${SLIP_OPTS.thanks?esc(SLIP_OPTS.thanks):"Thank you for your order!"}</span></div>
+  </div>`;
+  return slips.map(one).join("");
 }
+function slipDocWrap(body,autoPrint){
+  return `<!doctype html><html><head><title>Packing slips</title><style>body{margin:0;}${SLIP_CSS}</style></head><body>${body}${autoPrint?"<script>window.onload=()=>window.print();</"+"script>":""}</body></html>`;
+}
+function packingSlipHTML(slips){ return slipDocWrap(packingSlipBody(slips),true); }
 function printPackingSlipsDialog(slips){
   const list=(slips||[]).filter(Boolean);
   if(!list.length)return;
@@ -1890,7 +1909,7 @@ function printPickList(orderList){
   const rows=Object.keys(agg).sort().map(k=>({name:k,qty:agg[k]}));
   if(!rows.length)return;
   const esc=(x)=>String(x||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
-  const html=`<!doctype html><html><head><title>Pick list</title><style>body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;padding:36px 40px;}h1{font-size:19px;border-bottom:2px solid #1c1917;padding-bottom:10px;}table{width:100%;border-collapse:collapse;margin-top:16px;font-size:14px;max-width:560px;}th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#a8a29e;border-bottom:1px solid #e7e5e4;padding:6px 0;}td{padding:8px 0;border-bottom:1px solid #f5f5f4;}.q{text-align:right;width:64px;font-weight:700;}.c{width:36px;}.box{width:14px;height:14px;border:1.5px solid #a8a29e;border-radius:3px;display:inline-block;}</style></head><body><h1>Pick list · ${orderList.length} order${orderList.length!==1?"s":""} · ${new Date().toLocaleDateString()}</h1><table><thead><tr><th class="c"></th><th>Item</th><th class="q">Qty</th></tr></thead><tbody>${rows.map(r=>`<tr><td class="c"><span class="box"></span></td><td>${esc(r.name)}</td><td class="q">${r.qty}</td></tr>`).join("")}</tbody></table><script>window.onload=()=>window.print();</`+`script></body></html>`;
+  const html=`<!doctype html><html><head><title>Pick list</title><style>body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;padding:36px 40px;}h1{font-size:19px;border-bottom:2px solid #1c1917;padding-bottom:10px;}table{width:100%;border-collapse:collapse;margin-top:16px;font-size:14px;max-width:560px;}th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#a8a29e;border-bottom:1px solid #e7e5e4;padding:6px 0;}td{padding:8px 0;border-bottom:1px solid #f5f5f4;}.q{text-align:right;width:64px;font-weight:700;}.c{width:36px;}.box{width:14px;height:14px;border:1.5px solid #a8a29e;border-radius:3px;display:inline-block;}.plogo{max-height:42px;max-width:200px;object-fit:contain;display:block;margin-bottom:10px;}</style></head><body>${SLIP_OPTS.logo?`<img class="plogo" src="${SLIP_OPTS.logo}"/>`:""}<h1>Pick list · ${orderList.length} order${orderList.length!==1?"s":""} · ${new Date().toLocaleDateString()}</h1><table><thead><tr><th class="c"></th><th>Item</th><th class="q">Qty</th></tr></thead><tbody>${rows.map(r=>`<tr><td class="c"><span class="box"></span></td><td>${esc(r.name)}</td><td class="q">${r.qty}</td></tr>`).join("")}</tbody></table><script>window.onload=()=>window.print();</`+`script></body></html>`;
   /* Routed: "Pick lists" printer from Print settings; else browser window. */
   if(docPrinterAssigned("pickList")){ directPrintHtml(html,"Pick list","pickList").then(sent=>{ if(!sent)printHtmlViaFrame(html); }); return; }
   const w=window.open("","_blank"); if(!w)return; w.document.write(html); w.document.close();
@@ -2894,7 +2913,7 @@ const CUSTOM_DEFAULTS={
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
 const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
-const SLIP_OPTS={thanks:"",footer:""};   // synced from settings by AppInner; read by packingSlipHTML
+const SLIP_OPTS={thanks:"",footer:"",logo:"",company:""};   // synced from settings by AppInner; read by packingSlipHTML/printPickList
 const CI_OPTS={taxId:"",logo:""};                 // Tax ID / EIN printed on commercial invoices, from Settings → General
 const fireConfetti=()=>{try{window.dispatchEvent(new CustomEvent("sc-confetti"));}catch(e){}};
 const seasonalEmoji=()=>{const d=new Date(),m=d.getMonth(),dd=d.getDate();if(m===11&&dd<=27)return "🎅";if(m===9&&dd>=24)return "🎃";if(m===1&&dd>=10&&dd<=15)return "❤️";if(m===6&&dd<=5)return "🎆";if(m===2&&dd>=15&&dd<=18)return "🍀";if(m===10&&dd>=23&&dd<=29)return "🦃";return "";};
@@ -6263,6 +6282,34 @@ function uiDialog(opts){
 const uiAlert=(message,opts={})=>uiDialog({kind:"alert",message,...opts});
 const uiConfirm=(message,opts={})=>uiDialog({kind:"confirm",message,...opts});
 const uiPrompt=(message,def="",opts={})=>uiDialog({kind:"prompt",message,default:def==null?"":String(def),...opts});
+/* ── Packing-slip composer: the slip opens as an editable page BEFORE printing — click any
+      text to retype it, Add Image to drop in a picture (drag it to move), then Print. Opened
+      via window event "sc-slip-compose" {detail:{slips}} so any button can invoke it without
+      prop drilling. Batch/auto-print flows keep printing directly. ── */
+function SlipComposerHost(){
+  const [body,setBody]=React.useState(null);
+  const ref=React.useRef(null);
+  React.useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};if(d.slips&&d.slips.length)setBody(packingSlipBody(d.slips));};window.addEventListener("sc-slip-compose",h);return()=>window.removeEventListener("sc-slip-compose",h);},[]);
+  if(body==null)return null;
+  const addImage=(f)=>{if(!f)return;const r=new FileReader();r.onload=()=>{try{ref.current&&ref.current.focus();document.execCommand("insertImage",false,String(r.result));}catch(e){}};r.readAsDataURL(f);};
+  const print=()=>{const html=(ref.current&&ref.current.innerHTML)||body;const w=window.open("","_blank");if(!w)return uiAlert("Allow pop-ups to print the slip.");w.document.write(slipDocWrap(html,true));w.document.close();setBody(null);};
+  return createPortal(
+    <div className="fixed inset-0 z-[70] bg-black/40 flex items-start justify-center p-4 overflow-auto" onClick={()=>setBody(null)}>
+      <div className="bg-stone-100 rounded-xl shadow-2xl w-full max-w-[760px] my-6" onClick={e=>e.stopPropagation()}>
+        <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-stone-200 bg-white rounded-t-xl sticky top-0 z-10">
+          <span className="text-sm font-semibold text-stone-800 flex-1">Packing Slip — edit before printing</span>
+          <label className="text-xs bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5"/>Add Image<input type="file" accept="image/*" className="hidden" onChange={e=>{addImage(e.target.files&&e.target.files[0]);e.target.value="";}}/></label>
+          <button onClick={()=>setBody(null)} className="text-xs text-stone-500 border border-stone-200 rounded-lg px-2.5 py-1.5 hover:bg-stone-50">Cancel</button>
+          <button onClick={print} className="text-xs bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Printer className="w-3.5 h-3.5"/>Print</button>
+        </div>
+        <div className="px-4 py-1.5 text-[11px] text-stone-500">Click any text to edit it · images can be dragged to move · nothing prints until you hit Print.</div>
+        <style dangerouslySetInnerHTML={{__html:SLIP_CSS+".sc-slip-edit .slip{background:#fff;border:1px solid #e7e5e4;border-radius:8px;margin:0 16px 16px;box-shadow:0 1px 4px rgba(0,0,0,.06);} .sc-slip-edit [contenteditable]:focus{outline:none;}"}}/>
+        <div className="sc-slip-edit pb-4">
+          <div ref={ref} contentEditable suppressContentEditableWarning dangerouslySetInnerHTML={{__html:body}} className="outline-none"/>
+        </div>
+      </div>
+    </div>,document.body);
+}
 function DialogHost(){
   const [d,setD]=useState(null);
   const [val,setVal]=useState("");
@@ -6335,6 +6382,7 @@ export default function App(){
     {bootMsg&&<div className="bg-amber-50 border-b border-amber-200 text-amber-800 text-xs px-4 py-2 text-center">{bootMsg}</div>}
     <AppInner/>
     <DialogHost/>
+    <SlipComposerHost/>
   </>);
 }
 function AppInner(){
@@ -6474,7 +6522,7 @@ function AppInner(){
   useEffect(()=>{ const h=(e)=>{ const d=e&&e.detail; setLookPreview(d&&typeof d==="object"?d:null); }; window.addEventListener("sc-look-preview",h); return ()=>window.removeEventListener("sc-look-preview",h); },[]);
   const srf=lookPreview||custom;
   useEffect(()=>{ try{document.documentElement.style.fontSize=(custom.fontScale&&custom.fontScale!==100)?(custom.fontScale/100*16)+"px":"";}catch(e){} },[custom.fontScale]);
-  useEffect(()=>{ SLIP_OPTS.thanks=custom.slipThanks||""; SLIP_OPTS.footer=custom.slipFooter||""; CI_OPTS.taxId=settings.taxId||""; },[custom.slipThanks,custom.slipFooter,settings.taxId]);
+  useEffect(()=>{ SLIP_OPTS.thanks=custom.slipThanks||""; SLIP_OPTS.footer=custom.slipFooter||""; SLIP_OPTS.logo=settings.companyLogo||""; SLIP_OPTS.company=(settings.sender&&(settings.sender.company||settings.sender.name))||settings.company||""; CI_OPTS.taxId=settings.taxId||""; },[custom.slipThanks,custom.slipFooter,settings.companyLogo,settings.sender,settings.company,settings.taxId]);
   useEffect(()=>{ try{ const el=document.documentElement;
     el.classList.remove("dark","grey");   // themes retired — clears any saved dark/grey choice
     if(custom.accent){ el.setAttribute("data-accent","1"); el.style.setProperty("--acc",custom.accent); el.style.setProperty("--accD",shadeHex(custom.accent,-0.14)); el.style.setProperty("--accL",shadeHex(custom.accent,0.18)); }
@@ -7949,7 +7997,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             </div>}
             {/* form actions: an even 3-across grid so the column bottom lines up flush with the cards */}
             <div className="grid grid-cols-3 gap-2">
-              <button onClick={()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);printPackingSlips([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:(shipStatus&&shipStatus.tracking)||"",service:""}]);}} className="w-full flex items-center justify-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2 py-2 font-medium hover:bg-stone-200 whitespace-nowrap"><FileText className="w-4 h-4"/>Packing Slip</button>
+              <button onClick={()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);window.dispatchEvent(new CustomEvent("sc-slip-compose",{detail:{slips:[{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:(shipStatus&&shipStatus.tracking)||"",service:""}]}}));}} className="w-full flex items-center justify-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2 py-2 font-medium hover:bg-stone-200 whitespace-nowrap"><FileText className="w-4 h-4"/>Packing Slip</button>
               <button onClick={newShipment} className="w-full flex items-center justify-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2 py-2 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New Shipment</button>
               <button onClick={saveDraft} className={`w-full flex items-center justify-center gap-1.5 text-sm rounded px-2 py-2 font-medium whitespace-nowrap ${saved?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{saved?<><Check className="w-4 h-4"/>Saved</>:<><FileText className="w-4 h-4"/>Save Draft</>}</button>
             </div>
@@ -8822,7 +8870,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
           <div className="flex-1"/>
           {rateSrc.live?<span className="text-[11px] text-emerald-600 flex items-center gap-1"><Wifi className="w-3.5 h-3.5"/>Live FedEx rates</span>:canBook?<span className="text-[11px] text-stone-400">{rateSrc.loading?"Loading rates…":""}</span>:<span className="text-[11px] text-amber-600">Estimated rates — live pricing unavailable</span>}
           <button onClick={()=>goShip(o)} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5"/>Open in Ship Tab</button>
-          <button onClick={()=>printPackingSlips([slipFromOrder(o,settings&&settings.sender)])} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing Slip</button>
+          <button onClick={()=>window.dispatchEvent(new CustomEvent("sc-slip-compose",{detail:{slips:[slipFromOrder(o,settings&&settings.sender)]}}))} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing Slip</button>
           {o.country&&o.country!=="US"&&<button onClick={()=>printCommercialInvoice(o,(settings&&settings.products)||[],settings&&settings.sender,{...ciOpts,signature:ciOpts.signature||defaultSig(settings),senderTax:ciOpts.senderTax??((settings&&settings.taxId)||""),eei:ciOpts.eei??"NOEEI 30.37(a)",attachImgs:((settings&&settings.docAssets)||[]).filter(a=>(ciOpts.attach||[]).includes(a.id)).map(a=>({name:a.name,data:a.data}))})} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Receipt className="w-3.5 h-3.5"/>Commercial Invoice</button>}
         </div>
         {o.country&&o.country!=="US"&&<div className="border border-stone-200 rounded-lg p-3 space-y-2 bg-stone-50/60">
@@ -9214,7 +9262,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
     const itemsStr=rows.map(r=>r.qty>1?r.name+" x "+r.qty:r.name).join(", ");   /* trailing xN — the ONLY form parseItemsList reads back */
     const sh=shipments.find(x=>x.id===slipEdit.id); if(!sh)return;
     setShipments(list=>list.map(x=>x.id===slipEdit.id?{...x,items:itemsStr,lineItems:rows,note:slipEdit.note}:x));   /* reprints keep them (structured rows beat string parsing) */
-    printPackingSlips([slipFromShipment({...sh,items:itemsStr,lineItems:rows,note:slipEdit.note})]);
+    window.dispatchEvent(new CustomEvent("sc-slip-compose",{detail:{slips:[slipFromShipment({...sh,items:itemsStr,lineItems:rows,note:slipEdit.note})]}}));
     setSlipEdit(null);
   };
   const [reprintLp,setReprintLp]=useState(null);
@@ -9297,7 +9345,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                 <Info k="Tracking" v={<span className="inline-flex items-center gap-1"><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" className="text-[#0086E0] underline">{s.tracking} ↗</a><CopyTrackBtn tn={s.tracking}/></span>}/>
                 <Info k="To" v={`${s.recipient?.name||""}${s.recipient?.company?" · "+s.recipient.company:""} — ${s.recipient?.address1||""}, ${s.recipient?.city||""}, ${s.recipient?.state||""} ${s.recipient?.zip||""}`}/>
                 <Info k="Reference" v={s.reference||"—"}/>
-                <div className="flex items-end gap-2"><button onClick={(e)=>{e.stopPropagation();printPackingSlips([slipFromShipment(s)]);}} className="text-xs bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing Slip</button><button onClick={(e)=>{e.stopPropagation();openSlipEdit(s);}} title="Type the items for this slip — perfect for manual shipments with no store connected. Items are saved for reprints." className="text-xs bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF] flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5"/>Create Packing Slip</button>
+                <div className="flex items-end gap-2"><button onClick={(e)=>{e.stopPropagation();window.dispatchEvent(new CustomEvent("sc-slip-compose",{detail:{slips:[slipFromShipment(s)]}}));}} className="text-xs bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing Slip</button><button onClick={(e)=>{e.stopPropagation();openSlipEdit(s);}} title="Type the items for this slip — perfect for manual shipments with no store connected. Items are saved for reprints." className="text-xs bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF] flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5"/>Create Packing Slip</button>
                 {s.status!=="Voided"&&s.status!=="Delivered"&&<button onClick={async(e)=>{e.stopPropagation();if(!await uiConfirm("Void this label?\n\nIt will be marked Voided here and excluded from audits and duplicate checks. The carrier refund is processed automatically — contact support if you don't see it within a few days."))return;setShipments(list=>list.map(x=>x.id===s.id?{...x,status:"Voided",voidedAt:new Date().toLocaleString()}:x));window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Voided label",detail:(s.reference||"")+" · "+(s.tracking||"")}}));}} className="text-xs bg-rose-50 border border-rose-200 text-rose-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-rose-100 flex items-center gap-1.5"><Ban className="w-3.5 h-3.5"/>Void Label</button>}</div>
                 <Info k="Created" v={`${s.date}${s.time?" · "+s.time:""}`}/>
                 <Info k="From ZIP" v={s.fromZip}/>

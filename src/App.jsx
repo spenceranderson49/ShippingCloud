@@ -109,7 +109,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v587";
+const BUILD_TAG="addr-v588";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -1669,11 +1669,11 @@ const SLIP_CSS=`
   .slip .foot{margin-top:8px;font-size:10.5px;color:#78716c;}
   @media print{.slip{padding:24px 8px;}}
 `;
-const SLIP_TOKENS=["{{LOGO}}","{{ORDER_META}}","{{SHIP_TO}}","{{FACTS}}","{{ITEMS}}","{{NOTE}}","{{FOOTER}}","{{THANKS}}"];
+const SLIP_TOKENS=["{{LOGO}}","{{TITLE}}","{{ORDER_META}}","{{SHIP_TO}}","{{FACTS}}","{{ITEMS}}","{{NOTE}}","{{FOOTER}}","{{THANKS}}"];
 const DEFAULT_SLIP_TEMPLATE=`<div class="slip">
     <div class="hd">
       <div>{{LOGO}}</div>
-      <div class="doc"><div class="title">PACKING SLIP</div><div class="meta">{{ORDER_META}}</div></div>
+      <div class="doc"><div class="title">{{TITLE}}</div><div class="meta">{{ORDER_META}}</div></div>
     </div>
     <div class="cols">
       <div class="to"><div class="lbl">Ship To</div>{{SHIP_TO}}</div>
@@ -1687,6 +1687,7 @@ function packingSlipBody(slips){
   const esc=(x)=>String(x||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
   const parts=(sl)=>({
     "{{LOGO}}":SLIP_OPTS.logo?`<img class="logo" src="${SLIP_OPTS.logo}"/>`:`<div class="brand">${esc(sl.company||SLIP_OPTS.company)}</div>`,
+    "{{TITLE}}":esc(SLIP_OPTS.title||"PACKING SLIP"),
     "{{ORDER_META}}":`${sl.orderName?"Order "+esc(sl.orderName)+" · ":""}${esc(sl.date)}`,
     "{{SHIP_TO}}":`<div><b>${esc(sl.to.name)}</b></div>${sl.to.company?`<div>${esc(sl.to.company)}</div>`:""}<div>${esc(sl.to.address1)}</div><div>${esc(sl.to.city)}, ${esc(sl.to.state)} ${esc(sl.to.zip)}</div>`,
     "{{FACTS}}":`${sl.orderName?`Order <b>${esc(sl.orderName)}</b><br/>`:""}${sl.service?`${esc(sl.service)}<br/>`:""}${sl.tracking?`Tracking <b>${esc(sl.tracking)}</b>`:""}`,
@@ -2927,7 +2928,7 @@ const CUSTOM_DEFAULTS={
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
 const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
-const SLIP_OPTS={thanks:"",footer:"",logo:"",company:"",template:"",pickTitle:"",pickNote:""};   // synced from settings by AppInner; read by packingSlipHTML/printPickList
+const SLIP_OPTS={thanks:"",footer:"",logo:"",company:"",template:"",pickTitle:"",pickNote:"",title:""};   // synced from settings by AppInner; read by packingSlipHTML/printPickList
 const CI_OPTS={taxId:"",logo:""};                 // Tax ID / EIN printed on commercial invoices, from Settings → General
 const fireConfetti=()=>{try{window.dispatchEvent(new CustomEvent("sc-confetti"));}catch(e){}};
 const seasonalEmoji=()=>{const d=new Date(),m=d.getMonth(),dd=d.getDate();if(m===11&&dd<=27)return "🎅";if(m===9&&dd>=24)return "🎃";if(m===1&&dd>=10&&dd<=15)return "❤️";if(m===6&&dd<=5)return "🎆";if(m===2&&dd>=15&&dd<=18)return "🍀";if(m===10&&dd>=23&&dd<=29)return "🦃";return "";};
@@ -6576,7 +6577,7 @@ function AppInner(){
   useEffect(()=>{ const h=(e)=>{ const d=e&&e.detail; setLookPreview(d&&typeof d==="object"?d:null); }; window.addEventListener("sc-look-preview",h); return ()=>window.removeEventListener("sc-look-preview",h); },[]);
   const srf=lookPreview||custom;
   useEffect(()=>{ try{document.documentElement.style.fontSize=(custom.fontScale&&custom.fontScale!==100)?(custom.fontScale/100*16)+"px":"";}catch(e){} },[custom.fontScale]);
-  useEffect(()=>{ SLIP_OPTS.thanks=custom.slipThanks||""; SLIP_OPTS.footer=custom.slipFooter||""; SLIP_OPTS.logo=settings.companyLogo||""; SLIP_OPTS.company=(settings.sender&&(settings.sender.company||settings.sender.name))||settings.company||""; SLIP_OPTS.template=settings.slipTemplate||""; SLIP_OPTS.pickTitle=settings.pickListTitle||""; SLIP_OPTS.pickNote=settings.pickListNote||""; CI_OPTS.taxId=settings.taxId||""; },[custom.slipThanks,custom.slipFooter,settings.companyLogo,settings.sender,settings.company,settings.slipTemplate,settings.pickListTitle,settings.pickListNote,settings.taxId]);
+  useEffect(()=>{ SLIP_OPTS.thanks=(settings.slipThanks!=null?settings.slipThanks:custom.slipThanks)||""; SLIP_OPTS.footer=(settings.slipFooter!=null?settings.slipFooter:custom.slipFooter)||""; SLIP_OPTS.title=settings.slipTitle||""; SLIP_OPTS.logo=settings.companyLogo||""; SLIP_OPTS.company=(settings.sender&&(settings.sender.company||settings.sender.name))||settings.company||""; SLIP_OPTS.template=settings.slipTemplate||""; SLIP_OPTS.pickTitle=settings.pickListTitle||""; SLIP_OPTS.pickNote=settings.pickListNote||""; CI_OPTS.taxId=settings.taxId||""; },[custom.slipThanks,custom.slipFooter,settings.slipThanks,settings.slipFooter,settings.slipTitle,settings.companyLogo,settings.sender,settings.company,settings.slipTemplate,settings.pickListTitle,settings.pickListNote,settings.taxId]);
   useEffect(()=>{ try{ const el=document.documentElement;
     el.classList.remove("dark","grey");   // themes retired — clears any saved dark/grey choice
     if(custom.accent){ el.setAttribute("data-accent","1"); el.style.setProperty("--acc",custom.accent); el.style.setProperty("--accD",shadeHex(custom.accent,-0.14)); el.style.setProperty("--accL",shadeHex(custom.accent,0.18)); }
@@ -12857,56 +12858,56 @@ const DOC_TEMPLATES=[
  {id:"blank",name:"Blank letterhead",title:"",body:""},
 ];
 function SlipSettings({settings,setSettings}){
-  const tpl=settings.slipTemplate||DEFAULT_SLIP_TEMPLATE;
-  const ref=React.useRef(null);
-  const [dirty,setDirty]=React.useState(false);
+  const set=(k,v)=>setSettings(p=>({...p,[k]:v}));
   const sampleSlip={company:(settings.sender&&(settings.sender.company||settings.sender.name))||"Your Company",orderName:"SO-1042",date:new Date().toLocaleDateString(),to:{name:"Jordan Lee",company:"Summit Goods Co.",address1:"215 S State St",city:"Salt Lake City",state:"UT",zip:"84101"},items:[{name:"Widget — Large",qty:2},{name:"Gadget Pro",qty:1}],note:"",tracking:"771234567890",service:"FedEx Ground"};
-  // live preview from whatever's in the editor (falls back to saved/default)
-  const previewHtml=()=>{ const savedT=SLIP_OPTS.template; SLIP_OPTS.template=(ref.current&&ref.current.innerHTML)||tpl; const html=packingSlipBody([sampleSlip]); SLIP_OPTS.template=savedT; return html; };
-  const [preview,setPreview]=React.useState("");
-  React.useEffect(()=>{ SLIP_OPTS.logo=settings.companyLogo||""; SLIP_OPTS.template=settings.slipTemplate||""; setPreview(previewHtml()); },[]);
-  const refresh=()=>setPreview(previewHtml());
-  const save=()=>{ const html=(ref.current&&ref.current.innerHTML)||tpl; setSettings(p=>({...p,slipTemplate:html})); SLIP_OPTS.template=html; setDirty(false); };
-  const reset=async()=>{ if(!await uiConfirm("Reset the packing slip template to the built-in default?"))return; setSettings(p=>({...p,slipTemplate:""})); SLIP_OPTS.template=""; if(ref.current)ref.current.innerHTML=DEFAULT_SLIP_TEMPLATE; setDirty(false); refresh(); };
-  const addImage=(f)=>{ if(!f)return; const r=new FileReader(); r.onload=()=>{ try{ ref.current&&ref.current.focus(); document.execCommand("insertImage",false,String(r.result)); setDirty(true); refresh(); }catch(e){} }; r.readAsDataURL(f); };
+  /* preview renders the REAL slip from the simple fields (no template/token editing) */
+  const preview=React.useMemo(()=>{
+    const saved={t:SLIP_OPTS.title,th:SLIP_OPTS.thanks,f:SLIP_OPTS.footer,l:SLIP_OPTS.logo,tpl:SLIP_OPTS.template};
+    SLIP_OPTS.title=settings.slipTitle||""; SLIP_OPTS.thanks=settings.slipThanks!=null?settings.slipThanks:(saved.th||""); SLIP_OPTS.footer=settings.slipFooter!=null?settings.slipFooter:(saved.f||""); SLIP_OPTS.logo=settings.companyLogo||""; SLIP_OPTS.template="";
+    const html=packingSlipBody([sampleSlip]);
+    Object.assign(SLIP_OPTS,{title:saved.t,thanks:saved.th,footer:saved.f,logo:saved.l,template:saved.tpl});
+    return html;
+  },[settings.slipTitle,settings.slipThanks,settings.slipFooter,settings.companyLogo]);
+  const noLogo=!settings.companyLogo;
   return (<div className="max-w-3xl space-y-4">
     <div>
       <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><ClipboardList className="w-4 h-4"/>Packing Slips &amp; Pick Lists</h2>
-      <p className="text-sm text-stone-500 mt-1">Design the packing slip every order prints from — your logo, layout, wording, and pictures. Pick lists automatically carry your company logo too. {settings.companyLogo?"":<span className="text-amber-700">Add a company logo under Settings → Customizations to show it here.</span>}</p>
+      <p className="text-sm text-stone-500 mt-1">Set your wording below — the layout and your logo are handled for you. Everything updates in the live preview.{noLogo&&<span className="text-amber-700"> Add a company logo under Settings → Customizations to show it on both.</span>}</p>
     </div>
+
+    {/* ── Packing slip: simple fields + live preview ── */}
     <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-semibold text-stone-800 flex-1">Template</span>
-        <label className="text-xs bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5"/>Add Image<input type="file" accept="image/*" className="hidden" onChange={e=>{addImage(e.target.files&&e.target.files[0]);e.target.value="";}}/></label>
-        <button onClick={reset} className="text-xs text-rose-500 border border-stone-200 rounded-lg px-2.5 py-1.5 hover:bg-rose-50">Reset to Default</button>
-        <button onClick={save} disabled={!dirty} className="text-xs bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-1.5"><Check className="w-3.5 h-3.5"/>{dirty?"Save Template":"Saved"}</button>
-      </div>
-      <p className="text-[11px] text-stone-500">Click in the template to edit. The <b>{"{{TOKENS}}"}</b> below get swapped for each order's real data on print — keep the ones you want filled in:</p>
-      <div className="flex flex-wrap gap-1.5">{SLIP_TOKENS.map(t=><code key={t} className="text-[10px] bg-stone-100 border border-stone-200 rounded px-1.5 py-0.5 text-stone-600">{t}</code>)}</div>
-      <style dangerouslySetInnerHTML={{__html:SLIP_CSS+".sc-slip-tpl .slip{background:#fff;} .sc-slip-tpl [contenteditable]:focus{outline:2px solid #99D6FF;border-radius:6px;}"}}/>
-      <div className="sc-slip-tpl border border-stone-200 rounded-lg bg-white overflow-auto">
-        <div ref={ref} contentEditable suppressContentEditableWarning dangerouslySetInnerHTML={{__html:tpl}} onInput={()=>{setDirty(true);refresh();}} className="outline-none min-h-[240px]"/>
-      </div>
-    </div>
-    <div className="border border-stone-200 rounded-lg bg-stone-50 p-4">
-      <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Live preview — sample order</div>
-      <style dangerouslySetInnerHTML={{__html:SLIP_CSS}}/>
-      <div className="bg-white rounded-lg border border-stone-200 overflow-auto" dangerouslySetInnerHTML={{__html:preview}}/>
-    </div>
-    <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
-      <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><ClipboardList className="w-4 h-4"/>Pick List</div>
-      <p className="text-[11px] text-stone-500">The pick list aggregates every item across a batch with a check box to tick off as you pull. It carries your company logo automatically. Customize the heading and add standing instructions:</p>
+      <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><FileText className="w-4 h-4"/>Packing Slip</div>
       <div className="grid sm:grid-cols-2 gap-3">
-        <Field label="Heading"><Input value={settings.pickListTitle||""} placeholder="Pick list" onChange={e=>setSettings(p=>({...p,pickListTitle:e.target.value}))}/></Field>
-        <Field label="Note / instructions (optional)"><Input value={settings.pickListNote||""} placeholder="e.g. Pull to the staging shelf by 3pm" onChange={e=>setSettings(p=>({...p,pickListNote:e.target.value}))}/></Field>
+        <Field label="Title"><Input value={settings.slipTitle||""} placeholder="PACKING SLIP" onChange={e=>set("slipTitle",e.target.value)}/></Field>
+        <Field label="Thank-you message"><Input value={settings.slipThanks!=null?settings.slipThanks:""} placeholder="Thank you for your order!" onChange={e=>set("slipThanks",e.target.value)}/></Field>
+        <div className="sm:col-span-2"><Field label="Footer note (optional)"><Input value={settings.slipFooter!=null?settings.slipFooter:""} placeholder="e.g. Questions? support@yourstore.com · Easy returns within 30 days" onChange={e=>set("slipFooter",e.target.value)}/></Field></div>
       </div>
       <div className="bg-stone-50 border border-stone-200 rounded-lg p-4">
-        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Preview</div>
-        <div className="bg-white rounded border border-stone-200 p-4">
-          {settings.companyLogo&&<img src={settings.companyLogo} alt="logo" className="h-9 object-contain mb-2"/>}
-          <div className="text-[17px] font-bold text-stone-900 border-b-2 border-stone-800 pb-2">{settings.pickListTitle||"Pick list"} · 3 orders · {new Date().toLocaleDateString()}</div>
+        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Live preview</div>
+        <style dangerouslySetInnerHTML={{__html:SLIP_CSS}}/>
+        <div className="bg-white rounded-lg border border-stone-200 overflow-auto" dangerouslySetInnerHTML={{__html:preview}}/>
+      </div>
+    </div>
+
+    {/* ── Pick list: simple fields + live preview ── */}
+    <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
+      <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><ClipboardList className="w-4 h-4"/>Pick List</div>
+      <p className="text-[11px] text-stone-500">Aggregates every item across a batch with a check box to tick off as you pull — your logo is added automatically.</p>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <Field label="Heading"><Input value={settings.pickListTitle||""} placeholder="Pick List" onChange={e=>set("pickListTitle",e.target.value)}/></Field>
+        <Field label="Note / instructions (optional)"><Input value={settings.pickListNote||""} placeholder="e.g. Pull to the staging shelf by 3pm" onChange={e=>set("pickListNote",e.target.value)}/></Field>
+      </div>
+      <div className="bg-stone-50 border border-stone-200 rounded-lg p-4">
+        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Live preview</div>
+        <div className="bg-white rounded border border-stone-200 p-5" style={{fontFamily:"-apple-system,Segoe UI,Roboto,Arial,sans-serif",color:"#1c1917"}}>
+          {settings.companyLogo&&<img src={settings.companyLogo} alt="logo" className="h-10 object-contain mb-2.5"/>}
+          <div className="text-[17px] font-bold text-stone-900 border-b-2 border-stone-800 pb-2.5">{settings.pickListTitle||"Pick List"} · 3 orders · {new Date().toLocaleDateString()}</div>
           {settings.pickListNote&&<div className="text-xs text-stone-500 mt-1.5">{settings.pickListNote}</div>}
-          <div className="mt-3 space-y-1.5 text-sm">{[["Widget — Large",4],["Gadget Pro",2],["Cable 6ft",7]].map(([n,q])=><div key={n} className="flex items-center gap-2 border-b border-stone-100 pb-1.5"><span className="w-3.5 h-3.5 border-[1.5px] border-stone-400 rounded-sm inline-block"/><span className="flex-1">{n}</span><span className="font-bold">{q}</span></div>)}</div>
+          <div className="mt-4 space-y-2 text-sm">
+            <div className="flex items-center gap-3 text-[10px] uppercase tracking-widest text-stone-400 border-b-2 border-stone-800 pb-1.5"><span className="w-4"/><span className="flex-1">Item</span><span>Qty</span></div>
+            {[["Widget — Large",4],["Gadget Pro",2],["Cable 6ft",7]].map(([n,q])=><div key={n} className="flex items-center gap-3 border-b border-stone-100 pb-2"><span className="w-4 h-4 border-[1.5px] border-stone-400 rounded-sm inline-block shrink-0"/><span className="flex-1">{n}</span><span className="font-bold">{q}</span></div>)}
+          </div>
         </div>
       </div>
     </div>

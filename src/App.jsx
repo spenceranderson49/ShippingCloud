@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v594";
+const BUILD_TAG="addr-v595";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7637,7 +7637,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
        shows its error instead of a preview. */
     const _wantPrev=custom.previewBeforePrint!=null?!!custom.previewBeforePrint:!(custom.skipBookedSummary||custom.directNoPreview);
     if(_wantPrev&&!q._confirmed){
-      setLabelPreview({pendingBook:true,service:q.label,carrier,sell:q.sell??q.cost,fxDate:q.fxDate,refNo:reference||invoiceNo||"",residential,
+      setLabelPreview({pendingBook:true,service:q.label,carrier,sell:q.sell,fxDate:q.fxDate,refNo:reference||invoiceNo||"",residential,
         rec:{recipient:{name:receiver.name,company:receiver.company,city:receiver.city,state:receiver.state,zip:receiver.zip,address1:receiver.address1,phone:receiver.phone},service:q.label,carrier},
         senderInfo:{name:sender.name,company:sender.company,address1:sender.address1,city:sender.city,state:sender.state,zip:sender.zip,phone:sender.phone},
         pieceCount:pieces.length,weight:totalWeight,signature:sigOption!=="none",insurance:(pieces.length>1&&dvEach)?pieces.reduce((a,p)=>a+(+p.dv||0),0):(+insurance||0),
@@ -7655,7 +7655,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     const _orF=orFillMerge({reference:reference||invoiceNo||"",invoiceNo,poNo,department},orBoxRefFill({...q,packageTypeCode:q.packageTypeCode||(orBox?orBox.code:"")},settings.orBoxField,invoiceNo||reference||""));
     const order={reference:_orF.reference||"",orderNumber:invoiceNo||reference||"",invoiceNo:_orF.invoiceNo,poNo:_orF.poNo,department:_orF.department||"",shipmentDate:shipDate,
       carrierCode:q.carrierCode,serviceCode:q.serviceCode,packageTypeCode:(/one\s*rate/i.test(String(q.label||""))?(q.packageTypeCode||(orBox?orBox.code:"")):""),
-      shippingService:q.label,shippingTotal:String(q.sell??q.cost??"0.00"),contentDescription:"Merchandise",
+      shippingService:q.label,shippingTotal:String(q.sell??"0.00"),contentDescription:"Merchandise",
       signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:insurance||null,residential,
       billingParty:billTo==="third"?"third_party":(billTo==="receiver"?"receiver":"sender"),billingAccount:billTo==="third"?(thirdAcct||null):null,
       fedexAccount:ruleAcct||undefined,   // Autopilot "Book on FedEx Account" rule override
@@ -9457,7 +9457,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                   <button onClick={(e)=>{e.stopPropagation();setRateOpen(rateOpen===s.id?null:s.id);}} className="flex items-center gap-1.5 text-left group">
                     <ChevronRight className={`w-3.5 h-3.5 text-stone-400 transition-transform ${rateOpen===s.id?"rotate-90":""}`}/>
                     <span className="text-[11px] uppercase tracking-wider text-stone-400">Rate</span>
-                    <span className="text-sm font-semibold text-stone-800">{(()=>{const rv=s.sell!=null?s.sell:(s.cost!=null?s.cost:null);return (showMoney&&rv!=null)?money(rv):"—";})()}</span>
+                    <span className="text-sm font-semibold text-stone-800">{showMoney&&s.sell!=null?money(s.sell):"—"}</span>
                     <span className="text-[11px] text-stone-400 group-hover:text-stone-600">· view breakdown</span>
                   </button>
                   {showMoney&&rateOpen===s.id&&(()=>{
@@ -9466,7 +9466,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                     const accs=(s.rateAccessorials||[]);
                     const sumSur=surs.reduce((a,x)=>a+(+x.amount||0),0);
                     const sumAcc=accs.reduce((a,x)=>a+(+x.amount||0),0);
-                    const sellV=s.sell!=null?+s.sell:(s.cost!=null?+s.cost:0);
+                    const sellV=s.sell!=null?+s.sell:0;
                     const base=s.rateBase!=null?+s.rateBase:Math.max(0,sellV-sumSur-sumAcc-ins);
                     const Row=({label,amt,strong})=>(<div className={`flex justify-between py-0.5 ${strong?"font-semibold text-stone-800 border-t border-stone-200 mt-1 pt-1":"text-stone-600"}`}><span>{label}</span><span className="">{money(amt)}</span></div>);
                     return (<div className="mt-2 ml-5 max-w-sm bg-white border border-stone-200 rounded-lg px-3 py-2 text-[13px]">
@@ -9474,7 +9474,6 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                       {surs.map((x,i)=><Row key={"s"+i} label={x.label||"Surcharge"} amt={+x.amount||0}/>)}
                       {accs.map((x,i)=><Row key={"a"+i} label={x.label||"Accessorial"} amt={+x.amount||0}/>)}
                       {ins>0&&<Row label="Insurance / declared value" amt={ins}/>}
-                      {s.sell==null&&s.cost!=null&&<div className="text-[10px] text-stone-400 italic pt-0.5">shown at cost — no sell price recorded</div>}
                       <Row label="Total charged" amt={sellV} strong/>
                       {isAdmin&&s.cost!=null&&<div className="mt-1.5 pt-1.5 border-t border-dashed border-stone-200 text-[11px] text-stone-400 flex justify-between"><span>Your cost → margin</span><span className="">{money(s.cost)} → +{money(Math.max(0,(s.sell||0)-(s.cost||0)))}</span></div>}
                     </div>);

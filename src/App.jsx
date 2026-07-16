@@ -108,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v567";
+const BUILD_TAG="addr-v568";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -1881,7 +1881,7 @@ function dupShipment(refName,shipments,rcv){
   const norm=(s)=>String(s||"").replace(/\s+/g," ").trim().toUpperCase();
   const a1=norm(rcv.address1),zp=String(rcv.zip||"").slice(0,5);
   if(!a1||!zp)return null;
-  return (shipments||[]).find(sh=>fresh(sh,2)&&sh.recipient&&norm(sh.recipient.address1)===a1&&String(sh.recipient.zip||"").slice(0,5)===zp)||null;
+  return (shipments||[]).find(sh=>fresh(sh,1)&&sh.recipient&&norm(sh.recipient.address1)===a1&&String(sh.recipient.zip||"").slice(0,5)===zp)||null;
 }
 /* ── pick list: aggregate a batch by item so the puller walks the shelves once ── */
 function printPickList(orderList){
@@ -9256,7 +9256,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
   if(!shipments.length)return (<div className="space-y-3"><PendingBar/>{chkMsg&&<div className={`text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${chkMsg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{chkMsg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{chkMsg.err||chkMsg.ok}</div>}<Empty icon={Truck} title="No shipments yet" body="Print a label on the Ship tab and it lands here with tracking, edit & reship."/></div>);
   const voidS=id=>setShipments(s=>s.map(x=>x.id===id?{...x,status:"Voided"}:x));
   const reship=s=>goShip({receiver:s.recipient,weight:s.weight,reference:s.reference});
-  const tone=st=>st==="Delivered"?"green":st==="Voided"?"stone":st==="Exception"?"rose":st==="Out for delivery"?"amber":st==="In transit"?"amber":"blue";
+  const tone=st=>st==="Delivered"?"green":st==="Voided"?"rose":st==="Exception"?"rose":st==="Out for delivery"?"amber":st==="In transit"?"amber":"blue";   /* Voided reads as a problem, not neutral — red like exceptions */
   const term=q.trim().toLowerCase();
   const list=term?shipments.filter(s=>[s.recipient?.name,s.tracking,s.reference,s.invoiceNo,s.poNo,s.service].filter(Boolean).some(v=>String(v).toLowerCase().includes(term))):shipments;
   return (

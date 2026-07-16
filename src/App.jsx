@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v598";
+const BUILD_TAG="addr-v599";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7995,8 +7995,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {!custom.hideShipSteps&&<StepHead n="3" label="Service & rate"/>}
         {/* Rates row: service list on the left, a slim info column (From order · Billing & third-party)
             fills the space to its right. Wraps to a normal stack on narrow screens. */}
-        <div className="flex flex-wrap items-start gap-4">
-          <div className="flex-1 min-w-[300px]">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_384px] gap-4 items-start">
+          <div className="min-w-0">
             <ServiceList hideTitle={true} quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
           </div>
           <div className="w-full lg:w-[320px] lg:shrink-0 space-y-3">

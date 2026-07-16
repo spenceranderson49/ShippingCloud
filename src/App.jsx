@@ -108,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v581";
+const BUILD_TAG="addr-v582";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -1922,7 +1922,7 @@ function printPickList(orderList){
   const rows=Object.keys(agg).sort().map(k=>({name:k,qty:agg[k]}));
   if(!rows.length)return;
   const esc=(x)=>String(x||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
-  const html=`<!doctype html><html><head><title>Pick list</title><style>body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;padding:36px 40px;}h1{font-size:19px;border-bottom:2px solid #1c1917;padding-bottom:10px;}table{width:100%;border-collapse:collapse;margin-top:16px;font-size:14px;max-width:560px;}th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#a8a29e;border-bottom:1px solid #e7e5e4;padding:6px 0;}td{padding:8px 0;border-bottom:1px solid #f5f5f4;}.q{text-align:right;width:64px;font-weight:700;}.c{width:36px;}.box{width:14px;height:14px;border:1.5px solid #a8a29e;border-radius:3px;display:inline-block;}.plogo{max-height:42px;max-width:200px;object-fit:contain;display:block;margin-bottom:10px;}</style></head><body>${SLIP_OPTS.logo?`<img class="plogo" src="${SLIP_OPTS.logo}"/>`:""}<h1>Pick list · ${orderList.length} order${orderList.length!==1?"s":""} · ${new Date().toLocaleDateString()}</h1><table><thead><tr><th class="c"></th><th>Item</th><th class="q">Qty</th></tr></thead><tbody>${rows.map(r=>`<tr><td class="c"><span class="box"></span></td><td>${esc(r.name)}</td><td class="q">${r.qty}</td></tr>`).join("")}</tbody></table><script>window.onload=()=>window.print();</`+`script></body></html>`;
+  const html=`<!doctype html><html><head><title>Pick list</title><style>body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;padding:36px 40px;}h1{font-size:19px;border-bottom:2px solid #1c1917;padding-bottom:10px;}table{width:100%;border-collapse:collapse;margin-top:16px;font-size:14px;max-width:560px;}th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#a8a29e;border-bottom:1px solid #e7e5e4;padding:6px 0;}td{padding:8px 0;border-bottom:1px solid #f5f5f4;}.q{text-align:right;width:64px;font-weight:700;}.c{width:36px;}.box{width:14px;height:14px;border:1.5px solid #a8a29e;border-radius:3px;display:inline-block;}.plogo{max-height:42px;max-width:200px;object-fit:contain;display:block;margin-bottom:10px;}</style></head><body>${SLIP_OPTS.logo?`<img class="plogo" src="${SLIP_OPTS.logo}"/>`:""}<h1>${SLIP_OPTS.pickTitle?esc(SLIP_OPTS.pickTitle):"Pick list"} · ${orderList.length} order${orderList.length!==1?"s":""} · ${new Date().toLocaleDateString()}</h1>${SLIP_OPTS.pickNote?`<div style="font-size:12px;color:#57534e;margin-top:6px;">${esc(SLIP_OPTS.pickNote)}</div>`:""}<table><thead><tr><th class="c"></th><th>Item</th><th class="q">Qty</th></tr></thead><tbody>${rows.map(r=>`<tr><td class="c"><span class="box"></span></td><td>${esc(r.name)}</td><td class="q">${r.qty}</td></tr>`).join("")}</tbody></table><script>window.onload=()=>window.print();</`+`script></body></html>`;
   /* Routed: "Pick lists" printer from Print settings; else browser window. */
   if(docPrinterAssigned("pickList")){ directPrintHtml(html,"Pick list","pickList").then(sent=>{ if(!sent)printHtmlViaFrame(html); }); return; }
   const w=window.open("","_blank"); if(!w)return; w.document.write(html); w.document.close();
@@ -2926,7 +2926,7 @@ const CUSTOM_DEFAULTS={
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
 const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
-const SLIP_OPTS={thanks:"",footer:"",logo:"",company:"",template:""};   // synced from settings by AppInner; read by packingSlipHTML/printPickList
+const SLIP_OPTS={thanks:"",footer:"",logo:"",company:"",template:"",pickTitle:"",pickNote:""};   // synced from settings by AppInner; read by packingSlipHTML/printPickList
 const CI_OPTS={taxId:"",logo:""};                 // Tax ID / EIN printed on commercial invoices, from Settings → General
 const fireConfetti=()=>{try{window.dispatchEvent(new CustomEvent("sc-confetti"));}catch(e){}};
 const seasonalEmoji=()=>{const d=new Date(),m=d.getMonth(),dd=d.getDate();if(m===11&&dd<=27)return "🎅";if(m===9&&dd>=24)return "🎃";if(m===1&&dd>=10&&dd<=15)return "❤️";if(m===6&&dd<=5)return "🎆";if(m===2&&dd>=15&&dd<=18)return "🍀";if(m===10&&dd>=23&&dd<=29)return "🦃";return "";};
@@ -3653,7 +3653,9 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
   const upPrefs=(patch)=>setClients(cs=>cs.map(x=>x.id===cid?{...x,prefs:{...(x.prefs||{}),...patch}}:x));
   const upRules=(patch)=>setRules(r=>({...DEFAULT_RATE_RULES,...r,...patch}));
   const [mk,setMk]=useState({markup:c&&c.markup!=null?c.markup:"",markupMin:c&&c.markupMin!=null?c.markupMin:""});
-  useEffect(()=>{setMk({markup:c&&c.markup!=null?c.markup:"",markupMin:c&&c.markupMin!=null?c.markupMin:""});setLf({name:"",email:"",password:""});},[cid]);   /* lf too: a half-typed login for customer A must not attach to customer B */
+  const [rateCode,setRateCode]=useState("");
+  const [ratePaste,setRatePaste]=useState("");
+  useEffect(()=>{setMk({markup:c&&c.markup!=null?c.markup:"",markupMin:c&&c.markupMin!=null?c.markupMin:""});setLf({name:"",email:"",password:""});setRateCode("");setRatePaste("");},[cid]);   /* lf too: a half-typed login for customer A must not attach to customer B */
   const mkDirty=!!c&&(String(mk.markup??"")!==String(c.markup??"")||String(mk.markupMin??"")!==String(c.markupMin??""));
   const cDraft=c?{...c,markup:mk.markup,markupMin:mk.markupMin}:c;
   const ratesDirty=_rd.dirty||mkDirty;
@@ -3772,7 +3774,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       <div className="border border-stone-200 rounded-lg bg-white p-3 flex flex-wrap items-end gap-3">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-stone-800 flex items-center gap-2">Account-wide markup — {c.name} only {(mk.markup!=null&&mk.markup!==""&&+mk.markup!==0)||(mk.markupMin!=null&&mk.markupMin!==""&&+mk.markupMin>0)?<Badge tone="green">on</Badge>:<Badge>off</Badge>}</div>
-          <div className="text-[11px] text-stone-500 mt-0.5 max-w-md">Marks up the England/FedEx cost for every rate, service, and accessorial returned for this account only. Per-service rules below beat this. Leave blank and this account sells at exactly the raw carrier cost — no markup, anywhere.</div>
+          <div className="text-[11px] text-stone-500 mt-0.5 max-w-md">This marks up all rates and accessorials {(mk.markup!=null&&mk.markup!==""&&+mk.markup!==0)?(+mk.markup+"%"):"X%"} over the England cost.</div>
         </div>
         <span className="flex-1"/>
         <Field label="Markup %"><Input type="number" className="w-24" placeholder="e.g. 20" value={mk.markup==null?"":mk.markup} onChange={e=>setMk(m=>({...m,markup:e.target.value===""?"":+e.target.value}))}/></Field>
@@ -3783,25 +3785,35 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         <b>Live check</b> — a $10.00 raw cost sells right now for:&nbsp;
         {["FedEx Ground","FedEx Home Delivery","FedEx 2Day","FedEx Priority Overnight"].map((l,i)=><span key={l}>{i>0&&" · "}{l.replace("FedEx ","")} <b className="">{money(rateSellFor(10,l,{rules,client:cDraft}))}</b></span>)}
         &nbsp;— same engine that prices every quote for {c.name}; type a markup above or below and watch these move instantly.
-        <div className="mt-1 text-stone-500">How every live quote prices: the fee lines FedEx itemizes (fuel, residential, DAS, peak…) are split off and priced by their <b>accessorial rules</b> (no rule = account markup, else billed as-is). The <b>BASE freight</b> alone goes through the service rule — weight-break / zone % → %, Fixed $, Flat $, or List−% — then this account-wide markup, with the service <b>Min $ as a floor on the BASE</b>. Total = priced base + priced fees; Min $ profit still floors against total raw cost.</div>
       </div>
       <div className="border border-stone-200 rounded-lg bg-white p-3">
         <div className="flex flex-wrap items-center gap-4">
           <div className="text-sm font-semibold text-stone-800">Dim divisors <span className="font-normal text-[11px] text-stone-400">(platform-wide — every customer)</span></div>
           {[["express","Express"],["ground","Ground & Home Delivery"],["ground_economy","Ground Economy"]].map(([k,l])=>(
             <label key={k} className="text-xs text-stone-600 flex items-center gap-1.5">{l}
-              <input type="number" min="50" max="300" value={(rules.dimDivisors&&rules.dimDivisors[k])||139}
-                onChange={e=>{const v=Math.max(50,Math.min(300,+e.target.value||139));setRules(r=>({...DEFAULT_RATE_RULES,...r,dimDivisors:{express:139,ground:139,ground_economy:139,...(r.dimDivisors||{}),[k]:v}}));}}
+              <input type="number" min="50" max="300" defaultValue={(rules.dimDivisors&&rules.dimDivisors[k])||139} key={cid+k+((rules.dimDivisors&&rules.dimDivisors[k])||139)}
+                onChange={e=>{const raw=e.target.value;if(raw==="")return;const n=+raw;if(!isNaN(n))setRules(r=>({...DEFAULT_RATE_RULES,...r,dimDivisors:{express:139,ground:139,ground_economy:139,...(r.dimDivisors||{}),[k]:n}}));}}
+                onBlur={e=>{const v=Math.max(50,Math.min(300,+e.target.value||139));e.target.value=v;setRules(r=>({...DEFAULT_RATE_RULES,...r,dimDivisors:{express:139,ground:139,ground_economy:139,...(r.dimDivisors||{}),[k]:v}}));}}
                 className="w-20 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"/>
             </label>))}
           <span className="text-[10px] text-stone-400">Dim weight = L×W×H ÷ divisor; FedEx bills the higher of dim and actual. Saves with the green Save rates button.</span>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-stone-600">{c.name} prices from</span>
-        <Select value={assign[cid]||"default"} onChange={e=>upRules({assign:{...assign,[cid]:e.target.value}})}>{profiles.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</Select>
-        {prof.id==="default"&&<button onClick={dedicated} className="text-xs bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8]">Create dedicated "{c.name}" profile</button>}
-        <span className="text-[11px] text-stone-400">{prof.id==="default"?"On shared Default — your first edit below automatically forks "+c.name+"'s own copy, so other customers are never touched.":"Changes below price only "+c.name+"."}</span>
+      {/* Each account is priced individually below. Copy pulls THIS account's whole rate setup
+          (per-service rules, breaks, accessorial rules, account markup) into a code you can
+          paste onto another customer to clone every discount. */}
+      <div className="border border-stone-200 rounded-lg bg-stone-50/60 p-3 space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium text-stone-700 flex-1">Copy these rates to another customer</span>
+          <button onClick={()=>{const blob={v:1,markup:mk.markup,markupMin:mk.markupMin,listYear:prof.listYear||"",services:prof.services||{},surcharges:prof.surcharges||{}};const code=btoa(unescape(encodeURIComponent(JSON.stringify(blob))));setRateCode(code);try{navigator.clipboard.writeText(code);}catch(e){}say("Rates copied — paste the code onto another customer.");}} className="text-xs bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Copy className="w-3.5 h-3.5"/>Copy {c.name}'s Rates</button>
+        </div>
+        {rateCode&&<textarea readOnly value={rateCode} onFocus={e=>e.target.select()} className="w-full h-16 text-[11px] font-mono bg-white border border-stone-200 rounded p-2 outline-none" placeholder="Copied code appears here"/>}
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-stone-200">
+          <span className="text-sm font-medium text-stone-700 flex-1">Paste rates from another customer</span>
+          <button onClick={async()=>{if(!ratePaste.trim())return say("Paste a copied rates code first.");let blob;try{blob=JSON.parse(decodeURIComponent(escape(atob(ratePaste.trim()))));}catch(e){return uiAlert("That doesn't look like a rates code — copy one from another customer's Copy button.");}if(!blob||!blob.services)return uiAlert("That code has no rate data.");if(!await uiConfirm("Apply these rates and discounts to "+c.name+"? Their current per-service rules, accessorial rules, and account markup will be replaced."))return;setMk({markup:blob.markup===undefined?"":blob.markup,markupMin:blob.markupMin===undefined?"":blob.markupMin});upClient({markup:blob.markup===""||blob.markup==null?"":+blob.markup,markupMin:blob.markupMin===""||blob.markupMin==null?"":+blob.markupMin});upProfField(prof.id,{services:JSON.parse(JSON.stringify(blob.services||{})),surcharges:JSON.parse(JSON.stringify(blob.surcharges||{})),listYear:blob.listYear||prof.listYear});setRatePaste("");say("Rates applied to "+c.name+" — press Save rates to make it live.");}} className="text-xs bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-emerald-700 flex items-center gap-1.5"><Check className="w-3.5 h-3.5"/>Apply to {c.name}</button>
+        </div>
+        <textarea value={ratePaste} onChange={e=>setRatePaste(e.target.value)} className="w-full h-16 text-[11px] font-mono bg-white border border-stone-200 rounded p-2 outline-none focus:border-[#0099FF]" placeholder="Paste a copied rates code here, then Apply"/>
+        <span className="text-[11px] text-stone-400">Everything below prices <b>{c.name}</b> only — edits never touch another customer.</span>
       </div>
       {(()=>{
         const svcHiddenMap=rules.svcHidden||{};
@@ -6535,7 +6547,7 @@ function AppInner(){
   useEffect(()=>{ const h=(e)=>{ const d=e&&e.detail; setLookPreview(d&&typeof d==="object"?d:null); }; window.addEventListener("sc-look-preview",h); return ()=>window.removeEventListener("sc-look-preview",h); },[]);
   const srf=lookPreview||custom;
   useEffect(()=>{ try{document.documentElement.style.fontSize=(custom.fontScale&&custom.fontScale!==100)?(custom.fontScale/100*16)+"px":"";}catch(e){} },[custom.fontScale]);
-  useEffect(()=>{ SLIP_OPTS.thanks=custom.slipThanks||""; SLIP_OPTS.footer=custom.slipFooter||""; SLIP_OPTS.logo=settings.companyLogo||""; SLIP_OPTS.company=(settings.sender&&(settings.sender.company||settings.sender.name))||settings.company||""; SLIP_OPTS.template=settings.slipTemplate||""; CI_OPTS.taxId=settings.taxId||""; },[custom.slipThanks,custom.slipFooter,settings.companyLogo,settings.sender,settings.company,settings.slipTemplate,settings.taxId]);
+  useEffect(()=>{ SLIP_OPTS.thanks=custom.slipThanks||""; SLIP_OPTS.footer=custom.slipFooter||""; SLIP_OPTS.logo=settings.companyLogo||""; SLIP_OPTS.company=(settings.sender&&(settings.sender.company||settings.sender.name))||settings.company||""; SLIP_OPTS.template=settings.slipTemplate||""; SLIP_OPTS.pickTitle=settings.pickListTitle||""; SLIP_OPTS.pickNote=settings.pickListNote||""; CI_OPTS.taxId=settings.taxId||""; },[custom.slipThanks,custom.slipFooter,settings.companyLogo,settings.sender,settings.company,settings.slipTemplate,settings.pickListTitle,settings.pickListNote,settings.taxId]);
   useEffect(()=>{ try{ const el=document.documentElement;
     el.classList.remove("dark","grey");   // themes retired — clears any saved dark/grey choice
     if(custom.accent){ el.setAttribute("data-accent","1"); el.style.setProperty("--acc",custom.accent); el.style.setProperty("--accD",shadeHex(custom.accent,-0.14)); el.style.setProperty("--accL",shadeHex(custom.accent,0.18)); }
@@ -12766,6 +12778,23 @@ function SlipSettings({settings,setSettings}){
       <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Live preview — sample order</div>
       <style dangerouslySetInnerHTML={{__html:SLIP_CSS}}/>
       <div className="bg-white rounded-lg border border-stone-200 overflow-auto" dangerouslySetInnerHTML={{__html:preview}}/>
+    </div>
+    <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
+      <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><ClipboardList className="w-4 h-4"/>Pick List</div>
+      <p className="text-[11px] text-stone-500">The pick list aggregates every item across a batch with a check box to tick off as you pull. It carries your company logo automatically. Customize the heading and add standing instructions:</p>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <Field label="Heading"><Input value={settings.pickListTitle||""} placeholder="Pick list" onChange={e=>setSettings(p=>({...p,pickListTitle:e.target.value}))}/></Field>
+        <Field label="Note / instructions (optional)"><Input value={settings.pickListNote||""} placeholder="e.g. Pull to the staging shelf by 3pm" onChange={e=>setSettings(p=>({...p,pickListNote:e.target.value}))}/></Field>
+      </div>
+      <div className="bg-stone-50 border border-stone-200 rounded-lg p-4">
+        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Preview</div>
+        <div className="bg-white rounded border border-stone-200 p-4">
+          {settings.companyLogo&&<img src={settings.companyLogo} alt="logo" className="h-9 object-contain mb-2"/>}
+          <div className="text-[17px] font-bold text-stone-900 border-b-2 border-stone-800 pb-2">{settings.pickListTitle||"Pick list"} · 3 orders · {new Date().toLocaleDateString()}</div>
+          {settings.pickListNote&&<div className="text-xs text-stone-500 mt-1.5">{settings.pickListNote}</div>}
+          <div className="mt-3 space-y-1.5 text-sm">{[["Widget — Large",4],["Gadget Pro",2],["Cable 6ft",7]].map(([n,q])=><div key={n} className="flex items-center gap-2 border-b border-stone-100 pb-1.5"><span className="w-3.5 h-3.5 border-[1.5px] border-stone-400 rounded-sm inline-block"/><span className="flex-1">{n}</span><span className="font-bold">{q}</span></div>)}</div>
+        </div>
+      </div>
     </div>
   </div>);
 }

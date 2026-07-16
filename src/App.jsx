@@ -108,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v575";
+const BUILD_TAG="addr-v576";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7727,7 +7727,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       ))}
       {/* steps hidden = no numbered headers breaking up the page, so give the sections a touch
           more breathing room (16px vs 12px); with steps on, the headers carry the rhythm */}
-      <div className={"relative flex-1 min-w-0 "+(custom.hideShipSteps?"space-y-4":"space-y-3")}>
+      <div className={"relative flex-1 min-w-0 "+(custom.hideShipSteps?"space-y-5":"space-y-3")}>
         {/* Steps ON: actions share the step-1 header row. Steps OFF: that row disappears and the
             actions float beside the Sender/Receiver headings so the cards start at the very top. */}
         {!custom.hideShipSteps&&<div className="flex flex-wrap items-center justify-between gap-2">
@@ -8351,7 +8351,7 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
        indents past it and lines up under the service name even when the badge shifts the name */
     const matchBadge=matched===q.key?(<span className="text-[10px] font-semibold uppercase tracking-wide bg-[#E6F4FF] text-[#0086E0] border border-[#99D6FF] rounded px-1.5 py-0.5 shrink-0 inline-flex items-center gap-1">{matchedSrc==="autopilot"&&<Zap className="w-3 h-3"/>}{matchedSrc==="autopilot"?"Autopilot":"Requested"}</span>):null;
     return (
-      <div key={q.key||svcFamilyKey(q.label)} className={"border rounded-lg bg-white shadow-sm transition-all duration-200 "+(matched===q.key?"border-[#0086E0] ring-1 ring-[#0086E0]":"border-[#cbd5e1]")}>
+      <div key={q.key||svcFamilyKey(q.label)} className={"border rounded-lg bg-white shadow-sm transition-all duration-200 "+(matched===q.key?"border-[#0086E0] ring-1 ring-[#0086E0]":"border-[#b9c6d5]")}>
         <div onClick={()=>{setOpen(isOpen?null:q.key); if(q._oneRate&&q.packageTypeCode&&onOneRate)onOneRate(q.packageTypeCode);}} className="px-3 py-2 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
           <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isOpen?"rotate-90":""}`}/>
           {matchBadge}
@@ -8441,7 +8441,10 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
        (Centering was tried and rejected — Spencer prefers the list on the left. 52rem: 3xl read
        too compact, 4xl too wide.) */
     <div className="max-w-[52rem]">
-      <div className="flex items-center justify-between mb-2">
+      {/* Render this header row ONLY when it has content — with the title hidden and the view
+          toggle off it was an empty div whose mb-2 pushed the rate list 8px below the right
+          column's cards (the "boxes don't line up" report, pixel-measured). */}
+      {(!hideTitle||custom.showRateViewToggle||oneRateWarning)&&<div className="flex items-center justify-between mb-2">
         {oneRateWarning&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-2">{oneRateWarning}</div>}
         {hideTitle?<span/>:<h2 className="text-sm font-semibold text-stone-700">Select service</h2>}
         {custom.showRateViewToggle&&<div className="flex items-center gap-2">
@@ -8450,7 +8453,7 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
             {[["cheapest","Cheapest"],["carrier","By carrier"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-2.5 py-1 rounded-lg ${view===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}
           </div>
         </div>}
-      </div>
+      </div>}
       {view==="cheapest"
         ? <div className="space-y-1">{(collapse?collapsedRows():rowsForView(quotes)).map(Row)}{collapse&&<button onClick={()=>setShowAll(true)} className="w-full text-xs text-stone-500 hover:text-stone-700 border border-dashed border-stone-300 rounded-lg py-1.5 flex items-center justify-center gap-1">Show All Services <ChevronRight className="w-3.5 h-3.5 rotate-90"/></button>}{collapsible&&custom.matchedOnly&&showAll&&<button onClick={()=>setShowAll(false)} className="w-full text-xs text-stone-500 hover:text-stone-700 border border-dashed border-stone-300 rounded-lg py-1.5 flex items-center justify-center gap-1">Hide All Services <ChevronRight className="w-3.5 h-3.5 -rotate-90"/></button>}</div>
         : CARRIER_ORDER.map(c=>{const list=(collapse?collapsedRows():rowsForView(quotes)).filter(q=>q.carrier===c);if(!list.length)return null;return (<div key={c} className="mb-4"><div className="mb-2 pb-1.5 border-b border-stone-200"><CarrierMark carrier={c}/></div><div className="space-y-1.5">{list.map(Row)}</div></div>);})}

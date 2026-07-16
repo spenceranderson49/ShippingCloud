@@ -109,7 +109,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v585";
+const BUILD_TAG="addr-v586";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -4133,12 +4133,21 @@ function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureF
    Undo reverts to the last saved state; Reset restores the provided default. `committed` is the live
    persisted value; `commit` writes it for real. Returns the draft + a setter that mutates only the
    draft, plus dirty/save/undo/reset. */
+/* Global unsaved-edits registry: any draft hook adds its id while dirty; a single beforeunload
+   handler (installed in App) warns before a refresh/close if the set isn't empty. */
+const SC_DIRTY = (typeof window!=="undefined") ? (window.__scDirty=window.__scDirty||new Set()) : new Set();
+let _scDirtySeq=0;
+function useDirtyFlag(isDirty){
+  const idRef=React.useRef("d"+(++_scDirtySeq));
+  React.useEffect(()=>{ if(isDirty)SC_DIRTY.add(idRef.current); else SC_DIRTY.delete(idRef.current); return ()=>SC_DIRTY.delete(idRef.current); },[isDirty]);
+}
 function useDraft(committed,commit,defaultVal){
   const [draft,setDraft]=React.useState(committed);
   const [base,setBase]=React.useState(committed);   // last-saved snapshot we diff against
   // if the committed value changes underneath us (e.g. cloud poll) and we have no pending edits, follow it
   React.useEffect(()=>{ const j=JSON.stringify(committed); if(j!==JSON.stringify(base)&&JSON.stringify(draft)===JSON.stringify(base)){ setDraft(committed); setBase(committed); } },[committed]);
   const dirty=JSON.stringify(draft)!==JSON.stringify(base);
+  useDirtyFlag(dirty);
   const setDraftVal=React.useCallback((v)=>setDraft(prev=>typeof v==="function"?v(prev):v),[]);
   const save=React.useCallback(()=>{ commit(draft); setBase(draft); },[draft,commit]);
   const undo=React.useCallback(()=>setDraft(base),[base]);
@@ -4155,6 +4164,7 @@ function useSettingsDraft(settings,setSettings){
   const stage=React.useCallback((u)=>setPend(p=>[...p,u]),[]);
   const save=React.useCallback(()=>{ setPend(p=>{ if(p.length)setSettings(prev=>{let v=prev;for(const f of p)v=typeof f==="function"?f(v):f;return v;}); return []; }); },[setSettings]);
   const undo=React.useCallback(()=>setPend([]),[]);
+  useDirtyFlag(pend.length>0);
   return {view,stage,save,undo,dirty:pend.length>0};
 }
 /* Wrap a whole Settings section in one draft + pinned Save bar (same behavior as Print settings):
@@ -6401,8 +6411,19 @@ export default function App(){
     },4000);
   };
   useEffect(()=>{start();},[]);
-  if(phase==="boot"||phase==="loading") return <div className="min-h-screen bg-neutral-950 flex items-center justify-center"><div className="text-stone-400 text-sm flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>Loading your workspace…</div></div>;
-  if(phase==="netfail") return (<div className="min-h-screen bg-neutral-950 flex items-center justify-center p-6"><div className="text-center space-y-3 max-w-sm"><div className="text-stone-200 font-semibold">Can’t reach the server</div><p className="text-stone-500 text-sm">Your connection or the server hiccuped — nothing is wrong with your login. Give it a second and try again.</p><button onClick={()=>{setPhase("boot");start();}} className="text-sm bg-white text-stone-900 rounded-lg px-5 py-2 font-medium">Retry</button></div></div>);
+  if(phase==="boot"||phase==="loading") return (<div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f2f8fd] via-white to-[#e6f4ff] relative overflow-hidden">
+    <Cloud className="absolute -right-16 -top-16 w-80 h-80 text-[#0086E0]/5" strokeWidth={1}/>
+    <Cloud className="absolute -left-20 -bottom-20 w-96 h-96 text-[#0086E0]/5" strokeWidth={1}/>
+    <div className="relative flex flex-col items-center gap-5">
+      <div className="relative">
+        <span className="absolute inset-0 rounded-full bg-[#0086E0]/15 blur-xl animate-pulse"/>
+        {BRAND.fw?<img src={FW_LOGO} alt="" className="h-14 relative animate-[float_2.4s_ease-in-out_infinite]"/>:<div className="relative animate-[float_2.4s_ease-in-out_infinite]"><ShipCloudLogo size={52}/></div>}
+      </div>
+      <div className="flex items-center gap-2 text-[#006FBF]"><Loader2 className="w-4 h-4 animate-spin"/><span className="text-sm font-medium tracking-tight">Loading your workspace…</span></div>
+    </div>
+    <style dangerouslySetInnerHTML={{__html:"@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}"}}/>
+  </div>);
+  if(phase==="netfail") return (<div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-[#f2f8fd] via-white to-[#e6f4ff]"><div className="text-center space-y-3 max-w-sm bg-white/70 backdrop-blur rounded-2xl border border-[#cbd5e1] shadow-sm p-8"><WifiOff className="w-8 h-8 text-[#0086E0]/50 mx-auto"/><div className="text-stone-800 font-semibold">Can’t reach the server</div><p className="text-stone-500 text-sm">Your connection or the server hiccuped — nothing is wrong with your login. Give it a second and try again.</p><button onClick={()=>{setPhase("boot");start();}} className="text-sm bg-[#0086E0] text-white rounded-lg px-5 py-2 font-medium hover:bg-[#006db8]">Retry</button></div></div>);
   if(phase==="login") return <LandingGate onDone={async()=>{ setPhase("loading"); const r=await cloudLoadAll(); setPhase("ready"); if(!r.ok)setBootMsg("Signed in — first sync will complete in the background."); }}/>;
   return (<>
     {bootMsg&&<div className="bg-amber-50 border-b border-amber-200 text-amber-800 text-xs px-4 py-2 text-center">{bootMsg}</div>}
@@ -6425,7 +6446,15 @@ function AppInner(){
   /* Admin HQ boots straight into a SECTION ("admin:overview") — plain "admin" made AdminPortal
      render its own internal sidebar next to the HQ rail (the "same tabs twice" screenshot).
      Impersonating on Admin HQ lands on the customer's Ship tab. */
-  const [tab,setTab]=useState(()=>BRAND.admin?(lsGet("adminReturn",null)?"ship":"admin:overview"):"ship");
+  /* Remember the tab across refreshes (per login) — a reload used to always dump you back on
+     Ship. Restores the saved tab if it's still a real one, else the sensible default. */
+  const [tab,setTabRaw]=useState(()=>{
+    const def=BRAND.admin?(lsGet("adminReturn",null)?"ship":"admin:overview"):"ship";
+    try{ const saved=lsGet("sc.tab."+activeUid(),null); return (typeof saved==="string"&&saved)?saved:def; }catch(e){ return def; }
+  });
+  const setTab=(t)=>{ setTabRaw(t); try{ lsSet("sc.tab."+activeUid(), typeof t==="function"?t(tab):t); }catch(e){} };
+  /* Warn before a refresh/close if any draft has unsaved edits (Settings, rates, etc.). */
+  useEffect(()=>{ const h=(e)=>{ if(SC_DIRTY.size){ e.preventDefault(); e.returnValue="You have unsaved changes. Leave without saving?"; return e.returnValue; } }; window.addEventListener("beforeunload",h); return ()=>window.removeEventListener("beforeunload",h); },[]);
   const [pendingOpenOrderId,setPendingOpenOrderId]=useState(null);
   const [pendingOpenShipTracking,setPendingOpenShipTracking]=useState(null);
   useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};if(d.tab)setTab(d.tab);if(d.openOrderId)setPendingOpenOrderId(d.openOrderId);if(d.openShipTracking)setPendingOpenShipTracking(d.openShipTracking);if(d.batchCmd)setBatchCmd({...d.batchCmd,ts:Date.now()});};window.addEventListener("sc-nav",h);return()=>window.removeEventListener("sc-nav",h);},[]);
@@ -10700,8 +10729,8 @@ function FedexLocations({settings}){
 function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,isAdmin=false,showMoney=true,secPolicy={},currentUser=null,setCurrentUser=null,allowedTabs=null,fxLocOn=false}){
   /* Remember which Settings sub-section you were on, so leaving Settings and coming back returns you to
      the same panel instead of resetting to General. Persisted so it survives a full reload too. */
-  const [sec,setSecRaw]=useState("general");   // always open Settings on General
-  const setSec=(k)=>{ setSecRaw(k); };
+  const [sec,setSecRaw]=useState(()=>{ try{ const sv=lsGet("sc.settingssec."+(uid||"guest"),null); return (typeof sv==="string"&&sv)?sv:"general"; }catch(e){ return "general"; } });   // remembered across refreshes
+  const setSec=(k)=>{ setSecRaw(k); try{ lsSet("sc.settingssec."+(uid||"guest"), k); }catch(e){} };
   const [secSearch,setSecSearch]=useState("");
   /* Sidebar sections grouped into categories (v376) — Ship screen promoted out of Customizations
      into its own top-level section under Shipping. The flat `secs` list below feeds the

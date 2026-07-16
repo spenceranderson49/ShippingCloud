@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v610";
+const BUILD_TAG="addr-v611";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9537,10 +9537,10 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                   <button onClick={(e)=>{e.stopPropagation();setRateOpen(rateOpen===s.id?null:s.id);}} className="flex items-center gap-1.5 text-left group">
                     <ChevronRight className={`w-3.5 h-3.5 text-stone-400 transition-transform ${rateOpen===s.id?"rotate-90":""}`}/>
                     <span className="text-[11px] uppercase tracking-wider text-stone-400">Rate</span>
-                    {(()=>{const rv=sellFor(s);return <span className="text-sm font-semibold text-stone-800">{showMoney&&rv!=null?money(rv):"—"}</span>;})()}
+                    {(()=>{const rv=sellFor(s);return <span className="text-sm font-semibold text-stone-800">{rv!=null?money(rv):"—"}</span>;})()}
                     <span className="text-[11px] text-stone-400 group-hover:text-stone-600">· view breakdown</span>
                   </button>
-                  {showMoney&&rateOpen===s.id&&(()=>{
+                  {rateOpen===s.id&&(()=>{
                     const ins=parseFloat(s.insurance||0)||0;
                     const surs=(s.rateSurcharges||[]);
                     const accs=(s.rateAccessorials||[]);

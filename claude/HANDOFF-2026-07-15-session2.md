@@ -121,3 +121,32 @@ copy/UI commits). branch = staging = production(main) at **v569 / BUILD_TAG addr
   List card (settings.pickListTitle/pickListNote + logo, honored in printPickList).
 - Track API STILL 403 (re-verified this round). Genuinely not enabled on FedEx portal — code
   side is ready; only Spencer's portal toggle is missing.
+
+## v583–v585 (in production)
+- **v583** FedEx account requests: "Done" now removes them server-side (new db.js action
+  fedexRequestResolve — deletes the request by id/uid + its invoice blob; the old client-only
+  filter kept getting restored by the next cloud poll, so dismissed requests reappeared).
+  notifyFedexRequest emails FEDEX_ALERT_EMAIL||LOGIN_ALERT_EMAIL||spencer@freightwire.com on
+  every request with details + the uploaded invoice ATTACHED (Resend attachments).
+- **v584** ⭐ FedEx TRACKING LIVE. Spencer created a separate FedEx "Basic Integrated
+  Visibility" project → creds wired as FEDEX_TRACK_KEY / FEDEX_TRACK_SECRET (set on all 3 prod
+  sites; ship/rate stay on FEDEX_API_KEY). track-sync.mjs prefers the track creds, pulls
+  includeDetailedScans (scan events + ETA + delivery), stores trackEvents/trackedAt per
+  shipment. VERIFIED against live DB after manual kick: 118 shipments stamped, 103 with scan
+  events, real statuses (111 In transit / 1 OFD / 1 Exception / 2 Delivered). Scheduled fn is
+  HTTP-invokable (POST → 204) to force a run. Dashboard Live board → advanced-tracking UI:
+  "Synced from FedEx" stamp, clickable status pills that filter, each row expands a scan
+  timeline. NOTE: Track/Visibility works by tracking number — does NOT need accounts
+  provisioned (only Ship does), so the separate project needed just one account attached.
+- **v585** FedEx Location Finder: Settings → Find FedEx Locations (Shipping group) — search by
+  ZIP or geolocation, radius picker, results (address/hours/phone/distance/map). Backend
+  action "locations" in fedex.js → /location/v1/locations on the MAIN FEDEX_API_KEY project
+  (Spencer enabled Locations Search there). Feature flag fedexLocations default ON,
+  admin-toggleable. ⏳ Locations API still 403 as of this writing — FedEx entitlement not yet
+  propagated (same lag Track had); the code shows a friendly "not active yet" msg and will
+  work automatically once FedEx flips it. RE-TEST periodically.
+- FedEx compliance note: Spencer's new Track project made him agree "not a vendor who
+  sells/distributes." His model has reseller traits but FedEx shipping runs through England
+  (who holds the contract); token persona = DirectIntegrator_B2B. Flagged to confirm with
+  England/FedEx; England-sourced tracking would sidestep it entirely (England search API needs
+  a keyword; couldn't confirm a status/scan endpoint blind — one email to Rock Solid to ask).

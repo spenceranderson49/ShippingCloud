@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v601";
+const BUILD_TAG="addr-v602";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7995,11 +7995,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {!custom.hideShipSteps&&<StepHead n="3" label="Service & rate"/>}
         {/* Rates row: service list on the left, a slim info column (From order · Billing & third-party)
             fills the space to its right. Wraps to a normal stack on narrow screens. */}
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_416px] gap-4 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_440px] gap-4 items-start">
           <div className="min-w-0">
             <ServiceList hideTitle={true} quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
           </div>
-          <div className="w-full lg:w-[320px] lg:shrink-0 space-y-3">
+          <div className="w-full space-y-3">
             {/* ── Card 1: THIS SHIPMENT — read-only status, one card, one row per fact. State lives
                    in the icon color (green = good), not in three different tinted strips. ── */}
             {(()=>{
@@ -9330,17 +9330,24 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
   /* The quoted (sell) price is stored on every new booking. For older shipments that predate that,
      re-derive what the customer was quoted by running the STORED carrier cost back through their
      markup rules — never the raw cost. Returns null only when there's genuinely no price to show. */
-  const sellFor=(s)=>{ if(s.sell!=null)return +s.sell;
-    let cost=s.cost;
-    if(cost==null){ /* no price was saved on this shipment — estimate one from its route/weight/service */
-      try{ const qs=quoteRates({fromZip:s.fromZip,toZip:s.recipient&&s.recipient.zip,pieces:(s.pieces&&s.pieces.length)?s.pieces:[{weight:+s.weight||1,L:12,W:9,H:4}],residential:s.residential!==false});
-        const sk=canonSvc(s.service||""); const hit=(qs||[]).find(q=>canonSvc(q.label)===sk)||(qs||[])[0];
-        if(hit&&hit.cost!=null)cost=hit.cost;
-      }catch(e){}
-    }
-    if(cost==null)return null;
-    try{ const v=rateSellFor(+cost,s.service,{rules:rateRules,client,fromZip:s.fromZip,toZip:s.recipient&&s.recipient.zip,weight:s.weight}); return v!=null?v:+cost; }catch(e){ return +cost; } };
-  const sellIsEst=(s)=>s.sell==null;   // derived/estimated (no stored sell) → label it "est." so it never reads as a booked charge
+  // Only ever the exact price that was quoted + stored at booking. Never an estimate, never cost.
+  const sellFor=(s)=>s.sell!=null?+s.sell:null;
+  /* One-time backfill: older shipments stored the carrier COST but no sell. Reconstruct the sell the
+     SAME way the quote did — cost × this customer's markup rule — and PERSIST it so it's fixed forever
+     (not recomputed on later rule changes). Only runs on a single-customer (non-admin) view, so the
+     markup applied is always this customer's own; admin's mixed-customer feed is left untouched. */
+  useEffect(()=>{
+    if(isAdmin||!client)return;
+    let changed=false;
+    const next=(shipments||[]).map(s=>{
+      if(s&&s.sell==null&&s.cost!=null){
+        try{ const v=rateSellFor(+s.cost,s.service,{rules:rateRules,client,fromZip:s.fromZip,toZip:s.recipient&&s.recipient.zip,weight:s.weight}); if(v!=null){ changed=true; return {...s,sell:Math.round(v*100)/100}; } }catch(e){}
+      }
+      return s;
+    });
+    if(changed)setShipments(next);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
   /* Packing-slip composer for MANUAL shipments (no store integration → no line items):
      type the items, print, and they're saved onto the shipment so reprints match. */
   const [slipEdit,setSlipEdit]=useState(null);   // {id,rows:[{name,qty}],note}
@@ -9437,7 +9444,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
         <div className="flex items-center gap-3 px-4 py-2 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50"><div className="w-4"/><div className="w-24 shrink-0">Created</div><div className="flex-1">Recipient</div><div className="flex-1 hidden lg:block">Company</div><div className="w-56 hidden md:block">Service</div><div className="w-40 hidden md:block">Tracking</div><div className="flex-1 hidden lg:block">Ship-to address</div><div className="w-28 hidden xl:block">Reference</div><div className="w-28 shrink-0 text-right">Status</div></div>
         {list.length===0&&<div className="p-8 text-center text-sm text-stone-400">No shipments match “{q}”.</div>}
         {list.map(s=>(
-        <div key={s.id} id={"ship-row-"+s.id} className={open===s.id?"relative z-10 my-1.5 rounded-xl ring-2 ring-[#0086E0]/25 bg-white shadow-sm overflow-hidden":""}>
+        <div key={s.id} id={"ship-row-"+s.id} className={open===s.id?"relative z-10 my-1.5 rounded-xl border-2 border-[#0086E0]/40 bg-white shadow-md overflow-hidden":""}>
           <div onClick={()=>setOpen(open===s.id?null:s.id)} className={`flex items-center gap-3 px-4 ${custom.density==="compact"?"py-1.5":"py-3"} hover:bg-stone-50 cursor-pointer ${open===s.id?"bg-stone-50":""} ${stuck(s)?"border-l-2 border-amber-400":""}`} title={stuck(s)?"No delivery after "+custom.stuckDays+"+ days in transit — possibly stuck":undefined}>
             <button className="text-stone-400"><ChevronRight className={`w-4 h-4 transition-transform ${open===s.id?"rotate-90":""}`}/></button>
             <div className="w-24"><div className="text-sm text-stone-500">{s.date}</div><div className="text-[10px] text-stone-400">{s.time||""}</div></div>
@@ -9450,7 +9457,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
             <div className="w-28 shrink-0 text-right whitespace-nowrap">{s.tracking?<button onClick={(e)=>{e.stopPropagation();openTrack(s);}} title="See the FedEx scan history + estimated delivery" className="inline-flex items-center gap-1 hover:opacity-80"><Badge tone={tone(s.status)}>{s.status}</Badge><MapPin className="w-3 h-3 text-stone-400"/></button>:<Badge tone={tone(s.status)}>{s.status}</Badge>}</div>
           </div>
           {open===s.id&&(
-            <div className="px-12 pb-4 pt-1 bg-stone-50/60 text-sm">
+            <div className="px-12 pb-4 pt-4 bg-stone-50/60 text-sm border-t border-stone-200">
               {(()=>{const D=({k,v})=>(<div className="flex items-baseline gap-3 min-w-0"><span className="w-20 shrink-0 text-[10px] uppercase tracking-widest text-stone-400">{k}</span><span className="text-sm text-stone-800 truncate min-w-0">{v||"—"}</span></div>);
                 return (<>
                 <div className="flex items-baseline gap-3 mb-2 min-w-0"><span className="w-20 shrink-0 text-[10px] uppercase tracking-widest text-stone-400">To</span><span className="text-sm text-stone-800 min-w-0">{`${s.recipient?.name||""}${s.recipient?.company?" · "+s.recipient.company:""} — ${s.recipient?.address1||""}, ${s.recipient?.city||""}, ${s.recipient?.state||""} ${s.recipient?.zip||""}`}</span></div>
@@ -9471,7 +9478,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                   <button onClick={(e)=>{e.stopPropagation();setRateOpen(rateOpen===s.id?null:s.id);}} className="flex items-center gap-1.5 text-left group">
                     <ChevronRight className={`w-3.5 h-3.5 text-stone-400 transition-transform ${rateOpen===s.id?"rotate-90":""}`}/>
                     <span className="text-[11px] uppercase tracking-wider text-stone-400">Rate</span>
-                    {(()=>{const rv=sellFor(s);return <span className="text-sm font-semibold text-stone-800">{showMoney&&rv!=null?money(rv):"—"}{showMoney&&rv!=null&&sellIsEst(s)&&<span className="text-[10px] font-normal text-stone-400 ml-1">est.</span>}</span>;})()}
+                    {(()=>{const rv=sellFor(s);return <span className="text-sm font-semibold text-stone-800">{showMoney&&rv!=null?money(rv):"—"}</span>;})()}
                     <span className="text-[11px] text-stone-400 group-hover:text-stone-600">· view breakdown</span>
                   </button>
                   {showMoney&&rateOpen===s.id&&(()=>{

@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v611";
+const BUILD_TAG="addr-v612";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -8040,7 +8040,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {!custom.hideShipSteps&&<StepHead n="3" label="Service & rate"/>}
         {/* Rates row: service list on the left, a slim info column (From order · Billing & third-party)
             fills the space to its right. Wraps to a normal stack on narrow screens. */}
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_440px] gap-4 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_480px] gap-4 items-start">
           <div className="min-w-0">
             <ServiceList hideTitle={true} quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
           </div>
@@ -8525,7 +8525,7 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
           {matchBadge}
           <div className="flex-1 min-w-0 flex items-baseline gap-x-3 gap-y-0.5 flex-wrap">
             <span className="text-sm font-semibold text-stone-900">{(custom.aliases&&custom.aliases[canonSvc(q.label)])||q.label}</span>
-            <span className="text-[12.5px] text-stone-500 inline-flex items-center gap-1"><Calendar className="w-3.5 h-3.5"/>{(()=>{
+            <span className="text-sm text-stone-600 inline-flex items-center gap-1.5"><Calendar className="w-4 h-4"/>{(()=>{
               /* ONLY ever FedEx's own committed transit — never a computed/business-day guess. If FedEx
                  didn't return transit for this lane, show nothing (or "checking…" while it loads). */
               const fd=(fxLive&&q.fxDays!=null)?q.fxDays:null;

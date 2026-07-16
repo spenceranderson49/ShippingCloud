@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v614";
+const BUILD_TAG="addr-v615";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -5623,7 +5623,7 @@ function startCloudPoll(){
    If so we can paint the app instantly from cache and refresh in the background — no buffer page. */
 function hasCachedStores(uid){ try{ if(!LS_OK)return false; const p="sc_u/"+uid+"/"; for(let i=0;i<window.localStorage.length;i++){ const k=window.localStorage.key(i); if(k&&k.indexOf(p)===0)return true; } return false; }catch(e){ return false; } }
 async function cloudLoadAll(){
-  const res=await cloudCall({action:"getAll",token:CLOUD.token});
+  const res=await cloudCall({action:"getAll",token:CLOUD.token},45000);   // admin getAll is large — give it real time before it's treated as a failure
   if(res&&res.ok&&res.stores){
     const cloud=res.stores;
     /* Guard against losing edits made while a prior save was offline/failed: for any GLOBAL key,
@@ -6425,7 +6425,14 @@ export default function App(){
           const r=await cloudLoadAll();
           if(r&&r.ok){ CLOUD.offline=false; setBootMsg(""); }
           else if(r&&r.authFailed){ lsDel("cloud.token"); CLOUD.token=null; window.location.reload(); }
-          else { CLOUD.offline=true; setTimeout(async()=>{ const r2=await cloudLoadAll(); if(r2&&r2.ok){ CLOUD.offline=false; setBootMsg(""); } else setBootMsg("Offline — showing this device’s saved data; changes sync when the connection returns."); },4000); }
+          else {
+            /* The load failed or timed out. If the browser is actually online it's just a slow/large
+               admin load — do NOT flip to offline (that stops syncing and shows a false banner); retry
+               quietly. Only treat it as offline if the browser genuinely reports no connection. */
+            const trulyOffline=(typeof navigator!=="undefined")&&navigator.onLine===false;
+            if(trulyOffline){ CLOUD.offline=true; setBootMsg("Offline — showing this device’s saved data; changes sync when the connection returns."); }
+            setTimeout(async()=>{ const r2=await cloudLoadAll(); if(r2&&r2.ok){ CLOUD.offline=false; setBootMsg(""); } else if((typeof navigator!=="undefined")&&navigator.onLine===false){ CLOUD.offline=true; setBootMsg("Offline — showing this device’s saved data; changes sync when the connection returns."); } },4000);
+          }
         })();
         return;
       }
@@ -6483,7 +6490,7 @@ export default function App(){
   if(phase==="netfail") return (<div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-[#f2f8fd] via-white to-[#e6f4ff]"><div className="text-center space-y-3 max-w-sm bg-white/70 backdrop-blur rounded-2xl border border-stone-200 shadow-sm p-8"><WifiOff className="w-8 h-8 text-[#0086E0]/50 mx-auto"/><div className="text-stone-800 font-semibold">Can’t reach the server</div><p className="text-stone-500 text-sm">Your connection or the server hiccuped — nothing is wrong with your login. Give it a second and try again.</p><button onClick={()=>{setPhase("boot");start();}} className="text-sm bg-[#0086E0] text-white rounded-lg px-5 py-2 font-medium hover:bg-[#006db8]">Retry</button></div></div>);
   if(phase==="login") return <LandingGate onDone={async()=>{ setPhase("loading"); const r=await cloudLoadAll(); setPhase("ready"); if(!r.ok)setBootMsg("Signed in — first sync will complete in the background."); }}/>;
   return (<>
-    {bootMsg&&<div className="bg-amber-50 border-b border-amber-200 text-amber-800 text-xs px-4 py-2 text-center">{bootMsg}</div>}
+    {bootMsg&&!((typeof navigator!=="undefined")&&navigator.onLine&&/offline|can.?t reach the server/i.test(bootMsg))&&<div className="bg-amber-50 border-b border-amber-200 text-amber-800 text-xs px-4 py-2 text-center">{bootMsg}</div>}
     <AppInner/>
     <DialogHost/>
     <SlipComposerHost/>

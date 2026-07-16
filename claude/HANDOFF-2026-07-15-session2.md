@@ -102,3 +102,22 @@ copy/UI commits). branch = staging = production(main) at **v569 / BUILD_TAG addr
   (contentEditable + insertImage, opened via window event "sc-slip-compose") wired to all
   interactive Packing Slip buttons; batch/auto/PrintNode-routed slips keep the plain PDF
   path (no logo there yet — candidate follow-up).
+
+## v581–v582 (in production)
+- **v581** Packing slips: logo OR company name (no more doubled logo); slips print from an
+  editable token template ({{LOGO}}/{{ORDER_META}}/{{SHIP_TO}}/{{FACTS}}/{{ITEMS}}/{{NOTE}}/
+  {{FOOTER}}/{{THANKS}} in DEFAULT_SLIP_TEMPLATE, stored in settings.slipTemplate, synced via
+  SLIP_OPTS.template). New Settings section "Packing Slips" (SlipSettings) under Documents &
+  Printing — live-preview template editor + Add Image + Save/Reset. Composer "Edit Template"
+  routes there (sc-nav now forwards {settingsSec}). ⚠️ First v581 commit was EMPTY (temp-build
+  git-checkout ate the uncommitted work — the recurring trap); redone and pushed. RULE NOW:
+  commit+push BEFORE any temp screenshot build, always.
+- **v582** Customer Rates tab overhaul: dim divisor inputs clamp on BLUR not per-keystroke
+  (was unusable — every digit clamped to [50,300]); markup blurb → one line "marks up all
+  rates and accessorials X% over England cost"; rate-profile picker + "prices from" dropdown
+  REMOVED (each account priced individually; engine still uses per-account forked profiles
+  under the hood); added Copy Rates / Paste Rates — a base64 blob {markup,markupMin,listYear,
+  services,surcharges} cloned onto another customer via upProfField. SlipSettings gains a Pick
+  List card (settings.pickListTitle/pickListNote + logo, honored in printPickList).
+- Track API STILL 403 (re-verified this round). Genuinely not enabled on FedEx portal — code
+  side is ready; only Spencer's portal toggle is missing.

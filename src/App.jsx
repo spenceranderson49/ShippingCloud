@@ -108,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v565";
+const BUILD_TAG="addr-v566";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2483,7 +2483,11 @@ async function classifyOrderAddress(o,fromZip){
 function rateProfileFor(rules,clientId){
   const profs=(rules&&rules.profiles&&rules.profiles.length)?rules.profiles:DEFAULT_RATE_RULES.profiles;
   const pid=(rules&&rules.assign&&clientId&&rules.assign[clientId])||"default";
-  return profs.find(p=>p.id===pid)||profs.find(p=>p.id==="default")||profs[0];
+  /* NEVER fall back to profs[0]: with no "default" profile stored, every unassigned customer
+     silently priced from whichever profile happened to be first (real incident: everyone
+     inherited LAGENCE). Unassigned + no Default = the built-in blank profile (raw cost +
+     account markup only). */
+  return profs.find(p=>p.id===pid)||profs.find(p=>p.id==="default")||DEFAULT_RATE_RULES.profiles[0];
 }
 function rateProfileName(rules,clientId){ const p=rateProfileFor(rules,clientId); return (p&&p.name)||"Default"; }
 function baseCostLookup(rules,key,weight,zone){
@@ -4949,7 +4953,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
   const SECTION_META={};NAV_GROUPS.forEach(g=>g.items.forEach(([v,l,Icon])=>{SECTION_META[v]={label:l,Icon};}));
   SECTION_META.rates={label:"Advanced rates — tables & sheets",Icon:DollarSign};   // off the sidebar (customers each have a Rates tab now); reachable from a customer record for shared imports, zones, weight breaks, and printable rate sheets
   const allowedKeys=new Set(ALLOWED.map(x=>x[0]));
-  const groups=NAV_GROUPS.map(g=>({...g,items:g.items.filter(it=>allowedKeys.has(it[0]))})).filter(g=>g.items.length);
+  const groups=NAV_GROUPS.map(g=>({...g,items:g.items.filter(it=>allowedKeys.has(it[0])&&it[0]!=="rates")})).filter(g=>g.items.length);   /* rates rail entry hidden (owner request) — deep link via Customers → Rates → Advanced still opens it */
   /* Every admin capability lives in this one workspace — Customers, Rate database, everything — regardless
      of which login opens it. Pre-opening the core tabs means nobody has to discover the "+ Open" launcher
      to find rates/services; they're just already sitting there the moment Admin opens. */
@@ -6816,7 +6820,10 @@ function AppInner(){
     /* Admin HQ shows the admin rail only for a REAL admin. While impersonating ("Log In As")
        the shell must show the customer's own tabs — the admin rail with a customer session
        rendered an admin nav over a permanently blank body (isAdmin gates every admin body). */
-    if(BRAND.admin&&isAdmin)return adminSectionsFor(currentUser).map(([k,l])=>["admin:"+k,l,ADMIN_SECTION_ICONS[k]||ShieldCheck]);
+    /* "rates" is off the rail by owner request (2026-07-15): rates live on each customer's
+       Rates tab; the shared screen (imports, dim divisors, other carriers) stays reachable
+       through the "Advanced" link on any customer's Rates tab — hidden, not deleted. */
+    if(BRAND.admin&&isAdmin)return adminSectionsFor(currentUser).filter(([k])=>k!=="rates").map(([k,l])=>["admin:"+k,l,ADMIN_SECTION_ICONS[k]||ShieldCheck]);
     if(isAdmin)return applyPrefs(ALL_TABS);
     const t=ALL_TABS.filter(x=>x[0]!=="admin"&&(x[0]==="ship"||featureOn(x[0],currentUser,myFlags)));
     if(isCompanyAdmin){const entry=["companyadmin","Company Admin",Building2];const i=t.findIndex(x=>x[0]==="settings");i>=0?t.splice(i,0,entry):t.push(entry);}

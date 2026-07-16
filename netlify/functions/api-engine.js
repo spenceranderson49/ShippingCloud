@@ -259,7 +259,9 @@ function fedexSurchargeIdFor(lineLabel,svcLabel){
 function rateProfileFor(rules,clientId){
   const profs=(rules&&rules.profiles&&rules.profiles.length)?rules.profiles:DEFAULT_RATE_RULES.profiles;
   const pid=(rules&&rules.assign&&clientId&&rules.assign[clientId])||"default";
-  return profs.find(p=>p.id===pid)||profs.find(p=>p.id==="default")||profs[0];
+  /* NEVER fall back to profs[0] — see App.jsx rateProfileFor: unassigned customers must get the
+     blank built-in default, not whichever profile happens to be first in the stored list. */
+  return profs.find(p=>p.id===pid)||profs.find(p=>p.id==="default")||DEFAULT_RATE_RULES.profiles[0];
 }
 function baseCostLookup(rules,key,weight,zone){
   const t=rules&&rules.baseCosts&&rules.baseCosts[key];

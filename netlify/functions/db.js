@@ -963,12 +963,13 @@ exports.handler = async (event) => {
     }
     if (action === "apiKeyCreate") {
       if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
-      const clientId = String(body.clientId || "");
-      if (!clientId) return J({ ok: false, error: "Pick the customer this key belongs to." });
+      const mode = ["test","live","admin"].includes(String(body.mode || "live")) ? String(body.mode) : "live";
+      // admin/integration keys are platform-wide, not tied to one customer, so they don't need a clientId
+      const clientId = mode === "admin" ? "" : String(body.clientId || "");
+      if (mode !== "admin" && !clientId) return J({ ok: false, error: "Pick the customer this key belongs to." });
       const cur = await getStore("apiKeys");
       const keys = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
       if (keys.filter((k) => !k.revoked).length >= 500) return J({ ok: false, error: "Key limit reached." });
-      const mode = ["test","live","admin"].includes(String(body.mode || "live")) ? String(body.mode) : "live";
       const raw = "sck_" + mode + "_" + crypto.randomBytes(24).toString("hex");
       const row = { id: "k" + Date.now(), mode, prefix: raw.slice(0, 14) + "…", label: String(body.label || "").slice(0, 60), clientId, hash: crypto.createHash("sha256").update(raw).digest("hex"), createdAt: new Date().toISOString() };
       const w = await putStores({ apiKeys: [...keys, row] });

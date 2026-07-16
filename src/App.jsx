@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v592";
+const BUILD_TAG="addr-v593";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10524,21 +10524,23 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
 /* ════════ RETURNS / RMA ════════ */
 function Returns({returns,setReturns,orders,settings,logEmail}){
   const [creating,setCreating]=useState(false);
-  const [f,setF]=useState({customer:"",order:"",reason:"Wrong Size",carrier:"FedEx"});
+  const [f,setF]=useState({customer:"",email:"",order:"",reason:"Wrong Size",carrier:"FedEx"});
   const fulfilled=orders.filter(o=>o.status==="fulfilled");
-  const create=()=>{if(!f.customer)return;const tracking=newTracking(f.carrier);setReturns(r=>[{id:Date.now(),rma:"RMA-"+rnd(4),customer:f.customer,order:f.order,reason:f.reason,carrier:f.carrier,tracking,status:"Label created",date:new Date().toLocaleDateString()},...r]);if(settings?.notify?.returnLabel&&logEmail)logEmail({to:"customer@example.com",subject:`Your return label for ${f.order||"your order"} is ready`,type:"Return label"});setCreating(false);setF({customer:"",order:"",reason:"Wrong Size",carrier:"FedEx"});};
-  const tone=s=>s==="Delivered"?"green":s==="In transit"?"amber":"blue";
+  const create=()=>{if(!f.customer)return;setReturns(r=>[{id:Date.now(),rma:"RMA-"+rnd(4),customer:f.customer,email:(f.email||"").trim(),order:f.order,reason:f.reason,carrier:f.carrier,tracking:"",status:"Requested",date:new Date().toLocaleDateString()},...r]);if(settings?.notify?.returnLabel&&logEmail&&(f.email||"").trim())logEmail({to:(f.email||"").trim(),subject:`We received your return request for ${f.order||"your order"}`,type:"Return"});setCreating(false);setF({customer:"",email:"",order:"",reason:"Wrong Size",carrier:"FedEx"});};
+  const tone=s=>s==="Delivered"?"green":s==="In transit"?"amber":s==="Requested"?"stone":"blue";
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between"><h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Undo2 className="w-4 h-4"/>Returns &amp; RMAs</h2><button onClick={()=>setCreating(v=>!v)} className="flex items-center gap-1 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8]"><Plus className="w-4 h-4"/>Create Return</button></div>
       {creating&&<Panel title="New return label">
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Customer"><Input value={f.customer} onChange={e=>setF({...f,customer:e.target.value})} placeholder="Name"/></Field>
+          <Field label="Customer email"><Input value={f.email} onChange={e=>setF({...f,email:e.target.value})} placeholder="name@email.com"/></Field>
           <Field label="Original order"><Select value={f.order} onChange={e=>setF({...f,order:e.target.value})}><option value="">—</option>{fulfilled.map(o=><option key={o.id} value={o.name}>{o.name} · {o.customer}</option>)}</Select></Field>
           <Field label="Reason"><Select value={f.reason} onChange={e=>setF({...f,reason:e.target.value})}><option>Wrong Size</option><option>Defective</option><option>Not As Described</option><option>No Longer Wanted</option></Select></Field>
           <Field label="Return carrier"><Select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})}><option>FedEx</option><option>USPS</option></Select></Field>
         </div>
-        <button onClick={create} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium">Generate Return Label</button>
+        <button onClick={create} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium">Log Return Request</button>
+        <p className="text-[11px] text-stone-400">Logs the RMA and (if return emails are on) confirms receipt to the customer. Book the physical return label on the <b>Ship</b> tab — ship from the customer, Bill to → your account — then paste its tracking here.</p>
       </Panel>}
       <div className="border border-stone-200 rounded-lg overflow-hidden bg-white divide-y divide-stone-100">
         {returns.length===0&&<div className="p-8 text-center text-sm text-stone-400">No returns yet.</div>}
@@ -10547,7 +10549,7 @@ function Returns({returns,setReturns,orders,settings,logEmail}){
             <div className="w-24 text-sm font-semibold text-[#0086E0]">{r.rma}</div>
             <div className="flex-1 min-w-0"><div className="text-sm truncate">{r.customer}</div><div className="text-[11px] text-stone-400">{r.order?`${r.order} · `:""}{r.reason}</div></div>
             <div className={`text-xs font-bold hidden sm:block ${CARRIER_TINT[r.carrier]}`}>{r.carrier}</div>
-            <a href={TRACK_URL[r.carrier](r.tracking)} target="_blank" rel="noopener" className="text-[#0086E0] underline text-xs flex items-center gap-1 w-36 truncate">{r.tracking}<ExternalLink className="w-3 h-3 shrink-0"/></a>
+            {r.tracking?<a href={TRACK_URL[r.carrier](r.tracking)} target="_blank" rel="noopener" className="text-[#0086E0] underline text-xs flex items-center gap-1 w-36 truncate">{r.tracking}<ExternalLink className="w-3 h-3 shrink-0"/></a>:<span className="text-[11px] text-stone-400 italic w-36">label pending</span>}
             <Badge tone={tone(r.status)}>{r.status}</Badge>
           </div>
         ))}
@@ -10985,7 +10987,7 @@ function ProductCatalog({settings,setSettings}){
   const [editId,setEditId]=useState(null);
   const [ef,setEf]=useState(null);
   const [adding,setAdding]=useState(false);
-  const [nf,setNf]=useState({sku:"",name:"",l:"",w:"",h:"",wt:"",value:"",origin:"",hs:"",barcode:"",shipsAlone:false});
+  const [nf,setNf]=useState({sku:"",name:"",l:"",w:"",h:"",wt:"",value:"",origin:"",hs:"",barcode:"",shipsAlone:false,hazmat:false});
   const [msg,setMsg]=useState(null);
   const [busy,setBusy]=useState(false);
   const flash=(m)=>{setMsg(m);setTimeout(()=>setMsg(null),5000);};
@@ -10995,12 +10997,12 @@ function ProductCatalog({settings,setSettings}){
 
   const addProduct=()=>{
     if(!nf.name&&!nf.sku)return;
-    write([{id:"pr"+Date.now(),sku:nf.sku,name:nf.name||nf.sku,l:+nf.l||0,w:+nf.w||0,h:+nf.h||0,wt:+nf.wt||0,value:+nf.value||0,origin:nf.origin||"",hs:nf.hs||"",barcode:nf.barcode||"",shipsAlone:!!nf.shipsAlone},...products]);
-    setNf({sku:"",name:"",l:"",w:"",h:"",wt:"",value:"",origin:"",hs:"",barcode:"",shipsAlone:false});setAdding(false);
+    write([{id:"pr"+Date.now(),sku:nf.sku,name:nf.name||nf.sku,l:+nf.l||0,w:+nf.w||0,h:+nf.h||0,wt:+nf.wt||0,value:+nf.value||0,origin:nf.origin||"",hs:nf.hs||"",barcode:nf.barcode||"",shipsAlone:!!nf.shipsAlone,hazmat:!!nf.hazmat},...products]);
+    setNf({sku:"",name:"",l:"",w:"",h:"",wt:"",value:"",origin:"",hs:"",barcode:"",shipsAlone:false,hazmat:false});setAdding(false);
     flash({ok:"Product added."});
   };
   const saveEdit=()=>{ if(!ef)return; write(products.map(p=>p.id===editId?{...ef,l:+ef.l||0,w:+ef.w||0,h:+ef.h||0,wt:+ef.wt||0,value:+ef.value||0}:p)); setEditId(null);setEf(null); };
-  const del=(id)=>write(products.filter(p=>p.id!==id));
+  const del=async(id)=>{const p=products.find(x=>x.id===id);if(!await uiConfirm("Delete "+((p&&(p.name||p.sku))||"this product")+" from the catalog? This can't be undone."))return;write(products.filter(x=>x.id!==id));};
 
   const importCSV=(e)=>{
     const file=e.target.files&&e.target.files[0]; if(!file)return;

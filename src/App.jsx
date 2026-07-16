@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v596";
+const BUILD_TAG="addr-v597";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -144,7 +144,7 @@ class TabBoundary extends React.Component {
         <p className="text-sm text-stone-600 mb-3">The rest of the app is fine — only this tab stopped. Try again, and if it keeps happening do a hard refresh to clear any stale cached version.</p>
         <div className="text-[11px] text-stone-400 mb-4">build {b}{this.state.err&&this.state.err.message?" \u00b7 "+String(this.state.err.message).slice(0,90):""}</div>
         <div className="flex gap-2">
-          <button onClick={()=>this.setState({err:null})} className="text-sm font-semibold text-white bg-[#0086E0] rounded-lg px-4 py-2 hover:bg-[#0072BF]">Try Again</button>
+          <button onClick={()=>this.setState({err:null})} className="text-sm font-semibold text-white bg-[#0086E0] rounded-lg px-4 py-2 hover:bg-[#006db8]">Try Again</button>
           <button onClick={hard} className="text-sm text-stone-700 bg-stone-100 rounded-lg px-4 py-2 hover:bg-stone-200">Hard refresh (clears cache)</button>
         </div>
       </div>);
@@ -3028,7 +3028,7 @@ const rememberTrust=(em,d)=>{ try{ if(d&&d.deviceToken)lsSet(trustKey(em),{t:Str
    so its identity is stable and the select never remounts mid-interaction. */
 const TrustDeviceRow=({trustDays,setTrustDays})=>(<div className="flex items-center justify-between gap-3">
   <span className="text-sm text-stone-700">Trust This Device<span className="block text-[11px] text-stone-400">Skip the code on this browser for a while.</span></span>
-  <select value={trustDays} onChange={e=>setTrustDays(e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">
+  <select value={trustDays} onChange={e=>setTrustDays(e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0]">
     <option value="0">Don’t Trust</option><option value="30">30 Days</option><option value="60">60 Days</option><option value="90">90 Days</option>
   </select>
 </div>);
@@ -3120,7 +3120,7 @@ function Login({users,onLogin,brand}){
             <div onClick={e=>e.stopPropagation()} className="bg-white rounded-2xl p-6 max-w-sm w-full space-y-3 text-left">
               {fp==="ask"&&<><div className="font-semibold text-stone-800">Reset your password</div><p className="text-[13px] text-stone-500">Enter your login email and we’ll send a one-hour reset link.</p><input value={fpEmail} onChange={e=>setFpEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&fpAsk()} placeholder="you@company.com" autoFocus className="w-full border border-stone-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0086E0]/30"/><button onClick={fpAsk} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium hover:bg-[#006db8]">Send Reset Link</button></>}
               {fp==="sent"&&<><div className="font-semibold text-stone-800">Check your email</div><p className="text-[13px] text-stone-500">If that address has an account, a reset link is on its way. It works for one hour.</p><button onClick={()=>setFp(null)} className="w-full text-sm bg-stone-100 text-stone-700 rounded-lg py-2 font-medium hover:bg-stone-200">Close</button></>}
-              {fp&&fp.reset&&<><div className="font-semibold text-stone-800">Choose a new password</div><input type="password" value={fpPw} onChange={e=>setFpPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&fpSave()} placeholder="New password (min 6 characters)" autoFocus className="w-full border border-stone-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0086E0]/30"/><button onClick={fpSave} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium hover:bg-[#0072BE]">Save New Password</button></>}
+              {fp&&fp.reset&&<><div className="font-semibold text-stone-800">Choose a new password</div><input type="password" value={fpPw} onChange={e=>setFpPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&fpSave()} placeholder="New password (min 6 characters)" autoFocus className="w-full border border-stone-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0086E0]/30"/><button onClick={fpSave} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium hover:bg-[#006db8]">Save New Password</button></>}
               {fp==="done"&&<><div className="font-semibold text-emerald-700 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>Password updated</div><p className="text-[13px] text-stone-500">Sign in with your new password.</p><button onClick={()=>setFp(null)} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium">Sign In</button></>}
               {fpErr&&<div className="text-xs text-rose-600">{fpErr}</div>}
             </div>
@@ -3149,7 +3149,7 @@ function Domains({settings,setSettings,clients}){
       <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
         <div className="flex-1">
           <div className="text-[11px] text-stone-500 mb-1">Subdomain</div>
-          <div className="flex items-center bg-white border border-stone-200 rounded overflow-hidden focus-within:border-[#0099FF]">
+          <div className="flex items-center bg-white border border-stone-200 rounded overflow-hidden focus-within:border-[#0086E0]">
             <input value={sub} onChange={e=>setSub(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")add();}} placeholder="inxpress" className="flex-1 px-2.5 py-2 text-sm outline-none"/>
             <span className="px-2.5 py-2 text-sm text-stone-400 bg-stone-50 border-l border-stone-200">.{base}</span>
           </div>
@@ -3193,7 +3193,7 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
   const colorRow=(label,k)=>(
     <div className="flex items-center gap-3">
       <input type="color" value={b[k]} onChange={e=>set(k,e.target.value)} className="w-10 h-9 rounded border border-stone-200 bg-white cursor-pointer p-0.5"/>
-      <div className="flex-1"><div className="text-[11px] text-stone-500">{label}</div><input value={b[k]} onChange={e=>set(k,e.target.value)} className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"/></div>
+      <div className="flex-1"><div className="text-[11px] text-stone-500">{label}</div><input value={b[k]} onChange={e=>set(k,e.target.value)} className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"/></div>
     </div>
   );
   return (<div className="max-w-3xl space-y-4">
@@ -3241,7 +3241,7 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
     </Panel>
 
     <div className="flex items-center gap-3">
-      <button onClick={save} className={`text-sm rounded px-4 py-2 font-medium ${saved?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{saved?"✓ Saved — applied app-wide":"Save branding"}</button>
+      <button onClick={save} className={`text-sm rounded-lg px-4 py-2 font-medium ${saved?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{saved?"✓ Saved — applied app-wide":"Save branding"}</button>
       <button onClick={reset} className="text-sm text-stone-500 hover:text-stone-800 underline">Reset to ShippingCloud / Freightwire</button>
     </div>
   </div>);
@@ -3436,7 +3436,7 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection,cli
   return (<div className="space-y-4">
     <div className="flex flex-wrap items-center gap-2">
       <div className="flex bg-stone-100 rounded-lg p-0.5 text-sm">{PERIODS.map(([v,l])=><button key={v} onClick={()=>setPeriod(v)} className={"px-3 py-1.5 rounded-lg "+(period===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500")}>{l}</button>)}</div>
-      <div className="relative"><Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2"/><input value={feedQ} onChange={e=>setFeedQ(e.target.value)} placeholder="Search tracking, customer, service…" className="bg-white border border-stone-200 rounded-lg pl-8 pr-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 w-64"/></div>
+      <div className="relative"><Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2"/><input value={feedQ} onChange={e=>setFeedQ(e.target.value)} placeholder="Search tracking, customer, service…" className="bg-white border border-stone-200 rounded-lg pl-8 pr-2.5 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300 w-64"/></div>
       <span className="flex-1"/>
       <button onClick={()=>openSection("customers")} className="text-[12px] text-[#0086E0] hover:underline">Customers →</button>
     </div>
@@ -3812,7 +3812,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
             <label key={k} className="text-xs text-stone-600 flex items-center gap-1.5">{l}
               <NumBox value={(rules.dimDivisors&&rules.dimDivisors[k])||139} min={50} max={300} fallback={139}
                 onCommit={n=>setRules(r=>({...DEFAULT_RATE_RULES,...r,dimDivisors:{express:139,ground:139,ground_economy:139,...(r.dimDivisors||{}),[k]:n}}))}
-                className="w-20 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"/>
+                className="w-20 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"/>
             </label>))}
           <span className="text-[10px] text-stone-400">Dim weight = L×W×H ÷ divisor; FedEx bills the higher of dim and actual. Saves with the green Save rates button.</span>
         </div>
@@ -3830,7 +3830,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
           <span className="text-sm font-medium text-stone-700 flex-1">Paste rates from another customer</span>
           <button onClick={async()=>{if(!ratePaste.trim())return say("Paste a copied rates code first.");let blob;try{blob=JSON.parse(decodeURIComponent(escape(atob(ratePaste.trim()))));}catch(e){return uiAlert("That doesn't look like a rates code — copy one from another customer's Copy button.");}if(!blob||!blob.services)return uiAlert("That code has no rate data.");if(!await uiConfirm("Apply these rates and discounts to "+c.name+"? Their current per-service rules, accessorial rules, and account markup will be replaced."))return;setMk({markup:blob.markup===undefined?"":blob.markup,markupMin:blob.markupMin===undefined?"":blob.markupMin});upClient({markup:blob.markup===""||blob.markup==null?"":+blob.markup,markupMin:blob.markupMin===""||blob.markupMin==null?"":+blob.markupMin});upProfField(prof.id,{services:JSON.parse(JSON.stringify(blob.services||{})),surcharges:JSON.parse(JSON.stringify(blob.surcharges||{})),listYear:blob.listYear||prof.listYear});setRatePaste("");say("Rates applied to "+c.name+" — press Save rates to make it live.");}} className="text-xs bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-emerald-700 flex items-center gap-1.5"><Check className="w-3.5 h-3.5"/>Apply to {c.name}</button>
         </div>
-        <textarea value={ratePaste} onChange={e=>setRatePaste(e.target.value)} className="w-full h-16 text-[11px] font-mono bg-white border border-stone-200 rounded p-2 outline-none focus:border-[#0099FF]" placeholder="Paste a copied rates code here, then Apply"/>
+        <textarea value={ratePaste} onChange={e=>setRatePaste(e.target.value)} className="w-full h-16 text-[11px] font-mono bg-white border border-stone-200 rounded p-2 outline-none focus:border-[#0086E0]" placeholder="Paste a copied rates code here, then Apply"/>
         <span className="text-[11px] text-stone-400">Everything below prices <b>{c.name}</b> only — edits never touch another customer.</span>
       </div>
       {(()=>{
@@ -3840,7 +3840,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         const hiddenN=full.filter(sv=>svcHiddenMap[sv.k]).length;
         const togHide=(k)=>upRules({svcHidden:{...svcHiddenMap,[k]:!svcHiddenMap[k]}});
         return (<>
-        <div className="flex items-center gap-2"><Search className="w-3.5 h-3.5 text-stone-400"/><input value={svcFilter} onChange={e=>setSvcFilter(e.target.value)} placeholder="Find a service… (e.g. 2day extra large)" className="flex-1 max-w-xs bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>{svcFilter&&<button onClick={()=>setSvcFilter("")} className="text-xs text-stone-400 hover:text-stone-600">clear</button>}{svcFilter&&<span className="text-[11px] text-stone-400">search includes hidden rows — hidden ones show dimmed</span>}</div>
+        <div className="flex items-center gap-2"><Search className="w-3.5 h-3.5 text-stone-400"/><input value={svcFilter} onChange={e=>setSvcFilter(e.target.value)} placeholder="Find a service… (e.g. 2day extra large)" className="flex-1 max-w-xs bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0086E0]"/>{svcFilter&&<button onClick={()=>setSvcFilter("")} className="text-xs text-stone-400 hover:text-stone-600">clear</button>}{svcFilter&&<span className="text-[11px] text-stone-400">search includes hidden rows — hidden ones show dimmed</span>}</div>
         {hiddenN>0&&<div className="flex justify-end"><button onClick={()=>setShowHiddenSvc(v=>!v)} className="text-xs text-stone-500 hover:text-stone-700 flex items-center gap-1">{showHiddenSvc?<EyeOff className="w-3.5 h-3.5"/>:<Eye className="w-3.5 h-3.5"/>}{showHiddenSvc?"Done — collapse hidden rows":hiddenN+" hidden row"+(hiddenN>1?"s":"")+" — show"}</button></div>}
         <div className="border border-stone-200 rounded-lg bg-white overflow-x-auto"><table className="w-full text-sm min-w-[640px]"><tbody>
         {gs.map(g=>{
@@ -4536,7 +4536,7 @@ function RatesAdmin({clients=[],brand}){
               <label key={k} className="text-sm text-stone-700 font-medium">{l}
                 <NumBox value={(rules.dimDivisors&&rules.dimDivisors[k])||139} min={50} max={300} fallback={139}
                   onCommit={n=>setRules(r=>({...DEFAULT_RATE_RULES,...r,dimDivisors:{express:139,ground:139,ground_economy:139,...(r.dimDivisors||{}),[k]:n}}))}
-                  className="mt-1.5 block w-32 bg-white border border-stone-300 rounded-lg px-3 py-2 text-base outline-none focus:border-[#0099FF]"/>
+                  className="mt-1.5 block w-32 bg-white border border-stone-300 rounded-lg px-3 py-2 text-base outline-none focus:border-[#0086E0]"/>
               </label>))}
           </div>
           <p className="text-[11px] text-stone-400">Applies platform-wide the moment you Save. A higher divisor lowers dim weight — 1728 cu in at 139 bills 12.4 lb; at 225 it bills 7.7 lb.</p>
@@ -4607,7 +4607,7 @@ function RatesAdmin({clients=[],brand}){
         {ccImp&&<div className="border border-[#99D6FF] bg-[#F5FAFF] rounded-xl p-4 space-y-2">
           <div className="text-sm font-semibold text-stone-800">Paste the {ccImp.label} rate card</div>
           <div className="text-[11px] text-stone-500">Excel/CSV/TSV — first column weight (lb), one column per zone (headers = zone numbers). Same format as FedEx base-cost imports.</div>
-          <textarea value={ccImp.text} onChange={e=>setCcImp(p=>({...p,text:e.target.value}))} rows={8} spellCheck={false} placeholder={"Weight\t2\t3\t4\t5\t6\t7\t8\n1\t4.10\t4.25\t…"} className="w-full bg-white border border-stone-200 rounded-lg p-2.5 font-mono text-[12px] outline-none focus:border-[#0099FF] resize-y"/>
+          <textarea value={ccImp.text} onChange={e=>setCcImp(p=>({...p,text:e.target.value}))} rows={8} spellCheck={false} placeholder={"Weight\t2\t3\t4\t5\t6\t7\t8\n1\t4.10\t4.25\t…"} className="w-full bg-white border border-stone-200 rounded-lg p-2.5 font-mono text-[12px] outline-none focus:border-[#0086E0] resize-y"/>
           <div className="flex gap-2">
             <button onClick={()=>{const r2=parseRateTable(ccImp.text);if(r2.error)return uiAlert(r2.error);setRules(r=>({...DEFAULT_RATE_RULES,...r,baseCosts:{...(r.baseCosts||{}),["cc:"+ccImp.key]:r2}}));setCcImp(null);setImpMsg({ok:"Rate card staged — press Save rates to make it live."});}} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium">Stage Rate Card</button>
             <button onClick={()=>setCcImp(null)} className="text-sm text-stone-500 px-3 py-2 hover:bg-stone-100 rounded-lg">Cancel</button>
@@ -4693,7 +4693,7 @@ function RatesAdmin({clients=[],brand}){
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5">
         {RATE_SERVICES.fedex.filter(sv=>!sv.or).map(sv=>(<label key={sv.k} className="flex items-center gap-1.5 text-[12px] text-stone-700 cursor-pointer"><input type="checkbox" checked={!!shSvcs[sv.k]} onChange={e=>setShSvcs(m=>({...m,[sv.k]:e.target.checked}))} className="accent-[#0086E0]"/><span className="truncate">{sv.l.replace("FedEx ","")}</span></label>))}
       </div>
-      <button onClick={printSheetsMulti} disabled={!Object.keys(shSvcs).some(k=>shSvcs[k])} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5"><Printer className="w-4 h-4"/>Print rate sheets ({Object.keys(shSvcs).filter(k=>shSvcs[k]).length})</button>
+      <button onClick={printSheetsMulti} disabled={!Object.keys(shSvcs).some(k=>shSvcs[k])} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5"><Printer className="w-4 h-4"/>Print rate sheets ({Object.keys(shSvcs).filter(k=>shSvcs[k]).length})</button>
       <div className="text-[11px] text-stone-400">Services without an imported cost/list table print a note instead of a grid — import tables under Base costs to fill them in. One Rate prices live on the flat rules above.</div>
       <div className="border-t border-stone-100 pt-3 space-y-2">
         <div className="text-sm font-semibold text-stone-800">Accessorials sheet</div>
@@ -4705,7 +4705,7 @@ function RatesAdmin({clients=[],brand}){
         <div className="max-h-[220px] overflow-y-auto border border-stone-100 rounded-lg p-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
           {FEDEX_SURCHARGES.map(su=>(<label key={su.id} className="flex items-center gap-1.5 text-[11px] text-stone-700 cursor-pointer"><input type="checkbox" checked={!!shAccs[su.id]} onChange={e=>setShAccs(m=>({...m,[su.id]:e.target.checked}))} className="accent-[#0086E0]"/><span className="truncate">{su.aka||su.desc}<span className="text-stone-400"> · {su.seg}</span></span></label>))}
         </div>
-        <button onClick={printAccSheet} disabled={!Object.keys(shAccs).some(k=>shAccs[k])} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5"><Printer className="w-4 h-4"/>Print accessorials sheet ({Object.keys(shAccs).filter(k=>shAccs[k]).length})</button>
+        <button onClick={printAccSheet} disabled={!Object.keys(shAccs).some(k=>shAccs[k])} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5"><Printer className="w-4 h-4"/>Print accessorials sheet ({Object.keys(shAccs).filter(k=>shAccs[k]).length})</button>
       </div>
     </div>
     <div className="flex items-center justify-end gap-3 pt-2 border-t border-stone-200">
@@ -5266,7 +5266,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
         </div>}
         <p className="text-[11px] text-stone-400">Levels limit which Admin portal <b>sections</b> this login opens — they still get every regular tab (Ship, Orders, Settings…). Every admin has full data access underneath, so only make admins of people you trust. (All Logins always stays available so no one can lock themselves out.)</p>
       </div>}
-      <button onClick={create} className={`text-sm rounded px-4 py-2 font-medium flex items-center gap-1.5 ${added?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{added?<><Check className="w-4 h-4"/>Created</>:<><Plus className="w-4 h-4"/>Create login</>}</button>
+      <button onClick={create} className={`text-sm rounded-lg px-4 py-2 font-medium flex items-center gap-1.5 ${added?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{added?<><Check className="w-4 h-4"/>Created</>:<><Plus className="w-4 h-4"/>Create login</>}</button>
     </div>
     <div className="border border-stone-200 rounded-lg bg-white overflow-hidden divide-y divide-stone-100">
       <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="flex-1 min-w-0">Login</div><div className="w-20 shrink-0">Role</div><div className="w-36 shrink-0 hidden sm:block">Company</div><div className="w-24 shrink-0 hidden md:block">Last login</div><div className="w-48 shrink-0 text-right">Actions</div></div>
@@ -5758,9 +5758,9 @@ function CloudAuth({onDone,initialMode,intake}){
   return (<div className={"w-full bg-white rounded-xl p-6 space-y-4 shadow-2xl "+(mode==="request"?"max-w-md":"max-w-sm")}>
     {fp&&<div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={()=>setFp(null)}>
       <div onClick={e=>e.stopPropagation()} className="bg-white rounded-2xl p-6 max-w-sm w-full space-y-3 text-left">
-        {fp==="ask"&&<><div className="font-semibold text-stone-800">Reset your password</div><p className="text-[13px] text-stone-500">Enter your login email and we’ll send a one-hour reset link.</p><input value={fpEmail} onChange={e=>setFpEmail(e.target.value)} placeholder="you@company.com" className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><button onClick={fpAsk} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium hover:bg-[#0072BE]">Send Reset Link</button></>}
+        {fp==="ask"&&<><div className="font-semibold text-stone-800">Reset your password</div><p className="text-[13px] text-stone-500">Enter your login email and we’ll send a one-hour reset link.</p><input value={fpEmail} onChange={e=>setFpEmail(e.target.value)} placeholder="you@company.com" className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0086E0]"/><button onClick={fpAsk} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium hover:bg-[#006db8]">Send Reset Link</button></>}
         {fp==="sent"&&<><div className="font-semibold text-stone-800">Check your email</div><p className="text-[13px] text-stone-500">If that address has an account, a reset link is on its way. It works for one hour.</p><button onClick={()=>setFp(null)} className="w-full text-sm bg-stone-100 border border-stone-200 rounded-lg py-2 font-medium">Back To Sign In</button></>}
-        {fp&&fp.reset&&<><div className="font-semibold text-stone-800">Choose a new password</div><div className="relative"><input type={showFpPw?"text":"password"} value={fpPw} onChange={e=>setFpPw(e.target.value)} placeholder="New password (6+ characters)" className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 pr-9 text-sm outline-none focus:border-[#0099FF]"/><button type="button" onClick={()=>setShowFpPw(v=>!v)} tabIndex={-1} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">{showFpPw?<EyeOff className="w-4 h-4"/>:<Eye className="w-4 h-4"/>}</button></div><button onClick={fpSave} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium hover:bg-[#0072BE]">Save New Password</button></>}
+        {fp&&fp.reset&&<><div className="font-semibold text-stone-800">Choose a new password</div><div className="relative"><input type={showFpPw?"text":"password"} value={fpPw} onChange={e=>setFpPw(e.target.value)} placeholder="New password (6+ characters)" className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 pr-9 text-sm outline-none focus:border-[#0086E0]"/><button type="button" onClick={()=>setShowFpPw(v=>!v)} tabIndex={-1} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">{showFpPw?<EyeOff className="w-4 h-4"/>:<Eye className="w-4 h-4"/>}</button></div><button onClick={fpSave} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium hover:bg-[#006db8]">Save New Password</button></>}
         {fp==="done"&&<><div className="font-semibold text-emerald-700 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>Password updated</div><p className="text-[13px] text-stone-500">Sign in with your new password.</p><button onClick={()=>setFp(null)} className="w-full text-sm bg-[#0086E0] text-white rounded-lg py-2 font-medium">Sign In</button></>}
         {fpErr&&<div className="text-xs text-rose-600">{fpErr}</div>}
       </div>
@@ -5909,7 +5909,7 @@ function Landing({onAuth}){
         <NavTab label="Contact" onClick={()=>setPage("contact")}/>
         {PHONE_REAL&&<a href={"tel:"+CONTACT_PHONE_TEL} className="hidden md:flex items-center gap-2 text-sm text-stone-600 hover:text-stone-900 px-2.5 py-2"><Phone className="w-4 h-4 text-[#0086E0]"/>{CONTACT_PHONE}</a>}
         <button onClick={()=>onAuth("signin")} className="text-sm text-stone-600 hover:text-stone-900 px-2.5 py-2">Sign In</button>
-        <button onClick={()=>onAuth("request")} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white font-medium rounded-lg px-4 py-2">Create Account</button>
+        <button onClick={()=>onAuth("request")} className="text-sm bg-[#0086E0] hover:bg-[#006db8] text-white font-medium rounded-lg px-4 py-2">Create Account</button>
       </div>
     </div>
     {page==="home"&&<>
@@ -5918,7 +5918,7 @@ function Landing({onAuth}){
       <h1 style={{fontFamily:"'Space Grotesk',Inter,sans-serif",letterSpacing:"-0.03em"}} className="text-5xl sm:text-[68px] font-bold text-stone-900 leading-[1.02]">Your shipping platform.<br/><span className="text-[#0086E0]">Your shipping partner.</span></h1>
       <p className="mt-6 text-xl text-stone-500 leading-relaxed max-w-2xl mx-auto">The enterprise carrier rates big shippers get, a platform that actually fits how you work, and real people who answer the phone.</p>
       <div className="mt-9 flex flex-wrap gap-3 justify-center">
-        <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0072BE] text-white font-semibold rounded-xl px-8 py-4 text-[15px] shadow-lg shadow-[#0086E0]/20 transition-colors">Create Your Account</button>
+        <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#006db8] text-white font-semibold rounded-xl px-8 py-4 text-[15px] shadow-lg shadow-[#0086E0]/20 transition-colors">Create Your Account</button>
         <button onClick={()=>onAuth("fedex")} className="border border-stone-300 bg-white hover:border-[#0086E0]/50 hover:text-[#0086E0] text-stone-700 font-semibold rounded-xl px-8 py-4 text-[15px] flex items-center gap-2 transition-colors"><Truck className="w-4 h-4"/>Get your own FedEx account</button>
       </div>
     </div>
@@ -6001,7 +6001,7 @@ function Landing({onAuth}){
       <p className="mt-4 text-stone-500 leading-relaxed text-lg">When a customer says “I wish it did this,” our answer is usually “give us a week.”</p>
       <p className="mt-4 text-stone-500 leading-relaxed text-lg">We’re not trying to be the biggest shipping platform. We’re trying to be <span className="text-stone-900 font-medium">your</span> shipping platform — the last one you’ll need to switch to.</p>
       <div className="mt-8 flex flex-wrap gap-3">
-        <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0072BE] text-white font-semibold rounded-lg px-6 py-3">Create {BRAND.product} account</button>
+        <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#006db8] text-white font-semibold rounded-lg px-6 py-3">Create {BRAND.product} account</button>
         <button onClick={()=>setPage("contact")} className="border border-stone-300 hover:bg-stone-100 text-stone-700 font-medium rounded-lg px-6 py-3">Talk To Us</button>
       </div>
     </div>}
@@ -6023,7 +6023,7 @@ function Landing({onAuth}){
         </a>
       </div>
       <p className="mt-6 text-[13px] text-stone-500">Already a customer? Sign in and your account context comes with you — the person you reach will know your shipping.</p>
-      <div className="mt-6"><button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#0072BE] text-white font-semibold rounded-lg px-6 py-3">Create {BRAND.product} account</button></div>
+      <div className="mt-6"><button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#006db8] text-white font-semibold rounded-lg px-6 py-3">Create {BRAND.product} account</button></div>
     </div>}
     {/* footer */}
     <div className="max-w-6xl mx-auto px-5 py-10 text-center">
@@ -6081,7 +6081,7 @@ function FirstRunFedEx({user,onClose}){
       <p className="text-[11px] text-stone-500 -mt-1">Attach one and we’ll send back a line-by-line rate comparison — same day. (Download a recent PDF or CSV invoice from your carrier’s billing site.)</p>
       {err&&<div className="text-xs text-red-600">{err}</div>}
       <div className="flex items-center gap-2">
-        <button onClick={go} disabled={state==="busy"} className="flex-1 bg-[#0086E0] text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-[#0072BE] disabled:opacity-50">{state==="busy"?"Sending…":"Get my FedEx account"}</button>
+        <button onClick={go} disabled={state==="busy"} className="flex-1 bg-[#0086E0] text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-[#006db8] disabled:opacity-50">{state==="busy"?"Sending…":"Get my FedEx account"}</button>
         <button onClick={onClose} className="text-sm text-stone-500 px-3 py-2">Maybe Later</button>
       </div>
       </>)}
@@ -6157,7 +6157,7 @@ function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,set
         <Field label="Email"><Input value={f.email} onChange={e=>setF({...f,email:e.target.value})}/></Field>
         <Field label="Temp password"><Input value={f.password} onChange={e=>setF({...f,password:e.target.value})}/></Field>
       </div>
-      <button onClick={create} disabled={busy||!f.name||!f.email||!f.password} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<Plus className="w-4 h-4"/>}Create login</button>
+      <button onClick={create} disabled={busy||!f.name||!f.email||!f.password} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<Plus className="w-4 h-4"/>}Create login</button>
     </Panel>
     <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
       <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500">{users.length} login{users.length===1?"":"s"} in your company</div>
@@ -6224,7 +6224,7 @@ function CompanyAddressDeploy({companyUsers,companyFlags,setCompanyFlags,adminSe
     </div>
     {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
     <div className="flex flex-wrap items-center gap-2">
-      <button onClick={()=>deploy(false)} disabled={busy||!book.length} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<BookUser className="w-4 h-4"/>}Share to {mode==="all"?"everyone":`${targets.length} selected`}</button>
+      <button onClick={()=>deploy(false)} disabled={busy||!book.length} className="text-sm bg-[#0086E0] hover:bg-[#006db8] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<BookUser className="w-4 h-4"/>}Share to {mode==="all"?"everyone":`${targets.length} selected`}</button>
       <button onClick={()=>deploy(true)} disabled={busy} className="text-sm border border-stone-300 text-stone-600 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-50 disabled:opacity-40">Remove Shared Book</button>
     </div>
   </div>);
@@ -6233,8 +6233,9 @@ function CompanyAddressDeploy({companyUsers,companyFlags,setCompanyFlags,adminSe
 /* ════════ ASSISTANT CHAT ════════ */
 function AssistantChat({who,getContext,onAction}){
   const [open,setOpen]=useState(false);
-  /* the little X on the fab hides the assistant for THIS session only (sessionStorage, not a setting) */
-  const [gone,setGone]=useState(()=>{try{return sessionStorage.getItem("scAiGone")==="1";}catch(e){return false;}});
+  /* the little X on the fab MINIMIZES the assistant to a small edge tab for THIS session
+     (sessionStorage) — it never fully disappears; click the tab to bring it back. */
+  const [mini,setMini]=useState(()=>{try{return sessionStorage.getItem("scAiMini")==="1";}catch(e){return false;}});
   const [msgs,setMsgs]=useState([{role:"assistant",content:who==="demo"?`Hi, I’m ${AI_NAME}! Ask me anything about ${BRAND.product} — how a tab works, what Autopilot does, shipping advice, whatever. Everything in this demo is sample data, so click around freely.`:`Hi, I’m ${AI_NAME}! Ask me anything about ${BRAND.product} — how features work, or general shipping advice.`}]);
   const [input,setInput]=useState("");
   const [busy,setBusy]=useState(false);
@@ -6269,7 +6270,8 @@ function AssistantChat({who,getContext,onAction}){
     :ctxTab==="orders"?["Batch all open orders as cheapest ground","Which orders are getting stale?","Batch the Shopify orders","Make a rule: orders over $500 ship Priority Overnight"]
     :ctxTab==="addresses"?["Save this address: ","Ship 3 lb to ","How do I import my address book?","Take me to the Ship tab"]
     :["Batch all Shopify orders under 5 lb as cheapest ground","Make a rule: orders over $500 ship Priority Overnight","Run my Autopilot rules",who==="admin"?"Which orders are getting stale?":"How does the Batch tab work?"];
-  if(gone)return null;   // X'd away for this session — all hooks above ran, so this is safe
+  // minimized → a slim edge tab (below); all hooks above still run, so this branch is safe
+  if(mini&&!open)return (<button onClick={()=>{setMini(false);try{sessionStorage.removeItem("scAiMini");}catch(e){}setOpen(true);}} title={"Open "+AI_NAME} className="fixed bottom-5 right-0 z-40 w-6 h-11 rounded-l-lg bg-[#0086E0]/90 hover:bg-[#0086E0] hover:w-7 transition-all text-white shadow-lg flex items-center justify-center"><Sparkles className="w-3.5 h-3.5"/></button>);
   return (<>
     {open&&<div className="fixed bottom-20 right-4 sm:right-5 w-[min(92vw,370px)] h-[480px] max-h-[70vh] bg-white border border-stone-200 rounded-2xl shadow-2xl z-40 flex flex-col overflow-hidden">
       <div className="px-4 py-3 border-b border-stone-200 bg-stone-50 flex items-center gap-2">
@@ -6288,22 +6290,17 @@ function AssistantChat({who,getContext,onAction}){
         <div ref={endRef}/>
       </div>
       <div className="border-t border-stone-200 p-2 flex items-end gap-2">
-        <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}} rows={1} placeholder="Ask About the Platform…" className="flex-1 resize-none text-sm border border-stone-300 rounded-lg px-3 py-2 focus:outline-none focus:border-[#0099FF] max-h-24"/>
-        <button onClick={()=>send()} disabled={busy||!input.trim()} className="bg-[#0086E0] hover:bg-[#0072BE] disabled:opacity-40 text-white rounded-lg p-2.5"><Send className="w-4 h-4"/></button>
+        <textarea value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}} rows={1} placeholder="Ask About the Platform…" className="flex-1 resize-none text-sm border border-stone-300 rounded-lg px-3 py-2 focus:outline-none focus:border-[#0086E0] max-h-24"/>
+        <button onClick={()=>send()} disabled={busy||!input.trim()} className="bg-[#0086E0] hover:bg-[#006db8] disabled:opacity-40 text-white rounded-lg p-2.5"><Send className="w-4 h-4"/></button>
       </div>
       <div className="text-center text-[10px] text-stone-500 pb-1.5 -mt-0.5">Powered by {AI_NAME}</div>
     </div>}
     <div className="fixed bottom-4 right-4 sm:bottom-5 sm:right-5 z-40 w-14 h-14">
-      <button onClick={()=>setOpen(v=>!v)} title={"Ask "+AI_NAME+" about "+BRAND.product} className="relative w-14 h-14 rounded-full bg-[#0086E0] hover:bg-[#0072BE] text-white shadow-lg flex items-center justify-center">
+      <button onClick={()=>setOpen(v=>!v)} title={"Ask "+AI_NAME+" about "+BRAND.product} className="relative w-14 h-14 rounded-full bg-[#0086E0] hover:bg-[#006db8] text-white shadow-lg flex items-center justify-center">
         <span>{open?<X className="w-5 h-5"/>:<Sparkles className="w-5 h-5"/>}</span>
-        {/* the assistant's name wrapped around the top of the circle */}
-        {!open&&<svg viewBox="0 0 56 56" className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true">
-          <defs><path id="sc-ai-arc" d="M 8 30 A 20 20 0 0 1 48 30" fill="none"/></defs>
-          <text fill="#ffffff" style={{fontSize:"6px",fontWeight:700,letterSpacing:"0.3px"}}><textPath href="#sc-ai-arc" startOffset="50%" textAnchor="middle">{AI_NAME.toUpperCase()}</textPath></text>
-        </svg>}
       </button>
-      {/* dismiss for this session — e.g. when the button covers something you need to see */}
-      {!open&&<button onClick={()=>{setGone(true);try{sessionStorage.setItem("scAiGone","1");}catch(e){}}} title="Hide until your next sign-in / reload" className="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full bg-white border border-stone-300 text-stone-500 hover:text-rose-600 hover:border-rose-300 shadow flex items-center justify-center"><X className="w-3 h-3"/></button>}
+      {/* the X minimizes it to a slim edge tab for this session — it never fully disappears */}
+      {!open&&<button onClick={()=>{setMini(true);try{sessionStorage.setItem("scAiMini","1");}catch(e){}}} title="Minimize — tucks it to a tab on the edge; click that to bring it back" className="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full bg-white border border-stone-300 text-stone-500 hover:text-stone-700 shadow flex items-center justify-center"><X className="w-3 h-3"/></button>}
     </div>
   </>);
 }
@@ -6384,10 +6381,10 @@ function DialogHost(){
     <div className="w-full max-w-sm bg-white rounded-xl shadow-2xl p-5 space-y-4" onMouseDown={e=>e.stopPropagation()}>
       {d.title&&<div className="text-base font-semibold text-stone-800">{d.title}</div>}
       <div className="text-sm text-stone-600 whitespace-pre-line leading-relaxed">{d.message}</div>
-      {d.kind==="prompt"&&<input ref={inRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter")ok(); }} className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF] focus:ring-2 focus:ring-[#0086E0]/20"/>}
+      {d.kind==="prompt"&&<input ref={inRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter")ok(); }} className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0086E0] focus:ring-2 focus:ring-[#0086E0]/20"/>}
       <div className="flex items-center justify-end gap-2 pt-1">
         {d.kind!=="alert"&&<button onClick={cancel} className="text-sm text-stone-500 hover:text-stone-700 rounded-lg px-3 py-2">Cancel</button>}
-        <button onClick={ok} autoFocus={d.kind!=="prompt"} className={"text-sm font-semibold rounded-lg px-4 py-2 text-white "+(d.danger?"bg-rose-600 hover:bg-rose-700":"bg-[#0086E0] hover:bg-[#0072BE]")}>{okLabel}</button>
+        <button onClick={ok} autoFocus={d.kind!=="prompt"} className={"text-sm font-semibold rounded-lg px-4 py-2 text-white "+(d.danger?"bg-rose-600 hover:bg-rose-700":"bg-[#0086E0] hover:bg-[#006db8]")}>{okLabel}</button>
       </div>
     </div>
   </div>);
@@ -6446,7 +6443,7 @@ export default function App(){
     </div>
     <style dangerouslySetInnerHTML={{__html:"@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}"}}/>
   </div>);
-  if(phase==="netfail") return (<div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-[#f2f8fd] via-white to-[#e6f4ff]"><div className="text-center space-y-3 max-w-sm bg-white/70 backdrop-blur rounded-2xl border border-[#cbd5e1] shadow-sm p-8"><WifiOff className="w-8 h-8 text-[#0086E0]/50 mx-auto"/><div className="text-stone-800 font-semibold">Can’t reach the server</div><p className="text-stone-500 text-sm">Your connection or the server hiccuped — nothing is wrong with your login. Give it a second and try again.</p><button onClick={()=>{setPhase("boot");start();}} className="text-sm bg-[#0086E0] text-white rounded-lg px-5 py-2 font-medium hover:bg-[#006db8]">Retry</button></div></div>);
+  if(phase==="netfail") return (<div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-[#f2f8fd] via-white to-[#e6f4ff]"><div className="text-center space-y-3 max-w-sm bg-white/70 backdrop-blur rounded-2xl border border-stone-200 shadow-sm p-8"><WifiOff className="w-8 h-8 text-[#0086E0]/50 mx-auto"/><div className="text-stone-800 font-semibold">Can’t reach the server</div><p className="text-stone-500 text-sm">Your connection or the server hiccuped — nothing is wrong with your login. Give it a second and try again.</p><button onClick={()=>{setPhase("boot");start();}} className="text-sm bg-[#0086E0] text-white rounded-lg px-5 py-2 font-medium hover:bg-[#006db8]">Retry</button></div></div>);
   if(phase==="login") return <LandingGate onDone={async()=>{ setPhase("loading"); const r=await cloudLoadAll(); setPhase("ready"); if(!r.ok)setBootMsg("Signed in — first sync will complete in the background."); }}/>;
   return (<>
     {bootMsg&&<div className="bg-amber-50 border-b border-amber-200 text-amber-800 text-xs px-4 py-2 text-center">{bootMsg}</div>}
@@ -6997,7 +6994,7 @@ function AppInner(){
       </div>}
       <ConfettiHost mode={custom.confetti||"page"}/>
       <SaveToast/>
-      <header className={"border-b border-[#cbd5e1] sticky z-30 backdrop-blur bg-white/90 "+((adminReturn||isDemo)?"top-9":"top-0")}>
+      <header className={"border-b border-stone-200 sticky z-30 backdrop-blur bg-white/90 "+((adminReturn||isDemo)?"top-9":"top-0")}>
         <div className="px-3 sm:px-4 h-14 flex items-center gap-2 sm:gap-3 relative">
           <button onClick={()=>setNavOpen(true)} className="md:hidden p-2 -ml-1 rounded-lg hover:bg-stone-100 text-stone-600" aria-label="Menu"><Layers className="w-5 h-5"/></button>
 
@@ -7040,7 +7037,7 @@ function AppInner(){
       <div className="flex flex-1">
         {/* nav blends into the Ice background instead of sitting as a bright white slab (Spencer:
             "the banner on the left pops too much") — active item keeps its highlight */}
-        <aside className="hidden md:block w-48 shrink-0 border-r border-[#cbd5e1] bg-white min-h-screen">
+        <aside className="hidden md:block w-48 shrink-0 border-r border-stone-200 bg-white min-h-screen">
           {/* pt nudges the first tab down so "Ship" sits level with the Sender/ORDERS line in the content */}
           <nav className="px-2 pb-2 pt-[30px] space-y-0.5 sticky top-14">
             {TABS.map(([id,l,Icon])=>(
@@ -7061,7 +7058,7 @@ function AppInner(){
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
           {tab==="orders"&&<Orders showMoney={showMoney} orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} setSettings={setSettings} onShipped={onShipped} openOrderId={pendingOpenOrderId} onOpenedOrder={()=>setPendingOpenOrderId(null)}/>}
           {tab==="batch"&&<Batch showMoney={showMoney} orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} setSettings={setSettings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
-          {tab==="shipments"&&<Shipments showMoney={showMoney} openShipTracking={pendingOpenShipTracking} onOpenedShip={()=>setPendingOpenShipTracking(null)} isAdmin={isAdmin} labels={labelStore} shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels} settings={settings}/>}
+          {tab==="shipments"&&<Shipments showMoney={showMoney} openShipTracking={pendingOpenShipTracking} onOpenedShip={()=>setPendingOpenShipTracking(null)} isAdmin={isAdmin} labels={labelStore} shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels} settings={settings} client={client}/>}
           {hkHelp&&<div onClick={()=>setHkHelp(false)} className="fixed bottom-4 right-4 z-50 bg-stone-900 text-white rounded-xl shadow-lg p-4 text-xs space-y-1.5 cursor-pointer">
             <div className="font-semibold text-sm mb-1">Keyboard shortcuts</div>
             <div><span className=" bg-stone-700 rounded px-1">g</span> then <span className=" bg-stone-700 rounded px-1">s</span> Ship · <span className=" bg-stone-700 rounded px-1">o</span> Orders · <span className=" bg-stone-700 rounded px-1">h</span> Shipments</div>
@@ -7821,14 +7818,14 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         </div>
         {/* six matching boxes, two per row, everything centered (Spencer-approved layout) */}
         <div className="grid grid-cols-2 gap-1.5">
-          <input value={orderQ} onChange={e=>setOrderQ(e.target.value)} placeholder="Search Orders" className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF] placeholder-stone-600"/>
-          <div className="relative min-w-0"><select value={storeFilter} onChange={e=>setStoreFilter(e.target.value)} style={{textAlignLast:"center"}} className="appearance-none h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-6 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF]"><option value="all">All Stores</option>{storesPresent.map(s=><option key={s} value={s}>{s}</option>)}</select><ChevronDown className="w-3.5 h-3.5 absolute right-1.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"/></div>
-          <div className="relative min-w-0"><select value={orderSort} onChange={e=>setOrderSort(e.target.value)} style={{textAlignLast:"center"}} className="appearance-none h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-6 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="oldest">Oldest</option><option value="total">Order Value</option><option value="customer">Customer A–Z</option></select><ChevronDown className="w-3.5 h-3.5 absolute right-1.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"/></div>
+          <input value={orderQ} onChange={e=>setOrderQ(e.target.value)} placeholder="Search Orders" className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0086E0] placeholder-stone-600"/>
+          <div className="relative min-w-0"><select value={storeFilter} onChange={e=>setStoreFilter(e.target.value)} style={{textAlignLast:"center"}} className="appearance-none h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-6 text-[12px] text-stone-600 text-center outline-none focus:border-[#0086E0]"><option value="all">All Stores</option>{storesPresent.map(s=><option key={s} value={s}>{s}</option>)}</select><ChevronDown className="w-3.5 h-3.5 absolute right-1.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"/></div>
+          <div className="relative min-w-0"><select value={orderSort} onChange={e=>setOrderSort(e.target.value)} style={{textAlignLast:"center"}} className="appearance-none h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-6 text-[12px] text-stone-600 text-center outline-none focus:border-[#0086E0]"><option value="date">Newest</option><option value="oldest">Oldest</option><option value="total">Order Value</option><option value="customer">Customer A–Z</option></select><ChevronDown className="w-3.5 h-3.5 absolute right-1.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"/></div>
           <button onClick={()=>{const t=new Date().toISOString().slice(0,10);if(dateFrom===t&&dateTo===t){setDateFrom("");setDateTo("");}else{setDateFrom(t);setDateTo(t);}}} className={`h-7 w-full rounded-lg px-2 text-[12px] border ${(()=>{const t=new Date().toISOString().slice(0,10);return dateFrom===t&&dateTo===t;})()?"bg-[#0099FF] text-white border-[#0099FF]":"bg-white text-stone-600 border-stone-200 hover:bg-stone-50"}`}>Today</button>
           <div className="relative col-span-2 grid grid-cols-2 gap-1.5">
-            <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF]"/>
+            <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0086E0]"/>
             <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[9px] text-stone-400 pointer-events-none">–</span>
-            <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0099FF]"/>
+            <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} className="h-7 min-w-0 w-full bg-white border border-stone-200 rounded-lg px-2 text-[12px] text-stone-600 text-center outline-none focus:border-[#0086E0]"/>
           </div>
         </div>
         {(dateFrom||dateTo||storeFilter!=="all")&&<button onClick={()=>{setDateFrom("");setDateTo("");setStoreFilter("all");}} className="text-[11px] text-stone-400 hover:text-stone-700 flex items-center gap-1"><X className="w-3 h-3"/>Clear Filters</button>}
@@ -7846,7 +7843,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         </div>
         {/* the rail's own panel: Barely-Ice fill running header-to-bottom between the nav line and
             its right border — the orders are a true box now, not cards floating on the page */}
-        <span aria-hidden="true" className="absolute right-0 -left-3 sm:-left-4 -top-[26px] sm:-top-[34px] -bottom-4 sm:-bottom-6 border-r border-[#cbd5e1] -z-10 !mt-0"/>
+        <span aria-hidden="true" className="absolute right-0 -left-3 sm:-left-4 -top-[26px] sm:-top-[34px] -bottom-4 sm:-bottom-6 border-r border-stone-200 -z-10 !mt-0"/>
       </aside>
       ):(
         <button onClick={()=>setOrdersOpen(true)} title="Show orders" className="shrink-0 self-start flex flex-col items-center gap-1 text-stone-500 hover:text-stone-700 hover:border-stone-300 border border-stone-200 bg-white rounded-lg px-1.5 py-2 w-9"><ChevronRight className="w-4 h-4"/><ShoppingBag className="w-4 h-4"/>{ordersToShow.length?<span className="text-[10px] font-bold text-[#0086E0] leading-none">{ordersToShow.length}</span>:null}</button>
@@ -7879,7 +7876,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <button onClick={swap} title="Swap sender & receiver" className="hidden lg:flex absolute left-[calc(33.333%-3px)] top-8 -translate-x-1/2 z-10 items-center justify-center p-1 text-stone-400 hover:text-[#0086E0]"><ArrowLeftRight className="w-3.5 h-3.5"/></button>
           <div className="min-w-0 lg:col-span-2"><AddressCard title="Receiver" data={receiver} set={setReceiver} required errorFields={recErrors} scanSlot={<><div className="relative">
             <ScanLine className="w-4 h-4 text-[#0086E0] absolute left-2.5 top-2.5 pointer-events-none"/>
-            <input ref={scanRef} value={scanVal} onChange={e=>setScanVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();scanApply(scanVal);}}} placeholder="Scan Order # / SKU" title={scanMsg&&!scanMsg.ok?scanMsg.t:undefined} className={`w-full border border-dashed rounded-lg pl-8 pr-7 py-1.5 text-sm outline-none placeholder:text-stone-400 ${scanMsg?(scanMsg.ok?"border-emerald-300 bg-emerald-50":"border-rose-300 bg-rose-50"):"border-[#66C2FF] bg-[#E6F4FF]/50 focus:border-[#0099FF] focus:bg-white"}`}/>
+            <input ref={scanRef} value={scanVal} onChange={e=>setScanVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();scanApply(scanVal);}}} placeholder="Scan Order # / SKU" title={scanMsg&&!scanMsg.ok?scanMsg.t:undefined} className={`w-full border border-dashed rounded-lg pl-8 pr-7 py-1.5 text-sm outline-none placeholder:text-stone-400 ${scanMsg?(scanMsg.ok?"border-emerald-300 bg-emerald-50":"border-rose-300 bg-rose-50"):"border-[#66C2FF] bg-[#E6F4FF]/50 focus:border-[#0086E0] focus:bg-white"}`}/>
             {scanMsg&&<span className="absolute right-2 top-2">{scanMsg.ok?<CheckCircle2 className="w-4 h-4 text-emerald-500"/>:<AlertTriangle className="w-4 h-4 text-rose-400"/>}</span>}
           </div></>} contactFallback={{phone:sender.phone,email:sender.email}} addresses={settings.addresses} onSave={(d)=>{ if(!d.name&&!d.company)return; const entry={id:"ab"+Date.now(),name:d.name||"",company:d.company||"",address1:d.address1||"",address2:d.address2||"",city:d.city||"",state:d.state||"",zip:d.zip||"",country:d.country||"United States",phone:d.phone||"",email:d.email||"",acctCarrier:(billTo==="third"&&thirdAcct)?"FedEx":"",acctNum:(billTo==="third"&&thirdAcct)?thirdAcct:""}; setSettings(p=>{ const ex=(p.addresses||[]).filter(a=>!(a.address1===entry.address1&&a.zip===entry.zip)); return {...p,addresses:[entry,...ex]}; }); }} onPick={(a)=>{ if(a&&a.acctNum){setBillTo("third");setThirdAcct(a.acctNum);} else {setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");} }} hideAddr23={custom.hideAddr23} reqOverrides={{phone:custom.phoneRequired!==false,email:custom.emailRequired!==false,company:addrClassified&&!residential&&!String(receiver.company||"").trim()?true:false}} side={addressCheck}/></div>
         </div>
@@ -7889,7 +7886,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {intl&&<div className="flex items-center gap-2 text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2"><MapPin className="w-4 h-4"/>International shipment to <b>{receiver.country}</b> — FedEx &amp; DHL rates shown, customs info required below.</div>}
 
         {!custom.hideShipSteps&&<StepHead n="2" label="Package details"/>}
-        <div className="bg-white border border-[#b9c6d5] shadow-sm rounded-lg p-3 space-y-2">
+        <div className="bg-white border border-stone-200 shadow-sm rounded-lg p-3 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <datalist id="sc-ref-list">{[...((settings.fieldLists||{}).department||[]),...((settings.fieldLists||{}).reference||[])].map(v=><option key={v} value={v}/>)}</datalist>
             <datalist id="sc-inv-list">{(((settings.fieldLists||{}).invoice)||[]).map(v=><option key={v} value={v}/>)}</datalist>
@@ -7897,24 +7894,24 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             <datalist id="sc-dept-list">{(((settings.fieldLists||{}).department)||[]).map(v=><option key={v} value={v}/>)}</datalist>
             <div className="flex flex-wrap items-center gap-3">
               <div className="w-24 shrink-0 text-[10px] uppercase tracking-widest text-stone-600 font-semibold">Packages · {pieces.length}</div>
-              <div className="flex items-center gap-1"><span className="w-[72px] shrink-0 text-[10px] uppercase tracking-widest text-stone-500">Ship Date</span><input type="date" value={shipDate} onChange={e=>setShipDate(e.target.value)} className="w-36 text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded-lg px-2 outline-none focus:border-[#0099FF]" style={{fontFamily:"inherit"}}/></div>
+              <div className="flex items-center gap-1"><span className="w-[72px] shrink-0 text-[10px] uppercase tracking-widest text-stone-500">Ship Date</span><input type="date" value={shipDate} onChange={e=>setShipDate(e.target.value)} className="w-36 text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded-lg px-2 outline-none focus:border-[#0086E0]" style={{fontFamily:"inherit"}}/></div>
               <div className="flex items-center gap-1"><span className="w-12 shrink-0 text-[10px] uppercase tracking-widest text-stone-500">Ref #</span>{(custom.refLocked&&(((settings.fieldLists||{}).department||[]).length+(((settings.fieldLists||{}).reference)||[]).length)>0)
-                ?<select value={reference} onChange={e=>setReference(e.target.value)} className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] ${custom.refRequired&&!reference?"bg-white border-[#42a7ef]":"bg-white border-stone-300"}`}><option value="">— select —</option>{[...((settings.fieldLists||{}).department||[]),...(((settings.fieldLists||{}).reference)||[])].map(v=><option key={v} value={v}>{v}</option>)}</select>
-                :<input value={reference} onChange={e=>setReference(e.target.value)} list="sc-ref-list" placeholder="Order / Ref" className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 ${custom.refRequired&&!reference?"bg-white border-[#42a7ef]":"bg-white border-stone-300"}`}/>}</div>
+                ?<select value={reference} onChange={e=>setReference(e.target.value)} className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] ${custom.refRequired&&!reference?"bg-white border-[#42a7ef]":"bg-white border-stone-300"}`}><option value="">— select —</option>{[...((settings.fieldLists||{}).department||[]),...(((settings.fieldLists||{}).reference)||[])].map(v=><option key={v} value={v}>{v}</option>)}</select>
+                :<input value={reference} onChange={e=>setReference(e.target.value)} list="sc-ref-list" placeholder="Order / Ref" className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300 ${custom.refRequired&&!reference?"bg-white border-[#42a7ef]":"bg-white border-stone-300"}`}/>}</div>
               {!custom.hideInvoice&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Invoice #</span>{(custom.invLocked&&(((settings.fieldLists||{}).invoice)||[]).length>0)
-                ?<select value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] ${custom.invRequired&&!invoiceNo?"bg-white border-[#42a7ef]":"bg-white border-stone-300"}`}><option value="">— select —</option>{(((settings.fieldLists||{}).invoice)||[]).map(v=><option key={v} value={v}>{v}</option>)}</select>
-                :<input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} list="sc-inv-list" placeholder="INV-…" className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 ${custom.invRequired&&!invoiceNo?"bg-white border-[#42a7ef]":"bg-white border-stone-300"}`}/>}</div>}
+                ?<select value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] ${custom.invRequired&&!invoiceNo?"bg-white border-[#42a7ef]":"bg-white border-stone-300"}`}><option value="">— select —</option>{(((settings.fieldLists||{}).invoice)||[]).map(v=><option key={v} value={v}>{v}</option>)}</select>
+                :<input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)} list="sc-inv-list" placeholder="INV-…" className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300 ${custom.invRequired&&!invoiceNo?"bg-white border-[#42a7ef]":"bg-white border-stone-300"}`}/>}</div>}
               {!custom.hidePO&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">PO #</span>{(custom.poLocked&&(((settings.fieldLists||{}).po)||[]).length>0)
-                ?<select value={poNo} onChange={e=>setPoNo(e.target.value)} className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] ${custom.poRequired&&!poNo?"bg-white border-[#42a7ef]":"bg-white border-stone-300"}`}><option value="">— select —</option>{(((settings.fieldLists||{}).po)||[]).map(v=><option key={v} value={v}>{v}</option>)}</select>
-                :<input value={poNo} onChange={e=>setPoNo(e.target.value)} list="sc-po-list" placeholder="PO-…" className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 ${custom.poRequired&&!poNo?"bg-white border-[#42a7ef]":"bg-white border-stone-300"}`}/>}</div>}
+                ?<select value={poNo} onChange={e=>setPoNo(e.target.value)} className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] ${custom.poRequired&&!poNo?"bg-white border-[#42a7ef]":"bg-white border-stone-300"}`}><option value="">— select —</option>{(((settings.fieldLists||{}).po)||[]).map(v=><option key={v} value={v}>{v}</option>)}</select>
+                :<input value={poNo} onChange={e=>setPoNo(e.target.value)} list="sc-po-list" placeholder="PO-…" className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300 ${custom.poRequired&&!poNo?"bg-white border-[#42a7ef]":"bg-white border-stone-300"}`}/>}</div>}
               {!custom.hideDept&&<div className="flex items-center gap-1"><span className="text-[10px] uppercase tracking-widest text-stone-500">Dept</span>{(custom.deptLocked&&(((settings.fieldLists||{}).department)||[]).length>0)
-                ?<select value={department} onChange={e=>setDepartment(e.target.value)} className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] ${custom.deptRequired&&!department?"bg-white border-[#42a7ef]":"bg-white border-stone-300"}`}><option value="">— select —</option>{(((settings.fieldLists||{}).department)||[]).map(v=><option key={v} value={v}>{v}</option>)}</select>
-                :<input value={department} onChange={e=>setDepartment(e.target.value)} list="sc-dept-list" placeholder="Dept…" className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 ${custom.deptRequired&&!department?"bg-white border-[#42a7ef]":"bg-white border-stone-300"}`}/>}</div>}
+                ?<select value={department} onChange={e=>setDepartment(e.target.value)} className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] ${custom.deptRequired&&!department?"bg-white border-[#42a7ef]":"bg-white border-stone-300"}`}><option value="">— select —</option>{(((settings.fieldLists||{}).department)||[]).map(v=><option key={v} value={v}>{v}</option>)}</select>
+                :<input value={department} onChange={e=>setDepartment(e.target.value)} list="sc-dept-list" placeholder="Dept…" className={`w-36 border rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300 ${custom.deptRequired&&!department?"bg-white border-[#42a7ef]":"bg-white border-stone-300"}`}/>}</div>}
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <span className="w-24 shrink-0 text-[10px] uppercase tracking-widest text-stone-500">Total {totalWeight} lb</span>
-              <div className="flex items-center gap-1"><span className="w-[72px] shrink-0 text-[10px] uppercase tracking-widest text-stone-500">Signature</span><select value={sigOption} onChange={e=>{setSigOption(e.target.value);setSig(e.target.value!=="none");}} className="w-36 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="none">None</option><option value="direct">Direct Signature</option><option value="indirect">Indirect Signature</option><option value="adult">Adult Signature</option></select></div>
-              {!custom.hideInsure&&<div className="flex items-center gap-1"><span className="w-12 shrink-0 text-[10px] uppercase tracking-widest text-stone-500">{pieces.length>1?"Insure/box":"Insure"}</span><input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} disabled={pieces.length>1&&dvEach} placeholder="0" title={pieces.length>1&&!dvEach?"Declared value applied to every box":undefined} className="w-36 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 disabled:opacity-40"/>{pieces.length>1&&<label className="flex items-center gap-1 text-[11px] text-stone-500 cursor-pointer ml-0.5" title="Enter a different declared value on each box below"><input type="checkbox" checked={dvEach} onChange={e=>setDvEach(e.target.checked)} className="accent-[#0086E0]"/>Per Box</label>}</div>}
+              <div className="flex items-center gap-1"><span className="w-[72px] shrink-0 text-[10px] uppercase tracking-widest text-stone-500">Signature</span><select value={sigOption} onChange={e=>{setSigOption(e.target.value);setSig(e.target.value!=="none");}} className="w-36 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"><option value="none">None</option><option value="direct">Direct Signature</option><option value="indirect">Indirect Signature</option><option value="adult">Adult Signature</option></select></div>
+              {!custom.hideInsure&&<div className="flex items-center gap-1"><span className="w-12 shrink-0 text-[10px] uppercase tracking-widest text-stone-500">{pieces.length>1?"Insure/box":"Insure"}</span><input type="number" value={insurance} onChange={e=>setInsurance(e.target.value)} disabled={pieces.length>1&&dvEach} placeholder="0" title={pieces.length>1&&!dvEach?"Declared value applied to every box":undefined} className="w-36 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300 disabled:opacity-40"/>{pieces.length>1&&<label className="flex items-center gap-1 text-[11px] text-stone-500 cursor-pointer ml-0.5" title="Enter a different declared value on each box below"><input type="checkbox" checked={dvEach} onChange={e=>setDvEach(e.target.checked)} className="accent-[#0086E0]"/>Per Box</label>}</div>}
               {quotes.some(q=>{const l=String(q.label||"").toLowerCase();return l.includes("fedex")&&/(overnight|2\s?day|express saver)/.test(l);})&&<label className="flex items-center gap-1.5 text-[11px] text-stone-600 cursor-pointer"><input type="checkbox" checked={saturday} onChange={e=>setSat(e.target.checked)} className="accent-[#0086E0]"/><span className="uppercase tracking-widest text-stone-500">Saturday Delivery <span className="normal-case text-stone-400">(Express only)</span></span></label>}
             </div>
           </div>
@@ -7931,7 +7928,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           {pieces.map((p,i)=>(
             <div key={i} className="flex flex-wrap items-end gap-2 bg-white border border-stone-200 rounded-lg px-2 py-2">
               <div className="text-[11px] text-stone-400 w-6">#{i+1}</div>
-              <div><div className="text-[10px] uppercase tracking-widest text-stone-500">Box</div><select value={p.boxIdx??-1} onChange={e=>{const j=+e.target.value;const pr=(settings.boxes||SEED_BOXES)[j];if(pr)setPiece(i,{L:pr.L,W:pr.W,H:pr.H,boxIdx:j,orBox:""});else setPiece(i,{boxIdx:-1});}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]">{p.orBox?<option value="-1">{p.orBox}</option>:<option value="-1">Custom</option>}{(settings.boxes||SEED_BOXES).map((pr,j)=><option key={pr.id} value={j}>{pr.name}</option>)}</select></div>
+              <div><div className="text-[10px] uppercase tracking-widest text-stone-500">Box</div><select value={p.boxIdx??-1} onChange={e=>{const j=+e.target.value;const pr=(settings.boxes||SEED_BOXES)[j];if(pr)setPiece(i,{L:pr.L,W:pr.W,H:pr.H,boxIdx:j,orBox:""});else setPiece(i,{boxIdx:-1});}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]">{p.orBox?<option value="-1">{p.orBox}</option>:<option value="-1">Custom</option>}{(settings.boxes||SEED_BOXES).map((pr,j)=><option key={pr.id} value={j}>{pr.name}</option>)}</select></div>
               <PkgInput label="L" req value={p.L} onChange={e=>setPiece(i,{L:e.target.value})}/>
               <PkgInput label="W" req value={p.W} onChange={e=>setPiece(i,{W:e.target.value})}/>
               <PkgInput label="H" req value={p.H} onChange={e=>setPiece(i,{H:e.target.value})}/>
@@ -8012,7 +8009,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               const showRates=!custom.hideRateSrcBar;
               if(!showOrder&&!showAp&&!showRates&&!handsFree)return null;
               const apFired=liveRuleStatus&&liveRuleStatus.state==="fired";
-              return <div className="border border-[#b9c6d5] shadow-sm rounded-lg bg-white p-3 space-y-2">
+              return <div className="border border-stone-200 shadow-sm rounded-lg bg-white p-3 space-y-2">
                 <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">This Shipment</div>
                 {showOrder&&<div className="flex items-start gap-2 text-xs text-stone-600">
                   <Truck className="w-3.5 h-3.5 shrink-0 mt-0.5 text-stone-400"/>
@@ -8046,19 +8043,19 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 </div>}
               </div>;
             })()}
-            {!custom.hideBillingBox&&<div className="border border-[#b9c6d5] shadow-sm rounded-lg bg-white p-3 space-y-2">
+            {!custom.hideBillingBox&&<div className="border border-stone-200 shadow-sm rounded-lg bg-white p-3 space-y-2">
               <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5"/>Billing &amp; Third-Party</div>
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-stone-500">Bill to</span>
-                <select value={billTo} onChange={e=>setBillTo(e.target.value)} className="flex-1 bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="sender">Sender (You)</option><option value="receiver">Receiver</option><option value="third">Third-Party Acct</option></select>
+                <select value={billTo} onChange={e=>setBillTo(e.target.value)} className="flex-1 bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"><option value="sender">Sender (You)</option><option value="receiver">Receiver</option><option value="third">Third-Party Acct</option></select>
               </div>
-              {(billTo==="third"||billTo==="receiver")&&<input value={thirdAcct} onChange={e=>setThirdAcct(e.target.value)} placeholder={billTo==="receiver"?"Receiver's FedEx account #":"3rd-party account #"} className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>}
+              {(billTo==="third"||billTo==="receiver")&&<input value={thirdAcct} onChange={e=>setThirdAcct(e.target.value)} placeholder={billTo==="receiver"?"Receiver's FedEx account #":"3rd-party account #"} className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>}
             </div>}
-            {!custom.hideNotifyBox&&<div className="border border-[#b9c6d5] shadow-sm rounded-lg bg-white p-3 space-y-2">
+            {!custom.hideNotifyBox&&<div className="border border-stone-200 shadow-sm rounded-lg bg-white p-3 space-y-2">
               <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><Send className="w-3.5 h-3.5"/>Send Label &amp; Notify</div>
               <div>
                 <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Send to email</div>
-                <input value={emailTo} onChange={e=>setEmailTo(e.target.value)} placeholder={receiver.email||"customer@example.com"} className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+                <input value={emailTo} onChange={e=>setEmailTo(e.target.value)} placeholder={receiver.email||"customer@example.com"} className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>
               </div>
               <div className="flex flex-col gap-1.5">
                 <button onClick={sendLabel} disabled={!_sentTracking} title={_sentTracking?"":"Book the label first — the email carries its tracking number"} className={`w-full flex items-center justify-center gap-1.5 text-sm rounded px-3 py-2 font-medium disabled:opacity-40 ${sent==="label"?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{sent==="label"?<><Check className="w-4 h-4"/>Label Sent</>:<><Printer className="w-4 h-4"/>Send Shipping Label</>}</button>
@@ -8069,7 +8066,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                   <div className="text-[10px] uppercase tracking-widest text-stone-400">Message to customer</div>
                   <button onClick={saveMsgDefault} className={`text-[11px] font-medium ${msgSaved?"text-emerald-600":"text-[#0086E0] hover:text-[#006FBF]"}`}>{msgSaved?"✓ Saved as default":"Save as default"}</button>
                 </div>
-                <textarea value={emailMsg} onChange={e=>{emailMsgTouched.current=true;setEmailMsg(e.target.value);}} rows={3} placeholder="Add a custom note to include in the email — or save a default that's always pre-filled here." className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 resize-y"/>
+                <textarea value={emailMsg} onChange={e=>{emailMsgTouched.current=true;setEmailMsg(e.target.value);}} rows={3} placeholder="Add a custom note to include in the email — or save a default that's always pre-filled here." className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300 resize-y"/>
               </div>
               <p className="text-[11px] text-stone-400">Emails the buyer their tracking number once the label is booked. Logged under Settings → Email automation.</p>
             </div>}
@@ -8087,30 +8084,30 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
 <datalist id="sc-prod-list">{((settings&&settings.products)||[]).map(pr=><option key={pr.id} value={pr.name}>{(pr.sku?pr.sku+" · ":"")+(pr.hs?("HS "+pr.hs):"no HS yet")}</option>)}</datalist>
             <datalist id="sc-origin-list">{COUNTRIES.map(c=><option key={c} value={c}/>)}</datalist>
             <div className="grid sm:grid-cols-3 gap-2">
-              <Field label="Reason for export"><div className="flex gap-1"><Select value={EXPORT_REASONS.includes(customs.reason)?customs.reason:"__other"} onChange={e=>{const v=e.target.value;setCustoms({...customs,reason:v==="__other"?"":v});}}>{EXPORT_REASONS.map(r=><option key={r}>{r}</option>)}<option value="__other">Other…</option></Select>{!EXPORT_REASONS.includes(customs.reason)&&<input value={customs.reason} onChange={e=>setCustoms({...customs,reason:e.target.value})} placeholder="Type Reason" className="w-28 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/>}</div></Field>
+              <Field label="Reason for export"><div className="flex gap-1"><Select value={EXPORT_REASONS.includes(customs.reason)?customs.reason:"__other"} onChange={e=>{const v=e.target.value;setCustoms({...customs,reason:v==="__other"?"":v});}}>{EXPORT_REASONS.map(r=><option key={r}>{r}</option>)}<option value="__other">Other…</option></Select>{!EXPORT_REASONS.includes(customs.reason)&&<input value={customs.reason} onChange={e=>setCustoms({...customs,reason:e.target.value})} placeholder="Type Reason" className="w-28 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0]"/>}</div></Field>
               <Field label="Incoterms"><Select value={customs.incoterm} onChange={e=>setCustoms({...customs,incoterm:e.target.value})}>{INCOTERMS.map(r=><option key={r}>{r}</option>)}</Select></Field>
               <Field label="Duties & taxes to"><Select value={customs.dutiesBill} onChange={e=>setCustoms({...customs,dutiesBill:e.target.value})}><option value="receiver">Receiver (DAP)</option><option value="sender">Sender (DDP)</option></Select></Field>
             </div>
             <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">Your export details</div>
             <div className="grid sm:grid-cols-3 gap-2">
-              <Field label="Sender Tax ID / EIN"><input value={customs.senderTaxId??(settings.taxId||"")} onChange={e=>setCustoms({...customs,senderTaxId:e.target.value})} placeholder="12-3456789" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
+              <Field label="Sender Tax ID / EIN"><input value={customs.senderTaxId??(settings.taxId||"")} onChange={e=>setCustoms({...customs,senderTaxId:e.target.value})} placeholder="12-3456789" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></Field>
               <Field label="EIN issuer country"><Select value={customs.senderTaxCountry||"United States"} onChange={e=>setCustoms({...customs,senderTaxCountry:e.target.value})}>{COUNTRIES.map(c=><option key={c}>{c}</option>)}</Select></Field>
-              <Field label="FTR / EEI"><input value={customs.ftr??"NOEEI 30.37(a)"} onChange={e=>setCustoms({...customs,ftr:e.target.value})} list="sc-ftr-list" placeholder="NOEEI 30.37(a)" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/><datalist id="sc-ftr-list"><option value="NOEEI 30.37(a)">Under $2,500 per HS class</option><option value="NOEEI 30.36">To Canada</option><option value="NOEEI 30.37(h)">Gift / humanitarian</option><option value="AES ITN: X2026________">Filed — paste ITN</option></datalist></Field>
+              <Field label="FTR / EEI"><input value={customs.ftr??"NOEEI 30.37(a)"} onChange={e=>setCustoms({...customs,ftr:e.target.value})} list="sc-ftr-list" placeholder="NOEEI 30.37(a)" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/><datalist id="sc-ftr-list"><option value="NOEEI 30.37(a)">Under $2,500 per HS class</option><option value="NOEEI 30.36">To Canada</option><option value="NOEEI 30.37(h)">Gift / humanitarian</option><option value="AES ITN: X2026________">Filed — paste ITN</option></datalist></Field>
             </div>
             <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold mt-1">Receiver details</div>
             <div className="grid sm:grid-cols-4 gap-2">
-              <Field label="Importer of record"><div className="flex gap-1"><Select value={customs.ior||"Receiver"} onChange={e=>setCustoms({...customs,ior:e.target.value})}><option>Receiver</option><option>Shipper</option><option>Other</option></Select>{customs.ior==="Other"&&<input value={customs.iorName||""} onChange={e=>setCustoms({...customs,iorName:e.target.value})} placeholder="IOR name" className="w-28 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>}</div></Field>
-              <Field label="Receiver VAT / Tax ID"><input value={customs.receiverTaxId||""} onChange={e=>setCustoms({...customs,receiverTaxId:e.target.value})} placeholder="VAT nr" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
-              <Field label="Receiver EORI"><input value={customs.receiverEori||""} onChange={e=>setCustoms({...customs,receiverEori:e.target.value})} placeholder="EU/UK EORI" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
-              <Field label="Additional receiver contact"><input value={customs.altContact||""} onChange={e=>setCustoms({...customs,altContact:e.target.value})} placeholder="Broker / consignee alt — name & phone" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
+              <Field label="Importer of record"><div className="flex gap-1"><Select value={customs.ior||"Receiver"} onChange={e=>setCustoms({...customs,ior:e.target.value})}><option>Receiver</option><option>Shipper</option><option>Other</option></Select>{customs.ior==="Other"&&<input value={customs.iorName||""} onChange={e=>setCustoms({...customs,iorName:e.target.value})} placeholder="IOR name" className="w-28 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>}</div></Field>
+              <Field label="Receiver VAT / Tax ID"><input value={customs.receiverTaxId||""} onChange={e=>setCustoms({...customs,receiverTaxId:e.target.value})} placeholder="VAT nr" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></Field>
+              <Field label="Receiver EORI"><input value={customs.receiverEori||""} onChange={e=>setCustoms({...customs,receiverEori:e.target.value})} placeholder="EU/UK EORI" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></Field>
+              <Field label="Additional receiver contact"><input value={customs.altContact||""} onChange={e=>setCustoms({...customs,altContact:e.target.value})} placeholder="Broker / consignee alt — name & phone" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></Field>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <Field label="Package marks"><input value={customs.marks||""} onChange={e=>setCustoms({...customs,marks:e.target.value})} placeholder="Carton 1 of 3" className="w-40 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
+              <Field label="Package marks"><input value={customs.marks||""} onChange={e=>setCustoms({...customs,marks:e.target.value})} placeholder="Carton 1 of 3" className="w-40 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></Field>
               {customs.reason==="Sample"&&<label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700 mt-4"><input type="checkbox" checked={customs.samples!==false} onChange={e=>setCustoms({...customs,samples:e.target.checked})} className="accent-[#0086E0]"/>Print big "SAMPLES — NOT FOR RESALE" banner</label>}
             </div>
             {(customs.reason==="Sample"||customs.samples)&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">Tip: declare at least $10 value per sample item — $0/$1 values are a top cause of customs holds.</div>}
 
-            <Field label="Invoice notes"><textarea value={customs.notes||""} onChange={e=>setCustoms({...customs,notes:e.target.value})} rows={2} placeholder="Custom notes printed on the invoice — license numbers, 'samples for exhibition use only'…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></Field>
+            <Field label="Invoice notes"><textarea value={customs.notes||""} onChange={e=>setCustoms({...customs,notes:e.target.value})} rows={2} placeholder="Custom notes printed on the invoice — license numbers, 'samples for exhibition use only'…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></Field>
                         <div className="space-y-1.5">
               <div className="flex items-center justify-between mb-1"><div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">Add products</div>
               <div className="flex flex-col items-end"><div className="flex rounded-lg border border-stone-200 overflow-hidden text-[11px] font-medium">
@@ -8121,15 +8118,15 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <div className="hidden sm:flex text-[10px] uppercase tracking-wide text-stone-400 px-1 gap-2"><div className="flex-1 max-w-[340px]">Description</div><div className="w-44">HTS code</div><div className="w-44">Origin</div>{(customs.units||"lb")==="lb"?<><div className="w-14">Lb</div><div className="w-14">Oz</div></>:<div className="w-[120px]">Kg</div>}<div className="w-16">Qty</div><div className="w-24">Unit $</div><div className="flex-1"/></div>
               {customs.lines.map((l,i)=>(
                 <div key={i} className="flex flex-wrap sm:flex-nowrap gap-2 items-center">
-                  <input value={l.desc} onChange={e=>{const v=e.target.value;const hit=((settings&&settings.products)||[]).find(pr=>pr.name===v||pr.sku===v);if(hit){const wt=+hit.wt||0;setLine(i,{desc:hit.name,hts:hit.hs||l.hts,origin:hit.origin==="US"?"United States":(hit.origin||l.origin),value:l.value||String(hit.value||""),wlb:l.wlb??(wt?Math.floor(wt):""),woz:l.woz??(wt?Math.round((wt%1)*16):"")});}else setLine(i,{desc:v});}} list="sc-prod-list" placeholder="Item description — type or pick a product" className="flex-1 min-w-0 max-w-[340px] bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+                  <input value={l.desc} onChange={e=>{const v=e.target.value;const hit=((settings&&settings.products)||[]).find(pr=>pr.name===v||pr.sku===v);if(hit){const wt=+hit.wt||0;setLine(i,{desc:hit.name,hts:hit.hs||l.hts,origin:hit.origin==="US"?"United States":(hit.origin||l.origin),value:l.value||String(hit.value||""),wlb:l.wlb??(wt?Math.floor(wt):""),woz:l.woz??(wt?Math.round((wt%1)*16):"")});}else setLine(i,{desc:v});}} list="sc-prod-list" placeholder="Item description — type or pick a product" className="flex-1 min-w-0 max-w-[340px] bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>
                   
-                  <input value={l.hts} onChange={e=>setLine(i,{hts:e.target.value})} list="htscodes" placeholder="HTS code" className="w-44 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/>
-                  <select value={l.origin} onChange={e=>setLine(i,{origin:e.target.value})} className="w-44 bg-white border border-stone-200 rounded-lg px-1.5 py-1.5 text-sm outline-none focus:border-[#0099FF]">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
-                  {(customs.units||"lb")==="lb"?<><input type="number" value={l.wlb??""} onChange={e=>setLine(i,{wlb:e.target.value})} placeholder="lb" className="w-14 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-                  <input type="number" value={l.woz??""} onChange={e=>setLine(i,{woz:e.target.value})} placeholder="oz" className="w-14 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></>:
-                  <input type="number" value={l.wkg??""} onChange={e=>setLine(i,{wkg:e.target.value})} placeholder="kg" className="w-[120px] bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>}
-                  <input type="number" value={l.qty} onChange={e=>setLine(i,{qty:+e.target.value})} className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/>
-                  <input type="number" value={l.value} onChange={e=>setLine(i,{value:e.target.value})} placeholder="0.00" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/>
+                  <input value={l.hts} onChange={e=>setLine(i,{hts:e.target.value})} list="htscodes" placeholder="HTS code" className="w-44 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0]"/>
+                  <select value={l.origin} onChange={e=>setLine(i,{origin:e.target.value})} className="w-44 bg-white border border-stone-200 rounded-lg px-1.5 py-1.5 text-sm outline-none focus:border-[#0086E0]">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
+                  {(customs.units||"lb")==="lb"?<><input type="number" value={l.wlb??""} onChange={e=>setLine(i,{wlb:e.target.value})} placeholder="lb" className="w-14 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>
+                  <input type="number" value={l.woz??""} onChange={e=>setLine(i,{woz:e.target.value})} placeholder="oz" className="w-14 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></>:
+                  <input type="number" value={l.wkg??""} onChange={e=>setLine(i,{wkg:e.target.value})} placeholder="kg" className="w-[120px] bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>}
+                  <input type="number" value={l.qty} onChange={e=>setLine(i,{qty:+e.target.value})} className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0]"/>
+                  <input type="number" value={l.value} onChange={e=>setLine(i,{value:e.target.value})} placeholder="0.00" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0]"/>
                   <button onClick={()=>shipSuggestHS(i)} disabled={!l.desc||shipHsBusy===i} title={AI_NAME+" reads the item description and suggests an HTS code"} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap self-center">{shipHsBusy===i?"Searching…":"Search HTS codes"}</button>
                   {!!(l.desc&&l.hts)&&<button onClick={()=>saveHtsToCatalog(l)} title="Save this HTS code to your product catalog for next time" className="text-xs text-[#006FBF] hover:underline whitespace-nowrap self-center">Save To Catalog</button>}
                   <button onClick={()=>delLine(i)} className="text-stone-300 hover:text-rose-500 w-5"><X className="w-4 h-4"/></button>
@@ -8151,7 +8148,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 {settings.companyLogo?<img src={settings.companyLogo} alt="logo" className="h-6 max-w-[90px] object-contain"/>:<span className="text-[11px] text-stone-400 px-1">No logo yet</span>}
                 <label className="text-[11px] text-[#006FBF] hover:underline cursor-pointer px-1 whitespace-nowrap">Change logo<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,companyLogo:b})),600);e.target.value="";}}/></label>
               </span>
-              <input value={customs.printedName??((settings.sender&&settings.sender.name)||"")} onChange={e=>setCustoms({...customs,printedName:e.target.value})} placeholder="Printed name (under signature)" className="w-48 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+              <input value={customs.printedName??((settings.sender&&settings.sender.name)||"")} onChange={e=>setCustoms({...customs,printedName:e.target.value})} placeholder="Printed name (under signature)" className="w-48 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-[#0086E0] placeholder-stone-300"/>
               <button onClick={()=>setShipPad(v=>!v)} className="text-xs bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF]">Draw a Signature</button>
               <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload signature<input type="file" accept="image/*" className="hidden" onChange={e=>{const f=e.target.files&&e.target.files[0];if(!f)return;readImgFile(f,(b)=>setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"signature",name:f.name.replace(/\.[a-z]+$/i,""),data:b},...(pp.docAssets||[])]})),500);e.target.value="";}}/></label>
               
@@ -8160,7 +8157,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700"><input type="checkbox" checked={!!customs.autoPrint} onChange={e=>setCustoms({...customs,autoPrint:e.target.checked})} className="accent-[#0086E0]"/>Auto-print after label</label>
               <div className="flex gap-2">
               <button onClick={()=>printShipCI(true)} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3.5 py-2 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-4 h-4"/>View Invoice</button>
-              <button onClick={()=>printShipCI()} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5"><Receipt className="w-4 h-4"/>Print Commercial Invoice</button></div>
+              <button onClick={()=>printShipCI()} className="text-sm bg-[#0086E0] hover:bg-[#006db8] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5"><Receipt className="w-4 h-4"/>Print Commercial Invoice</button></div>
             {shipPad&&<SignaturePad onSave={(b64)=>{setSettings(pp=>({...pp,docAssets:[{id:"as"+Date.now(),type:"signature",name:"Signature "+new Date().toLocaleDateString(),data:b64},...(pp.docAssets||[])]}));setShipPad(false);}} onClose={()=>setShipPad(false)}/>}
             </div>
                           <datalist id="htscodes">{[...new Set(((settings&&settings.products)||[]).map(pr=>pr.hs).filter(Boolean))].map(c=><option key={"p"+c} value={c}/>)}{HTS_SUGGEST.map(h=><option key={h.code} value={h.code}>{h.desc}</option>)}</datalist>
@@ -8169,7 +8166,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           </div>
         )}
         {labelPreview&&<LabelPreviewModal data={labelPreview} settings={settings} onNewShipment={newShipment} onClose={()=>{const pend=labelPreview&&labelPreview.pendingBook;setLabelPreview(null);if(!pend&&(cz(settings).printFlowV2?cz(settings).resetAfterPrint:(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint)))newShipment();}}/>}
-        {naming&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setNaming(false)}><div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-sm space-y-3" onClick={e=>e.stopPropagation()}><div className="text-sm font-semibold text-stone-800">Name this draft</div><input autoFocus value={draftName} onChange={e=>setDraftName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")commitDraft(draftName.trim());}} placeholder="e.g. Dana Cole – Miami" className="w-full bg-white border border-stone-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF]"/><div className="flex justify-end gap-2"><button onClick={()=>setNaming(false)} className="text-sm px-3 py-1.5 rounded text-stone-600 hover:bg-stone-100">Cancel</button><button onClick={()=>commitDraft(draftName.trim())} className="text-sm px-3 py-1.5 rounded bg-[#0086E0] text-white font-medium hover:bg-[#006db8]">Save Draft</button></div></div></div>}
+        {naming&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setNaming(false)}><div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-sm space-y-3" onClick={e=>e.stopPropagation()}><div className="text-sm font-semibold text-stone-800">Name this draft</div><input autoFocus value={draftName} onChange={e=>setDraftName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")commitDraft(draftName.trim());}} placeholder="e.g. Dana Cole – Miami" className="w-full bg-white border border-stone-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0086E0]"/><div className="flex justify-end gap-2"><button onClick={()=>setNaming(false)} className="text-sm px-3 py-1.5 rounded text-stone-600 hover:bg-stone-100">Cancel</button><button onClick={()=>commitDraft(draftName.trim())} className="text-sm px-3 py-1.5 rounded bg-[#0086E0] text-white font-medium hover:bg-[#006db8]">Save Draft</button></div></div></div>}
         {shipStatus&&(!handsFree||shipStatus.state==="error"||shipStatus.state==="pending_timeout")&&<div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2.5 ${shipStatus.state==="error"?"bg-rose-50 text-rose-700 border border-rose-200":shipStatus.state==="booked"?"bg-emerald-50 text-emerald-700 border border-emerald-200":shipStatus.state==="pending_timeout"?"bg-amber-50 text-amber-700 border border-amber-200":"bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF]"}`}>
           {shipStatus.state==="booking"&&<><Loader2 className="w-4 h-4 animate-spin"/>Booking label on your FedEx account…</>}
           {shipStatus.state==="pending"&&<><Loader2 className="w-4 h-4 animate-spin"/>Booking your label — waiting for the carrier to confirm…</>}
@@ -8340,7 +8337,7 @@ function LabelPreviewModal({data,onClose,settings,onNewShipment}){
           <button onClick={download} className="text-sm px-3 py-2 rounded border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"><Download className="w-4 h-4"/>Download</button>
           {dtCfg&&dtCfg.enabled&&<button onClick={()=>printDocTab(dtCfg,docCtx,data.tracking)} className="text-sm px-3 py-2 rounded border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"><Tag className="w-4 h-4"/>Doc Tab</button>}
           {rcCfg&&rcCfg.enabled&&<button onClick={()=>printReceipt(rcCfg,docCtx,rcpLogo)} className="text-sm px-3 py-2 rounded border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"><Receipt className="w-4 h-4"/>Receipt</button>}
-          <button onClick={doPrint} className={autoPrintOff&&!hasPrinted?"text-sm px-4 py-2 rounded bg-[#0086E0] hover:bg-[#0072BE] text-white font-semibold flex items-center gap-1.5":"text-sm px-4 py-2 rounded border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 flex items-center gap-1.5"}><Printer className="w-4 h-4"/>{autoPrintOff?(hasPrinted?"Print again":"Print label"):"Reprint label"}</button>
+          <button onClick={doPrint} className={autoPrintOff&&!hasPrinted?"text-sm px-4 py-2 rounded bg-[#0086E0] hover:bg-[#006db8] text-white font-semibold flex items-center gap-1.5":"text-sm px-4 py-2 rounded border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 flex items-center gap-1.5"}><Printer className="w-4 h-4"/>{autoPrintOff?(hasPrinted?"Print again":"Print label"):"Reprint label"}</button>
           <button onClick={()=>setShowDetails(v=>!v)} className="text-sm px-3 py-2 rounded border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-1.5"><FileText className="w-4 h-4"/>See Details</button>
           {data.tracking&&<button onClick={()=>{try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"shipments",openShipTracking:data.tracking}}));}catch(e){} onClose();}} className="text-sm px-3 py-2 rounded border border-[#99D6FF] text-[#006FBF] bg-[#E6F4FF] hover:bg-[#CCEAFF] flex items-center gap-1.5"><Truck className="w-4 h-4"/>Go To Shipment</button>}
           {onNewShipment&&<button onClick={()=>{onNewShipment();onClose();}} className="text-sm px-4 py-2 rounded bg-[#0086E0] text-white hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>New Shipment</button>}
@@ -8477,7 +8474,7 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
        indents past it and lines up under the service name even when the badge shifts the name */
     const matchBadge=matched===q.key?(<span className="text-[10px] font-semibold uppercase tracking-wide bg-[#E6F4FF] text-[#0086E0] border border-[#99D6FF] rounded px-1.5 py-0.5 shrink-0 inline-flex items-center gap-1">{matchedSrc==="autopilot"&&<Zap className="w-3 h-3"/>}{matchedSrc==="autopilot"?"Autopilot":"Requested"}</span>):null;
     return (
-      <div key={q.key||svcFamilyKey(q.label)} className={"border rounded-lg bg-white shadow-sm transition-all duration-200 "+(matched===q.key?"border-[#0086E0] ring-1 ring-[#0086E0]":"border-[#b9c6d5]")}>
+      <div key={q.key||svcFamilyKey(q.label)} className={"border rounded-lg bg-white shadow-sm transition-all duration-200 "+(matched===q.key?"border-[#0086E0] ring-1 ring-[#0086E0]":"border-stone-200")}>
         <div onClick={()=>{setOpen(isOpen?null:q.key); if(q._oneRate&&q.packageTypeCode&&onOneRate)onOneRate(q.packageTypeCode);}} className="px-3 py-1.5 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
           <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isOpen?"rotate-90":""}`}/>
           {matchBadge}
@@ -8561,12 +8558,10 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
     );
   };
   return (
-    /* Capped width, left-aligned: on wide screens full-bleed rows put an airfield of blank space
-       between the service name and its price/button. ~3xl keeps every row's name, price and Print
-       label close together; narrower containers (Quick Quote, modals) are unaffected.
-       (Centering was tried and rejected — Spencer prefers the list on the left. 52rem: 3xl read
-       too compact, 4xl too wide.) */
-    <div className="max-w-[52rem]">
+    /* Fills its column so the Ship page's right-hand sidebar (This shipment / Billing / Send label)
+       sits right beside the rate list instead of across a gap. Narrower containers (Quick Quote,
+       modals) already bound the width, so they're unaffected. */
+    <div className="w-full">
       {/* Render this header row ONLY when it has content — with the title hidden and the view
           toggle off it was an empty div whose mb-2 pushed the rate list 8px below the right
           column's cards (the "boxes don't line up" report, pixel-measured). */}
@@ -8755,8 +8750,8 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
         <div className="flex-1 min-w-0 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <div className="md:hidden flex bg-stone-100 rounded-lg p-0.5 text-sm">{[["all","All"],["unfulfilled","Awaiting"],["fulfilled","Shipped"]].map(([v,l])=><button key={v} onClick={()=>setFilter(v)} className={`px-3 py-1.5 rounded-lg ${filter===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}</div>
-            <div className="flex-1 relative min-w-[160px]"><Search className="w-4 h-4 absolute left-2.5 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search orders, items, recipient…" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-3 py-2 text-sm outline-none focus:border-[#0099FF]"/></div>
-            <div className="flex items-center gap-1.5 text-sm"><span className="text-stone-500 hidden sm:inline">Sort</span><select value={sort} onChange={e=>setSort(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"><option value="date">Newest</option><option value="total">Order Total</option><option value="customer">Recipient</option><option value="state">Dest. state</option><option value="weight">Weight</option><option value="source">Store</option></select></div>
+            <div className="flex-1 relative min-w-[160px]"><Search className="w-4 h-4 absolute left-2.5 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search orders, items, recipient…" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-3 py-2 text-sm outline-none focus:border-[#0086E0]"/></div>
+            <div className="flex items-center gap-1.5 text-sm"><span className="text-stone-500 hidden sm:inline">Sort</span><select value={sort} onChange={e=>setSort(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0]"><option value="date">Newest</option><option value="total">Order Total</option><option value="customer">Recipient</option><option value="state">Dest. state</option><option value="weight">Weight</option><option value="source">Store</option></select></div>
             <button onClick={()=>downloadCSV("shippingcloud-orders.csv",[["Order","Customer","Company","Address","City","State","ZIP","Country","Items","SKU","Weight","Total","Source","Date","Note"],...orders.map(o=>[o.name,o.customer,o.company||"",o.address1||"",o.city,o.state,o.zip,o.country||"US",o.items||"",o.sku||"",o.weight,o.total||"",o.source||"",o.date||"",o.note||""])])} title="Download every open order as CSV" className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 px-2 py-2"><Download className="w-4 h-4"/>Export</button>
             {setSettings&&(()=>{const on=custom.autoRulesOnShip!==false;const toggle=()=>setSettings(pp=>({...pp,custom:{...(pp.custom||{}),autoRulesOnShip:!on}}));
               return <button onClick={toggle} title="When on, pulling an order into Ship pre-selects the service your Autopilot rules pick — applied as you ship." className={`flex items-center gap-1.5 text-sm rounded-lg px-3 py-1.5 font-medium border ${on?"bg-violet-50 border-violet-300 text-violet-700 hover:bg-violet-100":"bg-white border-stone-200 text-stone-500 hover:bg-stone-50"}`}><Zap className="w-4 h-4"/>Autopilot as I ship<span className={`ml-0.5 w-8 h-4 rounded-full flex items-center px-0.5 transition-colors ${on?"bg-violet-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-3 h-3 bg-white rounded-full"/></span></button>;
@@ -8937,8 +8932,8 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
         <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2"><CheckCircle2 className="w-4 h-4"/>Shipped{o.tracking?<> · tracking <a className="underline" href={TRACK_URL[carrierOf("FedEx")](o.tracking)} target="_blank" rel="noopener">{o.tracking}</a></>:""}</div>
       ):(<>
         <div className="flex flex-wrap items-end gap-3 border border-stone-200 rounded-lg bg-white p-3">
-          <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Weight (lb)</div><input type="number" value={weight} onChange={e=>{setWeight(+e.target.value);upd({weight:+e.target.value});}} className="w-20 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"/></div>
-          <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Box</div><select value={boxIdx} onChange={e=>{const j=+e.target.value;setBoxIdx(j);if(j>=0)setDimsOverride(null);}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="-1">Custom Size</option>{boxes.map((b,j)=><option key={b.id} value={j}>{b.name}</option>)}</select></div>
+          <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Weight (lb)</div><input type="number" value={weight} onChange={e=>{setWeight(+e.target.value);upd({weight:+e.target.value});}} className="w-20 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"/></div>
+          <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Box</div><select value={boxIdx} onChange={e=>{const j=+e.target.value;setBoxIdx(j);if(j>=0)setDimsOverride(null);}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"><option value="-1">Custom Size</option>{boxes.map((b,j)=><option key={b.id} value={j}>{b.name}</option>)}</select></div>
           <div className="flex items-end gap-1.5"><PkgInput label="L" value={box.L} onChange={e=>{setBoxIdx(-1);setDimsOverride(v=>({L:e.target.value,W:(v||box).W,H:(v||box).H}));}}/>
             <PkgInput label="W" value={box.W} onChange={e=>{setBoxIdx(-1);setDimsOverride(v=>({L:(v||box).L,W:e.target.value,H:(v||box).H}));}}/>
             <PkgInput label="H" value={box.H} onChange={e=>{setBoxIdx(-1);setDimsOverride(v=>({L:(v||box).L,W:(v||box).W,H:e.target.value}));}}/></div>
@@ -8954,12 +8949,12 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
         {o.country&&o.country!=="US"&&<div className="border border-stone-200 rounded-lg p-3 space-y-2 bg-stone-50/60">
           <div className="text-[10px] uppercase tracking-widest text-stone-400">Commercial invoice options</div>
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <input value={ciOpts.reason} onChange={e=>setCiOpts(v=>({...v,reason:e.target.value}))} list="sc-export-reasons-m" placeholder="Reason for export" className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] w-36"/><datalist id="sc-export-reasons-m">{EXPORT_REASONS.map(r=><option key={r} value={r}/>)}</datalist>
-            <select value={ciOpts.incoterm} onChange={e=>setCiOpts(v=>({...v,incoterm:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] max-w-[240px]">{INCOTERMS.map(r=><option key={r}>{r}</option>)}</select>
+            <input value={ciOpts.reason} onChange={e=>setCiOpts(v=>({...v,reason:e.target.value}))} list="sc-export-reasons-m" placeholder="Reason for export" className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0086E0] w-36"/><datalist id="sc-export-reasons-m">{EXPORT_REASONS.map(r=><option key={r} value={r}/>)}</datalist>
+            <select value={ciOpts.incoterm} onChange={e=>setCiOpts(v=>({...v,incoterm:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0086E0] max-w-[240px]">{INCOTERMS.map(r=><option key={r}>{r}</option>)}</select>
             {ciOpts.reason==="Sample"&&<label className="flex items-center gap-1.5 cursor-pointer text-stone-700"><input type="checkbox" checked={ciOpts.samples!==false} onChange={e=>setCiOpts(v=>({...v,samples:e.target.checked}))} className="accent-[#0086E0]"/>Print big "SAMPLES — NOT FOR RESALE" banner</label>}
           </div>
           {(ciOpts.reason==="Sample"||ciOpts.samples)&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">Tip: declare at least $10 value per sample item — $0/$1 values are a top cause of customs holds and inspections.</div>}
-          <textarea value={ciOpts.notes} onChange={e=>setCiOpts(v=>({...v,notes:e.target.value}))} rows={2} placeholder="Custom notes printed on the invoice — e.g. 'No commercial value, samples for exhibition use only', license numbers, broker contact…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+          <textarea value={ciOpts.notes} onChange={e=>setCiOpts(v=>({...v,notes:e.target.value}))} rows={2} placeholder="Custom notes printed on the invoice — e.g. 'No commercial value, samples for exhibition use only', license numbers, broker contact…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>
         </div>}
         {oneRate&&<div className={`text-xs rounded px-3 py-2 flex items-center gap-2 ${orBox?"bg-[#E6F4FF] text-[#0072BE] border border-[#99D6FF]":"bg-amber-50 text-amber-700 border border-amber-200"}`}><Boxes className="w-4 h-4 shrink-0"/>{orBox?<span>Qualifies for <b>{orBox.name}</b> — pricing this box only.</span>:<span>Set a box size within One Rate limits (≤2,200 cu in, ≤50 lb).</span>}</div>}
         {(o.shippingService||o.source)&&<div className="text-xs text-stone-500 flex items-center gap-1.5 -mt-1"><Truck className="w-3.5 h-3.5 text-stone-400"/>Buyer selected <b className="text-stone-700">{o.shippingService||"Standard"}</b>{o.source?` from ${o.source}`:""} — match it or pick the best rate below.</div>}
@@ -9148,7 +9143,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   const shipped=o.status==="fulfilled";
   const Row2=({k,v,strong})=>(<div className="flex items-center justify-between text-sm py-0.5"><span className="text-stone-500">{k}</span><span className={strong?"font-semibold text-stone-900":"text-stone-700"}>{v}</span></div>);
   const lbl=(t)=>(<div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">{t}</div>);
-  const inC="bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300";
+  const inC="bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300";
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-stretch sm:items-center justify-center sm:p-4" onClick={onClose}>
       {navPrev&&<button onClick={(e)=>{e.stopPropagation();goPrev();}} title={"Previous order ("+navPrev.name+")  ←"} className="hidden sm:flex absolute left-1 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full bg-white/90 hover:bg-white shadow-lg items-center justify-center text-stone-600 hover:text-stone-900"><ChevronRight className="w-6 h-6 rotate-180"/></button>}
@@ -9178,26 +9173,26 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
         {o.country&&!_isUSCountry(o.country)&&<div className="border border-stone-200 rounded-lg p-3 mt-3 space-y-2 bg-stone-50/60">
           <div className="text-[10px] uppercase tracking-widest text-stone-400">Commercial invoice options</div>
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <input value={ciOpts.reason} onChange={e=>setCiOpts(v=>({...v,reason:e.target.value}))} list="sc-export-reasons-m" placeholder="Reason for export" className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] w-36"/><datalist id="sc-export-reasons-m">{EXPORT_REASONS.map(r=><option key={r} value={r}/>)}</datalist>
-            <select value={ciOpts.incoterm} onChange={e=>setCiOpts(v=>({...v,incoterm:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] max-w-[240px]">{INCOTERMS.map(r=><option key={r}>{r}</option>)}</select>
+            <input value={ciOpts.reason} onChange={e=>setCiOpts(v=>({...v,reason:e.target.value}))} list="sc-export-reasons-m" placeholder="Reason for export" className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0086E0] w-36"/><datalist id="sc-export-reasons-m">{EXPORT_REASONS.map(r=><option key={r} value={r}/>)}</datalist>
+            <select value={ciOpts.incoterm} onChange={e=>setCiOpts(v=>({...v,incoterm:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0086E0] max-w-[240px]">{INCOTERMS.map(r=><option key={r}>{r}</option>)}</select>
             {ciOpts.reason==="Sample"&&<label className="flex items-center gap-1.5 cursor-pointer text-stone-700"><input type="checkbox" checked={ciOpts.samples!==false} onChange={e=>setCiOpts(v=>({...v,samples:e.target.checked}))} className="accent-[#0086E0]"/>Print big "SAMPLES — NOT FOR RESALE" banner</label>}
           </div>
           {(ciOpts.reason==="Sample"||ciOpts.samples)&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">Tip: declare at least $10 value per sample item — $0/$1 values are a top cause of customs holds and inspections.</div>}
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <select value={ciOpts.currency||"USD"} onChange={e=>setCiOpts(v=>({...v,currency:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF]">{["USD","CAD","EUR","GBP","MXN","AUD"].map(x=><option key={x}>{x}</option>)}</select>
-            <input value={ciOpts.packages||""} onChange={e=>setCiOpts(v=>({...v,packages:e.target.value}))} placeholder="Pkgs" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-            <input value={ciOpts.freight||""} onChange={e=>setCiOpts(v=>({...v,freight:e.target.value}))} placeholder="Freight $" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-            <input value={ciOpts.insurance||""} onChange={e=>setCiOpts(v=>({...v,insurance:e.target.value}))} placeholder="Insurance $" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-            <input value={ciOpts.marks||""} onChange={e=>setCiOpts(v=>({...v,marks:e.target.value}))} placeholder="Marks & nos — e.g. Carton 1 of 3" className="flex-1 min-w-[160px] bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+            <select value={ciOpts.currency||"USD"} onChange={e=>setCiOpts(v=>({...v,currency:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0086E0]">{["USD","CAD","EUR","GBP","MXN","AUD"].map(x=><option key={x}>{x}</option>)}</select>
+            <input value={ciOpts.packages||""} onChange={e=>setCiOpts(v=>({...v,packages:e.target.value}))} placeholder="Pkgs" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0086E0] placeholder-stone-300"/>
+            <input value={ciOpts.freight||""} onChange={e=>setCiOpts(v=>({...v,freight:e.target.value}))} placeholder="Freight $" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0086E0] placeholder-stone-300"/>
+            <input value={ciOpts.insurance||""} onChange={e=>setCiOpts(v=>({...v,insurance:e.target.value}))} placeholder="Insurance $" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0086E0] placeholder-stone-300"/>
+            <input value={ciOpts.marks||""} onChange={e=>setCiOpts(v=>({...v,marks:e.target.value}))} placeholder="Marks & nos — e.g. Carton 1 of 3" className="flex-1 min-w-[160px] bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0086E0] placeholder-stone-300"/>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <input value={ciOpts.senderTax??((settings&&settings.taxId)||"")} onChange={e=>setCiOpts(v=>({...v,senderTax:e.target.value}))} placeholder="Your EIN" className="w-32 bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-            <input value={ciOpts.receiverTax||""} onChange={e=>setCiOpts(v=>({...v,receiverTax:e.target.value}))} placeholder="Receiver VAT / Tax ID" className="w-40 bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-            <input value={ciOpts.receiverEori||""} onChange={e=>setCiOpts(v=>({...v,receiverEori:e.target.value}))} placeholder="Receiver EORI" className="w-36 bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-            <input value={ciOpts.eei??"NOEEI 30.37(a)"} onChange={e=>setCiOpts(v=>({...v,eei:e.target.value}))} placeholder="FTR / EEI" className="w-40 bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+            <input value={ciOpts.senderTax??((settings&&settings.taxId)||"")} onChange={e=>setCiOpts(v=>({...v,senderTax:e.target.value}))} placeholder="Your EIN" className="w-32 bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0086E0] placeholder-stone-300"/>
+            <input value={ciOpts.receiverTax||""} onChange={e=>setCiOpts(v=>({...v,receiverTax:e.target.value}))} placeholder="Receiver VAT / Tax ID" className="w-40 bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0086E0] placeholder-stone-300"/>
+            <input value={ciOpts.receiverEori||""} onChange={e=>setCiOpts(v=>({...v,receiverEori:e.target.value}))} placeholder="Receiver EORI" className="w-36 bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0086E0] placeholder-stone-300"/>
+            <input value={ciOpts.eei??"NOEEI 30.37(a)"} onChange={e=>setCiOpts(v=>({...v,eei:e.target.value}))} placeholder="FTR / EEI" className="w-40 bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0086E0] placeholder-stone-300"/>
           </div>
-          <input value={ciOpts.broker||""} onChange={e=>setCiOpts(v=>({...v,broker:e.target.value}))} placeholder="Customs broker contact (optional — prints as its own block)" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-          <textarea value={ciOpts.notes} onChange={e=>setCiOpts(v=>({...v,notes:e.target.value}))} rows={2} placeholder="Custom notes printed on the invoice — e.g. 'Samples for exhibition use only', license numbers…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+          <input value={ciOpts.broker||""} onChange={e=>setCiOpts(v=>({...v,broker:e.target.value}))} placeholder="Customs broker contact (optional — prints as its own block)" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>
+          <textarea value={ciOpts.notes} onChange={e=>setCiOpts(v=>({...v,notes:e.target.value}))} rows={2} placeholder="Custom notes printed on the invoice — e.g. 'Samples for exhibition use only', license numbers…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>
           <AssetChips settings={settings||{}} sel={ciOpts} onSel={(v)=>setCiOpts(c=>({...c,...v}))}/>
           <div className="text-[11px] text-stone-400">EEI/AES line prints automatically: "NO EEI — FTR 30.37(a)" up to $2,500, or an ITN blank above it.</div>
         </div>}
@@ -9278,7 +9273,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
                     </div>
                     <div>{lbl("Tags")}<input value={oTags} onChange={e=>setOTags(e.target.value)} placeholder="comma, separated" className={inC+" w-full"}/></div>
                     <div>{lbl("Order notes")}<textarea value={oNote} onChange={e=>setONote(e.target.value)} rows={3} placeholder="Notes on this order…" className={inC+" w-full"}/></div>
-                    <button onClick={saveOrderInfo} className="w-full text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#0072BE] flex items-center justify-center gap-1.5">{savedInfo?<><CheckCircle2 className="w-4 h-4"/>Saved</>:<>Save Changes to This Order</>}</button>
+                    <button onClick={saveOrderInfo} className="w-full text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#006db8] flex items-center justify-center gap-1.5">{savedInfo?<><CheckCircle2 className="w-4 h-4"/>Saved</>:<>Save Changes to This Order</>}</button>
                     <div className="text-[11px] text-stone-400">Saves the ship-to details on the left plus the info above. For Shopify orders, "Save these changes back to Shopify" under the address pushes the address &amp; email to Shopify too.</div>
                   </>):(<>
                     <div>{lbl("Ship from")}{(settings?.sender?.zip||settings?.sender?.company||settings?.sender?.name)?<div className="text-[13px] text-stone-600">{settings?.sender?.company||settings?.sender?.name||"Your address"} · {settings?.sender?.city} {settings?.sender?.state} {settings?.sender?.zip}</div>:<div className="text-[13px] text-amber-700">No sender set — set your default sender in Settings → Company.</div>}</div>
@@ -9330,7 +9325,13 @@ function CopyTrackBtn({tn,className=""}){
   return <button onClick={copy} title={ok?"Copied!":"Copy tracking number"} className={`shrink-0 p-0.5 rounded ${ok?"text-emerald-600":"text-stone-400 hover:text-stone-700 hover:bg-stone-100"} ${className}`}>{ok?<CheckCircle2 className="w-3.5 h-3.5"/>:<Copy className="w-3.5 h-3.5"/>}</button>;
 }
 
-function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,settings,labels={},isAdmin=false,openShipTracking=null,onOpenedShip,showMoney=true}){
+function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,settings,labels={},isAdmin=false,openShipTracking=null,onOpenedShip,showMoney=true,client=null}){
+  const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
+  /* The quoted (sell) price is stored on every new booking. For older shipments that predate that,
+     re-derive what the customer was quoted by running the STORED carrier cost back through their
+     markup rules — never the raw cost. Returns null only when there's genuinely no price to show. */
+  const sellFor=(s)=>{ if(s.sell!=null)return +s.sell; if(s.cost==null)return null;
+    try{ const v=rateSellFor(+s.cost,s.service,{rules:rateRules,client,fromZip:s.fromZip,toZip:s.recipient&&s.recipient.zip,weight:s.weight}); return v!=null?v:+s.cost; }catch(e){ return +s.cost; } };
   /* Packing-slip composer for MANUAL shipments (no store integration → no line items):
      type the items, print, and they're saved onto the shipment so reprints match. */
   const [slipEdit,setSlipEdit]=useState(null);   // {id,rows:[{name,qty}],note}
@@ -9405,14 +9406,14 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
           <div className="text-[11px] text-stone-500">Type what's in the box — quantities and names print on the slip and are saved to this shipment for reprints.</div>
           <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
             {slipEdit.rows.map((r,i)=>(<div key={i} className="flex items-center gap-2">
-              <input type="number" min="1" value={r.qty} onChange={e=>setSlipEdit(p=>({...p,rows:p.rows.map((x,j)=>j===i?{...x,qty:e.target.value}:x)}))} className="w-14 bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm text-center outline-none focus:border-[#0099FF]"/>
+              <input type="number" min="1" value={r.qty} onChange={e=>setSlipEdit(p=>({...p,rows:p.rows.map((x,j)=>j===i?{...x,qty:e.target.value}:x)}))} className="w-14 bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm text-center outline-none focus:border-[#0086E0]"/>
               <span className="text-stone-300 text-xs">×</span>
-              <input value={r.name} onChange={e=>setSlipEdit(p=>({...p,rows:p.rows.map((x,j)=>j===i?{...x,name:e.target.value}:x)}))} placeholder="Item name" className="flex-1 bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+              <input value={r.name} onChange={e=>setSlipEdit(p=>({...p,rows:p.rows.map((x,j)=>j===i?{...x,name:e.target.value}:x)}))} placeholder="Item name" className="flex-1 bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>
               {slipEdit.rows.length>1&&<button onClick={()=>setSlipEdit(p=>({...p,rows:p.rows.filter((_,j)=>j!==i)}))} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}
             </div>))}
           </div>
           <button onClick={()=>setSlipEdit(p=>({...p,rows:[...p.rows,{name:"",qty:1}]}))} className="text-xs bg-stone-100 border border-stone-200 rounded-lg px-2.5 py-1.5 font-medium text-stone-600 hover:bg-stone-200 flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add Item</button>
-          <textarea value={slipEdit.note} onChange={e=>setSlipEdit(p=>({...p,note:e.target.value}))} rows={2} placeholder="Note to print on the slip (optional)" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 resize-y"/>
+          <textarea value={slipEdit.note} onChange={e=>setSlipEdit(p=>({...p,note:e.target.value}))} rows={2} placeholder="Note to print on the slip (optional)" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300 resize-y"/>
           <div className="flex justify-end gap-2 pt-1">
             <button onClick={()=>setSlipEdit(null)} className="text-sm rounded-lg px-3 py-2 text-stone-500 hover:bg-stone-100">Cancel</button>
             <button onClick={slipEditPrint} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Printer className="w-4 h-4"/>Print Slip</button>
@@ -9421,7 +9422,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
       </div>,document.body)}
       {chkMsg&&<div className={`text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${chkMsg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{chkMsg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{chkMsg.err||chkMsg.ok}</div>}
       <div className="flex items-center gap-2">
-      <div className="relative flex-1"><Search className="w-4 h-4 absolute left-3 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by name, tracking, order, reference or PO #" className="w-full bg-white border border-stone-200 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:border-[#0099FF]"/></div>
+      <div className="relative flex-1"><Search className="w-4 h-4 absolute left-3 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by name, tracking, order, reference or PO #" className="w-full bg-white border border-stone-200 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:border-[#0086E0]"/></div>
       </div>
       <div className="border border-stone-200 rounded-lg overflow-hidden bg-white divide-y divide-stone-100">
         <div className="flex items-center gap-3 px-4 py-2 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50"><div className="w-4"/><div className="w-24 shrink-0">Created</div><div className="flex-1">Recipient</div><div className="flex-1 hidden lg:block">Company</div><div className="w-56 hidden md:block">Service</div><div className="w-40 hidden md:block">Tracking</div><div className="flex-1 hidden lg:block">Ship-to address</div><div className="w-28 hidden xl:block">Reference</div><div className="w-28 shrink-0 text-right">Status</div></div>
@@ -9441,23 +9442,27 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
           </div>
           {open===s.id&&(
             <div className="px-12 pb-4 pt-1 bg-stone-50/60 text-sm">
-              <div className="grid sm:grid-cols-2 gap-x-8 gap-y-1 mb-3">
-                <Info k="Carrier / service" v={s.service}/>
-                <Info k="Tracking" v={<span className="inline-flex items-center gap-1"><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" className="text-[#0086E0] underline">{s.tracking} ↗</a><CopyTrackBtn tn={s.tracking}/></span>}/>
-                <Info k="To" v={`${s.recipient?.name||""}${s.recipient?.company?" · "+s.recipient.company:""} — ${s.recipient?.address1||""}, ${s.recipient?.city||""}, ${s.recipient?.state||""} ${s.recipient?.zip||""}`}/>
-                <Info k="Reference" v={s.reference||"—"}/>
-                <div className="flex items-end gap-2"><button onClick={(e)=>{e.stopPropagation();window.dispatchEvent(new CustomEvent("sc-slip-compose",{detail:{slips:[slipFromShipment(s)]}}));}} className="text-xs bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing Slip</button><button onClick={(e)=>{e.stopPropagation();openSlipEdit(s);}} title="Type the items for this slip — perfect for manual shipments with no store connected. Items are saved for reprints." className="text-xs bg-[#E6F4FF] border border-[#99D6FF] text-[#006FBF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#CCEAFF] flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5"/>Create Packing Slip</button></div>
-                <Info k="Created" v={`${s.date}${s.time?" · "+s.time:""}`}/>
-                <Info k="From ZIP" v={s.fromZip}/>
-                <Info k="Packages" v={`${s.pieces?.length||1} pkg · ${s.weight} lb total`}/>
-                <Info k="Last scan" v={s.lastScan||"—"}/>
-                {s.intl&&<Info k="Customs" v={s.customs?`${s.customs.ci} · declared ${money(s.customs.total)}`:"International"}/>}
-                <Info k="Bill to" v={s.billTo==="third"?`Third-party ${s.thirdAcct||""}`:s.billTo}/>
-                <div className="col-span-full">
+              {(()=>{const D=({k,v})=>(<div className="flex items-baseline gap-3 min-w-0"><span className="w-20 shrink-0 text-[10px] uppercase tracking-widest text-stone-400">{k}</span><span className="text-sm text-stone-800 truncate min-w-0">{v||"—"}</span></div>);
+                return (<>
+                <div className="flex items-baseline gap-3 mb-2 min-w-0"><span className="w-20 shrink-0 text-[10px] uppercase tracking-widest text-stone-400">To</span><span className="text-sm text-stone-800 min-w-0">{`${s.recipient?.name||""}${s.recipient?.company?" · "+s.recipient.company:""} — ${s.recipient?.address1||""}, ${s.recipient?.city||""}, ${s.recipient?.state||""} ${s.recipient?.zip||""}`}</span></div>
+                <div className="grid sm:grid-cols-2 gap-x-10 gap-y-1.5 mb-3">
+                <D k="Service" v={s.service}/>
+                <D k="Tracking" v={<span className="inline-flex items-center gap-1 min-w-0"><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" className="text-[#0086E0] underline truncate">{s.tracking} ↗</a><CopyTrackBtn tn={s.tracking}/></span>}/>
+                <D k="Created" v={`${s.date}${s.time?" · "+s.time:""}`}/>
+                <D k="Reference" v={s.reference||"—"}/>
+                <D k="From ZIP" v={s.fromZip}/>
+                <D k="Packages" v={`${s.pieces?.length||1} pkg · ${s.weight} lb total`}/>
+                <D k="Last scan" v={s.lastScan||"—"}/>
+                <D k="Bill to" v={s.billTo==="third"?`Third-party ${s.thirdAcct||""}`:s.billTo}/>
+                {s.intl&&<D k="Customs" v={s.customs?`${s.customs.ci} · declared ${money(s.customs.total)}`:"International"}/>}
+                </div>
+                </>);})()}
+              <div className="mb-3">
+                <div className="">
                   <button onClick={(e)=>{e.stopPropagation();setRateOpen(rateOpen===s.id?null:s.id);}} className="flex items-center gap-1.5 text-left group">
                     <ChevronRight className={`w-3.5 h-3.5 text-stone-400 transition-transform ${rateOpen===s.id?"rotate-90":""}`}/>
                     <span className="text-[11px] uppercase tracking-wider text-stone-400">Rate</span>
-                    <span className="text-sm font-semibold text-stone-800">{showMoney&&s.sell!=null?money(s.sell):"—"}</span>
+                    {(()=>{const rv=sellFor(s);return <span className="text-sm font-semibold text-stone-800">{showMoney&&rv!=null?money(rv):"—"}</span>;})()}
                     <span className="text-[11px] text-stone-400 group-hover:text-stone-600">· view breakdown</span>
                   </button>
                   {showMoney&&rateOpen===s.id&&(()=>{
@@ -9466,7 +9471,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                     const accs=(s.rateAccessorials||[]);
                     const sumSur=surs.reduce((a,x)=>a+(+x.amount||0),0);
                     const sumAcc=accs.reduce((a,x)=>a+(+x.amount||0),0);
-                    const sellV=s.sell!=null?+s.sell:0;
+                    const sellV=sellFor(s)!=null?sellFor(s):0;
                     const base=s.rateBase!=null?+s.rateBase:Math.max(0,sellV-sumSur-sumAcc-ins);
                     const Row=({label,amt,strong})=>(<div className={`flex justify-between py-0.5 ${strong?"font-semibold text-stone-800 border-t border-stone-200 mt-1 pt-1":"text-stone-600"}`}><span>{label}</span><span className="">{money(amt)}</span></div>);
                     return (<div className="mt-2 ml-5 max-w-sm bg-white border border-stone-200 rounded-lg px-3 py-2 text-[13px]">
@@ -9475,7 +9480,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                       {accs.map((x,i)=><Row key={"a"+i} label={x.label||"Accessorial"} amt={+x.amount||0}/>)}
                       {ins>0&&<Row label="Insurance / declared value" amt={ins}/>}
                       <Row label="Total charged" amt={sellV} strong/>
-                      {isAdmin&&s.cost!=null&&<div className="mt-1.5 pt-1.5 border-t border-dashed border-stone-200 text-[11px] text-stone-400 flex justify-between"><span>Your cost → margin</span><span className="">{money(s.cost)} → +{money(Math.max(0,(s.sell||0)-(s.cost||0)))}</span></div>}
+                      {isAdmin&&s.cost!=null&&<div className="mt-1.5 pt-1.5 border-t border-dashed border-stone-200 text-[11px] text-stone-400 flex justify-between"><span>Your cost → margin</span><span className="">{money(s.cost)} → +{money(Math.max(0,sellV-(s.cost||0)))}</span></div>}
                     </div>);
                   })()}
                 </div>
@@ -9484,6 +9489,8 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                 <button onClick={()=>reship(s)} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><RotateCcw className="w-3.5 h-3.5"/>Edit &amp; reship</button>
                 <button onClick={(e)=>{e.stopPropagation();doReprint(s);}} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 flex items-center gap-1.5"><Printer className="w-3.5 h-3.5"/>Reprint</button>
                 {s.tracking&&<button onClick={(e)=>{e.stopPropagation();openTrack(s);}} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5"/>Track</button>}
+                <button onClick={(e)=>{e.stopPropagation();window.dispatchEvent(new CustomEvent("sc-slip-compose",{detail:{slips:[slipFromShipment(s)]}}));}} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5"/>Packing Slip</button>
+                <button onClick={(e)=>{e.stopPropagation();openSlipEdit(s);}} title="Type the items for this slip — saved for reprints" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5"/>Create Packing Slip</button>
                 {s.status!=="Voided"&&s.status!=="Delivered"&&<button onClick={(e)=>voidLabel(e,s)} className="text-sm text-rose-600 hover:bg-rose-50 rounded-lg px-3 py-1.5 font-medium flex items-center gap-1.5"><Ban className="w-3.5 h-3.5"/>Void Label</button>}
               </div>
             </div>
@@ -9758,7 +9765,7 @@ function Scan({orders,goShip,goTab}){
       <p className="text-sm text-stone-500">Scan an order barcode, SKU, or tracking number with your handheld scanner (or type it and press Enter). The matching order loads straight into the Ship tab, ready to print.</p>
       <div className="border-2 border-dashed border-[#99D6FF] rounded-xl bg-[#E6F4FF]/40 p-6 flex flex-col items-center gap-3">
         <ScanLine className="w-10 h-10 text-[#33ABFF]"/>
-        <input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();submit(val);}}} placeholder="Scan or type a code, then Enter" className="w-full max-w-md text-center bg-white border border-stone-300 rounded-lg px-4 py-3 text-lg outline-none focus:border-[#0099FF]"/>
+        <input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();submit(val);}}} placeholder="Scan or type a code, then Enter" className="w-full max-w-md text-center bg-white border border-stone-300 rounded-lg px-4 py-3 text-lg outline-none focus:border-[#0086E0]"/>
         <button onClick={()=>submit(val)} className="text-sm bg-[#0086E0] text-white rounded-lg px-5 py-2 font-medium hover:bg-[#006db8]">Look Up</button>
         {err&&<div className="text-sm text-rose-600 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4"/>{err}</div>}
       </div>
@@ -9997,7 +10004,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
     <div className="flex flex-wrap items-center gap-2 bg-white border border-stone-200 rounded-lg px-3 py-2">
       <Zap className="w-3.5 h-3.5 text-[#0086E0]"/>
       <span className="text-xs font-semibold text-stone-700">Saved Batches</span>
-      <select value={presetSel} onChange={e=>{setPresetSel(e.target.value);const p=(presets||[]).find(x=>x.id===e.target.value);if(p)applyPreset(p);}} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF] min-w-[180px]">
+      <select value={presetSel} onChange={e=>{setPresetSel(e.target.value);const p=(presets||[]).find(x=>x.id===e.target.value);if(p)applyPreset(p);}} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0086E0] min-w-[180px]">
         <option value="">— Pick a Saved Batch —</option>
         {(presets||[]).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
       </select>
@@ -10323,7 +10330,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         {held
           ?<span className="w-44 hidden sm:flex items-center gap-1 text-[11px] text-rose-600 shrink-0"><AlertTriangle className="w-3.5 h-3.5 shrink-0"/><span className="truncate">Held: {held}</span></span>
           :<div className="w-44 hidden sm:block shrink-0" onClick={e=>e.stopPropagation()}>
-            <select value={svcOv[o.id]||""} onChange={e=>setSvcOv(v=>{const n={...v};if(e.target.value)n[o.id]=e.target.value;else delete n[o.id];return n;})} title={ovWhy[o.id]?`Set by Autopilot rule: ${ovWhy[o.id]}`:""} className={`w-full bg-white border rounded px-2 py-1 text-xs outline-none focus:border-[#0099FF] ${svcOv[o.id]?"border-[#0099FF] text-[#006FBF] font-medium":"border-stone-200 text-stone-500"}`}>
+            <select value={svcOv[o.id]||""} onChange={e=>setSvcOv(v=>{const n={...v};if(e.target.value)n[o.id]=e.target.value;else delete n[o.id];return n;})} title={ovWhy[o.id]?`Set by Autopilot rule: ${ovWhy[o.id]}`:""} className={`w-full bg-white border rounded px-2 py-1 text-xs outline-none focus:border-[#0086E0] ${svcOv[o.id]?"border-[#0099FF] text-[#006FBF] font-medium":"border-stone-200 text-stone-500"}`}>
               <option value="">Auto — {q.label}</option>
               {RULE_SERVICES.map(sv=><option key={sv} value={sv}>{sv}</option>)}
             </select>
@@ -10361,8 +10368,8 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
       {/* command bar */}
       <div className="border border-stone-200 rounded-lg bg-white p-3 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[180px]"><Search className="w-4 h-4 absolute left-2.5 top-2 text-stone-400"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search orders — name, address, SKU, item, email…" className="w-full bg-stone-50 border border-stone-200 rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#0099FF] focus:bg-white"/></div>
-          <select value={sortBy} onChange={e=>setSortBy(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">
+          <div className="relative flex-1 min-w-[180px]"><Search className="w-4 h-4 absolute left-2.5 top-2 text-stone-400"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search orders — name, address, SKU, item, email…" className="w-full bg-stone-50 border border-stone-200 rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#0086E0] focus:bg-white"/></div>
+          <select value={sortBy} onChange={e=>setSortBy(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0]">
             <option value="newest">Newest First</option><option value="oldest">Oldest First</option><option value="heaviest">Heaviest First</option><option value="lightest">Lightest First</option><option value="value">Highest Value</option><option value="state">By State</option><option value="zone">By Zone</option>
           </select>
           <button onClick={()=>setFOpen(v=>!v)} className={`text-sm rounded-lg px-3 py-1.5 font-medium border flex items-center gap-1.5 ${activeFilters?"bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF]":"bg-white border-stone-200 text-stone-600 hover:bg-stone-100"}`}><ChevronDown className={`w-3.5 h-3.5 transition-transform ${fOpen?"rotate-180":""}`}/>Filters{activeFilters?` · ${activeFilters}`:""}</button>
@@ -10376,41 +10383,41 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
             const shown=vals.slice(0,cap);
             return (<div key={d} className="flex flex-wrap items-center gap-1.5">
               <span className="text-[10px] uppercase tracking-widest text-stone-400 w-14 shrink-0">{label}</span>
-              {d==="product"&&dimValues("product").length>8&&<input value={prodQ} onChange={e=>setProdQ(e.target.value)} placeholder="Find Product…" className="w-28 bg-white border border-stone-200 rounded-full px-2.5 py-1 text-xs outline-none focus:border-[#0099FF]"/>}
+              {d==="product"&&dimValues("product").length>8&&<input value={prodQ} onChange={e=>setProdQ(e.target.value)} placeholder="Find Product…" className="w-28 bg-white border border-stone-200 rounded-full px-2.5 py-1 text-xs outline-none focus:border-[#0086E0]"/>}
               {shown.map(([v,n])=><Chip key={v} on={fs[d].has(v)} onClick={()=>toggleDim(d,v)}>{v} <span className="opacity-60">{n}</span></Chip>)}
               {vals.length>cap&&<button onClick={()=>setShowAll(x=>{const nx=new Set(x);nx.add(d);return nx;})} className="text-[11px] text-[#006FBF] hover:underline">+{vals.length-cap} more</button>}
               {showAll.has(d)&&vals.length>12&&<button onClick={()=>setShowAll(x=>{const nx=new Set(x);nx.delete(d);return nx;})} className="text-[11px] text-stone-400 hover:underline">less</button>}
             </div>);
           })}
           {activeFilters>0&&<div className="flex items-center gap-3 pt-1">
-            <button onClick={()=>setSel(new Set(visible.filter(o=>!holds[o.id]).map(o=>o.id)))} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE] flex items-center gap-1.5"><Check className="w-4 h-4"/>Select these {visible.filter(o=>!holds[o.id]).length}</button>
+            <button onClick={()=>setSel(new Set(visible.filter(o=>!holds[o.id]).map(o=>o.id)))} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Check className="w-4 h-4"/>Select these {visible.filter(o=>!holds[o.id]).length}</button>
             <span className="text-[11px] text-stone-400">Filters narrow the list → grab them all with one click → batch.</span>
           </div>}
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <span className="text-[10px] uppercase tracking-widest text-stone-400 w-14 shrink-0">Ranges</span>
             <span className="text-xs text-stone-500">Weight</span>
-            <input value={wMin} onChange={e=>setWMin(e.target.value)} placeholder="Min" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>–<input value={wMax} onChange={e=>setWMax(e.target.value)} placeholder="Max" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>
+            <input value={wMin} onChange={e=>setWMin(e.target.value)} placeholder="Min" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0086E0]"/>–<input value={wMax} onChange={e=>setWMax(e.target.value)} placeholder="Max" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0086E0]"/>
             <span className="text-xs text-stone-500 ml-2">Total $</span>
-            <input value={tMin} onChange={e=>setTMin(e.target.value)} placeholder="Min" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>–<input value={tMax} onChange={e=>setTMax(e.target.value)} placeholder="Max" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>
+            <input value={tMin} onChange={e=>setTMin(e.target.value)} placeholder="Min" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0086E0]"/>–<input value={tMax} onChange={e=>setTMax(e.target.value)} placeholder="Max" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0086E0]"/>
             <span className="text-xs text-stone-500 ml-2">Age</span>
-            <select value={age} onChange={e=>setAge(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"><option value="any">Any</option><option value="today">Today</option><option value="2">≤ 2 days</option><option value="7">≤ 7 days</option><option value="old">Over 7 days</option></select>
+            <select value={age} onChange={e=>setAge(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0086E0]"><option value="any">Any</option><option value="today">Today</option><option value="2">≤ 2 days</option><option value="7">≤ 7 days</option><option value="old">Over 7 days</option></select>
             <span className="text-xs text-stone-500 ml-2">Order date</span>
-            <input type="date" value={dFrom} onChange={e=>setDFrom(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>
+            <input type="date" value={dFrom} onChange={e=>setDFrom(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0086E0]"/>
             <span className="text-xs text-stone-400">to</span>
-            <input type="date" value={dTo} onChange={e=>setDTo(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>
+            <input type="date" value={dTo} onChange={e=>setDTo(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0086E0]"/>
           </div>
         </div>}
         <div className="border-t border-stone-100 pt-3 flex flex-wrap items-center gap-2 sm:gap-3">
           <span className="text-[10px] uppercase tracking-widest text-stone-400">Rate rule</span>
-          <select value={rule} onChange={e=>setRule(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">
+          <select value={rule} onChange={e=>setRule(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0]">
             <option value="cheapest">Cheapest Overall</option>
             <option value="fastest">Fastest Delivery</option>
             <option value="ground">Cheapest Ground</option>
             <option value="specific">Specific Carrier &amp; Service</option>
           </select>
           {rule==="specific"&&<>
-            <select value={specCarrier} onChange={e=>{setSpecCarrier(e.target.value);setSpecSvc(SERVICE_OPTIONS[e.target.value][0]);}} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">{Object.keys(SERVICE_OPTIONS).map(c=><option key={c}>{c}</option>)}</select>
-            <select value={specSvc} onChange={e=>setSpecSvc(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">{(SERVICE_OPTIONS[specCarrier]||[]).map(sv=><option key={sv}>{sv}</option>)}</select>
+            <select value={specCarrier} onChange={e=>{setSpecCarrier(e.target.value);setSpecSvc(SERVICE_OPTIONS[e.target.value][0]);}} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0]">{Object.keys(SERVICE_OPTIONS).map(c=><option key={c}>{c}</option>)}</select>
+            <select value={specSvc} onChange={e=>setSpecSvc(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0]">{(SERVICE_OPTIONS[specCarrier]||[]).map(sv=><option key={sv}>{sv}</option>)}</select>
           </>}
           <label className="flex items-center gap-1.5 ml-2 bg-white border border-stone-200 rounded-lg pl-2.5 pr-1 py-1">
             <Layers className="w-3.5 h-3.5 text-stone-400"/>
@@ -10460,9 +10467,9 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         {svcMixSel.length>0&&<span className="hidden lg:flex items-center gap-1.5">{svcMixSel.map(([l,n])=><Badge key={l} tone="stone">{l.replace(/^FedEx /,"")} ×{n}</Badge>)}</span>}
         <button onClick={()=>printPackingSlips(rows.map(r=>slipFromOrder(r.o,settings.sender)))} disabled={rows.length===0} title="Print a packing slip for every selected order" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5"><FileText className="w-4 h-4"/>Packing Slips</button>
         <button onClick={()=>printPickList(rows.map(r=>r.o))} disabled={rows.length===0} title="One sheet: every item in this batch aggregated by product, with checkboxes" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5"><ClipboardList className="w-4 h-4"/>Pick List</button>
-        <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Fallback</span><select value={cz(settings).fallbackService||""} onChange={e=>setSettings&&setSettings(s=>({...s,custom:{...(s.custom||{}),fallbackService:e.target.value}}))} title="Service used for orders that match no rule" className="text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded-lg px-2 outline-none focus:border-[#0099FF]"><option value="">No Fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest Ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx Ground Economy">FedEx Ground Economy</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
-        <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Ship Date</span><input type="date" value={batchShipDate} onChange={e=>setBatchShipDate(e.target.value)} className="text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded-lg px-2 outline-none focus:border-[#0099FF]"/></label>
-        <button onClick={run} disabled={running||rows.length===0} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-semibold hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{running?<Loader2 className="w-4 h-4 animate-spin"/>:<Printer className="w-4 h-4"/>}{running?`Booking ${progress.n}/${progress.total}…`:`Create & print ${rows.length} label${rows.length!==1?"s":""}`}</button>
+        <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Fallback</span><select value={cz(settings).fallbackService||""} onChange={e=>setSettings&&setSettings(s=>({...s,custom:{...(s.custom||{}),fallbackService:e.target.value}}))} title="Service used for orders that match no rule" className="text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded-lg px-2 outline-none focus:border-[#0086E0]"><option value="">No Fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest Ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx Ground Economy">FedEx Ground Economy</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
+        <label className="flex items-center gap-1.5 text-[11px] text-stone-500"><span className="uppercase tracking-widest">Ship Date</span><input type="date" value={batchShipDate} onChange={e=>setBatchShipDate(e.target.value)} className="text-sm text-stone-800 py-1 bg-white border border-stone-300 rounded-lg px-2 outline-none focus:border-[#0086E0]"/></label>
+        <button onClick={run} disabled={running||rows.length===0} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-semibold hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{running?<Loader2 className="w-4 h-4 animate-spin"/>:<Printer className="w-4 h-4"/>}{running?`Booking ${progress.n}/${progress.total}…`:`Create & print ${rows.length} label${rows.length!==1?"s":""}`}</button>
       </div>
       {done>0&&<div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{done} shipment{done!==1?"s":""} recorded — see the Shipments tab. Connect your carrier account for live labels.</div>}
       {results.length>0&&<div className="border border-stone-200 rounded-lg bg-white p-4 space-y-2">
@@ -10472,7 +10479,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
           {results.filter(r=>!r.ok).length>0&&<Badge tone="rose">{results.filter(r=>!r.ok).length} failed</Badge>}
           <div className="flex-1"/>
           {printBusy&&!printGroups&&<span className="text-sm text-stone-500 flex items-center gap-1.5"><Loader2 className="w-4 h-4 animate-spin"/>Printing labels…</span>}
-        {printGroups&&printGroups.map(gp=><button key={gp.name} onClick={()=>printAll(gp.rows)} title="Opens these labels as their own print run — pick this printer in the dialog once" className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE] flex items-center gap-1.5"><Printer className="w-4 h-4"/>{gp.rows.length} → {gp.name}</button>)}
+        {printGroups&&printGroups.map(gp=><button key={gp.name} onClick={()=>printAll(gp.rows)} title="Opens these labels as their own print run — pick this printer in the dialog once" className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Printer className="w-4 h-4"/>{gp.rows.length} → {gp.name}</button>)}
         {results.some(r=>r.ok)&&<button onClick={()=>printPackingSlips(results.filter(r=>r.ok&&r.o).map(r=>slipFromOrder(r.o,settings.sender)))} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-4 h-4"/>Print Packing Slips</button>}
           <button onClick={()=>setResults([])} className="text-stone-300 hover:text-stone-600"><X className="w-4 h-4"/></button>
         </div>
@@ -10628,7 +10635,7 @@ function Reports({shipments,showMoney=true}){
       <div className="flex flex-wrap items-center gap-3">
         <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><TrendingUp className="w-4 h-4"/>Reports</h2>
         <div className="flex-1"/>
-        <select value={range} onChange={e=>setRange(+e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option><option value={0}>All Time</option></select>
+        <select value={range} onChange={e=>setRange(+e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0]"><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option><option value={0}>All Time</option></select>
         <button onClick={exportCSV} className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8]"><Download className="w-4 h-4"/>Export CSV</button>
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -10701,7 +10708,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button onClick={()=>carrierCall("carrierStatus")} disabled={!!cBusy} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5">{cBusy==="carrierStatus"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<Search className="w-3.5 h-3.5"/>}Check status</button>
-            <button onClick={()=>carrierCall("installCarrier")} disabled={!!cBusy||!uid} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{cBusy==="installCarrier"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<Zap className="w-3.5 h-3.5"/>}{cs&&cs.installed?"Update at checkout":"Install at checkout"}</button>
+            <button onClick={()=>carrierCall("installCarrier")} disabled={!!cBusy||!uid} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{cBusy==="installCarrier"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<Zap className="w-3.5 h-3.5"/>}{cs&&cs.installed?"Update at checkout":"Install at checkout"}</button>
           </div>
           {cs&&(cs.ok||cs.err)&&<div className={`mt-2 text-xs rounded px-2.5 py-1.5 border ${cs.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{cs.err||cs.ok}</div>}
           <p className="text-[11px] text-stone-400 mt-2">Live checkout rates require a Shopify plan with Carrier Calculated Shipping (Advanced/Plus, or the $20/mo add-on).</p>
@@ -10722,7 +10729,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
             <div key={k} className="flex items-center gap-3 py-1.5">
               <span className={`text-[10px] font-bold w-12 ${CARRIER_TINT[RATES[k].carrier]}`}>{RATES[k].carrier}</span>
               <span className="w-44 shrink-0 text-sm truncate" title={RATES[k].label}>{RATES[k].label}</span>
-              <input value={(ck.names||{})[k]||""} onChange={e=>setCk({names:{...(ck.names||{}),[k]:e.target.value}})} placeholder="Buyer sees… (blank = real name)" disabled={!ck.services[k]} className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 disabled:bg-stone-50 disabled:text-stone-400"/>
+              <input value={(ck.names||{})[k]||""} onChange={e=>setCk({names:{...(ck.names||{}),[k]:e.target.value}})} placeholder="Buyer sees… (blank = real name)" disabled={!ck.services[k]} className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300 disabled:bg-stone-50 disabled:text-stone-400"/>
               <button onClick={()=>toggleSvc(k)}><span className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${ck.services[k]?"bg-[#0086E0] justify-end":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></span></button>
             </div>
           ))}</div>
@@ -10732,7 +10739,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
       {/* PREVIEW */}
       <div className="space-y-4">
         <div className="border border-stone-200 rounded-lg bg-white p-4">
-          <div className="flex items-center justify-between mb-3"><h3 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Calculator className="w-4 h-4"/>Test cart</h3><div className="flex items-center gap-1.5 text-sm"><span className="text-stone-400">Ship To</span><input value={zip} onChange={e=>setZip(e.target.value)} className="w-20 bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"/></div></div>
+          <div className="flex items-center justify-between mb-3"><h3 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Calculator className="w-4 h-4"/>Test cart</h3><div className="flex items-center gap-1.5 text-sm"><span className="text-stone-400">Ship To</span><input value={zip} onChange={e=>setZip(e.target.value)} className="w-20 bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"/></div></div>
           <div className="space-y-1.5">{CART_ITEMS.map((it,i)=>(
             <div key={i} className="flex items-center gap-3 text-sm">
               <div className="flex-1"><span className="text-stone-800">{it.name}</span><span className="text-[11px] text-stone-400 ml-2">{it.l}×{it.w}×{it.h} · {it.wt}lb · ${it.price}</span></div>
@@ -10870,7 +10877,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
       <aside className="md:w-56 shrink-0 space-y-4">
         <div className="relative">
           <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-2.5 pointer-events-none"/>
-          <input value={secSearch} onChange={e=>setSecSearch(e.target.value)} placeholder="Search settings…" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-400"/>
+          <input value={secSearch} onChange={e=>setSecSearch(e.target.value)} placeholder="Search settings…" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-400"/>
         </div>
         {(()=>{ const q=secSearch.trim().toLowerCase(); let any=false;
         const groups=SEC_GROUPS.map(([gl,gsecs])=>{const vis=gsecs.filter(([id,l])=>polFor(id)!=="off"&&(!q||String(l).toLowerCase().includes(q)||gl.toLowerCase().includes(q))); if(!vis.length)return null; any=true; return (
@@ -10945,7 +10952,7 @@ function ReferenceFields({settings,setSettings}){
 function Warehouses({settings,setSettings}){
   const list=settings.warehouses||[];
   const [n,setN]=useState({name:"",company:"",address:"",city:"",state:"",zip:"",phone:""});
-  const inC="bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] w-full";
+  const inC="bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] w-full";
   const add=()=>{ if(!n.name||!n.zip)return; setSettings({...settings,warehouses:[...list,{...n,id:"wh"+Date.now()}]}); setN({name:"",company:"",address:"",city:"",state:"",zip:"",phone:""}); };
   const del=(i)=>setSettings({...settings,warehouses:list.filter((_,j)=>j!==i)});   // by index — two warehouses with the same name no longer delete together
   return (<div className="max-w-3xl space-y-4">
@@ -10976,7 +10983,7 @@ function Warehouses({settings,setSettings}){
         <input value={n.state} onChange={e=>setN({...n,state:e.target.value})} placeholder="State" className={inC}/>
         <input value={n.zip} onChange={e=>setN({...n,zip:e.target.value})} placeholder="ZIP" className={inC+""}/>
       </div>
-      <button onClick={add} disabled={!n.name||!n.zip} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5"><Plus className="w-4 h-4"/>Add Warehouse</button>
+      <button onClick={add} disabled={!n.name||!n.zip} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5"><Plus className="w-4 h-4"/>Add Warehouse</button>
     </div>
   </div>);
 }
@@ -11058,8 +11065,8 @@ function ProductCatalog({settings,setSettings}){
     {msg&&<div className={`text-xs rounded-lg px-3 py-2 border flex items-center gap-2 ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err?<AlertTriangle className="w-4 h-4"/>:<CheckCircle2 className="w-4 h-4"/>}{msg.err||msg.ok}</div>}
 
     <div className="flex flex-wrap items-center gap-2">
-      <div className="relative flex-1 min-w-[160px]"><Search className="w-4 h-4 absolute left-2.5 top-2 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search products or SKUs" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#0099FF]"/></div>
-      <button onClick={()=>setAdding(a=>!a)} className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE]"><Plus className="w-4 h-4"/>Add Product</button>
+      <div className="relative flex-1 min-w-[160px]"><Search className="w-4 h-4 absolute left-2.5 top-2 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search products or SKUs" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#0086E0]"/></div>
+      <button onClick={()=>setAdding(a=>!a)} className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8]"><Plus className="w-4 h-4"/>Add Product</button>
       <button onClick={pullShopify} disabled={busy} className="flex items-center gap-1.5 text-sm bg-[#5E8E3E] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#4e7834] disabled:opacity-50">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<ShoppingBag className="w-4 h-4"/>}Pull from Shopify</button>
       <label className="flex items-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-300 cursor-pointer"><Upload className="w-4 h-4"/>Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
       <button onClick={exportCSV} className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 px-2 py-1.5"><Download className="w-4 h-4"/>Export</button>
@@ -11083,7 +11090,7 @@ function ProductCatalog({settings,setSettings}){
         <label className="flex items-center gap-2 text-sm text-stone-600 pt-5 cursor-pointer"><input type="checkbox" checked={!!nf.shipsAlone} onChange={e=>setNf({...nf,shipsAlone:e.target.checked})} className="accent-[#0086E0]"/>Ships alone (own box)</label>
         <label className="flex items-center gap-2 text-sm text-stone-600 pt-5 cursor-pointer"><input type="checkbox" checked={!!nf.hazmat} onChange={e=>setNf({...nf,hazmat:e.target.checked})} className="accent-amber-600"/>Hazmat / lithium battery (ground only)</label>
       </div>
-      <div className="flex items-center gap-2 mt-2"><button onClick={addProduct} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-1.5 font-medium hover:bg-[#0072BE]">Save Product</button><button onClick={()=>setAdding(false)} className="text-sm text-stone-500 px-2 py-1.5">Cancel</button></div>
+      <div className="flex items-center gap-2 mt-2"><button onClick={addProduct} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-1.5 font-medium hover:bg-[#006db8]">Save Product</button><button onClick={()=>setAdding(false)} className="text-sm text-stone-500 px-2 py-1.5">Cancel</button></div>
     </div>}
 
     <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
@@ -11118,7 +11125,7 @@ function ProductCatalog({settings,setSettings}){
               <label className="flex items-center gap-2 text-sm text-stone-600 pt-5 cursor-pointer"><input type="checkbox" checked={!!ef.shipsAlone} onChange={e=>setEf({...ef,shipsAlone:e.target.checked})} className="accent-[#0086E0]"/>Ships alone (own box)</label>
               <label className="flex items-center gap-2 text-sm text-stone-600 pt-5 cursor-pointer"><input type="checkbox" checked={!!ef.hazmat} onChange={e=>setEf({...ef,hazmat:e.target.checked})} className="accent-amber-600"/>Hazmat / lithium battery</label>
             </div>
-            <div className="flex items-center gap-2 mt-2"><button onClick={saveEdit} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-1.5 font-medium hover:bg-[#0072BE]">Save</button><button onClick={()=>{setEditId(null);setEf(null);}} className="text-sm text-stone-500 px-2 py-1.5">Cancel</button></div>
+            <div className="flex items-center gap-2 mt-2"><button onClick={saveEdit} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-1.5 font-medium hover:bg-[#006db8]">Save</button><button onClick={()=>{setEditId(null);setEf(null);}} className="text-sm text-stone-500 px-2 py-1.5">Cancel</button></div>
           </div>}
         </div>);
       })}</div>
@@ -11440,7 +11447,7 @@ function PrinterSettings({settings:settingsLive,setSettings:commitSettings}){
           <div className="text-[10px] uppercase tracking-widest text-stone-400">1 · When a matching order comes in</div>
           <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
             <span>On the Ship tab<span className="block text-[11px] text-stone-400">Your Autopilot rules pick the service on a matching order — choose whether the other services stay visible. Whether it <b>books itself</b> is set by the mode below.</span></span>
-            <select value={cust.autoRulesOnShip===false?"off":(cust.matchedOnly?"hidden":"shown")} onChange={e=>{const v=e.target.value;setCust("autoRulesOnShip",v!=="off");setCust("matchedOnly",v==="hidden");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] shrink-0">
+            <select value={cust.autoRulesOnShip===false?"off":(cust.matchedOnly?"hidden":"shown")} onChange={e=>{const v=e.target.value;setCust("autoRulesOnShip",v!=="off");setCust("matchedOnly",v==="hidden");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] shrink-0">
               <option value="off">I Choose the Service</option>
               <option value="shown">Pre-select it — other services still show</option>
               <option value="hidden">Pre-select it — hide the other services</option>
@@ -11452,7 +11459,7 @@ function PrinterSettings({settings:settingsLive,setSettings:commitSettings}){
           </label>
           <label className="flex items-center justify-between gap-3 text-sm text-stone-700">
             <span>On the Batch screen<span className="block text-[11px] text-stone-400">Apply rules across the whole batch.</span></span>
-            <select value={!cust.autoRulesInBatch?"off":(cust.autoBookBatch?"auto":"fill")} onChange={e=>{const v=e.target.value;setCust("autoRulesInBatch",v!=="off");setCust("autoBookBatch",v==="auto");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] shrink-0">
+            <select value={!cust.autoRulesInBatch?"off":(cust.autoBookBatch?"auto":"fill")} onChange={e=>{const v=e.target.value;setCust("autoRulesInBatch",v!=="off");setCust("autoBookBatch",v==="auto");}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] shrink-0">
               <option value="off">Do Nothing</option>
               <option value="fill">Fill In Services</option>
               <option value="auto">Fill in &amp; auto-book</option>
@@ -11509,7 +11516,7 @@ function PrinterSettings({settings:settingsLive,setSettings:commitSettings}){
         <p className="text-[11px] text-stone-400">Tip: if labels ever stop printing, the PrintNode app on the label computer is almost always closed or signed out — open it and check it says Connected.</p>
         <div className="flex flex-wrap items-end gap-2">
           <label className="block text-sm text-stone-700 flex-1 min-w-[220px]">PrintNode API key
-            <input type="password" value={pnc.apiKey||""} onChange={e=>setPnCfg({apiKey:e.target.value})} placeholder="Paste Your Key" className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/>
+            <input type="password" value={pnc.apiKey||""} onChange={e=>setPnCfg({apiKey:e.target.value})} placeholder="Paste Your Key" className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0]"/>
           </label>
           <button onClick={pnFind} disabled={!String(pnc.apiKey||"").trim()||pnBusy==="find"} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{pnBusy==="find"?<><Loader2 className="w-4 h-4 animate-spin"/>Finding…</>:<><Search className="w-4 h-4"/>Find my printers</>}</button>
         </div>
@@ -11632,8 +11639,8 @@ function PrinterSettings({settings:settingsLive,setSettings:commitSettings}){
           <option value="4x6">4×6</option>
         </Select>
       </Field>
-      <label className="block text-sm text-stone-700 mt-1">Thank-you message<textarea value={cust.slipThanks||""} onChange={e=>setCust("slipThanks",e.target.value)} rows={2} placeholder="Thanks for your order! We appreciate you." className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></label>
-      <label className="block text-sm text-stone-700">Footer line<input value={cust.slipFooter||""} onChange={e=>setCust("slipFooter",e.target.value)} placeholder="Returns within 30 days · support@yourstore.com" className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/></label>
+      <label className="block text-sm text-stone-700 mt-1">Thank-you message<textarea value={cust.slipThanks||""} onChange={e=>setCust("slipThanks",e.target.value)} rows={2} placeholder="Thanks for your order! We appreciate you." className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></label>
+      <label className="block text-sm text-stone-700">Footer line<input value={cust.slipFooter||""} onChange={e=>setCust("slipFooter",e.target.value)} placeholder="Returns within 30 days · support@yourstore.com" className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></label>
       <div className="text-[11px] text-stone-400">The message &amp; footer print on every packing slip — Ship, Batch, and Orders.</div>
     </Panel>
     <Panel title="Doc tabs">
@@ -11652,7 +11659,7 @@ function PrinterSettings({settings:settingsLive,setSettings:commitSettings}){
         </Field>
         <Field label="Label offset from tear line">
           <div className="flex items-center gap-2">
-            <input type="number" min="0" max="0.6" step="0.02" value={dt.labelOffset==null?0.28:dt.labelOffset} onChange={e=>setDt({labelOffset:Math.max(0,Math.min(0.6,+e.target.value||0))})} className="w-24 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"/>
+            <input type="number" min="0" max="0.6" step="0.02" value={dt.labelOffset==null?0.28:dt.labelOffset} onChange={e=>setDt({labelOffset:Math.max(0,Math.min(0.6,+e.target.value||0))})} className="w-24 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"/>
             <span className="text-sm text-stone-500">inches</span>
             <span className="text-[11px] text-stone-400">Pushes the whole label away from the perforation so the carrier's own header can't bleed into the tab. Default 0.28″. Raise it if you still see label text at the tear line.</span>
           </div>
@@ -11980,7 +11987,7 @@ function rulePatchesFor(run){
    the order until Save is clicked. */
 function OrderEditForm({order,onSave,onCancel}){
   const [d,setD]=useState({customer:order.customer||"",company:order.company||"",address1:order.address1||"",address2:order.address2||"",city:order.city||"",state:order.state||"",zip:order.zip||"",phone:order.phone||"",email:order.email||"",weight:order.weight==null?"":order.weight});
-  const F=(k,ph,cls)=>(<input value={d[k]} onChange={e=>setD(p=>({...p,[k]:e.target.value}))} placeholder={ph} className={"bg-white border border-stone-200 rounded px-2 py-1 text-xs outline-none focus:border-[#0099FF] "+(cls||"")}/>);
+  const F=(k,ph,cls)=>(<input value={d[k]} onChange={e=>setD(p=>({...p,[k]:e.target.value}))} placeholder={ph} className={"bg-white border border-stone-200 rounded px-2 py-1 text-xs outline-none focus:border-[#0086E0] "+(cls||"")}/>);
   return (<div className="border border-[#BAE6FD] bg-[#F0F9FF] rounded-lg p-2.5 space-y-1.5" onClick={e=>e.stopPropagation()}>
     <div className="grid sm:grid-cols-2 gap-1.5">
       {F("customer","Name")}{F("company","Company")}
@@ -12004,7 +12011,7 @@ function RuleEditorModal({rule,onSave,onClose,onDelete,warehouses}){
   const addAct=()=>setR(p=>({...p,actions:[...(p.actions||[]),{id:"a"+Date.now()+Math.random().toString(36).slice(2,5),type:"Set Service",service:"ANY - Cheapest"}]}));
   const setAct=(i,patch)=>setR(p=>({...p,actions:p.actions.map((a,j)=>j===i?{...a,...patch}:a)}));
   const delAct=(i)=>setR(p=>({...p,actions:p.actions.filter((_,j)=>j!==i)}));
-  const inC="bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]";
+  const inC="bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0]";
   const actFields=(a,i)=>{
     switch(a.type){
       case "Set Service": return <select value={a.service||""} onChange={e=>setAct(i,{service:e.target.value})} className={inC+" flex-1 min-w-0"}>{RULE_SERVICES.map(s=><option key={s}>{s}</option>)}</select>;
@@ -12081,7 +12088,7 @@ function RuleEditorModal({rule,onSave,onClose,onDelete,warehouses}){
           {!rule._isNew?<button onClick={()=>onDelete(r.id)} className="text-sm text-rose-600 hover:bg-rose-50 rounded-lg px-3 py-1.5 font-medium">Delete</button>:<span/>}
           <div className="flex items-center gap-2">
             <button onClick={onClose} className="text-sm text-stone-500 rounded px-3 py-2 hover:bg-stone-100">Cancel</button>
-            <button onClick={()=>onSave(r)} disabled={!r.name} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40">Save Rule</button>
+            <button onClick={()=>onSave(r)} disabled={!r.name} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40">Save Rule</button>
           </div>
         </div>
       </div>
@@ -12122,7 +12129,7 @@ function RuleTesterPanel({rules,orders,originZip}){
       <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${openT?"rotate-180":""}`}/>
     </button>
     {openT&&<div className="px-4 pb-4 space-y-3 border-t border-stone-100 pt-3">
-      <select value={oid} onChange={e=>setOid(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] max-w-md w-full">
+      <select value={oid} onChange={e=>setOid(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] max-w-md w-full">
         <option value="">Pick an order to test…</option>
         {cand.map(o=><option key={o.id} value={o.id}>{o.name} — {o.customer||"?"} · {o.state||""} · ${o.total||"?"}</option>)}
       </select>
@@ -12336,14 +12343,14 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
       <div className="flex flex-wrap items-center gap-2 pt-1">
         <span className="text-[10px] uppercase tracking-widest text-stone-400 w-14 shrink-0">Ranges</span>
         <span className="text-xs text-stone-500">Weight</span>
-        <input value={fb.wMin} onChange={e=>setFb(f=>({...f,wMin:e.target.value}))} placeholder="Min" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>–<input value={fb.wMax} onChange={e=>setFb(f=>({...f,wMax:e.target.value}))} placeholder="Max" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>
+        <input value={fb.wMin} onChange={e=>setFb(f=>({...f,wMin:e.target.value}))} placeholder="Min" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0086E0]"/>–<input value={fb.wMax} onChange={e=>setFb(f=>({...f,wMax:e.target.value}))} placeholder="Max" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0086E0]"/>
         <span className="text-xs text-stone-500 ml-2">Total $</span>
-        <input value={fb.tMin} onChange={e=>setFb(f=>({...f,tMin:e.target.value}))} placeholder="Min" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>–<input value={fb.tMax} onChange={e=>setFb(f=>({...f,tMax:e.target.value}))} placeholder="Max" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"/>
+        <input value={fb.tMin} onChange={e=>setFb(f=>({...f,tMin:e.target.value}))} placeholder="Min" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0086E0]"/>–<input value={fb.tMax} onChange={e=>setFb(f=>({...f,tMax:e.target.value}))} placeholder="Max" className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0086E0]"/>
         <span className="text-xs text-stone-500 ml-2">Age</span>
-        <select value={fb.age} onChange={e=>setFb(f=>({...f,age:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0099FF]"><option value="any">Any</option><option value="today">Today</option><option value="2">≤ 2 days</option><option value="7">≤ 7 days</option><option value="old">Over 7 days</option></select>
+        <select value={fb.age} onChange={e=>setFb(f=>({...f,age:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0086E0]"><option value="any">Any</option><option value="today">Today</option><option value="2">≤ 2 days</option><option value="7">≤ 7 days</option><option value="old">Over 7 days</option></select>
       </div>
       <div className="flex flex-wrap items-center gap-3 pt-1">
-        <button onClick={fbSend} disabled={!fbCount} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5"><Layers className="w-4 h-4"/>Send {fbCount} order{fbCount!==1?"s":""} to Batch</button>
+        <button onClick={fbSend} disabled={!fbCount} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5"><Layers className="w-4 h-4"/>Send {fbCount} order{fbCount!==1?"s":""} to Batch</button>
         <span className="text-[11px] text-stone-400">Opens Batch with these orders pre-selected{fb.service?" and the service applied":""} — review, then Create labels.</span>
         <button onClick={()=>setFb({states:new Set(),zones:new Set(),sources:new Set(),skus:new Set(),wMin:"",wMax:"",tMin:"",tMax:"",age:"any",service:""})} className="text-xs text-stone-400 hover:underline">Clear Filters</button>
       </div>
@@ -12357,7 +12364,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
         {apResults.rows.filter(r=>!r.ok).length>0&&<Badge tone="rose">{apResults.rows.filter(r=>!r.ok).length} failed</Badge>}
         {apResults.heldN>0&&<Badge tone="amber">{apResults.heldN} held for review</Badge>}
         <div className="flex-1"/>
-        {apResults.rows.some(r=>r.ok&&r.pdf)&&<button disabled={apPrintBusy} onClick={apPrintAll} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE] disabled:opacity-60 flex items-center gap-1.5">{apPrintBusy?<Loader2 className="w-4 h-4 animate-spin"/>:<Printer className="w-4 h-4"/>}{apPrintBusy?"Preparing…":"Print all labels"}</button>}
+        {apResults.rows.some(r=>r.ok&&r.pdf)&&<button disabled={apPrintBusy} onClick={apPrintAll} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] disabled:opacity-60 flex items-center gap-1.5">{apPrintBusy?<Loader2 className="w-4 h-4 animate-spin"/>:<Printer className="w-4 h-4"/>}{apPrintBusy?"Preparing…":"Print all labels"}</button>}
         <button onClick={()=>setApResults(null)} className="text-stone-300 hover:text-stone-600"><X className="w-4 h-4"/></button>
       </div>
       {apResults.none&&<div className="text-sm text-stone-500">No unfulfilled orders to run right now{apResults.heldN?` — ${apResults.heldN} are held for your review`:""}.</div>}
@@ -12389,7 +12396,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
           <div className="mt-3 flex items-center justify-center gap-3">
             {/* "Add Starter Rules" removed — SEED_RULESET is intentionally empty (real accounts
                 start with zero Autopilot rules), so the button silently added nothing. */}
-            <button onClick={newRule} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#0072BE]">＋ Build Your First Rule</button>
+            <button onClick={newRule} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8]">＋ Build Your First Rule</button>
           </div>
         </div>}
         {rules.map((r,i)=>{
@@ -12433,7 +12440,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
                 <span className="text-[11px] text-stone-400 truncate">{o.customer} · {o.city}{o.state?", "+o.state:""} {o.country&&o.country!=="US"?`(${o.country})`:""}</span>
                 <div className="flex-1"/>
                 <div onClick={e=>e.stopPropagation()}>
-                  <select value={apSvcOv[o.id]||""} onChange={e=>setApSvcOv(v=>{const n={...v};if(e.target.value)n[o.id]=e.target.value;else delete n[o.id];return n;})} title={ruledSvc?"Rule picks "+ruledSvc+" — choosing here overrides it for this order only":"Overrides the service Autopilot books for this order"} className={`bg-white border rounded px-2 py-1 text-xs outline-none focus:border-[#0099FF] ${apSvcOv[o.id]?"border-[#0099FF] text-[#006FBF] font-medium":"border-stone-200 text-stone-500"}`}>
+                  <select value={apSvcOv[o.id]||""} onChange={e=>setApSvcOv(v=>{const n={...v};if(e.target.value)n[o.id]=e.target.value;else delete n[o.id];return n;})} title={ruledSvc?"Rule picks "+ruledSvc+" — choosing here overrides it for this order only":"Overrides the service Autopilot books for this order"} className={`bg-white border rounded px-2 py-1 text-xs outline-none focus:border-[#0086E0] ${apSvcOv[o.id]?"border-[#0099FF] text-[#006FBF] font-medium":"border-stone-200 text-stone-500"}`}>
                     <option value="">{ruledSvc?"Rule — "+ruledSvc:"Auto — best rate"}</option>
                     {RULE_SERVICES.map(sv=><option key={sv} value={sv}>{sv}</option>)}
                   </select>
@@ -12505,7 +12512,7 @@ function AddressBook({settings,setSettings}){
     </div>
     {msg&&<div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{msg}</div>}
     <div className="text-[11px] text-stone-400">CSV columns recognized: name, company, address, city, state, zip, phone (header row optional).</div>
-    <div className="relative"><Search className="w-4 h-4 absolute left-3 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search Address Book" className="w-full bg-white border border-stone-200 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:border-[#0099FF]"/></div>
+    <div className="relative"><Search className="w-4 h-4 absolute left-3 top-2.5 text-stone-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search Address Book" className="w-full bg-white border border-stone-200 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:border-[#0086E0]"/></div>
     <Panel title="Add address">
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2"><Field label="Name"><Input value={f.name} onChange={e=>setF({...f,name:e.target.value})}/></Field><Field label="Company"><Input value={f.company} onChange={e=>setF({...f,company:e.target.value})}/></Field><Field label="Phone"><Input value={f.phone} onChange={e=>setF({...f,phone:e.target.value})}/></Field><div className="col-span-2 sm:col-span-3"><Field label="Street"><Input value={f.address1} onChange={e=>setF({...f,address1:e.target.value})}/></Field></div><Field label="City"><Input value={f.city} onChange={e=>setF({...f,city:e.target.value})}/></Field><Field label="State"><Input value={f.state} onChange={e=>setF({...f,state:e.target.value})}/></Field><Field label="ZIP"><Input value={f.zip} onChange={e=>setF({...f,zip:e.target.value})}/></Field></div>
       <div className="border-t border-stone-100 pt-3 mt-1">
@@ -12542,7 +12549,7 @@ function AddressBook({settings,setSettings}){
             <div className="col-span-1 sm:col-span-2"><Field label="Third-party billing account #"><Input value={ef.acctNum||""} onChange={e=>setEf({...ef,acctNum:e.target.value})}/></Field></div>
           </div>
           <div className="flex items-center gap-2 mt-3">
-            <button onClick={saveEdit} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-1.5 font-medium hover:bg-[#0072BE]">Save Changes</button>
+            <button onClick={saveEdit} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-1.5 font-medium hover:bg-[#006db8]">Save Changes</button>
             <button onClick={()=>{setEditId(null);setEf(null);}} className="text-sm text-stone-500 hover:text-stone-700 px-2 py-1.5">Cancel</button>
           </div>
         </div>}
@@ -12606,7 +12613,7 @@ function ConnectorModal({c,settings,setSettings,orders,setOrders,onClose}){
         </div>
         <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-stone-200">
           <div>{connected&&<button onClick={disconnect} className="text-sm border border-stone-200 text-stone-500 rounded px-3 py-2 hover:bg-stone-50">Disconnect</button>}</div>
-          {c.orders&&connected&&<button onClick={sync} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>Sync orders now</>}</button>}
+          {c.orders&&connected&&<button onClick={sync} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Syncing…</>:<><RotateCcw className="w-4 h-4"/>Sync orders now</>}</button>}
         </div>
       </div>
     </div>
@@ -12693,7 +12700,7 @@ function Integrations({settings,setSettings,orders,setOrders}){
         </ol>
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex-1 min-w-[220px]"><div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">Admin API access token</div><Input type="password" value={tok} onChange={e=>setTok(e.target.value)} placeholder="shpat_…"/></div>
-          <button onClick={connectToken} disabled={tokBusy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#0072BE] disabled:opacity-40 flex items-center gap-1.5">{tokBusy?<><Loader2 className="w-4 h-4 animate-spin"/>Verifying…</>:<><ShieldCheck className="w-4 h-4"/>Verify &amp; connect</>}</button>
+          <button onClick={connectToken} disabled={tokBusy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{tokBusy?<><Loader2 className="w-4 h-4 animate-spin"/>Verifying…</>:<><ShieldCheck className="w-4 h-4"/>Verify &amp; connect</>}</button>
         </div>
         <div className="text-[11px] text-stone-400">The token is verified against Shopify before anything saves, and it's stored with this account's settings — never shared.</div>
       </div>}
@@ -12730,7 +12737,7 @@ function Billing({settings,setSettings}){
       <p className="text-xs text-stone-400">Prepaid funds cover label purchases and prepaid carrier products. Top up here; each label drawn against this balance shows in the ledger.</p>
       <div className="flex items-end gap-2">
         <div className="flex-1"><div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1">Add amount ($)</div><div className="flex gap-1.5">{[50,100,250,500].map(v=><button key={v} onClick={()=>setAmt(String(v))} className={`text-sm rounded px-2.5 py-1.5 border ${String(v)===amt?"bg-[#E6F4FF] border-[#66C1FF] text-[#006FBF]":"bg-white border-stone-200 text-stone-600 hover:bg-stone-50"}`}>${v}</button>)}<Input type="number" value={amt} onChange={e=>setAmt(e.target.value)} className="w-24"/></div></div>
-        <button onClick={addFunds} className={`text-sm rounded px-4 py-2 font-medium flex items-center gap-1.5 ${added?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{added?<><Check className="w-4 h-4"/>Added</>:<><Plus className="w-4 h-4"/>Add funds</>}</button>
+        <button onClick={addFunds} className={`text-sm rounded-lg px-4 py-2 font-medium flex items-center gap-1.5 ${added?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{added?<><Check className="w-4 h-4"/>Added</>:<><Plus className="w-4 h-4"/>Add funds</>}</button>
       </div>
       <label className="flex items-center gap-2 text-sm text-stone-600 pt-1"><input type="checkbox" checked={prepaid.autoRecharge} onChange={e=>setPrepaid({autoRecharge:e.target.checked})} className="accent-[#0086E0]"/>Auto-recharge when balance is low</label>
       {prepaid.autoRecharge&&<div className="grid grid-cols-2 gap-2 pl-6">
@@ -12764,7 +12771,7 @@ function SignaturePad({onSave,onClose}){
     <canvas ref={ref} width={420} height={130} className="border border-dashed border-stone-300 rounded bg-white touch-none w-full max-w-[420px]"
       onMouseDown={down} onMouseMove={move} onMouseUp={up} onMouseLeave={up} onTouchStart={down} onTouchMove={move} onTouchEnd={up}/>
     <div className="flex gap-2">
-      <button onClick={save} className="text-xs bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-3 py-1.5 font-medium">Save Signature</button>
+      <button onClick={save} className="text-xs bg-[#0086E0] hover:bg-[#006db8] text-white rounded-lg px-3 py-1.5 font-medium">Save Signature</button>
       <button onClick={clear} className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200">Clear</button>
       <button onClick={onClose} className="text-xs text-stone-400 hover:text-stone-600 px-1">Close</button>
     </div>
@@ -12821,7 +12828,7 @@ function CIHistory({settings,setSettings}){
   const del=(id)=>setSettings(p=>({...p,ciHistory:(p.ciHistory||[]).filter(x=>x.id!==id)}));
   return (<div className="max-w-3xl space-y-3">
     <div className="text-sm text-stone-500">Every commercial invoice you print is saved here automatically (previews aren't). Reprint or review any of them.</div>
-    <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by consignee, country, invoice #, tracking…" className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+    <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by consignee, country, invoice #, tracking…" className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>
     {hist.length===0&&<div className="text-sm text-stone-400 border border-dashed border-stone-200 rounded-lg p-6 text-center">No invoices {q?"match your search":"printed yet — print one from the Ship tab and it'll appear here"}.</div>}
     <div className="space-y-1.5">{hist.map(r=>(<div key={r.id} className="flex items-center gap-3 text-sm border border-stone-200 rounded-lg px-3 py-2 bg-white">
       <div className="flex-1 min-w-0"><div className="font-medium text-stone-800 truncate">{r.consignee||"—"} · {r.country||"—"}{r.proforma?" · PROFORMA":""}</div>
@@ -12835,7 +12842,7 @@ function CIHistory({settings,setSettings}){
 }
 /* CIEditor's text input at MODULE scope: defined inside the component it was a new type every
    render, so every keystroke remounted the input and dropped the cursor (one-letter-at-a-time). */
-const CIn=({v,on,ph,cls})=>(<input value={v} onChange={e=>on(e.target.value)} placeholder={ph} className={`bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 ${cls||"w-full"}`}/>);
+const CIn=({v,on,ph,cls})=>(<input value={v} onChange={e=>on(e.target.value)} placeholder={ph} className={`bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300 ${cls||"w-full"}`}/>);
 function CIEditor({settings,setSettings,shipments}){
   const intl=(shipments||[]).filter(sh=>sh.recipient&&sh.recipient.country&&!["US","United States"].includes(sh.recipient.country));
   const blank=()=>({exporter:{name:(settings.sender&&settings.sender.name)||"",company:(settings.sender&&settings.sender.company)||settings.company||"",address1:(settings.sender&&settings.sender.address1)||"",city:(settings.sender&&settings.sender.city)||"",state:(settings.sender&&settings.sender.state)||"",zip:(settings.sender&&settings.sender.zip)||"",phone:(settings.sender&&settings.sender.phone)||""},
@@ -12883,7 +12890,7 @@ function CIEditor({settings,setSettings,shipments}){
     <div className="text-sm text-stone-500">Rebuild, edit, and reprint a commercial invoice — start from a past international shipment or from scratch. (There's no way to reliably parse an uploaded PDF back into editable fields, so editing starts from your shipment data instead.)</div>
     <Panel title="Start from">
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <select onChange={e=>e.target.value&&loadShipment(e.target.value)} value="" className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF]">
+        <select onChange={e=>e.target.value&&loadShipment(e.target.value)} value="" className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0086E0]">
           <option value="">Pick an international shipment… ({intl.length})</option>
           {intl.map(sh=><option key={sh.id} value={sh.id}>{(sh.date||"")+" · "+((sh.recipient&&sh.recipient.name)||"")+" · "+((sh.recipient&&sh.recipient.country)||"")+" · "+(sh.tracking||sh.reference||"")}</option>)}
         </select>
@@ -12906,19 +12913,19 @@ function CIEditor({settings,setSettings,shipments}){
         <In v={doc.consignee.name} on={v=>setCo("name",v)} ph="Name"/><In v={doc.consignee.company} on={v=>setCo("company",v)} ph="Company"/><In v={doc.consignee.phone} on={v=>setCo("phone",v)} ph="Phone"/>
         <In v={doc.consignee.address1} on={v=>setCo("address1",v)} ph="Address" cls="w-full sm:col-span-2"/><In v={doc.consignee.email} on={v=>setCo("email",v)} ph="Email"/>
         <In v={doc.consignee.city} on={v=>setCo("city",v)} ph="City"/><In v={doc.consignee.state} on={v=>setCo("state",v)} ph="State / province"/><In v={doc.consignee.zip} on={v=>setCo("zip",v)} ph="Postal code"/>
-        <label className="text-sm sm:col-span-3"><select value={doc.consignee.country} onChange={e=>setCo("country",e.target.value)} className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0099FF]"><option value="">Country…</option>{COUNTRIES.filter(c=>c!=="United States").map(c=><option key={c}>{c}</option>)}</select></label>
+        <label className="text-sm sm:col-span-3"><select value={doc.consignee.country} onChange={e=>setCo("country",e.target.value)} className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#0086E0]"><option value="">Country…</option>{COUNTRIES.filter(c=>c!=="United States").map(c=><option key={c}>{c}</option>)}</select></label>
       </div>
     </Panel>
     <Panel title="Invoice details">
       <div className="grid sm:grid-cols-4 gap-2">
         <In v={doc.invoiceNo} on={v=>setDoc(d=>({...d,invoiceNo:v}))} ph="Invoice #"/>
-        <input value={doc.reason} onChange={e=>setDoc(d=>({...d,reason:e.target.value}))} list="sc-export-reasons-ci" placeholder="Reason for export" className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]"/>
+        <input value={doc.reason} onChange={e=>setDoc(d=>({...d,reason:e.target.value}))} list="sc-export-reasons-ci" placeholder="Reason for export" className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0]"/>
         <datalist id="sc-export-reasons-ci">{EXPORT_REASONS.map(r=><option key={r} value={r}/>)}</datalist>
-        <select value={doc.incoterm} onChange={e=>setDoc(d=>({...d,incoterm:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">{INCOTERMS.map(r=><option key={r}>{r}</option>)}</select>
+        <select value={doc.incoterm} onChange={e=>setDoc(d=>({...d,incoterm:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0]">{INCOTERMS.map(r=><option key={r}>{r}</option>)}</select>
         <In v={doc.weight} on={v=>setDoc(d=>({...d,weight:v}))} ph="Gross weight (lb)"/>
       </div>
       <div className="grid sm:grid-cols-5 gap-2 mt-2">
-        <select value={doc.currency||"USD"} onChange={e=>setDoc(d=>({...d,currency:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF]">{["USD","CAD","EUR","GBP","MXN","AUD"].map(x=><option key={x}>{x}</option>)}</select>
+        <select value={doc.currency||"USD"} onChange={e=>setDoc(d=>({...d,currency:e.target.value}))} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0]">{["USD","CAD","EUR","GBP","MXN","AUD"].map(x=><option key={x}>{x}</option>)}</select>
         <In v={doc.packages||""} on={v=>setDoc(d=>({...d,packages:v}))} ph="Packages"/>
         <In v={doc.freight||""} on={v=>setDoc(d=>({...d,freight:v}))} ph="Freight $"/>
         <In v={doc.insuranceAmt||""} on={v=>setDoc(d=>({...d,insuranceAmt:v}))} ph="Insurance $"/>
@@ -12929,19 +12936,19 @@ function CIEditor({settings,setSettings,shipments}){
       {doc.reason==="Sample"&&<label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700 mt-2"><input type="checkbox" checked={doc.samples!==false} onChange={e=>setDoc(d=>({...d,samples:e.target.checked}))} className="accent-[#0086E0]"/>Print big "SAMPLES — NOT FOR RESALE" banner</label>}
       <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700 mt-1"><input type="checkbox" checked={!!doc.proforma} onChange={e=>setDoc(d=>({...d,proforma:e.target.checked}))} className="accent-[#0086E0]"/>Print as PROFORMA invoice (quote / pre-shipment)</label>
       {(doc.reason==="Sample"||doc.samples)&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mt-1">Tip: declare at least $10 value per sample item.</div>}
-      <textarea value={doc.notes} onChange={e=>setDoc(d=>({...d,notes:e.target.value}))} rows={2} placeholder="Custom notes printed on the invoice…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 mt-2"/>
+      <textarea value={doc.notes} onChange={e=>setDoc(d=>({...d,notes:e.target.value}))} rows={2} placeholder="Custom notes printed on the invoice…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300 mt-2"/>
     </Panel>
     <Panel title="Line items">
       <datalist id="sc-prod-list-ci">{(settings.products||[]).map(pr=><option key={pr.id} value={pr.name}>{(pr.sku?pr.sku+" · ":"")+(pr.hs?("HS "+pr.hs):"no HS yet")}</option>)}</datalist>
       <datalist id="sc-hts-list-ci">{[...new Set([...(settings.products||[]).map(pr=>pr.hs).filter(Boolean),...HTS_SUGGEST.map(h=>h.code)])].map(c=><option key={c} value={c}/>)}</datalist>
       <div className="hidden sm:flex text-[10px] uppercase tracking-wide text-stone-400 px-1 gap-2"><div className="flex-1">Description</div><div className="w-14">Qty</div><div className="w-20">Unit $</div><div className="w-24">HS code</div><div className="w-32">Origin</div><div className="w-5"/></div>
       {doc.rows.map((r,i)=>(<div key={i} className="flex flex-wrap sm:flex-nowrap gap-2 items-center mt-1.5">
-        <input value={r.name} onChange={e=>{const v=e.target.value;const hit=(settings.products||[]).find(pr=>pr.name===v||pr.sku===v);if(hit)setRow(i,{name:hit.name,hs:hit.hs||r.hs,origin:hit.origin==="US"?"United States":(hit.origin||r.origin),unit:+r.unit||+hit.value||0});else setRow(i,{name:v});}} list="sc-prod-list-ci" placeholder="Item description — type or pick a product" className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+        <input value={r.name} onChange={e=>{const v=e.target.value;const hit=(settings.products||[]).find(pr=>pr.name===v||pr.sku===v);if(hit)setRow(i,{name:hit.name,hs:hit.hs||r.hs,origin:hit.origin==="US"?"United States":(hit.origin||r.origin),unit:+r.unit||+hit.value||0});else setRow(i,{name:v});}} list="sc-prod-list-ci" placeholder="Item description — type or pick a product" className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>
         <In v={r.qty} on={v=>setRow(i,{qty:v})} ph="1" cls="w-14"/>
         <In v={r.unit} on={v=>setRow(i,{unit:v})} ph="0.00" cls="w-20"/>
-        <input value={r.hs} onChange={e=>setRow(i,{hs:e.target.value})} list="sc-hts-list-ci" placeholder="HS" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+        <input value={r.hs} onChange={e=>setRow(i,{hs:e.target.value})} list="sc-hts-list-ci" placeholder="HS" className="w-24 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>
         <button onClick={()=>suggestHS(i)} disabled={!r.name||hsBusy===i} title={AI_NAME+" reads the item description and suggests an HTS code"} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] border border-[#99D6FF] rounded-lg px-2 py-1 font-medium hover:bg-[#CCEAFF] disabled:opacity-40 whitespace-nowrap">{hsBusy===i?"Searching…":"Search HTS"}</button>
-        <select value={r.origin} onChange={e=>setRow(i,{origin:e.target.value})} className="w-32 bg-white border border-stone-200 rounded-lg px-1 py-1.5 text-sm outline-none focus:border-[#0099FF]">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
+        <select value={r.origin} onChange={e=>setRow(i,{origin:e.target.value})} className="w-32 bg-white border border-stone-200 rounded-lg px-1 py-1.5 text-sm outline-none focus:border-[#0086E0]">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select>
         <button onClick={()=>setDoc(d=>({...d,rows:d.rows.filter((_,j)=>j!==i)}))} className="text-stone-300 hover:text-rose-500">×</button>
       </div>))}
       {hsMsg&&<div className={`text-[11px] mt-1.5 rounded px-2 py-1 border ${hsMsg.err?"text-rose-700 bg-rose-50 border-rose-200":"text-emerald-700 bg-emerald-50 border-emerald-200"}`}>{hsMsg.err||hsMsg.ok}</div>}
@@ -12952,7 +12959,7 @@ function CIEditor({settings,setSettings,shipments}){
     </Panel>
     <div className="flex gap-2">
       <button onClick={()=>print(true)} disabled={!doc.consignee.name&&!doc.consignee.company} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40 hover:bg-stone-200"><FileText className="w-4 h-4"/>View Invoice</button>
-      <button onClick={()=>print()} disabled={!doc.consignee.name&&!doc.consignee.company} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-4 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40"><Receipt className="w-4 h-4"/>Print Commercial Invoice</button>
+      <button onClick={()=>print()} disabled={!doc.consignee.name&&!doc.consignee.company} className="text-sm bg-[#0086E0] hover:bg-[#006db8] text-white rounded-lg px-4 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40"><Receipt className="w-4 h-4"/>Print Commercial Invoice</button>
     </div>
   </div>);
 }
@@ -13066,14 +13073,14 @@ function OtherDocs({settings,setSettings}){
     </Panel>}
     {cur&&<Panel title={cur.id?"Edit document":"New document"}>
       <div className="space-y-2">
-        <input value={cur.name} onChange={e=>setCur(c=>({...c,name:e.target.value}))} placeholder="Document name (for your list)" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-        <input value={cur.title} onChange={e=>setCur(c=>({...c,title:e.target.value}))} placeholder="Printed title (e.g. SIGNATURE RELEASE AUTHORIZATION)" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
-        <textarea value={cur.body} onChange={e=>setCur(c=>({...c,body:e.target.value}))} rows={12} placeholder="Body text — [bracketed] placeholders are just prompts, replace them with your details." className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 font-mono"/>
+        <input value={cur.name} onChange={e=>setCur(c=>({...c,name:e.target.value}))} placeholder="Document name (for your list)" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>
+        <input value={cur.title} onChange={e=>setCur(c=>({...c,title:e.target.value}))} placeholder="Printed title (e.g. SIGNATURE RELEASE AUTHORIZATION)" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>
+        <textarea value={cur.body} onChange={e=>setCur(c=>({...c,body:e.target.value}))} rows={12} placeholder="Body text — [bracketed] placeholders are just prompts, replace them with your details." className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300 font-mono"/>
         <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700"><input type="checkbox" checked={!!cur.sigLines} onChange={e=>setCur(c=>({...c,sigLines:e.target.checked}))} className="accent-[#0086E0]"/>Include signature lines</label>
         <AssetChips settings={settings} sel={cur} onSel={(v)=>setCur(c=>({...c,...v}))}/>
         <div className="flex gap-2">
           <button onClick={save} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200">Save</button>
-          <button onClick={()=>print(cur)} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-3.5 py-1.5 font-medium flex items-center gap-1.5"><FileText className="w-4 h-4"/>Print / Save as PDF</button>
+          <button onClick={()=>print(cur)} className="text-sm bg-[#0086E0] hover:bg-[#006db8] text-white rounded-lg px-3.5 py-1.5 font-medium flex items-center gap-1.5"><FileText className="w-4 h-4"/>Print / Save as PDF</button>
           <button onClick={()=>setCur(null)} className="text-sm text-stone-400 hover:text-stone-600 px-2">Close</button>
         </div>
       </div>
@@ -13089,7 +13096,7 @@ function GeneralSettings({settings,setSettings,goSec,currentUser,setCurrentUser}
      on every keystroke (one letter at a time, cursor gone). Called as {F({...})} there's no
      component boundary, so the input keeps focus. */
   const F=({k,label,ph,hint,type})=>(<label key={k} className="block text-sm text-stone-700">{label}
-    <input type={type||"text"} value={settings[k]||""} onChange={e=>set(k,e.target.value)} placeholder={ph} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+    <input type={type||"text"} value={settings[k]||""} onChange={e=>set(k,e.target.value)} placeholder={ph} className="mt-1 w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>
     {hint&&<span className="block text-[11px] text-stone-400 mt-0.5">{hint}</span>}</label>);
   const links=[["shipscreen","Ship Screen","Scan mode, hidden fields & Ship-tab options"],["customize","Customizations","Services, appearance, tabs & packing slips"],["reference","Reference Fields","Dropdown values, required & locked fields"],["carriers",BRAND.fw?"FedEx Account":"Carrier Accounts",BRAND.fw?"Your FedEx connection":"FedEx & DHL connections"],["boxes","Package Sizes","Your box library"],["printer","Print Settings","Labels, printing, doc tabs & automation"],["notifications","Email Automation","Customer notifications"],["integrations","Integrations","Stores & order sources"]];
   return (<div className="max-w-2xl space-y-4">
@@ -13116,7 +13123,7 @@ function GeneralSettings({settings,setSettings,goSec,currentUser,setCurrentUser}
     </Panel>
     <Panel title="Shipping defaults">
       <label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>Bill shipments to</span>
-        <select value={settings.defaultBillTo||"sender"} onChange={e=>set("defaultBillTo",e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="sender">My account (sender)</option><option value="third">Third-Party Account</option></select></label>
+        <select value={settings.defaultBillTo||"sender"} onChange={e=>set("defaultBillTo",e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"><option value="sender">My account (sender)</option><option value="third">Third-Party Account</option></select></label>
     </Panel>
     <AccountLoginPanel currentUser={currentUser} setCurrentUser={setCurrentUser}/>
     <TwoFactorPanel/>
@@ -13213,7 +13220,7 @@ function TwoFactorPanel(){
       </div>
       <div className="text-sm text-stone-700">2. Enter the 6-digit code your app shows now:</div>
       <div className="flex items-center gap-2">
-        <input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,"").slice(0,6))} onKeyDown={e=>e.key==="Enter"&&enable()} placeholder="123456" inputMode="numeric" className="w-32 border border-stone-300 rounded-lg px-3 py-2 text-sm tracking-[0.3em] text-center outline-none focus:border-[#0099FF]"/>
+        <input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,"").slice(0,6))} onKeyDown={e=>e.key==="Enter"&&enable()} placeholder="123456" inputMode="numeric" className="w-32 border border-stone-300 rounded-lg px-3 py-2 text-sm tracking-[0.3em] text-center outline-none focus:border-[#0086E0]"/>
         <button disabled={busy||code.length!==6} onClick={enable} className="text-sm bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-emerald-700 disabled:opacity-50">Turn on 2FA</button>
         <button disabled={busy} onClick={()=>{setSetup(null);setCode("");setMsg(null);}} className="text-xs text-stone-400 hover:text-stone-600">Cancel</button>
       </div>
@@ -13236,7 +13243,7 @@ function TwoFactorPanel(){
       {e2&&e2.enabled&&<div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm text-emerald-700"><Check className="w-4 h-4"/>Email verification is <b>on</b>.</div><button disabled={busy} onClick={e2disable} className="text-xs rounded px-2.5 py-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200 disabled:opacity-50">Turn Off</button></div>}
       {e2&&!e2.enabled&&!e2sent&&<button disabled={busy} onClick={e2begin} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] disabled:opacity-50">{busy?"Sending…":"Turn on email verification"}</button>}
       {e2&&!e2.enabled&&e2sent&&<div className="flex items-center gap-2">
-        <input value={e2code} onChange={e=>setE2code(e.target.value.replace(/\D/g,"").slice(0,6))} onKeyDown={e=>e.key==="Enter"&&e2enable()} placeholder="123456" inputMode="numeric" className="w-32 border border-stone-300 rounded-lg px-3 py-2 text-sm tracking-[0.3em] text-center outline-none focus:border-[#0099FF]"/>
+        <input value={e2code} onChange={e=>setE2code(e.target.value.replace(/\D/g,"").slice(0,6))} onKeyDown={e=>e.key==="Enter"&&e2enable()} placeholder="123456" inputMode="numeric" className="w-32 border border-stone-300 rounded-lg px-3 py-2 text-sm tracking-[0.3em] text-center outline-none focus:border-[#0086E0]"/>
         <button disabled={busy||e2code.length!==6} onClick={e2enable} className="text-sm bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-emerald-700 disabled:opacity-50">Confirm Code</button>
         <button disabled={busy} onClick={()=>{setE2sent(false);setE2code("");}} className="text-xs text-stone-400 hover:text-stone-600">Cancel</button>
       </div>}
@@ -13279,7 +13286,7 @@ function CompanyCustomDeploy({companyUsers,companyFlags,setCompanyFlags,adminSet
       <Customize settings={{custom:draft}} setSettings={(fn)=>setDraft(d=>{const r=typeof fn==="function"?fn({custom:d}):fn;return (r&&r.custom)||d;})} deployMode blockedKeys={new Set((client&&client.blockedServices)||[])} allowedTabs={allowedTabs}/>
     </div>
     <div className="flex flex-wrap items-center gap-2">
-      <button onClick={()=>deploy(false)} disabled={busy} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<ShieldCheck className="w-4 h-4"/>}Deploy to {mode==="all"?"everyone":`${targets.length} selected`}</button>
+      <button onClick={()=>deploy(false)} disabled={busy} className="text-sm bg-[#0086E0] hover:bg-[#006db8] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<ShieldCheck className="w-4 h-4"/>}Deploy to {mode==="all"?"everyone":`${targets.length} selected`}</button>
       <button onClick={()=>deploy(true)} disabled={busy} className="text-sm bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40">Clear Deployed Customizations</button>
       {msg&&<span className={`text-xs ${msg.err?"text-rose-600":"text-emerald-700"}`}>{msg.err||msg.ok}</span>}
     </div>
@@ -13304,7 +13311,7 @@ function FieldListEd({k,title,hint,ph,extra,fl,setList}){
         <button onClick={()=>setList(k,fl[k].filter(y=>y!==x))} className="text-stone-300 hover:text-rose-500 leading-none px-0.5">×</button></span>))}
     </div>
     <div className="flex gap-2">
-      <input value={v} onChange={e=>setV(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")add();}} placeholder={ph} className="flex-1 bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+      <input value={v} onChange={e=>setV(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")add();}} placeholder={ph} className="flex-1 bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>
       <button onClick={add} className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200">Add</button>
     </div>
     {hint&&<div className="text-[11px] text-stone-400 mt-1.5">{hint}</div>}
@@ -13353,10 +13360,10 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
     <span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span></label>);
   /* called as {Sel({...})} like Num below — a <select> remounting per change breaks keyboard use */
   const Sel=({k,label,opts})=>(<label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>{label}</span>
-    <select value={c[k]} onChange={e=>set(k,e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]">{opts.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>);
+    <select value={c[k]} onChange={e=>set(k,e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]">{opts.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>);
   /* called as {Num({...})}, not <Num/> — an inline component type remounts its input every render (focus loss) */
   const Num=({k,label,hint,step,suffix,prefix})=>(<label key={k} className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span>
-    <span className="flex items-center gap-1">{prefix&&<span className="text-stone-400 text-sm">{prefix}</span>}<input type="number" min="0" step={step||1} value={c[k]||""} placeholder="0" onChange={e=>set(k,+e.target.value||0)} className="w-20 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] text-right"/>{suffix&&<span className="text-xs text-stone-400">{suffix}</span>}</span></label>);
+    <span className="flex items-center gap-1">{prefix&&<span className="text-stone-400 text-sm">{prefix}</span>}<input type="number" min="0" step={step||1} value={c[k]||""} placeholder="0" onChange={e=>set(k,+e.target.value||0)} className="w-20 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] text-right"/>{suffix&&<span className="text-xs text-stone-400">{suffix}</span>}</span></label>);
   const SVC=[
     ["ground","FedEx Ground®"],["home","FedEx Home Delivery®"],["ground_economy","FedEx Ground Economy®"],
     ["express_saver","FedEx Express Saver®"],["2day","FedEx 2Day®"],["2day_am","FedEx 2Day® A.M."],
@@ -13424,9 +13431,9 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
         {Num({k:"autoSigValue",label:"Auto-add signature over",hint:"When you load an order worth this much or more, a signature is added automatically. 0 = off. Uses the signature type below.",prefix:"$"})}
         {Sel({k:"autoSigType",label:"Signature type to auto-add",opts:[["indirect","Indirect"],["direct","Direct"],["adult","Adult"]]})}
         <label className="sm:col-span-2 flex flex-wrap items-center justify-between gap-x-6 gap-y-1 text-sm text-stone-700"><span className="flex-1 min-w-[240px]">Ship-date cutoff time<span className="block text-[11px] text-stone-400">After this local time, new shipments default to the NEXT day's ship date. Leave blank to always use today.</span></span>
-          <span className="flex items-center gap-1"><input type="time" value={c.shipDateCutoff||""} onChange={e=>set("shipDateCutoff",e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"/>{c.shipDateCutoff&&<button onClick={()=>set("shipDateCutoff","")} className="text-[11px] text-stone-400 hover:text-rose-500">clear</button>}</span></label>
+          <span className="flex items-center gap-1"><input type="time" value={c.shipDateCutoff||""} onChange={e=>set("shipDateCutoff",e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"/>{c.shipDateCutoff&&<button onClick={()=>set("shipDateCutoff","")} className="text-[11px] text-stone-400 hover:text-rose-500">clear</button>}</span></label>
         <label className="sm:col-span-2 flex flex-wrap items-center justify-between gap-x-6 gap-y-1 text-sm text-stone-700"><span className="flex-1 min-w-[240px]">Fallback service when no rule matches<span className="block text-[11px] text-stone-400">In Batch &amp; Autopilot, orders that don't match any of your rules use this service instead of being left unset. Blank = leave unset (no fallback).</span></span>
-          <select value={c.fallbackService||""} onChange={e=>set("fallbackService",e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF]"><option value="">No Fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest Ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx Ground Economy">FedEx Ground Economy</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
+          <select value={c.fallbackService||""} onChange={e=>set("fallbackService",e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"><option value="">No Fallback</option><option value="cheapest">Cheapest</option><option value="ground">Cheapest Ground</option><option value="fastest">Fastest</option><option value="FedEx Ground">FedEx Ground</option><option value="FedEx Home Delivery">FedEx Home Delivery</option><option value="FedEx Ground Economy">FedEx Ground Economy</option><option value="FedEx 2Day">FedEx 2Day</option><option value="FedEx Express Saver">FedEx Express Saver</option><option value="FedEx Standard Overnight">FedEx Standard Overnight</option><option value="FedEx Priority Overnight">FedEx Priority Overnight</option></select></label>
       </div>
     </Panel>}
 
@@ -13445,7 +13452,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
               portal's own deploy view still shows everything with the lock styling. */}
           {SVC.filter(([k])=>isAdmin||!locked.has(k)).map(([k,l])=>{const lk=locked.has(k);const off=svcHidden.has(k)||lk;return (<div key={k} className="flex items-center gap-3">
             <label className={`flex items-center gap-1.5 text-sm w-56 shrink-0 ${lk?"text-stone-300 cursor-not-allowed":"text-stone-700 cursor-pointer"}`}><input type="checkbox" checked={!off} disabled={lk} onChange={()=>togSvc(k)} className="accent-[#0086E0]"/><span className={off?"line-through text-stone-300":""}>{l}</span>{lk&&<span className="text-[10px] text-stone-400 normal-case">locked</span>}</label>
-            <input value={(c.aliases||{})[k]||""} onChange={e=>setAlias(k,e.target.value)} placeholder={"rename — e.g. "+(k==="ground"?"Standard":k==="2day"?"Fast":"…")} disabled={off} className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 disabled:opacity-40"/>
+            <input value={(c.aliases||{})[k]||""} onChange={e=>setAlias(k,e.target.value)} placeholder={"rename — e.g. "+(k==="ground"?"Standard":k==="2day"?"Fast":"…")} disabled={off} className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300 disabled:opacity-40"/>
           </div>);})}
         </div>
         <div className="text-[11px] text-stone-400 mt-2">Renames are display-only on the Ship screen — labels and carrier paperwork keep the real FedEx name.</div>
@@ -13665,8 +13672,8 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
         {SHOW_ENGLAND&&isAdmin&&<p className="text-[11px] text-stone-400 -mt-1">The Integration ID enables real label printing. In Webship: gear/settings → eCommerce Integrations → Add → Rest API → Save New Integration → copy the ID. Turn on auto-ship for that integration so labels book automatically. The Provider account ID tells England which carrier account to ship on — click <b>Check booking access</b> to auto-fill it, or paste it manually if England hasn't opened that endpoint on your key.</p>}
         <div className="flex flex-wrap items-center gap-3">
           <button onClick={runTest} disabled={false} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{test&&test.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Testing…</>:<><ShieldCheck className="w-4 h-4"/>Test connection</>}</button>
-          <button onClick={runDiag} disabled={false} className="text-sm border border-stone-300 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5">{diag&&diag.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Checking…</>:<><Truck className="w-4 h-4"/>Check booking access</>}</button>
-          {SHOW_ENGLAND&&isAdmin&&<button onClick={runFlush} disabled={flush&&flush.loading} className="text-sm border border-stone-300 text-stone-700 rounded px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5" title="Clear saved quotes so every rate pulls fresh from England — use after changing pricing in England's backend">{flush&&flush.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Refreshing…</>:<><RefreshCw className="w-4 h-4"/>Refresh rates</>}</button>}
+          <button onClick={runDiag} disabled={false} className="text-sm border border-stone-300 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5">{diag&&diag.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Checking…</>:<><Truck className="w-4 h-4"/>Check booking access</>}</button>
+          {SHOW_ENGLAND&&isAdmin&&<button onClick={runFlush} disabled={flush&&flush.loading} className="text-sm border border-stone-300 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-40 flex items-center gap-1.5" title="Clear saved quotes so every rate pulls fresh from England — use after changing pricing in England's backend">{flush&&flush.loading?<><Loader2 className="w-4 h-4 animate-spin"/>Refreshing…</>:<><RefreshCw className="w-4 h-4"/>Refresh rates</>}</button>}
           {test&&!test.loading&&<span className={`text-xs flex items-center gap-1.5 ${test.ok?"text-emerald-700":"text-[#0086E0]"}`}>{test.ok?<CheckCircle2 className="w-4 h-4"/>:<AlertTriangle className="w-4 h-4"/>}{test.msg}</span>}
         </div>
         {flush&&!flush.loading&&<div className={`text-xs rounded px-3 py-2 flex items-start gap-1.5 ${flush.ok?"bg-emerald-50 text-emerald-700 border border-emerald-200":"bg-amber-50 text-amber-800 border border-amber-200"}`}>{flush.ok?<CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5"/>:<AlertTriangle className="w-4 h-4 shrink-0 mt-0.5"/>}<span>{flush.msg}</span></div>}
@@ -13959,7 +13966,7 @@ function CarrierAudit({shipments}){
   };
   const colSel=(field,label)=>csv?(
     <div className="flex items-center gap-1.5"><span className="text-[10px] uppercase tracking-widest text-stone-400">{label}</span>
-      <select value={map[field]} onChange={e=>setMap(m=>({...m,[field]:+e.target.value}))} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-[13px] outline-none focus:border-[#0099FF]">
+      <select value={map[field]} onChange={e=>setMap(m=>({...m,[field]:+e.target.value}))} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-[13px] outline-none focus:border-[#0086E0]">
         <option value={-1}>—</option>
         {csv.headers.map((h,i)=><option key={i} value={i}>{h||("Column "+(i+1))}</option>)}
       </select>
@@ -13973,7 +13980,7 @@ function CarrierAudit({shipments}){
     </div>
     <div className="border-2 border-dashed border-stone-300 rounded-xl bg-white p-6 text-center">
       {busy?<Loader2 className="w-6 h-6 text-[#0086E0] mx-auto mb-2 animate-spin"/>:<Upload className="w-6 h-6 text-stone-400 mx-auto mb-2"/>}
-      <label className="inline-block cursor-pointer text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#0072BE]">
+      <label className="inline-block cursor-pointer text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8]">
         {groups?"Choose a different invoice":"Upload invoice (PDF or CSV)"}
         <input type="file" accept=".csv,.pdf,text/csv,application/pdf" onChange={onFile} className="hidden"/>
       </label>
@@ -14011,7 +14018,7 @@ function CarrierAudit({shipments}){
               </div>
               <div className="w-24 text-right text-[13px] text-stone-500">{e.billedWeight!=null?(e.qWeight!=null&&e.billedWeight>e.qWeight+0.01?<span className="text-amber-600">{e.qWeight}→{e.billedWeight}</span>:e.billedWeight)+" lb":<span className="text-stone-300">—</span>}</div>
               <div className="w-24 text-right text-[13px] text-stone-600">{e.quoted!=null?money(e.quoted):<span className="text-stone-300">—</span>}</div>
-              <div className="w-24 text-right" onClick={ev=>ev.stopPropagation()}><input value={(overrides[e.key]&&overrides[e.key].billed!=null)?overrides[e.key].billed:e.billed} onChange={ev=>setBilled(e.key,ev.target.value)} className="w-20 text-right text-[13px] text-stone-800 bg-transparent border border-transparent hover:border-stone-200 focus:border-[#0099FF] rounded-lg px-1 py-0.5 outline-none"/></div>
+              <div className="w-24 text-right" onClick={ev=>ev.stopPropagation()}><input value={(overrides[e.key]&&overrides[e.key].billed!=null)?overrides[e.key].billed:e.billed} onChange={ev=>setBilled(e.key,ev.target.value)} className="w-20 text-right text-[13px] text-stone-800 bg-transparent border border-transparent hover:border-stone-200 focus:border-[#0086E0] rounded-lg px-1 py-0.5 outline-none"/></div>
               <div className={`w-24 text-right text-sm font-semibold ${dTone(e.diff)}`}>{e.diff==null?"—":(e.diff>0?"+":e.diff<0?"−":"")+money(Math.abs(e.diff)).slice(1)}{e.diffPct!=null?<span className="block text-[10px] font-normal opacity-70">{e.diffPct>0?"+":""}{e.diffPct}%</span>:null}</div>
             </div>
             {isO&&(<div className="px-10 pb-3 pt-1 space-y-2 bg-stone-50/50">
@@ -14207,7 +14214,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
       <div className="flex-1 min-w-0 flex items-center gap-1.5">
       <div className="relative flex-1 min-w-0">
         <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400"/>
-        <input value={q} onChange={e=>{setQ(e.target.value);setOpen(true);}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder={(addresses&&addresses.length)?`Address Book — ${addresses.length} Saved…`:"Search Address Book…"} className="w-full bg-white border border-stone-200 rounded pl-8 pr-8 py-1.5 text-[13px] outline-none focus:border-[#0099FF] placeholder-stone-300"/>
+        <input value={q} onChange={e=>{setQ(e.target.value);setOpen(true);}} onFocus={()=>setOpen(true)} onBlur={()=>setTimeout(()=>setOpen(false),150)} placeholder={(addresses&&addresses.length)?`Address Book — ${addresses.length} Saved…`:"Search Address Book…"} className="w-full bg-white border border-stone-200 rounded pl-8 pr-8 py-1.5 text-[13px] outline-none focus:border-[#0086E0] placeholder-stone-300"/>
         <button type="button" onMouseDown={(e)=>{e.preventDefault();setOpen(o=>!o);}} className="absolute right-2 top-1.5 text-stone-400 hover:text-[#0086E0]" title="Show all saved addresses"><ChevronDown className={`w-4 h-4 transition-transform ${open?"rotate-180":""}`}/></button>
         {open&&matches.length===0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg overflow-hidden">{defaultEntry&&<button onMouseDown={()=>pick(defaultEntry)} className="w-full text-left px-3 py-2 bg-[#F0F9FF] hover:bg-[#E6F4FF] border-b border-stone-100 flex items-center gap-2"><Home className="w-3.5 h-3.5 text-[#0086E0] shrink-0"/><span className="text-sm font-medium text-[#006FBF]">Default sender</span><span className="text-[11px] text-stone-400 truncate">{[defaultEntry.name||defaultEntry.company,defaultEntry.city].filter(Boolean).join(" · ")}</span></button>}<div className="px-3 py-2.5 text-xs text-stone-400">{(addresses&&addresses.length)?"No matches — try fewer letters.":"Nothing saved yet. Fill in an address and hit “Save to Address book” — it’ll be one click next time."}</div></div>}
         {open&&matches.length>0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-64 overflow-auto">{defaultEntry&&<button onMouseDown={()=>pick(defaultEntry)} className="w-full text-left px-3 py-2 bg-[#F0F9FF] hover:bg-[#E6F4FF] border-b border-stone-100 flex items-center gap-2"><Home className="w-3.5 h-3.5 text-[#0086E0] shrink-0"/><span className="text-sm font-medium text-[#006FBF]">Default sender</span><span className="text-[11px] text-stone-400 truncate">{[defaultEntry.name||defaultEntry.company,defaultEntry.city].filter(Boolean).join(" · ")}</span></button>}
@@ -14227,17 +14234,17 @@ function AddressCard({title,data,set,required,residential,setResidential,address
     {/* side (Address Check) is its OWN bordered box with a 12px gap — flex default stretch keeps
         both boxes' tops AND bottoms flush with the fields grid */}
     <div className={side?"flex flex-col lg:flex-row gap-4":""}>
-    <div className={side?"flex-1 min-w-0 grid grid-cols-6 gap-px bg-stone-200 border border-[#b9c6d5] shadow-sm rounded-lg":"grid grid-cols-6 gap-px bg-stone-200 border border-[#b9c6d5] shadow-sm rounded-lg"}>
+    <div className={side?"flex-1 min-w-0 grid grid-cols-6 gap-px bg-stone-200 border border-stone-200 shadow-sm rounded-lg":"grid grid-cols-6 gap-px bg-stone-200 border border-stone-200 shadow-sm rounded-lg"}>
       {cell("Country","country","col-span-6")}{cell("Name","name","col-span-6 sm:col-span-3",required)}{cell("Company","company","col-span-6 sm:col-span-3",reqOverrides.company===true)}{cell("Address 1","address1","col-span-6",required)}{cell(_fmt.zip,"zip","col-span-3 sm:col-span-2",required&&!_fmt.zipOpt)}{cell(_fmt.state,"state","col-span-3 sm:col-span-2",required&&!_fmt.stateOpt)}{cell("City","city","col-span-6 sm:col-span-2",required)}{!hideAddr23&&<>{cell("Address 2","address2","col-span-6 sm:col-span-3")}{cell("Address 3","address3","col-span-6 sm:col-span-3")}</>}{cell("Phone","phone","col-span-6 sm:col-span-3",required&&reqOverrides.phone!==false)}{cell("Email","email","col-span-6 sm:col-span-3",required&&reqOverrides.email!==false)}
     </div>
-    {side&&<div className="lg:w-[280px] xl:w-[330px] shrink-0 bg-stone-50 border border-[#b9c6d5] shadow-sm rounded-lg p-3">{side}</div>}
+    {side&&<div className="lg:w-[280px] xl:w-[330px] shrink-0 bg-stone-50 border border-stone-200 shadow-sm rounded-lg p-3">{side}</div>}
     </div>
   </div>);
 }
-function PkgInput({label,w,req,...p}){const ww=w||"w-14";const on=req&&!String(p.value??"").trim();return <div className={ww}><div className={`text-[10px] uppercase tracking-widest text-center ${on?"text-[#0086E0]":"text-stone-500"}`}>{label}</div><input placeholder="0" {...p} type="number" className={`w-full border rounded px-2 py-1 text-sm text-stone-900 outline-none focus:border-[#0099FF] placeholder-stone-300 text-center ${on?"bg-white border-[#42a7ef]":"bg-white border-stone-300"}`}/></div>;}
+function PkgInput({label,w,req,...p}){const ww=w||"w-14";const on=req&&!String(p.value??"").trim();return <div className={ww}><div className={`text-[10px] uppercase tracking-widest text-center ${on?"text-[#0086E0]":"text-stone-500"}`}>{label}</div><input placeholder="0" {...p} type="number" className={`w-full border rounded px-2 py-1 text-sm text-stone-900 outline-none focus:border-[#0086E0] placeholder-stone-300 text-center ${on?"bg-white border-[#42a7ef]":"bg-white border-stone-300"}`}/></div>;}
 function Panel({title,children}){return <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3"><div className="text-[10px] uppercase tracking-widest text-stone-400">{title}</div>{children}</div>;}
 function Field({label,children}){return <label className="block space-y-1"><span className="text-[11px] text-stone-500">{label}</span>{children}</label>;}
-function Input({className="",...p}){return <input {...p} className={`w-full bg-white border border-stone-200 rounded px-2.5 py-2 text-sm text-stone-900 focus:border-[#0099FF] outline-none ${className}`}/>;}
+function Input({className="",...p}){return <input {...p} className={`w-full bg-white border border-stone-200 rounded px-2.5 py-2 text-sm text-stone-900 focus:border-[#0086E0] outline-none ${className}`}/>;}
 /* Freely-typeable numeric box: type any number, it commits raw as you go and only clamps to
    [min,max] on blur. Local string state means the caret never jumps and you're never limited to
    one digit at a time (the old clamp-on-every-keystroke bug). External value changes sync in
@@ -14251,9 +14258,9 @@ function NumBox({value,onCommit,min,max,fallback,className="",...rest}){
     onFocus={()=>setFocus(true)}
     onChange={e=>{ const raw=e.target.value; setTxt(raw); if(raw===""||raw==="-")return; const n=+raw; if(!isNaN(n))onCommit&&onCommit(n); }}
     onBlur={e=>{ setFocus(false); let n=+e.target.value; if(e.target.value===""||isNaN(n))n=(fallback!=null?fallback:(min!=null?min:0)); n=clamp(n); setTxt(String(n)); onCommit&&onCommit(n); }}
-    className={className||"w-full bg-white border border-stone-200 rounded px-2.5 py-2 text-sm text-stone-900 focus:border-[#0099FF] outline-none"} {...rest}/>;
+    className={className||"w-full bg-white border border-stone-200 rounded px-2.5 py-2 text-sm text-stone-900 focus:border-[#0086E0] outline-none"} {...rest}/>;
 }
-function Select({children,...p}){return <select {...p} className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm focus:border-[#0099FF] outline-none">{children}</select>;}
+function Select({children,...p}){return <select {...p} className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm focus:border-[#0086E0] outline-none">{children}</select>;}
 function Toggle({on,set,label}){return <button onClick={()=>set(!on)} className={`flex items-center gap-1.5 text-xs rounded px-2.5 py-1.5 border ${on?"bg-[#E6F4FF] border-[#99D6FF] text-[#0086E0]":"bg-white border-stone-200 text-stone-400"}`}><span className={`w-2 h-2 rounded-full ${on?"bg-[#0086E0]":"bg-stone-300"}`}/>{label}</button>;}
 function Badge({children,tone="stone"}){const t={stone:"bg-stone-100 text-stone-500 border-stone-200",green:"bg-emerald-50 text-emerald-700 border-emerald-200",amber:"bg-amber-50 text-amber-700 border-amber-200",blue:"bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]",rose:"bg-rose-50 text-rose-600 border-rose-200",violet:"bg-violet-50 text-violet-700 border-violet-200"}[tone]||"bg-stone-100 text-stone-500 border-stone-200";return <span className={`text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 border ${t}`}>{children}</span>;}
 /* "···" overflow menu for dense action rows. Portaled + fixed-position so overflow-hidden list

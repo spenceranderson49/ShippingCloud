@@ -108,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v578";
+const BUILD_TAG="addr-v579";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -13824,7 +13824,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
     <datalist id={"sc-ab-company-"+abKey}>{abList.filter(a=>a.company).map(a=><option key={"c"+a.id} value={a.company}>{a.name?a.name+" · ":""}{a.city||""}</option>)}</datalist>
   </>):null;
   const cell=(label,k,span,req)=>(
-    <div key={k} className={`px-2 py-1.5 ${errorFields.includes(k)?"bg-rose-50 ring-1 ring-rose-300":(req&&!data[k]?"bg-white ring-1 ring-inset ring-[#42a7ef]":"bg-white")} ${span||""} ${k==="address1"?"relative":""}`}>
+    <div key={k} className={`px-2 py-1.5 ${k==="country"?"rounded-t-[7px]":k==="phone"?"rounded-bl-[7px]":k==="email"?"rounded-br-[7px]":""} ${errorFields.includes(k)?"bg-rose-50 relative z-10 shadow-[0_0_0_1.5px_#fda4af]":(req&&!data[k]?"bg-white relative z-10 shadow-[0_0_0_1.5px_#42a7ef]":"bg-white")} ${span||""} ${k==="address1"?"relative":""}`}>
       {!(k==="country"||k==="address2"||k==="address3")&&<div className={`text-[10px] uppercase tracking-wide ${errorFields.includes(k)?"text-rose-600 font-semibold":(req&&!data[k]?"text-[#0086E0]":"text-stone-400")} flex items-center gap-1`}>{label}{errorFields.includes(k)?" • required":""}{k==="address1"&&acBusy&&<Loader2 className="w-2.5 h-2.5 animate-spin text-stone-400"/>}</div>}
       {k==="country"
         ? <div className="flex items-center gap-2"><span className="text-[10px] uppercase tracking-wide text-stone-400 shrink-0">{label}</span><select value={data.country||"United States"} onChange={e=>f("country",e.target.value)} className="flex-1 bg-transparent text-[14px] leading-5 text-stone-900 outline-none">{COUNTRIES.map(c=><option key={c}>{c}</option>)}</select></div>
@@ -13875,7 +13875,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
     {/* side (Address Check) is its OWN bordered box with a 12px gap — flex default stretch keeps
         both boxes' tops AND bottoms flush with the fields grid */}
     <div className={side?"flex flex-col lg:flex-row gap-4":""}>
-    <div className={side?"flex-1 min-w-0 grid grid-cols-6 gap-px bg-stone-200 border border-[#b9c6d5] shadow-sm rounded-lg overflow-hidden":"grid grid-cols-6 gap-px bg-stone-200 border border-[#b9c6d5] shadow-sm rounded-lg overflow-hidden"}>
+    <div className={side?"flex-1 min-w-0 grid grid-cols-6 gap-px bg-stone-200 border border-[#b9c6d5] shadow-sm rounded-lg":"grid grid-cols-6 gap-px bg-stone-200 border border-[#b9c6d5] shadow-sm rounded-lg"}>
       {cell("Country","country","col-span-6")}{cell("Name","name","col-span-6 sm:col-span-3",required)}{cell("Company","company","col-span-6 sm:col-span-3",reqOverrides.company===true)}{cell("Address 1","address1","col-span-6",required)}{cell(_fmt.zip,"zip","col-span-3 sm:col-span-2",required&&!_fmt.zipOpt)}{cell(_fmt.state,"state","col-span-3 sm:col-span-2",required&&!_fmt.stateOpt)}{cell("City","city","col-span-6 sm:col-span-2",required)}{!hideAddr23&&<>{cell("Address 2","address2","col-span-6 sm:col-span-3")}{cell("Address 3","address3","col-span-6 sm:col-span-3")}</>}{cell("Phone","phone","col-span-6 sm:col-span-3",required&&reqOverrides.phone!==false)}{cell("Email","email","col-span-6 sm:col-span-3",required&&reqOverrides.email!==false)}
     </div>
     {side&&<div className="lg:w-[280px] xl:w-[330px] shrink-0 bg-stone-50 border border-[#b9c6d5] shadow-sm rounded-lg p-3">{side}</div>}

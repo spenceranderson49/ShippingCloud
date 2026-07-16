@@ -246,13 +246,17 @@ exports.handler = async (event) => {
         return (s != null && !isNaN(+s)) ? +s : q.cost;
       } catch { return q.cost; }
     };
+    const names = (ck.names && typeof ck.names === "object") ? ck.names : {};
     let priced = quotes
       .filter((q) => services[q.key] && !blocked.has(E.canonSvc(q.label)))
       .map((q) => {
         const sell = sellFor(q);
         const buyer = Math.round((sell * (1 + markup / 100) + handling) * 100) / 100;
         const dd = q.days || daysFor(q.label, fromZip, destN.zip);
-        return { ...q, sell, buyer, dmin: dd[0], dmax: dd[1] };
+        /* merchant's custom checkout name (Settings → Checkout Rates) — buyers see it instead
+           of the FedEx name; tiers presentation overwrites the label with the tier name anyway */
+        const disp = String(names[q.key] || "").trim();
+        return { ...q, label: disp || q.label, sell, buyer, dmin: dd[0], dmax: dd[1] };
       })
       .sort((a, b) => a.buyer - b.buyer);
     if (!priced.length) return J(200, { rates: [] });

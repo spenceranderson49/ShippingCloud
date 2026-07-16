@@ -108,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v572";
+const BUILD_TAG="addr-v573";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2888,7 +2888,7 @@ const CUSTOM_DEFAULTS={
   slipThanks:"",slipFooter:"",
   density:"comfortable",stuckDays:0,
   fontScale:100,startTab:"ship",hiddenTabs:[],tabOrder:[],
-  logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,skipBookedSummary:false,autoRulesOnShip:false,autoRulesInBatch:false,autoBookBatch:false,hotkeys:true,spendCap:0,orderCols:[],orderViews:[],accent:"",
+  logoScale:100,companyLogoScale:100,labelLogoOn:false,labelLogo:"",labelLogoPos:"bottom_left",labelLogoScale:22,skipBookedSummary:false,autoRulesOnShip:false,autoRulesInBatch:false,autoBookBatch:false,hotkeys:true,orderCols:[],orderViews:[],accent:"",
   refRequired:false,invRequired:false,poRequired:false,deptRequired:false,refLocked:false,invLocked:false,poLocked:false,deptLocked:false,hideDept:false,
   confetti:"page",seasonal:false,hideShipSteps:true,hideLabeledOrders:true,
 };
@@ -3930,46 +3930,26 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
     </div>}
 
     {tab==="fedex"&&(()=>{
+      /* Slimmed to essentials by owner request (2026-07-15): account #, tier, and three
+         has-this-service checkboxes for the rep. The old tier-economics fields (discounts,
+         dates, fuel basis, min charge, apply-to-pricing shortcut) were noise — any data
+         already saved in client.fedex stays stored, just no longer surfaced. */
       const fx=c.fedex||{};
       const upFx=(patch)=>setClients(cs=>cs.map(x=>x.id===cid?{...x,fedex:{...(x.fedex||{}),...patch}}:x));
-      const svcDisc=fx.svcDisc||{};
-      const upSvcDisc=(k,v)=>upFx({svcDisc:{...svcDisc,[k]:v}});
-      const applyTierToRates=async()=>{
-        const d=+fx.listDiscount;
-        if(!(d>0))return uiAlert("Set an overall FedEx list discount % first — that's what gets applied.");
-        if(prof.id==="default")return uiAlert("This customer prices from the SHARED Default profile — applying the tier here would reprice every Default customer. Open the Rates tab and give them their own profile first.");
-        if(!await uiConfirm("Set every FedEx service on "+c.name+"'s profile to FedEx list − "+d+"%? (Per-service overrides below win where set.)"))return;
-        const svcs={...(prof.services||{})};
-        svcQuick.forEach(sv=>{const per=+svcDisc[sv.k];const use=(per>0)?per:d;svcs[sv.k]={...(svcs[sv.k]||{}),basis:"list",pct:use};});
-        upRules({profiles:profiles.map(p=>p.id===prof.id?{...p,services:svcs}:p)});
-        setTab("rates");   /* the change is STAGED in the rates draft — land where the Save bar is visible */
-        say("Staged — press Save rates to make it live.");
-      };
       return (<div className="space-y-4">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
           <Field label="FedEx account # (rates & labels)"><Input value={fx.accountNumber||""} onChange={e=>upFx({accountNumber:e.target.value.replace(/[^0-9]/g,"")})} placeholder="9-digit account"/></Field>
-          <div className="col-span-1 sm:col-span-3 text-[11px] text-stone-500 pb-1.5">Live quotes and label bookings for {c.name} run on this FedEx account number (their England-provisioned account — its ACCOUNT rate is your raw cost). Blank = the platform's main FedEx account. The account must be added to your FedEx developer project or FedEx will reject it.</div>
+          <div className="col-span-1 sm:col-span-3 text-[11px] text-stone-500 pb-1.5">Live quotes and label bookings for {c.name} run on this FedEx account number. Blank = the platform's main FedEx account. The account must be added to your FedEx developer project or FedEx will reject it.</div>
         </div>
-        <p className="text-[11px] text-stone-500">Record this customer's FedEx-earned pricing tier so you always know their real cost basis. The overall list discount can drive their sell pricing in one click; per-service discounts below override it. This is reference + a pricing shortcut — it doesn't change what England bills.</p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
           <Field label="Tier / program"><Select value={fx.tier||""} onChange={e=>upFx({tier:e.target.value})}><option value="">— none —</option><option>Standard List</option><option>Earned Discount</option><option>Tier 1</option><option>Tier 2</option><option>Tier 3</option><option>Tier 4</option><option>Tier 5</option><option>Custom / negotiated</option><option>FedEx Advantage</option></Select></Field>
-          <Field label="Overall FedEx list discount %"><Input type="number" value={fx.listDiscount==null?"":fx.listDiscount} onChange={e=>upFx({listDiscount:e.target.value})} placeholder="e.g. 35"/></Field>
-          <Field label="Earned discount tier"><Input value={fx.earnedTier||""} onChange={e=>upFx({earnedTier:e.target.value})} placeholder="e.g. 25% band"/></Field>
-          <Field label="Effective date"><Input type="date" value={fx.effective||""} onChange={e=>upFx({effective:e.target.value})}/></Field>
-          <Field label="Next review / expires"><Input type="date" value={fx.review||""} onChange={e=>upFx({review:e.target.value})}/></Field>
-          <Field label="Fuel surcharge basis"><Select value={fx.fuel||"published"} onChange={e=>upFx({fuel:e.target.value})}><option value="published">Published (weekly)</option><option value="capped">Capped</option><option value="waived">Waived</option></Select></Field>
-          <Field label="Rep / contact"><Input value={fx.rep||""} onChange={e=>upFx({rep:e.target.value})} placeholder="FedEx rep name"/></Field>
-          <div className="col-span-2 sm:col-span-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <Field label="Min package charge"><Input value={fx.minCharge||""} onChange={e=>upFx({minCharge:e.target.value})} placeholder="$"/></Field>
-            <Field label="Grace / bill period"><Input value={fx.billPeriod||""} onChange={e=>upFx({billPeriod:e.target.value})} placeholder="e.g. weekly"/></Field>
-            <div className="col-span-2 flex items-end"><label className="flex items-center gap-2 text-sm cursor-pointer pb-2"><input type="checkbox" checked={!!fx.oneRate} onChange={e=>upFx({oneRate:e.target.checked})} className="accent-[#0086E0]"/>Eligible for FedEx One Rate</label></div>
+          <div className="col-span-2 sm:col-span-3 flex flex-wrap items-center gap-x-5 gap-y-2 pb-2">
+            <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={!!fx.oneRate} onChange={e=>upFx({oneRate:e.target.checked})} className="accent-[#0086E0]"/>One Rate</label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={!!fx.groundEconomy} onChange={e=>upFx({groundEconomy:e.target.checked})} className="accent-[#0086E0]"/>Ground Economy</label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={!!fx.dhl} onChange={e=>upFx({dhl:e.target.checked})} className="accent-[#0086E0]"/>DHL</label>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button onClick={applyTierToRates} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8]">Apply this tier to {c.name}'s rate pricing</button>
-          <span className="text-[11px] text-stone-400">Sets their profile's services to FedEx list − % using the discounts above. Needs FedEx list tables imported in the Rate database.</span>
-        </div>
-        <Field label="Tier notes"><Input value={fx.notes||""} onChange={e=>upFx({notes:e.target.value})} placeholder="e.g. volume commitment, GRI protection, contract #…"/></Field>
+        <p className="text-[11px] text-stone-400">Checkboxes are reference for the rep — they record which programs this customer has, and don't change pricing or what shows on their Ship screen.</p>
       </div>);
     })()}
     {tab==="features"&&<div className="space-y-3">
@@ -6049,7 +6029,7 @@ function CompanyAdminRequestButton({currentUser}){
   </div>);
 }
 
-function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,setCompanyFlags,settings}){
+function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,setCompanyFlags,settings,client=null,allowedTabs=null}){
   const [f,setF]=useState({name:"",email:"",password:""});
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState(null);
@@ -6126,7 +6106,7 @@ function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,set
       })}
     </div>
     <p className="text-[11px] text-stone-500">Blue chip = the person has that tab. Company admins always have every tab your account includes.</p>
-    <CompanyCustomDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings}/>
+    <CompanyCustomDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings} client={client} allowedTabs={allowedTabs}/>
     <CompanyAddressDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings}/>
   </div>);
 }
@@ -6838,6 +6818,10 @@ function AppInner(){
     return applyPrefs(t);
   },[isAdmin,isCompanyAdmin,currentUser,myFlags,custom.hiddenTabs,custom.tabOrder]);
   const unfulfilled=orders.filter(o=>o.status==="unfulfilled").length;
+  /* Feature-enabled tab keys for THIS login, before the user's own hide/reorder prefs — feeds
+     the Customize tab lists so nobody can see or deploy prefs for features the platform admin
+     hasn't switched on for them (admins get null = unfiltered). */
+  const featTabKeys=useMemo(()=>isAdmin?null:new Set(ALL_TABS.filter(x=>x[0]!=="admin"&&(x[0]==="ship"||featureOn(x[0],currentUser,myFlags))).map(x=>x[0])),[isAdmin,currentUser,myFlags]);
 
   /* ALL hooks run before any early return — a hook below a conditional return crashes React
      ("Rendered fewer hooks than expected") the moment currentUser flips across renders, which
@@ -6964,9 +6948,9 @@ function AppInner(){
           {tab==="invoices"&&<Invoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>}
           {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings} client={client} onShipped={onShipped}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
-          {tab==="companyadmin"&&isCompanyAdmin&&<CompanyAdmin currentUser={currentUser} companyUsers={companyUsers} setCompanyUsers={setCompanyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} settings={settings}/>}
+          {tab==="companyadmin"&&isCompanyAdmin&&<CompanyAdmin currentUser={currentUser} companyUsers={companyUsers} setCompanyUsers={setCompanyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} settings={settings} client={client} allowedTabs={featTabKeys}/>}
           {(tab==="admin"||tab.startsWith("admin:"))&&isAdmin&&<AdminPortal activeSection={tab.startsWith("admin:")?tab.slice(6):null} clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} publicBrand={publicBrand} setPublicBrand={setPublicBrand} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
-          {tab==="settings"&&<Settings showMoney={showMoney} secPolicy={(myFlags&&myFlags._secPolicy)||{}} isAdmin={isAdmin} uid={currentUser&&currentUser.id} currentUser={currentUser} setCurrentUser={setCurrentUser} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
+          {tab==="settings"&&<Settings showMoney={showMoney} secPolicy={(myFlags&&myFlags._secPolicy)||{}} isAdmin={isAdmin} uid={currentUser&&currentUser.id} currentUser={currentUser} setCurrentUser={setCurrentUser} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)} allowedTabs={featTabKeys}/>}
           </TabBoundary>
         </main>
       </div>
@@ -7521,7 +7505,6 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       setTimeout(()=>setShipStatus(null),4000);return;
     }
     setRecErrors([]);
-    if(custom.spendCap>0&&(q.sell??q.cost)>custom.spendCap){setShipStatus({state:"error",key:q.key,msg:`This rate is over your $${custom.spendCap} spending cap (Settings → Customizations).`});setTimeout(()=>setShipStatus(null),5000);return;}
     /* Preview-first flow: the click does NOT book anything. A pre-booking preview shows exactly
        what will be booked; clicking "Print label" there re-enters with _confirmed, which books
        and prints straight (no second popup). Validations above run first so a broken shipment
@@ -10458,7 +10441,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
   const tierOf=q=>q.maxDays<=1?"Express":q.maxDays<=3?"Standard":"Economy";
   let display=quotes;
   if(ck.presentation==="tiers"){const bt={};quotes.forEach(q=>{const t=tierOf(q);if(!bt[t]||q.buyer<bt[t].buyer)bt[t]={...q,shown:t};});display=["Express","Standard","Economy"].map(t=>bt[t]).filter(Boolean);}
-  else display=quotes.map(q=>({...q,shown:q.label}));
+  else display=quotes.map(q=>({...q,shown:String((ck.names||{})[q.key]||"").trim()||q.label}));   /* preview shows the merchant's custom checkout name, same as the live callback */
   const free=subtotal>=(+ck.freeThreshold||0)&&(+ck.freeThreshold>0)&&items.length>0;
   const endpoint="https://shippingcloud.net/.netlify/functions/shopify-rates";
   return (
@@ -10499,10 +10482,12 @@ function CheckoutRates({settings,setSettings,client,uid}){
           <div className="space-y-1">{CHECKOUT_SERVICES.map(k=>(
             <div key={k} className="flex items-center gap-3 py-1.5">
               <span className={`text-[10px] font-bold w-12 ${CARRIER_TINT[RATES[k].carrier]}`}>{RATES[k].carrier}</span>
-              <span className="flex-1 text-sm">{RATES[k].label}</span>
+              <span className="w-44 shrink-0 text-sm truncate" title={RATES[k].label}>{RATES[k].label}</span>
+              <input value={(ck.names||{})[k]||""} onChange={e=>setCk({names:{...(ck.names||{}),[k]:e.target.value}})} placeholder="Buyer sees… (blank = real name)" disabled={!ck.services[k]} className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 disabled:bg-stone-50 disabled:text-stone-400"/>
               <button onClick={()=>toggleSvc(k)}><span className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${ck.services[k]?"bg-[#0086E0] justify-end":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></span></button>
             </div>
           ))}</div>
+          <p className="text-[11px] text-stone-500 mt-2">Name each option anything you want — buyers see your name at checkout instead of the FedEx name. Applies with "Carrier names" presentation; the Economy / Standard / Express tiers keep their tier names.</p>
         </Panel>
       </div>
       {/* PREVIEW */}
@@ -10550,7 +10535,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
 }
 
 /* ════════ SETTINGS ════════ */
-function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,isAdmin=false,showMoney=true,secPolicy={},currentUser=null,setCurrentUser=null}){
+function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,isAdmin=false,showMoney=true,secPolicy={},currentUser=null,setCurrentUser=null,allowedTabs=null}){
   /* Remember which Settings sub-section you were on, so leaving Settings and coming back returns you to
      the same panel instead of resetting to General. Persisted so it survives a full reload too. */
   const [sec,setSecRaw]=useState("general");   // always open Settings on General
@@ -10615,9 +10600,9 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="general"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="General settings saved">{(s,ss)=><GeneralSettings settings={s} setSettings={ss} goSec={setSec} currentUser={currentUser} setCurrentUser={setCurrentUser}/>}</SettingsDraftWrap>}
         {sec==="cieditor"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Commercial invoice saved">{(s,ss)=><div className="space-y-6"><CIEditor settings={s} setSettings={ss} shipments={shipments}/><div className="border-t border-stone-200 pt-6"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-3">Commercial invoice history</div><CIHistory settings={s} setSettings={ss}/></div></div>}</SettingsDraftWrap>}
         {sec==="otherdocs"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Documents saved">{(s,ss)=><OtherDocs settings={s} setSettings={ss}/>}</SettingsDraftWrap>}
-        {sec==="customize"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])}/>}
-        {sec==="shipscreen"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="ship"/>}
-        {sec==="orderspage"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="orders"/>}
+        {sec==="customize"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} allowedTabs={allowedTabs}/>}
+        {sec==="shipscreen"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="ship" allowedTabs={allowedTabs}/>}
+        {sec==="orderspage"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="orders" allowedTabs={allowedTabs}/>}
         {sec==="billing"&&<Billing settings={settings} setSettings={setSettings}/>}
         {sec==="integrations"&&<Integrations settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders}/>}
         {sec==="subscription"&&<Subscription settings={settings} setSettings={setSettings}/>}
@@ -12902,7 +12887,7 @@ function TwoFactorPanel(){
     {msg&&<div className={`text-sm mt-2 ${msg.t==="ok"?"text-emerald-700":"text-rose-600"}`}>{msg.m}</div>}
   </Panel>);
 }
-function CompanyCustomDeploy({companyUsers,companyFlags,setCompanyFlags,adminSettings}){
+function CompanyCustomDeploy({companyUsers,companyFlags,setCompanyFlags,adminSettings,client=null,allowedTabs=null}){
   const [inclProducts,setInclProducts]=useState(false);
   const [draft,setDraft]=useState({});
   const [mode,setMode]=useState("all");
@@ -12934,7 +12919,7 @@ function CompanyCustomDeploy({companyUsers,companyFlags,setCompanyFlags,adminSet
     </div>
     <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700"><input type="checkbox" checked={inclProducts} onChange={e=>setInclProducts(e.target.checked)} className="accent-[#0086E0]"/>Also deploy my product catalog (names, HTS codes, origins, values) — signatures always stay personal to each login</label>
     <div className="border border-stone-100 rounded-lg p-3 bg-stone-50/50">
-      <Customize settings={{custom:draft}} setSettings={(fn)=>setDraft(d=>{const r=typeof fn==="function"?fn({custom:d}):fn;return (r&&r.custom)||d;})} deployMode/>
+      <Customize settings={{custom:draft}} setSettings={(fn)=>setDraft(d=>{const r=typeof fn==="function"?fn({custom:d}):fn;return (r&&r.custom)||d;})} deployMode blockedKeys={new Set((client&&client.blockedServices)||[])} allowedTabs={allowedTabs}/>
     </div>
     <div className="flex flex-wrap items-center gap-2">
       <button onClick={()=>deploy(false)} disabled={busy} className="text-sm bg-[#0086E0] hover:bg-[#0072BE] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<ShieldCheck className="w-4 h-4"/>}Deploy to {mode==="all"?"everyone":`${targets.length} selected`}</button>
@@ -12982,7 +12967,7 @@ function FieldLists({settings,setSettings}){
     <FieldListEd fl={fl} setList={setList} k="po" title="PO # values" ph="e.g. PO-GILLETTE-…" extra={<FieldListOpts c={c} setC={setC} req="poRequired" lock="poLocked"/>}/>
   </div>);
 }
-function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,only}){
+function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,only,allowedTabs=null}){
   const locked=blockedKeys||new Set();
   const committedCustom=cz(settings);
   const _cd=useDraft(committedCustom,(v)=>setSettings(p=>({...p,custom:v})),CUSTOM_DEFAULTS);
@@ -13031,7 +13016,10 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
   const svcHidden=new Set(c.hiddenServices||[]);
   const togSvc=(k)=>{ if(locked.has(k))return; const nx=new Set(svcHidden); nx.has(k)?nx.delete(k):nx.add(k); set("hiddenServices",[...nx]);};
   const setAlias=(k,v)=>set("aliases",{...(c.aliases||{}),[k]:v});
-  const tabChoices=ALL_TABS.filter(x=>x[0]!=="admin");
+  /* Only offer tabs the platform admin has actually enabled for this account — a company admin
+     must not see (or deploy prefs for) features like Invoices that aren't turned on for them.
+     allowedTabs=null (admin views) keeps the full list. */
+  const tabChoices=ALL_TABS.filter(x=>x[0]!=="admin"&&(!allowedTabs||x[0]==="ship"||allowedTabs.has(x[0])));
   const hiddenTabs=new Set(c.hiddenTabs||[]);
   const togTab=(k)=>{const nx=new Set(hiddenTabs); nx.has(k)?nx.delete(k):nx.add(k); set("hiddenTabs",[...nx]);};
   const order=(c.tabOrder&&c.tabOrder.length)?c.tabOrder:tabChoices.map(x=>x[0]);
@@ -13095,7 +13083,10 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
       <div className="border-t border-stone-100 mt-3 pt-3">
         <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Services — hide ones you never use, rename the rest{(isAdmin||deployMode)&&locked.size>0&&<span className="normal-case tracking-normal text-stone-400"> · greyed-out ones you've turned off for this customer</span>}</div>
         <div className="space-y-1.5">
-          {SVC.filter(([k])=>isAdmin||deployMode||!locked.has(k)).map(([k,l])=>{const lk=locked.has(k);const off=svcHidden.has(k)||lk;return (<div key={k} className="flex items-center gap-3">
+          {/* company admins and customers only see the services the platform admin allows them —
+              blocked ones disappear entirely (they were greyed-out noise before). The admin
+              portal's own deploy view still shows everything with the lock styling. */}
+          {SVC.filter(([k])=>isAdmin||!locked.has(k)).map(([k,l])=>{const lk=locked.has(k);const off=svcHidden.has(k)||lk;return (<div key={k} className="flex items-center gap-3">
             <label className={`flex items-center gap-1.5 text-sm w-56 shrink-0 ${lk?"text-stone-300 cursor-not-allowed":"text-stone-700 cursor-pointer"}`}><input type="checkbox" checked={!off} disabled={lk} onChange={()=>togSvc(k)} className="accent-[#0086E0]"/><span className={off?"line-through text-stone-300":""}>{l}</span>{lk&&<span className="text-[10px] text-stone-400 normal-case">locked</span>}</label>
             <input value={(c.aliases||{})[k]||""} onChange={e=>setAlias(k,e.target.value)} placeholder={"rename — e.g. "+(k==="ground"?"Standard":k==="2day"?"Fast":"…")} disabled={off} className="flex-1 min-w-0 bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0099FF] placeholder-stone-300 disabled:opacity-40"/>
           </div>);})}
@@ -13117,7 +13108,6 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
       <div className="border-t border-stone-100 mt-3 pt-3 grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         {Tog({k:"autopilotPreview",label:"Show an Autopilot preview column",hint:"Adds a column showing what your Autopilot rules would pick for each order — the service, a hold, or 'no rule matches' — before you ship. Runs your real rules, updates live."})}
         {Sel({k:"density",label:"List density",opts:[["comfortable","Comfortable"],["compact","Compact — more rows per screen"]]})}
-        {Num({k:"spendCap",label:"Spending cap",hint:"Hard-blocks booking any label above this. 0 = off",suffix:"$"})}
         {Tog({k:"hotkeys",label:"Keyboard shortcuts",hint:"Press ? anywhere for the list — g then o jumps to Orders, etc."})}
         {Num({k:"stuckDays",label:"Stuck-shipment flag",hint:"Highlight in-transit shipments older than this many days. 0 = off",suffix:"days"})}
       </div>

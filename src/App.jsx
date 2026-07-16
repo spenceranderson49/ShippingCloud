@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v593";
+const BUILD_TAG="addr-v594";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10947,8 +10947,8 @@ function Warehouses({settings,setSettings}){
   const list=settings.warehouses||[];
   const [n,setN]=useState({name:"",company:"",address:"",city:"",state:"",zip:"",phone:""});
   const inC="bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0099FF] w-full";
-  const add=()=>{ if(!n.name||!n.zip)return; setSettings({...settings,warehouses:[...list,{...n}]}); setN({name:"",company:"",address:"",city:"",state:"",zip:"",phone:""}); };
-  const del=(name)=>setSettings({...settings,warehouses:list.filter(w=>w.name!==name)});
+  const add=()=>{ if(!n.name||!n.zip)return; setSettings({...settings,warehouses:[...list,{...n,id:"wh"+Date.now()}]}); setN({name:"",company:"",address:"",city:"",state:"",zip:"",phone:""}); };
+  const del=(i)=>setSettings({...settings,warehouses:list.filter((_,j)=>j!==i)});   // by index — two warehouses with the same name no longer delete together
   return (<div className="max-w-3xl space-y-4">
     <div>
       <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Warehouse className="w-4 h-4"/>Warehouses / Ship-From Locations</h2>
@@ -10956,13 +10956,13 @@ function Warehouses({settings,setSettings}){
     </div>
     <div className="bg-white border border-stone-200 rounded-lg divide-y divide-stone-100">
       {list.length===0&&<div className="px-4 py-6 text-center text-sm text-stone-400">No warehouses yet — add your first below.</div>}
-      {list.map(w=>(
-        <div key={w.name} className="flex items-center justify-between px-4 py-3">
+      {list.map((w,i)=>(
+        <div key={w.id||i} className="flex items-center justify-between px-4 py-3">
           <div className="min-w-0">
             <div className="text-sm font-medium text-stone-800 flex items-center gap-1.5"><Warehouse className="w-3.5 h-3.5 text-stone-400"/>{w.name}</div>
             <div className="text-[13px] text-stone-500 truncate">{[w.company,w.address,[w.city,w.state].filter(Boolean).join(", "),w.zip].filter(Boolean).join(" · ")}{w.phone?` · ${w.phone}`:""}</div>
           </div>
-          <button onClick={()=>del(w.name)} className="text-stone-400 hover:text-rose-500 shrink-0 ml-3" title="Remove"><Trash2 className="w-4 h-4"/></button>
+          <button onClick={()=>del(i)} className="text-stone-400 hover:text-rose-500 shrink-0 ml-3" title="Remove"><Trash2 className="w-4 h-4"/></button>
         </div>
       ))}
     </div>
@@ -12291,7 +12291,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
     setRules(rs=>{ const i=rs.findIndex(x=>x.id===r.id); if(i>=0){const c=[...rs];c[i]=clean;return c;} return [...rs,clean]; });
     setEditing(null);
   };
-  const delRule=(id)=>{ setRules(rs=>rs.filter(x=>x.id!==id)); setEditing(null); };
+  const delRule=async(id)=>{ const r=rules.find(x=>x.id===id); if(!await uiConfirm("Delete the rule "+((r&&r.name)?`“${r.name}”`:"")+"? Automation will stop applying it. This can't be undone."))return; setRules(rs=>rs.filter(x=>x.id!==id)); setEditing(null); };
   const toggle=(id)=>setRules(rs=>rs.map(x=>x.id===id?{...x,enabled:!x.enabled}:x));
   const dupe=(r)=>setRules(rs=>{const i=rs.findIndex(x=>x.id===r.id);const copy={...JSON.parse(JSON.stringify(r)),id:"r"+Date.now(),name:(r.name||"Rule")+" (copy)"};const c=[...rs];c.splice(i+1,0,copy);return c;});
   const move=(id,dir)=>setRules(rs=>{const i=rs.findIndex(x=>x.id===id);if(i<0)return rs;const j=i+dir;if(j<0||j>=rs.length)return rs;const c=[...rs];const t=c[i];c[i]=c[j];c[j]=t;return c;});

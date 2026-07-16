@@ -101,6 +101,21 @@ const adminSectionsFor=(user)=>{
   allowed.add("users");
   return ADMIN_SECTIONS.filter(s=>allowed.has(s[0]));
 };
+/* Named admin permission levels — pick one instead of hand-checking sections. "full" ⇒ adminPerms=null
+   (every section, same as the owner). Presets store the exact section list; "custom" is any other set. */
+const ADMIN_LEVELS=[
+  {id:"full",name:"Full access",desc:"Every Admin section — same as you",sections:null},
+  {id:"manager",name:"Manager",desc:"Everything except API, Domains & Backups",sections:["overview","customers","users","rates","labelcert","customizations","branding","billing"]},
+  {id:"support",name:"Support",desc:"Dashboard, Customers, Logins, Rates & Labels",sections:["overview","customers","users","rates","labelcert"]},
+  {id:"billing",name:"Billing",desc:"Dashboard, Customers, Billing & Invoices",sections:["overview","customers","billing"]},
+];
+const levelOf=(adminPerms)=>{
+  if(!(adminPerms&&Array.isArray(adminPerms.sections)))return "full";
+  const set=new Set(adminPerms.sections);
+  const m=ADMIN_LEVELS.find(l=>l.sections&&l.sections.length===set.size&&l.sections.every(s=>set.has(s)));
+  return m?m.id:"custom";
+};
+const permsForLevel=(id)=>{ const l=ADMIN_LEVELS.find(x=>x.id===id); if(!l||!l.sections)return null; return {sections:[...l.sections]}; };
 const featureOn=(id,user,flagsForUser)=>{
   if(!user)return false;
   if(user.role==="admin")return true;                                   // admins always have everything
@@ -109,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v589";
+const BUILD_TAG="addr-v590";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3403,8 +3418,7 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection,cli
   },[ships,dayStart]);
   const [drill,setDrill]=useState(null);   // {_from,_to,_t} — a clicked chart bucket
   const Combo=({title,data})=>{const W=340,H=104,P=14;const mMax=Math.max(1,...data.map(d=>d.m));const cMax=Math.max(1,...data.map(d=>d.c));const bw=(W-P*2)/data.length;
-    return (<div className="border border-stone-200 rounded-lg bg-white p-3">
-      {partial&&<div className="text-[11px] text-stone-400 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 flex items-center gap-1.5"><Loader2 className="w-3 h-3 animate-spin"/>Loading platform-wide data… showing only your own login's shipments until it lands (a few seconds).</div>}
+    return (<div className="p-3">
       <div className="text-xs font-semibold text-stone-600 mb-1">{title} <span className="font-normal text-stone-400">— click a bar for the breakdown</span></div>
       <svg viewBox={"0 0 "+W+" "+H} className="w-full">
         {data.map((d,i)=>{const h=(H-32)*(d.m/mMax);const sel=drill&&drill._from===d._from&&drill._to===d._to;return <g key={i} className="cursor-pointer" onClick={()=>setDrill(sel?null:d)}>
@@ -3426,12 +3440,21 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection,cli
       <span className="flex-1"/>
       <button onClick={()=>openSection("customers")} className="text-[12px] text-[#0086E0] hover:underline">Customers →</button>
     </div>
-    <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+    {partial&&<div className="text-[12px] text-stone-500 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin"/>Loading platform-wide data… showing only your own login's shipments until it lands (a few seconds).</div>}
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
       <Stat2 label="Shipments" v={live.length+(voided?" (−"+voided+" void)":"")}/>
       <Stat2 label="Active customers" v={custN}/>
       <Stat2 label="Est. margin" v={money(totM)} tone={totM>=0?"text-emerald-600":"text-rose-600"}/>
       <Stat2 label="Quoted" v={money(totQ)}/>
-      <Stat2 label="Open orders (all logins)" v={platform.openOrders}/>
+    </div>
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-[12px] text-stone-500 px-1">
+      <span>Open orders <b className="text-stone-700">{platform.openOrders}</b></span>
+      <span className="text-stone-300">·</span>
+      <span>Logins <b className="text-stone-700">{loginStats.total}</b></span>
+      <span>Active <b className="text-stone-700">{loginStats.active}</b></span>
+      <span>Signed in · 7d <b className="text-stone-700">{loginStats.week}</b></span>
+      <span className="text-stone-300">·</span>
+      <span>All-time margin <b className={platform.margin>=0?"text-emerald-600":"text-rose-600"}>{money(platform.margin)}</b></span>
     </div>
     {drill&&(()=>{
       const rows=ships.filter(x=>{const t=tsOf(x);return t>=drill._from&&t<drill._to;}).sort((a,b)=>tsOf(b)-tsOf(a));
@@ -3464,12 +3487,12 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection,cli
       </div>);
     })()}
     <div className="grid lg:grid-cols-[340px,1fr] gap-3 items-start">
-      <div className="space-y-3">
+      <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
         <Combo title="Today — hourly" data={buckets.hourly}/>
         <Combo title="Last 14 days" data={buckets.daily}/>
         <Combo title="Last 12 weeks" data={buckets.weekly}/>
       </div>
-      <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
         <div className="px-4 py-2.5 border-b border-stone-100 flex items-center justify-between"><span className="text-sm font-semibold text-stone-700">Shipments — {PERIODS.find(p=>p[0]===period)[1].toLowerCase()}, all customers</span><span className="text-[11px] text-stone-400">{inP.length>400?"newest 400 shown":""}</span></div>
         <div className="overflow-x-auto max-h-[560px] overflow-y-auto">
           <table className="w-full text-[13px] min-w-[760px]">
@@ -3497,7 +3520,7 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection,cli
         </div>
       </div>
     </div>
-    <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+    <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
       <div className="px-4 py-2.5 border-b border-stone-100 text-sm font-semibold text-stone-700">By customer — {PERIODS.find(p=>p[0]===period)[1].toLowerCase()}</div>
       <div className="overflow-x-auto"><table className="w-full text-[13px] min-w-[680px]">
         <thead className="bg-stone-50"><tr className="text-[10px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal px-3 py-2">Customer</th><th className="text-right font-normal px-3 py-2">Shipments</th><th className="text-right font-normal px-3 py-2">Voided</th><th className="text-right font-normal px-3 py-2">Quoted</th><th className="text-right font-normal px-3 py-2">Est. margin</th><th className="text-right font-normal px-3 py-2">Margin / label</th><th className="text-right font-normal px-3 py-2">Margin %</th></tr></thead>
@@ -3514,12 +3537,6 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection,cli
           </tr>))}
         </tbody>
       </table></div>
-    </div>
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-      <Stat2 label="Logins created" v={loginStats.total}/>
-      <Stat2 label="Active logins" v={loginStats.active}/>
-      <Stat2 label="Signed in · last 7 days" v={loginStats.week}/>
-      <Stat2 label="All-time margin" v={money(platform.margin)} tone={platform.margin>=0?"text-emerald-600":"text-rose-600"}/>
     </div>
   </div>);
 }
@@ -5163,9 +5180,9 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
     if(res.users)setUsers(res.users);
     if(res.requests&&setSignupRequests)setSignupRequests(res.requests);
   };
-  const [f,setF]=useState({name:"",email:"",role:"customer",clientId:clients[0]?clients[0].id:"",password:"",full:true,perms:ADMIN_SECTIONS.map(x=>x[0])});
+  const [f,setF]=useState({name:"",email:"",role:"customer",clientId:clients[0]?clients[0].id:"",password:"",level:"full",perms:ADMIN_SECTIONS.map(x=>x[0])});
   const [added,setAdded]=useState(false);
-  const create=()=>{if(!f.name||!f.email||!f.password)return;const adminPerms=(f.role==="admin"&&!f.full)?{sections:f.perms}:null;setUsers(p=>[...p,{id:"u"+Date.now(),name:f.name,email:f.email,role:f.role,clientId:f.role==="customer"?f.clientId:null,adminPerms,status:"active",password:f.password,lastLogin:"—",createdAt:new Date().toISOString()}]);setF({name:"",email:"",role:"customer",clientId:clients[0]?clients[0].id:"",password:"",full:true,perms:ADMIN_SECTIONS.map(x=>x[0])});setAdded(true);setTimeout(()=>setAdded(false),1600);};
+  const create=()=>{if(!f.name||!f.email||!f.password)return;const dup=users.find(u=>u&&u.email&&u.email.toLowerCase()===f.email.trim().toLowerCase());if(dup){uiAlert("A login with that email already exists ("+(dup.name||dup.email)+"). Use a different email.");return;}const adminPerms=f.role==="admin"?(f.level==="custom"?{sections:f.perms}:permsForLevel(f.level)):null;setUsers(p=>[...p,{id:"u"+Date.now(),name:f.name,email:f.email.trim(),role:f.role,clientId:f.role==="customer"?f.clientId:null,adminPerms,status:"active",password:f.password,lastLogin:"—",createdAt:new Date().toISOString()}]);setF({name:"",email:"",role:"customer",clientId:clients[0]?clients[0].id:"",password:"",level:"full",perms:ADMIN_SECTIONS.map(x=>x[0])});setAdded(true);setTimeout(()=>setAdded(false),1600);};
   const toggle=(id)=>setUsers(us=>us.map(u=>u.id===id?{...u,status:u.status==="active"?"inactive":"active"}:u));
   const del=(id)=>setUsers(us=>us.filter(u=>u.id!==id));
   return (<div className="space-y-3">
@@ -5221,7 +5238,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
         {r.invoiceKey&&<button onClick={async()=>{const res=await cloudCall({action:"getUpload",token:CLOUD.token,key:r.invoiceKey});if(!res||!res.ok){uiAlert((res&&res.error)||"Could not fetch the file.");return;}const bytes=atob(res.data);const arr=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);const url=URL.createObjectURL(new Blob([arr],{type:res.type}));const a=document.createElement("a");a.href=url;a.download=res.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);}} className="text-xs border border-[#0086E0]/40 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>Carrier Invoice</button>}
         <select id={"reqclient-"+(r.id||r.email)} defaultValue="" className="text-xs border border-stone-300 rounded-lg px-2 py-1.5 bg-white"><option value="">No Customer Account Yet</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>
         <button disabled={busyReq===r.email} onClick={()=>{const sel=document.getElementById("reqclient-"+(r.id||r.email));decide(r.email,true,sel?sel.value:null);}} className="text-xs bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-emerald-700 disabled:opacity-50">{busyReq===r.email?"…":"Approve"}</button>
-        <button disabled={busyReq===r.email} onClick={()=>decide(r.email,false)} className="text-xs border border-stone-300 text-stone-600 rounded px-3 py-1.5 hover:bg-stone-50 disabled:opacity-50">Deny</button>
+        <button disabled={busyReq===r.email} onClick={async()=>{if(await uiConfirm("Deny "+(r.name||r.email)+"'s access request? This permanently removes the request"+(r.invoiceKey?" and their uploaded carrier invoice":"")+".")) decide(r.email,false);}} className="text-xs border border-stone-300 text-stone-600 rounded px-3 py-1.5 hover:bg-stone-50 disabled:opacity-50">Deny</button>
       </div>))}
       <p className="text-[11px] text-stone-400">Approving creates their login instantly with the password they chose at signup. Assign a customer account to give them that customer’s pricing, or leave unassigned and set it later.</p>
     </div>}
@@ -5234,30 +5251,37 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
         <Field label="Role"><Select value={f.role} onChange={e=>setF({...f,role:e.target.value})}><option value="customer">Customer</option>{fullAdmin&&<option value="admin">Admin</option>}</Select></Field>
         {f.role==="customer"&&<Field label="Customer account"><Select value={f.clientId} onChange={e=>setF({...f,clientId:e.target.value})}>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>}
       </div>
-      {f.role==="admin"&&<div className="border border-stone-200 rounded-lg bg-stone-50 p-3 space-y-2">
-        <label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={f.full} onChange={e=>setF({...f,full:e.target.checked})} className="accent-[#0086E0]"/><span className="font-medium text-stone-700">Full access — every Admin section</span></label>
-        {!f.full&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5">
+      {f.role==="admin"&&<div className="border border-stone-200 rounded-lg bg-stone-50 p-3 space-y-2.5">
+        <div className="text-[10px] uppercase tracking-widest text-stone-400">Permission level</div>
+        <div className="grid sm:grid-cols-2 gap-2">
+          {[...ADMIN_LEVELS,{id:"custom",name:"Custom…",desc:"Pick exactly which sections"}].map(l=>(
+            <label key={l.id} className={`flex items-start gap-2 rounded-lg border p-2.5 cursor-pointer ${f.level===l.id?"border-[#0086E0] bg-blue-50/60":"border-stone-200 bg-white hover:border-stone-300"}`}>
+              <input type="radio" name="newadminlevel" checked={f.level===l.id} onChange={()=>setF({...f,level:l.id})} className="mt-0.5 accent-[#0086E0]"/>
+              <span><span className="font-medium text-stone-700 text-sm">{l.name}</span><span className="text-[11px] text-stone-400 block leading-tight">{l.desc}</span></span>
+            </label>))}
+        </div>
+        {f.level==="custom"&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5 border-t border-stone-200 pt-2.5">
           {ADMIN_SECTIONS.map(([id,label])=>{const on=f.perms.includes(id);return (
             <label key={id} className="flex items-center gap-2 text-sm cursor-pointer py-0.5"><input type="checkbox" checked={on} onChange={e=>setF({...f,perms:e.target.checked?[...f.perms,id]:f.perms.filter(x=>x!==id)})} className="accent-[#0086E0]"/><span className="text-stone-700">{label}</span></label>);})}
         </div>}
-        <p className="text-[11px] text-stone-400">Limits which Admin portal sections this login can open. They still get every regular tab (Ship, Orders, Settings…) like any admin.</p>
+        <p className="text-[11px] text-stone-400">Levels limit which Admin portal <b>sections</b> this login opens — they still get every regular tab (Ship, Orders, Settings…). Every admin has full data access underneath, so only make admins of people you trust. (All Logins always stays available so no one can lock themselves out.)</p>
       </div>}
       <button onClick={create} className={`text-sm rounded px-4 py-2 font-medium flex items-center gap-1.5 ${added?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{added?<><Check className="w-4 h-4"/>Created</>:<><Plus className="w-4 h-4"/>Create login</>}</button>
     </div>
     <div className="border border-stone-200 rounded-lg bg-white overflow-hidden divide-y divide-stone-100">
-      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="flex-1">Login</div><div className="w-24">Role</div><div className="w-32 hidden sm:block">Company</div><div className="w-24 hidden sm:block">Last login</div><div className="text-right flex-1 hidden lg:block">Actions</div></div>
+      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="flex-1 min-w-0">Login</div><div className="w-20 shrink-0">Role</div><div className="w-36 shrink-0 hidden sm:block">Company</div><div className="w-24 shrink-0 hidden md:block">Last login</div><div className="w-48 shrink-0 text-right">Actions</div></div>
       {users.map(u=>(
-        <div key={u.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
+        <div key={u.id} className="px-4 py-3 text-sm">
+          <div className="flex items-center gap-3">
           <div className="flex-1 min-w-0"><div className="font-medium truncate">{u.name}{u.company?<span className="text-stone-400 font-normal"> · {u.company}</span>:null}</div><div className="text-[11px] text-stone-400 truncate">{u.email}{u.volume?` · ${u.volume}/mo`:""}{u.carrier?` · ships ${u.carrier}`:""}{u.createdAt?` · joined ${new Date(u.createdAt).toLocaleDateString()}`:""}</div></div>
-          <div className="w-24 flex items-center gap-1"><Badge tone={u.role==="admin"?"blue":"stone"}>{u.role}</Badge>{u.totp&&u.totp.enabled&&<Badge tone="green">2FA</Badge>}</div>
-          <div className="w-32 hidden sm:block text-xs text-stone-500 truncate">{u.role==="admin"?"— all —":(clients.find(c=>c.id===u.clientId)||{}).name||"—"}</div>
-          <div className="w-24 hidden sm:block text-xs text-stone-400">{u.lastLogin||"—"}</div>
-          <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <div className="w-20 shrink-0 flex items-center gap-1 flex-wrap"><Badge tone={u.role==="admin"?"blue":"stone"}>{u.role}</Badge>{u.role==="admin"&&u.adminPerms&&u.adminPerms.sections&&<Badge tone="amber">limited</Badge>}{u.totp&&u.totp.enabled&&<Badge tone="green">2FA</Badge>}</div>
+          <div className="w-36 shrink-0 hidden sm:block text-xs text-stone-500 truncate">{u.role==="admin"?"— all —":(clients.find(c=>c.id===u.clientId)||{}).name||"—"}</div>
+          <div className="w-24 shrink-0 hidden md:block text-xs text-stone-400">{u.lastLogin||"—"}</div>
+          <div className="w-48 shrink-0 flex items-center justify-end gap-1.5">
             {u.role!=="admin"&&<button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }} title="Open the app exactly as this person sees it" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Log In As</button>}
             <button onClick={()=>toggle(u.id)} title={u.status==="active"?"Deactivate":"Activate"} className={`text-[11px] rounded px-2 py-1 ${u.status==="active"?"bg-emerald-50 text-emerald-700":"bg-stone-100 text-stone-500"}`}>{u.status==="active"?"Active":"Deactivated"}</button>
             <RowMenu title={"More actions for "+(u.name||u.email)} items={[
               u.role==="admin"&&u.id!=="u1"&&!isBuiltInAdmin(u.email)&&u.id!==currentUser.id&&fullAdmin&&{label:"Portal access…",title:"Which Admin sections this login can open",active:accessOpen===u.id,onClick:()=>setAccessOpen(accessOpen===u.id?null:u.id)},
-              u.role!=="admin"&&u.clientId&&{label:"Rates: "+rateProfileName(rateRules,u.clientId),title:"Which rate profile this company prices from — applies to every login of the company",active:rpOpen===u.id,onClick:()=>setRpOpen(rpOpen===u.id?null:u.id)},
               u.role!=="admin"&&{label:"Company Admin",title:u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins",active:!!u.companyAdmin,onClick:()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))},
               u.role!=="admin"&&{label:"Tabs & logo…",title:"Features for this login",active:featOpen===u.id,onClick:()=>setFeatOpen(featOpen===u.id?null:u.id)},
               CLOUD.mode==="cloud"&&(u.role!=="admin"||fullAdmin)&&{label:"Set password…",title:"Reset password",onClick:async()=>{const np=await uiPrompt("New password for "+u.email+" (min 4 characters):","",{title:"Reset password"});if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});uiAlert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}},
@@ -5266,15 +5290,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
               u.id!==currentUser.id&&!isBuiltInAdmin(u.email)&&(u.role!=="admin"||(fullAdmin&&u.id!=="u1"))&&{label:"Delete login…",danger:true,onClick:async()=>{if(await uiConfirm("Delete "+(u.name||u.email)+"'s login? They won't be able to sign in anymore. Their customer account and its data are not touched."))del(u.id);}},
             ]}/>
           </div>
-          {rpOpen===u.id&&u.role!=="admin"&&u.clientId&&<div className="w-full mt-2 border-t border-stone-100 pt-3">
-            <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Rate profile for {(clients.find(c=>c.id===u.clientId)||{}).name||"this company"} — every login of the company prices from it</div>
-            <div className="flex flex-wrap items-center gap-2">
-              {/* read-only here on purpose: rate assignment is press-to-save on the customer record — this select used to write the global store instantly */}
-              <span className="text-xs bg-stone-100 border border-stone-200 rounded px-2 py-1 font-medium text-stone-700">{(((rateRules.profiles&&rateRules.profiles.length)?rateRules.profiles:DEFAULT_RATE_RULES.profiles).find(p=>p.id===((rateRules.assign||{})[u.clientId]||"default"))||{}).name||"Default"}</span>
-              <span className="text-[11px] text-stone-400">Change it on the customer record → Rates tab (press-to-save).</span>
-              <span className="text-[11px] text-stone-400">Edit the profile's services, zones, and surcharges under Admin → Rates. If no rule answers, their legacy flat markup ({(clients.find(c=>c.id===u.clientId)||{}).markup!=null?(clients.find(c=>c.id===u.clientId)||{}).markup+"%":"—"}) still applies.</span>
-            </div>
-          </div>}
+          </div>
           {featOpen===u.id&&u.role!=="admin"&&<div className="w-full mt-2 border-t border-stone-100 pt-3">
             <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Tabs &amp; features for {u.name||u.email} — anything you flip here applies to this login only</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1.5">
@@ -5312,13 +5328,20 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
             <p className="text-[11px] text-stone-400 mt-2">Changes apply the next time this person loads the app. Custom features we build for one customer appear in this list too — enabling them for someone else is one checkbox.</p>
           </div>}
           {accessOpen===u.id&&u.role==="admin"&&<div className="w-full mt-2 border-t border-stone-100 pt-3">
-            <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Admin access for {u.name||u.email}</div>
-            <label className="flex items-center gap-2 text-sm cursor-pointer mb-2"><input type="checkbox" checked={!(u.adminPerms&&u.adminPerms.sections)} onChange={e=>setUsers(us=>us.map(x=>x.id===u.id?{...x,adminPerms:e.target.checked?null:{sections:ADMIN_SECTIONS.map(z=>z[0])}}:x))} className="accent-[#0086E0]"/><span className="font-medium text-stone-700">Full access — every Admin section</span></label>
-            {u.adminPerms&&u.adminPerms.sections&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5">
+            <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Permission level for {u.name||u.email}</div>
+            {(()=>{const cur=levelOf(u.adminPerms);return (
+            <div className="grid sm:grid-cols-2 gap-2">
+              {[...ADMIN_LEVELS,{id:"custom",name:"Custom…",desc:"Pick exactly which sections"}].map(l=>(
+                <label key={l.id} className={`flex items-start gap-2 rounded-lg border p-2.5 cursor-pointer ${cur===l.id?"border-[#0086E0] bg-blue-50/60":"border-stone-200 bg-white hover:border-stone-300"}`}>
+                  <input type="radio" name={"lvl-"+u.id} checked={cur===l.id} onChange={()=>{ if(l.id==="custom"){ if(cur!=="custom")setUsers(us=>us.map(x=>x.id===u.id?{...x,adminPerms:{sections:ADMIN_SECTIONS.map(z=>z[0])}}:x)); } else setUsers(us=>us.map(x=>x.id===u.id?{...x,adminPerms:permsForLevel(l.id)}:x)); }} className="mt-0.5 accent-[#0086E0]"/>
+                  <span><span className="font-medium text-stone-700 text-sm">{l.name}</span><span className="text-[11px] text-stone-400 block leading-tight">{l.desc}</span></span>
+                </label>))}
+            </div>);})()}
+            {u.adminPerms&&u.adminPerms.sections&&levelOf(u.adminPerms)==="custom"&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5 border-t border-stone-100 mt-2.5 pt-2.5">
               {ADMIN_SECTIONS.map(([aid,label])=>{const on=u.adminPerms.sections.includes(aid);return (
                 <label key={aid} className="flex items-center gap-2 text-sm cursor-pointer py-0.5"><input type="checkbox" checked={on} onChange={e=>setUsers(us=>us.map(x=>x.id===u.id?{...x,adminPerms:{sections:e.target.checked?[...x.adminPerms.sections,aid]:x.adminPerms.sections.filter(z=>z!==aid)}}:x))} className="accent-[#0086E0]"/><span className="text-stone-700">{label}</span></label>);})}
             </div>}
-            <p className="text-[11px] text-stone-400 mt-2">Applies the next time they load the app. Section limits control what the Admin portal shows — every admin login still has full data access underneath, so only make admins of people you trust.</p>
+            <p className="text-[11px] text-stone-400 mt-2">Applies the next time they load the app. Levels control what the Admin portal shows — every admin login still has full data access underneath, so only make admins of people you trust.</p>
           </div>}
         </div>
       ))}
@@ -7975,11 +7998,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {!custom.hideShipSteps&&<StepHead n="3" label="Service & rate"/>}
         {/* Rates row: service list on the left, a slim info column (From order · Billing & third-party)
             fills the space to its right. Wraps to a normal stack on narrow screens. */}
-        <div className="flex flex-wrap items-start gap-3">
-          <div className="flex-1 min-w-[300px] max-w-[52rem]">
+        <div className="flex flex-wrap items-start gap-4">
+          <div className="flex-1 min-w-[300px] max-w-[64rem]">
             <ServiceList hideTitle={true} quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
           </div>
-          <div className="w-full lg:flex-1 lg:min-w-[280px] space-y-3">
+          <div className="w-full lg:w-[320px] lg:shrink-0 space-y-3">
             {/* ── Card 1: THIS SHIPMENT — read-only status, one card, one row per fact. State lives
                    in the icon color (green = good), not in three different tinted strips. ── */}
             {(()=>{

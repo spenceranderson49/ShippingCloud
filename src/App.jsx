@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v591";
+const BUILD_TAG="addr-v592";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9539,6 +9539,23 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true,isAdmin
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
   const _pf=useMemo(()=>pickupFeeFor(rateRules,client,f.carrierCode),[rateRules,client,f.carrierCode]);
   const pickupFee=_pf.fee;
+  /* Real FedEx pickup guardrails — advisory only (FedEx's API is the final word), surfaced so a
+     bad window/cutoff is caught before the courier is dispatched. Sources: FedEx on-call pickup
+     terms — Express same-day needs a request before the area's afternoon cutoff and a workable
+     ready→close window; Ground on-call is generally next business day. */
+  const _toMin=(t)=>{const [h,m]=String(t||"0:0").split(":").map(Number);return (h||0)*60+(m||0);};
+  const _todayStr=(()=>{try{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}catch(e){return "";}})();
+  const _winMin=_toMin(f.close)-_toMin(f.ready);
+  const _isToday=f.date&&f.date===_todayStr;
+  const _isPast=f.date&&f.date<_todayStr;
+  const pickAdvice=useMemo(()=>{const a=[];
+    if(_isPast)a.push("That date is in the past — pick today or a future business day.");
+    if(_winMin<=0)a.push("Close time has to be after the Ready time.");
+    else if(_winMin<120)a.push("Give the courier room: FedEx wants a workable window, so leave at least ~2 hours between Ready and Close.");
+    if(f.carrierCode==="FDXG"&&_isToday)a.push("Ground on-call pickups are usually next business day — not same-day. Choose tomorrow if today's route has already run.");
+    if(f.carrierCode==="FDXE"&&_isToday&&_toMin(f.ready)>=14*60)a.push("Same-day Express pickups must beat your area's afternoon cutoff (often ~1–3 PM). A late ready time today may roll to the next business day.");
+    return a;
+  },[f.carrierCode,f.date,f.ready,f.close,_winMin,_isToday,_isPast]);
   const cancelLive=async(p)=>{
     if(!await uiConfirm("Cancel this FedEx pickup ("+p.conf+")? The driver will not come."))return;
     setCanceling(p.id);
@@ -9576,8 +9593,18 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true,isAdmin
         <div className="text-[11px] text-stone-400 flex items-center gap-1"><MapPin className="w-3.5 h-3.5"/>{addrReady?`${s.address1}, ${s.city} ${s.state} ${s.zip}`:"Set your pickup address in Settings → Company"}</div>
         {showCosts&&<div className="flex items-center justify-between text-sm bg-stone-50 border border-stone-200 rounded-lg px-3 py-2"><span className="text-stone-600">On-call pickup fee ({f.carrierCode==="FDXG"?"Ground":"Express"}){isAdmin&&<span className="block text-[10px] text-stone-400">{_pf.ruleDesc} — edit it on the Rates tab accessorials (Pickup &amp; returns)</span>}</span><span className=" font-semibold text-stone-900">{money(pickupFee)}</span></div>}
         {showCosts&&<div className="text-[10px] text-stone-400 -mt-1">Billed per on-call pickup. Regular scheduled pickup routes bill weekly instead.</div>}
+        {pickAdvice.length>0&&<div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 space-y-1">{pickAdvice.map((a,i)=><div key={i} className="flex items-start gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span>{a}</span></div>)}</div>}
         {err&&<div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1.5 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>{err}</div>}
         <button onClick={add} disabled={busy||!addrReady} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Scheduling with FedEx…</>:<><Calendar className="w-4 h-4"/>Schedule pickup</>}</button>
+        <div className="mt-1 border-t border-stone-100 pt-3">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5"/>How FedEx pickups work</div>
+          <ul className="text-[11px] text-stone-500 space-y-1 leading-snug">
+            <li>· <b className="text-stone-600">Express</b> can be same-day if you schedule before your area's afternoon cutoff (often ~1–3 PM). <b className="text-stone-600">Ground</b> on-call is usually next business day.</li>
+            <li>· You give a <b className="text-stone-600">Ready</b> time and a <b className="text-stone-600">Close</b> time — the courier arrives anytime in that window, so leave a couple of hours.</li>
+            <li>· Have the packages waiting at the <b className="text-stone-600">Package location</b> by the Ready time.</li>
+            <li>· On-call pickups carry a per-pickup fee; dropping off at a FedEx location is free; a regular scheduled route bills weekly.</li>
+          </ul>
+        </div>
       </Panel>
       <div className="space-y-2">
         <div className="text-xs font-semibold uppercase tracking-widest text-stone-500">Scheduled</div>

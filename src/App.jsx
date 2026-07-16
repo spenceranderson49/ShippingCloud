@@ -109,7 +109,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v588";
+const BUILD_TAG="addr-v589";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -4086,7 +4086,7 @@ function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureF
   return (<div className="space-y-3">
     <div className="flex flex-wrap items-end gap-3">
       <Field label="Search customers & logins"><Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Company, contact, login name or email…" className="w-64"/></Field>
-      <Field label="Sort by"><Select value={sort} onChange={e=>setSort(e.target.value)}><option value="name">Name</option><option value="logins">Most Logins</option><option value="markup">Highest Markup</option><option value="profile">Rate Profile</option><option value="status">Status</option></Select></Field>
+      <Field label="Sort by"><Select value={sort} onChange={e=>setSort(e.target.value)}><option value="name">Name</option><option value="logins">Most Logins</option><option value="status">Status</option></Select></Field>
       <span className="flex-1"/>
       <button onClick={()=>setAdding(a=>!a)} className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8]"><Plus className="w-4 h-4"/>New Customer</button>
     </div>
@@ -4100,19 +4100,19 @@ function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureF
       <div className="col-span-2 sm:col-span-3"><button onClick={createCustomer} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium">Create &amp; open</button></div>
     </div>}
     <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
-      <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="w-4"/><div className="flex-1">Customer</div><div className="w-20 text-center">Logins</div><div className="w-28">Rate profile</div><div className="w-16 text-right">Markup</div><div className="w-20 text-right">Status</div></div>
+      <div className="flex items-center gap-4 px-4 py-2.5 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="w-9 shrink-0"/><div className="flex-1">Customer</div><div className="w-20 text-center shrink-0">Logins</div><div className="w-24 text-center shrink-0">Status</div><div className="w-5 shrink-0"/></div>
       <div className="divide-y divide-stone-100">
         {list.length===0&&<div className="px-4 py-8 text-sm text-stone-400 text-center">No customers match "{q}".</div>}
-        {list.map(c=>{const lg=loginsOf(c.id);const prof=profOf(c.id);return (
-          <div key={c.id} onClick={()=>onOpenCustomer&&onOpenCustomer(c.id)} className="group flex items-center gap-3 px-4 py-3 hover:bg-stone-50 cursor-pointer">
-            <button onClick={async(e)=>{e.stopPropagation();if(!await uiConfirm('Delete customer "'+c.name+'"? Their logins stay but lose the link. Rates/rules assigned to them are kept but unassigned.'))return;if(CLOUD.mode==="cloud")cloudCall({action:"deleteCustomer",token:CLOUD.token,clientId:c.id});setUsers(us=>us.map(x=>x.clientId===c.id?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==c.id));}} title="Delete customer" className="opacity-0 group-hover:opacity-100 text-stone-300 hover:text-rose-500 shrink-0 order-last"><Trash2 className="w-4 h-4"/></button>
-            <div className="w-7 h-7 rounded-lg bg-[#0086E0]/10 text-[#0086E0] flex items-center justify-center font-bold text-xs shrink-0">{String(c.name||"?").slice(0,1).toUpperCase()}</div>
+        {list.map(c=>{const lg=loginsOf(c.id);return (
+          <div key={c.id} onClick={()=>onOpenCustomer&&onOpenCustomer(c.id)} className="group flex items-center gap-4 px-4 py-3 hover:bg-stone-50 cursor-pointer">
+            <div className="w-9 h-9 rounded-lg bg-[#0086E0]/10 text-[#0086E0] flex items-center justify-center font-bold text-sm shrink-0">{String(c.name||"?").slice(0,1).toUpperCase()}</div>
             <div className="flex-1 min-w-0"><div className="font-medium text-sm truncate">{c.name}</div><div className="text-[11px] text-stone-400 truncate">{c.contact||"—"}{c.email?` · ${c.email}`:""}</div></div>
-            <div className="w-20 text-center"><Badge tone="blue">{lg.length}</Badge></div>
-            <div className="w-28 truncate"><Badge tone="green">{prof.name}</Badge></div>
-            <div className="w-16 text-right text-xs text-stone-500">{c.markup}%</div>
-            <div className="w-20 text-right"><Badge tone={c.status==="inactive"?"stone":"green"}>{c.status||"active"}</Badge></div>
-            <ChevronRight className="w-4 h-4 text-stone-300 shrink-0"/>
+            <div className="w-20 text-center shrink-0"><Badge tone="blue">{lg.length}</Badge></div>
+            <div className="w-24 text-center shrink-0"><Badge tone={c.status==="inactive"?"stone":"green"}>{c.status||"active"}</Badge></div>
+            <div className="w-5 shrink-0 flex items-center justify-end">
+              <button onClick={async(e)=>{e.stopPropagation();if(!await uiConfirm('Delete customer "'+c.name+'"? Their logins stay but lose the link. Rates/rules assigned to them are kept but unassigned.'))return;if(CLOUD.mode==="cloud")cloudCall({action:"deleteCustomer",token:CLOUD.token,clientId:c.id});setUsers(us=>us.map(x=>x.clientId===c.id?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==c.id));}} title="Delete customer" className="opacity-0 group-hover:opacity-100 text-stone-300 hover:text-rose-500 shrink-0"><Trash2 className="w-4 h-4"/></button>
+              <ChevronRight className="w-4 h-4 text-stone-300 shrink-0 group-hover:hidden"/>
+            </div>
           </div>);})}
       </div>
     </div>

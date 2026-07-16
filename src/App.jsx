@@ -108,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v573";
+const BUILD_TAG="addr-v574";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7892,7 +7892,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 </div>}
                 {showAp&&<div className={`flex items-start gap-2 text-xs ${liveRuleStatus.state==="error"?"text-rose-600":apFired?"text-emerald-700":"text-stone-500"}`}>
                   <Zap className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${apFired?"text-emerald-600":liveRuleStatus.state==="error"?"text-rose-500":"text-stone-400"}`}/>
-                  {liveRuleStatus.state==="fired"&&(()=>{const _sw=groundFamilySwap(liveRuleStatus.service,addrClassified?residential:null);return <span>Autopilot rule <b>"{liveRuleStatus.rule}"</b> matched — highlighted <b>{_sw}</b> in the list{_sw!==liveRuleStatus.service&&<span> (rule says {liveRuleStatus.service}, but FedEx classified this address {residential?"residential, so Home Delivery applies":"commercial, so Ground applies"})</span>}.</span>;})()}
+                  {liveRuleStatus.state==="fired"&&(()=>{const _sw=groundFamilySwap(liveRuleStatus.service,addrClassified?residential:null);return <span>Autopilot <b>"{liveRuleStatus.rule}"</b> → <b>{_sw}</b>{_sw!==liveRuleStatus.service&&<span className="text-stone-500"> (swapped — address is {residential?"residential":"commercial"})</span>}</span>;})()}
                   {liveRuleStatus.state==="no-order"&&<span>Autopilot is on, but no order is loaded — it only checks orders pulled in from the sidebar.</span>}
                   {liveRuleStatus.state==="no-rules"&&<span>Autopilot is on, but no rules are turned on — enable one on the Autopilot tab.</span>}
                   {liveRuleStatus.state==="no-match"&&<span>Autopilot: no rule matched this order — pick the service yourself.</span>}

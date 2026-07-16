@@ -13845,7 +13845,7 @@ function AddressCard({title,data,set,required,residential,setResidential,address
   return (<div className="relative">
     {abDatalists}
     <div className="flex items-center justify-between mb-1.5">
-      <span className="text-[#0086E0] font-semibold text-sm shrink-0">{title}</span>
+      <span className="text-[#0086E0] font-semibold text-[15px] shrink-0">{title}</span>
       <div className="flex items-center gap-2">
         {setResidential&&<label className="flex items-center gap-1.5 text-[11px] cursor-pointer"><input type="checkbox" checked={residential} onChange={e=>setResidential(e.target.checked)} className="accent-[#0086E0]"/>{residential?<span className="flex items-center gap-1 text-[#006FBF]"><Home className="w-3.5 h-3.5"/>Residential</span>:<span className="flex items-center gap-1 text-stone-600"><Building2 className="w-3.5 h-3.5"/>Commercial</span>}</label>}
       </div>

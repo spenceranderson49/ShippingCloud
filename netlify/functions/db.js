@@ -221,6 +221,23 @@ async function notifyLoginCreated(created, via) {
     await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key }, body: JSON.stringify({ from, to: [to], subject, html }) });
   } catch (e) {}
 }
+/* Owner alert on a new FedEx-account request — includes the customer's details and attaches
+   the uploaded invoice (whatever they attached) so it's actionable straight from the inbox. */
+async function notifyFedexRequest(req, invoice) {
+  try {
+    const key = (process.env.RESEND_API_KEY || "").trim(); if (!key || !req) return;
+    const to = (process.env.FEDEX_ALERT_EMAIL || process.env.LOGIN_ALERT_EMAIL || "spencer@freightwire.com").trim();
+    const from = (process.env.EMAIL_FROM || "ShippingCloud <notify@shippingcloud.net>").trim();
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    const rows = [["Name", req.name], ["Email", req.email], ["Monthly volume", req.volume], ["Currently ships", req.carrier], ["Invoice attached", req.invoiceName || "(none)"], ["Requested", req.requestedAt]]
+      .map((r) => '<tr><td style="padding:3px 10px 3px 0;color:#78716c">' + esc(r[0]) + '</td><td style="padding:3px 0;font-weight:600">' + esc(r[1] || "—") + "</td></tr>").join("");
+    const html = '<body style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1c1917"><div style="max-width:480px;margin:0 auto;padding:20px"><div style="font-size:15px;font-weight:700;margin-bottom:10px">New FedEx account request</div><table style="font-size:13px;line-height:1.5">' + rows + "</table>" + (req.invoiceName ? '<div style="color:#78716c;font-size:12px;margin-top:12px">Their uploaded invoice is attached to this email.</div>' : "") + "</div></body>";
+    const body = { from, to: [to], subject: "FedEx account request — " + (req.name || req.email || "new customer"), html };
+    /* attach the raw invoice the customer uploaded (base64), if any */
+    if (invoice && invoice.data) body.attachments = [{ filename: (req.invoiceName || "invoice"), content: String(invoice.data) }];
+    await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key }, body: JSON.stringify(body) });
+  } catch (e) {}
+}
 async function sendOtpCode(event, to, code) {
   const key = (process.env.RESEND_API_KEY || "").trim();
   if (!key) return { ok: false, configured: false };
@@ -1129,10 +1146,27 @@ exports.handler = async (event) => {
       if (prior && prior.invoiceKey && invoiceKey) await blobOp(prior.invoiceKey, { method: "DELETE" });
       reqs = reqs.filter((r) => r && r.uid !== auth.uid);
       if (reqs.length >= 200) return J({ ok: false, error: "Too many pending requests — try again later." });
-      reqs.push({ id: "fx" + Date.now(), uid: auth.uid, name, email: auth.email || "", volume, carrier, invoiceName, invoiceKey, requestedAt: new Date().toISOString() });
+      const newReq = { id: "fx" + Date.now(), uid: auth.uid, name, email: auth.email || "", volume, carrier, invoiceName, invoiceKey, requestedAt: new Date().toISOString() };
+      reqs.push(newReq);
       const w = await putStores({ fedexRequests: reqs });
       if (!w.ok) return J({ ok: false, error: "Could not save your request — try again." });
+      await notifyFedexRequest(newReq, inv);
       return J({ ok: true });
+    }
+
+    /* Admin dismisses a FedEx request — removes it server-side (a client-only filter kept
+       getting restored by the next cloud poll) and deletes the stored invoice blob. */
+    if (action === "fedexRequestResolve") {
+      if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
+      const id = String(body.id || ""), uid = String(body.uid || "");
+      const cur = await getStore("fedexRequests");
+      const reqs = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+      const gone = reqs.filter((r) => r && (r.id === id || (uid && r.uid === uid)));
+      const kept = reqs.filter((r) => !(r && (r.id === id || (uid && r.uid === uid))));
+      for (const g of gone) { if (g.invoiceKey) { try { await blobOp(g.invoiceKey, { method: "DELETE" }); } catch (e) {} } }
+      const w = await putStores({ fedexRequests: kept });
+      if (!w.ok) return J({ ok: false, error: "Couldn't update — try again." });
+      return J({ ok: true, fedexRequests: kept });
     }
 
     if (action === "approveSignup" || action === "denySignup") {

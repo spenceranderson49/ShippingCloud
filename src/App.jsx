@@ -108,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v582";
+const BUILD_TAG="addr-v583";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -5199,7 +5199,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
       {fedexRequests.map(r=>(<div key={r.id||r.uid} className="flex flex-wrap items-center gap-3 bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm">
         <div className="flex-1 min-w-[180px]"><div className="font-medium">{r.name||r.email}</div><div className="text-[11px] text-stone-400">{r.email}{r.volume?<> · {r.volume}/mo</>:null}{r.carrier?<> · ships {r.carrier}</>:null} · {r.requestedAt?new Date(r.requestedAt).toLocaleDateString():"recently"}</div></div>
         {r.invoiceKey&&<button onClick={async()=>{const res=await cloudCall({action:"getUpload",token:CLOUD.token,key:r.invoiceKey});if(!res||!res.ok){uiAlert((res&&res.error)||"Could not fetch the file.");return;}const bytes=atob(res.data);const arr=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);const url=URL.createObjectURL(new Blob([arr],{type:res.type}));const a=document.createElement("a");a.href=url;a.download=res.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);}} className="text-xs border border-[#0086E0]/40 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>Carrier Invoice</button>}
-        <button onClick={()=>setFedexRequests&&setFedexRequests(rs=>rs.filter(x=>x!==r))} className="text-xs border border-stone-300 text-stone-600 rounded px-3 py-1.5 hover:bg-stone-50">Done</button>
+        <button onClick={async()=>{ setFedexRequests&&setFedexRequests(rs=>rs.filter(x=>x!==r)); try{ const res=await cloudCall({action:"fedexRequestResolve",token:CLOUD.token,id:r.id||"",uid:r.uid||""}); if(res&&res.ok&&Array.isArray(res.fedexRequests))setFedexRequests&&setFedexRequests(res.fedexRequests); }catch(e){} }} className="text-xs border border-stone-300 text-stone-600 rounded px-3 py-1.5 hover:bg-stone-50">Done</button>
       </div>))}
       <p className="text-[11px] text-stone-400">These come from the welcome popup after a user’s first sign-in. Provision their England/FedEx account, drop the credentials into their customer card, then hit Done.</p>
     </div>}

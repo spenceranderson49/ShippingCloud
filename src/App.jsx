@@ -108,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v576";
+const BUILD_TAG="addr-v577";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7727,7 +7727,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       ))}
       {/* steps hidden = no numbered headers breaking up the page, so give the sections a touch
           more breathing room (16px vs 12px); with steps on, the headers carry the rhythm */}
-      <div className={"relative flex-1 min-w-0 "+(custom.hideShipSteps?"space-y-5":"space-y-3")}>
+      <div className={"relative flex-1 min-w-0 "+(custom.hideShipSteps?"space-y-4":"space-y-3")}>
         {/* Steps ON: actions share the step-1 header row. Steps OFF: that row disappears and the
             actions float beside the Sender/Receiver headings so the cards start at the very top. */}
         {!custom.hideShipSteps&&<div className="flex flex-wrap items-center justify-between gap-2">
@@ -13872,11 +13872,13 @@ function AddressCard({title,data,set,required,residential,setResidential,address
       </div>}
       </div>
     )}
-    <div className={side?"flex flex-col lg:flex-row border border-[#b9c6d5] shadow-sm rounded-lg overflow-hidden":""}>
-    <div className={side?"flex-1 min-w-0 grid grid-cols-6 gap-px bg-stone-200":"grid grid-cols-6 gap-px bg-stone-200 border border-[#b9c6d5] shadow-sm rounded-lg overflow-hidden"}>
+    {/* side (Address Check) is its OWN bordered box with a 12px gap — flex default stretch keeps
+        both boxes' tops AND bottoms flush with the fields grid */}
+    <div className={side?"flex flex-col lg:flex-row gap-3":""}>
+    <div className={side?"flex-1 min-w-0 grid grid-cols-6 gap-px bg-stone-200 border border-[#b9c6d5] shadow-sm rounded-lg overflow-hidden":"grid grid-cols-6 gap-px bg-stone-200 border border-[#b9c6d5] shadow-sm rounded-lg overflow-hidden"}>
       {cell("Country","country","col-span-6")}{cell("Name","name","col-span-6 sm:col-span-3",required)}{cell("Company","company","col-span-6 sm:col-span-3",reqOverrides.company===true)}{cell("Address 1","address1","col-span-6",required)}{cell(_fmt.zip,"zip","col-span-3 sm:col-span-2",required&&!_fmt.zipOpt)}{cell(_fmt.state,"state","col-span-3 sm:col-span-2",required&&!_fmt.stateOpt)}{cell("City","city","col-span-6 sm:col-span-2",required)}{!hideAddr23&&<>{cell("Address 2","address2","col-span-6 sm:col-span-3")}{cell("Address 3","address3","col-span-6 sm:col-span-3")}</>}{cell("Phone","phone","col-span-6 sm:col-span-3",required&&reqOverrides.phone!==false)}{cell("Email","email","col-span-6 sm:col-span-3",required&&reqOverrides.email!==false)}
     </div>
-    {side&&<div className="lg:w-[250px] xl:w-[290px] shrink-0 bg-stone-50 border-t lg:border-t-0 lg:border-l border-stone-200 p-3">{side}</div>}
+    {side&&<div className="lg:w-[250px] xl:w-[290px] shrink-0 bg-stone-50 border border-[#b9c6d5] shadow-sm rounded-lg p-3">{side}</div>}
     </div>
   </div>);
 }

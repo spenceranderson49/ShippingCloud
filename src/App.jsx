@@ -124,7 +124,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v600";
+const BUILD_TAG="addr-v601";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7995,7 +7995,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {!custom.hideShipSteps&&<StepHead n="3" label="Service & rate"/>}
         {/* Rates row: service list on the left, a slim info column (From order · Billing & third-party)
             fills the space to its right. Wraps to a normal stack on narrow screens. */}
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_384px] gap-4 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_416px] gap-4 items-start">
           <div className="min-w-0">
             <ServiceList hideTitle={true} quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
           </div>
@@ -9330,8 +9330,17 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
   /* The quoted (sell) price is stored on every new booking. For older shipments that predate that,
      re-derive what the customer was quoted by running the STORED carrier cost back through their
      markup rules — never the raw cost. Returns null only when there's genuinely no price to show. */
-  const sellFor=(s)=>{ if(s.sell!=null)return +s.sell; if(s.cost==null)return null;
-    try{ const v=rateSellFor(+s.cost,s.service,{rules:rateRules,client,fromZip:s.fromZip,toZip:s.recipient&&s.recipient.zip,weight:s.weight}); return v!=null?v:+s.cost; }catch(e){ return +s.cost; } };
+  const sellFor=(s)=>{ if(s.sell!=null)return +s.sell;
+    let cost=s.cost;
+    if(cost==null){ /* no price was saved on this shipment — estimate one from its route/weight/service */
+      try{ const qs=quoteRates({fromZip:s.fromZip,toZip:s.recipient&&s.recipient.zip,pieces:(s.pieces&&s.pieces.length)?s.pieces:[{weight:+s.weight||1,L:12,W:9,H:4}],residential:s.residential!==false});
+        const sk=canonSvc(s.service||""); const hit=(qs||[]).find(q=>canonSvc(q.label)===sk)||(qs||[])[0];
+        if(hit&&hit.cost!=null)cost=hit.cost;
+      }catch(e){}
+    }
+    if(cost==null)return null;
+    try{ const v=rateSellFor(+cost,s.service,{rules:rateRules,client,fromZip:s.fromZip,toZip:s.recipient&&s.recipient.zip,weight:s.weight}); return v!=null?v:+cost; }catch(e){ return +cost; } };
+  const sellIsEst=(s)=>s.sell==null;   // derived/estimated (no stored sell) → label it "est." so it never reads as a booked charge
   /* Packing-slip composer for MANUAL shipments (no store integration → no line items):
      type the items, print, and they're saved onto the shipment so reprints match. */
   const [slipEdit,setSlipEdit]=useState(null);   // {id,rows:[{name,qty}],note}
@@ -9462,7 +9471,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                   <button onClick={(e)=>{e.stopPropagation();setRateOpen(rateOpen===s.id?null:s.id);}} className="flex items-center gap-1.5 text-left group">
                     <ChevronRight className={`w-3.5 h-3.5 text-stone-400 transition-transform ${rateOpen===s.id?"rotate-90":""}`}/>
                     <span className="text-[11px] uppercase tracking-wider text-stone-400">Rate</span>
-                    {(()=>{const rv=sellFor(s);return <span className="text-sm font-semibold text-stone-800">{showMoney&&rv!=null?money(rv):"—"}</span>;})()}
+                    {(()=>{const rv=sellFor(s);return <span className="text-sm font-semibold text-stone-800">{showMoney&&rv!=null?money(rv):"—"}{showMoney&&rv!=null&&sellIsEst(s)&&<span className="text-[10px] font-normal text-stone-400 ml-1">est.</span>}</span>;})()}
                     <span className="text-[11px] text-stone-400 group-hover:text-stone-600">· view breakdown</span>
                   </button>
                   {showMoney&&rateOpen===s.id&&(()=>{

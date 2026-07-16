@@ -40,8 +40,10 @@ async function pgUpsert(rows) {
 }
 
 async function fedexToken() {
-  const id = (process.env.FEDEX_API_KEY || "").trim();
-  const secret = (process.env.FEDEX_SECRET_KEY || "").trim();
+  /* Track/Visibility runs on its OWN credentials (separate FedEx project) when present —
+     Ship/Rate stay on FEDEX_API_KEY. Falls back to the main key if the track pair isn't set. */
+  const id = (process.env.FEDEX_TRACK_KEY || process.env.FEDEX_API_KEY || "").trim();
+  const secret = (process.env.FEDEX_TRACK_SECRET || process.env.FEDEX_SECRET_KEY || "").trim();
   if (!id || !secret) return null;
   const base = (process.env.FEDEX_API_BASE || "https://apis.fedex.com").replace(/\/+$/, "");
   const r = await fetch(base + "/oauth/token", {
@@ -58,7 +60,7 @@ async function fedexTrack(auth, trackings) {
   const r = await fetch(auth.base + "/track/v1/trackingnumbers", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: "Bearer " + auth.token },
-    body: JSON.stringify({ includeDetailedScans: false, trackingInfo: trackings.map((t) => ({ trackingNumberInfo: { trackingNumber: t } })) }),
+    body: JSON.stringify({ includeDetailedScans: true, trackingInfo: trackings.map((t) => ({ trackingNumberInfo: { trackingNumber: t } })) }),
   });
   if (!r.ok) return { ok: false, status: r.status };
   const d = await r.json().catch(() => null);
@@ -99,7 +101,13 @@ function pickResult(data) {
     }
     const w = tr.estimatedDeliveryTimeWindow && tr.estimatedDeliveryTimeWindow.window;
     if (!estDate && w && w.ends) estDate = w.ends;
-    out[String(tn).replace(/\s+/g, "").toUpperCase()] = { status, lastScan: lastScan || null, actualDate, estDate };
+    /* scan-event history for the advanced-tracking timeline (most recent first, capped) */
+    const events = (tr.scanEvents || []).slice(0, 12).map((e) => ({
+      t: e.date || "",
+      status: e.eventDescription || "",
+      loc: [(e.scanLocation && e.scanLocation.city) || "", (e.scanLocation && e.scanLocation.stateOrProvinceCode) || ""].filter(Boolean).join(", "),
+    }));
+    out[String(tn).replace(/\s+/g, "").toUpperCase()] = { status, lastScan: lastScan || null, actualDate, estDate, events, raw: (latest.description || "") };
   }
   return out;
 }
@@ -161,6 +169,9 @@ export default async () => {
         if (next.onTime !== onTime) { next.onTime = onTime; dirty = true; }
         if (!next.deliveredAt) { next.deliveredAt = act.toLocaleDateString(); dirty = true; }
       }
+      /* scan history + last-synced stamp for the advanced-tracking view */
+      if (u.events && u.events.length && JSON.stringify(u.events) !== JSON.stringify(s.trackEvents || [])) { next.trackEvents = u.events; dirty = true; }
+      if (dirty) next.trackedAt = new Date().toISOString();
       return next;
     });
     if (dirty) changed.push({ tenant: "main", key: row.key, value: list });

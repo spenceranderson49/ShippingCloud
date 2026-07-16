@@ -108,7 +108,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v583";
+const BUILD_TAG="addr-v584";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9650,6 +9650,10 @@ const TRACK_STAGES=["Label created","In transit","Out for delivery","Delivered"]
 function trackPct(s){if(s==="Delivered")return 100;if(s==="Out for delivery")return 75;if(s==="In transit")return 45;if(s==="Exception")return 45;return 12;}
 function Dashboard({shipments,orders,returns,goTab}){
   const a=useMemo(()=>analytics(shipments),[shipments]);
+  const [openTrack,setOpenTrack]=useState(null);   // shipment id whose FedEx scan timeline is expanded
+  const [trackFilter,setTrackFilter]=useState(null);   // status pill filter on the live board
+  const _lastSync=useMemo(()=>{ let m=0; (shipments||[]).forEach(s=>{ if(s&&s.trackedAt){ const t=Date.parse(s.trackedAt); if(t>m)m=t; } }); return m; },[shipments]);
+  const _ago=(ms)=>{ if(!ms)return null; const s=Math.floor((Date.now()-ms)/1000); if(s<90)return "just now"; if(s<3600)return Math.floor(s/60)+"m ago"; if(s<86400)return Math.floor(s/3600)+"h ago"; return Math.floor(s/86400)+"d ago"; };
   const days=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
   const maxDay=Math.max(1,...a.byDay);
   const live=shipments.filter(s=>s.status!=="Voided");
@@ -9771,24 +9775,46 @@ function Dashboard({shipments,orders,returns,goTab}){
 
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 border border-stone-200 rounded-2xl bg-white overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-stone-100 flex items-center justify-between"><h3 className="text-sm font-semibold text-stone-700">Live board — shipments in motion</h3><span className="text-[11px] text-stone-400">{active.length} moving</span></div>
-          <div className="divide-y divide-stone-50 max-h-96 overflow-auto">
-            {active.length===0&&<div className="p-6 text-center text-sm text-stone-400">Nothing in transit.</div>}
-            {active.map(s=>{const exc=s.status==="Exception";return (
-              <div key={s.id} className="px-4 py-3 hover:bg-stone-50/60 transition">
+          <div className="px-4 py-2.5 border-b border-stone-100 flex items-center justify-between flex-wrap gap-2">
+            <h3 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Truck className="w-4 h-4 text-[#0086E0]"/>Live tracking</h3>
+            <span className="text-[11px] text-stone-400 flex items-center gap-1.5">{_lastSync?<><Wifi className="w-3 h-3 text-emerald-500"/>Synced from FedEx {_ago(_lastSync)}</>:<>{active.length} moving</>}</span>
+          </div>
+          {/* FedEx-style status pills — click to filter the board */}
+          <div className="px-3 py-2 border-b border-stone-100 flex flex-wrap gap-1.5">
+            {[["In transit",inTransit,"blue"],["Out for delivery",outForDel,"amber"],["Exception",exceptions,"rose"],["Delivered",delivered,"green"]].map(([st,n,tone])=>(
+              <button key={st} onClick={()=>setTrackFilter(f=>f===st?null:st)} className={`text-[11px] rounded-full px-2.5 py-1 border font-medium transition ${trackFilter===st?"ring-2 ring-offset-1 ring-[#0086E0]/40 ":""}${tone==="blue"?"bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]":tone==="amber"?"bg-amber-50 text-amber-700 border-amber-200":tone==="rose"?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{st} · {n}</button>
+            ))}
+          </div>
+          {(()=>{ const board=(trackFilter?live.filter(s=>s.status===trackFilter):active); return (
+          <div className="divide-y divide-stone-50 max-h-[30rem] overflow-auto">
+            {board.length===0&&<div className="p-6 text-center text-sm text-stone-400">{trackFilter?"Nothing "+trackFilter.toLowerCase()+".":"Nothing in transit."}</div>}
+            {board.map(s=>{const exc=s.status==="Exception";const dl=s.status==="Delivered";const open=openTrack===s.id;const evs=s.trackEvents||[];return (
+              <div key={s.id}>
+              <div onClick={()=>setOpenTrack(open?null:s.id)} className="px-4 py-3 hover:bg-stone-50/60 transition cursor-pointer">
                 <div className="flex items-center gap-3">
+                  <ChevronRight className={`w-3.5 h-3.5 text-stone-300 shrink-0 transition-transform ${open?"rotate-90":""}`}/>
                   <span className={`text-[11px] font-bold w-10 ${CARRIER_TINT[s.carrier]}`}>{s.carrier}</span>
-                  <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{s.recipient?.name} · {s.recipient?.city}, {s.recipient?.state}</div><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" className="text-[11px] text-[#0086E0]">{s.tracking}</a></div>
-                  <div className="hidden sm:block text-right"><div className="text-[11px] text-stone-400">ETA</div><div className="text-xs text-stone-600 font-medium">{s.eta||"—"}</div></div>
-                  <Badge tone={exc?"rose":s.status==="Out for delivery"?"amber":"blue"}>{s.status}</Badge>
+                  <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{s.recipient?.name} · {s.recipient?.city}, {s.recipient?.state}</div><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" onClick={e=>e.stopPropagation()} className="text-[11px] text-[#0086E0]">{s.tracking}</a></div>
+                  <div className="hidden sm:block text-right"><div className="text-[11px] text-stone-400">{dl?"Delivered":"ETA"}</div><div className="text-xs text-stone-600 font-medium">{dl?(s.deliveredAt||"✓"):(s.eta||"—")}</div></div>
+                  <Badge tone={exc?"rose":dl?"green":s.status==="Out for delivery"?"amber":"blue"}>{s.status}</Badge>
                 </div>
-                <div className="mt-2 flex items-center gap-2">
-                  <div className="flex-1 h-1.5 bg-stone-100 rounded-full overflow-hidden"><div className={`h-full rounded-full ${exc?"bg-rose-400":"bg-gradient-to-r from-[#0086E0] to-[#33ADFF]"}`} style={{width:`${trackPct(s.status)}%`}}/></div>
-                  <span className={`text-[11px] ${exc?"text-rose-600":"text-stone-400"} w-28 truncate text-right`}>{s.lastScan}</span>
+                <div className="mt-2 flex items-center gap-2 pl-6">
+                  <div className="flex-1 h-1.5 bg-stone-100 rounded-full overflow-hidden"><div className={`h-full rounded-full ${exc?"bg-rose-400":dl?"bg-emerald-400":"bg-gradient-to-r from-[#0086E0] to-[#33ADFF]"}`} style={{width:`${trackPct(s.status)}%`}}/></div>
+                  <span className={`text-[11px] ${exc?"text-rose-600":"text-stone-400"} w-28 truncate text-right`}>{s.lastScan||s.status}</span>
                 </div>
               </div>
+              {open&&<div className="px-4 pb-4 pl-14 bg-stone-50/40">
+                {evs.length?<div className="relative pl-4 border-l-2 border-stone-200 space-y-3 py-1">
+                  {evs.map((e,i)=>(<div key={i} className="relative">
+                    <span className={`absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full ring-2 ring-white ${i===0?(exc?"bg-rose-500":dl?"bg-emerald-500":"bg-[#0086E0]"):"bg-stone-300"}`}/>
+                    <div className={`text-xs ${i===0?"font-semibold text-stone-800":"text-stone-600"}`}>{e.status}</div>
+                    <div className="text-[11px] text-stone-400">{e.loc?e.loc+" · ":""}{(()=>{try{return e.t?new Date(e.t).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):"";}catch(x){return e.t||"";}})()}</div>
+                  </div>))}
+                </div>:<div className="text-[11px] text-stone-400 py-2">No scan history yet — updates every 30 minutes once the package moves.{s.eta?" ETA "+s.eta+".":""}</div>}
+              </div>}
+              </div>
             );})}
-          </div>
+          </div>);})()}
         </div>
         <div className="space-y-4">
           <div className="border border-stone-200 rounded-2xl bg-white p-4">

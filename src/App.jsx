@@ -84,7 +84,7 @@ const FEATURE_CATALOG=[
   {id:"pickups",label:"Pickups",desc:"Schedule carrier pickups",default:true},
   {id:"batch",label:"Batch",desc:"Rate & print in bulk",default:true},
   {id:"invoices",label:"Invoice Audit",desc:"Carrier invoice auditing",default:false},   /* off unless the admin grants it per login */
-  {id:"pickupCosts",label:"Pickup fee display",desc:"Show pickup fee estimates on the Pickups tab",default:true},
+  {id:"pickupCosts",label:"Pickup fee display",desc:"Show the on-call pickup fee on the Pickups tab. OFF by default — turn on per customer once their pickup pricing is set",default:false},
   {id:"rules",label:"Autopilot",desc:"Autopilot mode — automation rules",default:true},
   {id:"scan",label:"Scan",desc:"Barcode scan station",default:true},
   {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:true},
@@ -126,7 +126,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v623";
+const BUILD_TAG="addr-v624";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7558,8 +7558,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     {key:"fedex_intl_eco",carrier:"FedEx",label:"FedEx International Economy®",cost:null},
     {key:"fedex_intl_prio",carrier:"FedEx",label:"FedEx International Priority®",cost:null},
   ]:[
+    /* ONE ground-family placeholder (not Ground + Home Delivery): the pair is mutually exclusive
+       by address type, so showing both pre-classification meant a row VANISHED the moment FedEx
+       classified the address — the whole list jumped up a row. One placeholder that relabels in
+       place keeps the row count constant through classification. */
     {key:"fedex_ground",carrier:"FedEx",label:"FedEx Ground®",cost:null},
-    {key:"fedex_home",carrier:"FedEx",label:"FedEx Home Delivery®",cost:null},
     {key:"fedex_saver",carrier:"FedEx",label:"FedEx Express Saver®",cost:null},
     {key:"fedex_2day",carrier:"FedEx",label:"FedEx 2Day®",cost:null},
     {key:"fedex_std",carrier:"FedEx",label:"FedEx Standard Overnight®",cost:null},
@@ -7607,6 +7610,9 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const quotes=useMemo(()=>{
     let rates=(rateSrc.rates||[]).filter(q=>q.carrier==="FedEx");
     let list=rates.length?rates:FEDEX_SKELETON.slice();   // skeleton (blank prices) until live rates arrive
+    /* classified residential + still waiting on rates → the ground-family placeholder reads Home
+       Delivery so the live row lands on an identically-labeled slot (no relabel flash, no jump) */
+    if(!rates.length&&addrClassified&&residential)list=list.map(q=>q.key==="fedex_ground"?{...q,label:"FedEx Home Delivery®"}:q);
     const liveOR=rates.some(q=>q._oneRate);   // FedEx now quotes One Rate live when a FedEx box is picked
     /* other carriers: ONLY for customers the admin explicitly enabled — everyone else sees pure FedEx */
     if(client&&client.enabledCarriers&&client.enabledCarriers.length&&!intl){ try{ list=list.concat(customCarrierQuotes(rateRules,client,{fromZip:originZip,toZip:receiver.zip,pieces:pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H}))})); }catch(e){} }
@@ -8485,7 +8491,8 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
      rows forever. resetKey names the shipment identity; when it changes, the slate clears.
      While loading, remembered families render as plain quiet rows — never "Unavailable". */
   const lastResetRef=React.useRef(resetKey);
-  if(lastResetRef.current!==resetKey){lastResetRef.current=resetKey;tombRef.current={};}
+  const lastOrderRef=React.useRef([]);   // family keys in the last priced render's order (anti-reshuffle during reprice)
+  if(lastResetRef.current!==resetKey){lastResetRef.current=resetKey;tombRef.current={};lastOrderRef.current=[];}
   const rowsForView=(list)=>{
     if(!list.length){tombRef.current={};return list;}
     const seen=new Set(list.map(q=>svcFamilyKey(q.label)));
@@ -8493,7 +8500,18 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
     const tombs=Object.keys(tombRef.current).filter(k=>!seen.has(k)).map(k=>({...tombRef.current[k],sell:null,cost:null,_unavailable:!loading}));
     const priceOf=(q)=>{const p=q.sell??q.cost;return (p!=null&&!q._unavailable)?p:null;};
     const priceSort=(a,b)=>{const pa=priceOf(a),pb=priceOf(b);if(pa!=null&&pb!=null)return (pa-pb)||ladderSort(a,b);if(pa!=null)return -1;if(pb!=null)return 1;return ladderSort(a,b);};
-    return [...list,...tombs].sort(view==="cheapest"?priceSort:ladderSort);
+    const merged=[...list,...tombs];
+    /* Anti-jump: a reprice (address classified, residential toggled, weight edit) clears every
+       price for a beat. Snapping to ladder order and then back to price order made the list
+       shuffle twice. While loading with nothing priced yet, hold the LAST rendered order; when
+       the new prices land the sort usually matches it, so the list never visibly reshuffles. */
+    if(view==="cheapest"&&loading&&!merged.some(q=>priceOf(q)!=null)&&lastOrderRef.current.length){
+      const pos=(q)=>{const i=lastOrderRef.current.indexOf(svcFamilyKey(q.label));return i<0?99:i;};
+      return merged.sort((a,b)=>pos(a)-pos(b)||ladderSort(a,b));
+    }
+    const out=merged.sort(view==="cheapest"?priceSort:ladderSort);
+    if(view==="cheapest"&&out.some(q=>priceOf(q)!=null))lastOrderRef.current=out.map(q=>svcFamilyKey(q.label));
+    return out;
   };
   const Row=(q)=>{
     const isOpen=open===q.key;
@@ -8521,28 +8539,37 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
     comps=[...comps,...acc.map(a=>({label:a.label,amount:a.amount}))];
     const hasPrice=sell!=null;
     const matchBadge=matched===q.key?(<span className="text-[10px] font-semibold uppercase tracking-wide bg-[#E6F4FF] text-[#0086E0] border border-[#99D6FF] rounded px-1.5 py-0.5 shrink-0 inline-flex items-center gap-1">{matchedSrc==="autopilot"&&<Zap className="w-3 h-3"/>}{matchedSrc==="autopilot"?"Autopilot":"Requested"}</span>):null;
-    /* Two-line box: service name (+ badge trailing it) on top, transit on its own full-width line
-       below — the transit never competes with the name column or the Autopilot badge for space,
-       so it can't get clipped mid-word at any window width. */
+    /* ONLY ever FedEx's own committed transit — never a computed/business-day guess. If FedEx
+       didn't return transit for this lane, show nothing (or "checking…" while it loads). */
+    const transitEl=(()=>{
+      const fd=(fxLive&&q.fxDays!=null)?q.fxDays:null;
+      const dayTxt=fd!=null?`${fd} day${fd>1?"s":""} in transit`:"";
+      const dateTxt=(fxLive&&fxDate)?`arrives ${fmtDeliv(fxDate)}`:"";
+      if(dateTxt||dayTxt){ if(custom.transitStyle==="days")return dayTxt||dateTxt; return <>{dateTxt}{dateTxt&&dayTxt?` · ${dayTxt}`:dayTxt}</>; }
+      return (loading&&ready)?<span className="text-stone-300">checking FedEx…</span>:<span className="text-stone-300">—</span>;
+    })();
+    /* Row layout follows the badge: normally the transit sits inline BESIDE the name (fixed name
+       column so transits line up — no dead space under the name). Only when the Autopilot/Requested
+       badge is on this row does it go two-line — name + badge on top, transit on its own full-width
+       line below — so the badge never squeezes the transit into clipping. */
     return (
       <div key={q.key||svcFamilyKey(q.label)} className={"border rounded-lg bg-white shadow-sm transition-all duration-200 "+(matched===q.key?"border-[#0086E0] ring-1 ring-[#0086E0]":"border-stone-200")}>
         <div onClick={()=>{setOpen(isOpen?null:q.key); if(q._oneRate&&q.packageTypeCode&&onOneRate)onOneRate(q.packageTypeCode);}} className="px-3 py-2 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
           <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isOpen?"rotate-90":""}`}/>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <span className="truncate text-[15px] font-semibold text-stone-900">{(custom.aliases&&custom.aliases[canonSvc(q.label)])||q.label}</span>
-              {matchBadge}
+          {matchBadge?(
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="truncate text-[15px] font-semibold text-stone-900">{(custom.aliases&&custom.aliases[canonSvc(q.label)])||q.label}</span>
+                {matchBadge}
+              </div>
+              <span className="text-sm text-stone-600 flex items-center gap-1.5 min-w-0 mt-0.5"><Calendar className="w-4 h-4 shrink-0"/><span className="truncate">{transitEl}</span></span>
             </div>
-            <span className="text-sm text-stone-600 flex items-center gap-1.5 min-w-0 mt-0.5"><Calendar className="w-4 h-4 shrink-0"/><span className="truncate">{(()=>{
-              /* ONLY ever FedEx's own committed transit — never a computed/business-day guess. If FedEx
-                 didn't return transit for this lane, show nothing (or "checking…" while it loads). */
-              const fd=(fxLive&&q.fxDays!=null)?q.fxDays:null;
-              const dayTxt=fd!=null?`${fd} day${fd>1?"s":""} in transit`:"";
-              const dateTxt=(fxLive&&fxDate)?`arrives ${fmtDeliv(fxDate)}`:"";
-              if(dateTxt||dayTxt){ if(custom.transitStyle==="days")return dayTxt||dateTxt; return <>{dateTxt}{dateTxt&&dayTxt?` · ${dayTxt}`:dayTxt}</>; }
-              return (loading&&ready)?<span className="text-stone-300">checking FedEx…</span>:<span className="text-stone-300">—</span>;
-            })()}</span></span>
-          </div>
+          ):(
+            <div className="flex-1 min-w-0 flex items-center gap-x-4">
+              <span className="w-[248px] shrink-0 truncate text-[15px] font-semibold text-stone-900">{(custom.aliases&&custom.aliases[canonSvc(q.label)])||q.label}</span>
+              <span className="text-sm text-stone-600 inline-flex items-center gap-1.5 min-w-0 truncate"><Calendar className="w-4 h-4 shrink-0"/>{transitEl}</span>
+            </div>
+          )}
           <div className="text-right">{!!(custom.priceWarn>0&&ready&&hasPrice&&sell>custom.priceWarn)&&<div className="text-[10px] text-amber-600 flex items-center justify-end gap-0.5" title={"Above your $"+custom.priceWarn+" price alert"}><AlertTriangle className="w-3 h-3"/>over limit</div>}<div className="text-base font-semibold text-stone-900">{!ready?<span className="text-stone-300">—</span>:(live||fxLive)?(hasPrice?money(sell):<span className="text-stone-300">—</span>):loading?<span className="text-[11px] font-normal text-stone-400">pricing…</span>:(hasPrice?money(sell):<span className="text-stone-300">—</span>)}</div></div>
           {action&&(()=>{const unavailable=q._unavailable||(!hasPrice&&!loading&&live);
             return <button onClick={(e)=>{e.stopPropagation();if(!unavailable)action(q);}} disabled={!ready||!hasPrice||unavailable} title={unavailable?"FedEx isn't offering this service for this shipment (size/weight/destination).":!hasPrice&&q._oneRate?"No One Rate flat price came back — pick a priced service.":undefined} className={`shrink-0 w-32 text-sm rounded-lg px-3 py-1.5 font-medium flex items-center justify-center gap-1.5 disabled:cursor-not-allowed ${unavailable?"bg-rose-50 text-rose-600 border border-rose-200":bought===q.key?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8] disabled:opacity-40"}`}>{unavailable?<>Unavailable</>:bought===q.key?<><Check className="w-4 h-4"/>{doneLabel}</>:!hasPrice&&q._oneRate?<>No quote</>:<><Printer className="w-4 h-4"/>{label}</>}</button>;})()}
@@ -9617,7 +9644,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
 
 /* ════════ PICKUPS ════════ */
 function Pickups({pickups,setPickups,settings,client=null,showCosts=true,isAdmin=false}){
-  const [f,setF]=useState({carrierCode:"FDXE",date:"",ready:"10:00",close:"17:00",count:1,weight:5,location:"FRONT"});
+  const [f,setF]=useState({carrierCode:"FDXE",date:"",ready:"10:00",close:"17:00",count:1,weight:5,location:"Front"});
   const [busy,setBusy]=useState(false);
   const [canceling,setCanceling]=useState(null);
   const [err,setErr]=useState(null);
@@ -9640,8 +9667,8 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true,isAdmin
   const pickAdvice=useMemo(()=>{const a=[];
     if(_isPast)a.push("That date is in the past — pick today or a future business day.");
     if(_winMin<=0)a.push("Close time has to be after the Ready time.");
-    else if(_winMin<120)a.push("Give the courier room: FedEx wants a workable window, so leave at least ~2 hours between Ready and Close.");
-    if(f.carrierCode==="FDXG"&&_isToday)a.push("Ground on-call pickups are usually next business day — not same-day. Choose tomorrow if today's route has already run.");
+    else if(_winMin<240)a.push("On-call pickups need a 4-hour window — move the Ready or Close time so there are at least 4 hours between them.");
+    if(f.carrierCode==="FDXG"&&_isToday)a.push("Ground pickups are always next business day — pick tomorrow or later.");
     if(f.carrierCode==="FDXE"&&_isToday&&_toMin(f.ready)>=14*60)a.push("Same-day Express pickups must beat your area's afternoon cutoff (often ~1–3 PM). A late ready time today may roll to the next business day.");
     return a;
   },[f.carrierCode,f.date,f.ready,f.close,_winMin,_isToday,_isPast]);
@@ -9653,13 +9680,17 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true,isAdmin
     if(res&&res.ok)setPickups(x=>x.map(y=>y.id===p.id?{...y,canceled:true,live:false}:y));
     else setErr((res&&res.error)||"FedEx couldn't cancel this pickup — call FedEx with the confirmation code.");
   };
-  const PKG_LOC=[["FRONT","Front"],["NONE","None"],["REAR","Rear"],["SIDE","Side"]];
+  /* Free-typed package location: FedEx's API only takes FRONT/REAR/SIDE/NONE, so derive the enum
+     from what was typed and pass the full text through as courier remarks — the driver sees it. */
+  const locEnum=(t)=>{const x=String(t||"").toLowerCase();if(/rear|back|behind|dock|loading/.test(x))return "REAR";if(/side/.test(x))return "SIDE";if(/front|door|porch|desk|lobby|reception|office/.test(x))return "FRONT";return "NONE";};
   const add=async()=>{
     if(!f.date){setErr("Pick a date");return;}
+    if(f.carrierCode==="FDXG"&&f.date===_todayStr){setErr("Ground pickups are always next business day — pick tomorrow or later.");return;}
+    if(_winMin>0&&_winMin<240){setErr("On-call pickups need a 4-hour window between Ready and Close.");return;}
     setErr(null);setBusy(true);
     const res=await fedexSchedulePickup({
       name:s.name,company:s.company,phone:s.phone,address1:s.address1,address2:s.address2,city:s.city,state:s.state,zip:s.zip,country:s.country,
-      date:f.date,readyTime:f.ready+":00",closeTime:f.close+":00",packageCount:+f.count||1,totalWeight:+f.weight||1,carrierCode:f.carrierCode,packageLocation:f.location,residential:false,remarks:""
+      date:f.date,readyTime:f.ready+":00",closeTime:f.close+":00",packageCount:+f.count||1,totalWeight:+f.weight||1,carrierCode:f.carrierCode,packageLocation:locEnum(f.location),residential:false,remarks:String(f.location||"").trim()
     });
     setBusy(false);
     if(res&&res.ok){
@@ -9678,7 +9709,7 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true,isAdmin
         <div className="grid grid-cols-2 gap-3">{(()=>{const opts=[];for(let h=6;h<=20;h++)for(const m of ["00","30"]){const v=String(h).padStart(2,"0")+":"+m;const ap=h>=12?"PM":"AM";const h12=h%12===0?12:h%12;opts.push([v,h12+":"+m+" "+ap]);}
           const timeSel=(k,label)=><Field label={label}><Select value={f[k]} onChange={e=>setF({...f,[k]:e.target.value})}>{!opts.some(([v])=>v===f[k])&&<option value={f[k]}>{f[k]}</option>}{opts.map(([v,l])=><option key={v} value={v}>{l}</option>)}</Select></Field>;
           return <>{timeSel("ready","Ready time")}{timeSel("close","Close time")}</>;})()}</div>
-        <div className="grid grid-cols-2 gap-3"><Field label="Total weight (lb)"><Input type="number" value={f.weight} onChange={e=>setF({...f,weight:+e.target.value})}/></Field><Field label="Package location"><Select value={f.location} onChange={e=>setF({...f,location:e.target.value})}>{PKG_LOC.map(([v,l])=><option key={v} value={v}>{l}</option>)}</Select></Field></div>
+        <div className="grid grid-cols-2 gap-3"><Field label="Total weight (lb)"><Input type="number" value={f.weight} onChange={e=>setF({...f,weight:+e.target.value})}/></Field><Field label="Package location"><Input value={f.location} onChange={e=>setF({...f,location:e.target.value})} placeholder="Front desk, side door, loading dock…"/></Field></div>
         <div className="text-[11px] text-stone-400 flex items-center gap-1"><MapPin className="w-3.5 h-3.5"/>{addrReady?`${s.address1}, ${s.city} ${s.state} ${s.zip}`:"Set your pickup address in Settings → Company"}</div>
         {showCosts&&<div className="flex items-center justify-between text-sm bg-stone-50 border border-stone-200 rounded-lg px-3 py-2"><span className="text-stone-600">On-call pickup fee ({f.carrierCode==="FDXG"?"Ground":"Express"}){isAdmin&&<span className="block text-[10px] text-stone-400">{_pf.ruleDesc} — edit it on the Rates tab accessorials (Pickup &amp; returns)</span>}</span><span className=" font-semibold text-stone-900">{money(pickupFee)}</span></div>}
         {showCosts&&<div className="text-[10px] text-stone-400 -mt-1">Billed per on-call pickup. Regular scheduled pickup routes bill weekly instead.</div>}
@@ -9686,13 +9717,13 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true,isAdmin
         {err&&<div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1.5 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>{err}</div>}
         <button onClick={add} disabled={busy||!addrReady} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy?<><Loader2 className="w-4 h-4 animate-spin"/>Scheduling with FedEx…</>:<><Calendar className="w-4 h-4"/>Schedule pickup</>}</button>
         <div className="mt-1 border-t border-stone-100 pt-3">
-          <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5"/>How FedEx pickups work</div>
-          <ul className="text-[11px] text-stone-500 space-y-1 leading-snug">
-            <li>· <b className="text-stone-600">Express</b> can be same-day if you schedule before your area's afternoon cutoff (often ~1–3 PM). <b className="text-stone-600">Ground</b> on-call is usually next business day.</li>
-            <li>· You give a <b className="text-stone-600">Ready</b> time and a <b className="text-stone-600">Close</b> time — the courier arrives anytime in that window, so leave a couple of hours.</li>
-            <li>· Have the packages waiting at the <b className="text-stone-600">Package location</b> by the Ready time.</li>
-            <li>· On-call pickups carry a per-pickup fee; dropping off at a FedEx location is free; a regular scheduled route bills weekly.</li>
-          </ul>
+          <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5"/>How FedEx pickups work</div>
+          <div className="text-[11px] text-stone-500 leading-snug space-y-1.5">
+            <div className="flex gap-2"><b className="text-stone-600 w-16 shrink-0">Express</b><span>Same-day if scheduled before your area's afternoon cutoff (often 1–3 PM).</span></div>
+            <div className="flex gap-2"><b className="text-stone-600 w-16 shrink-0">Ground</b><span>Always picked up the next business day.</span></div>
+            <div className="flex gap-2"><b className="text-stone-600 w-16 shrink-0">Window</b><span>The courier arrives anytime between Ready and Close — at least 4 hours.</span></div>
+            <div className="flex gap-2"><b className="text-stone-600 w-16 shrink-0">Location</b><span>Have the packages waiting where you said by the Ready time.</span></div>
+          </div>
         </div>
       </Panel>
       <div className="space-y-2">

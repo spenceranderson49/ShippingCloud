@@ -126,7 +126,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v622";
+const BUILD_TAG="addr-v623";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -5068,7 +5068,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
       {k==="labelcert"&&<FedexCertLab settings={settings}/>}
       {k==="branding"&&<Branding settings={settings} setSettings={setSettings} brand={brand} publicBrand={publicBrand} setPublicBrand={setPublicBrand}/>}
       {k==="domains"&&<Domains settings={settings} setSettings={setSettings} clients={clients}/>}
-      {k==="users"&&<UsersAdmin users={users} setUsers={setUsers} clients={clients} currentUser={currentUser} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
+      {k==="users"&&<UsersAdmin users={users} setUsers={setUsers} clients={clients} setClients={setClients} currentUser={currentUser} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
       {k==="customizations"&&<CustomizationsAdmin users={users} clients={clients} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures}/>}
       {k==="overview"&&<AdminDashboard platform={platform} loginStats={loginStats} uEmail={uEmail} openCustomer={openCustomer} openSection={openSection} clients={clients}/>}
       {k==="apiadmin"&&<ApiAdmin clients={clients} platform={platform} openCustomer={openCustomer}/>}
@@ -5187,7 +5187,7 @@ function CustomizationsAdmin({users,clients,featureFlags={},setFeatureFlags,cust
     </div>
   </div>);
 }
-function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSignupRequests,featureFlags={},setFeatureFlags,customFeatures=[],fedexRequests=[],setFedexRequests,companyAdminRequests=[],setCompanyAdminRequests}){
+function UsersAdmin({users,setUsers,clients,setClients,currentUser,signupRequests=[],setSignupRequests,featureFlags={},setFeatureFlags,customFeatures=[],fedexRequests=[],setFedexRequests,companyAdminRequests=[],setCompanyAdminRequests}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 — show each customer's rate profile here (read-only since v459)
   const [rpOpen,setRpOpen]=useState(null);
   const CATALOG=[...FEATURE_CATALOG,...customFeatures.map(c=>({...c,custom:true}))];
@@ -5204,9 +5204,32 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
     if(res.users)setUsers(res.users);
     if(res.requests&&setSignupRequests)setSignupRequests(res.requests);
   };
-  const [f,setF]=useState({name:"",email:"",role:"customer",clientId:clients[0]?clients[0].id:"",password:"",level:"full",perms:ADMIN_SECTIONS.map(x=>x[0])});
+  const [f,setF]=useState({name:"",email:"",role:"customer",clientId:clients[0]?clients[0].id:"",newCustomer:"",password:"",level:"full",perms:ADMIN_SECTIONS.map(x=>x[0])});
   const [added,setAdded]=useState(false);
-  const create=()=>{if(!f.name||!f.email||!f.password)return;const dup=users.find(u=>u&&u.email&&u.email.toLowerCase()===f.email.trim().toLowerCase());if(dup){uiAlert("A login with that email already exists ("+(dup.name||dup.email)+"). Use a different email.");return;}const adminPerms=f.role==="admin"?(f.level==="custom"?{sections:f.perms}:permsForLevel(f.level)):null;setUsers(p=>[...p,{id:"u"+Date.now(),name:f.name,email:f.email.trim(),role:f.role,clientId:f.role==="customer"?f.clientId:null,adminPerms,status:"active",password:f.password,lastLogin:"—",createdAt:new Date().toISOString()}]);setF({name:"",email:"",role:"customer",clientId:clients[0]?clients[0].id:"",password:"",level:"full",perms:ADMIN_SECTIONS.map(x=>x[0])});setAdded(true);setTimeout(()=>setAdded(false),1600);};
+  const create=()=>{
+    if(!f.name||!f.email||!f.password)return;
+    const dup=users.find(u=>u&&u.email&&u.email.toLowerCase()===f.email.trim().toLowerCase());
+    if(dup){uiAlert("A login with that email already exists ("+(dup.name||dup.email)+"). Use a different email.");return;}
+    let clientId=f.role==="customer"?f.clientId:null;
+    /* "+ New customer" in the dropdown: create the customer record right here so the login and its
+       company land together — no round-trip through the Customers page first. Same defaults as the
+       Customers page New Customer form (15% markup, standard service set). */
+    if(f.role==="customer"&&f.clientId==="__new"){
+      const nm=(f.newCustomer||"").trim();
+      if(!nm){uiAlert("Name the new customer (the company this login belongs to).");return;}
+      const dupC=clients.find(c=>c&&c.name&&String(c.name).trim().toLowerCase()===nm.toLowerCase());
+      if(dupC)clientId=dupC.id;   // that company already exists — attach the login instead of duplicating it
+      else{
+        const id="c"+Date.now();
+        setClients&&setClients(p=>[...p,{id,name:nm,contact:f.name,email:f.email.trim(),phone:"",origin:"",markup:15,status:"active",since:new Date().toISOString().slice(0,7),plan:"Standard",blockedServices:[...DEFAULT_BLOCKED_SERVICES],createdAt:new Date().toISOString()}]);
+        clientId=id;
+      }
+    }
+    const adminPerms=f.role==="admin"?(f.level==="custom"?{sections:f.perms}:permsForLevel(f.level)):null;
+    setUsers(p=>[...p,{id:"u"+Date.now(),name:f.name,email:f.email.trim(),role:f.role,clientId,adminPerms,status:"active",password:f.password,lastLogin:"—",createdAt:new Date().toISOString()}]);
+    setF({name:"",email:"",role:"customer",clientId:clients[0]?clients[0].id:"",newCustomer:"",password:"",level:"full",perms:ADMIN_SECTIONS.map(x=>x[0])});
+    setAdded(true);setTimeout(()=>setAdded(false),1600);
+  };
   const toggle=(id)=>setUsers(us=>us.map(u=>u.id===id?{...u,status:u.status==="active"?"inactive":"active"}:u));
   const del=(id)=>setUsers(us=>us.filter(u=>u.id!==id));
   return (<div className="space-y-3">
@@ -5273,8 +5296,10 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
         <Field label="Email"><Input value={f.email} onChange={e=>setF({...f,email:e.target.value})}/></Field>
         <Field label="Temp password"><Input value={f.password} onChange={e=>setF({...f,password:e.target.value})}/></Field>
         <Field label="Role"><Select value={f.role} onChange={e=>setF({...f,role:e.target.value})}><option value="customer">Customer</option>{fullAdmin&&<option value="admin">Admin</option>}</Select></Field>
-        {f.role==="customer"&&<Field label="Customer account"><Select value={f.clientId} onChange={e=>setF({...f,clientId:e.target.value})}>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Select></Field>}
+        {f.role==="customer"&&<Field label="Customer account"><Select value={f.clientId} onChange={e=>setF({...f,clientId:e.target.value})}>{clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}<option value="__new">+ New customer…</option></Select></Field>}
+        {f.role==="customer"&&f.clientId==="__new"&&<Field label="New customer name"><Input value={f.newCustomer} onChange={e=>setF({...f,newCustomer:e.target.value})} placeholder="Company name"/></Field>}
       </div>
+      {f.role==="customer"&&f.clientId==="__new"&&<p className="text-[11px] text-stone-500 -mt-1">Creates the customer record too (standard service set, 15% markup) — it shows up on the Customers page instantly, and you can set real rates there after.</p>}
       {f.role==="admin"&&<div className="border border-stone-200 rounded-lg bg-stone-50 p-3 space-y-2.5">
         <div className="text-[10px] uppercase tracking-widest text-stone-400">Permission level</div>
         <div className="grid sm:grid-cols-2 gap-2">
@@ -5289,6 +5314,7 @@ function UsersAdmin({users,setUsers,clients,currentUser,signupRequests=[],setSig
             <label key={id} className="flex items-center gap-2 text-sm cursor-pointer py-0.5"><input type="checkbox" checked={on} onChange={e=>setF({...f,perms:e.target.checked?[...f.perms,id]:f.perms.filter(x=>x!==id)})} className="accent-[#0086E0]"/><span className="text-stone-700">{label}</span></label>);})}
         </div>}
         <p className="text-[11px] text-stone-400">Levels limit which Admin portal <b>sections</b> this login opens — they still get every regular tab (Ship, Orders, Settings…). Every admin has full data access underneath, so only make admins of people you trust. (All Logins always stays available so no one can lock themselves out.)</p>
+        <p className="text-[11px] text-stone-400"><b>Admin logins never attach to a customer</b> — they see every account, so they don't appear on any customer's card. If this person should work inside one customer's account, make them a <b>Customer</b> login on that customer instead.</p>
       </div>}
       <button onClick={create} className={`text-sm rounded-lg px-4 py-2 font-medium flex items-center gap-1.5 ${added?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{added?<><Check className="w-4 h-4"/>Created</>:<><Plus className="w-4 h-4"/>Create login</>}</button>
     </div>

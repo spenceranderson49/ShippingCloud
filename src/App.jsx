@@ -126,7 +126,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v626";
+const BUILD_TAG="addr-v627";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -1469,12 +1469,21 @@ function cleanServiceList(list,{intl=false,residential=null}={}){
   return out.filter(q=>byFam[famOf(q)]===q);
 }
 async function fedexTransit(s){
-  const body={fromZip:s.fromZip,toZip:s.toZip,fromCountry:s.fromCountry||"US",toCountry:s.toCountry||"US",residential:!!s.residential,saturdayDelivery:!!s.saturdayDelivery,pieces:(s.pieces||[]).map(p=>({weight:Math.ceil(+p.weight||1)}))};
-  const res=await fedexCall(body);
-  if(!res||!res.ok||!Array.isArray(res.services)) return {};
-  const map={};
-  for(const sv of res.services){ const k=canonSvc(sv.serviceType); if(!map[k]||(sv.transitDays!=null)) map[k]={days:sv.transitDays,date:sv.deliveryDate,day:sv.deliveryDay,name:sv.serviceName}; }
-  return map;
+  const one=async(sat)=>{
+    const body={fromZip:s.fromZip,toZip:s.toZip,fromCountry:s.fromCountry||"US",toCountry:s.toCountry||"US",residential:!!s.residential,saturdayDelivery:sat,pieces:(s.pieces||[]).map(p=>({weight:Math.ceil(+p.weight||1)}))};
+    const res=await fedexCall(body);
+    if(!res||!res.ok||!Array.isArray(res.services)) return null;
+    const map={};
+    for(const sv of res.services){ const k=canonSvc(sv.serviceType); if(!map[k]||(sv.transitDays!=null)) map[k]={days:sv.transitDays,date:sv.deliveryDate,day:sv.deliveryDay,name:sv.serviceName}; }
+    return map;
+  };
+  if(!s.saturdayDelivery) return (await one(false))||{};
+  /* Saturday Delivery ON: FedEx's transit response then covers ONLY the Saturday-capable Express
+     services, so everything else showed "—". Ask twice — normal + Saturday — and overlay the
+     Saturday commits on the normal ones. Both answers are FedEx's own committed data; the
+     non-Saturday services keep their real weekday commitments. */
+  const [base,sat]=await Promise.all([one(false),one(true)]);
+  return {...(base||{}),...(sat||{})};
 }
 function countryCode(c){
   if(!c) return "US";
@@ -8549,7 +8558,7 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
          "Saturday delivery" instead. All of it derives from FedEx's own committed date. */
       const _dow=(fxLive&&fxDate)?fxDate.getDay():null;
       const wkTxt=_dow===6?"Saturday delivery":_dow===0?"Sunday delivery":"";
-      const dayTxt=wkTxt||(fd!=null?`${fd} business day${fd>1?"s":""}`:"");
+      const dayTxt=wkTxt||(fd!=null&&fd>0?`${fd} business day${fd>1?"s":""}`:"");   // a 0-count never renders — the date carries it
       const dateTxt=(fxLive&&fxDate)?`arrives ${fmtDeliv(fxDate)}`:"";
       if(dateTxt||dayTxt){ if(custom.transitStyle==="days")return dayTxt||dateTxt; return <>{dateTxt}{dateTxt&&dayTxt?` · ${dayTxt}`:dayTxt}</>; }
       return (loading&&ready)?<span className="text-stone-300">checking FedEx…</span>:<span className="text-stone-300">—</span>;

@@ -126,7 +126,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v627";
+const BUILD_TAG="addr-v628";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9087,7 +9087,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
   const goPrev=()=>{if(navPrev&&onNav)onNav(navPrev);};
   const goNext=()=>{if(navNext&&onNav)onNav(navNext);};
   useEffect(()=>{
-    const h=(e)=>{if(e.key==="ArrowLeft"&&navPrev)goPrev();else if(e.key==="ArrowRight"&&navNext)goNext();};
+    const h=(e)=>{if(/^(INPUT|TEXTAREA|SELECT)$/.test(e.target&&e.target.tagName)||(e.target&&e.target.isContentEditable))return;if(e.key==="ArrowLeft"&&navPrev)goPrev();else if(e.key==="ArrowRight"&&navNext)goNext();};
     window.addEventListener("keydown",h);return()=>window.removeEventListener("keydown",h);
   },[navIdx,navList.length]);
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // v196 rate database
@@ -9448,6 +9448,10 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
     if(changed)setShipments(next);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[shipments.length,clients.length]);
+  /* These two MUST live above the empty-list early return below — hooks can't sit after a
+     conditional return, or the empty→first-shipment transition throws "rendered more hooks". */
+  const [voiding,setVoiding]=useState(null);     // shipment id currently being cancelled with the carrier
+  const [trackModal,setTrackModal]=useState(null);   // {s, loading, events, status, estDelivery, error}
   /* Packing-slip composer for MANUAL shipments (no store integration → no line items):
      type the items, print, and they're saved onto the shipment so reprints match. */
   const [slipEdit,setSlipEdit]=useState(null);   // {id,rows:[{name,qty}],note}
@@ -9485,7 +9489,6 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
     </div>
   ):null;
   if(!shipments.length)return (<div className="space-y-3"><PendingBar/>{chkMsg&&<div className={`text-xs rounded px-2 py-1.5 flex items-center gap-1.5 ${chkMsg.err?"bg-rose-50 text-rose-600 border border-rose-200":"bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{chkMsg.err?<AlertTriangle className="w-3.5 h-3.5"/>:<CheckCircle2 className="w-3.5 h-3.5"/>}{chkMsg.err||chkMsg.ok}</div>}<Empty icon={Truck} title="No shipments yet" body="Print a label on the Ship tab and it lands here with tracking, edit & reship."/></div>);
-  const [voiding,setVoiding]=useState(null);   // shipment id currently being cancelled with the carrier
   const voidLabel=async(e,s)=>{ e&&e.stopPropagation();
     if(!await uiConfirm("Void this label?\n\nWe'll ask "+(s.carrier||"the carrier")+" to cancel it and request the refund, then mark it Voided here (excluded from audits and duplicate checks)."))return;
     setVoiding(s.id);
@@ -9499,7 +9502,6 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
     window.dispatchEvent(new CustomEvent("sc-audit",{detail:{action:"Voided label",detail:(s.reference||"")+" · "+(s.tracking||"")}}));
     setVoiding(null); uiAlert(msg);
   };
-  const [trackModal,setTrackModal]=useState(null);   // {s, loading, events, status, estDelivery, error}
   const openTrack=(s)=>{
     const cached=(s.trackEvents&&s.trackEvents.length)?s.trackEvents:null;
     setTrackModal({s,loading:true,events:cached||[],status:s.status,estDelivery:s.estDelivery||null,error:null});

@@ -88,7 +88,7 @@ const FEATURE_CATALOG=[
   {id:"rules",label:"Autopilot",desc:"Autopilot mode — automation rules",default:true},
   {id:"scan",label:"Scan",desc:"Barcode scan station",default:true},
   {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:true},
-  {id:"seeCosts",label:"See costs & spend",desc:"Rates, order totals, batch totals and Reports dollars. Turn OFF to hide all money from this customer's logins",default:true},
+  {id:"seeCosts",label:"See costs & spend",desc:"Rates, order totals, batch totals, Dashboard spend and Reports dollars. Turn OFF to hide all money from this customer's logins",default:true},
   {id:"fedexLocations",label:"FedEx Location Finder",desc:"Find nearest FedEx drop-off / pickup locations by ZIP or current location",default:true},
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own NON-FedEx carrier accounts (the FedEx Account settings page always shows for every customer; admins always have this)",default:false},
 ];
@@ -126,7 +126,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v621";
+const BUILD_TAG="addr-v622";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7122,7 +7122,7 @@ function AppInner(){
         </aside>
         <main className="flex-1 min-w-0 overflow-x-clip px-3 sm:px-6 py-4 sm:py-6">
           <TabBoundary key={tab} name={tab}>
-          {tab==="dashboard"&&<Dashboard shipments={shipments} orders={orders} returns={returns} goTab={setTab}/>}
+          {tab==="dashboard"&&<Dashboard shipments={shipments} orders={orders} returns={returns} goTab={setTab} showMoney={showMoney}/>}
           {tab==="ship"&&<Ship client={client} priceAs={adminPriceAs} setPriceAs={setAdminPriceAs} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={ruleset} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders} currentUser={currentUser} setUsers={setUsers} setCurrentUser={setCurrentUser} clients={clients} labels={labelStore}/>}
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
           {tab==="orders"&&<Orders showMoney={showMoney} orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} setSettings={setSettings} onShipped={onShipped} openOrderId={pendingOpenOrderId} onOpenedOrder={()=>setPendingOpenOrderId(null)}/>}
@@ -8494,17 +8494,20 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
     }
     comps=[...comps,...acc.map(a=>({label:a.label,amount:a.amount}))];
     const hasPrice=sell!=null;
-    /* rendered twice: for real in the row, and invisible in the expanded panel so the breakdown
-       indents past it and lines up under the service name even when the badge shifts the name */
     const matchBadge=matched===q.key?(<span className="text-[10px] font-semibold uppercase tracking-wide bg-[#E6F4FF] text-[#0086E0] border border-[#99D6FF] rounded px-1.5 py-0.5 shrink-0 inline-flex items-center gap-1">{matchedSrc==="autopilot"&&<Zap className="w-3 h-3"/>}{matchedSrc==="autopilot"?"Autopilot":"Requested"}</span>):null;
+    /* Two-line box: service name (+ badge trailing it) on top, transit on its own full-width line
+       below — the transit never competes with the name column or the Autopilot badge for space,
+       so it can't get clipped mid-word at any window width. */
     return (
       <div key={q.key||svcFamilyKey(q.label)} className={"border rounded-lg bg-white shadow-sm transition-all duration-200 "+(matched===q.key?"border-[#0086E0] ring-1 ring-[#0086E0]":"border-stone-200")}>
-        <div onClick={()=>{setOpen(isOpen?null:q.key); if(q._oneRate&&q.packageTypeCode&&onOneRate)onOneRate(q.packageTypeCode);}} className="px-3 py-1.5 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
+        <div onClick={()=>{setOpen(isOpen?null:q.key); if(q._oneRate&&q.packageTypeCode&&onOneRate)onOneRate(q.packageTypeCode);}} className="px-3 py-2 flex items-center gap-3 cursor-pointer hover:bg-stone-50 rounded-lg">
           <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 transition-transform ${isOpen?"rotate-90":""}`}/>
-          {matchBadge}
-          <div className="flex-1 min-w-0 flex items-center gap-x-4">
-            <span className="w-[248px] shrink-0 truncate text-[15px] font-semibold text-stone-900">{(custom.aliases&&custom.aliases[canonSvc(q.label)])||q.label}</span>
-            <span className="text-sm text-stone-600 inline-flex items-center gap-1.5 min-w-0 truncate"><Calendar className="w-4 h-4 shrink-0"/>{(()=>{
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="truncate text-[15px] font-semibold text-stone-900">{(custom.aliases&&custom.aliases[canonSvc(q.label)])||q.label}</span>
+              {matchBadge}
+            </div>
+            <span className="text-sm text-stone-600 flex items-center gap-1.5 min-w-0 mt-0.5"><Calendar className="w-4 h-4 shrink-0"/><span className="truncate">{(()=>{
               /* ONLY ever FedEx's own committed transit — never a computed/business-day guess. If FedEx
                  didn't return transit for this lane, show nothing (or "checking…" while it loads). */
               const fd=(fxLive&&q.fxDays!=null)?q.fxDays:null;
@@ -8512,7 +8515,7 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
               const dateTxt=(fxLive&&fxDate)?`arrives ${fmtDeliv(fxDate)}`:"";
               if(dateTxt||dayTxt){ if(custom.transitStyle==="days")return dayTxt||dateTxt; return <>{dateTxt}{dateTxt&&dayTxt?` · ${dayTxt}`:dayTxt}</>; }
               return (loading&&ready)?<span className="text-stone-300">checking FedEx…</span>:<span className="text-stone-300">—</span>;
-            })()}</span>
+            })()}</span></span>
           </div>
           <div className="text-right">{!!(custom.priceWarn>0&&ready&&hasPrice&&sell>custom.priceWarn)&&<div className="text-[10px] text-amber-600 flex items-center justify-end gap-0.5" title={"Above your $"+custom.priceWarn+" price alert"}><AlertTriangle className="w-3 h-3"/>over limit</div>}<div className="text-base font-semibold text-stone-900">{!ready?<span className="text-stone-300">—</span>:(live||fxLive)?(hasPrice?money(sell):<span className="text-stone-300">—</span>):loading?<span className="text-[11px] font-normal text-stone-400">pricing…</span>:(hasPrice?money(sell):<span className="text-stone-300">—</span>)}</div></div>
           {action&&(()=>{const unavailable=q._unavailable||(!hasPrice&&!loading&&live);
@@ -8520,12 +8523,11 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
         </div>
         {isOpen&&ready&&hasPrice&&<div className="px-3 pb-3 pt-1 border-t border-stone-100">
           {/* Compact breakdown table lined up under the service name and its transit line. The
-              spacer + invisible badge mirror the row's chevron and Autopilot/Requested chip, so
-              the indent tracks the name exactly whether or not a badge is present; max-w keeps
-              every label right beside its amount instead of stretched across the box. */}
+              spacer mirrors the row's chevron (the badge now trails the name, so it never shifts
+              the name's indent); max-w keeps every label right beside its amount instead of
+              stretched across the box. */}
           <div className="flex gap-3">
           <span className="w-4 shrink-0"/>
-          {matchBadge&&<span className="invisible shrink-0" aria-hidden="true">{matchBadge}</span>}
           <div className="max-w-[300px] flex-1 min-w-0">
           <div className="flex items-center justify-between mb-1.5">
             <div className="text-[10px] uppercase tracking-widest text-stone-400">Rate breakdown</div>
@@ -9843,7 +9845,7 @@ function Scan({orders,goShip,goTab}){
 /* ════════ DASHBOARD ════════ */
 const TRACK_STAGES=["Label created","In transit","Out for delivery","Delivered"];
 function trackPct(s){if(s==="Delivered")return 100;if(s==="Out for delivery")return 75;if(s==="In transit")return 45;if(s==="Exception")return 45;return 12;}
-function Dashboard({shipments,orders,returns,goTab}){
+function Dashboard({shipments,orders,returns,goTab,showMoney=true}){
   const a=useMemo(()=>analytics(shipments),[shipments]);
   const [openTrack,setOpenTrack]=useState(null);   // shipment id whose FedEx scan timeline is expanded
   const [trackFilter,setTrackFilter]=useState(null);   // status pill filter on the live board
@@ -9899,7 +9901,7 @@ function Dashboard({shipments,orders,returns,goTab}){
         return (<div className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 flex flex-wrap items-center gap-x-7 gap-y-1.5">
           <span className="text-[10px] uppercase tracking-widest text-[#0086E0] font-semibold flex items-center gap-1.5"><Clock className="w-3.5 h-3.5"/>Yesterday</span>
           <Cell k="Labels" v={ys.length}/>
-          <Cell k="Spend" v={"$"+spend.toFixed(2)}/>
+          {showMoney&&<Cell k="Spend" v={"$"+spend.toFixed(2)}/>}
           <Cell k="Top service" v={top?top[0]:"—"}/>
           <span className="w-px h-4 bg-stone-200 hidden sm:block"/>
           <Cell k="Today so far" v={ts.length}/>

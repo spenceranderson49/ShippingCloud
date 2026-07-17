@@ -126,7 +126,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v625";
+const BUILD_TAG="addr-v626";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -8543,8 +8543,13 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
        didn't return transit for this lane, show nothing (or "checking…" while it loads). */
     const transitEl=(()=>{
       const fd=(fxLive&&q.fxDays!=null)?q.fxDays:null;
-      /* "business days" (FedEx's own wording) — plain "days" reads as calendar days and lies over weekends */
-      const dayTxt=fd!=null?`${fd} business day${fd>1?"s":""}`:"";
+      /* "business days" (FedEx's own wording) — plain "days" reads as calendar days and lies over
+         weekends. When FedEx COMMITS a weekend date (Home Delivery Saturdays; Express with the
+         Saturday flag), a business-day count next to a Saturday date reads contradictory — say
+         "Saturday delivery" instead. All of it derives from FedEx's own committed date. */
+      const _dow=(fxLive&&fxDate)?fxDate.getDay():null;
+      const wkTxt=_dow===6?"Saturday delivery":_dow===0?"Sunday delivery":"";
+      const dayTxt=wkTxt||(fd!=null?`${fd} business day${fd>1?"s":""}`:"");
       const dateTxt=(fxLive&&fxDate)?`arrives ${fmtDeliv(fxDate)}`:"";
       if(dateTxt||dayTxt){ if(custom.transitStyle==="days")return dayTxt||dateTxt; return <>{dateTxt}{dateTxt&&dayTxt?` · ${dayTxt}`:dayTxt}</>; }
       return (loading&&ready)?<span className="text-stone-300">checking FedEx…</span>:<span className="text-stone-300">—</span>;

@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v659";
+const BUILD_TAG="addr-v660";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10016,10 +10016,11 @@ function Inventory({settings,client,showMoney=true,currentUser,orders=[]}){
   const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
   const openPo=(pos||[]).filter(p=>p&&p.status!=="received").length;
   const Switcher=()=>(<div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm flex-wrap">
-    {[["stock","Stock"],["pos","Purchase Orders"],["suppliers","Suppliers"],["pick","Pick Lists"],["scan","Scan Receive"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}</button>)}
+    {[["stock","Stock"],["pos","Purchase Orders"],["suppliers","Suppliers"],["pick","Pick Lists"],["pack","Pack Verify"],["scan","Scan Receive"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}</button>)}
   </div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
   if(view==="pick") return (<div className="max-w-5xl space-y-4"><Switcher/><PickList orders={orders} items={list}/></div>);
+  if(view==="pack") return (<div className="max-w-5xl space-y-4"><Switcher/><PackVerify orders={orders} items={list}/></div>);
   if(view==="scan") return (<div className="max-w-5xl space-y-4"><Switcher/><ScanReceive items={list} onReceived={patch} reload={load}/></div>);
   const reorderLowStock=()=>{
     const low=list.filter(it=>!(Array.isArray(it.kit)&&it.kit.length)&&(+it.reorder||0)>0&&(+it.onHand||0)<=(+it.reorder||0));
@@ -10279,6 +10280,55 @@ function SuppliersView({suppliers,setSuppliers}){
   </div>);
 }
 
+/* Pack-verify station — pick an order, scan each item into the box; the order can't be marked packed
+   until every line is fully scanned. Catches mis-picks. Read-only against inventory. */
+function PackVerify({orders,items}){
+  const open=(orders||[]).filter(o=>o&&o.status!=="fulfilled"&&Array.isArray(o.lineItems)&&o.lineItems.some(li=>li&&li.sku));
+  const [order,setOrder]=useState(null);
+  const [scanned,setScanned]=useState({});   // sku(lower) → count
+  const [val,setVal]=useState("");
+  const [msg,setMsg]=useState("");
+  const inputRef=useRef(null);
+  const byCode=useMemo(()=>{ const m={}; (items||[]).forEach(it=>{ if(it.barcode)m[String(it.barcode).trim().toLowerCase()]=String(it.sku).toLowerCase(); m[String(it.sku).toLowerCase()]=m[String(it.sku).toLowerCase()]||String(it.sku).toLowerCase(); }); return m; },[items]);
+  const need=useMemo(()=>{ const m={}; if(order){ (order.lineItems||[]).forEach(li=>{ const s=String(li.sku||"").trim().toLowerCase(); if(!s)return; m[s]=(m[s]||0)+(+li.qty||+li.quantity||1); }); } return m; },[order]);
+  const start=(o)=>{ setOrder(o); setScanned({}); setMsg(""); setTimeout(()=>{try{inputRef.current&&inputRef.current.focus();}catch(e){}},50); };
+  const doScan=(raw)=>{
+    const code=String(raw||"").trim(); if(!code)return; setVal("");
+    const sku=byCode[code.toLowerCase()]||code.toLowerCase();
+    if(need[sku]==null){ setMsg("✗ "+code+" isn't on this order"); return; }
+    const have=(scanned[sku]||0);
+    if(have>=need[sku]){ setMsg("• "+sku+" already fully scanned"); return; }
+    setScanned(s=>({...s,[sku]:have+1})); setMsg("");
+    try{inputRef.current&&inputRef.current.focus();}catch(e){}
+  };
+  const lines=order?(order.lineItems||[]).filter(li=>li.sku).map(li=>{ const s=String(li.sku).toLowerCase(); return {sku:li.sku,name:li.title||li.name||"",need:need[s]||0,have:scanned[s]||0}; }):[];
+  const allDone=order&&lines.length>0&&lines.every(l=>l.have>=l.need);
+  return (<div className="space-y-4">
+    <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ScanLine className="w-5 h-5 text-[#0086E0]"/>Pack verify</h2><p className="text-sm text-stone-500 mt-0.5">Scan each item into the box before shipping — the order isn't verified until every line matches.</p></div>
+    {!order?(open.length===0?<div className="border border-stone-200 rounded-xl bg-white p-6 text-sm text-stone-500">No open orders with SKUs to pack.</div>:
+      <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100 max-h-96 overflow-y-auto">
+        {open.map(o=>(<button key={o.id} onClick={()=>start(o)} className="w-full text-left px-4 py-3 hover:bg-stone-50 flex items-center gap-3"><div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{o.name||o.id} · {o.customer||""}</div><div className="text-[11px] text-stone-400 truncate">{(o.lineItems||[]).filter(li=>li.sku).reduce((s,li)=>s+(+li.qty||+li.quantity||1),0)} items</div></div><ChevronRight className="w-4 h-4 text-stone-300"/></button>))}
+      </div>):(
+      <>
+      <div className={`border rounded-xl p-4 ${allDone?"border-emerald-300 bg-emerald-50/50":"border-stone-200 bg-white"}`}>
+        <div className="flex items-center justify-between mb-3"><div className="font-medium text-stone-900">{order.name||order.id} · {order.customer||""}</div><button onClick={()=>setOrder(null)} className="text-xs text-stone-500 hover:text-stone-700">← pick another</button></div>
+        {!allDone&&<div className="flex items-end gap-2 mb-3">
+          <label className="text-xs text-stone-600 flex-1">Scan item<input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();doScan(val);}}} placeholder="Scan barcode or type SKU…" className="mt-1 w-full border border-stone-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#0086E0]" autoFocus/></label>
+        </div>}
+        {msg&&<div className="text-xs text-amber-600 mb-2">{msg}</div>}
+        <div className="space-y-1.5">
+          {lines.map(l=>{ const done=l.have>=l.need; return (<div key={l.sku} className={`flex items-center gap-3 px-3 py-2 rounded-lg ${done?"bg-emerald-50":"bg-stone-50"}`}>
+            {done?<CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0"/>:<div className="w-4 h-4 rounded-full border-2 border-stone-300 shrink-0"/>}
+            <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{l.name||l.sku}</div><div className="text-[11px] text-stone-400">{l.sku}</div></div>
+            <div className={`text-sm font-semibold ${done?"text-emerald-600":"text-stone-700"}`}>{l.have}/{l.need}</div>
+          </div>);})}
+        </div>
+        {allDone&&<div className="mt-3 flex items-center gap-2 text-sm text-emerald-700 font-medium"><CheckCircle2 className="w-5 h-5"/>Verified — everything's in the box. Ready to ship.</div>}
+      </div>
+      </>
+    )}
+  </div>);
+}
 /* Scan-receive station — scan a barcode or type a SKU; each scan receives +N into stock. Matches by
    barcode first, then SKU. A fast warehouse receiving loop; the input stays focused between scans. */
 function ScanReceive({items,onReceived,reload}){

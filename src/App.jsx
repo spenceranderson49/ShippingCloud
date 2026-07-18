@@ -126,7 +126,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v636";
+const BUILD_TAG="addr-v637";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6270,6 +6270,7 @@ function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,set
     <p className="text-[11px] text-stone-500">Blue chip = the person has that tab. Company admins always have every tab your account includes.</p>
     <CompanyLogoDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags}/>
     <CompanyDefaultsDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings}/>
+    <CompanyDocsDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings}/>
     <CompanyCustomDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings} client={client} allowedTabs={allowedTabs}/>
     <CompanyAddressDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings}/>
   </div>);
@@ -6703,7 +6704,7 @@ function AppInner(){
   /* Company-admin-deployed package sizes (_boxes) + dropdown values (_fieldLists), each with a lock. */
   const deployedExtra=useMemo(()=>{ const uid=currentUser&&currentUser.id;
     const fl=(uid&&featureFlags&&featureFlags[uid])||(CLOUD.mode==="cloud"?(myFeatures||{}):{});
-    return { boxes:(fl&&fl._boxes)||null, boxesLock:!!(fl&&fl._boxesLock), fieldLists:(fl&&fl._fieldLists)||null, fieldListsLock:!!(fl&&fl._fieldListsLock) };
+    return { boxes:(fl&&fl._boxes)||null, boxesLock:!!(fl&&fl._boxesLock), fieldLists:(fl&&fl._fieldLists)||null, fieldListsLock:!!(fl&&fl._fieldListsLock), docs:(fl&&fl._docs)||null, docsLock:!!(fl&&fl._docsLock) };
   },[currentUser,featureFlags,myFeatures]);
   const settings=useMemo(()=>{ const sc=scrubLegacyDefaults(settingsRaw);
     const depFlags=(function(){const uid=currentUser&&currentUser.id;return (uid&&featureFlags&&featureFlags[uid])||(CLOUD.mode==="cloud"?(myFeatures||{}):{});})();
@@ -6727,7 +6728,15 @@ function AppInner(){
        otherwise merge deployed values into each list alongside the member's own. */
     let fieldLists=sc.fieldLists;
     if(deployedExtra.fieldLists&&typeof deployedExtra.fieldLists==="object"){ const mine=sc.fieldLists||{}; const out={...mine}; for(const k of Object.keys(deployedExtra.fieldLists)){ const dv=Array.isArray(deployedExtra.fieldLists[k])?deployedExtra.fieldLists[k]:[]; if(deployedExtra.fieldListsLock){out[k]=dv;} else {const mv=Array.isArray(mine[k])?mine[k]:[]; const seen=new Set(mv.map(x=>String(x).toLowerCase())); out[k]=[...mv,...dv.filter(x=>!seen.has(String(x).toLowerCase()))];} } fieldLists=out; }
-    return {...sc,products,addresses,companyLogo,boxes,fieldLists,custom:{...deployedCustom,...personalCustom},_logoLocked:deployedLogo.lock};   // company-deployed defaults sit under personal choices
+    /* Company-deployed document template (packing slip text + commercial-invoice letterhead/signature
+       assets + tax ID): scalar fields default in when the member hasn't set their own (locked → win);
+       docAssets (letterhead/signature images) merge by id, or locked → deployed set only. */
+    let docOverlay={};
+    if(deployedExtra.docs&&typeof deployedExtra.docs==="object"){ const dd=deployedExtra.docs; const dlock=deployedExtra.docsLock;
+      for(const k of ["slipTitle","slipThanks","slipFooter","slipTemplate","pickListTitle","pickListNote","defaultSigId","taxId"]){ const dv=dd[k]; if(dv==null||dv==="")continue; const pv=sc[k]; if(dlock||pv==null||pv==="")docOverlay[k]=dv; }
+      if(Array.isArray(dd.docAssets)&&dd.docAssets.length){ const mine=Array.isArray(sc.docAssets)?sc.docAssets:[]; if(dlock){docOverlay.docAssets=dd.docAssets;} else {const ids=new Set(mine.map(a=>a&&a.id)); docOverlay.docAssets=[...mine,...dd.docAssets.filter(a=>a&&!ids.has(a.id))];} }
+    }
+    return {...sc,products,addresses,companyLogo,boxes,fieldLists,...docOverlay,custom:{...deployedCustom,...personalCustom},_logoLocked:deployedLogo.lock};   // company-deployed defaults sit under personal choices
   },[settingsRaw,deployedCustom,deployedLogo,deployedExtra]);
   const setSettings=(v)=>setSettingsRaw(p=>scrubLegacyDefaults(typeof v==="function"?v(scrubLegacyDefaults(p)):v));
   const custom=cz(settings);
@@ -13454,6 +13463,50 @@ function CompanyDefaultsDeploy({companyUsers,companyFlags,setCompanyFlags,adminS
       {msg&&<span className={`text-xs ${msg.err?"text-rose-600":"text-emerald-700"}`}>{msg.err||msg.ok}</span>}
     </div>
     <p className="text-[11px] text-stone-400">Deploys <b>your</b> current Package Sizes (Settings → Package Sizes) and dropdown values (Settings → Reference Fields) — edit those, then deploy.</p>
+  </div>);
+}
+/* Company document template — deploys the admin's packing-slip text, commercial-invoice letterhead
+   + saved signatures (docAssets), default signature, and tax ID to the whole team. Stored as `_docs`
+   (+ `_docsLock`); merged member-side in the settings memo. This is the "CI/slip template for the
+   company" — set it up once under Settings → Commercial Invoice / Packing Slip / Other Documents,
+   then deploy here. */
+function CompanyDocsDeploy({companyUsers,companyFlags,setCompanyFlags,adminSettings}){
+  const users=(companyUsers||[]).filter(u=>u.status!=="disabled"&&u.status!=="deactivated");
+  const s=adminSettings||{};
+  const assets=(s.docAssets||[]);
+  const letterheads=assets.filter(a=>a&&a.type==="letterhead").length;
+  const sigs=assets.filter(a=>a&&a.type==="signature").length;
+  const [lock,setLock]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState(null);
+  const buildDocs=()=>({slipTitle:s.slipTitle||"",slipThanks:s.slipThanks||"",slipFooter:s.slipFooter||"",slipTemplate:s.slipTemplate||"",pickListTitle:s.pickListTitle||"",pickListNote:s.pickListNote||"",defaultSigId:s.defaultSigId||"",taxId:s.taxId||"",docAssets:assets});
+  const run=async(clear)=>{
+    if(!users.length){setMsg({err:"No team logins yet — create one above first."});return;}
+    setBusy(true);let ok=0,fail=0; const docs=buildDocs();
+    for(const u of users){
+      const cur={...((companyFlags||{})[u.id]||{})};
+      if(clear){delete cur._docs;delete cur._docsLock;} else {cur._docs=docs;cur._docsLock=lock;}
+      const r=await cloudCall({action:"companySetFlags",token:CLOUD.token,uid:u.id,flags:cur});
+      if(r&&r.ok){ok++;setCompanyFlags(m=>({...(m||{}),[u.id]:r.flags||cur}));}else fail++;
+    }
+    setBusy(false);
+    setMsg(fail?{err:`${ok} updated, ${fail} failed — try again.`}:{ok:clear?`Cleared for ${ok} login${ok!==1?"s":""}.`:`Deployed to ${ok} login${ok!==1?"s":""} — visible on their next load.`});
+  };
+  return (<div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
+    <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><FileText className="w-4 h-4 text-[#0086E0]"/>Document template (packing slip &amp; commercial invoice)</div>
+    <div className="text-xs text-stone-500">Deploys <b>your</b> packing-slip text, commercial-invoice letterhead &amp; signature, and Tax ID/EIN as the company default. Set them up under <b>Settings → Packing Slip / Commercial Invoice / Other Documents</b>, then deploy. Lock to make them the enforced company template members can't change.</div>
+    <div className="flex flex-wrap gap-1.5 text-[11px]">
+      <span className={`rounded-full px-2 py-0.5 border ${s.slipTitle||s.slipFooter?"bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]":"bg-stone-50 text-stone-400 border-stone-200"}`}>Packing slip {s.slipTitle||s.slipFooter?"✓":"—"}</span>
+      <span className={`rounded-full px-2 py-0.5 border ${letterheads?"bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]":"bg-stone-50 text-stone-400 border-stone-200"}`}>{letterheads} letterhead</span>
+      <span className={`rounded-full px-2 py-0.5 border ${sigs?"bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]":"bg-stone-50 text-stone-400 border-stone-200"}`}>{sigs} signature</span>
+      <span className={`rounded-full px-2 py-0.5 border ${s.taxId?"bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]":"bg-stone-50 text-stone-400 border-stone-200"}`}>Tax ID {s.taxId?"✓":"—"}</span>
+    </div>
+    <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={lock} onChange={e=>setLock(e.target.checked)} className="accent-[#0086E0]"/>Lock — members use this template and can't change it</label>
+    <div className="flex flex-wrap items-center gap-2">
+      <button onClick={()=>run(false)} disabled={busy} className="text-sm bg-[#0086E0] hover:bg-[#006db8] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<ShieldCheck className="w-4 h-4"/>}Deploy to team ({users.length})</button>
+      <button onClick={()=>run(true)} disabled={busy} className="text-sm bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40">Clear</button>
+      {msg&&<span className={`text-xs ${msg.err?"text-rose-600":"text-emerald-700"}`}>{msg.err||msg.ok}</span>}
+    </div>
   </div>);
 }
 /* Company header logo — deploys ONE logo to every team login (shows top-right in the header and on

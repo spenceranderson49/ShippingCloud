@@ -652,6 +652,12 @@ exports.handler = async (event) => {
         if (body.reorder != null) it.reorder = Math.max(0, Math.round(+body.reorder || 0));
         if (body.cost != null && body.cost !== "") it.cost = money2(body.cost);
         if (body.loc != null) it.loc = String(body.loc).slice(0, 60);
+        /* Kit / bill-of-materials: a list of component SKUs consumed when this item ships. Empty array
+           clears it (item becomes a normal stocked SKU again). */
+        if (body.kit != null) {
+          const k = Array.isArray(body.kit) ? body.kit.slice(0, 50).map((c) => ({ sku: String((c && c.sku) || "").trim().slice(0, 80), qty: Math.max(1, Math.round(+(c && c.qty) || 1)) })).filter((c) => c.sku) : [];
+          if (k.length) it.kit = k; else delete it.kit;
+        }
         const before = +it.onHand || 0; let counted = false;
         if (body.onHand != null && body.onHand !== "") { it.onHand = Math.max(0, Math.round(+body.onHand || 0)); counted = it.onHand !== before; }
         it.updatedAt = nowISO;
@@ -682,22 +688,59 @@ exports.handler = async (event) => {
         const lines = Array.isArray(body.lines) ? body.lines : [];
         const receiving = action === "invReceive";
         if (!lines.length) return J({ ok: true, items: [], skipped: true });
+        const ref = String(body.ref || "").slice(0, 60);
         const out = [];
+        /* Decrement a single stocked SKU (shipping) and log it. */
+        const shipOne = async (sku, qty, kitOf) => {
+          const cur = await readItem(sku);
+          if (!cur.ok) return { retry: true };
+          const prev = (cur.value && typeof cur.value === "object") ? cur.value : null;
+          if (!prev) return { skipped: true };   // untracked component/SKU → skip silently
+          const it = { ...prev }; const before = +it.onHand || 0;
+          it.onHand = Math.max(0, before - qty); it.updatedAt = nowISO;
+          const w = await writeItem(sku, it);
+          if (!w.ok) return { fail: true };
+          await addLog({ type: "ship", sku, name: it.name || "", qty: it.onHand - before, balance: it.onHand, ref, kitOf: kitOf || undefined });
+          return { it };
+        };
         for (const ln of lines.slice(0, 200)) {
           const sku = String(ln.sku || "").trim(); const qty = Math.round(+ln.qty || 0);
           if (!normSku(sku) || qty <= 0) continue;
           const cur = await readItem(sku);
           if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read " + sku + " — try again." });
           const prev = (cur.value && typeof cur.value === "object") ? cur.value : null;
-          if (!receiving && !prev) continue;   // shipping an untracked SKU → skip silently
+
+          if (!receiving) {
+            /* Kit/BOM: shipping a kit depletes its COMPONENTS, not the kit itself (kits aren't stocked). */
+            if (prev && Array.isArray(prev.kit) && prev.kit.length) {
+              for (const comp of prev.kit.slice(0, 50)) {
+                const cs = String(comp && comp.sku || "").trim(); const cq = Math.max(1, Math.round(+ (comp && comp.qty) || 1));
+                if (!normSku(cs)) continue;
+                const r = await shipOne(cs, qty * cq, sku);
+                if (r.retry) return J({ ok: false, retry: true, error: "Couldn't read " + cs + " — try again." });
+                if (r.fail) return J({ ok: false, error: "Save failed on " + cs + "." });
+                if (r.it) out.push(r.it);
+              }
+              continue;
+            }
+            if (!prev) continue;   // untracked, non-kit → skip
+            const r = await shipOne(sku, qty, null);
+            if (r.retry) return J({ ok: false, retry: true, error: "Couldn't read " + sku + " — try again." });
+            if (r.fail) return J({ ok: false, error: "Save failed on " + sku + "." });
+            if (r.it) out.push(r.it);
+            continue;
+          }
+
+          // receiving
           const it = prev ? { ...prev } : { sku, name: String(ln.name || "").slice(0, 120), onHand: 0, createdAt: nowISO };
           const before = +it.onHand || 0;
-          it.onHand = receiving ? before + qty : Math.max(0, before - qty);
-          if (receiving) { if (ln.cost != null && ln.cost !== "") it.cost = money2(ln.cost); if (ln.name && !it.name) it.name = String(ln.name).slice(0, 120); }
+          it.onHand = before + qty;
+          if (ln.cost != null && ln.cost !== "") it.cost = money2(ln.cost);
+          if (ln.name && !it.name) it.name = String(ln.name).slice(0, 120);
           it.updatedAt = nowISO;
           const w = await writeItem(sku, it);
           if (!w.ok) return J({ ok: false, error: "Save failed on " + sku + "." });
-          await addLog({ type: receiving ? "receipt" : "ship", sku, name: it.name || "", qty: it.onHand - before, balance: it.onHand, ref: String(body.ref || "").slice(0, 60) });
+          await addLog({ type: "receipt", sku, name: it.name || "", qty, balance: it.onHand, ref });
           out.push(it);
         }
         return J({ ok: true, items: out });

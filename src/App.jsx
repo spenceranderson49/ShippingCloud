@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v666";
+const BUILD_TAG="addr-v667";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6603,28 +6603,34 @@ function TrackingPage({num,brandId}){
    rate-limited server-side. The merchant reviews requests in their Returns tab. */
 function ReturnsPortal({brandId}){
   const [brand,setBrand]=useState(null);
-  const [f,setF]=useState({order:"",email:"",name:"",items:"",reason:"Wrong size / fit"});
+  const [f,setF]=useState({order:"",email:"",name:"",items:"",reason:"",resolution:""});
   const [busy,setBusy]=useState(false);
   const [done,setDone]=useState(false);
   const [err,setErr]=useState("");
   useEffect(()=>{ let dead=false; (async()=>{ try{ const r=await fetch("/.netlify/functions/db",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"pubBrand",b:brandId})}); const j=await r.json(); if(!dead&&j&&j.ok)setBrand(j.brand||null); }catch(e){} })(); return ()=>{dead=true;}; },[brandId]);
   const accent=(brand&&brand.color&&/^#?[0-9a-fA-F]{3,8}$/.test(brand.color))?(brand.color[0]==="#"?brand.color:"#"+brand.color):"#0086E0";
+  const policy=(brand&&brand.returnPolicy)||{};
+  const methods=policy.methods||{refund:true,exchange:true};
+  const resOpts=[["refund","Refund"],["credit","Store credit"],["exchange","Exchange"]].filter(([k])=>methods[k]!==false&&(k!=="credit"||methods.credit));
+  const ALL_REASONS=["Wrong size / fit","Changed my mind","Arrived damaged","Wrong item received","Defective / not working","Other"];
+  const REASONS=(Array.isArray(policy.reasons)&&policy.reasons.length)?policy.reasons:ALL_REASONS;
+  useEffect(()=>{ setF(f=>({...f,reason:f.reason||REASONS[0]||"",resolution:f.resolution||(resOpts[0]?resOpts[0][0]:"")})); /* eslint-disable-next-line */ },[brand]);
   const submit=async()=>{
     setErr("");
     if(!f.order.trim()||!/.+@.+\..+/.test(f.email)){setErr("Enter your order number and the email on the order.");return;}
     setBusy(true);
-    try{ const r=await fetch("/.netlify/functions/db",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"returnSubmit",b:brandId,order:f.order,email:f.email,name:f.name,items:f.items,reason:f.reason})}); const j=await r.json(); if(j&&j.ok)setDone(true); else setErr((j&&j.error)||"Couldn't submit — try again."); }
+    try{ const r=await fetch("/.netlify/functions/db",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"returnSubmit",b:brandId,order:f.order,email:f.email,name:f.name,items:f.items,reason:f.reason,resolution:f.resolution})}); const j=await r.json(); if(j&&j.ok)setDone(true); else setErr((j&&j.error)||"Couldn't submit — try again."); }
     catch(e){ setErr("Network error — try again."); }
     setBusy(false);
   };
-  const REASONS=["Wrong size / fit","Changed my mind","Arrived damaged","Wrong item received","Defective / not working","Other"];
   return (<div className="min-h-screen bg-stone-50 flex flex-col">
     <div style={{background:accent}} className="text-white"><div className="max-w-lg mx-auto px-5 py-5 flex items-center gap-3">{brand&&brand.logo?<img src={brand.logo} alt="" className="h-9 w-auto max-w-[180px] object-contain bg-white/95 rounded px-1.5 py-1"/>:<span className="text-xl font-extrabold tracking-tight">{brand&&brand.name?brand.name:"Returns"}</span>}{brand&&brand.name&&brand.logo?<span className="text-lg font-semibold">{brand.name}</span>:null}</div></div>
     <div className="flex-1 max-w-lg w-full mx-auto px-5 py-6">
       <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6">
         {done?(<div className="text-center py-6"><div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-3"><CheckCircle2 className="w-7 h-7"/></div><div className="text-lg font-semibold text-stone-900">Return request received</div><p className="text-sm text-stone-500 mt-1">{brand&&brand.name?brand.name:"The store"} will review it and email you next steps{f.email?" at "+f.email:""}.</p></div>):(<>
           <div className="text-lg font-semibold text-stone-900">Start a return</div>
-          <p className="text-sm text-stone-500 mt-0.5 mb-4">Tell us about your order and we'll get your return going.</p>
+          <p className="text-sm text-stone-500 mt-0.5 mb-1">Tell us about your order and we'll get your return going.</p>
+          {(policy.windowDays>0||policy.instructions)&&<div className="text-[11px] text-stone-500 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 mb-3">{policy.windowDays>0?<span>Returns accepted within <b>{policy.windowDays} days</b> of your order.{policy.restockPct>0?" A "+policy.restockPct+"% restocking fee may apply.":""}</span>:null}{policy.instructions?<div className={policy.windowDays>0?"mt-1":""}>{policy.instructions}</div>:null}</div>}
           {err&&<div className="text-xs rounded px-3 py-2 border bg-rose-50 text-rose-600 border-rose-200 mb-3">{err}</div>}
           <div className="space-y-3">
             <label className="block text-xs text-stone-600">Order number<input value={f.order} onChange={e=>setF({...f,order:e.target.value})} placeholder="#1024" className="mt-1 w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"/></label>
@@ -6632,6 +6638,7 @@ function ReturnsPortal({brandId}){
             <label className="block text-xs text-stone-600">Your name (optional)<input value={f.name} onChange={e=>setF({...f,name:e.target.value})} className="mt-1 w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"/></label>
             <label className="block text-xs text-stone-600">Items you're returning<textarea value={f.items} onChange={e=>setF({...f,items:e.target.value})} rows={2} placeholder="e.g. 1× Blue Hoodie (M)" className="mt-1 w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"/></label>
             <label className="block text-xs text-stone-600">Reason<select value={f.reason} onChange={e=>setF({...f,reason:e.target.value})} className="mt-1 w-full border border-stone-300 rounded-lg px-3 py-2 text-sm">{REASONS.map(r=><option key={r}>{r}</option>)}</select></label>
+            {resOpts.length>0&&<div><div className="text-xs text-stone-600 mb-1">What would you like?</div><div className="flex flex-wrap gap-2">{resOpts.map(([k,l])=><button key={k} type="button" onClick={()=>setF({...f,resolution:k})} className={`text-sm rounded-lg px-3 py-1.5 border ${f.resolution===k?"text-white border-transparent":"bg-white text-stone-600 border-stone-200"}`} style={f.resolution===k?{background:accent}:undefined}>{l}</button>)}</div></div>}
             <button onClick={submit} disabled={busy} style={{background:accent}} className="w-full text-white rounded-lg px-4 py-2.5 font-medium disabled:opacity-40 flex items-center justify-center gap-1.5">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:null}Submit return request</button>
           </div>
         </>)}
@@ -11583,7 +11590,7 @@ function Returns({returns,setReturns,orders,settings,logEmail}){
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium text-stone-900 flex items-center gap-2">Order {rq.order||"—"}<Badge tone={stTone2[rq.status]||"stone"}>{rq.status}</Badge></div>
               <div className="text-[11px] text-stone-400">{rq.name?rq.name+" · ":""}{rq.email}{rq.at?" · "+new Date(rq.at).toLocaleDateString():""}</div>
-              <div className="text-xs text-stone-600 mt-1">{rq.reason}{rq.items?" — "+rq.items:""}</div>
+              <div className="text-xs text-stone-600 mt-1">{rq.reason}{rq.resolution?" · wants "+rq.resolution:""}{rq.items?" — "+rq.items:""}</div>
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
               {rq.status==="new"&&<><button onClick={()=>fromRequest(rq)} className="text-xs bg-[#0086E0] text-white rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#006db8]">Approve &amp; create label</button><button onClick={()=>setReqStatus(rq.id,"denied")} className="text-xs bg-stone-100 text-stone-500 rounded-lg px-2.5 py-1.5 hover:bg-rose-50 hover:text-rose-600">Deny</button></>}
@@ -11904,7 +11911,7 @@ function BrandedTracking({settings,setSettings}){
   const [msg,setMsg]=useState(null);
   const [copied,setCopied]=useState(false);
   const [copied2,setCopied2]=useState(false);
-  const seed=()=>({name:settings.company||"",logo:settings.companyLogo||"",color:"#0086E0",enabled:true,returns:true,supportEmail:(settings.sender&&settings.sender.email)||"",supportPhone:(settings.sender&&settings.sender.phone)||"",site:""});
+  const seed=()=>({name:settings.company||"",logo:settings.companyLogo||"",color:"#0086E0",enabled:true,returns:true,supportEmail:(settings.sender&&settings.sender.email)||"",supportPhone:(settings.sender&&settings.sender.phone)||"",site:"",returnPolicy:{windowDays:30,reasons:[],autoApprove:false,restockPct:0,methods:{refund:true,credit:false,exchange:true},instructions:""}});
   useEffect(()=>{ let dead=false; (async()=>{
     if(!CLOUD.token){ setBrand(seed()); return; }
     const r=await cloudCall({action:"trackBrandGet",token:CLOUD.token});
@@ -11933,6 +11940,27 @@ function BrandedTracking({settings,setSettings}){
     {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
     <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={brand.enabled!==false} onChange={e=>upd("enabled",e.target.checked)} className="accent-[#0086E0]"/>Enable branded tracking</label>
     <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={brand.returns!==false} onChange={e=>upd("returns",e.target.checked)} className="accent-[#0086E0]"/>Enable self-service returns portal <span className="text-xs text-stone-400">(buyers can request a return; you review them in the Returns tab)</span></label>
+    {brand.returns!==false&&(()=>{ const rp=brand.returnPolicy||{}; const setRp=(k,v)=>upd("returnPolicy",{...rp,[k]:v}); const setMethod=(k,v)=>upd("returnPolicy",{...rp,methods:{...(rp.methods||{}),[k]:v}}); const REASON_OPTS=["Wrong size / fit","Changed my mind","Arrived damaged","Wrong item received","Defective / not working","Other"]; const chosen=Array.isArray(rp.reasons)?rp.reasons:[]; return (
+    <Panel title="Returns policy">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <Field label="Return window (days)"><Input type="number" value={rp.windowDays??30} onChange={e=>setRp("windowDays",e.target.value===""?0:+e.target.value)} placeholder="30 · 0 = no limit"/></Field>
+        <Field label="Restocking fee (%)"><Input type="number" value={rp.restockPct??0} onChange={e=>setRp("restockPct",e.target.value===""?0:+e.target.value)}/></Field>
+        <div className="flex items-end"><label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer pb-2"><input type="checkbox" checked={!!rp.autoApprove} onChange={e=>setRp("autoApprove",e.target.checked)} className="accent-[#0086E0]"/>Auto-approve requests</label></div>
+      </div>
+      <div className="mt-2">
+        <div className="text-xs text-stone-600 mb-1">Eligible reasons <span className="text-stone-400">(none checked = allow all)</span></div>
+        <div className="flex flex-wrap gap-1.5">{REASON_OPTS.map(r=>{ const on=chosen.includes(r); return <button key={r} type="button" onClick={()=>setRp("reasons",on?chosen.filter(x=>x!==r):[...chosen,r])} className={`text-xs rounded-full px-2.5 py-1 border ${on?"bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]":"bg-white text-stone-500 border-stone-200 hover:border-stone-300"}`}>{r}</button>; })}</div>
+      </div>
+      <div className="mt-2">
+        <div className="text-xs text-stone-600 mb-1">Resolutions offered to the buyer</div>
+        <div className="flex flex-wrap gap-3 text-sm text-stone-700">
+          <label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" checked={(rp.methods||{}).refund!==false} onChange={e=>setMethod("refund",e.target.checked)} className="accent-[#0086E0]"/>Refund</label>
+          <label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" checked={!!(rp.methods||{}).credit} onChange={e=>setMethod("credit",e.target.checked)} className="accent-[#0086E0]"/>Store credit</label>
+          <label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" checked={(rp.methods||{}).exchange!==false} onChange={e=>setMethod("exchange",e.target.checked)} className="accent-[#0086E0]"/>Exchange</label>
+        </div>
+      </div>
+      <Field label="Policy note shown to buyers (optional)"><textarea value={rp.instructions||""} onChange={e=>setRp("instructions",e.target.value)} rows={2} className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm mt-1" placeholder="e.g. Items must be unworn with tags attached."/></Field>
+    </Panel>);})()}
     <Panel title="Your branding">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Store / company name"><Input value={brand.name||""} onChange={e=>upd("name",e.target.value)}/></Field>

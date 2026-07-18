@@ -620,11 +620,14 @@ exports.handler = async (event) => {
       const brandRec = await getStore("pub:track:" + brandId);
       if (!brandRec.ok) return J({ ok: false, retry: true, error: "Please try again in a moment." });
       if (!(brandRec.value && typeof brandRec.value === "object")) return J({ ok: false, error: "This store hasn't set up returns." });
+      const policy = (brandRec.value.returnPolicy && typeof brandRec.value.returnPolicy === "object") ? brandRec.value.returnPolicy : {};
+      const resolution = ["refund", "credit", "exchange"].indexOf(String(body.resolution)) >= 0 ? String(body.resolution) : "";
       const key = "retreq:" + brandId;
       const cur = await getStore(key);
       if (!cur.ok) return J({ ok: false, retry: true, error: "Please try again in a moment." });
       const list = Array.isArray(cur.value) ? cur.value : [];
-      list.unshift({ id: "ret" + Date.now() + Math.floor(Math.random() * 1000), at: new Date().toISOString(), order, email: email.toLowerCase(), name, items: itemsTxt, reason, status: "new" });
+      const status = policy.autoApprove ? "approved" : "new";   // auto-approve when the merchant's policy allows
+      list.unshift({ id: "ret" + Date.now() + Math.floor(Math.random() * 1000), at: new Date().toISOString(), order, email: email.toLowerCase(), name, items: itemsTxt, reason, resolution, status });
       const w = await putStores({ [key]: list.slice(0, 500) });
       if (!w.ok) return J({ ok: false, error: "Couldn't submit — try again." });
       return J({ ok: true });
@@ -989,6 +992,17 @@ exports.handler = async (event) => {
         site: String(b.site || "").slice(0, 200),
         enabled: b.enabled !== false,
         returns: b.returns !== false,
+      };
+      /* Returns policy the public portal enforces: window, eligible reasons, auto-approve, restock
+         fee, and which resolutions are offered. Clamped/sanitized. */
+      const rp = (b.returnPolicy && typeof b.returnPolicy === "object") ? b.returnPolicy : {};
+      brand.returnPolicy = {
+        windowDays: Math.max(0, Math.min(3650, Math.round(+rp.windowDays || 0))),
+        reasons: Array.isArray(rp.reasons) ? rp.reasons.slice(0, 20).map((s) => String(s).slice(0, 60)).filter(Boolean) : [],
+        autoApprove: !!rp.autoApprove,
+        restockPct: Math.max(0, Math.min(100, +rp.restockPct || 0)),
+        methods: { refund: (rp.methods && rp.methods.refund) !== false, credit: !!(rp.methods && rp.methods.credit), exchange: (rp.methods && rp.methods.exchange) !== false },
+        instructions: String(rp.instructions || "").slice(0, 500),
       };
       try { if (JSON.stringify(brand).length > 320000) return J({ ok: false, error: "That logo is too large — use a smaller image (well under 300 KB)." }); } catch (e) {}
       const w = await putStores({ [key]: brand });

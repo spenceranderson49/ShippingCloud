@@ -518,6 +518,9 @@ exports.handler = async (event) => {
         if (!cThere) fix.clients = [...(cArr || []), newClient];
         await putStores(fix);
       }
+      /* Owner alert — this is the ONE login path you didn't initiate: someone signed themselves up.
+         (Admin-created and company-admin-approved logins deliberately send no email.) */
+      await notifyLoginCreated([newUser], "self-serve signup");
       return J({ ok: true, token: makeToken(newUser), user: { ...newUser, passHash: undefined }, fedexFiled: !!writes.fedexRequests });
     }
     // ── self-serve password reset ──
@@ -1019,7 +1022,9 @@ exports.handler = async (event) => {
       if (!Object.keys(toWrite).length) return J({ ok: false, rejectedOnly: true, rejected, error: "Nothing saved — " + rejected.join("; ") });
       const w = await putStores(toWrite);
       if (!w.ok) return J({ ok: false, error: "Save failed: " + ((w.err && w.err.text) || "").slice(0, 200) });
-      if (_newLogins.length) await notifyLoginCreated(_newLogins, "admin portal (" + maskEmail(auth.email || auth.uid) + ")");
+      /* No owner alert here: these logins are created BY the admin in the portal (or arrive via a
+         restore) — you already know about them, so an email is just noise. The owner alert now fires
+         only for self-serve signups (requestAccess), the one path you didn't initiate. */
       return J({ ok: true, saved: Object.keys(toWrite), rejected });
     }
 
@@ -1293,7 +1298,8 @@ exports.handler = async (event) => {
       const newUser = { id: "u" + Date.now() + Math.floor(Math.random() * 1000), name: req.name, email: req.email, company: req.company || "", role: String(body.role || "customer") === "admin" ? "admin" : "customer", clientId: body.clientId || null, status: "active", password: "", passHash: req.passHash, lastLogin: "—" };
       const w = await putStores({ users: [...users, newUser], signupRequests: remaining });
       if (!w.ok) return J({ ok: false, error: "Save failed." });
-      await notifyLoginCreated([newUser], "signup approval");
+      /* You clicked "approve", so no confirmation email — the self-serve signup already alerted you
+         when it first landed (see requestAccess). */
       return J({ ok: true, users: stripUsers([...users, newUser]), requests: stripUsers(remaining) });
     }
 

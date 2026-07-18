@@ -305,7 +305,18 @@ async function schedulePickup(c, body, tk) {
      account (Express confirmations are often a short per-location daily sequence like "3024"; the
      alphanumeric part is the `location` code — both together are the full reference). */
   try { console.log("FEDEX pickup output=" + JSON.stringify(o).slice(0, 500)); } catch (e) {}
-  return { ok: true, confirmationCode: o.pickupConfirmationCode || o.pickupConfirmationNumber || o.confirmationNumber || o.confirmationCode || null, location: o.location || null, message: o.message || null };
+  /* The Express station code comes back in `location` — but across accounts/versions it can be a
+     bare string ("JDYA") OR an object. Dig it out of every shape FedEx has been seen to use so the
+     4-letter code isn't lost to a nesting difference. (Sandbox often returns none — real production
+     Express pickups include it.) */
+  const digLoc = (v) => {
+    if (!v) return null;
+    if (typeof v === "string") return v.trim() || null;
+    if (typeof v === "object") return digLoc(v.locationId || v.code || v.value || v.stationId || v.id) ;
+    return null;
+  };
+  const location = digLoc(o.location) || digLoc(o.pickupLocation) || digLoc(o.readyPickupInfo && o.readyPickupInfo.location) || null;
+  return { ok: true, confirmationCode: o.pickupConfirmationCode || o.pickupConfirmationNumber || o.confirmationNumber || o.confirmationCode || null, location, message: o.message || null };
 }
 
 async function cancelPickup(c, body, tk) {

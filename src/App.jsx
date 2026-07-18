@@ -65,10 +65,10 @@ function FreightwireShipHub({logoH=44,sub=true,subText="Customer Portal",accent=
 /* Admin-HQ lockup: the ShippingHub wordmark, then "Admin Portal" set to the RIGHT and larger —
    reads as one line: "ShippingHub · Admin Portal". */
 const AdminPortalLockup=({logoH=44,...props})=>{
-  const portalSize=Math.round(logoH*0.6);
-  return (<span className="inline-flex items-center" style={{gap:Math.round(logoH*0.34)}}>
+  const portalSize=Math.round(logoH*0.48);
+  return (<span className="inline-flex items-center" style={{gap:Math.round(logoH*0.28)}}>
     <FreightwireShipHub logoH={logoH} {...props} sub={false}/>
-    <span style={{width:1,height:Math.round(logoH*0.82),background:"#d6d3ce"}} className="shrink-0"/>
+    <span style={{width:1,height:Math.round(logoH*0.72),background:"#d6d3ce"}} className="shrink-0"/>
     <span style={{fontFamily:"Inter,system-ui,sans-serif",fontWeight:700,fontSize:portalSize,letterSpacing:"0.03em",lineHeight:1,color:"#57534e",whiteSpace:"nowrap"}}>Admin Portal</span>
   </span>);
 };
@@ -135,7 +135,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v646";
+const BUILD_TAG="addr-v647";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -188,7 +188,7 @@ const APP_ORIGIN=(()=>{ try{ return (typeof window!=="undefined"&&window.locatio
    by scanning for the transparent gap before the wordmark) instead of the ShippingCloud cloud, plus
    the FreightwireShip tab title. Crop bounds verified against the shipped asset: mark = 78x78 at x5,y2. */
 if(typeof window!=="undefined"&&BRAND.fw){
-  try{ document.title=BRAND.admin?"ShippingHub Admin Portal":"ShippingHub — Freightwire"; }catch(e){}
+  try{ document.title=BRAND.admin?"Admin Portal":"ShippingHub — Freightwire"; }catch(e){}
   try{
     const setIcon=(href)=>{ try{
       document.querySelectorAll('link[rel*="icon"]').forEach(l=>l.parentNode&&l.parentNode.removeChild(l));

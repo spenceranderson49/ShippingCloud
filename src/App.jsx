@@ -62,9 +62,16 @@ function FreightwireShipHub({logoH=44,sub=true,subText="Customer Portal",accent=
     </span>
   </span>);
 }
-/* Admin-HQ lockup: "ADMIN PORTAL / by ShippingHub" wherever the admin brand shows its mark */
-/* Admin-HQ lockup: the ShippingHub wordmark with "Admin Portal" underneath → reads "ShippingHub Admin Portal". */
-const AdminPortalLockup=(props)=><FreightwireShipHub subText="Admin Portal" {...props} sub={true}/>;
+/* Admin-HQ lockup: the ShippingHub wordmark, then "Admin Portal" set to the RIGHT and larger —
+   reads as one line: "ShippingHub · Admin Portal". */
+const AdminPortalLockup=({logoH=44,...props})=>{
+  const portalSize=Math.round(logoH*0.6);
+  return (<span className="inline-flex items-center" style={{gap:Math.round(logoH*0.34)}}>
+    <FreightwireShipHub logoH={logoH} {...props} sub={false}/>
+    <span style={{width:1,height:Math.round(logoH*0.82),background:"#d6d3ce"}} className="shrink-0"/>
+    <span style={{fontFamily:"Inter,system-ui,sans-serif",fontWeight:700,fontSize:portalSize,letterSpacing:"0.03em",lineHeight:1,color:"#57534e",whiteSpace:"nowrap"}}>Admin Portal</span>
+  </span>);
+};
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:false};
 /* ── Per-login feature catalog ──────────────────────────────────────────────
    Every capability is a per-login switch, managed in Admin → Users. Customers
@@ -127,7 +134,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v643";
+const BUILD_TAG="addr-v644";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6297,6 +6304,7 @@ function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,set
     <CompanyLogoDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags}/>
     <CompanyDefaultsDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings}/>
     <CompanyDocsDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings}/>
+    <CompanyRulesDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags}/>
     <CompanyCustomDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings} client={client} allowedTabs={allowedTabs}/>
     <CompanyAddressDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings}/>
   </div>);
@@ -6732,6 +6740,12 @@ function AppInner(){
     const fl=(uid&&featureFlags&&featureFlags[uid])||(CLOUD.mode==="cloud"?(myFeatures||{}):{});
     return { boxes:(fl&&fl._boxes)||null, boxesLock:!!(fl&&fl._boxesLock), fieldLists:(fl&&fl._fieldLists)||null, fieldListsLock:!!(fl&&fl._fieldListsLock), docs:(fl&&fl._docs)||null, docsLock:!!(fl&&fl._docsLock) };
   },[currentUser,featureFlags,myFeatures]);
+  /* Company-admin-deployed Autopilot rules → keep the module cache the rule engine reads in sync. */
+  const deployedRules=useMemo(()=>{ const uid=currentUser&&currentUser.id;
+    const fl=(uid&&featureFlags&&featureFlags[uid])||(CLOUD.mode==="cloud"?(myFeatures||{}):{});
+    return { rules:Array.isArray(fl&&fl._rules)?fl._rules:[], lock:!!(fl&&fl._rulesLock) };
+  },[currentUser,featureFlags,myFeatures]);
+  useEffect(()=>{ COMPANY_RULES=deployedRules.rules; COMPANY_RULES_LOCK=deployedRules.lock; },[deployedRules]);
   const settings=useMemo(()=>{ const sc=scrubLegacyDefaults(settingsRaw);
     const depFlags=(function(){const uid=currentUser&&currentUser.id;return (uid&&featureFlags&&featureFlags[uid])||(CLOUD.mode==="cloud"?(myFeatures||{}):{});})();
     const depProds=(depFlags&&depFlags._products)||null;
@@ -12135,7 +12149,22 @@ function ruleApply(act,ov,changed){
     default: return act.type;
   }
 }
+/* Company-admin-deployed Autopilot rules run ALONGSIDE each login's own rules. The module cache is
+   kept in sync by AppInner from the login's deployed flags (_rules/_rulesLock). Injecting here — at
+   the single shared engine — makes deployed rules fire on every path (Ship live-match, Batch run,
+   Orders/modal previews) without threading a merged ruleset through each consumer. */
+let COMPANY_RULES=[];
+let COMPANY_RULES_LOCK=false;
+function withCompanyRules(rules){
+  if(!Array.isArray(COMPANY_RULES)||!COMPANY_RULES.length)return Array.isArray(rules)?rules:[];
+  if(COMPANY_RULES_LOCK)return COMPANY_RULES;                       // locked: only the company's rules run
+  const base=Array.isArray(rules)?rules:[];
+  const key=(r)=>String((r&&(r.id||r.name))||"");
+  const seen=new Set(COMPANY_RULES.map(key));
+  return [...COMPANY_RULES,...base.filter(r=>!seen.has(key(r)))];   // company rules first, then the login's own
+}
 function runRuleEngine(rules,orders,originZip){
+  rules=withCompanyRules(rules);
   const firedRuleIds=new Set();
   const results=orders.map(src=>{
     const ov=ruleOrderView(src,originZip);
@@ -13498,6 +13527,45 @@ function CompanyDefaultsDeploy({companyUsers,companyFlags,setCompanyFlags,adminS
       {msg&&<span className={`text-xs ${msg.err?"text-rose-600":"text-emerald-700"}`}>{msg.err||msg.ok}</span>}
     </div>
     <p className="text-[11px] text-stone-400">Deploys <b>your</b> current Package Sizes (Settings → Package Sizes) and dropdown values (Settings → Reference Fields) — edit those, then deploy.</p>
+  </div>);
+}
+/* Company Autopilot rules — deploys the admin's OWN Autopilot rules to the team; they run alongside
+   each member's personal rules (or replace them when Locked), via the module cache injected into
+   runRuleEngine. Stored as `_rules` / `_rulesLock`. */
+function CompanyRulesDeploy({companyUsers,companyFlags,setCompanyFlags}){
+  const [ruleset]=usePersist("ruleset",SEED_RULESET);
+  const users=(companyUsers||[]).filter(u=>u.status!=="disabled"&&u.status!=="deactivated");
+  const all=Array.isArray(ruleset)?ruleset:[];
+  const enabledCount=all.filter(r=>r&&r.enabled).length;
+  const [lock,setLock]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState(null);
+  const [mode,setMode]=useState("all");
+  const [picked,setPicked]=useState({});
+  const targets=mode==="all"?users:users.filter(u=>picked[u.id]);
+  const run=async(clear)=>{
+    if(!targets.length){setMsg({err:"Pick at least one login."});return;}
+    if(!clear&&!enabledCount){setMsg({err:"You have no enabled Autopilot rules to deploy — add some on the Autopilot tab first."});return;}
+    setBusy(true);let ok=0,fail=0;
+    for(const u of targets){
+      const cur={...((companyFlags||{})[u.id]||{})};
+      if(clear){delete cur._rules;delete cur._rulesLock;} else {cur._rules=all;cur._rulesLock=lock;}
+      const r=await cloudCall({action:"companySetFlags",token:CLOUD.token,uid:u.id,flags:cur});
+      if(r&&r.ok){ok++;setCompanyFlags(m=>({...(m||{}),[u.id]:r.flags||cur}));}else fail++;
+    }
+    setBusy(false);
+    setMsg(fail?{err:`${ok} updated, ${fail} failed — try again.`}:{ok:clear?`Cleared for ${ok} login${ok!==1?"s":""}.`:`Deployed ${enabledCount} rule${enabledCount!==1?"s":""} to ${ok} login${ok!==1?"s":""} — active on their next load.`});
+  };
+  return (<div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
+    <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><Zap className="w-4 h-4 text-violet-600"/>Autopilot rules</div>
+    <div className="text-xs text-stone-500">Push <b>your</b> Autopilot rules (Autopilot tab) to the team — they run on everyone's orders alongside each person's own rules. Lock to run <b>only</b> the company rules (members can't override). You have <b>{enabledCount}</b> enabled rule{enabledCount!==1?"s":""}.</div>
+    <DeployTargets users={users} mode={mode} setMode={setMode} picked={picked} setPicked={setPicked}/>
+    <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={lock} onChange={e=>setLock(e.target.checked)} className="accent-[#0086E0]"/>Lock — run only these rules company-wide (ignore members' personal rules)</label>
+    <div className="flex flex-wrap items-center gap-2">
+      <button onClick={()=>run(false)} disabled={busy} className="text-sm bg-[#0086E0] hover:bg-[#006db8] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<ShieldCheck className="w-4 h-4"/>}Deploy to {mode==="all"?"team":targets.length+" selected"} ({targets.length})</button>
+      <button onClick={()=>run(true)} disabled={busy} className="text-sm bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40">Clear</button>
+      {msg&&<span className={`text-xs ${msg.err?"text-rose-600":"text-emerald-700"}`}>{msg.err||msg.ok}</span>}
+    </div>
   </div>);
 }
 /* Shared "who gets it" picker for every company deploy panel — Everyone, or a checklist subset

@@ -816,7 +816,7 @@ exports.handler = async (event) => {
            admin pushes to their team (customizations, product catalog, shared address book). Those
            must pass through as-is; every other key is coerced to a strict boolean. Unknown underscore
            keys are dropped so a crafted request can't smuggle in platform-only flags (e.g. _secPolicy). */
-        const DEPLOY_KEYS = { _custom: 1, _products: 1, _addresses: 1, _companyLogo: 1, _companyLogoLock: 1, _boxes: 1, _boxesLock: 1, _fieldLists: 1, _fieldListsLock: 1, _docs: 1, _docsLock: 1, _rules: 1, _rulesLock: 1 };
+        const DEPLOY_KEYS = { _custom: 1, _products: 1, _addresses: 1, _companyLogo: 1, _companyLogoLock: 1, _boxes: 1, _boxesLock: 1, _fieldLists: 1, _fieldListsLock: 1, _docs: 1, _docsLock: 1, _rules: 1, _rulesLock: 1, _rateMarkup: 1 };
         const flags = {}; let n = 0;
         for (const k of Object.keys(raw)) {
           if (n >= 64) break;

@@ -93,6 +93,7 @@ const FEATURE_CATALOG=[
   {id:"batch",label:"Batch",desc:"Rate & print in bulk",default:true},
   {id:"invoices",label:"Invoice Audit",desc:"Carrier invoice auditing",default:false},   /* off unless the admin grants it per login */
   {id:"pickupCosts",label:"Pickup fee display",desc:"Show the on-call pickup fee on the Pickups tab. OFF by default — turn on per customer once their pickup pricing is set",default:false},
+  {id:"companyMarkup",label:"Company rate markup",desc:"Let THIS company admin add their own margin on top of the rates their team sees (Company Admin → Rate Markup). OFF by default — turn it on for a reseller who marks shipping up to their own departments/customers",default:false},
   {id:"rules",label:"Autopilot",desc:"Autopilot mode — automation rules",default:true},
   {id:"scan",label:"Scan",desc:"Barcode scan station",default:true},
   {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:true},
@@ -134,7 +135,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v645";
+const BUILD_TAG="addr-v646";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2592,7 +2593,16 @@ function list2025Lookup(key,weight,zone){
 }
 /* Sell price for one quote. ctx: {rules, client, prof?, fromZip, toZip, weight}. Falls back to the
    customer's legacy flat markup whenever no rule answers — nothing changes until a rule is set. */
+/* Wrapper: compute the platform sell price, then stack the company admin's resale markup (if this
+   login has one deployed). Internal recursion passes _noSurAdj:true and _noCoMarkup so the markup is
+   never applied mid-calculation or twice — only once, on the final total the member actually pays. */
 function rateSellFor(cost,label,ctx){
+  const out=rateSellForBase(cost,label,ctx);
+  const c=ctx||{};
+  if(c._noSurAdj||c._noCoMarkup)return out;
+  return applyCompanyMarkup(out);
+}
+function rateSellForBase(cost,label,ctx){
   const c=ctx||{};
   /* LIVE quotes split BASE from FEES (the spec): the service rule — % / Fixed / Flat / List−% —
      and its Min $ price the BASE freight ONLY. Every itemized fee line (fuel, residential, DAS,
@@ -6224,7 +6234,7 @@ function CompanyAdminRequestButton({currentUser}){
   </div>);
 }
 
-function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,setCompanyFlags,settings,client=null,allowedTabs=null}){
+function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,setCompanyFlags,settings,client=null,allowedTabs=null,markupEntitled=false}){
   const [f,setF]=useState({name:"",email:"",password:""});
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState(null);
@@ -6305,6 +6315,7 @@ function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,set
     <CompanyDefaultsDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings}/>
     <CompanyDocsDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings}/>
     <CompanyRulesDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags}/>
+    {markupEntitled&&<CompanyMarkupDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags}/>}
     <CompanyCustomDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings} client={client} allowedTabs={allowedTabs}/>
     <CompanyAddressDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings}/>
   </div>);
@@ -6746,6 +6757,13 @@ function AppInner(){
     return { rules:Array.isArray(fl&&fl._rules)?fl._rules:[], lock:!!(fl&&fl._rulesLock) };
   },[currentUser,featureFlags,myFeatures]);
   useEffect(()=>{ COMPANY_RULES=deployedRules.rules; COMPANY_RULES_LOCK=deployedRules.lock; },[deployedRules]);
+  /* Company-admin-deployed resale markup → mirror into the module cache rateSellFor() reads. */
+  const deployedMarkup=useMemo(()=>{ const uid=currentUser&&currentUser.id;
+    const fl=(uid&&featureFlags&&featureFlags[uid])||(CLOUD.mode==="cloud"?(myFeatures||{}):{});
+    const m=fl&&fl._rateMarkup;
+    return (m&&typeof m==="object"&&((+m.pct||0)>0||(+m.min||0)>0))?{pct:+m.pct||0,min:+m.min||0}:null;
+  },[currentUser,featureFlags,myFeatures]);
+  useEffect(()=>{ COMPANY_MARKUP=deployedMarkup; },[deployedMarkup]);
   const settings=useMemo(()=>{ const sc=scrubLegacyDefaults(settingsRaw);
     const depFlags=(function(){const uid=currentUser&&currentUser.id;return (uid&&featureFlags&&featureFlags[uid])||(CLOUD.mode==="cloud"?(myFeatures||{}):{});})();
     const depProds=(depFlags&&depFlags._products)||null;
@@ -7261,7 +7279,7 @@ function AppInner(){
           {tab==="invoices"&&<Invoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>}
           {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings} client={client} onShipped={onShipped}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
-          {tab==="companyadmin"&&isCompanyAdmin&&<CompanyAdmin currentUser={currentUser} companyUsers={companyUsers} setCompanyUsers={setCompanyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} settings={settings} client={client} allowedTabs={featTabKeys}/>}
+          {tab==="companyadmin"&&isCompanyAdmin&&<CompanyAdmin currentUser={currentUser} companyUsers={companyUsers} setCompanyUsers={setCompanyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} settings={settings} client={client} allowedTabs={featTabKeys} markupEntitled={featureOn("companyMarkup",currentUser,myFlags)}/>}
           {(tab==="admin"||tab.startsWith("admin:"))&&isAdmin&&<AdminPortal activeSection={tab.startsWith("admin:")?tab.slice(6):null} clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} publicBrand={publicBrand} setPublicBrand={setPublicBrand} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
           {tab==="settings"&&<Settings showMoney={showMoney} secPolicy={(myFlags&&myFlags._secPolicy)||{}} isAdmin={isAdmin} uid={currentUser&&currentUser.id} currentUser={currentUser} setCurrentUser={setCurrentUser} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)} allowedTabs={featTabKeys} fxLocOn={featureOn("fedexLocations",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
           </TabBoundary>
@@ -12163,6 +12181,22 @@ function withCompanyRules(rules){
   const seen=new Set(COMPANY_RULES.map(key));
   return [...COMPANY_RULES,...base.filter(r=>!seen.has(key(r)))];   // company rules first, then the login's own
 }
+/* Company-admin resale markup — a reseller company admin can add their OWN margin on top of the
+   sell price their team already sees. Gated: the platform admin must first enable the "companyMarkup"
+   feature for that admin; the admin then deploys a {pct,min} to their team (stored per-login as
+   _rateMarkup). AppInner mirrors the current login's deployed value into this cache; rateSellFor()
+   applies it as the FINAL step so every quote surface (Ship, Batch, Orders, QuickQuote, Autopilot)
+   inherits it once. Null / zero → no-op, so nobody without a deployed markup is affected. */
+let COMPANY_MARKUP=null;   // { pct, min } deployed to this login, or null
+function applyCompanyMarkup(sell){
+  const m=COMPANY_MARKUP;
+  if(!m||sell==null||isNaN(+sell))return sell;
+  const pct=+m.pct||0,min=+m.min||0;
+  if(pct<=0&&min<=0)return sell;
+  let out=+sell*(1+pct/100);
+  if(min>0&&out<+sell+min)out=+sell+min;
+  return Math.round(out*100)/100;
+}
 function runRuleEngine(rules,orders,originZip){
   rules=withCompanyRules(rules);
   const firedRuleIds=new Set();
@@ -13564,6 +13598,49 @@ function CompanyRulesDeploy({companyUsers,companyFlags,setCompanyFlags}){
     <div className="flex flex-wrap items-center gap-2">
       <button onClick={()=>run(false)} disabled={busy} className="text-sm bg-[#0086E0] hover:bg-[#006db8] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<ShieldCheck className="w-4 h-4"/>}Deploy to {mode==="all"?"team":targets.length+" selected"} ({targets.length})</button>
       <button onClick={()=>run(true)} disabled={busy} className="text-sm bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40">Clear</button>
+      {msg&&<span className={`text-xs ${msg.err?"text-rose-600":"text-emerald-700"}`}>{msg.err||msg.ok}</span>}
+    </div>
+  </div>);
+}
+/* Company resale markup — a reseller company admin adds their own margin on top of the rates their
+   team sees. Only rendered when the platform admin has enabled the "companyMarkup" entitlement for
+   this admin, so it's OFF until explicitly turned on. Deploys a {pct,min} per login as _rateMarkup;
+   applied member-side by rateSellFor() via the COMPANY_MARKUP module cache. */
+function CompanyMarkupDeploy({companyUsers,companyFlags,setCompanyFlags}){
+  const users=(companyUsers||[]).filter(u=>u.status!=="disabled"&&u.status!=="deactivated");
+  const [pct,setPct]=useState("");
+  const [min,setMin]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState(null);
+  const [mode,setMode]=useState("all");
+  const [picked,setPicked]=useState({});
+  const targets=mode==="all"?users:users.filter(u=>picked[u.id]);
+  const pctN=pct===""?0:+pct,minN=min===""?0:+min;
+  const run=async(clear)=>{
+    if(!targets.length){setMsg({err:"Pick at least one login."});return;}
+    if(!clear&&pctN<=0&&minN<=0){setMsg({err:"Enter a markup % (and/or a minimum $) to deploy."});return;}
+    if(!clear&&(pctN<0||minN<0)){setMsg({err:"Markup can't be negative."});return;}
+    setBusy(true);let ok=0,fail=0;
+    for(const u of targets){
+      const cur={...((companyFlags||{})[u.id]||{})};
+      if(clear)delete cur._rateMarkup; else cur._rateMarkup={pct:pctN,min:minN};
+      const r=await cloudCall({action:"companySetFlags",token:CLOUD.token,uid:u.id,flags:cur});
+      if(r&&r.ok){ok++;setCompanyFlags(m=>({...(m||{}),[u.id]:r.flags||cur}));}else fail++;
+    }
+    setBusy(false);
+    setMsg(fail?{err:`${ok} updated, ${fail} failed — try again.`}:{ok:clear?`Markup removed for ${ok} login${ok!==1?"s":""}.`:`Applied ${pctN}%${minN>0?` (min $${minN})`:""} to ${ok} login${ok!==1?"s":""} — live on their next quote.`});
+  };
+  return (<div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
+    <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><DollarSign className="w-4 h-4 text-emerald-600"/>Rate markup</div>
+    <div className="text-xs text-stone-500">Add <b>your own margin</b> on top of the rates your team sees at ship time. Every quote — Ship, Batch, Orders, Quick Quote — shows the marked-up price. Leave it off for anyone you don't deploy to.</div>
+    <div className="flex flex-wrap items-end gap-3">
+      <label className="text-xs text-stone-600">Markup %<br/><input type="number" min="0" step="0.5" value={pct} onChange={e=>setPct(e.target.value)} placeholder="e.g. 15" className="mt-1 w-24 border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm"/></label>
+      <label className="text-xs text-stone-600">Min $ margin <span className="text-stone-400">(optional)</span><br/><input type="number" min="0" step="0.25" value={min} onChange={e=>setMin(e.target.value)} placeholder="e.g. 2.00" className="mt-1 w-28 border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm"/></label>
+    </div>
+    <DeployTargets users={users} mode={mode} setMode={setMode} picked={picked} setPicked={setPicked}/>
+    <div className="flex flex-wrap items-center gap-2">
+      <button onClick={()=>run(false)} disabled={busy} className="text-sm bg-[#0086E0] hover:bg-[#006db8] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<ShieldCheck className="w-4 h-4"/>}Apply to {mode==="all"?"team":targets.length+" selected"} ({targets.length})</button>
+      <button onClick={()=>run(true)} disabled={busy} className="text-sm bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40">Remove markup</button>
       {msg&&<span className={`text-xs ${msg.err?"text-rose-600":"text-emerald-700"}`}>{msg.err||msg.ok}</span>}
     </div>
   </div>);

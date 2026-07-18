@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v665";
+const BUILD_TAG="addr-v666";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7295,6 +7295,17 @@ function AppInner(){
      the Customize tab lists so nobody can see or deploy prefs for features the platform admin
      hasn't switched on for them (admins get null = unfiltered). */
   const featTabKeys=useMemo(()=>isAdmin?null:new Set(ALL_TABS.filter(x=>x[0]!=="admin"&&(x[0]==="ship"||featureOn(x[0],currentUser,myFlags))).map(x=>x[0])),[isAdmin,currentUser,myFlags]);
+  /* Enforce feature toggles at the CONTENT level, not just the sidebar: if a non-admin lands on a
+     tab whose feature the admin has switched OFF (via a saved tab, keyboard shortcut, or nav event),
+     bounce them to Ship. Without this, "off" only hid the nav button — the page could still be
+     reached. Ship is always allowed; admin tabs and the company-admin tab are handled separately. */
+  useEffect(()=>{
+    if(isAdmin||!featTabKeys)return;
+    const t=String(tab||"");
+    if(t==="ship"||t.startsWith("admin"))return;
+    if(t==="companyadmin"){ if(!isCompanyAdmin)setTab("ship"); return; }
+    if(!featTabKeys.has(t)) setTab("ship");
+  },[tab,featTabKeys,isAdmin,isCompanyAdmin]);
 
   /* ALL hooks run before any early return — a hook below a conditional return crashes React
      ("Rendered fewer hooks than expected") the moment currentUser flips across renders, which

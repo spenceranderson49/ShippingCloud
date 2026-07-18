@@ -126,7 +126,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v635";
+const BUILD_TAG="addr-v636";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -5613,29 +5613,40 @@ function cloudQueue(key,val){
 }
 async function cloudFlush(){
   CLOUD.timer=null;
+  /* SERIALIZE: never let two flushes run at once. A cold function can take several seconds; if a
+     second edit armed a new flush while the first was still in flight, the two putMany upserts
+     could commit OUT OF ORDER (last-write-wins on the server), leaving the OLDER value — and the
+     next poll would then propagate it and permanently lose the newer edit. Wait for the in-flight
+     flush, then flush whatever's queued. */
+  if(CLOUD.flushing){ if(!CLOUD.timer)CLOUD.timer=setTimeout(cloudFlush,300); return; }
   const stores=CLOUD.queue; if(!Object.keys(stores).length)return;
   CLOUD.queue={};
+  CLOUD.flushing=true;
   const keys=Object.keys(stores);
-  const res=await cloudCall({action:"putMany",token:CLOUD.token,stores},30000);   // saves get 30s (admin payloads are big + cold functions) before a false "can't save"
-  if(res&&res.ok){
-    CLOUD.offline=false;
-    try{ window.dispatchEvent(new CustomEvent("sc-saved",{detail:{keys}})); }catch(e){}
-    return;
-  }
-  if(res&&res.authFailed){ lsDel("cloud.token"); window.location.reload(); return; }
-  if(res&&res.rejectedOnly){
-    /* Every key was refused by server policy (permissions / wipe-guard) — a retry can NEVER
-       succeed, so drop the batch. SILENTLY: these are writes this login was never allowed to
-       make (e.g. a customer session echoing the shared rateRules slice) — a red "couldn't save"
-       toast for them is pure noise. Real user saves are admin-scoped and never land here. */
-    try{ console.warn("cloud: dropped policy-rejected write:",keys.join(", ")); }catch(e){}
-    return;
-  }
-  CLOUD.offline=true;
-  CLOUD.queue={...stores,...CLOUD.queue};
-  for(const k in stores) delete CLOUD.baseline[k];
-  try{ window.dispatchEvent(new CustomEvent("sc-save-failed",{detail:{keys,error:(res&&res.error)||"offline"}})); }catch(e){}
-  if(!CLOUD.timer)CLOUD.timer=setTimeout(cloudFlush,10000);
+  try{
+    const res=await cloudCall({action:"putMany",token:CLOUD.token,stores},30000);   // saves get 30s (admin payloads are big + cold functions) before a false "can't save"
+    if(res&&res.ok){
+      CLOUD.offline=false;
+      try{ window.dispatchEvent(new CustomEvent("sc-saved",{detail:{keys}})); }catch(e){}
+      return;
+    }
+    if(res&&res.authFailed){ lsDel("cloud.token"); window.location.reload(); return; }
+    if(res&&res.rejectedOnly){
+      /* Every key was refused by server policy (permissions / wipe-guard) — a retry can NEVER
+         succeed, so drop the batch. SILENTLY: these are writes this login was never allowed to
+         make (e.g. a customer session echoing the shared rateRules slice) — a red "couldn't save"
+         toast for them is pure noise. Real user saves are admin-scoped and never land here.
+         (Transient data-safety refusals return ok:false WITHOUT rejectedOnly, so they take the
+         retry path below instead of being dropped.) */
+      try{ console.warn("cloud: dropped policy-rejected write:",keys.join(", ")); }catch(e){}
+      return;
+    }
+    CLOUD.offline=true;
+    CLOUD.queue={...stores,...CLOUD.queue};
+    for(const k in stores) delete CLOUD.baseline[k];
+    try{ window.dispatchEvent(new CustomEvent("sc-save-failed",{detail:{keys,error:(res&&res.error)||"offline"}})); }catch(e){}
+    if(!CLOUD.timer)CLOUD.timer=setTimeout(cloudFlush,10000);
+  } finally { CLOUD.flushing=false; }
 }
 /* Closing/refreshing the tab inside the ~800ms flush debounce must not lose a just-saved edit:
    sendBeacon delivers the queued putMany even as the page unloads (fire-and-forget by design). */

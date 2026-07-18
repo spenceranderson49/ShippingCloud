@@ -787,7 +787,7 @@ exports.handler = async (event) => {
            admin pushes to their team (customizations, product catalog, shared address book). Those
            must pass through as-is; every other key is coerced to a strict boolean. Unknown underscore
            keys are dropped so a crafted request can't smuggle in platform-only flags (e.g. _secPolicy). */
-        const DEPLOY_KEYS = { _custom: 1, _products: 1, _addresses: 1 };
+        const DEPLOY_KEYS = { _custom: 1, _products: 1, _addresses: 1, _companyLogo: 1, _companyLogoLock: 1, _boxes: 1, _boxesLock: 1, _fieldLists: 1, _fieldListsLock: 1 };
         const flags = {}; let n = 0;
         for (const k of Object.keys(raw)) {
           if (n >= 64) break;
@@ -796,11 +796,20 @@ exports.handler = async (event) => {
           flags[k] = raw[k] === true; n++;
         }
         const cur = await getStore("featureFlags");
-        const map = (cur.ok && cur.value && typeof cur.value === "object") ? cur.value : {};
-        map[uid] = flags;
+        /* DATA-SAFETY: this REPLACES the whole featureFlags map with `map`. On a read failure `map`
+           would be {} and we'd erase every login's flags/logos/deploys platform-wide (same class as
+           the putMany wipe). Refuse + retry instead. */
+        if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read current settings to save safely — will retry automatically." });
+        const map = (cur.value && typeof cur.value === "object" && !Array.isArray(cur.value)) ? cur.value : {};
+        /* Preserve platform-managed underscore keys the company-admin client never sends (e.g.
+           _logoB64 set in All Logins, _secPolicy) so toggling one company flag can't drop them.
+           Company-admin-managed DEPLOY_KEYS are authoritative: absent = intentionally cleared. */
+        const prev = (map[uid] && typeof map[uid] === "object" && !Array.isArray(map[uid])) ? map[uid] : {};
+        const preserved = {}; for (const k of Object.keys(prev)) { if (k.charAt(0) === "_" && !DEPLOY_KEYS[k] && !(k in flags)) preserved[k] = prev[k]; }
+        map[uid] = { ...preserved, ...flags };
         const w = await putStores({ featureFlags: map });
-        if (!w.ok) return J({ ok: false, error: "Could not save — try again." });
-        return J({ ok: true, uid, flags });
+        if (!w.ok) return J({ ok: false, retry: true, error: "Could not save — will retry." });
+        return J({ ok: true, uid, flags: map[uid] });
       }
 
       if (action === "companySetActive") {
@@ -950,7 +959,11 @@ exports.handler = async (event) => {
          them. A write that would EMPTY a non-empty store is refused; a big shrink (≥25% gone,
          store had ≥8 rows) snapshots the current value first so it stays restorable. ── */
       for (const key of Object.keys(toWrite)) {
-        if (!/^u\/[^/]+\/(orders|shipments)$/.test(key)) continue;
+        /* F14+: extended beyond orders/shipments to the other per-customer array stores — invoices &
+           ledger are FINANCIAL records, the rest are operational. All are whole-array last-write-wins
+           from the browser, so a stale tab could silently truncate them and (not being CRITICAL) they
+           had no snapshot to recover from. Same rule: refuse an outright wipe, snapshot a big shrink. */
+        if (!/^u\/[^/]+\/(orders|shipments|invoices|ledger|drafts|addresses|accounts|returns|manifests|batches)$/.test(key)) continue;
         const curP = await getStore(key);
         const curArr = (curP.ok && Array.isArray(curP.value)) ? curP.value : null;
         if (!curArr || !curArr.length) continue;
@@ -990,7 +1003,8 @@ exports.handler = async (event) => {
       const clientId = mode === "admin" ? "" : String(body.clientId || "");
       if (mode !== "admin" && !clientId) return J({ ok: false, error: "Pick the customer this key belongs to." });
       const cur = await getStore("apiKeys");
-      const keys = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+      if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read current keys to save safely — will retry." });   // else [] would drop every existing key
+      const keys = Array.isArray(cur.value) ? cur.value : [];
       if (keys.filter((k) => !k.revoked).length >= 500) return J({ ok: false, error: "Key limit reached." });
       const raw = "sck_" + mode + "_" + crypto.randomBytes(24).toString("hex");
       const row = { id: "k" + Date.now(), mode, prefix: raw.slice(0, 14) + "…", label: String(body.label || "").slice(0, 60), clientId, hash: crypto.createHash("sha256").update(raw).digest("hex"), createdAt: new Date().toISOString() };
@@ -1001,7 +1015,8 @@ exports.handler = async (event) => {
     if (action === "apiKeyRevoke") {
       if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
       const cur = await getStore("apiKeys");
-      const keys = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+      if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read current keys to save safely — will retry." });   // else [] would erase every key
+      const keys = Array.isArray(cur.value) ? cur.value : [];
       const w = await putStores({ apiKeys: keys.map((k) => k.id === String(body.id) ? { ...k, revoked: true } : k) });
       return J(w.ok ? { ok: true } : { ok: false, error: "Save failed." });
     }
@@ -1014,8 +1029,12 @@ exports.handler = async (event) => {
       const cid = String(body.clientId || "");
       if (!cid) return J({ ok: false, error: "No customer id." });
       const [cRes, uRes, tRes] = await Promise.all([getStore("clients"), getStore("users"), getStore("deletedClients")]);
-      const clients = (cRes.ok && Array.isArray(cRes.value)) ? cRes.value : [];
-      const users = (uRes.ok && Array.isArray(uRes.value)) ? uRes.value : [];
+      /* DATA-SAFETY: both branches below write the whole `users` array. On a users/clients read
+         failure those would be [] and we'd write an empty users store — wiping every login/password.
+         Refuse + retry. */
+      if (!cRes.ok || !uRes.ok) return J({ ok: false, retry: true, error: "Couldn't read current data to delete safely — will retry." });
+      const clients = Array.isArray(cRes.value) ? cRes.value : [];
+      const users = Array.isArray(uRes.value) ? uRes.value : [];
       const tomb = (tRes.ok && Array.isArray(tRes.value)) ? tRes.value : [];
       if (!clients.some((c) => c && c.id === cid)) {
         // already gone from clients — still make sure it's tombstoned + logins unlinked
@@ -1023,7 +1042,7 @@ exports.handler = async (event) => {
         await putStores({ users: users.map((u) => u && u.clientId === cid ? { ...u, clientId: null } : u), deletedClients: nt });
         return J({ ok: true, removed: cid, already: true });
       }
-      try { const ts = new Date().toISOString().replace(/[:.]/g, "-"); await putStores({ ["bak:clients:" + ts]: clients }); } catch (e) {}   // snapshot before an intentional delete
+      try { const ts = new Date().toISOString().replace(/[:.]/g, "-"); await putStores({ ["bak:clients:" + ts]: clients, ["bak:users:" + ts]: users }); } catch (e) {}   // snapshot BOTH before an intentional delete (users are unlinked here too)
       const newClients = clients.filter((c) => c && c.id !== cid);
       const newUsers = users.map((u) => u && u.clientId === cid ? { ...u, clientId: null } : u);
       const newTomb = tomb.includes(cid) ? tomb : [...tomb, cid].slice(-1000);
@@ -1196,8 +1215,13 @@ exports.handler = async (event) => {
       if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
       const email = String(body.email || "").trim().toLowerCase();
       const [curU, curR] = await Promise.all([getStore("users"), getStore("signupRequests")]);
-      const users = (curU.ok && Array.isArray(curU.value)) ? curU.value : [];
-      const reqs = (curR.ok && Array.isArray(curR.value)) ? curR.value : [];
+      /* DATA-SAFETY: approveSignup writes users:[...users,newUser]. If the users read failed, `users`
+         would be [] and it would write ONLY the new login — wiping every existing login and password
+         hash. Refuse + retry on any read we depend on. (denySignup only touches signupRequests.) */
+      if (!curR.ok) return J({ ok: false, retry: true, error: "Couldn't read the request list — will retry." });
+      if (action === "approveSignup" && !curU.ok) return J({ ok: false, retry: true, error: "Couldn't read current logins to save safely — will retry." });
+      const users = Array.isArray(curU.value) ? curU.value : [];
+      const reqs = Array.isArray(curR.value) ? curR.value : [];
       const req = reqs.find((r) => r && String(r.email || "").toLowerCase() === email);
       if (!req) return J({ ok: false, error: "Request not found (it may have been handled already)." });
       const remaining = reqs.filter((r) => r !== req);

@@ -136,7 +136,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v648";
+const BUILD_TAG="addr-v649";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6522,7 +6522,78 @@ function DialogHost(){
     </div>
   </div>);
 }
+/* ════════ PUBLIC BRANDED TRACKING PAGE ════════
+   Rendered standalone (no auth) when the URL carries ?track=<number>[&b=<brandId>]. Shows the
+   shipper's logo/name/color when a brand is published, else the platform brand, plus a live FedEx
+   status + scan timeline. Safe to share with a buyer. */
+function TrackingPage({num,brandId}){
+  const [d,setD]=useState(null);
+  const [err,setErr]=useState("");
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{ let dead=false; (async()=>{
+    setLoading(true); setErr("");
+    try{
+      const r=await fetch("/.netlify/functions/track",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({n:num,b:brandId})});
+      const j=await r.json();
+      if(dead)return;
+      if(j&&j.ok){ setD(j); } else { setD(j&&j.brand?{brand:j.brand}:null); setErr((j&&j.error)||"We couldn't find that tracking number."); }
+    }catch(e){ if(!dead){ setErr("Network error — please try again."); } }
+    if(!dead)setLoading(false);
+  })(); return ()=>{dead=true;}; },[num,brandId]);
+  const brand=(d&&d.brand)||null;
+  const accent=(brand&&brand.color&&/^#?[0-9a-fA-F]{3,8}$/.test(brand.color))?(brand.color[0]==="#"?brand.color:"#"+brand.color):"#0086E0";
+  const delivered=d&&/deliver/i.test(d.status||"")&&!/out for/i.test(d.status||"");
+  const fmtDate=(s)=>{ try{ return new Date(s).toLocaleString([], {weekday:"short",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}); }catch(e){ return String(s||"").slice(0,16).replace("T"," "); } };
+  return (<div className="min-h-screen bg-stone-50 flex flex-col">
+    <div style={{background:accent}} className="text-white">
+      <div className="max-w-2xl mx-auto px-5 py-5 flex items-center gap-3">
+        {brand&&brand.logo?<img src={brand.logo} alt={brand.name||""} className="h-9 w-auto max-w-[180px] object-contain bg-white/95 rounded px-1.5 py-1"/>:
+          (BRAND.fw?<img src={FW_LOGO} alt="" className="h-8"/>:<span className="text-xl font-extrabold tracking-tight">Shipping<span className="opacity-80">Cloud</span></span>)}
+        {brand&&brand.name?<span className="text-lg font-semibold">{brand.name}</span>:null}
+      </div>
+    </div>
+    <div className="flex-1 max-w-2xl w-full mx-auto px-5 py-6">
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6">
+        <div className="text-[11px] uppercase tracking-widest text-stone-400">Tracking number</div>
+        <div className="text-lg font-mono font-semibold text-stone-800 mt-0.5 break-all">{num}</div>
+        {loading&&<div className="flex items-center gap-2 text-stone-500 text-sm mt-6"><Loader2 className="w-4 h-4 animate-spin"/>Checking with the carrier…</div>}
+        {!loading&&err&&<div className="mt-5 text-sm text-stone-600 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">{err}</div>}
+        {!loading&&d&&d.ok&&<>
+          <div className="mt-5 flex items-center gap-3">
+            <div className={`w-11 h-11 rounded-full flex items-center justify-center ${delivered?"bg-emerald-100 text-emerald-600":"bg-sky-100 text-sky-600"}`}>{delivered?<CheckCircle2 className="w-6 h-6"/>:<Truck className="w-6 h-6"/>}</div>
+            <div><div className="text-lg font-semibold text-stone-900">{d.status||"In transit"}</div>{d.estDelivery&&!delivered&&<div className="text-sm text-stone-500">Estimated delivery {fmtDate(d.estDelivery)}</div>}</div>
+          </div>
+          {Array.isArray(d.events)&&d.events.length>0&&<div className="mt-6">
+            <div className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-3">History</div>
+            <div className="space-y-0">
+              {d.events.map((e,i)=>(<div key={i} className="flex gap-3">
+                <div className="flex flex-col items-center">
+                  <div className={`w-2.5 h-2.5 rounded-full mt-1.5 ${i===0?"":"bg-stone-300"}`} style={i===0?{background:accent}:undefined}/>
+                  {i<d.events.length-1&&<div className="w-px flex-1 bg-stone-200 my-1"/>}
+                </div>
+                <div className="pb-4 min-w-0">
+                  <div className={`text-sm ${i===0?"font-semibold text-stone-900":"text-stone-700"}`}>{e.status}</div>
+                  <div className="text-[11px] text-stone-400">{fmtDate(e.time)}{e.location?" · "+e.location:""}</div>
+                </div>
+              </div>))}
+            </div>
+          </div>}
+        </>}
+      </div>
+      {brand&&(brand.supportEmail||brand.supportPhone||brand.site)&&<div className="mt-4 text-center text-xs text-stone-500">
+        Questions about your order? {brand.supportEmail?<a href={"mailto:"+brand.supportEmail} className="underline" style={{color:accent}}>{brand.supportEmail}</a>:null}{brand.supportPhone?<> · {brand.supportPhone}</>:null}{brand.site?<> · <a href={brand.site.startsWith("http")?brand.site:("https://"+brand.site)} target="_blank" rel="noreferrer" className="underline" style={{color:accent}}>Visit store</a></>:null}
+      </div>}
+      <div className="mt-6 text-center text-[11px] text-stone-400">Powered by {BRAND.fw?"Freightwire ShippingHub":"ShippingCloud"}</div>
+    </div>
+  </div>);
+}
+
 export default function App(){
+  /* Public branded tracking page — served with NO auth and NO app boot. This runs before any hook
+     so a shared tracking link opens instantly for a buyer who has no ShippingCloud account. The URL
+     doesn't change between track/non-track without a reload, so the hook order stays consistent. */
+  { let _trk="",_b=""; try{ const u=new URL(window.location.href); _trk=u.searchParams.get("track")||""; _b=u.searchParams.get("b")||""; }catch(e){}
+    if(_trk) return <TrackingPage num={_trk} brandId={_b}/>; }
   const [phase,setPhase]=useState("boot");
   const [bootMsg,setBootMsg]=useState("");
   const [bannerHid,setBannerHid]=useState(false);
@@ -9462,7 +9533,8 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
                     {items.length===0&&<div className="text-sm text-stone-400 py-2">No item detail on this order.</div>}
                     {items.map(li=>(
                       <div key={li.id} className="flex items-center gap-3 py-2.5">
-                        <div className="w-12 h-12 rounded bg-gradient-to-br from-stone-100 to-stone-200 border border-stone-200 flex items-center justify-center text-stone-500 font-semibold shrink-0">{(li.title||"?").slice(0,1).toUpperCase()}</div>
+                        {li.image?<img src={li.image} alt={li.title||""} loading="lazy" className="w-12 h-12 rounded object-cover border border-stone-200 bg-white shrink-0" onError={e=>{e.currentTarget.style.display="none";e.currentTarget.nextSibling&&(e.currentTarget.nextSibling.style.display="flex");}}/>:null}
+                        <div style={li.image?{display:"none"}:undefined} className="w-12 h-12 rounded bg-gradient-to-br from-stone-100 to-stone-200 border border-stone-200 flex items-center justify-center text-stone-500 font-semibold shrink-0">{(li.title||"?").slice(0,1).toUpperCase()}</div>
                         <div className="flex-1 min-w-0">
                           <div className="text-sm text-stone-800 truncate">{li.title}{li.variant?<span className="text-stone-400"> · {li.variant}</span>:""}</div>
                           <div className="text-[11px] text-stone-400">SKU: {li.sku||"—"}</div>
@@ -11244,6 +11316,65 @@ function FedexLocations({settings}){
     </div>:<div className="text-sm text-stone-400 text-center py-6">No FedEx locations found in that range — try a wider radius.</div>)}
   </div>);
 }
+/* Branded tracking setup — publish a public brand (logo/name/color/support) and get the shareable
+   tracking-link format. The saved brandId is cached in settings so shipment links can be built. */
+function BrandedTracking({settings,setSettings}){
+  const [brand,setBrand]=useState(null);
+  const [brandId,setBrandId]=useState(settings.trackBrandId||"");
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState(null);
+  const [copied,setCopied]=useState(false);
+  const seed=()=>({name:settings.company||"",logo:settings.companyLogo||"",color:"#0086E0",enabled:true,supportEmail:(settings.sender&&settings.sender.email)||"",supportPhone:(settings.sender&&settings.sender.phone)||"",site:""});
+  useEffect(()=>{ let dead=false; (async()=>{
+    if(!CLOUD.token){ setBrand(seed()); return; }
+    const r=await cloudCall({action:"trackBrandGet",token:CLOUD.token});
+    if(dead)return;
+    if(r&&r.ok){ setBrandId(r.brandId); setBrand(r.brand||seed()); if(r.brandId&&r.brandId!==settings.trackBrandId)setSettings(s=>({...s,trackBrandId:r.brandId})); }
+    else setBrand(seed());
+  })(); return ()=>{dead=true;}; /* eslint-disable-next-line */ },[]);
+  const upd=(k,v)=>setBrand(b=>({...(b||{}),[k]:v}));
+  const onLogo=(e)=>{ const f=e.target.files&&e.target.files[0]; if(!f)return; if(f.size>600000){setMsg({err:"That image is too large — use one under 500 KB."});return;} const rd=new FileReader(); rd.onload=()=>upd("logo",rd.result); rd.readAsDataURL(f); };
+  const save=async()=>{ if(!CLOUD.token){setMsg({err:"Sign in to publish your tracking page."});return;} setBusy(true);
+    const r=await cloudCall({action:"trackBrandSave",token:CLOUD.token,brand});
+    setBusy(false);
+    if(r&&r.ok){ setBrandId(r.brandId); setSettings(s=>({...s,trackBrandId:r.brandId})); setMsg({ok:"Saved — your branded tracking page is live."}); }
+    else setMsg({err:(r&&r.error)||"Couldn't save — try again."});
+  };
+  if(!brand)return (<div className="flex items-center gap-2 text-stone-500 text-sm p-4"><Loader2 className="w-4 h-4 animate-spin"/>Loading…</div>);
+  const accent=(brand.color&&/^#?[0-9a-fA-F]{3,8}$/.test(brand.color))?(brand.color[0]==="#"?brand.color:"#"+brand.color):"#0086E0";
+  const linkTmpl=brandId?(APP_ORIGIN+"/?track=TRACKING_NUMBER&b="+brandId):"";
+  const sample=brandId?(APP_ORIGIN+"/?track=123456789012&b="+brandId):"";
+  const copy=()=>{ try{ navigator.clipboard.writeText(linkTmpl); setCopied(true); setTimeout(()=>setCopied(false),1800); }catch(e){} };
+  return (<div className="max-w-2xl space-y-4">
+    <div>
+      <h3 className="text-base font-semibold text-stone-900 flex items-center gap-2"><MapPin className="w-4 h-4 text-[#0086E0]"/>Branded tracking page</h3>
+      <p className="text-sm text-stone-500 mt-0.5">A tracking page on your link with your logo and colors — share it with buyers instead of sending them to fedex.com.</p>
+    </div>
+    {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
+    <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={brand.enabled!==false} onChange={e=>upd("enabled",e.target.checked)} className="accent-[#0086E0]"/>Enable branded tracking</label>
+    <Panel title="Your branding">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Field label="Store / company name"><Input value={brand.name||""} onChange={e=>upd("name",e.target.value)}/></Field>
+        <Field label="Accent color"><div className="flex items-center gap-2"><input type="color" value={accent} onChange={e=>upd("color",e.target.value)} className="w-9 h-9 rounded border border-stone-200 p-0.5"/><Input value={brand.color||""} onChange={e=>upd("color",e.target.value)} placeholder="#0086E0"/></div></Field>
+        <Field label="Support email"><Input value={brand.supportEmail||""} onChange={e=>upd("supportEmail",e.target.value)}/></Field>
+        <Field label="Support phone"><Input value={brand.supportPhone||""} onChange={e=>upd("supportPhone",e.target.value)}/></Field>
+        <Field label="Store website (optional)"><Input value={brand.site||""} onChange={e=>upd("site",e.target.value)} placeholder="yourstore.com"/></Field>
+        <Field label="Logo"><div className="flex items-center gap-2">{brand.logo?<img src={brand.logo} alt="" className="h-8 w-auto max-w-[120px] object-contain border border-stone-200 rounded bg-white px-1"/>:null}<label className="text-xs bg-stone-100 border border-stone-200 rounded-lg px-2.5 py-1.5 cursor-pointer hover:bg-stone-200">{brand.logo?"Replace":"Upload"}<input type="file" accept="image/*" onChange={onLogo} className="hidden"/></label>{brand.logo?<button onClick={()=>upd("logo","")} className="text-xs text-rose-500 hover:underline">remove</button>:null}</div></Field>
+      </div>
+      <div className="mt-3"><button onClick={save} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<CheckCircle2 className="w-4 h-4"/>}Save & publish</button></div>
+    </Panel>
+    {/* Live preview */}
+    <div className="rounded-xl overflow-hidden border border-stone-200">
+      <div style={{background:accent}} className="text-white px-4 py-3 flex items-center gap-2">{brand.logo?<img src={brand.logo} alt="" className="h-7 w-auto max-w-[120px] object-contain bg-white/95 rounded px-1"/>:<span className="font-extrabold">Shipping<span className="opacity-80">Cloud</span></span>}{brand.name?<span className="font-semibold">{brand.name}</span>:null}</div>
+      <div className="bg-white px-4 py-3 text-sm"><div className="text-[11px] uppercase tracking-widest text-stone-400">Tracking</div><div className="font-mono text-stone-700">123456789012</div><div className="mt-2 flex items-center gap-2"><Truck className="w-4 h-4" style={{color:accent}}/><span className="font-medium text-stone-800">In transit</span></div></div>
+    </div>
+    {brandId&&<Panel title="Your tracking link">
+      <p className="text-xs text-stone-500 mb-2">Replace <b>TRACKING_NUMBER</b> with the shipment's number. FedEx tracking numbers work automatically.</p>
+      <div className="flex items-center gap-2"><input readOnly value={linkTmpl} className="flex-1 border border-stone-200 rounded-lg px-2.5 py-2 text-xs font-mono bg-stone-50"/><button onClick={copy} className="text-xs bg-stone-100 border border-stone-200 rounded-lg px-3 py-2 hover:bg-stone-200 flex items-center gap-1">{copied?<Check className="w-3.5 h-3.5 text-emerald-600"/>:<Copy className="w-3.5 h-3.5"/>}{copied?"Copied":"Copy"}</button></div>
+      <a href={sample} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs mt-2" style={{color:accent}}><ExternalLink className="w-3.5 h-3.5"/>Preview the live page</a>
+    </Panel>}
+  </div>);
+}
 function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,isAdmin=false,showMoney=true,secPolicy={},currentUser=null,setCurrentUser=null,allowedTabs=null,fxLocOn=false}){
   /* Remember which Settings sub-section you were on, so leaving Settings and coming back returns you to
      the same panel instead of resetting to General. Persisted so it survives a full reload too. */
@@ -11257,7 +11388,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
     ["Workspace",[["general","General",Cog],["customize","Customizations",Sliders]]],
     ["Shipping",[["shipscreen","Ship Screen",Truck],["orderspage","Orders",ShoppingBag],["carriers","FedEx Account",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package Sizes",Package],["boxlogic","Box Logic",Layers],["catalog","Product Catalog",Boxes],["reference","Reference Fields",Receipt],["fedexlocations","Find FedEx Locations",MapPin]]],
     ["Documents & Printing",[["printer","Print Settings",Printer],["cieditor","Commercial Invoice",Receipt],["otherdocs","Other Documents",FileText],["slips","Packing Slips",ClipboardList],["manifests","Manifests",FileText]]],
-    ["Automation & Integrations",[["integrations","Integrations",Layers],["notifications","Email Automation",Mail],["checkout","Checkout Rates",ShoppingBag]]],
+    ["Automation & Integrations",[["integrations","Integrations",Layers],["notifications","Email Automation",Mail],["tracking","Branded Tracking",MapPin],["checkout","Checkout Rates",ShoppingBag]]],
     ["Account",[["reports","Reports",TrendingUp],["billing","Billing",CreditCard],["subscription","Subscription",Star]]],
   ];
   const secs=SEC_GROUPS.flatMap(g=>g[1]);
@@ -11317,6 +11448,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="orderspage"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="orders" allowedTabs={allowedTabs}/>}
         {sec==="billing"&&<Billing settings={settings} setSettings={setSettings}/>}
         {sec==="integrations"&&<Integrations settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders}/>}
+        {sec==="tracking"&&<BrandedTracking settings={settings} setSettings={setSettings}/>}
         {sec==="subscription"&&<Subscription settings={settings} setSettings={setSettings}/>}
         </div>
       </div>

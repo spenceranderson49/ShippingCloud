@@ -715,6 +715,38 @@ exports.handler = async (event) => {
       return J({ ok: false, error: "Unknown inventory action." });
     }
 
+    /* ── Branded tracking: a company publishes a small PUBLIC brand record (logo, name, color,
+       support info) that the customer-facing tracking page (track.js) reads. Keyed by an opaque,
+       stable brandId derived from the company id, so the link never exposes internal ids. ── */
+    if (action === "trackBrandSave" || action === "trackBrandGet") {
+      const curU = await getStore("users");
+      if (!curU.ok) return J({ ok: false, retry: true, error: "Storage is briefly unavailable — try again." });
+      const me = (Array.isArray(curU.value) ? curU.value : []).find((x) => x && x.id === auth.uid) || null;
+      if (!me) return J({ ok: false, authFailed: true, error: "Account not found." });
+      const cid = me.role === "admin" ? String(body.clientId || "").trim() : String(me.clientId || "").trim();
+      if (!cid) return J({ ok: false, error: "No company is attached to this login." });
+      const brandId = crypto.createHmac("sha256", secret()).update("track:" + cid).digest("hex").slice(0, 20);
+      const key = "pub:track:" + brandId;
+      if (action === "trackBrandGet") {
+        const cur = await getStore(key);
+        return J({ ok: true, brandId, brand: (cur.ok && cur.value && typeof cur.value === "object") ? cur.value : null });
+      }
+      const b = (body.brand && typeof body.brand === "object") ? body.brand : {};
+      const brand = {
+        name: String(b.name || "").slice(0, 80),
+        logo: String(b.logo || "").slice(0, 300000),          // data URL or https image
+        color: String(b.color || "").slice(0, 16),
+        supportEmail: String(b.supportEmail || "").slice(0, 120),
+        supportPhone: String(b.supportPhone || "").slice(0, 40),
+        site: String(b.site || "").slice(0, 200),
+        enabled: b.enabled !== false,
+      };
+      try { if (JSON.stringify(brand).length > 320000) return J({ ok: false, error: "That logo is too large — use a smaller image (well under 300 KB)." }); } catch (e) {}
+      const w = await putStores({ [key]: brand });
+      if (!w.ok) return J({ ok: false, error: "Couldn't save — try again." });
+      return J({ ok: true, brandId, brand });
+    }
+
     /* ── two-factor auth management (self-service, per logged-in user) ── */
     if (action === "totpBegin" || action === "totpEnable" || action === "totpDisable" || action === "totpStatus" || action === "totpBackupRegen") {
       const curU = await getStore("users");

@@ -23,6 +23,9 @@ function transform(o) {
     quantity: Number(li.quantity) || 1,
     price: S(li.price),
     grams: Number(li.grams) || 0,
+    productId: S(li.product_id),
+    variantId: S(li.variant_id),
+    image: "",   // filled by enrichLineItemImages() after the orders come back
   }));
   return {
     id: "shp_" + o.id,
@@ -51,6 +54,34 @@ function transform(o) {
     date: S(o.created_at).slice(0, 10),
     note: S(o.note),
   };
+}
+
+/* Shopify order line_items don't carry image URLs, so do ONE products fetch for every product in the
+   batch and map product/variant → photo. Best-effort: a failure just leaves images blank. */
+async function enrichLineItemImages(orders, shop, token) {
+  try {
+    const ids = [...new Set(orders.flatMap((o) => (o.lineItems || []).map((li) => li.productId).filter(Boolean)))].slice(0, 250);
+    if (!ids.length) return;
+    const url = `https://${shop}/admin/api/${API}/products.json?ids=${ids.join(",")}&fields=id,image,images,variants&limit=250`;
+    const r = await fetch(url, { headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" } });
+    if (!r.ok) return;
+    const d = await r.json().catch(() => ({}));
+    const prodImg = {};      // product_id → featured image src
+    const varImg = {};       // variant_id → its own image src (falls back to product featured)
+    for (const p of (d.products || [])) {
+      const pid = S(p.id);
+      const featured = (p.image && p.image.src) || (p.images && p.images[0] && p.images[0].src) || "";
+      if (featured) prodImg[pid] = featured;
+      const byImgId = {}; for (const im of (p.images || [])) byImgId[S(im.id)] = im.src;
+      for (const v of (p.variants || [])) {
+        const vid = S(v.id);
+        varImg[vid] = (v.image_id && byImgId[S(v.image_id)]) || featured || "";
+      }
+    }
+    for (const o of orders) for (const li of (o.lineItems || [])) {
+      li.image = varImg[li.variantId] || prodImg[li.productId] || "";
+    }
+  } catch (e) { /* images are a nicety — never fail the sync over them */ }
 }
 
 exports.handler = async (event) => {
@@ -127,6 +158,7 @@ exports.handler = async (event) => {
     if (!r.ok) return J({ ok: false, error: "Shopify HTTP " + r.status + (d && d.errors ? ": " + JSON.stringify(d.errors) : (text ? ": " + text.slice(0, 200) : "")) });
 
     const orders = (d.orders || []).map(transform);
+    await enrichLineItemImages(orders, shop, token);   // attach product photos so order details show pictures
     return J({ ok: true, count: orders.length, orders });
   } catch (e) { return J({ ok: false, error: "Function error: " + (e && e.message ? e.message : String(e)) }); }
 };

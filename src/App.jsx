@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v663";
+const BUILD_TAG="addr-v664";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10810,8 +10810,18 @@ function Dashboard({shipments,orders,returns,goTab,showMoney=true}){
     <div className="flex justify-between text-xs mb-1"><span className={`font-semibold ${tint?(tint[k]||"text-stone-700"):"text-stone-700"}`}>{k}</span><span className="text-stone-400">{n}</span></div>
     <div className="h-2 bg-stone-100 rounded-full overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-[#0086E0] to-[#33ADFF]" style={{width:`${(n/Math.max(1,total))*100}%`}}/></div>
   </div>))}</div>);
+  const [inv,setInv]=useState(null);
+  useEffect(()=>{ if(!CLOUD.token)return; let dead=false; (async()=>{ const r=await cloudCall({action:"invList",token:CLOUD.token}); if(!dead&&r&&r.ok)setInv(r.items||[]); })(); return ()=>{dead=true;}; },[]);
+  const invStock=(inv||[]).filter(it=>!(Array.isArray(it.kit)&&it.kit.length));
+  const invLow=invStock.filter(it=>(+it.reorder||0)>0&&(+it.onHand||0)<=(+it.reorder||0)).length;
+  const invValue=invStock.reduce((s,it)=>s+(+it.onHand||0)*(+it.cost||0),0);
   return (
     <div className="space-y-5">
+      {inv&&invStock.length>0&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <button onClick={()=>goTab&&goTab("inventory")} className="text-left border border-stone-200 rounded-xl bg-white px-4 py-3 hover:border-[#0086E0]/40 transition"><div className="text-[11px] uppercase tracking-wide text-stone-400 flex items-center gap-1"><Boxes className="w-3.5 h-3.5"/>SKUs tracked</div><div className="text-xl font-semibold text-stone-900">{invStock.length}</div></button>
+        {showMoney&&<button onClick={()=>goTab&&goTab("inventory")} className="text-left border border-stone-200 rounded-xl bg-white px-4 py-3 hover:border-[#0086E0]/40 transition"><div className="text-[11px] uppercase tracking-wide text-stone-400">Stock value</div><div className="text-xl font-semibold text-stone-900">{money(invValue)}</div></button>}
+        <button onClick={()=>goTab&&goTab("inventory")} className={`text-left border rounded-xl bg-white px-4 py-3 transition ${invLow?"border-amber-300 hover:border-amber-400":"border-stone-200 hover:border-[#0086E0]/40"}`}><div className="text-[11px] uppercase tracking-wide text-stone-400">Low stock</div><div className={`text-xl font-semibold ${invLow?"text-amber-600":"text-stone-900"}`}>{invLow}{invLow>0?" ⚠":""}</div></button>
+      </div>}
       {/* morning digest — yesterday at a glance, read-only */}
       {(()=>{try{
         const y=new Date(Date.now()-864e5).toLocaleDateString();

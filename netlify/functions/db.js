@@ -640,7 +640,7 @@ exports.handler = async (event) => {
        Every login of a company shares its inventory; a platform admin may target a specific
        company via body.clientId. All reads refuse-and-retry on failure so stock is never
        silently zeroed by a transient DB hiccup. */
-    if (["invList", "invUpsert", "invAdjust", "invReceive", "invShip", "invDelete", "poList", "poSave", "poReceive", "poDelete", "supplierList", "supplierSave", "supplierDelete", "returnList", "returnSetStatus"].indexOf(action) >= 0) {
+    if (["invList", "invUpsert", "invAdjust", "invReceive", "invShip", "invDelete", "invTransfer", "poList", "poSave", "poReceive", "poDelete", "supplierList", "supplierSave", "supplierDelete", "returnList", "returnSetStatus"].indexOf(action) >= 0) {
       const curU = await getStore("users");
       if (!curU.ok) return J({ ok: false, retry: true, error: "Storage is briefly unavailable — try again." });
       const allU = Array.isArray(curU.value) ? curU.value : [];
@@ -665,6 +665,23 @@ exports.handler = async (event) => {
         arr.unshift({ id: "mv" + Date.now() + Math.floor(Math.random() * 1000), at: nowISO, by: me.email || me.id, ...mv });
         const w = await putStores({ [logKey]: arr.slice(0, 1000) });
         return w.ok;
+      };
+      /* Apply a stock change to an item, keeping optional per-location detail (byLoc) consistent.
+         BACKWARD-COMPATIBLE: an item WITHOUT byLoc behaves exactly as before (onHand only) — the new
+         path only engages once an item has been split across locations via a transfer. When byLoc
+         exists, onHand is always re-derived as the sum of its locations, so the two can never drift. */
+      const applyStockDelta = (it, delta, preferLoc) => {
+        const before = +it.onHand || 0;
+        if (!it.byLoc || typeof it.byLoc !== "object") { it.onHand = Math.max(0, before + delta); return; }
+        const bl = { ...it.byLoc };
+        if (delta >= 0) { const L = (preferLoc && String(preferLoc)) || Object.keys(bl)[0] || "Main"; bl[L] = Math.max(0, (+bl[L] || 0) + delta); }
+        else {
+          let need = -delta;
+          if (preferLoc && bl[preferLoc] != null) { const take = Math.min(need, +bl[preferLoc] || 0); bl[preferLoc] = (+bl[preferLoc] || 0) - take; need -= take; }
+          for (const L of Object.keys(bl).sort((a, b) => (+bl[b] || 0) - (+bl[a] || 0))) { if (need <= 0) break; const take = Math.min(need, +bl[L] || 0); bl[L] = (+bl[L] || 0) - take; need -= take; }
+        }
+        it.byLoc = bl;
+        it.onHand = Object.keys(bl).reduce((s, k) => s + (+bl[k] || 0), 0);
       };
 
       if (action === "invList") {
@@ -694,7 +711,18 @@ exports.handler = async (event) => {
           if (k.length) it.kit = k; else delete it.kit;
         }
         const before = +it.onHand || 0; let counted = false;
-        if (body.onHand != null && body.onHand !== "") { it.onHand = Math.max(0, Math.round(+body.onHand || 0)); counted = it.onHand !== before; }
+        if (body.onHand != null && body.onHand !== "") {
+          const newOn = Math.max(0, Math.round(+body.onHand || 0)); counted = newOn !== before;
+          if (it.byLoc && typeof it.byLoc === "object" && Object.keys(it.byLoc).length) {
+            /* Multi-location item: distribute the recounted total across its locations proportionally
+               so byLoc never drifts from onHand. */
+            const keys = Object.keys(it.byLoc); const S = keys.reduce((s, k) => s + (+it.byLoc[k] || 0), 0);
+            const bl = {};
+            if (S > 0) { let acc = 0; keys.forEach((k, i) => { const v = i === keys.length - 1 ? (newOn - acc) : Math.round((+it.byLoc[k] || 0) / S * newOn); bl[k] = Math.max(0, v); acc += bl[k]; }); }
+            else { bl[keys[0] || "Main"] = newOn; }
+            it.byLoc = bl; it.onHand = keys.reduce((s, k) => s + (+bl[k] || 0), 0);
+          } else { it.onHand = newOn; }
+        }
         it.updatedAt = nowISO;
         const w = await writeItem(sku, it);
         if (!w.ok) return J({ ok: false, error: "Save failed — try again." });
@@ -712,7 +740,7 @@ exports.handler = async (event) => {
         if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read that item — try again." });
         if (!(cur.value && typeof cur.value === "object")) return J({ ok: false, error: "That SKU isn't tracked yet — add it first." });
         const it = { ...cur.value }; const before = +it.onHand || 0;
-        it.onHand = Math.max(0, before + delta); it.updatedAt = nowISO;
+        applyStockDelta(it, delta, body.loc); it.updatedAt = nowISO;
         const w = await writeItem(sku, it);
         if (!w.ok) return J({ ok: false, error: "Save failed — try again." });
         await addLog({ type: "adjust", sku, name: it.name || "", qty: it.onHand - before, balance: it.onHand, reason: String(body.reason || "").slice(0, 120) });
@@ -732,7 +760,7 @@ exports.handler = async (event) => {
           const prev = (cur.value && typeof cur.value === "object") ? cur.value : null;
           if (!prev) return { skipped: true };   // untracked component/SKU → skip silently
           const it = { ...prev }; const before = +it.onHand || 0;
-          it.onHand = Math.max(0, before - qty); it.updatedAt = nowISO;
+          applyStockDelta(it, -qty, null); it.updatedAt = nowISO;
           const w = await writeItem(sku, it);
           if (!w.ok) return { fail: true };
           await addLog({ type: "ship", sku, name: it.name || "", qty: it.onHand - before, balance: it.onHand, ref, kitOf: kitOf || undefined });
@@ -769,7 +797,7 @@ exports.handler = async (event) => {
           // receiving
           const it = prev ? { ...prev } : { sku, name: String(ln.name || "").slice(0, 120), onHand: 0, createdAt: nowISO };
           const before = +it.onHand || 0;
-          it.onHand = before + qty;
+          applyStockDelta(it, qty, ln.loc);
           if (ln.cost != null && ln.cost !== "") it.cost = money2(ln.cost);
           if (ln.name && !it.name) it.name = String(ln.name).slice(0, 120);
           it.updatedAt = nowISO;
@@ -788,6 +816,33 @@ exports.handler = async (event) => {
         if (!r.ok) return J({ ok: false, error: "Delete failed — try again." });
         await addLog({ type: "removed", sku, name: String(body.name || "").slice(0, 120), qty: 0 });
         return J({ ok: true });
+      }
+
+      if (action === "invTransfer") {
+        const sku = String(body.sku || "").trim();
+        const from = String(body.from || "").slice(0, 60).trim();
+        const to = String(body.to || "").slice(0, 60).trim();
+        const qty = Math.round(+body.qty || 0);
+        if (!normSku(sku) || !from || !to || qty <= 0) return J({ ok: false, error: "Pick a SKU, a from/to location and a quantity." });
+        if (from === to) return J({ ok: false, error: "Choose two different locations." });
+        const cur = await readItem(sku);
+        if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read that item — try again." });
+        if (!(cur.value && typeof cur.value === "object")) return J({ ok: false, error: "That SKU isn't tracked yet." });
+        const it = { ...cur.value };
+        // First transfer splits the flat on-hand into locations, seeding the item's current label (or "Main").
+        if (!it.byLoc || typeof it.byLoc !== "object" || !Object.keys(it.byLoc).length) it.byLoc = { [(it.loc && String(it.loc)) || "Main"]: +it.onHand || 0 };
+        const bl = { ...it.byLoc };
+        if ((+bl[from] || 0) < qty) return J({ ok: false, error: "Only " + (+bl[from] || 0) + " at " + from + " to move." });
+        bl[from] = (+bl[from] || 0) - qty;
+        bl[to] = (+bl[to] || 0) + qty;
+        for (const k of Object.keys(bl)) if ((+bl[k] || 0) <= 0) delete bl[k];   // drop emptied locations
+        it.byLoc = bl;
+        it.onHand = Object.keys(bl).reduce((s, k) => s + (+bl[k] || 0), 0);   // total is unchanged, just relocated
+        it.updatedAt = nowISO;
+        const w = await writeItem(sku, it);
+        if (!w.ok) return J({ ok: false, error: "Transfer failed — try again." });
+        await addLog({ type: "transfer", sku, name: it.name || "", qty, balance: it.onHand, reason: from + " → " + to });
+        return J({ ok: true, item: it });
       }
 
       /* ── Suppliers (company-shared, low-churn → a single array store) ── */

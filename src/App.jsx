@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v657";
+const BUILD_TAG="addr-v658";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9913,6 +9913,7 @@ function Inventory({settings,client,showMoney=true,currentUser,orders=[]}){
   const [showLog,setShowLog]=useState(false);
   const [editSku,setEditSku]=useState(null);
   const [ef,setEf]=useState(null);
+  const [xfer,setXfer]=useState(null);
   const [view,setView]=useState("stock");
   const [pos,setPos]=useState([]);
   const [suppliers,setSuppliers]=useState([]);
@@ -9991,8 +9992,18 @@ function Inventory({settings,client,showMoney=true,currentUser,orders=[]}){
     if(r&&r.ok){ patch(r.item); setEditSku(null); setEf(null); flash("Saved "+r.item.sku+"."); load(); } else flash((r&&r.error)||"Couldn't save.",true);
   };
   const exportCSV=()=>{
-    const rows=[["SKU","Name","On hand","Reorder","Unit cost","Value","Location","Kit components"],...list.map(it=>[it.sku,it.name||"",+it.onHand||0,+it.reorder||0,+it.cost||0,((+it.onHand||0)*(+it.cost||0)).toFixed(2),it.loc||"",(Array.isArray(it.kit)?it.kit.map(c=>c.qty+"× "+c.sku).join(" + "):"")])];
+    const rows=[["SKU","Name","On hand","Reorder","Unit cost","Value","Location","Kit components"],...list.map(it=>[it.sku,it.name||"",+it.onHand||0,+it.reorder||0,+it.cost||0,((+it.onHand||0)*(+it.cost||0)).toFixed(2),(it.byLoc&&Object.keys(it.byLoc).length?Object.keys(it.byLoc).map(k=>k+":"+it.byLoc[k]).join(" | "):(it.loc||"")),(Array.isArray(it.kit)?it.kit.map(c=>c.qty+"× "+c.sku).join(" + "):"")])];
     downloadCSV((BRAND.fw?"freightwire":"shippingcloud")+"-inventory.csv",rows);
+  };
+  const openXfer=(it)=>{ const locs=(it.byLoc&&Object.keys(it.byLoc).length)?Object.keys(it.byLoc):[(it.loc||"Main")]; setXfer({sku:it.sku,name:it.name||"",byLoc:(it.byLoc&&Object.keys(it.byLoc).length)?it.byLoc:{[(it.loc||"Main")]:+it.onHand||0},from:locs[0],to:"",qty:""}); };
+  const doXfer=async()=>{
+    if(!xfer.to.trim()){flash("Enter a destination location.",true);return;}
+    if(xfer.to.trim()===xfer.from){flash("Pick two different locations.",true);return;}
+    if(!(+xfer.qty>0)){flash("Enter a quantity to move.",true);return;}
+    setBusy("xfer");
+    const r=await cloudCall({action:"invTransfer",token:CLOUD.token,sku:xfer.sku,from:xfer.from,to:xfer.to.trim(),qty:+xfer.qty});
+    setBusy("");
+    if(r&&r.ok){ patch(r.item); setXfer(null); flash("Moved "+(+xfer.qty)+" "+xfer.sku+" → "+xfer.to.trim()+"."); load(); } else flash((r&&r.error)||"Transfer failed.",true);
   };
   if(!CLOUD.token) return (<div className="max-w-2xl"><div className="border border-stone-200 rounded-xl bg-white p-6 text-sm text-stone-600">Inventory lives in the cloud — sign in to your account to track stock.</div></div>);
   if(items===null) return (<div className="flex items-center gap-2 text-stone-500 text-sm p-4"><Loader2 className="w-4 h-4 animate-spin"/>Loading inventory…</div>);
@@ -10075,10 +10086,11 @@ function Inventory({settings,client,showMoney=true,currentUser,orders=[]}){
             <td className="px-3 py-2 text-right text-stone-500">{(+it.reorder||0)||"—"}</td>
             {showMoney&&<td className="px-3 py-2 text-right text-stone-500">{it.cost?money(it.cost):"—"}</td>}
             {showMoney&&<td className="px-3 py-2 text-right text-stone-700">{(!isKit&&it.cost)?money((+it.onHand||0)*(+it.cost||0)):"—"}</td>}
-            <td className="px-3 py-2 text-stone-500">{it.loc||"—"}</td>
+            <td className="px-3 py-2 text-stone-500">{(it.byLoc&&Object.keys(it.byLoc).length)?<span className="text-xs">{Object.keys(it.byLoc).map(k=><span key={k} className="inline-block mr-1.5 whitespace-nowrap"><span className="text-stone-700 font-medium">{it.byLoc[k]}</span> {k}</span>)}</span>:(it.loc||"—")}</td>
             <td className="px-3 py-2 text-right whitespace-nowrap">
               {!isKit&&<button onClick={()=>count(it)} disabled={busy==="cnt"+it.sku} title="Cycle count" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200 mr-1">Count</button>}
               {!isKit&&<button onClick={()=>adjust(it)} disabled={busy==="adj"+it.sku} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200 mr-1">Adjust</button>}
+              {!isKit&&<button onClick={()=>openXfer(it)} title="Move stock between locations" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200 mr-1">Move</button>}
               <button onClick={()=>openEdit(it)} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200 mr-1">Edit</button>
               <button onClick={()=>del(it)} disabled={busy==="del"+it.sku} title="Stop tracking" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="w-3.5 h-3.5"/></button>
             </td>
@@ -10118,6 +10130,19 @@ function Inventory({settings,client,showMoney=true,currentUser,orders=[]}){
           <button onClick={()=>setEf({...ef,kit:[...(ef.kit||[]),{sku:"",qty:1}]})} className="text-xs text-[#0086E0] hover:underline flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add component</button>
         </div>
         <div className="flex items-center gap-2 mt-5"><button onClick={saveEdit} disabled={busy==="edit"} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy==="edit"&&<Loader2 className="w-4 h-4 animate-spin"/>}Save</button><button onClick={()=>{setEf(null);setEditSku(null);}} className="text-sm text-stone-500 px-2">Cancel</button></div>
+      </div>
+    </div>}
+    {xfer&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setXfer(null)}>
+      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1"><div className="font-semibold text-stone-900">Move stock — {xfer.sku}</div><button onClick={()=>setXfer(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+        <p className="text-xs text-stone-500 mb-3">Move units between locations. The total on hand doesn't change — it's just relocated.</p>
+        <div className="text-xs text-stone-500 mb-2">Currently: {Object.keys(xfer.byLoc).map(k=><span key={k} className="inline-block mr-2"><b className="text-stone-700">{xfer.byLoc[k]}</b> at {k}</span>)}</div>
+        <div className="grid grid-cols-3 gap-2 items-end">
+          <label className="text-xs text-stone-600 col-span-1">From<select value={xfer.from} onChange={e=>setXfer({...xfer,from:e.target.value})} className="mt-1 w-full border border-stone-300 rounded-lg px-2 py-2 text-sm">{Object.keys(xfer.byLoc).map(k=><option key={k} value={k}>{k} ({xfer.byLoc[k]})</option>)}</select></label>
+          <label className="text-xs text-stone-600 col-span-1">To<input list="xfer-locs" value={xfer.to} onChange={e=>setXfer({...xfer,to:e.target.value})} placeholder="Aisle / bin" className="mt-1 w-full border border-stone-300 rounded-lg px-2 py-2 text-sm"/><datalist id="xfer-locs">{[...new Set(list.flatMap(it=>it.byLoc?Object.keys(it.byLoc):(it.loc?[it.loc]:[])))].map(l=><option key={l} value={l}/>)}</datalist></label>
+          <label className="text-xs text-stone-600 col-span-1">Qty<input type="number" min="1" value={xfer.qty} onChange={e=>setXfer({...xfer,qty:e.target.value})} className="mt-1 w-full border border-stone-300 rounded-lg px-2 py-2 text-sm"/></label>
+        </div>
+        <div className="flex items-center gap-2 mt-4"><button onClick={doXfer} disabled={busy==="xfer"} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy==="xfer"?<Loader2 className="w-4 h-4 animate-spin"/>:<ArrowLeftRight className="w-4 h-4"/>}Move</button><button onClick={()=>setXfer(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
       </div>
     </div>}
   </div>);

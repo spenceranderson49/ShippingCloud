@@ -126,7 +126,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v633";
+const BUILD_TAG="addr-v634";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -13256,18 +13256,10 @@ function GeneralSettings({settings,setSettings,goSec,currentUser,setCurrentUser}
         {F({k:"supportPhone",label:"Support phone",ph:"(801) 555-0100",type:"tel"})}
       </div>
     </Panel>
-    <Panel title="Default sender (ship-from)">
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="Name"><Input value={sn.name||""} onChange={e=>setSn("name",e.target.value)}/></Field>
-        <Field label="Company"><Input value={sn.company||""} onChange={e=>setSn("company",e.target.value)}/></Field>
-        <Field label="Address"><Input value={sn.address1||""} onChange={e=>setSn("address1",e.target.value)}/></Field>
-        <Field label="City"><Input value={sn.city||""} onChange={e=>setSn("city",e.target.value)}/></Field>
-        <Field label="State"><Input value={sn.state||""} onChange={e=>setSn("state",e.target.value)}/></Field>
-        <Field label="ZIP"><Input value={sn.zip||""} onChange={e=>setSn("zip",e.target.value)}/></Field>
-        <Field label="Phone"><Input value={sn.phone||""} onChange={e=>setSn("phone",e.target.value)}/></Field>
-        <Field label="Email"><Input value={sn.email||""} onChange={e=>setSn("email",e.target.value)}/></Field>
-      </div>
-    </Panel>
+    {/* AddressCard = Google Places autocomplete + ZIP→city/state autofill + smart paste, same as the Ship screen */}
+    <div><div className="text-[10px] uppercase tracking-widest text-stone-500 mb-1.5">Default sender (ship-from)</div>
+      <AddressCard title="Sender" data={sn} set={(v)=>setSettings(p=>({...p,sender:(typeof v==="function"?v(p.sender||{}):v)}))}/>
+    </div>
     <Panel title="Shipping defaults">
       <label className="flex items-center justify-between gap-3 text-sm text-stone-700"><span>Bill shipments to</span>
         <select value={settings.defaultBillTo||"sender"} onChange={e=>set("defaultBillTo",e.target.value)} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"><option value="sender">My account (sender)</option><option value="third">Third-Party Account</option></select></label>

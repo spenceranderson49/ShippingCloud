@@ -20,6 +20,7 @@ const SCOPES = [
   // only fulfill via the fulfillment-orders APIs below).
   "read_orders",
   "read_products",                     // product catalog pull (weights/dims/SKUs)
+  "read_inventory", "write_inventory", // push on-hand back to Shopify (prevents overselling) — opt-in; a store must reconnect once to grant these
   "write_shipping",                    // carrier service = live checkout rates
   "read_fulfillments", "write_fulfillments",
   "read_assigned_fulfillment_orders", "write_assigned_fulfillment_orders",

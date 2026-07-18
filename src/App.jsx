@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v660";
+const BUILD_TAG="addr-v661";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -1354,6 +1354,7 @@ const PLACES_ENDPOINT="/.netlify/functions/places";
 const SHOPIFY_AUTH="/.netlify/functions/shopify-auth";
 const SHOPIFY_SYNC="/.netlify/functions/shopify-sync";
 const SHOPIFY_FULFILL="/.netlify/functions/shopify-fulfill";
+const SHOPIFY_INVENTORY="/.netlify/functions/shopify-inventory";
 async function shopifyCall(endpoint,payload,timeout=20000){
   const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),timeout);
   try{
@@ -9995,6 +9996,18 @@ function Inventory({settings,client,showMoney=true,currentUser,orders=[]}){
     const rows=[["SKU","Name","On hand","Reorder","Unit cost","Value","Location","Kit components"],...list.map(it=>[it.sku,it.name||"",+it.onHand||0,+it.reorder||0,+it.cost||0,((+it.onHand||0)*(+it.cost||0)).toFixed(2),(it.byLoc&&Object.keys(it.byLoc).length?Object.keys(it.byLoc).map(k=>k+":"+it.byLoc[k]).join(" | "):(it.loc||"")),(Array.isArray(it.kit)?it.kit.map(c=>c.qty+"× "+c.sku).join(" + "):"")])];
     downloadCSV((BRAND.fw?"freightwire":"shippingcloud")+"-inventory.csv",rows);
   };
+  const shopConns=shopifyConns(settings);
+  const syncShopify=async()=>{
+    if(!shopConns.length)return;
+    const updates=list.filter(it=>!(Array.isArray(it.kit)&&it.kit.length)&&it.sku).map(it=>({sku:it.sku,available:+it.onHand||0}));
+    if(!updates.length){flash("No stock to sync yet.",true);return;}
+    setBusy("shopify");
+    let synced=0,skipped=0,reconnect=false;
+    for(const c of shopConns){ const r=await shopifyCall(SHOPIFY_INVENTORY,{shop:c.shop,token:c.token,updates}); if(r&&r.ok){synced+=r.synced||0;skipped+=r.skipped||0;} else if(r&&r.needsReconnect){reconnect=true;} }
+    setBusy("");
+    if(reconnect)flash("Reconnect your Shopify store to allow stock sync (Settings → Integrations → reconnect).",true);
+    else flash("Synced "+synced+" SKU"+(synced!==1?"s":"")+" to Shopify"+(skipped?" · "+skipped+" skipped (not in Shopify or tracking off)":"")+".");
+  };
   const openXfer=(it)=>{ const locs=(it.byLoc&&Object.keys(it.byLoc).length)?Object.keys(it.byLoc):[(it.loc||"Main")]; setXfer({sku:it.sku,name:it.name||"",byLoc:(it.byLoc&&Object.keys(it.byLoc).length)?it.byLoc:{[(it.loc||"Main")]:+it.onHand||0},from:locs[0],to:"",qty:""}); };
   const doXfer=async()=>{
     if(!xfer.to.trim()){flash("Enter a destination location.",true);return;}
@@ -10039,6 +10052,7 @@ function Inventory({settings,client,showMoney=true,currentUser,orders=[]}){
         <p className="text-sm text-stone-500 mt-0.5">Stock on hand per SKU, shared across your whole company. Auto-decrements when orders ship.</p>
       </div>
       <div className="flex items-center gap-2">
+        {shopConns.length>0&&list.length>0&&<button onClick={syncShopify} disabled={busy==="shopify"} title="Push on-hand quantities to Shopify so it can't oversell" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5">{busy==="shopify"?<Loader2 className="w-4 h-4 animate-spin"/>:<ShoppingBag className="w-4 h-4"/>}Sync to Shopify</button>}
         {list.length>0&&<button onClick={exportCSV} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Download className="w-4 h-4"/>Export</button>}
         {catalog.length>0&&<button onClick={importCatalog} disabled={busy==="import"} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5">{busy==="import"?<Loader2 className="w-4 h-4 animate-spin"/>:<Download className="w-4 h-4"/>}Import from catalog</button>}
         <button onClick={()=>setAdding(a=>!a)} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>New item</button>

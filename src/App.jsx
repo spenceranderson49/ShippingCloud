@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v664";
+const BUILD_TAG="addr-v665";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9999,6 +9999,30 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     const rows=[["SKU","Name","On hand","Reorder","Unit cost","Value","Location","Kit components"],...list.map(it=>[it.sku,it.name||"",+it.onHand||0,+it.reorder||0,+it.cost||0,((+it.onHand||0)*(+it.cost||0)).toFixed(2),(it.byLoc&&Object.keys(it.byLoc).length?Object.keys(it.byLoc).map(k=>k+":"+it.byLoc[k]).join(" | "):(it.loc||"")),(Array.isArray(it.kit)?it.kit.map(c=>c.qty+"× "+c.sku).join(" + "):"")])];
     downloadCSV((BRAND.fw?"freightwire":"shippingcloud")+"-inventory.csv",rows);
   };
+  const importCSV=async(e)=>{
+    const file=e.target.files&&e.target.files[0]; if(!file)return;
+    let text=""; try{ text=await file.text(); }catch(err){ flash("Couldn't read that file.",true); return; }
+    const rows=parseCSVText(text);
+    if(rows.length<2){ flash("That file has no data rows.",true); e.target.value=""; return; }
+    const head=rows[0].map(h=>String(h).trim().toLowerCase());
+    const col=(names)=>{ for(const n of names){ const i=head.indexOf(n); if(i>=0)return i; } return -1; };
+    const ci={sku:col(["sku","item sku","variant sku"]),name:col(["name","title","product","description"]),onHand:col(["on hand","onhand","qty","quantity","stock","count"]),reorder:col(["reorder","reorder at","reorder point","min","minimum"]),cost:col(["unit cost","cost","price","unit price"]),loc:col(["location","bin","warehouse","loc"]),barcode:col(["barcode","upc","ean","gtin"])};
+    if(ci.sku<0){ flash("Your CSV needs a SKU column (header 'SKU').",true); e.target.value=""; return; }
+    setBusy("importcsv"); let n=0,fail=0;
+    for(const r of rows.slice(1,1001)){
+      const sku=String(r[ci.sku]||"").trim(); if(!sku)continue;
+      const p={action:"invUpsert",token:CLOUD.token,sku};
+      if(ci.name>=0)p.name=r[ci.name];
+      if(ci.onHand>=0&&String(r[ci.onHand]).trim()!=="")p.onHand=Math.round(+String(r[ci.onHand]).replace(/[^0-9.\-]/g,"")||0);
+      if(ci.reorder>=0&&String(r[ci.reorder]).trim()!=="")p.reorder=Math.round(+String(r[ci.reorder]).replace(/[^0-9.\-]/g,"")||0);
+      if(ci.cost>=0&&String(r[ci.cost]).trim()!=="")p.cost=+String(r[ci.cost]).replace(/[^0-9.\-]/g,"")||0;
+      if(ci.loc>=0)p.loc=r[ci.loc];
+      if(ci.barcode>=0)p.barcode=r[ci.barcode];
+      const res=await cloudCall(p); if(res&&res.ok)n++; else fail++;
+    }
+    setBusy(""); e.target.value=""; await load();
+    flash("Imported / updated "+n+" item"+(n!==1?"s":"")+(fail?" · "+fail+" failed":"")+".");
+  };
   const shopConns=shopifyConns(settings);
   const syncShopify=async()=>{
     if(!shopConns.length)return;
@@ -10057,6 +10081,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
       <div className="flex items-center gap-2">
         {shopConns.length>0&&list.length>0&&<button onClick={syncShopify} disabled={busy==="shopify"} title="Push on-hand quantities to Shopify so it can't oversell" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5">{busy==="shopify"?<Loader2 className="w-4 h-4 animate-spin"/>:<ShoppingBag className="w-4 h-4"/>}Sync to Shopify</button>}
         {shopConns.length>0&&setSettings&&<label className="flex items-center gap-1.5 text-xs text-stone-600 cursor-pointer" title="Automatically push the new level to Shopify each time an order ships"><input type="checkbox" checked={!!settings.autoShopifyStock} onChange={e=>setSettings(s=>({...s,autoShopifyStock:e.target.checked}))} className="accent-[#0086E0]"/>auto on ship</label>}
+        <label className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 flex items-center gap-1.5 cursor-pointer">{busy==="importcsv"?<Loader2 className="w-4 h-4 animate-spin"/>:<Upload className="w-4 h-4"/>}Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
         {list.length>0&&<button onClick={exportCSV} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Download className="w-4 h-4"/>Export</button>}
         {catalog.length>0&&<button onClick={importCatalog} disabled={busy==="import"} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5">{busy==="import"?<Loader2 className="w-4 h-4 animate-spin"/>:<Download className="w-4 h-4"/>}Import from catalog</button>}
         <button onClick={()=>setAdding(a=>!a)} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>New item</button>

@@ -126,7 +126,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v639";
+const BUILD_TAG="addr-v640";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -13463,11 +13463,14 @@ function CompanyDefaultsDeploy({companyUsers,companyFlags,setCompanyFlags,adminS
   const [lockFields,setLockFields]=useState(false);
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState(null);
+  const [mode,setMode]=useState("all");
+  const [picked,setPicked]=useState({});
+  const targets=mode==="all"?users:users.filter(u=>picked[u.id]);
   const run=async(clear)=>{
-    if(!users.length){setMsg({err:"No team logins yet — create one above first."});return;}
+    if(!targets.length){setMsg({err:"Pick at least one login."});return;}
     if(!clear&&!incBoxes&&!incFields){setMsg({err:"Pick at least one thing to deploy."});return;}
     setBusy(true);let ok=0,fail=0;
-    for(const u of users){
+    for(const u of targets){
       const cur={...((companyFlags||{})[u.id]||{})};
       if(clear){delete cur._boxes;delete cur._boxesLock;delete cur._fieldLists;delete cur._fieldListsLock;}
       else{ if(incBoxes){cur._boxes=boxes;cur._boxesLock=lockBoxes;} if(incFields){cur._fieldLists=fl;cur._fieldListsLock=lockFields;} }
@@ -13479,15 +13482,25 @@ function CompanyDefaultsDeploy({companyUsers,companyFlags,setCompanyFlags,adminS
   };
   return (<div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
     <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><Package className="w-4 h-4 text-[#0086E0]"/>Package sizes &amp; dropdown values</div>
-    <div className="text-xs text-stone-500">Push your own <b>package sizes</b> and <b>dropdown values</b> (Departments, Ref #, PO #) to the team. Lock either to make it the enforced company set members can't remove.</div>
+    <div className="text-xs text-stone-500">Push your own <b>package sizes</b> and <b>dropdown values</b> (Departments, Ref #, PO #) to everyone or selected logins. Lock either to make it the enforced company set members can't remove.</div>
+    <DeployTargets users={users} mode={mode} setMode={setMode} picked={picked} setPicked={setPicked}/>
     <label className="flex items-center justify-between gap-2 text-sm text-stone-700"><span className="flex items-center gap-2"><input type="checkbox" checked={incBoxes} onChange={e=>setIncBoxes(e.target.checked)} className="accent-[#0086E0]"/>Package sizes <span className="text-[11px] text-stone-400">({boxes.length})</span></span>{incBoxes&&<label className="flex items-center gap-1.5 text-[11px] text-stone-500 cursor-pointer"><input type="checkbox" checked={lockBoxes} onChange={e=>setLockBoxes(e.target.checked)} className="accent-[#0086E0]"/>lock</label>}</label>
     <label className="flex items-center justify-between gap-2 text-sm text-stone-700"><span className="flex items-center gap-2"><input type="checkbox" checked={incFields} onChange={e=>setIncFields(e.target.checked)} className="accent-[#0086E0]"/>Dropdown values <span className="text-[11px] text-stone-400">({flCount} across Departments/Ref/PO)</span></span>{incFields&&<label className="flex items-center gap-1.5 text-[11px] text-stone-500 cursor-pointer"><input type="checkbox" checked={lockFields} onChange={e=>setLockFields(e.target.checked)} className="accent-[#0086E0]"/>lock</label>}</label>
     <div className="flex flex-wrap items-center gap-2">
-      <button onClick={()=>run(false)} disabled={busy} className="text-sm bg-[#0086E0] hover:bg-[#006db8] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<ShieldCheck className="w-4 h-4"/>}Deploy to team ({users.length})</button>
+      <button onClick={()=>run(false)} disabled={busy} className="text-sm bg-[#0086E0] hover:bg-[#006db8] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<ShieldCheck className="w-4 h-4"/>}Deploy to {mode==="all"?"team":targets.length+" selected"} ({targets.length})</button>
       <button onClick={()=>run(true)} disabled={busy} className="text-sm bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40">Clear</button>
       {msg&&<span className={`text-xs ${msg.err?"text-rose-600":"text-emerald-700"}`}>{msg.err||msg.ok}</span>}
     </div>
     <p className="text-[11px] text-stone-400">Deploys <b>your</b> current Package Sizes (Settings → Package Sizes) and dropdown values (Settings → Reference Fields) — edit those, then deploy.</p>
+  </div>);
+}
+/* Shared "who gets it" picker for every company deploy panel — Everyone, or a checklist subset
+   (e.g. give Address Book / a logo / a template to 3 of 10 logins). */
+function DeployTargets({users,mode,setMode,picked,setPicked}){
+  return (<div className="flex flex-wrap items-center gap-3 text-sm">
+    <label className="flex items-center gap-1.5 cursor-pointer"><input type="radio" checked={mode==="all"} onChange={()=>setMode("all")} className="accent-[#0086E0]"/>Everyone ({users.length})</label>
+    <label className="flex items-center gap-1.5 cursor-pointer"><input type="radio" checked={mode==="some"} onChange={()=>setMode("some")} className="accent-[#0086E0]"/>Selected logins</label>
+    {mode==="some"&&<div className="flex flex-wrap gap-2 w-full">{users.length===0?<span className="text-[11px] text-stone-400">No logins yet.</span>:users.map(u=>(<label key={u.id} className="flex items-center gap-1.5 text-xs bg-stone-50 border border-stone-200 rounded-lg px-2 py-1 cursor-pointer"><input type="checkbox" checked={!!picked[u.id]} onChange={e=>setPicked(pp=>({...pp,[u.id]:e.target.checked}))} className="accent-[#0086E0]"/>{u.name||u.email}</label>))}</div>}
   </div>);
 }
 /* Company document template — deploys the admin's packing-slip text, commercial-invoice letterhead
@@ -13504,11 +13517,14 @@ function CompanyDocsDeploy({companyUsers,companyFlags,setCompanyFlags,adminSetti
   const [lock,setLock]=useState(false);
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState(null);
+  const [mode,setMode]=useState("all");
+  const [picked,setPicked]=useState({});
+  const targets=mode==="all"?users:users.filter(u=>picked[u.id]);
   const buildDocs=()=>({slipTitle:s.slipTitle||"",slipThanks:s.slipThanks||"",slipFooter:s.slipFooter||"",slipTemplate:s.slipTemplate||"",pickListTitle:s.pickListTitle||"",pickListNote:s.pickListNote||"",defaultSigId:s.defaultSigId||"",taxId:s.taxId||"",docAssets:assets});
   const run=async(clear)=>{
-    if(!users.length){setMsg({err:"No team logins yet — create one above first."});return;}
+    if(!targets.length){setMsg({err:"Pick at least one login."});return;}
     setBusy(true);let ok=0,fail=0; const docs=buildDocs();
-    for(const u of users){
+    for(const u of targets){
       const cur={...((companyFlags||{})[u.id]||{})};
       if(clear){delete cur._docs;delete cur._docsLock;} else {cur._docs=docs;cur._docsLock=lock;}
       const r=await cloudCall({action:"companySetFlags",token:CLOUD.token,uid:u.id,flags:cur});
@@ -13519,7 +13535,8 @@ function CompanyDocsDeploy({companyUsers,companyFlags,setCompanyFlags,adminSetti
   };
   return (<div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
     <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><FileText className="w-4 h-4 text-[#0086E0]"/>Document template (packing slip &amp; commercial invoice)</div>
-    <div className="text-xs text-stone-500">Deploys <b>your</b> packing-slip text, commercial-invoice letterhead &amp; signature, and Tax ID/EIN as the company default. Set them up under <b>Settings → Packing Slip / Commercial Invoice / Other Documents</b>, then deploy. Lock to make them the enforced company template members can't change.</div>
+    <div className="text-xs text-stone-500">Deploys <b>your</b> packing-slip text, commercial-invoice letterhead &amp; signature, and Tax ID/EIN as the default for everyone or selected logins. Set them up under <b>Settings → Packing Slip / Commercial Invoice / Other Documents</b>, then deploy. Lock to make them the enforced company template members can't change.</div>
+    <DeployTargets users={users} mode={mode} setMode={setMode} picked={picked} setPicked={setPicked}/>
     <div className="flex flex-wrap gap-1.5 text-[11px]">
       <span className={`rounded-full px-2 py-0.5 border ${s.slipTitle||s.slipFooter?"bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]":"bg-stone-50 text-stone-400 border-stone-200"}`}>Packing slip {s.slipTitle||s.slipFooter?"✓":"—"}</span>
       <span className={`rounded-full px-2 py-0.5 border ${letterheads?"bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]":"bg-stone-50 text-stone-400 border-stone-200"}`}>{letterheads} letterhead</span>
@@ -13528,7 +13545,7 @@ function CompanyDocsDeploy({companyUsers,companyFlags,setCompanyFlags,adminSetti
     </div>
     <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={lock} onChange={e=>setLock(e.target.checked)} className="accent-[#0086E0]"/>Lock — members use this template and can't change it</label>
     <div className="flex flex-wrap items-center gap-2">
-      <button onClick={()=>run(false)} disabled={busy} className="text-sm bg-[#0086E0] hover:bg-[#006db8] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<ShieldCheck className="w-4 h-4"/>}Deploy to team ({users.length})</button>
+      <button onClick={()=>run(false)} disabled={busy} className="text-sm bg-[#0086E0] hover:bg-[#006db8] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<ShieldCheck className="w-4 h-4"/>}Deploy to {mode==="all"?"team":targets.length+" selected"} ({targets.length})</button>
       <button onClick={()=>run(true)} disabled={busy} className="text-sm bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40">Clear</button>
       {msg&&<span className={`text-xs ${msg.err?"text-rose-600":"text-emerald-700"}`}>{msg.err||msg.ok}</span>}
     </div>
@@ -13543,14 +13560,17 @@ function CompanyLogoDeploy({companyUsers,companyFlags,setCompanyFlags}){
   const [lock,setLock]=useState(false);
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState(null);
+  const [mode,setMode]=useState("all");
+  const [picked,setPicked]=useState({});
+  const targets=mode==="all"?users:users.filter(u=>picked[u.id]);
   useEffect(()=>{ for(const u of users){ const f=(companyFlags||{})[u.id]||{}; if(f._companyLogo){ setLogo(f._companyLogo); setLock(!!f._companyLogoLock); break; } } /* seed once from any already-deployed value */ // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
   const onFile=(file)=>{ if(!file)return; try{ readImgFile(file,(b)=>setLogo(b),600); }catch(e){} };
   const deployLogo=async(clear)=>{
-    if(!users.length){setMsg({err:"No team logins yet — create one above first."});return;}
+    if(!targets.length){setMsg({err:"Pick at least one login."});return;}
     if(!clear&&!logo){setMsg({err:"Upload a logo first."});return;}
     setBusy(true); let ok=0,fail=0;
-    for(const u of users){
+    for(const u of targets){
       const cur={...((companyFlags||{})[u.id]||{})};
       if(clear){delete cur._companyLogo;delete cur._companyLogoLock;} else {cur._companyLogo=logo;cur._companyLogoLock=lock;}
       const r=await cloudCall({action:"companySetFlags",token:CLOUD.token,uid:u.id,flags:cur});
@@ -13562,7 +13582,8 @@ function CompanyLogoDeploy({companyUsers,companyFlags,setCompanyFlags}){
   };
   return (<div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
     <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><Sparkles className="w-4 h-4 text-[#0086E0]"/>Company header logo</div>
-    <div className="text-xs text-stone-500">Push one logo to your whole team — it shows in the header (top-right) and on their documents. Lock it to stop individuals swapping in their own.</div>
+    <div className="text-xs text-stone-500">Push one logo to everyone or selected logins — it shows in the header (top-right) and on their documents. Lock it to stop individuals swapping in their own.</div>
+    <DeployTargets users={users} mode={mode} setMode={setMode} picked={picked} setPicked={setPicked}/>
     <div className="flex items-center gap-3 flex-wrap">
       {logo?<img src={logo} alt="Company logo" className="h-10 w-auto max-w-[180px] object-contain border border-stone-200 rounded bg-white px-2 py-1"/>:<span className="text-[11px] text-stone-300 border border-dashed border-stone-300 rounded px-3 py-2.5">No logo</span>}
       <label className="text-[11px] bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={e=>{onFile(e.target.files&&e.target.files[0]);e.target.value="";}}/></label>
@@ -13570,7 +13591,7 @@ function CompanyLogoDeploy({companyUsers,companyFlags,setCompanyFlags}){
     </div>
     <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={lock} onChange={e=>setLock(e.target.checked)} className="accent-[#0086E0]"/>Lock — team members can't replace it with their own logo</label>
     <div className="flex flex-wrap items-center gap-2">
-      <button onClick={()=>deployLogo(false)} disabled={busy} className="text-sm bg-[#0086E0] hover:bg-[#006db8] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<ShieldCheck className="w-4 h-4"/>}Deploy to team ({users.length})</button>
+      <button onClick={()=>deployLogo(false)} disabled={busy} className="text-sm bg-[#0086E0] hover:bg-[#006db8] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<ShieldCheck className="w-4 h-4"/>}Deploy to {mode==="all"?"team":targets.length+" selected"} ({targets.length})</button>
       <button onClick={()=>deployLogo(true)} disabled={busy} className="text-sm bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40">Clear</button>
       {msg&&<span className={`text-xs ${msg.err?"text-rose-600":"text-emerald-700"}`}>{msg.err||msg.ok}</span>}
     </div>

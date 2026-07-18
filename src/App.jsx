@@ -126,7 +126,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v634";
+const BUILD_TAG="addr-v635";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6258,6 +6258,7 @@ function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,set
     </div>
     <p className="text-[11px] text-stone-500">Blue chip = the person has that tab. Company admins always have every tab your account includes.</p>
     <CompanyLogoDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags}/>
+    <CompanyDefaultsDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings}/>
     <CompanyCustomDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings} client={client} allowedTabs={allowedTabs}/>
     <CompanyAddressDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings}/>
   </div>);
@@ -6688,6 +6689,11 @@ function AppInner(){
     const fl=(uid&&featureFlags&&featureFlags[uid])||(CLOUD.mode==="cloud"?(myFeatures||{}):{});
     return { src:(fl&&fl._companyLogo)||"", lock:!!(fl&&fl._companyLogoLock) };
   },[currentUser,featureFlags,myFeatures]);
+  /* Company-admin-deployed package sizes (_boxes) + dropdown values (_fieldLists), each with a lock. */
+  const deployedExtra=useMemo(()=>{ const uid=currentUser&&currentUser.id;
+    const fl=(uid&&featureFlags&&featureFlags[uid])||(CLOUD.mode==="cloud"?(myFeatures||{}):{});
+    return { boxes:(fl&&fl._boxes)||null, boxesLock:!!(fl&&fl._boxesLock), fieldLists:(fl&&fl._fieldLists)||null, fieldListsLock:!!(fl&&fl._fieldListsLock) };
+  },[currentUser,featureFlags,myFeatures]);
   const settings=useMemo(()=>{ const sc=scrubLegacyDefaults(settingsRaw);
     const depFlags=(function(){const uid=currentUser&&currentUser.id;return (uid&&featureFlags&&featureFlags[uid])||(CLOUD.mode==="cloud"?(myFeatures||{}):{});})();
     const depProds=(depFlags&&depFlags._products)||null;
@@ -6702,8 +6708,16 @@ function AppInner(){
     /* Company header logo: if the admin LOCKED the deploy, it always wins (members can't override);
        otherwise it's the default the member sees until they upload their own. */
     const companyLogo=deployedLogo.lock?(deployedLogo.src||sc.companyLogo||""):(sc.companyLogo||deployedLogo.src||"");
-    return {...sc,products,addresses,companyLogo,custom:{...deployedCustom,...personalCustom},_logoLocked:deployedLogo.lock};   // company-deployed defaults sit under personal choices
-  },[settingsRaw,deployedCustom,deployedLogo]);
+    /* Company-deployed package sizes: locked → deployed set only; otherwise deployed presets merge in
+       by name alongside the member's own. */
+    let boxes=sc.boxes;
+    if(deployedExtra.boxes&&deployedExtra.boxes.length){ if(deployedExtra.boxesLock){boxes=deployedExtra.boxes;} else {const mine=sc.boxes||[];const bn=new Set(mine.map(x=>String(x&&x.name||"").toLowerCase()));boxes=[...mine,...deployedExtra.boxes.filter(x=>!bn.has(String(x&&x.name||"").toLowerCase()))];} }
+    /* Company-deployed dropdown values (department/reference/invoice/po): locked → deployed only;
+       otherwise merge deployed values into each list alongside the member's own. */
+    let fieldLists=sc.fieldLists;
+    if(deployedExtra.fieldLists&&typeof deployedExtra.fieldLists==="object"){ const mine=sc.fieldLists||{}; const out={...mine}; for(const k of Object.keys(deployedExtra.fieldLists)){ const dv=Array.isArray(deployedExtra.fieldLists[k])?deployedExtra.fieldLists[k]:[]; if(deployedExtra.fieldListsLock){out[k]=dv;} else {const mv=Array.isArray(mine[k])?mine[k]:[]; const seen=new Set(mv.map(x=>String(x).toLowerCase())); out[k]=[...mv,...dv.filter(x=>!seen.has(String(x).toLowerCase()))];} } fieldLists=out; }
+    return {...sc,products,addresses,companyLogo,boxes,fieldLists,custom:{...deployedCustom,...personalCustom},_logoLocked:deployedLogo.lock};   // company-deployed defaults sit under personal choices
+  },[settingsRaw,deployedCustom,deployedLogo,deployedExtra]);
   const setSettings=(v)=>setSettingsRaw(p=>scrubLegacyDefaults(typeof v==="function"?v(scrubLegacyDefaults(p)):v));
   const custom=cz(settings);
   /* Live look preview: while the Appearance editor is open it broadcasts its DRAFT accent over the
@@ -13389,6 +13403,47 @@ function TwoFactorPanel(){
     </div>
     {msg&&<div className={`text-sm mt-2 ${msg.t==="ok"?"text-emerald-700":"text-rose-600"}`}>{msg.m}</div>}
   </Panel>);
+}
+/* Company package sizes + dropdown values (Departments / Ref # / PO #) — deploys the admin's own
+   Package Sizes and Reference-Field lists to the whole team. Stored as `_boxes` / `_fieldLists`
+   (+ `_boxesLock` / `_fieldListsLock`); merged member-side in the `settings` memo up in AppInner. */
+function CompanyDefaultsDeploy({companyUsers,companyFlags,setCompanyFlags,adminSettings}){
+  const users=(companyUsers||[]).filter(u=>u.status!=="disabled"&&u.status!=="deactivated");
+  const boxes=(adminSettings&&adminSettings.boxes)||[];
+  const fl=(adminSettings&&adminSettings.fieldLists)||{};
+  const flCount=Object.values(fl).reduce((a,v)=>a+(Array.isArray(v)?v.length:0),0);
+  const [incBoxes,setIncBoxes]=useState(true);
+  const [incFields,setIncFields]=useState(true);
+  const [lockBoxes,setLockBoxes]=useState(false);
+  const [lockFields,setLockFields]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState(null);
+  const run=async(clear)=>{
+    if(!users.length){setMsg({err:"No team logins yet — create one above first."});return;}
+    if(!clear&&!incBoxes&&!incFields){setMsg({err:"Pick at least one thing to deploy."});return;}
+    setBusy(true);let ok=0,fail=0;
+    for(const u of users){
+      const cur={...((companyFlags||{})[u.id]||{})};
+      if(clear){delete cur._boxes;delete cur._boxesLock;delete cur._fieldLists;delete cur._fieldListsLock;}
+      else{ if(incBoxes){cur._boxes=boxes;cur._boxesLock=lockBoxes;} if(incFields){cur._fieldLists=fl;cur._fieldListsLock=lockFields;} }
+      const r=await cloudCall({action:"companySetFlags",token:CLOUD.token,uid:u.id,flags:cur});
+      if(r&&r.ok){ok++;setCompanyFlags(m=>({...(m||{}),[u.id]:r.flags||cur}));}else fail++;
+    }
+    setBusy(false);
+    setMsg(fail?{err:`${ok} updated, ${fail} failed — try again.`}:{ok:clear?`Cleared for ${ok} login${ok!==1?"s":""}.`:`Deployed to ${ok} login${ok!==1?"s":""} — visible on their next load.`});
+  };
+  return (<div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
+    <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><Package className="w-4 h-4 text-[#0086E0]"/>Package sizes &amp; dropdown values</div>
+    <div className="text-xs text-stone-500">Push your own <b>package sizes</b> and <b>dropdown values</b> (Departments, Ref #, PO #) to the team. Lock either to make it the enforced company set members can't remove.</div>
+    <label className="flex items-center justify-between gap-2 text-sm text-stone-700"><span className="flex items-center gap-2"><input type="checkbox" checked={incBoxes} onChange={e=>setIncBoxes(e.target.checked)} className="accent-[#0086E0]"/>Package sizes <span className="text-[11px] text-stone-400">({boxes.length})</span></span>{incBoxes&&<label className="flex items-center gap-1.5 text-[11px] text-stone-500 cursor-pointer"><input type="checkbox" checked={lockBoxes} onChange={e=>setLockBoxes(e.target.checked)} className="accent-[#0086E0]"/>lock</label>}</label>
+    <label className="flex items-center justify-between gap-2 text-sm text-stone-700"><span className="flex items-center gap-2"><input type="checkbox" checked={incFields} onChange={e=>setIncFields(e.target.checked)} className="accent-[#0086E0]"/>Dropdown values <span className="text-[11px] text-stone-400">({flCount} across Departments/Ref/PO)</span></span>{incFields&&<label className="flex items-center gap-1.5 text-[11px] text-stone-500 cursor-pointer"><input type="checkbox" checked={lockFields} onChange={e=>setLockFields(e.target.checked)} className="accent-[#0086E0]"/>lock</label>}</label>
+    <div className="flex flex-wrap items-center gap-2">
+      <button onClick={()=>run(false)} disabled={busy} className="text-sm bg-[#0086E0] hover:bg-[#006db8] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<ShieldCheck className="w-4 h-4"/>}Deploy to team ({users.length})</button>
+      <button onClick={()=>run(true)} disabled={busy} className="text-sm bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40">Clear</button>
+      {msg&&<span className={`text-xs ${msg.err?"text-rose-600":"text-emerald-700"}`}>{msg.err||msg.ok}</span>}
+    </div>
+    <p className="text-[11px] text-stone-400">Deploys <b>your</b> current Package Sizes (Settings → Package Sizes) and dropdown values (Settings → Reference Fields) — edit those, then deploy.</p>
+  </div>);
 }
 /* Company header logo — deploys ONE logo to every team login (shows top-right in the header and on
    documents). Stored as `_companyLogo` on each login's flags; `_companyLogoLock` decides whether an

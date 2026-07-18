@@ -126,7 +126,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v638";
+const BUILD_TAG="addr-v639";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3630,6 +3630,14 @@ function BackupsAdmin({clients=[],setClients,users=[],setUsers}){
       <p className="text-[12px] text-amber-700 mt-2">Close any other admin tabs before restoring, so they don't overwrite the recovered data.</p>
     </div>
     {msg&&<div className="text-sm rounded-lg px-3 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700">{msg}</div>}
+    {/* Prominent one-click login/password recovery — the thing you reach for if anything ever wipes. */}
+    {cloud&&groups.users&&groups.users.length>0&&<div className="border-2 border-emerald-300 bg-emerald-50/60 rounded-lg p-4">
+      <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><Users className="w-4 h-4 text-emerald-600"/>Restore logins &amp; passwords</div>
+      <p className="text-[12px] text-stone-600 mt-1">Missing a login or password? Roll <b>all logins</b> back to a saved point in one click — passwords included. Your current logins are snapshotted first, so it's fully reversible.</p>
+      <div className="flex flex-wrap gap-2 mt-2.5">
+        {groups.users.slice(0,5).map((b,i)=>(<button key={b.key} disabled={!!busy} onClick={()=>restore(b)} className="text-xs bg-white border border-emerald-300 text-emerald-800 rounded-lg px-3 py-1.5 font-medium hover:bg-emerald-100 disabled:opacity-40 inline-flex items-center gap-1.5"><RotateCcw className="w-3.5 h-3.5"/>{parseTs(b.ts)} · {b.count} login{b.count===1?"":"s"}{i===0?" · newest":""}</button>))}
+      </div>
+    </div>}
     {!cloud&&<div className="text-sm text-stone-500 border border-stone-200 rounded-lg p-4">Backups live in the cloud database — this is available on the live site.</div>}
     {rows===null&&cloud&&<div className="text-sm text-stone-400 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>Loading backups…</div>}
     {rows&&rows.length===0&&cloud&&<div className="text-sm text-stone-500 border border-stone-200 rounded-lg p-4">No snapshots found yet. Snapshots are created automatically the next time customers, rates, or logins are overwritten.</div>}

@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v661";
+const BUILD_TAG="addr-v662";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7108,7 +7108,10 @@ function AppInner(){
         const src=(ord&&Array.isArray(ord.lineItems)&&ord.lineItems.length)?ord.lineItems:(Array.isArray(rec&&rec.lineItems)?rec.lineItems:[]);
         const by0={}; src.forEach(li=>{ const sku=String((li&&li.sku)||"").trim(); if(!sku)return; by0[sku]=(by0[sku]||0)+(+li.qty||+li.quantity||1); });
         const lines=Object.keys(by0).map(sku=>({sku,qty:by0[sku]}));
-        if(lines.length) cloudCall({action:"invShip",token:CLOUD.token,lines,ref:rec.tracking||(ord&&(ord.name||ord.id))||""});
+        if(lines.length) cloudCall({action:"invShip",token:CLOUD.token,lines,ref:rec.tracking||(ord&&(ord.name||ord.id))||""}).then(res=>{
+          /* Auto-sync the decremented levels to Shopify so it can't oversell — opt-in, best-effort. */
+          try{ if(settings.autoShopifyStock&&res&&res.ok&&Array.isArray(res.items)&&res.items.length){ const conns=shopifyConns(settings); const updates=res.items.map(it=>({sku:it.sku,available:+it.onHand||0})); conns.forEach(c=>shopifyCall(SHOPIFY_INVENTORY,{shop:c.shop,token:c.token,updates})); } }catch(e){}
+        });
       }
     }catch(e){}
     // push tracking back to Shopify if this order came from a connected store
@@ -7415,7 +7418,7 @@ function AppInner(){
           {tab==="drafts"&&<Drafts drafts={drafts} setDrafts={setDrafts} goShip={goShip}/>}
           {tab==="returns"&&<Returns returns={returns} setReturns={setReturns} orders={orders} settings={settings} logEmail={logEmail}/>}
           {tab==="pickups"&&<Pickups pickups={pickups} setPickups={setPickups} settings={settings} client={client} isAdmin={isAdmin} showCosts={featureOn("pickupCosts",currentUser,myFlags)}/>}
-          {tab==="inventory"&&<Inventory settings={settings} client={client} showMoney={showMoney} currentUser={currentUser} orders={orders}/>}
+          {tab==="inventory"&&<Inventory settings={settings} setSettings={setSettings} client={client} showMoney={showMoney} currentUser={currentUser} orders={orders}/>}
           {tab==="invoices"&&<Invoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>}
           {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings} client={client} onShipped={onShipped}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
@@ -9902,7 +9905,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
    Company-shared stock, one row per SKU on the server (inv:<clientId>:<sku>). Tracks on-hand,
    reorder point, unit cost and location; receives POs; auto-decrements when orders ship (see the
    invShip hook in AppInner). Money columns hide when the login can't see costs. */
-function Inventory({settings,client,showMoney=true,currentUser,orders=[]}){
+function Inventory({settings,setSettings,client,showMoney=true,currentUser,orders=[]}){
   const [items,setItems]=useState(null);   // null = loading
   const [log,setLog]=useState([]);
   const [err,setErr]=useState(""); const [ok,setOk]=useState("");
@@ -10053,6 +10056,7 @@ function Inventory({settings,client,showMoney=true,currentUser,orders=[]}){
       </div>
       <div className="flex items-center gap-2">
         {shopConns.length>0&&list.length>0&&<button onClick={syncShopify} disabled={busy==="shopify"} title="Push on-hand quantities to Shopify so it can't oversell" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5">{busy==="shopify"?<Loader2 className="w-4 h-4 animate-spin"/>:<ShoppingBag className="w-4 h-4"/>}Sync to Shopify</button>}
+        {shopConns.length>0&&setSettings&&<label className="flex items-center gap-1.5 text-xs text-stone-600 cursor-pointer" title="Automatically push the new level to Shopify each time an order ships"><input type="checkbox" checked={!!settings.autoShopifyStock} onChange={e=>setSettings(s=>({...s,autoShopifyStock:e.target.checked}))} className="accent-[#0086E0]"/>auto on ship</label>}
         {list.length>0&&<button onClick={exportCSV} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Download className="w-4 h-4"/>Export</button>}
         {catalog.length>0&&<button onClick={importCatalog} disabled={busy==="import"} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5">{busy==="import"?<Loader2 className="w-4 h-4 animate-spin"/>:<Download className="w-4 h-4"/>}Import from catalog</button>}
         <button onClick={()=>setAdding(a=>!a)} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>New item</button>

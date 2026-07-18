@@ -597,6 +597,39 @@ exports.handler = async (event) => {
     }
 
 
+    /* ── PUBLIC: self-serve return request (branded returns portal). No auth — a buyer submits it
+       from the merchant's returns page. Stored under the merchant's opaque brandId so the merchant
+       (who can recompute that id from their own company id) can read them back. Rate-limited. ── */
+    if (action === "pubBrand") {
+      const brandId = String(body.b || "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 40);
+      if (!brandId) return J({ ok: false });
+      const b = await getStore("pub:track:" + brandId);
+      return J({ ok: true, brand: (b.ok && b.value && typeof b.value === "object" && b.value.enabled !== false) ? b.value : null });
+    }
+    if (action === "returnSubmit") {
+      const brandId = String(body.b || "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 40);
+      if (!brandId) return J({ ok: false, error: "This returns link is missing its store id." });
+      const ip = clientIp(event);
+      if (!loginThrottleOk(ip, "ret|" + brandId, 8)) return J({ ok: false, error: "Too many requests — please wait a few minutes." });
+      const order = String(body.order || "").trim().slice(0, 60);
+      const email = String(body.email || "").trim().slice(0, 120);
+      const reason = String(body.reason || "").trim().slice(0, 200);
+      const itemsTxt = String(body.items || "").trim().slice(0, 600);
+      const name = String(body.name || "").trim().slice(0, 80);
+      if (!order || !/.+@.+\..+/.test(email)) return J({ ok: false, error: "Enter your order number and the email on the order." });
+      const brandRec = await getStore("pub:track:" + brandId);
+      if (!brandRec.ok) return J({ ok: false, retry: true, error: "Please try again in a moment." });
+      if (!(brandRec.value && typeof brandRec.value === "object")) return J({ ok: false, error: "This store hasn't set up returns." });
+      const key = "retreq:" + brandId;
+      const cur = await getStore(key);
+      if (!cur.ok) return J({ ok: false, retry: true, error: "Please try again in a moment." });
+      const list = Array.isArray(cur.value) ? cur.value : [];
+      list.unshift({ id: "ret" + Date.now() + Math.floor(Math.random() * 1000), at: new Date().toISOString(), order, email: email.toLowerCase(), name, items: itemsTxt, reason, status: "new" });
+      const w = await putStores({ [key]: list.slice(0, 500) });
+      if (!w.ok) return J({ ok: false, error: "Couldn't submit — try again." });
+      return J({ ok: true });
+    }
+
     /* ── everything below requires a valid session ── */
     const auth = verifyToken(body.token);
     if (!auth) return J({ ok: false, authFailed: true, error: "Session expired — sign in again." });
@@ -607,7 +640,7 @@ exports.handler = async (event) => {
        Every login of a company shares its inventory; a platform admin may target a specific
        company via body.clientId. All reads refuse-and-retry on failure so stock is never
        silently zeroed by a transient DB hiccup. */
-    if (["invList", "invUpsert", "invAdjust", "invReceive", "invShip", "invDelete", "poList", "poSave", "poReceive", "poDelete", "supplierList", "supplierSave", "supplierDelete"].indexOf(action) >= 0) {
+    if (["invList", "invUpsert", "invAdjust", "invReceive", "invShip", "invDelete", "poList", "poSave", "poReceive", "poDelete", "supplierList", "supplierSave", "supplierDelete", "returnList", "returnSetStatus"].indexOf(action) >= 0) {
       const curU = await getStore("users");
       if (!curU.ok) return J({ ok: false, retry: true, error: "Storage is briefly unavailable — try again." });
       const allU = Array.isArray(curU.value) ? curU.value : [];
@@ -853,6 +886,24 @@ exports.handler = async (event) => {
         return J({ ok: true });
       }
 
+      /* ── Return requests (from the branded returns portal). Stored under retreq:<brandId>; the
+         merchant recomputes brandId from their own company id, so no cross-company access. ── */
+      if (action === "returnList" || action === "returnSetStatus") {
+        const brandId = crypto.createHmac("sha256", secret()).update("track:" + cid).digest("hex").slice(0, 20);
+        const rKey = "retreq:" + brandId;
+        const cur = await getStore(rKey);
+        if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't load return requests — try again." });
+        let list = Array.isArray(cur.value) ? cur.value : [];
+        if (action === "returnList") return J({ ok: true, requests: list });
+        const id = String(body.id || "");
+        const status = ["new", "approved", "denied", "closed"].indexOf(String(body.status)) >= 0 ? String(body.status) : null;
+        if (!status) return J({ ok: false, error: "Invalid status." });
+        list = list.map((r) => r && r.id === id ? { ...r, status, handledAt: new Date().toISOString() } : r);
+        const w = await putStores({ [rKey]: list });
+        if (!w.ok) return J({ ok: false, error: "Couldn't update — try again." });
+        return J({ ok: true, requests: list });
+      }
+
       return J({ ok: false, error: "Unknown inventory action." });
     }
 
@@ -881,6 +932,7 @@ exports.handler = async (event) => {
         supportPhone: String(b.supportPhone || "").slice(0, 40),
         site: String(b.site || "").slice(0, 200),
         enabled: b.enabled !== false,
+        returns: b.returns !== false,
       };
       try { if (JSON.stringify(brand).length > 320000) return J({ ok: false, error: "That logo is too large — use a smaller image (well under 300 KB)." }); } catch (e) {}
       const w = await putStores({ [key]: brand });

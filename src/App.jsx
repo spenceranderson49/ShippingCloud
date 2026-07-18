@@ -136,7 +136,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v654";
+const BUILD_TAG="addr-v655";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6588,9 +6588,53 @@ function TrackingPage({num,brandId}){
           </div>}
         </>}
       </div>
+      {brandId&&(brand&&brand.returns!==false)&&<div className="mt-4 text-center"><a href={"/?returns="+encodeURIComponent(brandId)} className="inline-flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg border" style={{color:accent,borderColor:accent}}><Undo2 className="w-4 h-4"/>Start a return</a></div>}
       {brand&&(brand.supportEmail||brand.supportPhone||brand.site)&&<div className="mt-4 text-center text-xs text-stone-500">
         Questions about your order? {brand.supportEmail?<a href={"mailto:"+brand.supportEmail} className="underline" style={{color:accent}}>{brand.supportEmail}</a>:null}{brand.supportPhone?<> · {brand.supportPhone}</>:null}{brand.site?<> · <a href={brand.site.startsWith("http")?brand.site:("https://"+brand.site)} target="_blank" rel="noreferrer" className="underline" style={{color:accent}}>Visit store</a></>:null}
       </div>}
+      <div className="mt-6 text-center text-[11px] text-stone-400">Powered by {BRAND.fw?"Freightwire ShippingHub":"ShippingCloud"}</div>
+    </div>
+  </div>);
+}
+
+/* Public branded returns portal — a buyer submits a return request against their order. No auth,
+   rate-limited server-side. The merchant reviews requests in their Returns tab. */
+function ReturnsPortal({brandId}){
+  const [brand,setBrand]=useState(null);
+  const [f,setF]=useState({order:"",email:"",name:"",items:"",reason:"Wrong size / fit"});
+  const [busy,setBusy]=useState(false);
+  const [done,setDone]=useState(false);
+  const [err,setErr]=useState("");
+  useEffect(()=>{ let dead=false; (async()=>{ try{ const r=await fetch("/.netlify/functions/db",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"pubBrand",b:brandId})}); const j=await r.json(); if(!dead&&j&&j.ok)setBrand(j.brand||null); }catch(e){} })(); return ()=>{dead=true;}; },[brandId]);
+  const accent=(brand&&brand.color&&/^#?[0-9a-fA-F]{3,8}$/.test(brand.color))?(brand.color[0]==="#"?brand.color:"#"+brand.color):"#0086E0";
+  const submit=async()=>{
+    setErr("");
+    if(!f.order.trim()||!/.+@.+\..+/.test(f.email)){setErr("Enter your order number and the email on the order.");return;}
+    setBusy(true);
+    try{ const r=await fetch("/.netlify/functions/db",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"returnSubmit",b:brandId,order:f.order,email:f.email,name:f.name,items:f.items,reason:f.reason})}); const j=await r.json(); if(j&&j.ok)setDone(true); else setErr((j&&j.error)||"Couldn't submit — try again."); }
+    catch(e){ setErr("Network error — try again."); }
+    setBusy(false);
+  };
+  const REASONS=["Wrong size / fit","Changed my mind","Arrived damaged","Wrong item received","Defective / not working","Other"];
+  return (<div className="min-h-screen bg-stone-50 flex flex-col">
+    <div style={{background:accent}} className="text-white"><div className="max-w-lg mx-auto px-5 py-5 flex items-center gap-3">{brand&&brand.logo?<img src={brand.logo} alt="" className="h-9 w-auto max-w-[180px] object-contain bg-white/95 rounded px-1.5 py-1"/>:<span className="text-xl font-extrabold tracking-tight">{brand&&brand.name?brand.name:"Returns"}</span>}{brand&&brand.name&&brand.logo?<span className="text-lg font-semibold">{brand.name}</span>:null}</div></div>
+    <div className="flex-1 max-w-lg w-full mx-auto px-5 py-6">
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6">
+        {done?(<div className="text-center py-6"><div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-3"><CheckCircle2 className="w-7 h-7"/></div><div className="text-lg font-semibold text-stone-900">Return request received</div><p className="text-sm text-stone-500 mt-1">{brand&&brand.name?brand.name:"The store"} will review it and email you next steps{f.email?" at "+f.email:""}.</p></div>):(<>
+          <div className="text-lg font-semibold text-stone-900">Start a return</div>
+          <p className="text-sm text-stone-500 mt-0.5 mb-4">Tell us about your order and we'll get your return going.</p>
+          {err&&<div className="text-xs rounded px-3 py-2 border bg-rose-50 text-rose-600 border-rose-200 mb-3">{err}</div>}
+          <div className="space-y-3">
+            <label className="block text-xs text-stone-600">Order number<input value={f.order} onChange={e=>setF({...f,order:e.target.value})} placeholder="#1024" className="mt-1 w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"/></label>
+            <label className="block text-xs text-stone-600">Email on the order<input value={f.email} onChange={e=>setF({...f,email:e.target.value})} className="mt-1 w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"/></label>
+            <label className="block text-xs text-stone-600">Your name (optional)<input value={f.name} onChange={e=>setF({...f,name:e.target.value})} className="mt-1 w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"/></label>
+            <label className="block text-xs text-stone-600">Items you're returning<textarea value={f.items} onChange={e=>setF({...f,items:e.target.value})} rows={2} placeholder="e.g. 1× Blue Hoodie (M)" className="mt-1 w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"/></label>
+            <label className="block text-xs text-stone-600">Reason<select value={f.reason} onChange={e=>setF({...f,reason:e.target.value})} className="mt-1 w-full border border-stone-300 rounded-lg px-3 py-2 text-sm">{REASONS.map(r=><option key={r}>{r}</option>)}</select></label>
+            <button onClick={submit} disabled={busy} style={{background:accent}} className="w-full text-white rounded-lg px-4 py-2.5 font-medium disabled:opacity-40 flex items-center justify-center gap-1.5">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:null}Submit return request</button>
+          </div>
+        </>)}
+      </div>
+      {brand&&brand.supportEmail&&<div className="mt-4 text-center text-xs text-stone-500">Need help? <a href={"mailto:"+brand.supportEmail} className="underline" style={{color:accent}}>{brand.supportEmail}</a></div>}
       <div className="mt-6 text-center text-[11px] text-stone-400">Powered by {BRAND.fw?"Freightwire ShippingHub":"ShippingCloud"}</div>
     </div>
   </div>);
@@ -6600,8 +6644,9 @@ export default function App(){
   /* Public branded tracking page — served with NO auth and NO app boot. This runs before any hook
      so a shared tracking link opens instantly for a buyer who has no ShippingCloud account. The URL
      doesn't change between track/non-track without a reload, so the hook order stays consistent. */
-  { let _trk="",_b=""; try{ const u=new URL(window.location.href); _trk=u.searchParams.get("track")||""; _b=u.searchParams.get("b")||""; }catch(e){}
-    if(_trk) return <TrackingPage num={_trk} brandId={_b}/>; }
+  { let _trk="",_b="",_ret=""; try{ const u=new URL(window.location.href); _trk=u.searchParams.get("track")||""; _b=u.searchParams.get("b")||""; _ret=u.searchParams.get("returns")||""; }catch(e){}
+    if(_trk) return <TrackingPage num={_trk} brandId={_b}/>;
+    if(_ret) return <ReturnsPortal brandId={_ret}/>; }
   const [phase,setPhase]=useState("boot");
   const [bootMsg,setBootMsg]=useState("");
   const [bannerHid,setBannerHid]=useState(false);
@@ -11223,12 +11268,32 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
 function Returns({returns,setReturns,orders,settings,logEmail}){
   const [creating,setCreating]=useState(false);
   const [f,setF]=useState({customer:"",email:"",order:"",reason:"Wrong Size",carrier:"FedEx"});
+  const [reqs,setReqs]=useState(null);
+  useEffect(()=>{ if(!CLOUD.token)return; let dead=false; (async()=>{ const r=await cloudCall({action:"returnList",token:CLOUD.token}); if(!dead&&r&&r.ok)setReqs(r.requests||[]); })(); return ()=>{dead=true;}; },[]);
+  const setReqStatus=async(id,status)=>{ const r=await cloudCall({action:"returnSetStatus",token:CLOUD.token,id,status}); if(r&&r.ok)setReqs(r.requests||[]); };
+  const fromRequest=(rq)=>{ setF({customer:rq.name||"",email:rq.email||"",order:rq.order||"",reason:rq.reason||"Wrong Size",carrier:"FedEx"}); setCreating(true); setReqStatus(rq.id,"approved"); try{window.scrollTo({top:0,behavior:"smooth"});}catch(e){} };
   const fulfilled=orders.filter(o=>o.status==="fulfilled");
   const create=()=>{if(!f.customer)return;setReturns(r=>[{id:Date.now(),rma:"RMA-"+rnd(4),customer:f.customer,email:(f.email||"").trim(),order:f.order,reason:f.reason,carrier:f.carrier,tracking:"",status:"Requested",date:new Date().toLocaleDateString()},...r]);if(settings?.notify?.returnLabel&&logEmail&&(f.email||"").trim())logEmail({to:(f.email||"").trim(),subject:`We received your return request for ${f.order||"your order"}`,type:"Return"});setCreating(false);setF({customer:"",email:"",order:"",reason:"Wrong Size",carrier:"FedEx"});};
   const tone=s=>s==="Delivered"?"green":s==="In transit"?"amber":s==="Requested"?"stone":"blue";
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between"><h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Undo2 className="w-4 h-4"/>Returns &amp; RMAs</h2><button onClick={()=>setCreating(v=>!v)} className="flex items-center gap-1 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8]"><Plus className="w-4 h-4"/>Create Return</button></div>
+      {reqs&&reqs.length>0&&<div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+        <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 flex items-center justify-between"><span>Customer return requests</span><span>{reqs.filter(r=>r.status==="new").length} new</span></div>
+        <div className="divide-y divide-stone-100 max-h-96 overflow-y-auto">
+          {reqs.slice(0,80).map(rq=>(<div key={rq.id} className="px-4 py-3 flex items-start gap-3 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-stone-900 flex items-center gap-2">Order {rq.order||"—"}{rq.status==="new"?<Badge tone="blue">new</Badge>:<Badge tone={rq.status==="approved"?"green":rq.status==="denied"?"rose":"stone"}>{rq.status}</Badge>}</div>
+              <div className="text-[11px] text-stone-400">{rq.name?rq.name+" · ":""}{rq.email}{rq.at?" · "+new Date(rq.at).toLocaleDateString():""}</div>
+              <div className="text-xs text-stone-600 mt-1">{rq.reason}{rq.items?" — "+rq.items:""}</div>
+            </div>
+            {rq.status==="new"&&<div className="flex items-center gap-1.5">
+              <button onClick={()=>fromRequest(rq)} className="text-xs bg-[#0086E0] text-white rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#006db8]">Approve &amp; create label</button>
+              <button onClick={()=>setReqStatus(rq.id,"denied")} className="text-xs bg-stone-100 text-stone-500 rounded-lg px-2.5 py-1.5 hover:bg-rose-50 hover:text-rose-600">Deny</button>
+            </div>}
+          </div>))}
+        </div>
+      </div>}
       {creating&&<Panel title="New return label">
         <div className="grid sm:grid-cols-2 gap-3">
           <Field label="Customer"><Input value={f.customer} onChange={e=>setF({...f,customer:e.target.value})} placeholder="Name"/></Field>
@@ -11538,7 +11603,8 @@ function BrandedTracking({settings,setSettings}){
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState(null);
   const [copied,setCopied]=useState(false);
-  const seed=()=>({name:settings.company||"",logo:settings.companyLogo||"",color:"#0086E0",enabled:true,supportEmail:(settings.sender&&settings.sender.email)||"",supportPhone:(settings.sender&&settings.sender.phone)||"",site:""});
+  const [copied2,setCopied2]=useState(false);
+  const seed=()=>({name:settings.company||"",logo:settings.companyLogo||"",color:"#0086E0",enabled:true,returns:true,supportEmail:(settings.sender&&settings.sender.email)||"",supportPhone:(settings.sender&&settings.sender.phone)||"",site:""});
   useEffect(()=>{ let dead=false; (async()=>{
     if(!CLOUD.token){ setBrand(seed()); return; }
     const r=await cloudCall({action:"trackBrandGet",token:CLOUD.token});
@@ -11566,6 +11632,7 @@ function BrandedTracking({settings,setSettings}){
     </div>
     {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
     <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={brand.enabled!==false} onChange={e=>upd("enabled",e.target.checked)} className="accent-[#0086E0]"/>Enable branded tracking</label>
+    <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={brand.returns!==false} onChange={e=>upd("returns",e.target.checked)} className="accent-[#0086E0]"/>Enable self-service returns portal <span className="text-xs text-stone-400">(buyers can request a return; you review them in the Returns tab)</span></label>
     <Panel title="Your branding">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Store / company name"><Input value={brand.name||""} onChange={e=>upd("name",e.target.value)}/></Field>
@@ -11586,6 +11653,11 @@ function BrandedTracking({settings,setSettings}){
       <p className="text-xs text-stone-500 mb-2">Replace <b>TRACKING_NUMBER</b> with the shipment's number. FedEx tracking numbers work automatically.</p>
       <div className="flex items-center gap-2"><input readOnly value={linkTmpl} className="flex-1 border border-stone-200 rounded-lg px-2.5 py-2 text-xs font-mono bg-stone-50"/><button onClick={copy} className="text-xs bg-stone-100 border border-stone-200 rounded-lg px-3 py-2 hover:bg-stone-200 flex items-center gap-1">{copied?<Check className="w-3.5 h-3.5 text-emerald-600"/>:<Copy className="w-3.5 h-3.5"/>}{copied?"Copied":"Copy"}</button></div>
       <a href={sample} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs mt-2" style={{color:accent}}><ExternalLink className="w-3.5 h-3.5"/>Preview the live page</a>
+    </Panel>}
+    {brandId&&brand.returns!==false&&<Panel title="Your returns portal link">
+      <p className="text-xs text-stone-500 mb-2">Share this so buyers can start a return themselves. Requests show up in your <b>Returns</b> tab.</p>
+      <div className="flex items-center gap-2"><input readOnly value={APP_ORIGIN+"/?returns="+brandId} className="flex-1 border border-stone-200 rounded-lg px-2.5 py-2 text-xs font-mono bg-stone-50"/><button onClick={()=>{try{navigator.clipboard.writeText(APP_ORIGIN+"/?returns="+brandId);setCopied2(true);setTimeout(()=>setCopied2(false),1600);}catch(e){}}} className="text-xs bg-stone-100 border border-stone-200 rounded-lg px-3 py-2 hover:bg-stone-200 flex items-center gap-1">{copied2?<Check className="w-3.5 h-3.5 text-emerald-600"/>:<Copy className="w-3.5 h-3.5"/>}{copied2?"Copied":"Copy"}</button></div>
+      <a href={APP_ORIGIN+"/?returns="+brandId} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs mt-2" style={{color:accent}}><ExternalLink className="w-3.5 h-3.5"/>Preview the returns page</a>
     </Panel>}
   </div>);
 }

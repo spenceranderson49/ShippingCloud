@@ -126,7 +126,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v630";
+const BUILD_TAG="addr-v631";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6550,7 +6550,7 @@ export default function App(){
     <style dangerouslySetInnerHTML={{__html:"@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}"}}/>
   </div>);
   if(phase==="netfail") return (<div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-[#f2f8fd] via-white to-[#e6f4ff]"><div className="text-center space-y-3 max-w-sm bg-white/70 backdrop-blur rounded-2xl border border-stone-200 shadow-sm p-8"><WifiOff className="w-8 h-8 text-[#0086E0]/50 mx-auto"/><div className="text-stone-800 font-semibold">Can’t reach the server</div><p className="text-stone-500 text-sm">Your connection or the server hiccuped — nothing is wrong with your login. Give it a second and try again.</p><button onClick={()=>{setPhase("boot");start();}} className="text-sm bg-[#0086E0] text-white rounded-lg px-5 py-2 font-medium hover:bg-[#006db8]">Retry</button></div></div>);
-  if(phase==="login") return <LandingGate onDone={async()=>{ setPhase("loading"); const r=await cloudLoadAll(); setPhase("ready"); if(!r.ok)setBootMsg("Signed in — first sync will complete in the background."); }}/>;
+  if(phase==="login") return <LandingGate onDone={async()=>{ setPhase("loading"); await cloudLoadAll(); setPhase("ready"); /* no "first sync…" banner — the app is cache-first and syncs silently in the background; the user has nothing to act on */ }}/>;
   return (<>
     {bootMsg&&!bannerHid&&!((typeof navigator!=="undefined")&&navigator.onLine&&/offline|can.?t reach the server/i.test(bootMsg))&&<div className="bg-amber-50 border-b border-amber-200 text-amber-800 text-xs px-4 py-2 text-center relative">{bootMsg}<button onClick={()=>setBannerHid(true)} title="Dismiss" className="absolute right-3 top-1/2 -translate-y-1/2 text-amber-500 hover:text-amber-800"><X className="w-3.5 h-3.5"/></button></div>}
     <AppInner/>

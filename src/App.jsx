@@ -136,7 +136,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v652";
+const BUILD_TAG="addr-v653";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -341,6 +341,14 @@ function quoteRates(s){
 const CARRIER_TINT={FedEx:"text-violet-600",UPS:"text-amber-700",USPS:"text-[#0086E0]",DHL:"text-red-600"};
 const CARRIER_ORDER=["FedEx","UPS","USPS","DHL"];
 const TRACK_URL={FedEx:n=>`https://www.fedex.com/fedextrack/?trknbr=${n}`,UPS:n=>`https://www.ups.com/track?tracknum=${n}`,USPS:n=>`https://tools.usps.com/go/TrackConfirmAction?tLabels=${n}`,DHL:n=>`https://www.dhl.com/us-en/home/tracking.html?tracking-id=${n}`};
+/* Branded tracking link when the company has published one (Settings → Branded Tracking), else the
+   carrier's own page. Used for the buyer-facing tracking URL pushed to Shopify/other stores. */
+const brandedTrackUrl=(tracking,settings,carrier)=>{
+  const bid=settings&&settings.trackBrandId;
+  if(bid&&tracking)return APP_ORIGIN+"/?track="+encodeURIComponent(tracking)+"&b="+encodeURIComponent(bid);
+  const c=carrier||"FedEx";
+  return (TRACK_URL[c]&&tracking)?TRACK_URL[c](tracking):(tracking?TRACK_URL.FedEx(tracking):"");
+};
 const carrierOf=l=>l.startsWith("UPS")?"UPS":l.startsWith("USPS")?"USPS":l.startsWith("DHL")?"DHL":"FedEx";
 const money=n=>`$${Number(n).toFixed(2)}`;
 const rnd=(n)=>Math.random().toString().slice(2,2+n);
@@ -7070,7 +7078,7 @@ function AppInner(){
           /* Re-label (order already shipped): replace the tracking WITHOUT emailing the customer,
              then ask in the toast whether to send the email — never auto-notify on a redo. */
           const _relabel=ord.status==="fulfilled"||!!ord.shopifyFulfilled;
-          shopifyPushTracking(_conn,{shopifyId:ord.shopifyId,tracking:rec.tracking,carrier:rec.carrier,notifyCustomer:_relabel?false:undefined,prevTracking:_relabel?(ord.tracking||""):undefined}).then(res=>{
+          shopifyPushTracking(_conn,{shopifyId:ord.shopifyId,tracking:rec.tracking,trackingUrl:brandedTrackUrl(rec.tracking,settings,rec.carrier),carrier:rec.carrier,notifyCustomer:_relabel?false:undefined,prevTracking:_relabel?(ord.tracking||""):undefined}).then(res=>{
           if(res&&res.ok){ setOrders(o=>o.map(x=>x.id===orderId?{...x,shopifyFulfilled:true,tracking:rec.tracking}:x)); }
           else { logEmail&&logEmail({to:"system",subject:"Shopify fulfillment failed: "+((res&&res.error)||"unknown"),type:"System"}); }
           /* SURFACE the result — a failed (or successful re-label) push must never die silently in a log */
@@ -7086,7 +7094,7 @@ function AppInner(){
       const m=ord&&SRC[ord.source];
       if(m){ const c=connectorOf(m[0]); const creds=(settings.conn||{})[m[0]];
         if(c&&creds&&connConnected(settings,c)){
-          connectorPushTracking(c,creds,{platformId:ord[m[1]],tracking:rec.tracking,carrier:rec.carrier,lineItemIds:ord.lineItemIds,lines:ord.lines,version:ord.squareVersion}).then(res=>{
+          connectorPushTracking(c,creds,{platformId:ord[m[1]],tracking:rec.tracking,trackingUrl:brandedTrackUrl(rec.tracking,settings,rec.carrier),carrier:rec.carrier,lineItemIds:ord.lineItemIds,lines:ord.lines,version:ord.squareVersion}).then(res=>{
             if(res&&res.ok){ setOrders(o=>o.map(x=>x.id===orderId?{...x,platformFulfilled:true}:x)); }
             else { logEmail&&logEmail({to:"system",subject:ord.source+" fulfillment failed: "+((res&&res.error)||"unknown"),type:"System"}); }
           });
@@ -9603,14 +9611,16 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
 }
 
 /* Tiny copy-to-clipboard button that sits beside a tracking-number link. */
-function CopyTrackBtn({tn,className=""}){
+function CopyTrackBtn({tn,link,className=""}){
   const [ok,setOk]=useState(false);
-  const copy=async(e)=>{ e.stopPropagation(); e.preventDefault(); const t=String(tn||""); if(!t)return;
-    try{ await navigator.clipboard.writeText(t); }
-    catch(err){ try{ const ta=document.createElement("textarea");ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove(); }catch(e2){} }
+  const val=link||String(tn||"");
+  const copy=async(e)=>{ e.stopPropagation(); e.preventDefault(); if(!val)return;
+    try{ await navigator.clipboard.writeText(val); }
+    catch(err){ try{ const ta=document.createElement("textarea");ta.value=val;document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove(); }catch(e2){} }
     setOk(true); setTimeout(()=>setOk(false),1600);
   };
-  if(!tn)return null;
+  if(!val)return null;
+  if(link)return <button onClick={copy} title={ok?"Link copied!":"Copy shareable tracking link"} className={`shrink-0 inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded ${ok?"text-emerald-600":"text-[#0086E0] hover:bg-[#0086E0]/10"} ${className}`}>{ok?<Check className="w-3 h-3"/>:<Copy className="w-3 h-3"/>}link</button>;
   return <button onClick={copy} title={ok?"Copied!":"Copy tracking number"} className={`shrink-0 p-0.5 rounded ${ok?"text-emerald-600":"text-stone-400 hover:text-stone-700 hover:bg-stone-100"} ${className}`}>{ok?<CheckCircle2 className="w-3.5 h-3.5"/>:<Copy className="w-3.5 h-3.5"/>}</button>;
 }
 
@@ -9756,7 +9766,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
                 <div className="flex items-baseline gap-3 mb-2 min-w-0"><span className="w-20 shrink-0 text-[10px] uppercase tracking-widest text-stone-400">To</span><span className="text-sm text-stone-800 min-w-0">{`${s.recipient?.name||""}${s.recipient?.company?" · "+s.recipient.company:""} — ${s.recipient?.address1||""}, ${s.recipient?.city||""}, ${s.recipient?.state||""} ${s.recipient?.zip||""}`}</span></div>
                 <div className="grid sm:grid-cols-2 gap-x-10 gap-y-1.5 mb-3">
                 <D k="Service" v={s.service}/>
-                <D k="Tracking" v={<span className="inline-flex items-center gap-1 min-w-0"><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" className="text-[#0086E0] underline truncate">{s.tracking} ↗</a><CopyTrackBtn tn={s.tracking}/></span>}/>
+                <D k="Tracking" v={<span className="inline-flex items-center gap-1 min-w-0"><a href={TRACK_URL[s.carrier](s.tracking)} target="_blank" rel="noopener" className="text-[#0086E0] underline truncate">{s.tracking} ↗</a><CopyTrackBtn tn={s.tracking}/>{settings&&settings.trackBrandId&&s.tracking?<CopyTrackBtn link={brandedTrackUrl(s.tracking,settings,s.carrier)}/>:null}</span>}/>
                 <D k="Created" v={`${s.date}${s.time?" · "+s.time:""}`}/>
                 <D k="Reference" v={s.reference||"—"}/>
                 <D k="From ZIP" v={s.fromZip}/>

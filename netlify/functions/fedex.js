@@ -301,7 +301,10 @@ async function schedulePickup(c, body, tk) {
   } catch (e) { return { ok: false, error: "pickup fetch failed: " + (e && e.message) }; }
   if (!r.ok) return { ok: false, error: "pickup HTTP " + r.status + (d && d.errors && d.errors[0] ? ": " + (d.errors[0].message || JSON.stringify(d.errors)) : (t ? ": " + t.slice(0, 200) : "")) };
   const o = (d && d.output) || {};
-  return { ok: true, confirmationCode: o.pickupConfirmationCode || o.confirmationNumber || null, location: o.location || null, message: o.message || null };
+  /* Return FedEx's confirmation code verbatim (Express ~ "JTSA4023", Ground ~ "CPU289289282"). A
+     short numeric code usually means the request hit the FedEx SANDBOX, which returns mock codes —
+     production returns the full code. Check several possible field names so nothing is dropped. */
+  return { ok: true, confirmationCode: o.pickupConfirmationCode || o.pickupConfirmationNumber || o.confirmationNumber || o.confirmationCode || null, location: o.location || null, message: o.message || null };
 }
 
 async function cancelPickup(c, body, tk) {

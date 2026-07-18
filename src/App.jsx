@@ -126,7 +126,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v632";
+const BUILD_TAG="addr-v633";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9670,6 +9670,11 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true,isAdmin
   const [canceling,setCanceling]=useState(null);
   const [err,setErr]=useState(null);
   const s=settings.sender||{};
+  /* Editable pickup address — defaults to the sender on the label, but each pickup can override it
+     (Google Places autocomplete + ZIP autofill come free via AddressCard). "Use my sender address"
+     re-syncs it. */
+  const senderAddr=()=>({name:s.name||"",company:s.company||"",address1:s.address1||"",address2:s.address2||"",city:s.city||"",state:s.state||"",zip:s.zip||"",phone:s.phone||"",email:s.email||"",country:s.country||"United States"});
+  const [pickupAddr,setPickupAddr]=useState(senderAddr);
   /* Pickup fee, priced exactly like any accessorial: the customer's profile rule on the on-call
      pickup row (percent / $ over cost / % off list / flat) applied to the Service Guide default,
      account markup as the fallback. Admin can hide this per login (Pickup fee display feature). */
@@ -9708,9 +9713,11 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true,isAdmin
     if(!f.date){setErr("Pick a date");return;}
     if(f.carrierCode==="FDXG"&&f.date===_todayStr){setErr("Ground pickups are always next business day — pick tomorrow or later.");return;}
     if(_winMin>0&&_winMin<240){setErr("On-call pickups need a 4-hour window between Ready and Close.");return;}
+    if(!(pickupAddr.address1&&pickupAddr.city&&pickupAddr.state&&pickupAddr.zip)){setErr("Fill in the pickup address (street, city, state, ZIP).");return;}
     setErr(null);setBusy(true);
+    const pa=pickupAddr;
     const res=await fedexSchedulePickup({
-      name:s.name,company:s.company,phone:s.phone,address1:s.address1,address2:s.address2,city:s.city,state:s.state,zip:s.zip,country:s.country,
+      name:pa.name,company:pa.company,phone:pa.phone,address1:pa.address1,address2:pa.address2,city:pa.city,state:pa.state,zip:pa.zip,country:pa.country,
       date:f.date,readyTime:f.ready+":00",closeTime:f.close+":00",packageCount:+f.count||1,totalWeight:+f.weight||1,carrierCode:f.carrierCode,packageLocation:locEnum(f.location),residential:false,remarks:String(f.location||"").trim()
     });
     setBusy(false);
@@ -9720,7 +9727,7 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true,isAdmin
       setErr((res&&res.error)||"FedEx pickup failed");
     }
   };
-  const addrReady=s.address1&&s.city&&s.state&&s.zip;
+  const addrReady=pickupAddr.address1&&pickupAddr.city&&pickupAddr.state&&pickupAddr.zip;
   return (
     <div className="grid lg:grid-cols-2 gap-6 max-w-4xl">
       <Panel title="Schedule a FedEx pickup">
@@ -9731,7 +9738,13 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true,isAdmin
           const timeSel=(k,label)=><Field label={label}><Select value={f[k]} onChange={e=>setF({...f,[k]:e.target.value})}>{!opts.some(([v])=>v===f[k])&&<option value={f[k]}>{f[k]}</option>}{opts.map(([v,l])=><option key={v} value={v}>{l}</option>)}</Select></Field>;
           return <>{timeSel("ready","Ready time")}{timeSel("close","Close time")}</>;})()}</div>
         <div className="grid grid-cols-2 gap-3"><Field label="Total weight (lb)"><Input type="number" value={f.weight} onChange={e=>setF({...f,weight:+e.target.value})}/></Field><Field label="Package location"><Input value={f.location} onChange={e=>setF({...f,location:e.target.value})} placeholder="Front desk, side door, loading dock…"/></Field></div>
-        <div className="text-[11px] text-stone-400 flex items-center gap-1"><MapPin className="w-3.5 h-3.5"/>{addrReady?`${s.address1}, ${s.city} ${s.state} ${s.zip}`:"Set your pickup address in Settings → Company"}</div>
+        <div className="border border-stone-200 rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between px-2.5 py-1.5 bg-stone-50 border-b border-stone-100">
+            <span className="text-[10px] uppercase tracking-widest text-stone-500 flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5"/>Pickup address</span>
+            <button type="button" onClick={()=>setPickupAddr(senderAddr())} className="text-[10px] text-[#0086E0] hover:underline">Use my sender address</button>
+          </div>
+          <AddressCard title="Pickup" data={pickupAddr} set={setPickupAddr}/>
+        </div>
         {showCosts&&<div className="flex items-center justify-between text-sm bg-stone-50 border border-stone-200 rounded-lg px-3 py-2"><span className="text-stone-600">On-call pickup fee ({f.carrierCode==="FDXG"?"Ground":"Express"}){isAdmin&&<span className="block text-[10px] text-stone-400">{_pf.ruleDesc} — edit it on the Rates tab accessorials (Pickup &amp; returns)</span>}</span><span className=" font-semibold text-stone-900">{money(pickupFee)}</span></div>}
         {showCosts&&<div className="text-[10px] text-stone-400 -mt-1">Billed per on-call pickup. Regular scheduled pickup routes bill weekly instead.</div>}
         {pickAdvice.length>0&&<div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 space-y-1">{pickAdvice.map((a,i)=><div key={i} className="flex items-start gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span>{a}</span></div>)}</div>}

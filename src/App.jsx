@@ -136,7 +136,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v651";
+const BUILD_TAG="addr-v652";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9857,6 +9857,9 @@ function Inventory({settings,client,showMoney=true,currentUser}){
   const [showLog,setShowLog]=useState(false);
   const [editSku,setEditSku]=useState(null);
   const [ef,setEf]=useState(null);
+  const [view,setView]=useState("stock");
+  const [pos,setPos]=useState([]);
+  const [suppliers,setSuppliers]=useState([]);
   const catalog=(settings&&settings.products)||[];
   const flash=(m,isErr)=>{ if(isErr){setErr(m);setOk("");}else{setOk(m);setErr("");} setTimeout(()=>{setErr("");setOk("");},4500); };
   const load=async()=>{
@@ -9864,8 +9867,12 @@ function Inventory({settings,client,showMoney=true,currentUser}){
     const r=await cloudCall({action:"invList",token:CLOUD.token});
     if(r&&r.ok){ setItems(r.items||[]); setLog(r.log||[]); }
     else { setItems([]); setErr((r&&r.error)||"Couldn't load inventory."); }
+    const [rp,rs]=await Promise.all([cloudCall({action:"poList",token:CLOUD.token}),cloudCall({action:"supplierList",token:CLOUD.token})]);
+    if(rp&&rp.ok)setPos(rp.pos||[]);
+    if(rs&&rs.ok)setSuppliers(rs.suppliers||[]);
   };
   useEffect(()=>{ load(); /* eslint-disable-next-line */ },[]);
+  const incomingBySku=useMemo(()=>{ const m={}; (pos||[]).forEach(po=>{ if(po.status==="received")return; (po.lines||[]).forEach(l=>{ const rem=Math.max(0,(+l.qtyOrdered||0)-(+l.qtyReceived||0)); if(rem>0){ const k=String(l.sku||"").toLowerCase(); m[k]=(m[k]||0)+rem; } }); }); return m; },[pos]);
   const patch=(it)=>setItems(arr=>{ const a=Array.isArray(arr)?[...arr]:[]; const i=a.findIndex(x=>String(x.sku).toLowerCase()===String(it.sku).toLowerCase()); if(i>=0)a[i]=it; else a.push(it); return a; });
   const addItem=async()=>{
     if(!nf.sku.trim()){flash("Enter a SKU.",true);return;}
@@ -9938,7 +9945,14 @@ function Inventory({settings,client,showMoney=true,currentUser}){
   const totValue=list.reduce((s,it)=>s+(+it.onHand||0)*(+it.cost||0),0);
   const lowCount=list.filter(isLow).length;
   const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
+  const openPo=(pos||[]).filter(p=>p&&p.status!=="received").length;
+  const Switcher=()=>(<div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm">
+    {[["stock","Stock"],["pos","Purchase Orders"],["suppliers","Suppliers"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}</button>)}
+  </div>);
+  if(view==="pos") return (<div className="max-w-5xl space-y-4"><Switcher/><PurchaseOrders pos={pos} setPos={setPos} suppliers={suppliers} items={list} showMoney={showMoney} onReload={load}/></div>);
+  if(view==="suppliers") return (<div className="max-w-5xl space-y-4"><Switcher/><SuppliersView suppliers={suppliers} setSuppliers={setSuppliers}/></div>);
   return (<div className="max-w-5xl space-y-4">
+    <Switcher/>
     <div className="flex items-center justify-between flex-wrap gap-2">
       <div>
         <h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Boxes className="w-5 h-5 text-[#0086E0]"/>Inventory</h2>
@@ -9982,12 +9996,13 @@ function Inventory({settings,client,showMoney=true,currentUser}){
     </div>
     <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
       <div className="overflow-x-auto"><table className="w-full text-sm">
-        <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 text-left"><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">On hand</th><th className="px-3 py-2 text-right">Reorder</th>{showMoney&&<th className="px-3 py-2 text-right">Unit cost</th>}{showMoney&&<th className="px-3 py-2 text-right">Value</th>}<th className="px-3 py-2">Location</th><th className="px-3 py-2"></th></tr></thead>
+        <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 text-left"><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">On hand</th><th className="px-3 py-2 text-right">Incoming</th><th className="px-3 py-2 text-right">Reorder</th>{showMoney&&<th className="px-3 py-2 text-right">Unit cost</th>}{showMoney&&<th className="px-3 py-2 text-right">Value</th>}<th className="px-3 py-2">Location</th><th className="px-3 py-2"></th></tr></thead>
         <tbody className="divide-y divide-stone-100">
-          {filtered.length===0&&<tr><td colSpan={showMoney?7:5} className="px-3 py-8 text-center text-stone-400 text-sm">{list.length?"No items match your search.":"No inventory yet — add an item, or import from your product catalog."}</td></tr>}
-          {filtered.map(it=>{const isKit=Array.isArray(it.kit)&&it.kit.length>0;return (<tr key={it.sku} className={isLow(it)?"bg-amber-50/60":""}>
+          {filtered.length===0&&<tr><td colSpan={showMoney?8:6} className="px-3 py-8 text-center text-stone-400 text-sm">{list.length?"No items match your search.":"No inventory yet — add an item, or import from your product catalog."}</td></tr>}
+          {filtered.map(it=>{const isKit=Array.isArray(it.kit)&&it.kit.length>0;const inc=incomingBySku[String(it.sku).toLowerCase()]||0;return (<tr key={it.sku} className={isLow(it)?"bg-amber-50/60":""}>
             <td className="px-3 py-2"><div className="font-medium text-stone-900 flex items-center gap-1.5">{it.name||it.sku}{isKit&&<span className="text-[9px] uppercase tracking-wide bg-violet-100 text-violet-700 rounded px-1.5 py-0.5">kit</span>}</div><div className="text-[11px] text-stone-400">{it.sku}{isKit?" · "+it.kit.map(c=>c.qty+"× "+c.sku).join(" + "):""}</div></td>
             <td className="px-3 py-2 text-right">{isKit?<span className="text-stone-400 text-xs">—</span>:<><span className={`font-semibold ${isLow(it)?"text-amber-600":"text-stone-900"}`}>{+it.onHand||0}</span>{isLow(it)&&<span className="ml-1 text-[10px] uppercase tracking-wide text-amber-600">low</span>}</>}</td>
+            <td className="px-3 py-2 text-right text-stone-500">{inc>0?<span className="text-sky-600">+{inc}</span>:"—"}</td>
             <td className="px-3 py-2 text-right text-stone-500">{(+it.reorder||0)||"—"}</td>
             {showMoney&&<td className="px-3 py-2 text-right text-stone-500">{it.cost?money(it.cost):"—"}</td>}
             {showMoney&&<td className="px-3 py-2 text-right text-stone-700">{(!isKit&&it.cost)?money((+it.onHand||0)*(+it.cost||0)):"—"}</td>}
@@ -10034,6 +10049,133 @@ function Inventory({settings,client,showMoney=true,currentUser}){
           <button onClick={()=>setEf({...ef,kit:[...(ef.kit||[]),{sku:"",qty:1}]})} className="text-xs text-[#0086E0] hover:underline flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add component</button>
         </div>
         <div className="flex items-center gap-2 mt-5"><button onClick={saveEdit} disabled={busy==="edit"} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy==="edit"&&<Loader2 className="w-4 h-4 animate-spin"/>}Save</button><button onClick={()=>{setEf(null);setEditSku(null);}} className="text-sm text-stone-500 px-2">Cancel</button></div>
+      </div>
+    </div>}
+  </div>);
+}
+
+/* Purchase Orders — create POs against a supplier, receive (full or partial) into stock. */
+function PurchaseOrders({pos,setPos,suppliers,items,showMoney,onReload}){
+  const [msg,setMsg]=useState(null);
+  const [busy,setBusy]=useState("");
+  const [editing,setEditing]=useState(null);
+  const [receiving,setReceiving]=useState(null);
+  const flash=(m,e)=>{ setMsg(e?{err:m}:{ok:m}); setTimeout(()=>setMsg(null),4000); };
+  const blankLine=()=>({sku:"",name:"",qtyOrdered:"",qtyReceived:0,cost:""});
+  const newPo=()=>setEditing({number:"",supplierId:"",expectedAt:"",notes:"",lines:[blankLine()]});
+  const editPo=(po)=>setEditing({...po,supplierId:po.supplierId||"",lines:(po.lines||[]).map(l=>({...l}))});
+  const skuName=(sku)=>{ const it=items.find(i=>String(i.sku).toLowerCase()===String(sku).toLowerCase()); return it?it.name:""; };
+  const savePo=async()=>{
+    const sup=suppliers.find(s=>s.id===editing.supplierId);
+    const lines=(editing.lines||[]).filter(l=>String(l.sku||"").trim()&&+l.qtyOrdered>0).map(l=>({sku:String(l.sku).trim(),name:l.name||skuName(l.sku)||"",qtyOrdered:+l.qtyOrdered,qtyReceived:+l.qtyReceived||0,cost:l.cost===""?0:+l.cost}));
+    if(!lines.length){flash("Add at least one line with a SKU and quantity.",true);return;}
+    setBusy("save");
+    const r=await cloudCall({action:"poSave",token:CLOUD.token,po:{...editing,supplierName:sup?sup.name:"",lines}});
+    setBusy("");
+    if(r&&r.ok){ setPos(p=>[r.po,...(p||[]).filter(x=>x.id!==r.po.id)]); setEditing(null); flash("Saved "+r.po.number+"."); } else flash((r&&r.error)||"Couldn't save PO.",true);
+  };
+  const openReceive=(po)=>{ const qty={}; (po.lines||[]).forEach(l=>{ const rem=Math.max(0,(+l.qtyOrdered||0)-(+l.qtyReceived||0)); qty[l.sku]=rem; }); setReceiving({po,qty}); };
+  const doReceive=async()=>{
+    const receipts=Object.keys(receiving.qty||{}).map(sku=>({sku,qty:+receiving.qty[sku]||0})).filter(x=>x.qty>0);
+    if(!receipts.length){flash("Enter quantities to receive.",true);return;}
+    setBusy("recv");
+    const r=await cloudCall({action:"poReceive",token:CLOUD.token,id:receiving.po.id,receipts});
+    setBusy("");
+    if(r&&r.ok){ setPos(p=>(p||[]).map(x=>x.id===r.po.id?r.po:x)); setReceiving(null); flash("Received into stock."); onReload&&onReload(); } else flash((r&&r.error)||"Receive failed.",true);
+  };
+  const del=async(po)=>{ if(!await uiConfirm("Delete "+po.number+"? This does not remove stock already received."))return; const r=await cloudCall({action:"poDelete",token:CLOUD.token,id:po.id}); if(r&&r.ok)setPos(p=>(p||[]).filter(x=>x.id!==po.id)); };
+  const sorted=(pos||[]).slice().sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
+  const stTone={open:"bg-stone-100 text-stone-600",partial:"bg-amber-100 text-amber-700",received:"bg-emerald-100 text-emerald-700"};
+  const setLine=(i,patch)=>setEditing(e=>({...e,lines:e.lines.map((l,j)=>j===i?{...l,...patch}:l)}));
+  return (<div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ClipboardList className="w-5 h-5 text-[#0086E0]"/>Purchase Orders</h2><p className="text-sm text-stone-500 mt-0.5">Order stock from suppliers, then receive it into inventory — full or partial.</p></div>
+      <button onClick={newPo} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>New PO</button>
+    </div>
+    {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
+    <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+      {sorted.length===0&&<div className="p-8 text-center text-sm text-stone-400">No purchase orders yet.</div>}
+      {sorted.map(po=>{ const ord=(po.lines||[]).reduce((s,l)=>s+(+l.qtyOrdered||0),0); const rec=(po.lines||[]).reduce((s,l)=>s+(+l.qtyReceived||0),0); return (
+        <div key={po.id} className="p-3 flex items-center gap-3 flex-wrap">
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-stone-900 flex items-center gap-2">{po.number}<span className={`text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 ${stTone[po.status]||stTone.open}`}>{po.status}</span></div>
+            <div className="text-[11px] text-stone-400">{po.supplierName||"No supplier"}{po.expectedAt?" · expected "+po.expectedAt:""} · {rec}/{ord} received</div>
+          </div>
+          {po.status!=="received"&&<button onClick={()=>openReceive(po)} className="text-xs bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-emerald-700">Receive</button>}
+          <button onClick={()=>editPo(po)} className="text-xs bg-stone-100 text-stone-600 rounded-lg px-2.5 py-1.5 hover:bg-stone-200">Edit</button>
+          <button onClick={()=>del(po)} className="text-xs bg-stone-100 text-stone-400 rounded-lg px-2 py-1.5 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="w-3.5 h-3.5"/></button>
+        </div>);})}
+    </div>
+    {editing&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setEditing(null)}>
+      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-5 max-h-[92vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3"><div className="font-semibold text-stone-900">{editing.id?"Edit PO":"New purchase order"}</div><button onClick={()=>setEditing(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <Field label="PO number (optional)"><Input value={editing.number} onChange={e=>setEditing({...editing,number:e.target.value})} placeholder="auto"/></Field>
+          <Field label="Supplier"><select value={editing.supplierId} onChange={e=>setEditing({...editing,supplierId:e.target.value})} className="w-full border border-stone-300 rounded-lg px-2 py-2 text-sm"><option value="">—</option>{suppliers.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
+          <Field label="Expected date"><Input type="date" value={editing.expectedAt||""} onChange={e=>setEditing({...editing,expectedAt:e.target.value})}/></Field>
+        </div>
+        <div className="mt-3">
+          <div className="text-xs font-semibold text-stone-600 mb-1">Line items</div>
+          {(editing.lines||[]).map((l,i)=>(<div key={i} className="flex items-center gap-2 mb-1.5">
+            <input list="inv-skus" value={l.sku} onChange={e=>setLine(i,{sku:e.target.value,name:skuName(e.target.value)})} placeholder="SKU" className="flex-1 border border-stone-300 rounded-lg px-2 py-1.5 text-sm"/>
+            <input type="number" min="1" value={l.qtyOrdered} onChange={e=>setLine(i,{qtyOrdered:e.target.value})} placeholder="Qty" className="w-20 border border-stone-300 rounded-lg px-2 py-1.5 text-sm"/>
+            {showMoney&&<input type="number" step="0.01" value={l.cost} onChange={e=>setLine(i,{cost:e.target.value})} placeholder="Cost" className="w-24 border border-stone-300 rounded-lg px-2 py-1.5 text-sm"/>}
+            <button onClick={()=>setEditing(e=>({...e,lines:e.lines.filter((_,j)=>j!==i)}))} className="text-stone-400 hover:text-rose-600"><Trash2 className="w-4 h-4"/></button>
+          </div>))}
+          <datalist id="inv-skus">{items.map(it=><option key={it.sku} value={it.sku}>{it.name}</option>)}</datalist>
+          <button onClick={()=>setEditing(e=>({...e,lines:[...(e.lines||[]),blankLine()]}))} className="text-xs text-[#0086E0] hover:underline flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add line</button>
+        </div>
+        <Field label="Notes" ><textarea value={editing.notes||""} onChange={e=>setEditing({...editing,notes:e.target.value})} rows={2} className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm mt-1"/></Field>
+        <div className="flex items-center gap-2 mt-4"><button onClick={savePo} disabled={busy==="save"} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy==="save"&&<Loader2 className="w-4 h-4 animate-spin"/>}Save PO</button><button onClick={()=>setEditing(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
+      </div>
+    </div>}
+    {receiving&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setReceiving(null)}>
+      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-5 max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1"><div className="font-semibold text-stone-900">Receive {receiving.po.number}</div><button onClick={()=>setReceiving(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+        <p className="text-xs text-stone-500 mb-3">Enter how many of each line arrived. Received quantities are added to stock.</p>
+        <div className="space-y-2">
+          {(receiving.po.lines||[]).map(l=>{ const rem=Math.max(0,(+l.qtyOrdered||0)-(+l.qtyReceived||0)); return (
+            <div key={l.sku} className="flex items-center gap-2">
+              <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{l.name||l.sku}</div><div className="text-[11px] text-stone-400">{l.sku} · {l.qtyReceived||0}/{l.qtyOrdered} received · {rem} remaining</div></div>
+              <input type="number" min="0" value={receiving.qty[l.sku]} onChange={e=>setReceiving(r=>({...r,qty:{...r.qty,[l.sku]:e.target.value}}))} className="w-20 border border-stone-300 rounded-lg px-2 py-1.5 text-sm"/>
+            </div>);})}
+        </div>
+        <div className="flex items-center gap-2 mt-4"><button onClick={doReceive} disabled={busy==="recv"} className="text-sm bg-emerald-600 text-white rounded-lg px-4 py-2 font-medium hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-1.5">{busy==="recv"?<Loader2 className="w-4 h-4 animate-spin"/>:<CheckCircle2 className="w-4 h-4"/>}Receive into stock</button><button onClick={()=>setReceiving(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
+      </div>
+    </div>}
+  </div>);
+}
+/* Suppliers — a simple vendor list used by Purchase Orders. */
+function SuppliersView({suppliers,setSuppliers}){
+  const [msg,setMsg]=useState(null); const [busy,setBusy]=useState(false); const [ef,setEf]=useState(null);
+  const flash=(m,e)=>{ setMsg(e?{err:m}:{ok:m}); setTimeout(()=>setMsg(null),3500); };
+  const save=async()=>{ if(!ef.name||!ef.name.trim()){flash("Name is required.",true);return;} setBusy(true); const r=await cloudCall({action:"supplierSave",token:CLOUD.token,supplier:ef}); setBusy(false); if(r&&r.ok){ setSuppliers(r.suppliers); setEf(null); flash("Saved."); } else flash((r&&r.error)||"Couldn't save.",true); };
+  const del=async(s)=>{ if(!await uiConfirm("Delete "+s.name+"?"))return; const r=await cloudCall({action:"supplierDelete",token:CLOUD.token,id:s.id}); if(r&&r.ok)setSuppliers(r.suppliers); };
+  return (<div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Building2 className="w-5 h-5 text-[#0086E0]"/>Suppliers</h2><p className="text-sm text-stone-500 mt-0.5">Vendors you order stock from. Used when creating purchase orders.</p></div>
+      <button onClick={()=>setEf({name:"",contact:"",email:"",phone:"",leadDays:"",notes:""})} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>New supplier</button>
+    </div>
+    {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
+    <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+      {(suppliers||[]).length===0&&<div className="p-8 text-center text-sm text-stone-400">No suppliers yet.</div>}
+      {(suppliers||[]).map(s=>(<div key={s.id} className="p-3 flex items-center gap-3">
+        <div className="flex-1 min-w-0"><div className="font-medium text-stone-900">{s.name}</div><div className="text-[11px] text-stone-400">{[s.contact,s.email,s.phone,s.leadDays?s.leadDays+"-day lead":""].filter(Boolean).join(" · ")||"—"}</div></div>
+        <button onClick={()=>setEf(s)} className="text-xs bg-stone-100 text-stone-600 rounded-lg px-2.5 py-1.5 hover:bg-stone-200">Edit</button>
+        <button onClick={()=>del(s)} className="text-xs bg-stone-100 text-stone-400 rounded-lg px-2 py-1.5 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="w-3.5 h-3.5"/></button>
+      </div>))}
+    </div>
+    {ef&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setEf(null)}>
+      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3"><div className="font-semibold text-stone-900">{ef.id?"Edit supplier":"New supplier"}</div><button onClick={()=>setEf(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="col-span-2"><Field label="Name"><Input value={ef.name} onChange={e=>setEf({...ef,name:e.target.value})}/></Field></div>
+          <Field label="Contact"><Input value={ef.contact} onChange={e=>setEf({...ef,contact:e.target.value})}/></Field>
+          <Field label="Lead time (days)"><Input type="number" value={ef.leadDays} onChange={e=>setEf({...ef,leadDays:e.target.value})}/></Field>
+          <Field label="Email"><Input value={ef.email} onChange={e=>setEf({...ef,email:e.target.value})}/></Field>
+          <Field label="Phone"><Input value={ef.phone} onChange={e=>setEf({...ef,phone:e.target.value})}/></Field>
+        </div>
+        <div className="flex items-center gap-2 mt-4"><button onClick={save} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy&&<Loader2 className="w-4 h-4 animate-spin"/>}Save</button><button onClick={()=>setEf(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
       </div>
     </div>}
   </div>);

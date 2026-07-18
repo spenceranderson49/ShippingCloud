@@ -607,7 +607,7 @@ exports.handler = async (event) => {
        Every login of a company shares its inventory; a platform admin may target a specific
        company via body.clientId. All reads refuse-and-retry on failure so stock is never
        silently zeroed by a transient DB hiccup. */
-    if (String(action).startsWith("inv") && action !== "invite") {
+    if (["invList", "invUpsert", "invAdjust", "invReceive", "invShip", "invDelete", "poList", "poSave", "poReceive", "poDelete", "supplierList", "supplierSave", "supplierDelete"].indexOf(action) >= 0) {
       const curU = await getStore("users");
       if (!curU.ok) return J({ ok: false, retry: true, error: "Storage is briefly unavailable — try again." });
       const allU = Array.isArray(curU.value) ? curU.value : [];
@@ -619,6 +619,8 @@ exports.handler = async (event) => {
       const normSku = (s) => String(s || "").trim().toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 80);
       const skuKey = (s) => "inv:" + cid + ":" + normSku(s);
       const logKey = "invlog:" + cid;
+      const poKey = (id) => "po:" + cid + ":" + String(id).replace(/[^a-zA-Z0-9]/g, "").slice(0, 40);
+      const supKey = "invsup:" + cid;
       const nowISO = new Date().toISOString();
       const money2 = (n) => Math.round((+n || 0) * 100) / 100;
       const readItem = (s) => getStore(skuKey(s));
@@ -752,6 +754,102 @@ exports.handler = async (event) => {
         const r = await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=eq." + encodeURIComponent(skuKey(sku)), { method: "DELETE" });
         if (!r.ok) return J({ ok: false, error: "Delete failed — try again." });
         await addLog({ type: "removed", sku, name: String(body.name || "").slice(0, 120), qty: 0 });
+        return J({ ok: true });
+      }
+
+      /* ── Suppliers (company-shared, low-churn → a single array store) ── */
+      if (action === "supplierList") {
+        const cur = await getStore(supKey);
+        if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't load suppliers — try again." });
+        return J({ ok: true, suppliers: Array.isArray(cur.value) ? cur.value : [] });
+      }
+      if (action === "supplierSave" || action === "supplierDelete") {
+        const cur = await getStore(supKey);
+        if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read suppliers — try again." });
+        let list = Array.isArray(cur.value) ? cur.value.slice() : [];
+        if (action === "supplierDelete") {
+          list = list.filter((s) => s && s.id !== String(body.id || ""));
+        } else {
+          const s = body.supplier && typeof body.supplier === "object" ? body.supplier : {};
+          const rec = { id: String(s.id || ("sup" + Date.now() + Math.floor(Math.random() * 1000))), name: String(s.name || "").slice(0, 120), contact: String(s.contact || "").slice(0, 120), email: String(s.email || "").slice(0, 120), phone: String(s.phone || "").slice(0, 40), leadDays: Math.max(0, Math.round(+s.leadDays || 0)), notes: String(s.notes || "").slice(0, 300) };
+          if (!rec.name) return J({ ok: false, error: "Supplier name is required." });
+          const i = list.findIndex((x) => x && x.id === rec.id);
+          if (i >= 0) list[i] = rec; else list.push(rec);
+          if (list.length > 500) return J({ ok: false, error: "Too many suppliers." });
+        }
+        const w = await putStores({ [supKey]: list });
+        if (!w.ok) return J({ ok: false, error: "Save failed — try again." });
+        return J({ ok: true, suppliers: list });
+      }
+
+      /* ── Purchase Orders (one row per PO: po:<cid>:<id>) ── */
+      if (action === "poList") {
+        const r = await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=like.po:" + encodeURIComponent(cid) + ":*&select=value");
+        if (!r.ok) return J({ ok: false, retry: true, error: "Couldn't load purchase orders — try again." });
+        const pos = (Array.isArray(r.data) ? r.data : []).map((row) => row.value).filter((v) => v && typeof v === "object");
+        return J({ ok: true, pos });
+      }
+      if (action === "poSave") {
+        const p = body.po && typeof body.po === "object" ? body.po : {};
+        const id = String(p.id || ("po" + Date.now() + Math.floor(Math.random() * 1000))).replace(/[^a-zA-Z0-9]/g, "").slice(0, 40);
+        const lines = (Array.isArray(p.lines) ? p.lines : []).slice(0, 300).map((l) => ({
+          sku: String(l.sku || "").trim().slice(0, 80), name: String(l.name || "").slice(0, 120),
+          qtyOrdered: Math.max(0, Math.round(+l.qtyOrdered || 0)), qtyReceived: Math.max(0, Math.round(+l.qtyReceived || 0)),
+          cost: money2(l.cost),
+        })).filter((l) => l.sku);
+        if (!lines.length) return J({ ok: false, error: "Add at least one line item." });
+        const existing = await getStore(poKey(id));
+        if (!existing.ok) return J({ ok: false, retry: true, error: "Couldn't read that PO — try again." });
+        const prev = (existing.value && typeof existing.value === "object") ? existing.value : null;
+        const po = {
+          id, number: String(p.number || (prev && prev.number) || ("PO-" + String(Date.now()).slice(-6))).slice(0, 40),
+          supplierId: String(p.supplierId || "").slice(0, 40), supplierName: String(p.supplierName || "").slice(0, 120),
+          status: prev && prev.status === "received" ? prev.status : "open",
+          expectedAt: String(p.expectedAt || "").slice(0, 20), notes: String(p.notes || "").slice(0, 500),
+          lines, createdAt: (prev && prev.createdAt) || nowISO, updatedAt: nowISO,
+        };
+        const w = await putStores({ [poKey(id)]: po });
+        if (!w.ok) return J({ ok: false, error: "Save failed — try again." });
+        return J({ ok: true, po });
+      }
+      if (action === "poReceive") {
+        const id = String(body.id || "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 40);
+        const cur = await getStore(poKey(id));
+        if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read that PO — try again." });
+        if (!(cur.value && typeof cur.value === "object")) return J({ ok: false, error: "That PO no longer exists." });
+        const po = { ...cur.value };
+        const recv = Array.isArray(body.receipts) ? body.receipts : [];   // [{sku, qty}]
+        const byS = {}; recv.forEach((r) => { const s = String(r.sku || "").trim(); const q = Math.round(+r.qty || 0); if (s && q > 0) byS[s] = (byS[s] || 0) + q; });
+        const received = [];
+        po.lines = (po.lines || []).map((l) => {
+          const q = byS[l.sku] || 0; if (!q) return l;
+          const take = Math.min(q, Math.max(0, (l.qtyOrdered || 0) - (l.qtyReceived || 0))) || q;   // allow over-receipt if line already met
+          received.push({ sku: l.sku, name: l.name, qty: q, cost: l.cost });
+          return { ...l, qtyReceived: (l.qtyReceived || 0) + q };
+        });
+        // Push receipts into inventory (create item if missing), logging each as a PO receipt.
+        for (const rc of received) {
+          const cur2 = await readItem(rc.sku);
+          if (!cur2.ok) return J({ ok: false, retry: true, error: "Couldn't read " + rc.sku + " — try again." });
+          const prev = (cur2.value && typeof cur2.value === "object") ? cur2.value : null;
+          const it = prev ? { ...prev } : { sku: rc.sku, name: rc.name || "", onHand: 0, createdAt: nowISO };
+          const before = +it.onHand || 0; it.onHand = before + rc.qty;
+          if (rc.cost) it.cost = money2(rc.cost); if (rc.name && !it.name) it.name = rc.name; it.updatedAt = nowISO;
+          const w2 = await writeItem(rc.sku, it);
+          if (!w2.ok) return J({ ok: false, error: "Save failed on " + rc.sku + "." });
+          await addLog({ type: "receipt", sku: rc.sku, name: it.name || "", qty: rc.qty, balance: it.onHand, ref: po.number });
+        }
+        const allDone = (po.lines || []).every((l) => (l.qtyReceived || 0) >= (l.qtyOrdered || 0));
+        po.status = allDone ? "received" : (po.lines.some((l) => l.qtyReceived > 0) ? "partial" : "open");
+        po.updatedAt = nowISO;
+        const w = await putStores({ [poKey(id)]: po });
+        if (!w.ok) return J({ ok: false, error: "Couldn't update the PO — try again." });
+        return J({ ok: true, po });
+      }
+      if (action === "poDelete") {
+        const id = String(body.id || "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 40);
+        const r = await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=eq." + encodeURIComponent(poKey(id)), { method: "DELETE" });
+        if (!r.ok) return J({ ok: false, error: "Delete failed — try again." });
         return J({ ok: true });
       }
 

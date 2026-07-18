@@ -126,7 +126,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v631";
+const BUILD_TAG="addr-v632";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6257,6 +6257,7 @@ function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,set
       })}
     </div>
     <p className="text-[11px] text-stone-500">Blue chip = the person has that tab. Company admins always have every tab your account includes.</p>
+    <CompanyLogoDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags}/>
     <CompanyCustomDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings} client={client} allowedTabs={allowedTabs}/>
     <CompanyAddressDeploy companyUsers={companyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} adminSettings={settings}/>
   </div>);
@@ -6681,6 +6682,12 @@ function AppInner(){
     const fl=(uid&&featureFlags&&featureFlags[uid])||(CLOUD.mode==="cloud"?(myFeatures||{}):{});
     return (fl&&fl._custom)||{};
   },[currentUser,featureFlags,myFeatures]);
+  /* Company-admin-deployed header logo (per-login flag, set from Company Admin → Company header logo).
+     Its own memo so a logo-only change re-derives settings even when _custom didn't change. */
+  const deployedLogo=useMemo(()=>{ const uid=currentUser&&currentUser.id;
+    const fl=(uid&&featureFlags&&featureFlags[uid])||(CLOUD.mode==="cloud"?(myFeatures||{}):{});
+    return { src:(fl&&fl._companyLogo)||"", lock:!!(fl&&fl._companyLogoLock) };
+  },[currentUser,featureFlags,myFeatures]);
   const settings=useMemo(()=>{ const sc=scrubLegacyDefaults(settingsRaw);
     const depFlags=(function(){const uid=currentUser&&currentUser.id;return (uid&&featureFlags&&featureFlags[uid])||(CLOUD.mode==="cloud"?(myFeatures||{}):{});})();
     const depProds=(depFlags&&depFlags._products)||null;
@@ -6692,8 +6699,11 @@ function AppInner(){
     let addresses=sc.addresses;
     if(depAddrs&&depAddrs.length){const akey=(x)=>(String(x.name||"")+"|"+String(x.address1||"")+"|"+String(x.zip||"")).toLowerCase();const mine=sc.addresses||[];const seen=new Set(mine.map(akey));addresses=[...mine,...depAddrs.filter(x=>!seen.has(akey(x))).map(x=>({...x,_shared:true}))];}
     const personalCustom=Object.fromEntries(Object.entries(sc.custom||{}).filter(([k,v])=>v!==""&&v!=null));   // "" = "use default" — must not mask company-deployed values
-    return {...sc,products,addresses,custom:{...deployedCustom,...personalCustom}};   // company-deployed defaults sit under personal choices
-  },[settingsRaw,deployedCustom]);
+    /* Company header logo: if the admin LOCKED the deploy, it always wins (members can't override);
+       otherwise it's the default the member sees until they upload their own. */
+    const companyLogo=deployedLogo.lock?(deployedLogo.src||sc.companyLogo||""):(sc.companyLogo||deployedLogo.src||"");
+    return {...sc,products,addresses,companyLogo,custom:{...deployedCustom,...personalCustom},_logoLocked:deployedLogo.lock};   // company-deployed defaults sit under personal choices
+  },[settingsRaw,deployedCustom,deployedLogo]);
   const setSettings=(v)=>setSettingsRaw(p=>scrubLegacyDefaults(typeof v==="function"?v(scrubLegacyDefaults(p)):v));
   const custom=cz(settings);
   /* Live look preview: while the Appearance editor is open it broadcasts its DRAFT accent over the
@@ -13374,6 +13384,48 @@ function TwoFactorPanel(){
     </div>
     {msg&&<div className={`text-sm mt-2 ${msg.t==="ok"?"text-emerald-700":"text-rose-600"}`}>{msg.m}</div>}
   </Panel>);
+}
+/* Company header logo — deploys ONE logo to every team login (shows top-right in the header and on
+   documents). Stored as `_companyLogo` on each login's flags; `_companyLogoLock` decides whether an
+   individual can replace it with their own (merged in the `settings` memo up in AppInner). */
+function CompanyLogoDeploy({companyUsers,companyFlags,setCompanyFlags}){
+  const users=(companyUsers||[]).filter(u=>u.status!=="disabled"&&u.status!=="deactivated");
+  const [logo,setLogo]=useState("");
+  const [lock,setLock]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState(null);
+  useEffect(()=>{ for(const u of users){ const f=(companyFlags||{})[u.id]||{}; if(f._companyLogo){ setLogo(f._companyLogo); setLock(!!f._companyLogoLock); break; } } /* seed once from any already-deployed value */ // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+  const onFile=(file)=>{ if(!file)return; try{ readImgFile(file,(b)=>setLogo(b),600); }catch(e){} };
+  const deployLogo=async(clear)=>{
+    if(!users.length){setMsg({err:"No team logins yet — create one above first."});return;}
+    if(!clear&&!logo){setMsg({err:"Upload a logo first."});return;}
+    setBusy(true); let ok=0,fail=0;
+    for(const u of users){
+      const cur={...((companyFlags||{})[u.id]||{})};
+      if(clear){delete cur._companyLogo;delete cur._companyLogoLock;} else {cur._companyLogo=logo;cur._companyLogoLock=lock;}
+      const r=await cloudCall({action:"companySetFlags",token:CLOUD.token,uid:u.id,flags:cur});
+      if(r&&r.ok){ok++;setCompanyFlags(m=>({...(m||{}),[u.id]:r.flags||cur}));}else fail++;
+    }
+    setBusy(false);
+    if(clear)setLogo("");
+    setMsg(fail?{err:`${ok} updated, ${fail} failed — try again.`}:{ok:clear?`Logo cleared for ${ok} login${ok!==1?"s":""}.`:`Deployed to ${ok} login${ok!==1?"s":""}${lock?" · locked":""} — they'll see it on next page load.`});
+  };
+  return (<div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
+    <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><Sparkles className="w-4 h-4 text-[#0086E0]"/>Company header logo</div>
+    <div className="text-xs text-stone-500">Push one logo to your whole team — it shows in the header (top-right) and on their documents. Lock it to stop individuals swapping in their own.</div>
+    <div className="flex items-center gap-3 flex-wrap">
+      {logo?<img src={logo} alt="Company logo" className="h-10 w-auto max-w-[180px] object-contain border border-stone-200 rounded bg-white px-2 py-1"/>:<span className="text-[11px] text-stone-300 border border-dashed border-stone-300 rounded px-3 py-2.5">No logo</span>}
+      <label className="text-[11px] bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={e=>{onFile(e.target.files&&e.target.files[0]);e.target.value="";}}/></label>
+      {logo&&<button onClick={()=>setLogo("")} className="text-[11px] text-stone-400 hover:text-rose-600">Remove</button>}
+    </div>
+    <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={lock} onChange={e=>setLock(e.target.checked)} className="accent-[#0086E0]"/>Lock — team members can't replace it with their own logo</label>
+    <div className="flex flex-wrap items-center gap-2">
+      <button onClick={()=>deployLogo(false)} disabled={busy} className="text-sm bg-[#0086E0] hover:bg-[#006db8] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5 disabled:opacity-40">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<ShieldCheck className="w-4 h-4"/>}Deploy to team ({users.length})</button>
+      <button onClick={()=>deployLogo(true)} disabled={busy} className="text-sm bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40">Clear</button>
+      {msg&&<span className={`text-xs ${msg.err?"text-rose-600":"text-emerald-700"}`}>{msg.err||msg.ok}</span>}
+    </div>
+  </div>);
 }
 function CompanyCustomDeploy({companyUsers,companyFlags,setCompanyFlags,adminSettings,client=null,allowedTabs=null}){
   const [inclProducts,setInclProducts]=useState(false);

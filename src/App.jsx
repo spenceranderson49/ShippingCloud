@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v658";
+const BUILD_TAG="addr-v659";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9908,7 +9908,7 @@ function Inventory({settings,client,showMoney=true,currentUser,orders=[]}){
   const [busy,setBusy]=useState("");
   const [q,setQ]=useState("");
   const [adding,setAdding]=useState(false);
-  const [nf,setNf]=useState({sku:"",name:"",onHand:"",reorder:"",cost:"",loc:""});
+  const [nf,setNf]=useState({sku:"",name:"",onHand:"",reorder:"",cost:"",loc:"",barcode:""});
   const [rcv,setRcv]=useState({sku:"",qty:"",cost:""});
   const [showLog,setShowLog]=useState(false);
   const [editSku,setEditSku]=useState(null);
@@ -9936,9 +9936,9 @@ function Inventory({settings,client,showMoney=true,currentUser,orders=[]}){
   const addItem=async()=>{
     if(!nf.sku.trim()){flash("Enter a SKU.",true);return;}
     setBusy("add");
-    const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:nf.sku.trim(),name:nf.name,onHand:nf.onHand===""?0:+nf.onHand,reorder:nf.reorder===""?0:+nf.reorder,cost:nf.cost===""?"":+nf.cost,loc:nf.loc});
+    const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:nf.sku.trim(),name:nf.name,onHand:nf.onHand===""?0:+nf.onHand,reorder:nf.reorder===""?0:+nf.reorder,cost:nf.cost===""?"":+nf.cost,loc:nf.loc,barcode:nf.barcode});
     setBusy("");
-    if(r&&r.ok){ patch(r.item); setNf({sku:"",name:"",onHand:"",reorder:"",cost:"",loc:""}); setAdding(false); flash("Added "+r.item.sku+"."); load(); }
+    if(r&&r.ok){ patch(r.item); setNf({sku:"",name:"",onHand:"",reorder:"",cost:"",loc:"",barcode:""}); setAdding(false); flash("Added "+r.item.sku+"."); load(); }
     else flash((r&&r.error)||"Couldn't save.",true);
   };
   const adjust=async(it)=>{
@@ -9983,11 +9983,11 @@ function Inventory({settings,client,showMoney=true,currentUser,orders=[]}){
     setBusy("");
     if(r&&r.ok){ patch(r.item); const diff=cnt-(+it.onHand||0); flash(it.sku+" counted → "+cnt+(diff?" ("+(diff>0?"+":"")+diff+" variance)":" (no variance)")); load(); } else flash((r&&r.error)||"Count failed.",true);
   };
-  const openEdit=(it)=>{ setEf({sku:it.sku,name:it.name||"",reorder:it.reorder??"",cost:it.cost??"",loc:it.loc||"",kit:Array.isArray(it.kit)?it.kit.map(c=>({sku:c.sku,qty:c.qty})):[]}); setEditSku(it.sku); };
+  const openEdit=(it)=>{ setEf({sku:it.sku,name:it.name||"",reorder:it.reorder??"",cost:it.cost??"",loc:it.loc||"",barcode:it.barcode||"",kit:Array.isArray(it.kit)?it.kit.map(c=>({sku:c.sku,qty:c.qty})):[]}); setEditSku(it.sku); };
   const saveEdit=async()=>{
     if(!ef)return; setBusy("edit");
     const kit=(ef.kit||[]).filter(c=>String(c.sku||"").trim()).map(c=>({sku:c.sku,qty:Math.max(1,Math.round(+c.qty||1))}));
-    const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:ef.sku,name:ef.name,reorder:ef.reorder===""?0:+ef.reorder,cost:ef.cost===""?"":+ef.cost,loc:ef.loc,kit});
+    const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:ef.sku,name:ef.name,reorder:ef.reorder===""?0:+ef.reorder,cost:ef.cost===""?"":+ef.cost,loc:ef.loc,barcode:ef.barcode||"",kit});
     setBusy("");
     if(r&&r.ok){ patch(r.item); setEditSku(null); setEf(null); flash("Saved "+r.item.sku+"."); load(); } else flash((r&&r.error)||"Couldn't save.",true);
   };
@@ -10016,10 +10016,11 @@ function Inventory({settings,client,showMoney=true,currentUser,orders=[]}){
   const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
   const openPo=(pos||[]).filter(p=>p&&p.status!=="received").length;
   const Switcher=()=>(<div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm flex-wrap">
-    {[["stock","Stock"],["pos","Purchase Orders"],["suppliers","Suppliers"],["pick","Pick Lists"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}</button>)}
+    {[["stock","Stock"],["pos","Purchase Orders"],["suppliers","Suppliers"],["pick","Pick Lists"],["scan","Scan Receive"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}</button>)}
   </div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
   if(view==="pick") return (<div className="max-w-5xl space-y-4"><Switcher/><PickList orders={orders} items={list}/></div>);
+  if(view==="scan") return (<div className="max-w-5xl space-y-4"><Switcher/><ScanReceive items={list} onReceived={patch} reload={load}/></div>);
   const reorderLowStock=()=>{
     const low=list.filter(it=>!(Array.isArray(it.kit)&&it.kit.length)&&(+it.reorder||0)>0&&(+it.onHand||0)<=(+it.reorder||0));
     if(!low.length)return;
@@ -10057,6 +10058,7 @@ function Inventory({settings,client,showMoney=true,currentUser,orders=[]}){
         <Field label="Reorder at"><Input type="number" value={nf.reorder} onChange={e=>setNf({...nf,reorder:e.target.value})} placeholder="e.g. 10"/></Field>
         {showMoney&&<Field label="Unit cost"><Input type="number" value={nf.cost} onChange={e=>setNf({...nf,cost:e.target.value})} placeholder="0.00"/></Field>}
         <Field label="Location"><Input value={nf.loc} onChange={e=>setNf({...nf,loc:e.target.value})} placeholder="Aisle / bin"/></Field>
+        <Field label="Barcode / UPC"><Input value={nf.barcode} onChange={e=>setNf({...nf,barcode:e.target.value})} placeholder="scan or type"/></Field>
       </div>
       <div className="flex items-center gap-2 mt-2"><button onClick={addItem} disabled={busy==="add"} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-1.5 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy==="add"&&<Loader2 className="w-4 h-4 animate-spin"/>}Save item</button><button onClick={()=>setAdding(false)} className="text-sm text-stone-500 px-2 py-1.5">Cancel</button></div>
     </Panel>}
@@ -10118,6 +10120,7 @@ function Inventory({settings,client,showMoney=true,currentUser,orders=[]}){
           <Field label="Reorder at"><Input type="number" value={ef.reorder} onChange={e=>setEf({...ef,reorder:e.target.value})}/></Field>
           {showMoney&&<Field label="Unit cost"><Input type="number" value={ef.cost} onChange={e=>setEf({...ef,cost:e.target.value})}/></Field>}
           <Field label="Location / bin"><Input value={ef.loc} onChange={e=>setEf({...ef,loc:e.target.value})}/></Field>
+          <Field label="Barcode / UPC"><Input value={ef.barcode} onChange={e=>setEf({...ef,barcode:e.target.value})}/></Field>
         </div>
         <div className="mt-4 border-t border-stone-100 pt-3">
           <div className="text-xs font-semibold text-stone-600 mb-1 flex items-center gap-1.5"><Boxes className="w-3.5 h-3.5 text-violet-600"/>Kit / bundle components</div>
@@ -10276,6 +10279,50 @@ function SuppliersView({suppliers,setSuppliers}){
   </div>);
 }
 
+/* Scan-receive station — scan a barcode or type a SKU; each scan receives +N into stock. Matches by
+   barcode first, then SKU. A fast warehouse receiving loop; the input stays focused between scans. */
+function ScanReceive({items,onReceived,reload}){
+  const [qtyPer,setQtyPer]=useState(1);
+  const [val,setVal]=useState("");
+  const [feed,setFeed]=useState([]);   // {sku,name,qty,ok,at}
+  const [busy,setBusy]=useState(false);
+  const inputRef=useRef(null);
+  const byCode=useMemo(()=>{ const m={}; (items||[]).forEach(it=>{ if(it.barcode)m[String(it.barcode).trim().toLowerCase()]=it; m[String(it.sku).toLowerCase()]=m[String(it.sku).toLowerCase()]||it; }); return m; },[items]);
+  useEffect(()=>{ try{ inputRef.current&&inputRef.current.focus(); }catch(e){} },[]);
+  const submit=async(raw)=>{
+    const code=String(raw||"").trim(); if(!code)return;
+    const it=byCode[code.toLowerCase()];
+    setVal("");
+    if(!it){ setFeed(f=>[{code,name:"Not found — add it in Stock first, or set its barcode",qty:0,ok:false},...f].slice(0,60)); return; }
+    const q=Math.max(1,Math.round(+qtyPer||1));
+    setBusy(true);
+    const r=await cloudCall({action:"invReceive",token:CLOUD.token,lines:[{sku:it.sku,qty:q}],ref:"scan"});
+    setBusy(false);
+    if(r&&r.ok&&r.items&&r.items[0]){ onReceived&&onReceived(r.items[0]); setFeed(f=>[{sku:it.sku,name:it.name||it.sku,qty:q,onHand:r.items[0].onHand,ok:true},...f].slice(0,60)); }
+    else setFeed(f=>[{sku:it.sku,name:(r&&r.error)||"Receive failed",qty:0,ok:false},...f].slice(0,60));
+    try{ inputRef.current&&inputRef.current.focus(); }catch(e){}
+  };
+  const totalScans=feed.filter(x=>x.ok).reduce((s,x)=>s+x.qty,0);
+  return (<div className="space-y-4">
+    <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ScanLine className="w-5 h-5 text-[#0086E0]"/>Scan to receive</h2><p className="text-sm text-stone-500 mt-0.5">Scan a barcode (or type a SKU) and press Enter — each scan adds to stock. Great for putting away a delivery.</p></div>
+    <div className="border border-stone-200 rounded-xl bg-white p-4">
+      <div className="flex items-end gap-3 flex-wrap">
+        <label className="text-xs text-stone-600 flex-1 min-w-[220px]">Scan / SKU<input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();submit(val);}}} placeholder="Scan barcode or type SKU…" className="mt-1 w-full border border-stone-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#0086E0]" autoFocus/></label>
+        <label className="text-xs text-stone-600">Qty per scan<input type="number" min="1" value={qtyPer} onChange={e=>setQtyPer(e.target.value)} className="mt-1 w-20 border border-stone-300 rounded-lg px-2 py-2.5 text-sm"/></label>
+        <button onClick={()=>submit(val)} disabled={busy||!val.trim()} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2.5 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<Plus className="w-4 h-4"/>}Receive</button>
+      </div>
+      {feed.length>0&&<div className="text-[11px] text-stone-400 mt-2">Session: {totalScans} unit{totalScans!==1?"s":""} received across {feed.filter(x=>x.ok).length} scan{feed.filter(x=>x.ok).length!==1?"s":""}.</div>}
+    </div>
+    <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100 max-h-96 overflow-y-auto">
+      {feed.length===0&&<div className="p-6 text-center text-sm text-stone-400">Scans will appear here.</div>}
+      {feed.map((x,i)=>(<div key={i} className={`px-4 py-2 flex items-center gap-3 ${x.ok?"":"bg-rose-50/50"}`}>
+        {x.ok?<CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0"/>:<AlertTriangle className="w-4 h-4 text-rose-500 shrink-0"/>}
+        <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{x.name}</div><div className="text-[11px] text-stone-400">{x.sku||x.code}</div></div>
+        {x.ok&&<div className="text-sm text-stone-600">+{x.qty} → <b className="text-stone-900">{x.onHand}</b></div>}
+      </div>))}
+    </div>
+  </div>);
+}
 /* Pick lists — pick unfulfilled orders, aggregate their SKUs into a bin-sorted pick sheet. Read-only. */
 function PickList({orders,items}){
   const open=(orders||[]).filter(o=>o&&o.status!=="fulfilled"&&Array.isArray(o.lineItems)&&o.lineItems.some(li=>li&&li.sku));

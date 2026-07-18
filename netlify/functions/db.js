@@ -704,6 +704,7 @@ exports.handler = async (event) => {
         if (body.reorder != null) it.reorder = Math.max(0, Math.round(+body.reorder || 0));
         if (body.cost != null && body.cost !== "") it.cost = money2(body.cost);
         if (body.loc != null) it.loc = String(body.loc).slice(0, 60);
+        if (body.barcode != null) it.barcode = String(body.barcode).trim().slice(0, 60);
         /* Kit / bill-of-materials: a list of component SKUs consumed when this item ships. Empty array
            clears it (item becomes a normal stocked SKU again). */
         if (body.kit != null) {

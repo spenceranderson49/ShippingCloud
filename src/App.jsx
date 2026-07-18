@@ -136,7 +136,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v653";
+const BUILD_TAG="addr-v654";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9870,6 +9870,8 @@ function Inventory({settings,client,showMoney=true,currentUser}){
   const [view,setView]=useState("stock");
   const [pos,setPos]=useState([]);
   const [suppliers,setSuppliers]=useState([]);
+  const [lowOnly,setLowOnly]=useState(false);
+  const [poSeed,setPoSeed]=useState(null);
   const catalog=(settings&&settings.products)||[];
   const flash=(m,isErr)=>{ if(isErr){setErr(m);setOk("");}else{setOk(m);setErr("");} setTimeout(()=>{setErr("");setOk("");},4500); };
   const load=async()=>{
@@ -9949,8 +9951,8 @@ function Inventory({settings,client,showMoney=true,currentUser}){
   if(!CLOUD.token) return (<div className="max-w-2xl"><div className="border border-stone-200 rounded-xl bg-white p-6 text-sm text-stone-600">Inventory lives in the cloud — sign in to your account to track stock.</div></div>);
   if(items===null) return (<div className="flex items-center gap-2 text-stone-500 text-sm p-4"><Loader2 className="w-4 h-4 animate-spin"/>Loading inventory…</div>);
   const list=(items||[]).slice().sort((a,b)=>String(a.name||a.sku).localeCompare(String(b.name||b.sku)));
-  const filtered=q.trim()?list.filter(it=>(String(it.sku)+" "+String(it.name||"")).toLowerCase().includes(q.trim().toLowerCase())):list;
-  const isLow=(it)=>(+it.reorder||0)>0&&(+it.onHand||0)<=(+it.reorder||0);
+  const isLow=(it)=>(+it.reorder||0)>0&&(+it.onHand||0)<=(+it.reorder||0)&&!(Array.isArray(it.kit)&&it.kit.length);
+  const filtered=(q.trim()?list.filter(it=>(String(it.sku)+" "+String(it.name||"")).toLowerCase().includes(q.trim().toLowerCase())):list).filter(it=>!lowOnly||isLow(it));
   const totUnits=list.reduce((s,it)=>s+(+it.onHand||0),0);
   const totValue=list.reduce((s,it)=>s+(+it.onHand||0)*(+it.cost||0),0);
   const lowCount=list.filter(isLow).length;
@@ -9959,7 +9961,14 @@ function Inventory({settings,client,showMoney=true,currentUser}){
   const Switcher=()=>(<div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm">
     {[["stock","Stock"],["pos","Purchase Orders"],["suppliers","Suppliers"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}</button>)}
   </div>);
-  if(view==="pos") return (<div className="max-w-5xl space-y-4"><Switcher/><PurchaseOrders pos={pos} setPos={setPos} suppliers={suppliers} items={list} showMoney={showMoney} onReload={load}/></div>);
+  const reorderLowStock=()=>{
+    const low=list.filter(it=>!(Array.isArray(it.kit)&&it.kit.length)&&(+it.reorder||0)>0&&(+it.onHand||0)<=(+it.reorder||0));
+    if(!low.length)return;
+    const lines=low.map(it=>{ const target=Math.max((+it.reorder||0)*2,(+it.reorder||0)+1); return {sku:it.sku,name:it.name||"",qtyOrdered:Math.max(1,target-(+it.onHand||0)),qtyReceived:0,cost:it.cost||""}; });
+    setPoSeed({number:"",supplierId:"",expectedAt:"",notes:"Auto-generated from low stock",lines});
+    setView("pos");
+  };
+  if(view==="pos") return (<div className="max-w-5xl space-y-4"><Switcher/><PurchaseOrders pos={pos} setPos={setPos} suppliers={suppliers} items={list} showMoney={showMoney} onReload={load} seed={poSeed} onSeedUsed={()=>setPoSeed(null)}/></div>);
   if(view==="suppliers") return (<div className="max-w-5xl space-y-4"><Switcher/><SuppliersView suppliers={suppliers} setSuppliers={setSuppliers}/></div>);
   return (<div className="max-w-5xl space-y-4">
     <Switcher/>
@@ -10000,9 +10009,11 @@ function Inventory({settings,client,showMoney=true,currentUser}){
         <button onClick={receive} disabled={busy==="rcv"} className="text-sm bg-emerald-600 text-white rounded-lg px-4 py-2 font-medium hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-1.5">{busy==="rcv"?<Loader2 className="w-4 h-4 animate-spin"/>:<Plus className="w-4 h-4"/>}Receive</button>
       </div>
     </Panel>
-    <div className="flex items-center gap-2">
-      <div className="relative flex-1 max-w-xs"><Search className="w-4 h-4 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search SKU or name…" className="w-full border border-stone-300 rounded-lg pl-8 pr-3 py-2 text-sm"/></div>
-      <button onClick={()=>setShowLog(s=>!s)} className="text-xs text-stone-500 hover:text-stone-700 flex items-center gap-1">{showLog?"Hide":"Show"} movement log ({log.length})</button>
+    <div className="flex items-center gap-2 flex-wrap">
+      <div className="relative flex-1 max-w-xs min-w-[160px]"><Search className="w-4 h-4 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search SKU or name…" className="w-full border border-stone-300 rounded-lg pl-8 pr-3 py-2 text-sm"/></div>
+      <button onClick={()=>setLowOnly(v=>!v)} className={`text-xs rounded-lg px-2.5 py-2 border font-medium ${lowOnly?"bg-amber-100 text-amber-700 border-amber-200":"bg-white text-stone-500 border-stone-200 hover:bg-stone-50"}`}>Low stock only{lowCount?" ("+lowCount+")":""}</button>
+      {lowCount>0&&<button onClick={reorderLowStock} className="text-xs rounded-lg px-2.5 py-2 bg-[#0086E0] text-white font-medium hover:bg-[#006db8] flex items-center gap-1"><ClipboardList className="w-3.5 h-3.5"/>Reorder low stock</button>}
+      <button onClick={()=>setShowLog(s=>!s)} className="text-xs text-stone-500 hover:text-stone-700 flex items-center gap-1 ml-auto">{showLog?"Hide":"Show"} movement log ({log.length})</button>
     </div>
     <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
       <div className="overflow-x-auto"><table className="w-full text-sm">
@@ -10065,11 +10076,12 @@ function Inventory({settings,client,showMoney=true,currentUser}){
 }
 
 /* Purchase Orders — create POs against a supplier, receive (full or partial) into stock. */
-function PurchaseOrders({pos,setPos,suppliers,items,showMoney,onReload}){
+function PurchaseOrders({pos,setPos,suppliers,items,showMoney,onReload,seed,onSeedUsed}){
   const [msg,setMsg]=useState(null);
   const [busy,setBusy]=useState("");
   const [editing,setEditing]=useState(null);
   const [receiving,setReceiving]=useState(null);
+  useEffect(()=>{ if(seed){ setEditing(seed); onSeedUsed&&onSeedUsed(); } /* eslint-disable-next-line */ },[seed]);
   const flash=(m,e)=>{ setMsg(e?{err:m}:{ok:m}); setTimeout(()=>setMsg(null),4000); };
   const blankLine=()=>({sku:"",name:"",qtyOrdered:"",qtyReceived:0,cost:""});
   const newPo=()=>setEditing({number:"",supplierId:"",expectedAt:"",notes:"",lines:[blankLine()]});

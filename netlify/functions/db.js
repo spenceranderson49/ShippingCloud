@@ -952,7 +952,7 @@ exports.handler = async (event) => {
         let list = Array.isArray(cur.value) ? cur.value : [];
         if (action === "returnList") return J({ ok: true, requests: list });
         const id = String(body.id || "");
-        const status = ["new", "approved", "denied", "closed"].indexOf(String(body.status)) >= 0 ? String(body.status) : null;
+        const status = ["new", "approved", "denied", "received", "refunded", "exchanged", "closed"].indexOf(String(body.status)) >= 0 ? String(body.status) : null;
         if (!status) return J({ ok: false, error: "Invalid status." });
         list = list.map((r) => r && r.id === id ? { ...r, status, handledAt: new Date().toISOString() } : r);
         const w = await putStores({ [rKey]: list });

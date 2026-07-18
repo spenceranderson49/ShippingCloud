@@ -841,17 +841,33 @@ exports.handler = async (event) => {
       let _newLogins = [];
       if ("users" in toWrite) {
         const cur = await getStore("users");
-        const _hadEmails = new Set((cur.ok && Array.isArray(cur.value) ? cur.value : []).map((u) => u && String(u.email || "").toLowerCase()).filter(Boolean));
-        toWrite.users = mergeUsersForWrite(toWrite.users, cur.ok ? cur.value : []);
-        _newLogins = (toWrite.users || []).filter((u) => u && u.email && !_hadEmails.has(String(u.email).toLowerCase()));
-        /* STALE-TAB GUARD: an admin tab opened before a signup holds an old copy of this array;
-           its next save (whole-array) would silently DELETE the fresh login. Re-add any current
-           row the incoming write is missing that was created in the last 15 minutes — a tab that
-           old can't have legitimately deleted it. Older rows stay deletable as normal. */
-        const _cutU = Date.now() - 15 * 60 * 1000;
-        const _haveU = new Set((toWrite.users || []).map((u) => u && u.id));
-        for (const u of (cur.ok && Array.isArray(cur.value) ? cur.value : [])) {
-          if (u && !_haveU.has(u.id) && u.createdAt && Date.parse(u.createdAt) > _cutU) toWrite.users.push(u);
+        /* PASSWORD-SAFETY (critical): the client's copy of `users` carries NO password hashes —
+           stripUsers() removes them before they ever leave the server. We re-attach each hash from
+           the CURRENT server value in mergeUsersForWrite below. If this read FAILED (Supabase
+           timeout/network blip — most likely right after a deploy or on a cold start), merging
+           against an empty array would treat every existing login as brand-new and write it with NO
+           hash, wiping EVERY password in one save (and there's no plaintext fallback to recover
+           from). So we hard-refuse the users write whenever we couldn't read the current hashes.
+           Nothing is lost — the client keeps its data and simply retries. A read that SUCCEEDS but
+           returns undefined (a genuinely empty/new tenant) is fine: new logins carry a plaintext
+           password that mergeUsersForWrite hashes. */
+        if (!cur.ok) {
+          delete toWrite.users;
+          rejected.push("users (refused: couldn't read current logins to preserve passwords — no change was made, reload and try again)");
+        } else {
+          const curUsers = Array.isArray(cur.value) ? cur.value : [];
+          const _hadEmails = new Set(curUsers.map((u) => u && String(u.email || "").toLowerCase()).filter(Boolean));
+          toWrite.users = mergeUsersForWrite(toWrite.users, curUsers);
+          _newLogins = (toWrite.users || []).filter((u) => u && u.email && !_hadEmails.has(String(u.email).toLowerCase()));
+          /* STALE-TAB GUARD: an admin tab opened before a signup holds an old copy of this array;
+             its next save (whole-array) would silently DELETE the fresh login. Re-add any current
+             row the incoming write is missing that was created in the last 15 minutes — a tab that
+             old can't have legitimately deleted it. Older rows stay deletable as normal. */
+          const _cutU = Date.now() - 15 * 60 * 1000;
+          const _haveU = new Set((toWrite.users || []).map((u) => u && u.id));
+          for (const u of curUsers) {
+            if (u && !_haveU.has(u.id) && u.createdAt && Date.parse(u.createdAt) > _cutU) toWrite.users.push(u);
+          }
         }
       }
       if ("clients" in toWrite && Array.isArray(toWrite.clients)) {
@@ -880,8 +896,17 @@ exports.handler = async (event) => {
          loaded (this wiped a login's byoCarrier entry on 2026-07-13). */
       if ("featureFlags" in toWrite && toWrite.featureFlags && typeof toWrite.featureFlags === "object" && !Array.isArray(toWrite.featureFlags)) {
         const curF = await getStore("featureFlags");
-        const curV = (curF.ok && curF.value && typeof curF.value === "object" && !Array.isArray(curF.value)) ? curF.value : {};
-        toWrite.featureFlags = { ...curV, ...toWrite.featureFlags };
+        /* Same read-failure safety as users: this is a per-login MERGE against the current value. If
+           the read failed, curV would be {} and the write would REPLACE the whole map with only the
+           logins this tab knew about — erasing every other login's flags/logo. Refuse on read
+           failure instead of clobbering. */
+        if (!curF.ok) {
+          delete toWrite.featureFlags;
+          rejected.push("featureFlags (refused: couldn't read current settings to merge — no change was made, reload and try again)");
+        } else {
+          const curV = (curF.value && typeof curF.value === "object" && !Array.isArray(curF.value)) ? curF.value : {};
+          toWrite.featureFlags = { ...curV, ...toWrite.featureFlags };
+        }
       }
       /* ── DATA-LOSS GUARDS on the business-critical global stores ──
          1. A write that would WIPE a non-empty store (empty array / rateRules with zero

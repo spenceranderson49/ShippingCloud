@@ -136,7 +136,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v650";
+const BUILD_TAG="addr-v651";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -14281,7 +14281,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
     {(cs==="services"||only==="ship")&&<Panel title="Rates & services">
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         {Sel({k:"defaultView",label:"Default rate view",opts:[["cheapest","Cheapest First"],["carrier","Grouped by Carrier"]]})}
-        {(isAdmin||deployMode)&&<div className="rounded-lg border border-blue-100 bg-blue-50/40 p-2.5"><div className="text-[10px] uppercase tracking-widest text-blue-400 mb-1.5 flex items-center gap-1"><ShieldCheck className="w-3 h-3"/>Admin only</div>{Tog({k:"showRateViewToggle",invert:true,label:"Hide the Cheapest / By carrier switch on Ship",hint:"Hidden = the rate list just uses the default view above, with no toggle or 'enter ZIP & weight' hint shown. Only you (admin) can change this."})}</div>}
+        {isAdmin&&<div className="rounded-lg border border-blue-100 bg-blue-50/40 p-2.5"><div className="text-[10px] uppercase tracking-widest text-blue-400 mb-1.5 flex items-center gap-1"><ShieldCheck className="w-3 h-3"/>Admin only</div>{Tog({k:"showRateViewToggle",invert:true,label:"Hide the Cheapest / By carrier switch on Ship",hint:"Hidden = the rate list just uses the default view above, with no toggle or 'enter ZIP & weight' hint shown. Only the platform admin can change this — company admins can't."})}</div>}
         {Sel({k:"transitStyle",label:"Transit display",opts:[["date","Days + Arrival Date"],["days","Day Count Only"]]})}
         {Num({k:"priceWarn",label:"Price alert",hint:"Flag any rate above this amount. 0 = off",step:"1",suffix:"$"})}
       </div>

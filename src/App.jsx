@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v656";
+const BUILD_TAG="addr-v657";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7414,7 +7414,7 @@ function AppInner(){
           {tab==="drafts"&&<Drafts drafts={drafts} setDrafts={setDrafts} goShip={goShip}/>}
           {tab==="returns"&&<Returns returns={returns} setReturns={setReturns} orders={orders} settings={settings} logEmail={logEmail}/>}
           {tab==="pickups"&&<Pickups pickups={pickups} setPickups={setPickups} settings={settings} client={client} isAdmin={isAdmin} showCosts={featureOn("pickupCosts",currentUser,myFlags)}/>}
-          {tab==="inventory"&&<Inventory settings={settings} client={client} showMoney={showMoney} currentUser={currentUser}/>}
+          {tab==="inventory"&&<Inventory settings={settings} client={client} showMoney={showMoney} currentUser={currentUser} orders={orders}/>}
           {tab==="invoices"&&<Invoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>}
           {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings} client={client} onShipped={onShipped}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
@@ -9901,7 +9901,7 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
    Company-shared stock, one row per SKU on the server (inv:<clientId>:<sku>). Tracks on-hand,
    reorder point, unit cost and location; receives POs; auto-decrements when orders ship (see the
    invShip hook in AppInner). Money columns hide when the login can't see costs. */
-function Inventory({settings,client,showMoney=true,currentUser}){
+function Inventory({settings,client,showMoney=true,currentUser,orders=[]}){
   const [items,setItems]=useState(null);   // null = loading
   const [log,setLog]=useState([]);
   const [err,setErr]=useState(""); const [ok,setOk]=useState("");
@@ -10005,9 +10005,10 @@ function Inventory({settings,client,showMoney=true,currentUser}){
   const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
   const openPo=(pos||[]).filter(p=>p&&p.status!=="received").length;
   const Switcher=()=>(<div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm flex-wrap">
-    {[["stock","Stock"],["pos","Purchase Orders"],["suppliers","Suppliers"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}</button>)}
+    {[["stock","Stock"],["pos","Purchase Orders"],["suppliers","Suppliers"],["pick","Pick Lists"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}</button>)}
   </div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
+  if(view==="pick") return (<div className="max-w-5xl space-y-4"><Switcher/><PickList orders={orders} items={list}/></div>);
   const reorderLowStock=()=>{
     const low=list.filter(it=>!(Array.isArray(it.kit)&&it.kit.length)&&(+it.reorder||0)>0&&(+it.onHand||0)<=(+it.reorder||0));
     if(!low.length)return;
@@ -10250,6 +10251,46 @@ function SuppliersView({suppliers,setSuppliers}){
   </div>);
 }
 
+/* Pick lists — pick unfulfilled orders, aggregate their SKUs into a bin-sorted pick sheet. Read-only. */
+function PickList({orders,items}){
+  const open=(orders||[]).filter(o=>o&&o.status!=="fulfilled"&&Array.isArray(o.lineItems)&&o.lineItems.some(li=>li&&li.sku));
+  const [sel,setSel]=useState({});
+  const [built,setBuilt]=useState(null);
+  const bySku=useMemo(()=>{ const m={}; (items||[]).forEach(it=>{ m[String(it.sku).toLowerCase()]=it; }); return m; },[items]);
+  const chosen=open.filter(o=>sel[o.id]);
+  const build=()=>{
+    const agg={};
+    chosen.forEach(o=>{ (o.lineItems||[]).forEach(li=>{ const sku=String(li.sku||"").trim(); if(!sku)return; const k=sku.toLowerCase(); if(!agg[k])agg[k]={sku,name:li.title||li.name||(bySku[k]&&bySku[k].name)||"",qty:0}; agg[k].qty+=(+li.qty||+li.quantity||1); }); });
+    const rows=Object.values(agg).map(r=>{ const it=bySku[r.sku.toLowerCase()]; return {...r,loc:(it&&it.loc)||"",onHand:it?(+it.onHand||0):null,short:it?Math.max(0,r.qty-(+it.onHand||0)):null}; }).sort((a,b)=>String(a.loc||"~").localeCompare(String(b.loc||"~"))||String(a.sku).localeCompare(b.sku));
+    setBuilt({rows,orders:chosen.length});
+  };
+  const printSheet=()=>{ try{ const w=window.open("","_blank"); if(!w)return; const rows=built.rows.map(r=>`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${r.loc||"—"}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${r.name||""}<div style="color:#999;font-size:11px">${r.sku}</div></td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${r.qty}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;color:${r.short?"#c00":"#999"}">${r.onHand==null?"—":r.onHand}${r.short?" (short "+r.short+")":""}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;width:40px"></td></tr>`).join(""); w.document.write(`<html><head><title>Pick list</title></head><body style="font-family:system-ui;padding:24px"><h2>Pick list · ${built.orders} order(s) · ${new Date().toLocaleString()}</h2><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:#666;font-size:11px;text-transform:uppercase"><th style="padding:6px 10px">Bin</th><th style="padding:6px 10px">Item</th><th style="padding:6px 10px;text-align:right">Pick</th><th style="padding:6px 10px;text-align:right">On hand</th><th style="padding:6px 10px">✓</th></tr></thead><tbody>${rows}</tbody></table></body></html>`); w.document.close(); w.focus(); setTimeout(()=>{try{w.print();}catch(e){}},250); }catch(e){} };
+  return (<div className="space-y-4">
+    <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ClipboardList className="w-5 h-5 text-[#0086E0]"/>Pick lists</h2><p className="text-sm text-stone-500 mt-0.5">Select open orders and build a bin-sorted pick sheet for the warehouse.</p></div>
+    {open.length===0?<div className="border border-stone-200 rounded-xl bg-white p-6 text-sm text-stone-500">No open orders with SKUs to pick. Orders need line items with SKUs (from a connected store or your catalog).</div>:<>
+      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+        <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 flex items-center justify-between"><label className="flex items-center gap-2 cursor-pointer normal-case tracking-normal text-xs text-stone-600"><input type="checkbox" checked={chosen.length===open.length&&open.length>0} onChange={e=>{const all={};if(e.target.checked)open.forEach(o=>all[o.id]=true);setSel(all);}} className="accent-[#0086E0]"/>Select all</label><span>{chosen.length} selected</span></div>
+        <div className="divide-y divide-stone-100 max-h-72 overflow-y-auto">
+          {open.map(o=>(<label key={o.id} className="px-4 py-2.5 flex items-center gap-3 cursor-pointer hover:bg-stone-50">
+            <input type="checkbox" checked={!!sel[o.id]} onChange={e=>setSel(s=>({...s,[o.id]:e.target.checked}))} className="accent-[#0086E0]"/>
+            <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{o.name||o.id} · {o.customer||""}</div><div className="text-[11px] text-stone-400 truncate">{(o.lineItems||[]).filter(li=>li.sku).map(li=>(li.qty||li.quantity||1)+"× "+(li.sku)).join(", ")}</div></div>
+          </label>))}
+        </div>
+      </div>
+      <button onClick={build} disabled={!chosen.length} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5"><ClipboardList className="w-4 h-4"/>Build pick list ({chosen.length})</button>
+    </>}
+    {built&&<div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 flex items-center justify-between"><span>Pick sheet · {built.orders} order(s) · {built.rows.reduce((s,r)=>s+r.qty,0)} units</span><button onClick={printSheet} className="normal-case tracking-normal text-xs bg-white border border-stone-200 rounded px-2 py-1 hover:bg-stone-100 flex items-center gap-1"><Printer className="w-3.5 h-3.5"/>Print</button></div>
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-[10px] uppercase tracking-widest text-stone-400"><th className="px-3 py-2">Bin</th><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">Pick</th><th className="px-3 py-2 text-right">On hand</th></tr></thead>
+        <tbody className="divide-y divide-stone-100">{built.rows.map(r=>(<tr key={r.sku} className={r.short?"bg-rose-50/50":""}>
+          <td className="px-3 py-2 text-stone-600">{r.loc||"—"}</td>
+          <td className="px-3 py-2"><div className="text-stone-800">{r.name||r.sku}</div><div className="text-[11px] text-stone-400">{r.sku}</div></td>
+          <td className="px-3 py-2 text-right font-semibold text-stone-900">{r.qty}</td>
+          <td className={`px-3 py-2 text-right ${r.short?"text-rose-600":"text-stone-500"}`}>{r.onHand==null?"—":r.onHand}{r.short?" (short "+r.short+")":""}</td>
+        </tr>))}</tbody></table></div>
+    </div>}
+  </div>);
+}
 /* Inventory analytics — valuation, value by location, dead stock, movement, top items. Read-only. */
 function InventoryAnalytics({list,log,showMoney=true}){
   const stock=(list||[]).filter(it=>!(Array.isArray(it.kit)&&it.kit.length));

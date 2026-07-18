@@ -40,6 +40,9 @@ exports.handler = async (event) => {
     let b = {}; try { b = JSON.parse(event.body || "{}"); } catch { return J({ ok: false, error: "Bad JSON" }); }
     const c = { accountId: S(b.accountId).trim(), consumerKey: S(b.consumerKey).trim(), consumerSecret: S(b.consumerSecret).trim(), tokenId: S(b.tokenId).trim(), tokenSecret: S(b.tokenSecret).trim() };
     for (const k of ["accountId", "consumerKey", "consumerSecret", "tokenId", "tokenSecret"]) if (!c[k]) return J({ ok: false, error: "Missing " + k });
+    /* accountId is concatenated into the REST host — allow only NetSuite's real account-id shape
+       (digits, optional _SB1 sandbox suffix) so it can't smuggle a different host / path / SSRF. */
+    if (!/^[0-9]+(_[a-z0-9]+)?$/i.test(c.accountId)) return J({ ok: false, error: "Invalid accountId (e.g. 1234567 or 1234567_SB1)." });
     const host = restHost(c.accountId);
 
     if (b.action === "create") {

@@ -6,6 +6,7 @@
      POST { action:"sync",    storeUrl, token }                         → { ok, orders }
      POST { action:"fulfill", storeUrl, token, orderId, tracking, carrier }
    ════════════════════════════════════════════════════════════════════════ */
+const { safeExternalUrl } = require("./_ssrf.js");
 const J = (o) => ({ statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify(o) });
 const S = (v) => (v == null ? "" : String(v));
 const api = (u) => S(u).replace(/\/+$/, "") + "/rest/V1";
@@ -50,6 +51,7 @@ exports.handler = async (event) => {
     let b = {}; try { b = JSON.parse(event.body || "{}"); } catch { return J({ ok: false, error: "Bad JSON" }); }
     const c = { storeUrl: S(b.storeUrl).trim(), token: S(b.token).trim() };
     if (!c.storeUrl || !c.token) return J({ ok: false, error: "Missing storeUrl/token." });
+    if (!safeExternalUrl(c.storeUrl)) return J({ ok: false, error: "storeUrl must be a public https:// address." });
     if (b.action === "fulfill") return J(await fulfill(c, b));
     return J(await syncOrders(c));
   } catch (e) { return J({ ok: false, error: "Function error: " + (e && e.message ? e.message : String(e)) }); }

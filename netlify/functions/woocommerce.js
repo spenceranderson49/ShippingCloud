@@ -7,6 +7,7 @@
    Note: tracking numbers in Woo live in the "Shipment Tracking" plugin; if it
    isn't installed we mark the order Completed and add an order note w/ tracking.
    ════════════════════════════════════════════════════════════════════════ */
+const { safeExternalUrl } = require("./_ssrf.js");
 const J = (o) => ({ statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify(o) });
 const S = (v) => (v == null ? "" : String(v));
 const auth = (c) => "Basic " + Buffer.from(c.key + ":" + c.secret).toString("base64");
@@ -51,6 +52,7 @@ exports.handler = async (event) => {
     let b = {}; try { b = JSON.parse(event.body || "{}"); } catch { return J({ ok: false, error: "Bad JSON" }); }
     const c = { storeUrl: S(b.storeUrl).trim(), key: S(b.key).trim(), secret: S(b.secret).trim() };
     if (!c.storeUrl || !c.key || !c.secret) return J({ ok: false, error: "Missing storeUrl/key/secret." });
+    if (!safeExternalUrl(c.storeUrl)) return J({ ok: false, error: "storeUrl must be a public https:// address." });
     if (b.action === "fulfill") return J(await fulfill(c, b));
     return J(await syncOrders(c));
   } catch (e) { return J({ ok: false, error: "Function error: " + (e && e.message ? e.message : String(e)) }); }

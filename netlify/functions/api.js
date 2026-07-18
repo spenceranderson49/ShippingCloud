@@ -169,7 +169,10 @@ async function provisionCustomer(body) {
   if (!name) return ERR(422, "invalid_request", "customer.name is required.");
   /* fresh read (not the auth snapshot) so we never clobber a concurrent portal edit */
   const [cRes, rRes] = await Promise.all([getStore("clients"), getStore("rateRules")]);
-  const clients = (cRes.ok && Array.isArray(cRes.value)) ? cRes.value : [];
+  /* Refuse on a real read failure — never treat an unreadable store as empty and then
+     write the whole array back (that would erase every customer + rate card). */
+  if (!cRes.ok || !rRes.ok) return ERR(503, "db_unavailable", "Storage is briefly unavailable — nothing was changed. Try again in a moment.");
+  const clients = Array.isArray(cRes.value) ? cRes.value : [];
   const rules = (rRes.ok && rRes.value && typeof rRes.value === "object") ? rRes.value : { profiles: [{ id: "default", name: "Default", services: {}, surcharges: {} }], assign: {}, baseCosts: {} };
   rules.profiles = Array.isArray(rules.profiles) && rules.profiles.length ? rules.profiles : [{ id: "default", name: "Default", services: {}, surcharges: {} }];
   rules.assign = rules.assign || {};
@@ -199,7 +202,8 @@ async function provisionCustomer(body) {
 async function saveReport(body) {
   const rep = { id: "rpt" + Date.now(), title: S(body.title || "Report"), type: S(body.type || "optimization"), customer_external_id: body.customer_external_id || null, data: body.data || null, received: new Date().toISOString() };
   const cur = await getStore("proposalReports");
-  const arr = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+  if (!cur.ok) return ERR(503, "db_unavailable", "Storage is briefly unavailable — nothing was saved. Try again.");
+  const arr = Array.isArray(cur.value) ? cur.value : [];
   await putStore("proposalReports", [rep, ...arr].slice(0, 1000));
   return J(201, { report_id: rep.id, note: "Saved. Visible in Admin → API → Reports." });
 }
@@ -463,7 +467,8 @@ exports.handler = async (event) => {
     if (seg[0] === "pickups" && method === "POST" && seg.length === 3 && seg[2] === "cancel") {
       const conf = seg[1];
       const cur = await getStore(pickupStoreKey(client));
-      const arr = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+      if (!cur.ok) return ERR(503, "db_unavailable", "Storage is briefly unavailable — nothing was changed. Try again.");
+      const arr = Array.isArray(cur.value) ? cur.value : [];
       const hit = arr.find((p) => S(p.confirmation) === conf);
       if (isTest || /^TESTPICKUP/.test(conf)) { await putStore(pickupStoreKey(client), arr.map((p) => S(p.confirmation) === conf ? { ...p, status: "canceled" } : p)); return J(200, { confirmation: conf, status: "canceled", test: true }); }
       const res = await callFn("./fedex.js", { action: "pickupCancel", confirmationCode: conf, carrierCode: "FDXE", date: hit ? hit.date : S(body.date), location: hit ? hit.location : S(body.location), account: fedexAccount });

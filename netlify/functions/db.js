@@ -85,7 +85,7 @@ const sign = (p) => crypto.createHmac("sha256", secret()).update(p).digest("hex"
    refreshToken action below also re-issues a fresh token on boot when one is within 30 days of
    lapsing, so an active session effectively never expires. (The real fix for mass logouts is a
    stable SESSION_SECRET env var — see the deploy notes.) */
-const makeToken = (user) => { const p = b64u(JSON.stringify({ uid: String(user.id), email: user.email, role: user.role || "customer", clientId: user.clientId || null, exp: Date.now() + 365 * 24 * 3600 * 1000 })); return p + "." + sign(p); };
+const makeToken = (user) => { const p = b64u(JSON.stringify({ uid: String(user.id), email: user.email, role: user.role || "customer", clientId: user.clientId || null, t: TENANT, exp: Date.now() + 365 * 24 * 3600 * 1000 })); return p + "." + sign(p); };
 function verifyToken(token) {
   try {
     const [p, sig] = String(token || "").split(".");
@@ -94,6 +94,11 @@ function verifyToken(token) {
     if (want.length !== got.length || !crypto.timingSafeEqual(want, got)) return null;
     const payload = JSON.parse(unb64u(p));
     if (!payload || payload.kind || !payload.uid || !payload.exp || Date.now() > payload.exp) return null;   /* kind = pwreset — only resetPassword may consume it */
+    /* Tenant binding: a token minted for one tenant (e.g. sandbox) must not verify against another
+       (production), even when both share a derived SESSION_SECRET. Tokens issued before this field
+       existed carry no `t` and are still accepted, so nobody gets logged out on rollout; every token
+       minted from now on is pinned to its tenant. */
+    if (payload.t && payload.t !== TENANT) return null;
     return payload;
   } catch { return null; }
 }
@@ -286,6 +291,13 @@ const canWriteKey = (auth, key) => String(key).startsWith("bak:") ? false : (aut
 /* best-effort per-container throttle for the unauthenticated signup endpoint (F3) */
 const RA_HITS = {};
 const signupThrottleOk = (ip) => { const w = Math.floor(Date.now() / 3600000), k = String(ip || "?") + ":" + w; RA_HITS[k] = (RA_HITS[k] || 0) + 1; if (Object.keys(RA_HITS).length > 2000) { for (const x in RA_HITS) { if (!x.endsWith(":" + w)) delete RA_HITS[x]; } } return RA_HITS[k] <= 5; };
+/* Best-effort per-container brute-force throttle for login / password-reset. Keyed by IP+email in
+   10-minute windows; blocks after `max` failed-shaped attempts. Only bumped on a real attempt, so a
+   legitimate user who signs in first try never trips it. Not a substitute for a stable secret, but
+   it stops password/2FA-code guessing from a single container. */
+const LOGIN_HITS = {};
+const loginThrottleOk = (ip, email, max) => { const w = Math.floor(Date.now() / 600000), k = String(ip || "?") + "|" + String(email || "?") + ":" + w; LOGIN_HITS[k] = (LOGIN_HITS[k] || 0) + 1; if (Object.keys(LOGIN_HITS).length > 5000) { for (const x in LOGIN_HITS) { if (!x.endsWith(":" + w)) delete LOGIN_HITS[x]; } } return LOGIN_HITS[k] <= (max || 12); };
+const clientIp = (event) => String((event.headers && (event.headers["x-nf-client-connection-ip"] || event.headers["x-forwarded-for"] || "")).split(",")[0] || "").trim();
 const SYNC_BLOCK = { session: 1 }; // never stored server-side
 
 exports.handler = async (event) => {
@@ -328,6 +340,7 @@ exports.handler = async (event) => {
       const email = String(body.email || "").trim().toLowerCase();
       const password = String(body.password || "");
       if (!email || !password) return J({ ok: false, error: "Enter your email and password." });
+      if (!loginThrottleOk(clientIp(event), email, 12)) return J({ ok: false, error: "Too many attempts. Wait a few minutes and try again." });
       const cur = await getStore("users");
       if (!cur.ok) return J({ ok: false, error: "We’re having trouble reaching the server — try again in a moment." });
       let users = Array.isArray(cur.value) ? cur.value : [];
@@ -512,6 +525,9 @@ exports.handler = async (event) => {
       const email = String(body.email || "").trim().toLowerCase();
       const generic = { ok: true, note: "If that email has an account, a reset link is on its way." };
       if (!/.+@.+\..+/.test(email)) return J(generic);
+      /* Throttle reset requests (email-bomb / enumeration guard) — return the same generic
+         message so a blocked caller learns nothing about whether the address exists. */
+      if (!loginThrottleOk(clientIp(event), "reset|" + email, 6)) return J(generic);
       const curU = await getStore("users");
       const users = Array.isArray(curU.value) ? curU.value : [];
       const u = users.find((x) => x && String(x.email || "").toLowerCase() === email && x.status !== "disabled");
@@ -763,7 +779,8 @@ exports.handler = async (event) => {
       if (action === "requestCompanyAdmin") {
         if (me.companyAdmin) return J({ ok: true, already: true });
         const cur = await getStore("companyAdminRequests");
-        const list = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+        if (!cur.ok) return J({ ok: false, retry: true, error: "Storage is briefly unavailable — try again." });
+        const list = Array.isArray(cur.value) ? cur.value : [];
         if (list.some((r2) => r2 && r2.uid === auth.uid)) return J({ ok: true, pending: true });
         list.push({ id: "car" + Date.now(), uid: auth.uid, name: me.name || "", email: me.email || "", clientId: me.clientId || null, date: new Date().toLocaleDateString() });
         const w = await putStores({ companyAdminRequests: list });

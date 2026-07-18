@@ -12,6 +12,7 @@
      action:"create" { sobject, fields:{...} }         → { ok, id }
      action:"refresh"                                  → fresh accessToken
    ════════════════════════════════════════════════════════════════════════ */
+const { safeExternalUrl } = require("./_ssrf.js");
 const J = (o) => ({ statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify(o) });
 const S = (v) => (v == null ? "" : String(v));
 const html = (m) => ({ statusCode: 200, headers: { "Content-Type": "text/html" }, body: `<!doctype html><meta charset="utf-8"><body style="font-family:system-ui;padding:40px;max-width:560px;margin:auto"><h2>ShippingCloud · Salesforce</h2><p>${m}</p></body>` });
@@ -53,6 +54,7 @@ exports.handler = async (event) => {
 
     const inst = S(b.instanceUrl).replace(/\/+$/, ""), token = S(b.accessToken);
     if (!inst || !token) return J({ ok: false, error: "Missing instanceUrl/accessToken (reconnect Salesforce)." });
+    if (!safeExternalUrl(inst)) return J({ ok: false, error: "instanceUrl must be a public https:// Salesforce address." });
     const headers = { "Authorization": "Bearer " + token, "Content-Type": "application/json" };
 
     if (b.action === "query") {

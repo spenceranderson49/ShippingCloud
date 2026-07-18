@@ -95,6 +95,7 @@ const FEATURE_CATALOG=[
   {id:"pickupCosts",label:"Pickup fee display",desc:"Show the on-call pickup fee on the Pickups tab. OFF by default — turn on per customer once their pickup pricing is set",default:false},
   {id:"companyMarkup",label:"Company rate markup",desc:"Let THIS company admin add their own margin on top of the rates their team sees (Company Admin → Rate Markup). OFF by default — turn it on for a reseller who marks shipping up to their own departments/customers",default:false},
   {id:"inventory",label:"Inventory",desc:"Track stock on hand per SKU, receive purchase orders, set reorder points, and auto-decrement when orders ship. OFF by default — turn on per customer",default:false},
+  {id:"brandedTracking",label:"Branded tracking & returns",desc:"Customer-facing branded tracking page + self-service returns portal (Settings → Branded Tracking). OFF by default — turn on per customer",default:false},
   {id:"rules",label:"Autopilot",desc:"Autopilot mode — automation rules",default:true},
   {id:"scan",label:"Scan",desc:"Barcode scan station",default:true},
   {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:true},
@@ -136,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v655";
+const BUILD_TAG="addr-v656";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7419,7 +7420,7 @@ function AppInner(){
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
           {tab==="companyadmin"&&isCompanyAdmin&&<CompanyAdmin currentUser={currentUser} companyUsers={companyUsers} setCompanyUsers={setCompanyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} settings={settings} client={client} allowedTabs={featTabKeys} markupEntitled={featureOn("companyMarkup",currentUser,myFlags)}/>}
           {(tab==="admin"||tab.startsWith("admin:"))&&isAdmin&&<AdminPortal activeSection={tab.startsWith("admin:")?tab.slice(6):null} clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} publicBrand={publicBrand} setPublicBrand={setPublicBrand} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
-          {tab==="settings"&&<Settings showMoney={showMoney} secPolicy={(myFlags&&myFlags._secPolicy)||{}} isAdmin={isAdmin} uid={currentUser&&currentUser.id} currentUser={currentUser} setCurrentUser={setCurrentUser} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)} allowedTabs={featTabKeys} fxLocOn={featureOn("fedexLocations",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
+          {tab==="settings"&&<Settings showMoney={showMoney} secPolicy={(myFlags&&myFlags._secPolicy)||{}} isAdmin={isAdmin} uid={currentUser&&currentUser.id} currentUser={currentUser} setCurrentUser={setCurrentUser} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)} allowedTabs={featTabKeys} fxLocOn={featureOn("fedexLocations",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)} trackingOn={featureOn("brandedTracking",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
           </TabBoundary>
         </main>
       </div>
@@ -10003,9 +10004,10 @@ function Inventory({settings,client,showMoney=true,currentUser}){
   const lowCount=list.filter(isLow).length;
   const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
   const openPo=(pos||[]).filter(p=>p&&p.status!=="received").length;
-  const Switcher=()=>(<div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm">
-    {[["stock","Stock"],["pos","Purchase Orders"],["suppliers","Suppliers"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}</button>)}
+  const Switcher=()=>(<div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm flex-wrap">
+    {[["stock","Stock"],["pos","Purchase Orders"],["suppliers","Suppliers"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}</button>)}
   </div>);
+  if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
   const reorderLowStock=()=>{
     const low=list.filter(it=>!(Array.isArray(it.kit)&&it.kit.length)&&(+it.reorder||0)>0&&(+it.onHand||0)<=(+it.reorder||0));
     if(!low.length)return;
@@ -10245,6 +10247,67 @@ function SuppliersView({suppliers,setSuppliers}){
         <div className="flex items-center gap-2 mt-4"><button onClick={save} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy&&<Loader2 className="w-4 h-4 animate-spin"/>}Save</button><button onClick={()=>setEf(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
       </div>
     </div>}
+  </div>);
+}
+
+/* Inventory analytics — valuation, value by location, dead stock, movement, top items. Read-only. */
+function InventoryAnalytics({list,log,showMoney=true}){
+  const stock=(list||[]).filter(it=>!(Array.isArray(it.kit)&&it.kit.length));
+  const totUnits=stock.reduce((s,it)=>s+(+it.onHand||0),0);
+  const totValue=stock.reduce((s,it)=>s+(+it.onHand||0)*(+it.cost||0),0);
+  const skuCount=stock.length;
+  // last ship per SKU from the movement ledger
+  const lastShip={}; let ship30=0; const cutoff30=Date.now()-30*864e5;
+  (log||[]).forEach(mv=>{ if(mv&&mv.type==="ship"){ const k=String(mv.sku||"").toLowerCase(); const t=Date.parse(mv.at||"")||0; if(!lastShip[k]||t>lastShip[k])lastShip[k]=t; if(t>=cutoff30)ship30+=Math.abs(+mv.qty||0); } });
+  const DEAD_DAYS=60;
+  const dead=stock.filter(it=>(+it.onHand||0)>0&&(()=>{ const t=lastShip[String(it.sku).toLowerCase()]; return !t||(Date.now()-t)>DEAD_DAYS*864e5; })());
+  const deadValue=dead.reduce((s,it)=>s+(+it.onHand||0)*(+it.cost||0),0);
+  const byLoc={}; stock.forEach(it=>{ const l=it.loc||"Unassigned"; if(!byLoc[l])byLoc[l]={units:0,value:0,skus:0}; byLoc[l].units+=(+it.onHand||0); byLoc[l].value+=(+it.onHand||0)*(+it.cost||0); byLoc[l].skus+=1; });
+  const locs=Object.keys(byLoc).sort((a,b)=>byLoc[b].value-byLoc[a].value);
+  const top=stock.map(it=>({sku:it.sku,name:it.name,val:(+it.onHand||0)*(+it.cost||0),units:+it.onHand||0})).filter(x=>x.val>0).sort((a,b)=>b.val-a.val).slice(0,10);
+  const daysCover=ship30>0?Math.round(totUnits/(ship30/30)):null;
+  const Tile=({label,value,tone,sub})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div>{sub?<div className="text-[11px] text-stone-400 mt-0.5">{sub}</div>:null}</div>);
+  return (<div className="space-y-4">
+    <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-[#0086E0]"/>Inventory analytics</h2><p className="text-sm text-stone-500 mt-0.5">Valuation, movement, and dead stock — based on your current stock and recent movements.</p></div>
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <Tile label="SKUs" value={skuCount}/>
+      <Tile label="Units on hand" value={totUnits.toLocaleString()}/>
+      {showMoney&&<Tile label="Stock value" value={money(totValue)}/>}
+      {showMoney&&<Tile label="Dead stock value" value={money(deadValue)} tone={deadValue?"text-amber-600":"text-stone-900"} sub={dead.length+" SKU"+(dead.length!==1?"s":"")+" · no sale in "+DEAD_DAYS+"d"}/>}
+    </div>
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <Tile label="Units shipped (30d)" value={ship30.toLocaleString()} sub="from movement log"/>
+      <Tile label="Days of cover" value={daysCover!=null?daysCover+"d":"—"} sub={daysCover!=null?"at current pace":"no recent sales"}/>
+    </div>
+    {showMoney&&<div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500">Value by location</div>
+      <div className="divide-y divide-stone-100">
+        {locs.length===0&&<div className="p-4 text-sm text-stone-400">No stock yet.</div>}
+        {locs.map(l=>{ const pct=totValue>0?Math.round(byLoc[l].value/totValue*100):0; return (<div key={l} className="px-4 py-2.5 flex items-center gap-3">
+          <div className="w-40 shrink-0 truncate text-sm text-stone-800">{l}</div>
+          <div className="flex-1 h-2 bg-stone-100 rounded-full overflow-hidden"><div className="h-full bg-[#0086E0]" style={{width:pct+"%"}}/></div>
+          <div className="w-16 text-right text-xs text-stone-500">{byLoc[l].units} u</div>
+          <div className="w-24 text-right text-sm font-medium text-stone-800">{money(byLoc[l].value)}</div>
+        </div>);})}
+      </div>
+    </div>}
+    <div className="grid md:grid-cols-2 gap-4">
+      {showMoney&&<div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+        <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500">Top items by value</div>
+        <div className="divide-y divide-stone-100">
+          {top.length===0&&<div className="p-4 text-sm text-stone-400">Add unit costs to see valuation.</div>}
+          {top.map(t=>(<div key={t.sku} className="px-4 py-2 flex items-center gap-3"><div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{t.name||t.sku}</div><div className="text-[11px] text-stone-400">{t.sku} · {t.units} u</div></div><div className="text-sm font-medium text-stone-800">{money(t.val)}</div></div>))}
+        </div>
+      </div>}
+      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+        <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500">Dead stock — no sale in {DEAD_DAYS} days</div>
+        <div className="divide-y divide-stone-100 max-h-80 overflow-y-auto">
+          {dead.length===0&&<div className="p-4 text-sm text-stone-400">Nothing stale — every stocked item has sold recently.</div>}
+          {dead.map(it=>(<div key={it.sku} className="px-4 py-2 flex items-center gap-3"><div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{it.name||it.sku}</div><div className="text-[11px] text-stone-400">{it.sku}</div></div><div className="text-sm text-stone-500">{+it.onHand||0} u{showMoney&&it.cost?" · "+money((+it.onHand||0)*(+it.cost||0)):""}</div></div>))}
+        </div>
+      </div>
+    </div>
+    <p className="text-[11px] text-stone-400">Dead-stock &amp; movement figures use the recent movement log (last 1,000 events per company), so very old sales may fall outside the window.</p>
   </div>);
 }
 
@@ -11661,7 +11724,7 @@ function BrandedTracking({settings,setSettings}){
     </Panel>}
   </div>);
 }
-function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,isAdmin=false,showMoney=true,secPolicy={},currentUser=null,setCurrentUser=null,allowedTabs=null,fxLocOn=false}){
+function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,isAdmin=false,showMoney=true,secPolicy={},currentUser=null,setCurrentUser=null,allowedTabs=null,fxLocOn=false,trackingOn=false}){
   /* Remember which Settings sub-section you were on, so leaving Settings and coming back returns you to
      the same panel instead of resetting to General. Persisted so it survives a full reload too. */
   const [sec,setSecRaw]=useState(()=>{ try{ const sv=lsGet("sc.settingssec."+(uid||"guest"),null); return (typeof sv==="string"&&sv)?sv:"general"; }catch(e){ return "general"; } });   // remembered across refreshes
@@ -11685,6 +11748,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
     if(currentUser&&currentUser.demo&&(id==="billing"||id==="subscription"))return "off";   // demo: no plans/pricing/card surfaces
     if(id==="subscription"&&!(secPolicy&&secPolicy.subscription))return "off";   // hidden unless the admin portal explicitly turns it on for this customer
     if(id==="fedexlocations"&&!fxLocOn)return "off";   // FedEx Location Finder feature (admin-toggleable, default on)
+    if(id==="tracking"&&!trackingOn)return "off";   // Branded tracking & returns — off until the admin enables it per customer
     /* The FedEx Account page shows for EVERY customer (Spencer 2026-07-15: "I want FedEx in
        there always") — the panel itself renders only the FedEx pieces for non-admins; the
        England/platform plumbing stays admin-only inside it. The byoCarrier feature flag now

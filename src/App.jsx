@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v667";
+const BUILD_TAG="addr-v668";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -11575,12 +11575,12 @@ function Returns({returns,setReturns,orders,settings,logEmail}){
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between"><h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Undo2 className="w-4 h-4"/>Returns &amp; RMAs</h2><button onClick={()=>setCreating(v=>!v)} className="flex items-center gap-1 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8]"><Plus className="w-4 h-4"/>Create Return</button></div>
-      {reqs&&reqs.length>0&&(()=>{ const byReason={}; reqs.forEach(r=>{ const k=r.reason||"Other"; byReason[k]=(byReason[k]||0)+1; }); const topReasons=Object.keys(byReason).sort((a,b)=>byReason[b]-byReason[a]).slice(0,4); const stTone2={new:"blue",approved:"green",denied:"rose",received:"amber",refunded:"stone",exchanged:"stone",closed:"stone"}; return (<>
+      {reqs&&reqs.length>0&&(()=>{ const byReason={}; reqs.forEach(r=>{ const k=r.reason||"Other"; byReason[k]=(byReason[k]||0)+1; }); const topReasons=Object.keys(byReason).sort((a,b)=>byReason[b]-byReason[a]).slice(0,4); const stTone2={new:"blue",approved:"green",denied:"rose",received:"amber",refunded:"stone",credited:"stone",exchanged:"stone",closed:"stone"}; return (<>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <div className="border border-stone-200 rounded-xl bg-white px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-stone-400">Requests</div><div className="text-lg font-semibold text-stone-900">{reqs.length}</div></div>
           <div className="border border-stone-200 rounded-xl bg-white px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-stone-400">New</div><div className="text-lg font-semibold text-[#0086E0]">{reqs.filter(r=>r.status==="new").length}</div></div>
           <div className="border border-stone-200 rounded-xl bg-white px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-stone-400">In progress</div><div className="text-lg font-semibold text-amber-600">{reqs.filter(r=>["approved","received"].indexOf(r.status)>=0).length}</div></div>
-          <div className="border border-stone-200 rounded-xl bg-white px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-stone-400">Resolved</div><div className="text-lg font-semibold text-stone-700">{reqs.filter(r=>["refunded","exchanged","closed","denied"].indexOf(r.status)>=0).length}</div></div>
+          <div className="border border-stone-200 rounded-xl bg-white px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-stone-400">Resolved</div><div className="text-lg font-semibold text-stone-700">{reqs.filter(r=>["refunded","credited","exchanged","closed","denied"].indexOf(r.status)>=0).length}</div></div>
         </div>
         {topReasons.length>0&&<div className="border border-stone-200 rounded-xl bg-white px-4 py-2.5"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Top return reasons</div><div className="flex flex-wrap gap-2">{topReasons.map(r=><span key={r} className="text-xs bg-stone-100 rounded-full px-2.5 py-1 text-stone-600">{r} <b className="text-stone-800">{byReason[r]}</b></span>)}</div></div>}
         <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
@@ -11595,8 +11595,8 @@ function Returns({returns,setReturns,orders,settings,logEmail}){
             <div className="flex items-center gap-1.5 flex-wrap">
               {rq.status==="new"&&<><button onClick={()=>fromRequest(rq)} className="text-xs bg-[#0086E0] text-white rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#006db8]">Approve &amp; create label</button><button onClick={()=>setReqStatus(rq.id,"denied")} className="text-xs bg-stone-100 text-stone-500 rounded-lg px-2.5 py-1.5 hover:bg-rose-50 hover:text-rose-600">Deny</button></>}
               {rq.status==="approved"&&<button onClick={()=>setReqStatus(rq.id,"received")} className="text-xs bg-amber-100 text-amber-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-amber-200">Mark received</button>}
-              {rq.status==="received"&&<><button onClick={()=>setReqStatus(rq.id,"refunded")} className="text-xs bg-emerald-100 text-emerald-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-emerald-200">Refunded</button><button onClick={()=>setReqStatus(rq.id,"exchanged")} className="text-xs bg-sky-100 text-sky-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-sky-200">Exchanged</button></>}
-              {["refunded","exchanged","denied","closed"].indexOf(rq.status)<0&&rq.status!=="new"&&<button onClick={()=>setReqStatus(rq.id,"closed")} className="text-xs bg-stone-100 text-stone-400 rounded-lg px-2 py-1.5 hover:bg-stone-200">Close</button>}
+              {rq.status==="received"&&<><button onClick={()=>setReqStatus(rq.id,"refunded")} className="text-xs bg-emerald-100 text-emerald-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-emerald-200">Refunded</button><button onClick={()=>setReqStatus(rq.id,"credited")} className="text-xs bg-violet-100 text-violet-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-violet-200">Store credit</button><button onClick={()=>setReqStatus(rq.id,"exchanged")} className="text-xs bg-sky-100 text-sky-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-sky-200">Exchanged</button></>}
+              {["refunded","credited","exchanged","denied","closed"].indexOf(rq.status)<0&&rq.status!=="new"&&<button onClick={()=>setReqStatus(rq.id,"closed")} className="text-xs bg-stone-100 text-stone-400 rounded-lg px-2 py-1.5 hover:bg-stone-200">Close</button>}
             </div>
           </div>))}
         </div>

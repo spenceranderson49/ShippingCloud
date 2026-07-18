@@ -80,7 +80,12 @@ const checkPw = (pw, stored) => {
 const b64u = (s) => Buffer.from(s).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const unb64u = (s) => Buffer.from(String(s).replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
 const sign = (p) => crypto.createHmac("sha256", secret()).update(p).digest("hex");
-const makeToken = (user) => { const p = b64u(JSON.stringify({ uid: String(user.id), email: user.email, role: user.role || "customer", clientId: user.clientId || null, exp: Date.now() + 30 * 24 * 3600 * 1000 })); return p + "." + sign(p); };
+/* 1-year token life (was 30 days). A short TTL with NO sliding refresh meant a long-lived admin
+   session got hard-kicked to the login screen the moment it crossed the expiry line mid-work. The
+   refreshToken action below also re-issues a fresh token on boot when one is within 30 days of
+   lapsing, so an active session effectively never expires. (The real fix for mass logouts is a
+   stable SESSION_SECRET env var — see the deploy notes.) */
+const makeToken = (user) => { const p = b64u(JSON.stringify({ uid: String(user.id), email: user.email, role: user.role || "customer", clientId: user.clientId || null, exp: Date.now() + 365 * 24 * 3600 * 1000 })); return p + "." + sign(p); };
 function verifyToken(token) {
   try {
     const [p, sig] = String(token || "").split(".");
@@ -444,7 +449,14 @@ exports.handler = async (event) => {
       const _raIp = (event.headers && (event.headers["x-nf-client-connection-ip"] || String(event.headers["x-forwarded-for"] || "").split(",")[0].trim())) || "";
       if (!signupThrottleOk(_raIp)) return J({ ok: false, error: "Too many signups from this connection — try again in an hour." });
       const [curU, curR, curF, curC] = await Promise.all([getStore("users"), getStore("signupRequests"), getStore("fedexRequests"), getStore("clients")]);
-      const users = (curU.ok && Array.isArray(curU.value)) ? curU.value : [];
+      /* DATA-SAFETY (critical): this is the ONLY unauthenticated write path, and it does a whole-array
+         `putStores({users, clients})`. If the users/clients read failed (Supabase cold-start timeout),
+         those would be [] and one anonymous signup would OVERWRITE every existing login + password hash
+         and every customer — with NO snapshot (putStores bypasses the putMany wipe-guards). Refuse the
+         signup on any failed read; the person just retries. This is the same guard every authenticated
+         whole-array writer already has. */
+      if (!curU.ok || !curC.ok) return J({ ok: false, error: "We couldn't reach the database just now — please try again in a moment." });
+      const users = Array.isArray(curU.value) ? curU.value : [];
       if (users.some((u) => u && String(u.email || "").toLowerCase() === email)) return J({ ok: false, error: "That email already has a login. Try signing in." });
       if (users.length >= 2000) return J({ ok: false, error: "Signups are temporarily paused — give us a call." });
       /* Every self-serve signup IS a customer: mint the client record right here and assign the
@@ -795,6 +807,11 @@ exports.handler = async (event) => {
           if (k.charAt(0) === "_") { if (DEPLOY_KEYS[k]) { flags[k] = raw[k]; n++; } continue; }
           flags[k] = raw[k] === true; n++;
         }
+        /* SIZE CAP: deploy payloads carry base64 images (_docs.docAssets, _companyLogo). featureFlags
+           is one JSONB row per tenant synced whole and cached in localStorage — a few big images ×
+           many logins can blow it up (silent save failures / quota). Cap one login's payload; if it's
+           over, tell the admin to shrink the images rather than corrupting the store. ~300 KB/login. */
+        try { if (JSON.stringify(flags).length > 300000) return J({ ok: false, error: "That template/logo is too large to deploy — use smaller images (aim for well under 300 KB total)." }); } catch (e) {}
         const cur = await getStore("featureFlags");
         /* DATA-SAFETY: this REPLACES the whole featureFlags map with `map`. On a read failure `map`
            would be {} and we'd erase every login's flags/logos/deploys platform-wide (same class as
@@ -1102,7 +1119,10 @@ exports.handler = async (event) => {
       if (!bkey.startsWith("bak:")) return J({ ok: false, error: "Not a backup key." });
       const bak = await getStore(bkey);
       if (!bak.ok || bak.value === undefined) return J({ ok: false, error: "Backup not found." });
-      return J({ ok: true, value: bak.value });
+      /* Never ship password hashes to the browser — the picker only needs names/emails/ids. Same
+         invariant getAll/stripUsers enforces; getBackup previously returned users snapshots raw. */
+      const isUsers = /^bak:(users|signupRequests):/.test(bkey);
+      return J({ ok: true, value: isUsers ? stripUsers(bak.value) : bak.value });
     }
     if (action === "restoreBackup") {
       if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
@@ -1203,7 +1223,8 @@ exports.handler = async (event) => {
         if (!up || !up.ok) { invoiceKey = ""; invoiceName = ""; }
       }
       const cur = await getStore("fedexRequests");
-      let reqs = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+      if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read current requests to save safely — try again." });   // else [] would drop other pending requests
+      let reqs = Array.isArray(cur.value) ? cur.value : [];
       const prior = reqs.find((r) => r && r.uid === auth.uid);
       if (prior && prior.invoiceKey && invoiceKey) await blobOp(prior.invoiceKey, { method: "DELETE" });
       reqs = reqs.filter((r) => r && r.uid !== auth.uid);
@@ -1222,7 +1243,8 @@ exports.handler = async (event) => {
       if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
       const id = String(body.id || ""), uid = String(body.uid || "");
       const cur = await getStore("fedexRequests");
-      const reqs = (cur.ok && Array.isArray(cur.value)) ? cur.value : [];
+      if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read current requests — try again." });   // else [] would drop the other pending requests
+      const reqs = Array.isArray(cur.value) ? cur.value : [];
       const gone = reqs.filter((r) => r && (r.id === id || (uid && r.uid === uid)));
       const kept = reqs.filter((r) => !(r && (r.id === id || (uid && r.uid === uid))));
       for (const g of gone) { if (g.invoiceKey) { try { await blobOp(g.invoiceKey, { method: "DELETE" }); } catch (e) {} } }

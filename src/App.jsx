@@ -63,7 +63,8 @@ function FreightwireShipHub({logoH=44,sub=true,subText="Customer Portal",accent=
   </span>);
 }
 /* Admin-HQ lockup: "ADMIN PORTAL / by ShippingHub" wherever the admin brand shows its mark */
-const AdminPortalLockup=(props)=><FreightwireShipHub name1="Admin" name2="Portal" subText="by ShippingHub" {...props} sub={true}/>;
+/* Admin-HQ lockup: the ShippingHub wordmark with "Admin Portal" underneath → reads "ShippingHub Admin Portal". */
+const AdminPortalLockup=(props)=><FreightwireShipHub subText="Admin Portal" {...props} sub={true}/>;
 const DEFAULT_BRAND={name1:"Shipping",name2:"Cloud",primary:FW_BLUE,dark:FW_DARK,partnerLabel:"by",logo:FW_LOGO,showLogo:false};
 /* ── Per-login feature catalog ──────────────────────────────────────────────
    Every capability is a per-login switch, managed in Admin → Users. Customers
@@ -126,7 +127,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v642";
+const BUILD_TAG="addr-v643";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -179,7 +180,7 @@ const APP_ORIGIN=(()=>{ try{ return (typeof window!=="undefined"&&window.locatio
    by scanning for the transparent gap before the wordmark) instead of the ShippingCloud cloud, plus
    the FreightwireShip tab title. Crop bounds verified against the shipped asset: mark = 78x78 at x5,y2. */
 if(typeof window!=="undefined"&&BRAND.fw){
-  try{ document.title=BRAND.admin?"Admin Portal by ShippingHub":"ShippingHub — Freightwire"; }catch(e){}
+  try{ document.title=BRAND.admin?"ShippingHub Admin Portal":"ShippingHub — Freightwire"; }catch(e){}
   try{
     const setIcon=(href)=>{ try{
       document.querySelectorAll('link[rel*="icon"]').forEach(l=>l.parentNode&&l.parentNode.removeChild(l));
@@ -9757,8 +9758,13 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true,isAdmin
     if(f.carrierCode==="FDXE"&&_isToday&&_toMin(f.ready)>=14*60)a.push("Same-day Express pickups must beat your area's afternoon cutoff (often ~1–3 PM). A late ready time today may roll to the next business day.");
     return a;
   },[f.carrierCode,f.date,f.ready,f.close,_winMin,_isToday,_isPast]);
+  /* FedEx Express on-call confirmations = the STATION code (letters, the `location` field) + the
+     numeric confirmation → e.g. "JDYA" + "4040" = "JDYA4040". FedEx returns them as two fields; the
+     full customer-facing number is the concatenation. Ground already returns a complete alphanumeric
+     code, so leave it. (Cancellation still uses the raw p.conf + p.fxLocation separately.) */
+  const confFull=(p)=>((p.carrierCode||"FDXE")==="FDXE"&&p.fxLocation&&p.conf)?(String(p.fxLocation).toUpperCase()+String(p.conf)):(p.conf||"");
   const cancelLive=async(p)=>{
-    if(!await uiConfirm("Cancel this FedEx pickup ("+p.conf+")? The driver will not come."))return;
+    if(!await uiConfirm("Cancel this FedEx pickup ("+confFull(p)+")? The driver will not come."))return;
     setCanceling(p.id);
     const res=await fedexCancelPickup({confirmationCode:p.conf,carrierCode:p.carrierCode||"FDXE",date:p.date,location:p.fxLocation||""});
     setCanceling(null);
@@ -9825,7 +9831,7 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true,isAdmin
           <div key={p.id} className="border border-stone-200 rounded-lg bg-white p-3 flex items-center gap-3">
             <div className={`text-xs font-bold ${CARRIER_TINT[p.carrier]||"text-[#0086E0]"}`}>{p.carrier}</div>
             <div className="flex-1"><div className="text-sm text-stone-800">{p.date} · {p.count} pkg{p.carrierCode==="FDXG"?" · Ground":" · Express"}</div><div className="text-[11px] text-stone-400">{p.ready}–{p.close} · {p.location}</div></div>
-            <div className="text-right"><div className=" text-[11px] font-semibold text-stone-700">{p.conf}{p.fxLocation?<span className="font-normal text-stone-400"> · {p.fxLocation}</span>:null}</div>{p.canceled?<div className="text-[10px] uppercase tracking-wide text-stone-400">canceled</div>:p.live?<div className="text-[10px] uppercase tracking-wide text-emerald-600">confirmed</div>:null}{showCosts&&p.fee!=null&&!p.canceled&&<div className="text-[10px] text-stone-400">{money(p.fee)}</div>}</div>
+            <div className="text-right"><div className=" text-[11px] font-semibold text-stone-700">{confFull(p)}</div>{p.canceled?<div className="text-[10px] uppercase tracking-wide text-stone-400">canceled</div>:p.live?<div className="text-[10px] uppercase tracking-wide text-emerald-600">confirmed</div>:null}{showCosts&&p.fee!=null&&!p.canceled&&<div className="text-[10px] text-stone-400">{money(p.fee)}</div>}</div>
             {p.live&&!p.canceled
               ?<button onClick={()=>cancelLive(p)} disabled={canceling===p.id} title="Cancel this pickup with FedEx" className="text-[11px] text-rose-600 bg-rose-50 border border-rose-200 rounded px-2 py-1 hover:bg-rose-100 disabled:opacity-50">{canceling===p.id?"Canceling…":"Cancel"}</button>
               :<button onClick={()=>setPickups(x=>x.filter(y=>y.id!==p.id))} title="Remove from this list" className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}

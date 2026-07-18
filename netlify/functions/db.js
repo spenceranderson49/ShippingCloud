@@ -1076,6 +1076,26 @@ exports.handler = async (event) => {
       }
       return J({ ok: true, backups: out });
     }
+    if (action === "backupNow") {   // on-demand restore point across every critical store (admin only)
+      if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
+      const STORES = ["users", "clients", "rateRules", "featureFlags", "invoicesIssued", "salesReps", "proposalReports", "signupRequests"];
+      const ts = new Date().toISOString().replace(/[:.]/g, "-");
+      let saved = 0, failed = 0;
+      for (const key of STORES) {
+        const cur = await getStore(key);
+        if (!cur.ok || cur.value === undefined) continue;   // never snapshot a failed read (would store nothing / mislead a restore)
+        const w = await putStores({ ["bak:" + key + ":" + ts]: cur.value });
+        if (w.ok) {
+          saved++;
+          try { // prune to newest 10 per key
+            const lr = await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=like." + encodeURIComponent("bak:" + key + ":") + "*&select=key&order=key.desc");
+            const bks = (Array.isArray(lr.data) ? lr.data : []).map((r2) => r2.key);
+            for (const bk of bks.slice(10)) { await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=eq." + encodeURIComponent(bk), { method: "DELETE" }); }
+          } catch (e) {}
+        } else failed++;
+      }
+      return J({ ok: saved > 0, saved, failed });
+    }
     if (action === "getBackup") {   // read one snapshot's full value (admin only) — powers the individual-customer picker
       if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
       const bkey = String(body.key || "");

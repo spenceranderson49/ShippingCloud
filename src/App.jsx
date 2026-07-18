@@ -126,7 +126,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v637";
+const BUILD_TAG="addr-v638";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3604,12 +3604,29 @@ function BackupsAdmin({clients=[],setClients,users=[],setUsers}){
     const n=chosen.length;setPick(null);
     setMsg("Restored "+n+" "+(pick.kind==="users"?"login":"customer")+(n===1?"":"s")+" into your list — they'll appear under Customers. (This is saved; your list before was snapshotted too.)");
   };
+  const backupNow=async()=>{ setBusy("__now");setMsg("");
+    const r=await cloudCall({action:"backupNow",token:CLOUD.token},30000); setBusy("");
+    if(r&&r.ok){ setMsg("Fresh restore point saved across "+r.saved+" stores — you can roll back to right now anytime below."); load(); }
+    else setMsg((r&&r.error)||"Backup failed — try again."); };
+  const downloadBackup=async()=>{ setBusy("__dl");setMsg("");
+    const r=await cloudCall({action:"getAll",token:CLOUD.token},45000); setBusy("");
+    if(!r||!r.ok||!r.stores){ setMsg((r&&r.error)||"Couldn't build the backup file — try again."); return; }
+    try{ const blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),note:"ShippingCloud full backup — customers, rates, logins (no passwords), settings & all data",stores:r.stores},null,2)],{type:"application/json"});
+      const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="shippingcloud-backup-"+new Date().toISOString().slice(0,10)+".json"; a.click(); setTimeout(()=>URL.revokeObjectURL(url),5000);
+      setMsg("Full backup downloaded — keep it somewhere safe (Drive, etc.). Passwords aren't in the file (they stay hashed on the server; restore those from the snapshots below)."); }
+    catch(e){ setMsg("Download failed — try again."); } };
   const groups={};(rows||[]).forEach(b=>{(groups[b.orig]=groups[b.orig]||[]).push(b);});
   const order=["clients","rateRules","users","featureFlags","invoicesIssued","salesReps","proposalReports"];
   return (<div className="space-y-4 max-w-4xl">
     <div className="border border-[#99D6FF] bg-[#F0F9FF] rounded-lg p-4">
-      <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><RotateCcw className="w-4 h-4 text-[#0086E0]"/>Backups &amp; restore</div>
-      <p className="text-[13px] text-stone-600 mt-1">Every time your customers, rates, or logins are saved, the previous version is snapshotted automatically (the newest 10 are kept). If something looks missing, find the version below and either <b>Restore all</b> (swap the whole list to that snapshot) or, for customers, <b>Pick customers…</b> to merge just the missing accounts back in without touching the rest. Everything is reversible — the current version is snapshotted first.</p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><RotateCcw className="w-4 h-4 text-[#0086E0]"/>Backups &amp; restore</div>
+        {cloud&&<div className="flex items-center gap-2">
+          <button onClick={backupNow} disabled={!!busy} title="Snapshot every critical store right now" className="text-xs bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] disabled:opacity-40 inline-flex items-center gap-1.5">{busy==="__now"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<ShieldCheck className="w-3.5 h-3.5"/>}Back up now</button>
+          <button onClick={downloadBackup} disabled={!!busy} title="Download everything as a file to keep off-site" className="text-xs bg-white border border-[#0086E0]/50 text-[#0086E0] rounded-lg px-3 py-1.5 font-medium hover:bg-blue-50 disabled:opacity-40 inline-flex items-center gap-1.5">{busy==="__dl"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<Download className="w-3.5 h-3.5"/>}Download full backup</button>
+        </div>}
+      </div>
+      <p className="text-[13px] text-stone-600 mt-2">Every time your customers, rates, or logins are saved, the previous version is snapshotted automatically (newest 10 kept). Use <b>Back up now</b> to force a fresh restore point before anything risky, and <b>Download full backup</b> to keep an off-site copy. If something looks missing, find the version below and either <b>Restore</b> (swap the whole list to that snapshot) or <b>Pick…</b> to merge just the missing customers/logins back in. Everything is reversible — the current version is snapshotted first.</p>
       <p className="text-[12px] text-amber-700 mt-2">Close any other admin tabs before restoring, so they don't overwrite the recovered data.</p>
     </div>
     {msg&&<div className="text-sm rounded-lg px-3 py-2 bg-emerald-50 border border-emerald-200 text-emerald-700">{msg}</div>}

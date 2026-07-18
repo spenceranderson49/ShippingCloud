@@ -301,9 +301,10 @@ async function schedulePickup(c, body, tk) {
   } catch (e) { return { ok: false, error: "pickup fetch failed: " + (e && e.message) }; }
   if (!r.ok) return { ok: false, error: "pickup HTTP " + r.status + (d && d.errors && d.errors[0] ? ": " + (d.errors[0].message || JSON.stringify(d.errors)) : (t ? ": " + t.slice(0, 200) : "")) };
   const o = (d && d.output) || {};
-  /* Return FedEx's confirmation code verbatim (Express ~ "JTSA4023", Ground ~ "CPU289289282"). A
-     short numeric code usually means the request hit the FedEx SANDBOX, which returns mock codes —
-     production returns the full code. Check several possible field names so nothing is dropped. */
+  /* Log the RAW pickup output so we can see exactly which fields/format FedEx returns for this
+     account (Express confirmations are often a short per-location daily sequence like "3024"; the
+     alphanumeric part is the `location` code — both together are the full reference). */
+  try { console.log("FEDEX pickup output=" + JSON.stringify(o).slice(0, 500)); } catch (e) {}
   return { ok: true, confirmationCode: o.pickupConfirmationCode || o.pickupConfirmationNumber || o.confirmationNumber || o.confirmationCode || null, location: o.location || null, message: o.message || null };
 }
 

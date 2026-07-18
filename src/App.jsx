@@ -126,7 +126,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v641";
+const BUILD_TAG="addr-v642";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9825,7 +9825,7 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true,isAdmin
           <div key={p.id} className="border border-stone-200 rounded-lg bg-white p-3 flex items-center gap-3">
             <div className={`text-xs font-bold ${CARRIER_TINT[p.carrier]||"text-[#0086E0]"}`}>{p.carrier}</div>
             <div className="flex-1"><div className="text-sm text-stone-800">{p.date} · {p.count} pkg{p.carrierCode==="FDXG"?" · Ground":" · Express"}</div><div className="text-[11px] text-stone-400">{p.ready}–{p.close} · {p.location}</div></div>
-            <div className="text-right"><div className=" text-[11px] text-stone-600">{p.conf}</div>{p.canceled?<div className="text-[10px] uppercase tracking-wide text-stone-400">canceled</div>:p.live?<div className="text-[10px] uppercase tracking-wide text-emerald-600">confirmed</div>:null}{showCosts&&p.fee!=null&&!p.canceled&&<div className="text-[10px] text-stone-400">{money(p.fee)}</div>}</div>
+            <div className="text-right"><div className=" text-[11px] font-semibold text-stone-700">{p.conf}{p.fxLocation?<span className="font-normal text-stone-400"> · {p.fxLocation}</span>:null}</div>{p.canceled?<div className="text-[10px] uppercase tracking-wide text-stone-400">canceled</div>:p.live?<div className="text-[10px] uppercase tracking-wide text-emerald-600">confirmed</div>:null}{showCosts&&p.fee!=null&&!p.canceled&&<div className="text-[10px] text-stone-400">{money(p.fee)}</div>}</div>
             {p.live&&!p.canceled
               ?<button onClick={()=>cancelLive(p)} disabled={canceling===p.id} title="Cancel this pickup with FedEx" className="text-[11px] text-rose-600 bg-rose-50 border border-rose-200 rounded px-2 py-1 hover:bg-rose-100 disabled:opacity-50">{canceling===p.id?"Canceling…":"Cancel"}</button>
               :<button onClick={()=>setPickups(x=>x.filter(y=>y.id!==p.id))} title="Remove from this list" className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>}

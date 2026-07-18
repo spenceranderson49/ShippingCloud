@@ -601,6 +601,120 @@ exports.handler = async (event) => {
     const auth = verifyToken(body.token);
     if (!auth) return J({ ok: false, authFailed: true, error: "Session expired — sign in again." });
 
+    /* ── Inventory (Phase 1) ── company-shared stock, tracked as ONE ROW PER SKU
+       (key `inv:<clientId>:<sku>`) so a decrement touches only that item — never a
+       whole-catalog blob rewrite — plus an append-only movement ledger (`invlog:<clientId>`).
+       Every login of a company shares its inventory; a platform admin may target a specific
+       company via body.clientId. All reads refuse-and-retry on failure so stock is never
+       silently zeroed by a transient DB hiccup. */
+    if (String(action).startsWith("inv") && action !== "invite") {
+      const curU = await getStore("users");
+      if (!curU.ok) return J({ ok: false, retry: true, error: "Storage is briefly unavailable — try again." });
+      const allU = Array.isArray(curU.value) ? curU.value : [];
+      const me = allU.find((x) => x && x.id === auth.uid) || null;
+      if (!me) return J({ ok: false, authFailed: true, error: "Account not found." });
+      if (me.status && me.status !== "active") return J({ ok: false, error: "This account is inactive." });
+      const cid = me.role === "admin" ? String(body.clientId || "").trim() : String(me.clientId || "").trim();
+      if (!cid) return J({ ok: false, error: "No company is attached to this login, so there's nowhere to keep inventory." });
+      const normSku = (s) => String(s || "").trim().toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 80);
+      const skuKey = (s) => "inv:" + cid + ":" + normSku(s);
+      const logKey = "invlog:" + cid;
+      const nowISO = new Date().toISOString();
+      const money2 = (n) => Math.round((+n || 0) * 100) / 100;
+      const readItem = (s) => getStore(skuKey(s));
+      const writeItem = (s, it) => putStores({ [skuKey(s)]: it });
+      const addLog = async (mv) => {
+        const cur = await getStore(logKey);
+        if (!cur.ok) return false;   // never rewrite the ledger from a failed read
+        const arr = Array.isArray(cur.value) ? cur.value : [];
+        arr.unshift({ id: "mv" + Date.now() + Math.floor(Math.random() * 1000), at: nowISO, by: me.email || me.id, ...mv });
+        const w = await putStores({ [logKey]: arr.slice(0, 1000) });
+        return w.ok;
+      };
+
+      if (action === "invList") {
+        const r = await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=like.inv:" + encodeURIComponent(cid) + ":*&select=key,value");
+        if (!r.ok) return J({ ok: false, retry: true, error: "Couldn't load inventory — try again." });
+        const items = (Array.isArray(r.data) ? r.data : []).map((row) => row.value).filter((v) => v && typeof v === "object");
+        const lg = await getStore(logKey);
+        return J({ ok: true, items, log: (lg.ok && Array.isArray(lg.value)) ? lg.value.slice(0, 200) : [] });
+      }
+
+      if (action === "invUpsert") {
+        const sku = String(body.sku || "").trim();
+        if (!normSku(sku)) return J({ ok: false, error: "A SKU is required." });
+        const cur = await readItem(sku);
+        if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read that item — try again." });
+        const prev = (cur.value && typeof cur.value === "object") ? cur.value : null;
+        const it = prev ? { ...prev } : { sku, onHand: 0, createdAt: nowISO };
+        it.sku = sku;
+        if (body.name != null) it.name = String(body.name).slice(0, 120);
+        if (body.reorder != null) it.reorder = Math.max(0, Math.round(+body.reorder || 0));
+        if (body.cost != null && body.cost !== "") it.cost = money2(body.cost);
+        if (body.loc != null) it.loc = String(body.loc).slice(0, 60);
+        const before = +it.onHand || 0; let counted = false;
+        if (body.onHand != null && body.onHand !== "") { it.onHand = Math.max(0, Math.round(+body.onHand || 0)); counted = it.onHand !== before; }
+        it.updatedAt = nowISO;
+        const w = await writeItem(sku, it);
+        if (!w.ok) return J({ ok: false, error: "Save failed — try again." });
+        if (!prev) await addLog({ type: "new", sku, name: it.name || "", qty: +it.onHand || 0, balance: +it.onHand || 0 });
+        else if (counted) await addLog({ type: "count", sku, name: it.name || "", qty: (+it.onHand || 0) - before, balance: +it.onHand || 0, reason: "manual count" });
+        return J({ ok: true, item: it });
+      }
+
+      if (action === "invAdjust") {
+        const sku = String(body.sku || "").trim();
+        if (!normSku(sku)) return J({ ok: false, error: "A SKU is required." });
+        const delta = Math.round(+body.delta || 0);
+        if (!delta) return J({ ok: false, error: "Enter a quantity to add or remove." });
+        const cur = await readItem(sku);
+        if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read that item — try again." });
+        if (!(cur.value && typeof cur.value === "object")) return J({ ok: false, error: "That SKU isn't tracked yet — add it first." });
+        const it = { ...cur.value }; const before = +it.onHand || 0;
+        it.onHand = Math.max(0, before + delta); it.updatedAt = nowISO;
+        const w = await writeItem(sku, it);
+        if (!w.ok) return J({ ok: false, error: "Save failed — try again." });
+        await addLog({ type: "adjust", sku, name: it.name || "", qty: it.onHand - before, balance: it.onHand, reason: String(body.reason || "").slice(0, 120) });
+        return J({ ok: true, item: it });
+      }
+
+      if (action === "invReceive" || action === "invShip") {
+        const lines = Array.isArray(body.lines) ? body.lines : [];
+        const receiving = action === "invReceive";
+        if (!lines.length) return J({ ok: true, items: [], skipped: true });
+        const out = [];
+        for (const ln of lines.slice(0, 200)) {
+          const sku = String(ln.sku || "").trim(); const qty = Math.round(+ln.qty || 0);
+          if (!normSku(sku) || qty <= 0) continue;
+          const cur = await readItem(sku);
+          if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read " + sku + " — try again." });
+          const prev = (cur.value && typeof cur.value === "object") ? cur.value : null;
+          if (!receiving && !prev) continue;   // shipping an untracked SKU → skip silently
+          const it = prev ? { ...prev } : { sku, name: String(ln.name || "").slice(0, 120), onHand: 0, createdAt: nowISO };
+          const before = +it.onHand || 0;
+          it.onHand = receiving ? before + qty : Math.max(0, before - qty);
+          if (receiving) { if (ln.cost != null && ln.cost !== "") it.cost = money2(ln.cost); if (ln.name && !it.name) it.name = String(ln.name).slice(0, 120); }
+          it.updatedAt = nowISO;
+          const w = await writeItem(sku, it);
+          if (!w.ok) return J({ ok: false, error: "Save failed on " + sku + "." });
+          await addLog({ type: receiving ? "receipt" : "ship", sku, name: it.name || "", qty: it.onHand - before, balance: it.onHand, ref: String(body.ref || "").slice(0, 60) });
+          out.push(it);
+        }
+        return J({ ok: true, items: out });
+      }
+
+      if (action === "invDelete") {
+        const sku = String(body.sku || "").trim();
+        if (!normSku(sku)) return J({ ok: false, error: "A SKU is required." });
+        const r = await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=eq." + encodeURIComponent(skuKey(sku)), { method: "DELETE" });
+        if (!r.ok) return J({ ok: false, error: "Delete failed — try again." });
+        await addLog({ type: "removed", sku, name: String(body.name || "").slice(0, 120), qty: 0 });
+        return J({ ok: true });
+      }
+
+      return J({ ok: false, error: "Unknown inventory action." });
+    }
+
     /* ── two-factor auth management (self-service, per logged-in user) ── */
     if (action === "totpBegin" || action === "totpEnable" || action === "totpDisable" || action === "totpStatus" || action === "totpBackupRegen") {
       const curU = await getStore("users");

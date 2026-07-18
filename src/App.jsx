@@ -94,6 +94,7 @@ const FEATURE_CATALOG=[
   {id:"invoices",label:"Invoice Audit",desc:"Carrier invoice auditing",default:false},   /* off unless the admin grants it per login */
   {id:"pickupCosts",label:"Pickup fee display",desc:"Show the on-call pickup fee on the Pickups tab. OFF by default — turn on per customer once their pickup pricing is set",default:false},
   {id:"companyMarkup",label:"Company rate markup",desc:"Let THIS company admin add their own margin on top of the rates their team sees (Company Admin → Rate Markup). OFF by default — turn it on for a reseller who marks shipping up to their own departments/customers",default:false},
+  {id:"inventory",label:"Inventory",desc:"Track stock on hand per SKU, receive purchase orders, set reorder points, and auto-decrement when orders ship. OFF by default — turn on per customer",default:false},
   {id:"rules",label:"Autopilot",desc:"Autopilot mode — automation rules",default:true},
   {id:"scan",label:"Scan",desc:"Barcode scan station",default:true},
   {id:"settings",label:"Settings",desc:"Their own settings page (boxes, sender, integrations)",default:true},
@@ -135,7 +136,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v647";
+const BUILD_TAG="addr-v648";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2971,7 +2972,7 @@ const CUSTOM_DEFAULTS={
   confetti:"page",seasonal:false,hideShipSteps:false,hideLabeledOrders:true,
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
-const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
+const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["inventory","Inventory",Boxes],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
 const SLIP_OPTS={thanks:"",footer:"",logo:"",company:"",template:"",pickTitle:"",pickNote:"",title:""};   // synced from settings by AppInner; read by packingSlipHTML/printPickList
 const CI_OPTS={taxId:"",logo:""};                 // Tax ID / EIN printed on commercial invoices, from Settings → General
 const fireConfetti=()=>{try{window.dispatchEvent(new CustomEvent("sc-confetti"));}catch(e){}};
@@ -6972,6 +6973,18 @@ function AppInner(){
     _origOnShippedAudit(rec);
     setShipments(p=>[{...rec,time:rec.time||new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}),dayAgo:0,client:client.name},...p]);
     if(orderId) setOrders(o=>o.map(x=>x.id===orderId?{...x,status:"fulfilled",tracking:rec.tracking}:x));
+    /* Inventory auto-decrement (Phase 1) — fire-and-forget so it can NEVER block or fail a shipment.
+       Only for logins with the Inventory feature and a company; the server skips any SKU it isn't
+       tracking. Untracked catalogs simply no-op. */
+    try{
+      if(CLOUD.token&&currentUser&&currentUser.clientId&&featureOn("inventory",currentUser,myFlags)){
+        const ord=orderId?orders.find(x=>x&&x.id===orderId):null;
+        const src=(ord&&Array.isArray(ord.lineItems)&&ord.lineItems.length)?ord.lineItems:(Array.isArray(rec&&rec.lineItems)?rec.lineItems:[]);
+        const by0={}; src.forEach(li=>{ const sku=String((li&&li.sku)||"").trim(); if(!sku)return; by0[sku]=(by0[sku]||0)+(+li.qty||+li.quantity||1); });
+        const lines=Object.keys(by0).map(sku=>({sku,qty:by0[sku]}));
+        if(lines.length) cloudCall({action:"invShip",token:CLOUD.token,lines,ref:rec.tracking||(ord&&(ord.name||ord.id))||""});
+      }
+    }catch(e){}
     // push tracking back to Shopify if this order came from a connected store
     if(orderId&&shopifyConnected(settings)){
       const ord=orders.find(x=>x.id===orderId);
@@ -7276,6 +7289,7 @@ function AppInner(){
           {tab==="drafts"&&<Drafts drafts={drafts} setDrafts={setDrafts} goShip={goShip}/>}
           {tab==="returns"&&<Returns returns={returns} setReturns={setReturns} orders={orders} settings={settings} logEmail={logEmail}/>}
           {tab==="pickups"&&<Pickups pickups={pickups} setPickups={setPickups} settings={settings} client={client} isAdmin={isAdmin} showCosts={featureOn("pickupCosts",currentUser,myFlags)}/>}
+          {tab==="inventory"&&<Inventory settings={settings} client={client} showMoney={showMoney} currentUser={currentUser}/>}
           {tab==="invoices"&&<Invoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>}
           {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings} client={client} onShipped={onShipped}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
@@ -9753,6 +9767,154 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
       </div>,document.body)}
     </div>
   );
+}
+
+/* ════════ INVENTORY (Phase 1) ════════
+   Company-shared stock, one row per SKU on the server (inv:<clientId>:<sku>). Tracks on-hand,
+   reorder point, unit cost and location; receives POs; auto-decrements when orders ship (see the
+   invShip hook in AppInner). Money columns hide when the login can't see costs. */
+function Inventory({settings,client,showMoney=true,currentUser}){
+  const [items,setItems]=useState(null);   // null = loading
+  const [log,setLog]=useState([]);
+  const [err,setErr]=useState(""); const [ok,setOk]=useState("");
+  const [busy,setBusy]=useState("");
+  const [q,setQ]=useState("");
+  const [adding,setAdding]=useState(false);
+  const [nf,setNf]=useState({sku:"",name:"",onHand:"",reorder:"",cost:"",loc:""});
+  const [rcv,setRcv]=useState({sku:"",qty:"",cost:""});
+  const [showLog,setShowLog]=useState(false);
+  const catalog=(settings&&settings.products)||[];
+  const flash=(m,isErr)=>{ if(isErr){setErr(m);setOk("");}else{setOk(m);setErr("");} setTimeout(()=>{setErr("");setOk("");},4500); };
+  const load=async()=>{
+    if(!CLOUD.token){ setItems([]); return; }
+    const r=await cloudCall({action:"invList",token:CLOUD.token});
+    if(r&&r.ok){ setItems(r.items||[]); setLog(r.log||[]); }
+    else { setItems([]); setErr((r&&r.error)||"Couldn't load inventory."); }
+  };
+  useEffect(()=>{ load(); /* eslint-disable-next-line */ },[]);
+  const patch=(it)=>setItems(arr=>{ const a=Array.isArray(arr)?[...arr]:[]; const i=a.findIndex(x=>String(x.sku).toLowerCase()===String(it.sku).toLowerCase()); if(i>=0)a[i]=it; else a.push(it); return a; });
+  const addItem=async()=>{
+    if(!nf.sku.trim()){flash("Enter a SKU.",true);return;}
+    setBusy("add");
+    const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:nf.sku.trim(),name:nf.name,onHand:nf.onHand===""?0:+nf.onHand,reorder:nf.reorder===""?0:+nf.reorder,cost:nf.cost===""?"":+nf.cost,loc:nf.loc});
+    setBusy("");
+    if(r&&r.ok){ patch(r.item); setNf({sku:"",name:"",onHand:"",reorder:"",cost:"",loc:""}); setAdding(false); flash("Added "+r.item.sku+"."); load(); }
+    else flash((r&&r.error)||"Couldn't save.",true);
+  };
+  const adjust=async(it)=>{
+    const raw=await uiPrompt("Adjust on-hand for "+it.sku+" (current "+(+it.onHand||0)+"). Enter a change like 12 or -3:","",{title:"Adjust stock"});
+    if(raw==null||raw==="")return; const delta=Math.round(+raw||0); if(!delta)return;
+    const reason=await uiPrompt("Reason (optional) — e.g. damaged, found, correction:","",{title:"Reason"});
+    setBusy("adj"+it.sku);
+    const r=await cloudCall({action:"invAdjust",token:CLOUD.token,sku:it.sku,delta,reason:reason||""});
+    setBusy("");
+    if(r&&r.ok){ patch(r.item); flash(it.sku+" → "+r.item.onHand+" on hand."); load(); } else flash((r&&r.error)||"Couldn't adjust.",true);
+  };
+  const receive=async()=>{
+    if(!rcv.sku){flash("Pick a SKU to receive.",true);return;}
+    if(!(+rcv.qty>0)){flash("Enter a quantity to receive.",true);return;}
+    setBusy("rcv");
+    const r=await cloudCall({action:"invReceive",token:CLOUD.token,lines:[{sku:rcv.sku,qty:+rcv.qty,cost:rcv.cost===""?"":+rcv.cost}]});
+    setBusy("");
+    if(r&&r.ok&&r.items&&r.items[0]){ patch(r.items[0]); setRcv({sku:"",qty:"",cost:""}); flash("Received "+ (+rcv.qty) +" — "+r.items[0].sku+" now "+r.items[0].onHand+"."); load(); }
+    else flash((r&&r.error)||"Receive failed.",true);
+  };
+  const importCatalog=async()=>{
+    const tracked=new Set((items||[]).map(x=>String(x.sku).toLowerCase()));
+    const toAdd=catalog.filter(p=>p.sku&&!tracked.has(String(p.sku).toLowerCase()));
+    if(!toAdd.length){flash("Every catalog SKU is already tracked.",true);return;}
+    setBusy("import"); let n=0;
+    for(const p of toAdd.slice(0,300)){ const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:p.sku,name:p.name||"",cost:(p.value===""||p.value==null)?"":(+p.value||0),onHand:0}); if(r&&r.ok)n++; }
+    setBusy(""); await load();
+    flash(n?("Imported "+n+" SKU"+(n!==1?"s":"")+" at 0 on-hand — set counts with Receive or Adjust."):"Nothing imported.");
+  };
+  const del=async(it)=>{
+    if(!await uiConfirm("Stop tracking "+it.sku+"? Its movement history stays in the log."))return;
+    setBusy("del"+it.sku);
+    const r=await cloudCall({action:"invDelete",token:CLOUD.token,sku:it.sku,name:it.name||""});
+    setBusy("");
+    if(r&&r.ok){ setItems(a=>(a||[]).filter(x=>x.sku!==it.sku)); flash("Stopped tracking "+it.sku+"."); load(); } else flash((r&&r.error)||"Delete failed.",true);
+  };
+  if(!CLOUD.token) return (<div className="max-w-2xl"><div className="border border-stone-200 rounded-xl bg-white p-6 text-sm text-stone-600">Inventory lives in the cloud — sign in to your account to track stock.</div></div>);
+  if(items===null) return (<div className="flex items-center gap-2 text-stone-500 text-sm p-4"><Loader2 className="w-4 h-4 animate-spin"/>Loading inventory…</div>);
+  const list=(items||[]).slice().sort((a,b)=>String(a.name||a.sku).localeCompare(String(b.name||b.sku)));
+  const filtered=q.trim()?list.filter(it=>(String(it.sku)+" "+String(it.name||"")).toLowerCase().includes(q.trim().toLowerCase())):list;
+  const isLow=(it)=>(+it.reorder||0)>0&&(+it.onHand||0)<=(+it.reorder||0);
+  const totUnits=list.reduce((s,it)=>s+(+it.onHand||0),0);
+  const totValue=list.reduce((s,it)=>s+(+it.onHand||0)*(+it.cost||0),0);
+  const lowCount=list.filter(isLow).length;
+  const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
+  return (<div className="max-w-5xl space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <div>
+        <h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Boxes className="w-5 h-5 text-[#0086E0]"/>Inventory</h2>
+        <p className="text-sm text-stone-500 mt-0.5">Stock on hand per SKU, shared across your whole company. Auto-decrements when orders ship.</p>
+      </div>
+      <div className="flex items-center gap-2">
+        {catalog.length>0&&<button onClick={importCatalog} disabled={busy==="import"} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5">{busy==="import"?<Loader2 className="w-4 h-4 animate-spin"/>:<Download className="w-4 h-4"/>}Import from catalog</button>}
+        <button onClick={()=>setAdding(a=>!a)} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>New item</button>
+      </div>
+    </div>
+    {(err||ok)&&<div className={`text-xs rounded px-3 py-2 border ${err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{err||ok}</div>}
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <Tile label="SKUs tracked" value={list.length}/>
+      <Tile label="Units on hand" value={totUnits.toLocaleString()}/>
+      {showMoney&&<Tile label="Stock value" value={money(totValue)}/>}
+      <Tile label="Low stock" value={lowCount} tone={lowCount?"text-amber-600":"text-stone-900"}/>
+    </div>
+    {adding&&<Panel title="New inventory item">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <Field label="SKU"><Input value={nf.sku} onChange={e=>setNf({...nf,sku:e.target.value})} placeholder="ABC-001"/></Field>
+        <Field label="Name"><Input value={nf.name} onChange={e=>setNf({...nf,name:e.target.value})}/></Field>
+        <Field label="On hand"><Input type="number" value={nf.onHand} onChange={e=>setNf({...nf,onHand:e.target.value})} placeholder="0"/></Field>
+        <Field label="Reorder at"><Input type="number" value={nf.reorder} onChange={e=>setNf({...nf,reorder:e.target.value})} placeholder="e.g. 10"/></Field>
+        {showMoney&&<Field label="Unit cost"><Input type="number" value={nf.cost} onChange={e=>setNf({...nf,cost:e.target.value})} placeholder="0.00"/></Field>}
+        <Field label="Location"><Input value={nf.loc} onChange={e=>setNf({...nf,loc:e.target.value})} placeholder="Aisle / bin"/></Field>
+      </div>
+      <div className="flex items-center gap-2 mt-2"><button onClick={addItem} disabled={busy==="add"} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-1.5 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy==="add"&&<Loader2 className="w-4 h-4 animate-spin"/>}Save item</button><button onClick={()=>setAdding(false)} className="text-sm text-stone-500 px-2 py-1.5">Cancel</button></div>
+    </Panel>}
+    <Panel title="Receive stock">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="text-xs text-stone-600">SKU<br/><select value={rcv.sku} onChange={e=>setRcv({...rcv,sku:e.target.value})} className="mt-1 border border-stone-300 rounded-lg px-2.5 py-2 text-sm min-w-[180px]"><option value="">— pick an item —</option>{list.map(it=><option key={it.sku} value={it.sku}>{it.name?it.name+" ("+it.sku+")":it.sku}</option>)}</select></label>
+        <label className="text-xs text-stone-600">Qty received<br/><input type="number" min="1" value={rcv.qty} onChange={e=>setRcv({...rcv,qty:e.target.value})} className="mt-1 w-24 border border-stone-300 rounded-lg px-2.5 py-2 text-sm"/></label>
+        {showMoney&&<label className="text-xs text-stone-600">Unit cost <span className="text-stone-400">(optional)</span><br/><input type="number" step="0.01" value={rcv.cost} onChange={e=>setRcv({...rcv,cost:e.target.value})} className="mt-1 w-28 border border-stone-300 rounded-lg px-2.5 py-2 text-sm"/></label>}
+        <button onClick={receive} disabled={busy==="rcv"} className="text-sm bg-emerald-600 text-white rounded-lg px-4 py-2 font-medium hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-1.5">{busy==="rcv"?<Loader2 className="w-4 h-4 animate-spin"/>:<Plus className="w-4 h-4"/>}Receive</button>
+      </div>
+    </Panel>
+    <div className="flex items-center gap-2">
+      <div className="relative flex-1 max-w-xs"><Search className="w-4 h-4 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search SKU or name…" className="w-full border border-stone-300 rounded-lg pl-8 pr-3 py-2 text-sm"/></div>
+      <button onClick={()=>setShowLog(s=>!s)} className="text-xs text-stone-500 hover:text-stone-700 flex items-center gap-1">{showLog?"Hide":"Show"} movement log ({log.length})</button>
+    </div>
+    <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="overflow-x-auto"><table className="w-full text-sm">
+        <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 text-left"><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">On hand</th><th className="px-3 py-2 text-right">Reorder</th>{showMoney&&<th className="px-3 py-2 text-right">Unit cost</th>}{showMoney&&<th className="px-3 py-2 text-right">Value</th>}<th className="px-3 py-2">Location</th><th className="px-3 py-2"></th></tr></thead>
+        <tbody className="divide-y divide-stone-100">
+          {filtered.length===0&&<tr><td colSpan={showMoney?7:5} className="px-3 py-8 text-center text-stone-400 text-sm">{list.length?"No items match your search.":"No inventory yet — add an item, or import from your product catalog."}</td></tr>}
+          {filtered.map(it=>(<tr key={it.sku} className={isLow(it)?"bg-amber-50/60":""}>
+            <td className="px-3 py-2"><div className="font-medium text-stone-900">{it.name||it.sku}</div><div className="text-[11px] text-stone-400">{it.sku}</div></td>
+            <td className="px-3 py-2 text-right"><span className={`font-semibold ${isLow(it)?"text-amber-600":"text-stone-900"}`}>{+it.onHand||0}</span>{isLow(it)&&<span className="ml-1 text-[10px] uppercase tracking-wide text-amber-600">low</span>}</td>
+            <td className="px-3 py-2 text-right text-stone-500">{(+it.reorder||0)||"—"}</td>
+            {showMoney&&<td className="px-3 py-2 text-right text-stone-500">{it.cost?money(it.cost):"—"}</td>}
+            {showMoney&&<td className="px-3 py-2 text-right text-stone-700">{it.cost?money((+it.onHand||0)*(+it.cost||0)):"—"}</td>}
+            <td className="px-3 py-2 text-stone-500">{it.loc||"—"}</td>
+            <td className="px-3 py-2 text-right whitespace-nowrap"><button onClick={()=>adjust(it)} disabled={busy==="adj"+it.sku} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200 mr-1">Adjust</button><button onClick={()=>del(it)} disabled={busy==="del"+it.sku} title="Stop tracking" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="w-3.5 h-3.5"/></button></td>
+          </tr>))}
+        </tbody>
+      </table></div>
+    </div>
+    {showLog&&<div className="border border-stone-200 rounded-xl bg-white p-3">
+      <div className="text-xs font-semibold text-stone-600 mb-2">Recent movements</div>
+      {log.length===0?<div className="text-xs text-stone-400 py-2">No movements yet.</div>:
+        <div className="space-y-1 max-h-72 overflow-y-auto">{log.map(mv=>(<div key={mv.id} className="flex items-center gap-2 text-xs py-1 border-b border-stone-50 last:border-0">
+          <span className={`inline-block w-14 shrink-0 font-medium ${mv.type==="ship"?"text-rose-600":mv.type==="receipt"?"text-emerald-600":mv.type==="new"?"text-[#0086E0]":"text-stone-500"}`}>{mv.type}</span>
+          <span className="flex-1 min-w-0 truncate text-stone-700">{mv.name||mv.sku} <span className="text-stone-400">({mv.sku})</span></span>
+          <span className={`shrink-0 font-mono ${(+mv.qty||0)<0?"text-rose-600":(+mv.qty||0)>0?"text-emerald-600":"text-stone-400"}`}>{(+mv.qty||0)>0?"+":""}{+mv.qty||0}</span>
+          <span className="shrink-0 text-stone-400 w-16 text-right">→ {mv.balance!=null?mv.balance:"—"}</span>
+          <span className="shrink-0 text-stone-300 w-28 text-right hidden sm:inline">{String(mv.at||"").slice(0,16).replace("T"," ")}</span>
+        </div>))}</div>}
+    </div>}
+    <p className="text-[11px] text-stone-400">Stock is shared across every login in your company. Shipping an order with matching SKUs decrements it automatically.</p>
+  </div>);
 }
 
 /* ════════ PICKUPS ════════ */

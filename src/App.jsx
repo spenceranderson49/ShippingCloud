@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v696";
+const BUILD_TAG="addr-v697";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10941,14 +10941,22 @@ function PickList({orders,items}){
   const open=(orders||[]).filter(o=>o&&o.status!=="fulfilled"&&Array.isArray(o.lineItems)&&o.lineItems.some(li=>li&&li.sku));
   const [sel,setSel]=useState({});
   const [built,setBuilt]=useState(null);
+  const [picked,setPicked]=useState({});   // sku(lower) -> units picked, for the interactive pick session
+  const [session,setSession]=useState(false); // guided scan-to-pick mode
+  const [scan,setScan]=useState("");
+  const [scanMsg,setScanMsg]=useState(null);
   const bySku=useMemo(()=>{ const m={}; (items||[]).forEach(it=>{ m[String(it.sku).toLowerCase()]=it; }); return m; },[items]);
   const chosen=open.filter(o=>sel[o.id]);
   const build=()=>{
     const agg={};
     chosen.forEach(o=>{ (o.lineItems||[]).forEach(li=>{ const sku=String(li.sku||"").trim(); if(!sku)return; const k=sku.toLowerCase(); if(!agg[k])agg[k]={sku,name:li.title||li.name||(bySku[k]&&bySku[k].name)||"",qty:0}; agg[k].qty+=(+li.qty||+li.quantity||1); }); });
-    const rows=Object.values(agg).map(r=>{ const it=bySku[r.sku.toLowerCase()]; return {...r,loc:(it&&it.loc)||"",onHand:it?(+it.onHand||0):null,short:it?Math.max(0,r.qty-(+it.onHand||0)):null}; }).sort((a,b)=>String(a.loc||"~").localeCompare(String(b.loc||"~"))||String(a.sku).localeCompare(b.sku));
-    setBuilt({rows,orders:chosen.length});
+    const rows=Object.values(agg).map(r=>{ const it=bySku[r.sku.toLowerCase()]; return {...r,loc:(it&&it.loc)||"",barcode:(it&&it.barcode)||"",onHand:it?(+it.onHand||0):null,short:it?Math.max(0,r.qty-(+it.onHand||0)):null}; }).sort((a,b)=>String(a.loc||"~").localeCompare(String(b.loc||"~"))||String(a.sku).localeCompare(b.sku));
+    setBuilt({rows,orders:chosen.length}); setPicked({}); setSession(false);
   };
+  // Interactive pick: total/needed and how many are fully picked.
+  const pickTotals=useMemo(()=>{ if(!built)return{need:0,done:0,lines:0,linesDone:0}; let need=0,done=0,linesDone=0; built.rows.forEach(r=>{ const p=Math.min(r.qty,+picked[r.sku.toLowerCase()]||0); need+=r.qty; done+=p; if(p>=r.qty)linesDone++; }); return{need,done,lines:built.rows.length,linesDone}; },[built,picked]);
+  const pickOne=(sku,n=1)=>{ const k=String(sku).toLowerCase(); const row=built&&built.rows.find(r=>r.sku.toLowerCase()===k); if(!row)return false; setPicked(p=>({...p,[k]:Math.min(row.qty,Math.max(0,(+p[k]||0)+n))})); return true; };
+  const doScan=(e)=>{ e.preventDefault(); const v=scan.trim(); if(!v)return; const k=v.toLowerCase(); const row=built.rows.find(r=>r.sku.toLowerCase()===k||String(r.barcode||"").toLowerCase()===k); if(!row){ setScanMsg({err:"No matching item on this pick list: "+v}); } else if((+picked[row.sku.toLowerCase()]||0)>=row.qty){ setScanMsg({err:row.sku+" is already fully picked."}); } else { pickOne(row.sku,1); setScanMsg({ok:"Picked "+row.sku+" ("+(Math.min(row.qty,(+picked[row.sku.toLowerCase()]||0)+1))+"/"+row.qty+")"}); } setScan(""); setTimeout(()=>setScanMsg(null),2500); };
   const printSheet=()=>{ try{ const w=window.open("","_blank"); if(!w)return; const rows=built.rows.map(r=>`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${r.loc||"—"}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${r.name||""}<div style="color:#999;font-size:11px">${r.sku}</div></td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${r.qty}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;color:${r.short?"#c00":"#999"}">${r.onHand==null?"—":r.onHand}${r.short?" (short "+r.short+")":""}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;width:40px"></td></tr>`).join(""); w.document.write(`<html><head><title>Pick list</title></head><body style="font-family:system-ui;padding:24px"><h2>Pick list · ${built.orders} order(s) · ${new Date().toLocaleString()}</h2><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:#666;font-size:11px;text-transform:uppercase"><th style="padding:6px 10px">Bin</th><th style="padding:6px 10px">Item</th><th style="padding:6px 10px;text-align:right">Pick</th><th style="padding:6px 10px;text-align:right">On hand</th><th style="padding:6px 10px">✓</th></tr></thead><tbody>${rows}</tbody></table></body></html>`); w.document.close(); w.focus(); setTimeout(()=>{try{w.print();}catch(e){}},250); }catch(e){} };
   return (<div className="space-y-4">
     <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ClipboardList className="w-5 h-5 text-[#0086E0]"/>Pick lists</h2><p className="text-sm text-stone-500 mt-0.5">Select open orders and build a bin-sorted pick sheet for the warehouse.</p></div>
@@ -10964,16 +10972,27 @@ function PickList({orders,items}){
       </div>
       <button onClick={build} disabled={!chosen.length} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5"><ClipboardList className="w-4 h-4"/>Build pick list ({chosen.length})</button>
     </>}
-    {built&&<div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
-      <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 flex items-center justify-between"><span>Pick sheet · {built.orders} order(s) · {built.rows.reduce((s,r)=>s+r.qty,0)} units</span><button onClick={printSheet} className="normal-case tracking-normal text-xs bg-white border border-stone-200 rounded px-2 py-1 hover:bg-stone-100 flex items-center gap-1"><Printer className="w-3.5 h-3.5"/>Print</button></div>
-      <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-[10px] uppercase tracking-widest text-stone-400"><th className="px-3 py-2">Bin</th><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">Pick</th><th className="px-3 py-2 text-right">On hand</th></tr></thead>
-        <tbody className="divide-y divide-stone-100">{(()=>{ let lastZone=null; const out=[]; built.rows.forEach(r=>{ const zone=r.loc||"Unassigned"; if(zone!==lastZone){ lastZone=zone; out.push(<tr key={"z-"+zone} className="bg-[#f2f8fd]"><td colSpan={4} className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-[#0086E0] font-semibold flex items-center gap-1"><MapPin className="w-3 h-3"/>{zone}</td></tr>); } out.push(<tr key={r.sku} className={r.short?"bg-rose-50/50":""}>
+    {built&&(()=>{ const allPicked=pickTotals.need>0&&pickTotals.done>=pickTotals.need; const pct=pickTotals.need>0?Math.round(pickTotals.done/pickTotals.need*100):0; return (<div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 flex items-center justify-between gap-2 flex-wrap"><span>Pick sheet · {built.orders} order(s) · {built.rows.reduce((s,r)=>s+r.qty,0)} units</span>
+        <div className="flex items-center gap-2 normal-case tracking-normal">
+          <button onClick={()=>setSession(s=>!s)} className={`text-xs rounded px-2 py-1 flex items-center gap-1 border ${session?"bg-[#0086E0] text-white border-[#0086E0]":"bg-white border-stone-200 hover:bg-stone-100"}`}><ScanLine className="w-3.5 h-3.5"/>{session?"Picking…":"Start pick session"}</button>
+          <button onClick={printSheet} className="text-xs bg-white border border-stone-200 rounded px-2 py-1 hover:bg-stone-100 flex items-center gap-1"><Printer className="w-3.5 h-3.5"/>Print</button>
+        </div>
+      </div>
+      {session&&<div className="px-4 py-3 border-b border-stone-100 bg-sky-50/40 space-y-2">
+        <div className="flex items-center gap-3"><div className="flex-1 h-2.5 bg-stone-200 rounded-full overflow-hidden"><div className={`h-full ${allPicked?"bg-emerald-500":"bg-[#0086E0]"} transition-all`} style={{width:pct+"%"}}/></div><div className="text-xs font-medium text-stone-600 w-28 text-right">{pickTotals.done}/{pickTotals.need} units · {pickTotals.linesDone}/{pickTotals.lines} lines</div></div>
+        {allPicked?<div className="text-sm text-emerald-700 font-medium flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>All items picked — ready to pack &amp; ship. Head to Pack Verify to scan each order into its box.</div>:<form onSubmit={doScan} className="flex items-center gap-2"><input autoFocus value={scan} onChange={e=>setScan(e.target.value)} placeholder="Scan or type a SKU / barcode to pick…" className="flex-1 border border-stone-300 rounded-lg px-3 py-2 text-sm"/><button type="submit" className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-2 font-medium hover:bg-[#006db8]">Pick</button></form>}
+        {scanMsg&&<div className={`text-xs rounded px-2.5 py-1.5 ${scanMsg.err?"bg-rose-50 text-rose-600":"bg-emerald-50 text-emerald-700"}`}>{scanMsg.err||scanMsg.ok}</div>}
+      </div>}
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-[10px] uppercase tracking-widest text-stone-400"><th className="px-3 py-2">Bin</th><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">Pick</th>{session&&<th className="px-3 py-2 text-right">Picked</th>}<th className="px-3 py-2 text-right">On hand</th></tr></thead>
+        <tbody className="divide-y divide-stone-100">{(()=>{ let lastZone=null; const out=[]; const cols=session?5:4; built.rows.forEach(r=>{ const zone=r.loc||"Unassigned"; const p=Math.min(r.qty,+picked[r.sku.toLowerCase()]||0); const done=p>=r.qty; if(zone!==lastZone){ lastZone=zone; out.push(<tr key={"z-"+zone} className="bg-[#f2f8fd]"><td colSpan={cols} className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-[#0086E0] font-semibold"><span className="flex items-center gap-1"><MapPin className="w-3 h-3"/>{zone}</span></td></tr>); } out.push(<tr key={r.sku} className={session&&done?"bg-emerald-50/50":r.short?"bg-rose-50/50":""}>
           <td className="px-3 py-2 text-stone-400 text-xs">{r.loc||"—"}</td>
-          <td className="px-3 py-2"><div className="text-stone-800">{r.name||r.sku}</div><div className="text-[11px] text-stone-400">{r.sku}</div></td>
+          <td className="px-3 py-2"><div className="text-stone-800 flex items-center gap-1.5">{session&&done&&<CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0"/>}{r.name||r.sku}</div><div className="text-[11px] text-stone-400">{r.sku}{r.barcode?" · "+r.barcode:""}</div></td>
           <td className="px-3 py-2 text-right font-semibold text-stone-900">{r.qty}</td>
+          {session&&<td className="px-3 py-2 text-right"><div className="inline-flex items-center gap-1.5"><button onClick={()=>pickOne(r.sku,-1)} className="w-6 h-6 rounded bg-stone-100 hover:bg-stone-200 text-stone-600 leading-none">−</button><span className={`w-8 text-center font-medium ${done?"text-emerald-700":"text-stone-700"}`}>{p}</span><button onClick={()=>pickOne(r.sku,1)} disabled={done} className="w-6 h-6 rounded bg-[#0086E0]/10 hover:bg-[#0086E0]/20 text-[#0086E0] leading-none disabled:opacity-30">+</button></div></td>}
           <td className={`px-3 py-2 text-right ${r.short?"text-rose-600":"text-stone-500"}`}>{r.onHand==null?"—":r.onHand}{r.short?" (short "+r.short+")":""}</td>
         </tr>); }); return out; })()}</tbody></table></div>
-    </div>}
+    </div>); })()}
   </div>);
 }
 /* WMS Overview — one home screen tying the whole warehouse together: health tiles, action-needed

@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v725";
+const BUILD_TAG="addr-v726";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7118,6 +7118,9 @@ function AppInner(){
         if(lines.length) cloudCall({action:"invShip",token:CLOUD.token,lines,ref:rec.tracking||(ord&&(ord.name||ord.id))||""}).then(res=>{
           /* Auto-sync the decremented levels to Shopify so it can't oversell — opt-in, best-effort. */
           try{ if(settings.autoShopifyStock&&res&&res.ok&&Array.isArray(res.items)&&res.items.length){ const conns=shopifyConns(settings); const updates=res.items.map(it=>({sku:it.sku,available:+it.onHand||0})); conns.forEach(c=>shopifyCall(SHOPIFY_INVENTORY,{shop:c.shop,token:c.token,updates})); } }catch(e){}
+          /* Low-stock alert: if this shipment pushed an item to/below its reorder point, log it so
+             you find out the moment it happens (before=after+shipped qty → only alerts on the crossing). */
+          try{ if(res&&res.ok&&Array.isArray(res.items)&&logEmail){ const qBy={}; lines.forEach(l=>{qBy[String(l.sku).toLowerCase()]=l.qty;}); const crossed=res.items.filter(it=>{ const ro=+it.reorder||0; if(ro<=0)return false; const after=+it.onHand||0; const before=after+(qBy[String(it.sku).toLowerCase()]||0); return before>ro&&after<=ro; }); if(crossed.length)logEmail({to:"system",subject:"Low stock — reorder: "+crossed.slice(0,10).map(it=>(it.name||it.sku)+" ("+(+it.onHand||0)+" left)").join("; "),type:"System"}); } }catch(e){}
         });
       }
     }catch(e){}

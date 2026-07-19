@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v686";
+const BUILD_TAG="addr-v687";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9954,6 +9954,15 @@ const WMS_GLOSSARY=[
   ["Pack verify","Scanning each item into the box so nothing wrong ships."],
   ["ABC analysis","Ranks products by how much value they move — A = your top movers."],
 ];
+/* Step-by-step how-to tutorials shown in the Help guide. */
+const WMS_TUTORIALS=[
+  ["Add your products","📦",["Click New item (or Import from catalog / Import CSV to add lots at once).","Enter a SKU — a short code for the product. That's the only required field.","Optionally set On hand, a Reorder point, and a Unit cost.","Save — it appears in your Stock list."]],
+  ["Receive a purchase order","🚚",["Go to Purchase Orders → New PO.","Pick a supplier and add line items (SKU + quantity + cost).","Save. When the stock arrives, open the PO and click Receive.","Enter how many arrived — it adds to on-hand automatically and closes the PO."]],
+  ["Never run out — reorder points","🔔",["Edit an item and set Reorder at (min) and Reorder up to (max).","When on-hand hits the min, the item shows a Low badge.","Click Reorder low stock to auto-build a PO that fills everything back to max."]],
+  ["Ship & watch stock count down","✅",["Ship orders like normal from the Ship or Orders tab.","If the order's items match your SKUs, stock decrements by itself.","Orders show an in-stock / short badge so you know before you ship."]],
+  ["Count stock (cycle count)","🔢",["On the Stock list click Count next to an item.","Enter the number you actually counted.","The system records the difference — no math needed."]],
+  ["Move stock between locations","↔️",["Turn on a couple of Warehouses (or just type bin names).","Click Move on an item, choose from/to and a quantity.","The total stays the same — it's just relocated. Per-location counts show on the row."]],
+];
 /* ════════ INVENTORY ════════
    Company-shared stock, one row per SKU on the server (inv:<clientId>:<sku>). Tracks on-hand,
    reorder point, unit cost and location; receives POs; auto-decrements when orders ship (see the
@@ -9980,8 +9989,25 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const [catFilter,setCatFilter]=useState("");
   const [building,setBuilding]=useState(null);
   const [showHelp,setShowHelp]=useState(false);
+  const [helpTab,setHelpTab]=useState("start");
   const [setupHid,setSetupHid]=useState(()=>{ try{ return !!lsGet("wms.setupHid."+((currentUser&&currentUser.id)||"g"),false); }catch(e){ return false; } });
   const hideSetup=()=>{ setSetupHid(true); try{ lsSet("wms.setupHid."+((currentUser&&currentUser.id)||"g"),true); }catch(e){} };
+  const loadSample=async()=>{
+    if(!await uiConfirm("Load a sample warehouse (a few example products, a supplier, and a location) so you can try everything out? You can delete these anytime."))return;
+    setBusy("sample");
+    const items=[
+      {sku:"TSHIRT-BLK-M",name:"Black T-Shirt (M)",onHand:120,reorder:30,maxStock:150,cost:4.50,loc:"A1",category:"Apparel",barcode:"100000000011"},
+      {sku:"TSHIRT-BLK-L",name:"Black T-Shirt (L)",onHand:8,reorder:30,maxStock:150,cost:4.50,loc:"A1",category:"Apparel",barcode:"100000000028"},
+      {sku:"MUG-WHT",name:"White Ceramic Mug",onHand:64,reorder:20,maxStock:100,cost:2.10,loc:"B2",category:"Drinkware",barcode:"100000000035"},
+      {sku:"CANDLE-VAN",name:"Vanilla Candle",onHand:15,reorder:25,maxStock:80,cost:6.00,loc:"C1",category:"Home",barcode:"100000000042"},
+      {sku:"STICKER-PACK",name:"Sticker Pack (10)",onHand:500,reorder:100,maxStock:600,cost:0.30,loc:"D3",category:"Accessories",barcode:"100000000059"},
+    ];
+    for(const it of items){ await cloudCall({action:"invUpsert",token:CLOUD.token,...it}); }
+    await cloudCall({action:"invUpsert",token:CLOUD.token,sku:"GIFTBOX",name:"Gift Box (T-Shirt + Mug)",category:"Bundles",kit:[{sku:"TSHIRT-BLK-M",qty:1},{sku:"MUG-WHT",qty:1}]});
+    await cloudCall({action:"supplierSave",token:CLOUD.token,supplier:{name:"Acme Supply Co.",contact:"Sales",email:"orders@acmesupply.example",leadDays:5}});
+    await cloudCall({action:"warehouseSave",token:CLOUD.token,warehouse:{name:"Main Warehouse",code:"WH1",type:"warehouse"}});
+    setBusy(""); flash("Sample warehouse loaded — explore, then delete these items whenever you like."); load();
+  };
   const catalog=(settings&&settings.products)||[];
   const flash=(m,isErr)=>{ if(isErr){setErr(m);setOk("");}else{setOk(m);setErr("");} setTimeout(()=>{setErr("");setOk("");},4500); };
   const load=async()=>{
@@ -10168,10 +10194,24 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     </div>
     {(err||ok)&&<div className={`text-xs rounded px-3 py-2 border ${err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{err||ok}</div>}
     {showHelp&&<div className="rounded-2xl border border-stone-200 bg-white p-5">
-      <div className="flex items-center justify-between mb-1"><div className="text-base font-semibold text-stone-900 flex items-center gap-2"><MessageCircle className="w-4 h-4 text-[#0086E0]"/>How the warehouse works — in plain English</div><button onClick={()=>setShowHelp(false)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
-      <p className="text-sm text-stone-500 mb-3">Every term you'll see, explained. Hover the little <span className="inline-flex w-3.5 h-3.5 rounded-full bg-stone-200 text-stone-500 text-[9px] font-bold items-center justify-center align-middle">?</span> anywhere for a quick reminder.</p>
-      <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">{WMS_GLOSSARY.map(([t,d])=>(<div key={t}><div className="text-sm font-semibold text-stone-800">{t}</div><div className="text-xs text-stone-500 leading-snug">{d}</div></div>))}</div>
-      <div className="mt-4 pt-3 border-t border-stone-100 text-xs text-stone-500"><b className="text-stone-700">The short version:</b> add your products → say how many you have → ship orders like normal. Stock counts itself down, warns you when it's low, and helps you reorder. Everything else is optional and there when you need it.</div>
+      <div className="flex items-center justify-between mb-3"><div className="text-base font-semibold text-stone-900 flex items-center gap-2"><MessageCircle className="w-4 h-4 text-[#0086E0]"/>WMS guide</div><button onClick={()=>setShowHelp(false)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+      <div className="inline-flex rounded-lg border border-stone-200 bg-stone-50 p-0.5 text-sm mb-4">
+        {[["start","Get started"],["defs","Definitions"]].map(([v,l])=><button key={v} onClick={()=>setHelpTab(v)} className={`px-3 py-1.5 rounded-md ${helpTab===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}
+      </div>
+      {helpTab==="start"?<div>
+        <div className="rounded-xl border border-[#0086E0]/20 bg-[#f2f8fd] p-3 mb-4 flex items-center justify-between flex-wrap gap-2">
+          <div className="text-sm text-stone-700"><b>New here?</b> Load a sample warehouse and click around — no risk.</div>
+          <button onClick={loadSample} disabled={busy==="sample"} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy==="sample"?<Loader2 className="w-4 h-4 animate-spin"/>:<Boxes className="w-4 h-4"/>}Load sample warehouse</button>
+        </div>
+        <div className="space-y-3">{WMS_TUTORIALS.map(([t,icon,steps])=>(<div key={t} className="border border-stone-100 rounded-xl p-3">
+          <div className="text-sm font-semibold text-stone-800 mb-1.5">{icon} {t}</div>
+          <ol className="list-decimal ml-5 space-y-0.5 text-xs text-stone-600">{steps.map((s,i)=><li key={i}>{s}</li>)}</ol>
+        </div>))}</div>
+        <div className="mt-4 pt-3 border-t border-stone-100 text-xs text-stone-500"><b className="text-stone-700">The short version:</b> add your products → say how many you have → ship orders like normal. Stock counts itself down, warns you when it's low, and helps you reorder. Everything else is optional and there when you need it.</div>
+      </div>:<div>
+        <p className="text-sm text-stone-500 mb-3">Every term you'll see, explained. Hover the little <span className="inline-flex w-3.5 h-3.5 rounded-full bg-stone-200 text-stone-500 text-[9px] font-bold items-center justify-center align-middle">?</span> anywhere for a quick reminder.</p>
+        <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">{WMS_GLOSSARY.map(([t,d])=>(<div key={t}><div className="text-sm font-semibold text-stone-800">{t}</div><div className="text-xs text-stone-500 leading-snug">{d}</div></div>))}</div>
+      </div>}
     </div>}
     {list.length>0&&!setupHid&&(()=>{ const setup=[
       {label:"Add your products",done:list.length>0,cta:null},

@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v672";
+const BUILD_TAG="addr-v673";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9988,10 +9988,13 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const receive=async()=>{
     if(!rcv.sku){flash("Pick a SKU to receive.",true);return;}
     if(!(+rcv.qty>0)){flash("Enter a quantity to receive.",true);return;}
+    const rcvIt=list.find(x=>x.sku===rcv.sku);
+    const cp=(rcvIt&&+rcvIt.casePack)||0;
+    const units=(rcv.unit==="cases"&&cp>0)?(+rcv.qty*cp):+rcv.qty;   // case-pack conversion
     setBusy("rcv");
-    const r=await cloudCall({action:"invReceive",token:CLOUD.token,lines:[{sku:rcv.sku,qty:+rcv.qty,cost:rcv.cost===""?"":+rcv.cost}]});
+    const r=await cloudCall({action:"invReceive",token:CLOUD.token,lines:[{sku:rcv.sku,qty:units,cost:rcv.cost===""?"":+rcv.cost}]});
     setBusy("");
-    if(r&&r.ok&&r.items&&r.items[0]){ patch(r.items[0]); setRcv({sku:"",qty:"",cost:""}); flash("Received "+ (+rcv.qty) +" — "+r.items[0].sku+" now "+r.items[0].onHand+"."); load(); }
+    if(r&&r.ok&&r.items&&r.items[0]){ patch(r.items[0]); setRcv({sku:"",qty:"",cost:"",unit:"units"}); flash("Received "+units+" — "+r.items[0].sku+" now "+r.items[0].onHand+"."); load(); }
     else flash((r&&r.error)||"Receive failed.",true);
   };
   const importCatalog=async()=>{
@@ -10018,11 +10021,11 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     setBusy("");
     if(r&&r.ok){ patch(r.item); const diff=cnt-(+it.onHand||0); flash(it.sku+" counted → "+cnt+(diff?" ("+(diff>0?"+":"")+diff+" variance)":" (no variance)")); load(); } else flash((r&&r.error)||"Count failed.",true);
   };
-  const openEdit=(it)=>{ setEf({sku:it.sku,name:it.name||"",reorder:it.reorder??"",cost:it.cost??"",loc:it.loc||"",barcode:it.barcode||"",category:it.category||"",kit:Array.isArray(it.kit)?it.kit.map(c=>({sku:c.sku,qty:c.qty})):[]}); setEditSku(it.sku); };
+  const openEdit=(it)=>{ setEf({sku:it.sku,name:it.name||"",reorder:it.reorder??"",cost:it.cost??"",loc:it.loc||"",barcode:it.barcode||"",category:it.category||"",uom:it.uom||"",casePack:it.casePack??"",kit:Array.isArray(it.kit)?it.kit.map(c=>({sku:c.sku,qty:c.qty})):[]}); setEditSku(it.sku); };
   const saveEdit=async()=>{
     if(!ef)return; setBusy("edit");
     const kit=(ef.kit||[]).filter(c=>String(c.sku||"").trim()).map(c=>({sku:c.sku,qty:Math.max(1,Math.round(+c.qty||1))}));
-    const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:ef.sku,name:ef.name,reorder:ef.reorder===""?0:+ef.reorder,cost:ef.cost===""?"":+ef.cost,loc:ef.loc,barcode:ef.barcode||"",category:ef.category||"",kit});
+    const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:ef.sku,name:ef.name,reorder:ef.reorder===""?0:+ef.reorder,cost:ef.cost===""?"":+ef.cost,loc:ef.loc,barcode:ef.barcode||"",category:ef.category||"",uom:ef.uom||"",casePack:ef.casePack===""?0:+ef.casePack,kit});
     setBusy("");
     if(r&&r.ok){ patch(r.item); setEditSku(null); setEf(null); flash("Saved "+r.item.sku+"."); load(); } else flash((r&&r.error)||"Couldn't save.",true);
   };
@@ -10144,6 +10147,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
       <div className="flex flex-wrap items-end gap-2">
         <label className="text-xs text-stone-600">SKU<br/><select value={rcv.sku} onChange={e=>setRcv({...rcv,sku:e.target.value})} className="mt-1 border border-stone-300 rounded-lg px-2.5 py-2 text-sm min-w-[180px]"><option value="">— pick an item —</option>{list.map(it=><option key={it.sku} value={it.sku}>{it.name?it.name+" ("+it.sku+")":it.sku}</option>)}</select></label>
         <label className="text-xs text-stone-600">Qty received<br/><input type="number" min="1" value={rcv.qty} onChange={e=>setRcv({...rcv,qty:e.target.value})} className="mt-1 w-24 border border-stone-300 rounded-lg px-2.5 py-2 text-sm"/></label>
+        {(()=>{ const ri=list.find(x=>x.sku===rcv.sku); const cp=(ri&&+ri.casePack)||0; if(cp<=0)return null; return <label className="text-xs text-stone-600">Unit<br/><select value={rcv.unit||"units"} onChange={e=>setRcv({...rcv,unit:e.target.value})} className="mt-1 border border-stone-300 rounded-lg px-2 py-2 text-sm"><option value="units">units</option><option value="cases">cases (×{cp})</option></select></label>; })()}
         {showMoney&&<label className="text-xs text-stone-600">Unit cost <span className="text-stone-400">(optional)</span><br/><input type="number" step="0.01" value={rcv.cost} onChange={e=>setRcv({...rcv,cost:e.target.value})} className="mt-1 w-28 border border-stone-300 rounded-lg px-2.5 py-2 text-sm"/></label>}
         <button onClick={receive} disabled={busy==="rcv"} className="text-sm bg-emerald-600 text-white rounded-lg px-4 py-2 font-medium hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-1.5">{busy==="rcv"?<Loader2 className="w-4 h-4 animate-spin"/>:<Plus className="w-4 h-4"/>}Receive</button>
       </div>
@@ -10204,6 +10208,8 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
           <Field label="Location / bin"><Input value={ef.loc} onChange={e=>setEf({...ef,loc:e.target.value})}/></Field>
           <Field label="Barcode / UPC"><Input value={ef.barcode} onChange={e=>setEf({...ef,barcode:e.target.value})}/></Field>
           <Field label="Category"><Input value={ef.category||""} onChange={e=>setEf({...ef,category:e.target.value})}/></Field>
+          <Field label="Base unit"><Input value={ef.uom||""} onChange={e=>setEf({...ef,uom:e.target.value})} placeholder="each / lb / ft"/></Field>
+          <Field label="Units per case"><Input type="number" value={ef.casePack??""} onChange={e=>setEf({...ef,casePack:e.target.value})} placeholder="e.g. 12"/></Field>
         </div>
         <div className="mt-4 border-t border-stone-100 pt-3">
           <div className="text-xs font-semibold text-stone-600 mb-1 flex items-center gap-1.5"><Boxes className="w-3.5 h-3.5 text-violet-600"/>Kit / bundle components</div>

@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v720";
+const BUILD_TAG="addr-v721";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -2982,7 +2982,7 @@ const CUSTOM_DEFAULTS={
   confetti:"page",seasonal:false,hideShipSteps:false,hideLabeledOrders:true,
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
-const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["inventory","Inventory",Boxes],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
+const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["inventory","Warehouse",Boxes],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
 const SLIP_OPTS={thanks:"",footer:"",logo:"",company:"",template:"",pickTitle:"",pickNote:"",title:""};   // synced from settings by AppInner; read by packingSlipHTML/printPickList
 const CI_OPTS={taxId:"",logo:""};                 // Tax ID / EIN printed on commercial invoices, from Settings → General
 const fireConfetti=()=>{try{window.dispatchEvent(new CustomEvent("sc-confetti"));}catch(e){}};
@@ -10276,14 +10276,14 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   if(view==="scan") return (<div className="max-w-5xl space-y-4"><Switcher/><ScanReceive items={list} onReceived={patch} reload={load}/></div>);
   if(view==="warehouses") return (<div className="max-w-5xl space-y-4"><Switcher/><WarehousesView warehouses={warehouses} setWarehouses={setWarehouses} items={list}/></div>);
   if(view==="containers") return (<div className="max-w-5xl space-y-4"><Switcher/><ContainerTypes containers={containers} setContainers={setContainers} showMoney={showMoney}/></div>);
-  if(view==="runner") return (<div className="max-w-2xl space-y-4"><Switcher/><RunnerPortal items={list} orders={orders} warehouses={warehouses} onReceived={patch} onReload={load}/></div>);
+  if(view==="runner") return (<div className="max-w-5xl space-y-4"><Switcher/><RunnerPortal items={list} orders={orders} warehouses={warehouses} onReceived={patch} onReload={load}/></div>);
   if(view==="billing") return (<div className="max-w-5xl space-y-4"><Switcher/><Billing3PL/></div>);
   if(view==="sale") return (<div className="max-w-5xl space-y-4"><Switcher/><PointOfSale items={list} onReload={load}/></div>);
-  if(view==="packgroups") return (<div className="max-w-3xl space-y-4"><Switcher/><PackingGroups/></div>);
-  if(view==="links") return (<div className="max-w-3xl space-y-4"><Switcher/><ThirdPartyLinks/></div>);
-  if(view==="dropoffs") return (<div className="max-w-3xl space-y-4"><Switcher/><Dropoffs/></div>);
-  if(view==="mailboxes") return (<div className="max-w-3xl space-y-4"><Switcher/><MailBoxes/></div>);
-  if(view==="requests") return (<div className="max-w-3xl space-y-4"><Switcher/><Requests3PL/></div>);
+  if(view==="packgroups") return (<div className="max-w-5xl space-y-4"><Switcher/><PackingGroups/></div>);
+  if(view==="links") return (<div className="max-w-5xl space-y-4"><Switcher/><ThirdPartyLinks/></div>);
+  if(view==="dropoffs") return (<div className="max-w-5xl space-y-4"><Switcher/><Dropoffs/></div>);
+  if(view==="mailboxes") return (<div className="max-w-5xl space-y-4"><Switcher/><MailBoxes/></div>);
+  if(view==="requests") return (<div className="max-w-5xl space-y-4"><Switcher/><Requests3PL/></div>);
   if(view==="production") return (<div className="max-w-5xl space-y-4"><Switcher/><ProductionOrders production={production} setProduction={setProduction} items={list} onReload={load}/></div>);
   if(view==="replenish") return (<div className="max-w-5xl space-y-4"><Switcher/><Replenishment list={list} suppliers={suppliers} log={log} incomingBySku={incomingBySku} committedBySku={committedBySku} showMoney={showMoney} onReload={load} onCreated={p=>{setPos(x=>[...p,...(x||[])]);setView("pos");load();}}/></div>);
   if(view==="count") return (<div className="max-w-5xl space-y-4"><Switcher/><CycleCount list={list} showMoney={showMoney} onApplied={load}/></div>);
@@ -11334,7 +11334,7 @@ function WListManager({kind,title,subtitle,Icon,fields,addLabel,statuses,default
   const cycle=async(it)=>{ if(!statuses)return; const i=statuses.indexOf(it.status); const nextStatus=statuses[(i+1)%statuses.length]; await persist(items.map(x=>x.id===it.id?{...x,status:nextStatus}:x)); };
   const stTone=(s)=>{ const i=statuses?statuses.indexOf(s):-1; return i<=0?"bg-amber-100 text-amber-700":i===statuses.length-1?"bg-emerald-100 text-emerald-700":"bg-sky-100 text-sky-700"; };
   if(items===null)return <div className="border border-stone-200 rounded-xl bg-white p-8 text-center text-sm text-stone-400 flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>Loading…</div>;
-  return (<div className="space-y-4">
+  return (<div className="space-y-4 max-w-3xl">
     <div className="flex items-center justify-between flex-wrap gap-2">
       <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Icon className="w-5 h-5 text-[#0086E0]"/>{title}</h2><p className="text-sm text-stone-500 mt-0.5">{subtitle}</p></div>
       <button onClick={()=>setEf(blank())} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>{addLabel||"New"}</button>
@@ -11569,10 +11569,12 @@ function RunnerPortal({items,orders,warehouses,onReceived,onReload}){
     <div className="grid grid-cols-4 gap-1.5">
       {MODES.map(([m,l])=>{ const Ic=iconFor[m]; return (<button key={m} onClick={()=>setMode(m)} className={`rounded-xl py-3 font-semibold text-sm flex flex-col items-center gap-1 border ${mode===m?"bg-[#0086E0] text-white border-[#0086E0]":"bg-white text-stone-600 border-stone-200 hover:bg-stone-50"}`}><Ic className="w-5 h-5"/>{l}</button>); })}
     </div>
+    <div className="max-w-xl">
     {mode==="receive"&&<RunnerReceive byCode={byCode} onReceived={onReceived} onReload={onReload}/>}
     {mode==="count"&&<RunnerCount byCode={byCode} onReload={onReload}/>}
     {mode==="put"&&<RunnerPut byCode={byCode} locOptions={locOptions} onReload={onReload}/>}
     {mode==="pull"&&<RunnerPull orders={orders} items={items}/>}
+    </div>
   </div>);
 }
 /* Runner · Receive — scan a SKU/barcode, tap a big + to bump the count, Receive adds it to stock. */

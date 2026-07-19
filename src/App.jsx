@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v689";
+const BUILD_TAG="addr-v690";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10158,7 +10158,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
   const openPo=(pos||[]).filter(p=>p&&p.status!=="received").length;
   const Switcher=()=>(<div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm flex-wrap">
-    {[["overview","Overview"],["stock","Stock"],["replenish","Replenish"],["pos","Purchase Orders"],["suppliers","Suppliers"],["warehouses","Warehouses"],["pick","Pick Lists"],["pack","Pack Verify"],["scan","Scan Receive"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}{v==="replenish"&&lowCount>0?" ("+lowCount+")":""}</button>)}
+    {[["overview","Overview"],["stock","Stock"],["replenish","Replenish"],["count","Cycle Count"],["pos","Purchase Orders"],["suppliers","Suppliers"],["warehouses","Warehouses"],["pick","Pick Lists"],["pack","Pack Verify"],["scan","Scan Receive"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}{v==="replenish"&&lowCount>0?" ("+lowCount+")":""}</button>)}
   </div>);
   if(view==="overview") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryOverview list={list} pos={pos} log={log} suppliers={suppliers} orders={orders} showMoney={showMoney} committedBySku={committedBySku} incomingBySku={incomingBySku} goView={setView} onReceive={()=>setView("stock")}/></div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
@@ -10167,6 +10167,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   if(view==="scan") return (<div className="max-w-5xl space-y-4"><Switcher/><ScanReceive items={list} onReceived={patch} reload={load}/></div>);
   if(view==="warehouses") return (<div className="max-w-5xl space-y-4"><Switcher/><WarehousesView warehouses={warehouses} setWarehouses={setWarehouses}/></div>);
   if(view==="replenish") return (<div className="max-w-5xl space-y-4"><Switcher/><Replenishment list={list} suppliers={suppliers} incomingBySku={incomingBySku} committedBySku={committedBySku} showMoney={showMoney} onCreated={p=>{setPos(x=>[...p,...(x||[])]);setView("pos");load();}}/></div>);
+  if(view==="count") return (<div className="max-w-5xl space-y-4"><Switcher/><CycleCount list={list} showMoney={showMoney} onApplied={load}/></div>);
   const reorderLowStock=()=>{
     const low=list.filter(it=>!(Array.isArray(it.kit)&&it.kit.length)&&(+it.reorder||0)>0&&(+it.onHand||0)<=(+it.reorder||0));
     if(!low.length)return;
@@ -10371,6 +10372,73 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
         <div className="flex items-center gap-2 mt-4"><button onClick={build} disabled={busy==="build"} className="text-sm bg-violet-600 text-white rounded-lg px-4 py-2 font-medium hover:bg-violet-700 disabled:opacity-40 flex items-center gap-1.5">{busy==="build"?<Loader2 className="w-4 h-4 animate-spin"/>:<Boxes className="w-4 h-4"/>}Build</button><button onClick={()=>setBuilding(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
       </div>
     </div>);})()}
+  </div>);
+}
+
+/* Cycle Count — WMS stock audit. Pick a scope, count what's physically on the shelf, and the sheet
+   shows the variance against the system count. Applying reconciles each difference through invAdjust
+   so it lands in the ledger as an "adjust · cycle count" entry — a full audit trail. Serial/lot items
+   are excluded (those reconcile by scanning individual units, not a flat sheet). */
+function CycleCount({list,showMoney,onApplied}){
+  const countable=(list||[]).filter(it=>!it.trackSerial&&!it.trackLot&&!(Array.isArray(it.kit)&&it.kit.length));
+  const cats=Array.from(new Set(countable.map(it=>it.category).filter(Boolean))).sort();
+  const [cat,setCat]=useState("");
+  const [counts,setCounts]=useState({});   // sku -> string
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState(null);
+  const flash=(m,e)=>{ setMsg(e?{err:m}:{ok:m}); setTimeout(()=>setMsg(null),4500); };
+  const rows=countable.filter(it=>!cat||it.category===cat).sort((a,b)=>String(a.loc||"~").localeCompare(String(b.loc||"~"))||String(a.sku).localeCompare(String(b.sku)));
+  const variance=(it)=>{ const c=counts[it.sku]; if(c===undefined||c==="")return null; return Math.round(+c||0)-(+it.onHand||0); };
+  const changed=rows.filter(it=>{ const v=variance(it); return v!==null&&v!==0; });
+  const counted=rows.filter(it=>{ const c=counts[it.sku]; return c!==undefined&&c!==""; });
+  const netUnits=changed.reduce((s,it)=>s+variance(it),0);
+  const netValue=changed.reduce((s,it)=>s+variance(it)*(+it.cost||0),0);
+  const apply=async()=>{
+    if(!changed.length){flash("No variances to apply — counts match the system.",true);return;}
+    if(!await uiConfirm("Apply "+changed.length+" adjustment"+(changed.length===1?"":"s")+"? This updates on-hand stock and records each in the ledger."))return;
+    setBusy(true); let ok=0;
+    for(const it of changed){
+      const v=variance(it);
+      const r=await cloudCall({action:"invAdjust",token:CLOUD.token,sku:it.sku,delta:v,reason:"cycle count"+(cat?" · "+cat:"")});
+      if(r&&r.ok)ok++; else { setBusy(false); flash("Failed on "+it.sku+" — "+((r&&r.error)||"try again")+". "+ok+" applied.",true); onApplied&&onApplied(); return; }
+    }
+    setBusy(false); setCounts({}); flash("Applied "+ok+" adjustment"+(ok===1?"":"s")+".");
+    onApplied&&onApplied();
+  };
+  return (<div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ClipboardList className="w-5 h-5 text-[#0086E0]"/>Cycle Count</h2><p className="text-sm text-stone-500 mt-0.5">Count a shelf and reconcile it to the system. Enter what you physically have; leave a row blank to skip it. Only differences are adjusted, and each is logged.</p></div>
+    </div>
+    {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
+    <div className="flex items-center gap-2 flex-wrap">
+      <select value={cat} onChange={e=>setCat(e.target.value)} className="text-sm border border-stone-300 rounded-lg px-2.5 py-2"><option value="">All items ({countable.length})</option>{cats.map(c=><option key={c} value={c}>{c}</option>)}</select>
+      {counted.length>0&&<button onClick={()=>setCounts({})} className="text-xs text-stone-500 hover:underline">Clear counts</button>}
+    </div>
+    {rows.length===0?(
+      <div className="border border-stone-200 rounded-xl bg-white p-8 text-center text-sm text-stone-400">No countable items in this scope. (Serial &amp; lot-tracked items are counted by scanning.)</div>
+    ):(<>
+      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-stone-50 text-stone-500 text-xs"><tr>
+            <th className="px-3 py-2 text-left">Item</th><th className="px-3 py-2 text-left">Location</th>
+            <th className="px-3 py-2 text-right">System</th><th className="px-3 py-2 text-right">Counted</th><th className="px-3 py-2 text-right">Variance</th>
+          </tr></thead>
+          <tbody className="divide-y divide-stone-100">
+            {rows.map(it=>{ const v=variance(it); return (<tr key={it.sku} className={v!==null&&v!==0?"bg-amber-50/50":""}>
+              <td className="px-3 py-2"><div className="text-stone-800">{it.name||it.sku}</div><div className="text-[11px] text-stone-400">{it.sku}</div></td>
+              <td className="px-3 py-2 text-stone-500">{it.loc||"—"}</td>
+              <td className="px-3 py-2 text-right text-stone-700">{+it.onHand||0}</td>
+              <td className="px-3 py-2 text-right"><input type="number" min="0" value={counts[it.sku]??""} onChange={e=>setCounts(c=>({...c,[it.sku]:e.target.value}))} placeholder="—" className="w-20 border border-stone-300 rounded-lg px-2 py-1 text-sm text-right"/></td>
+              <td className={`px-3 py-2 text-right font-medium ${v===null?"text-stone-300":v===0?"text-emerald-600":v>0?"text-emerald-700":"text-rose-600"}`}>{v===null?"—":v>0?"+"+v:v}</td>
+            </tr>);})}
+          </tbody>
+        </table>
+      </div>
+      <div className="border border-stone-200 rounded-xl bg-white p-4 flex items-center justify-between flex-wrap gap-2">
+        <div className="text-sm text-stone-600">{counted.length} counted · <b className="text-stone-800">{changed.length}</b> variance{changed.length===1?"":"s"} · net {netUnits>0?"+"+netUnits:netUnits} units{showMoney?" · "+(netValue>=0?"+$":"-$")+Math.abs(netValue).toFixed(2)+" value":""}</div>
+        <button onClick={apply} disabled={busy||!changed.length} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy&&<Loader2 className="w-4 h-4 animate-spin"/>}Apply {changed.length||""} adjustment{changed.length===1?"":"s"}</button>
+      </div>
+    </>)}
   </div>);
 }
 

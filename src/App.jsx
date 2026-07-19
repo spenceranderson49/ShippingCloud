@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v698";
+const BUILD_TAG="addr-v699";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10954,13 +10954,13 @@ function ScanReceive({items,onReceived,reload}){
     setBusy(true);
     const r=await cloudCall({action:"invReceive",token:CLOUD.token,lines:[{sku:it.sku,qty:q}],ref:"scan"});
     setBusy(false);
-    if(r&&r.ok&&r.items&&r.items[0]){ onReceived&&onReceived(r.items[0]); setFeed(f=>[{sku:it.sku,name:it.name||it.sku,qty:q,onHand:r.items[0].onHand,ok:true},...f].slice(0,60)); }
+    if(r&&r.ok&&r.items&&r.items[0]){ onReceived&&onReceived(r.items[0]); setFeed(f=>[{sku:it.sku,name:it.name||it.sku,qty:q,onHand:r.items[0].onHand,loc:it.loc||"",ok:true},...f].slice(0,60)); }
     else setFeed(f=>[{sku:it.sku,name:(r&&r.error)||"Receive failed",qty:0,ok:false},...f].slice(0,60));
     try{ inputRef.current&&inputRef.current.focus(); }catch(e){}
   };
   const totalScans=feed.filter(x=>x.ok).reduce((s,x)=>s+x.qty,0);
   return (<div className="space-y-4">
-    <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ScanLine className="w-5 h-5 text-[#0086E0]"/>Scan to receive</h2><p className="text-sm text-stone-500 mt-0.5">Scan a barcode (or type a SKU) and press Enter — each scan adds to stock. Great for putting away a delivery.</p></div>
+    <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ScanLine className="w-5 h-5 text-[#0086E0]"/>Scan to receive</h2><p className="text-sm text-stone-500 mt-0.5">Scan a barcode (or type a SKU) and press Enter — each scan adds to stock and shows the item's put-away location. Great for putting away a delivery.</p></div>
     <div className="border border-stone-200 rounded-xl bg-white p-4">
       <div className="flex items-end gap-3 flex-wrap">
         <label className="text-xs text-stone-600 flex-1 min-w-[220px]">Scan / SKU<input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();submit(val);}}} placeholder="Scan barcode or type SKU…" className="mt-1 w-full border border-stone-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#0086E0]" autoFocus/></label>
@@ -10974,6 +10974,7 @@ function ScanReceive({items,onReceived,reload}){
       {feed.map((x,i)=>(<div key={i} className={`px-4 py-2 flex items-center gap-3 ${x.ok?"":"bg-rose-50/50"}`}>
         {x.ok?<CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0"/>:<AlertTriangle className="w-4 h-4 text-rose-500 shrink-0"/>}
         <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{x.name}</div><div className="text-[11px] text-stone-400">{x.sku||x.code}</div></div>
+        {x.ok&&x.loc&&<div className="text-[11px] text-[#0086E0] font-medium flex items-center gap-1 shrink-0" title="Put away in this location"><MapPin className="w-3 h-3"/>{x.loc}</div>}
         {x.ok&&<div className="text-sm text-stone-600">+{x.qty} → <b className="text-stone-900">{x.onHand}</b></div>}
       </div>))}
     </div>

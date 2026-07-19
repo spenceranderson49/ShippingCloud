@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v722";
+const BUILD_TAG="addr-v723";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10045,6 +10045,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const [xfer,setXfer]=useState(null);
   const [adj,setAdj]=useState(null);
   const [wmsSimple,setWmsSimple]=usePersist("wmsSimple",true);   // entry-level view on by default; reveals full toolset on demand
+  const [wmsFlow,setWmsFlow]=usePersist("wmsFlow","simple");      // fulfillment flow: "simple" (grab→ship) or "standard" (pick→pack→ship)
   const [view,setView]=useState("stock");
   const [pos,setPos]=useState([]);
   const [suppliers,setSuppliers]=useState([]);
@@ -10270,7 +10271,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   </div>); };
   if(view==="overview") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryOverview list={list} pos={pos} log={log} suppliers={suppliers} orders={orders} showMoney={showMoney} committedBySku={committedBySku} incomingBySku={incomingBySku} goView={setView} onReceive={()=>setView("stock")}/></div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
-  if(view==="toship") return (<div className="max-w-5xl space-y-4"><Switcher/><ToShip orders={orders} list={list} committedBySku={committedBySku} goView={setView} shipOrder={goShip?shipOrder:null}/></div>);
+  if(view==="toship") return (<div className="max-w-5xl space-y-4"><Switcher/><ToShip orders={orders} list={list} committedBySku={committedBySku} goView={setView} shipOrder={goShip?shipOrder:null} flow={wmsFlow} setFlow={setWmsFlow}/></div>);
   if(view==="pick") return (<div className="max-w-5xl space-y-4"><Switcher/><PickList orders={orders} items={list}/></div>);
   if(view==="pack") return (<div className="max-w-5xl space-y-4"><Switcher/><PackVerify orders={orders} items={list} shipOrder={goShip?shipOrder:null}/></div>);
   if(view==="scan") return (<div className="max-w-5xl space-y-4"><Switcher/><ScanReceive items={list} onReceived={patch} reload={load}/></div>);
@@ -11090,13 +11091,16 @@ function ScanReceive({items,onReceived,reload}){
 /* To Ship — the warehouse's daily work queue (ShipHero-style). Every unfulfilled order with a stock-
    readiness badge (ready to pick vs short), sorted so the ready + oldest float up. Read-only; jumps
    into the pick and pack flows. Deliberately plain so a first-timer knows exactly what to do next. */
-function ToShip({orders,list,committedBySku,goView,shipOrder}){
+function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFlow}){
+  const standard=flow==="standard";
   const stockBySku=useMemo(()=>{ const m={}; (list||[]).forEach(it=>{ if(Array.isArray(it.kit)&&it.kit.length&&!it.assembled)return; m[String(it.sku).toLowerCase()]=+it.onHand||0; }); return m; },[list]);
   const itBySku=useMemo(()=>{ const m={}; (list||[]).forEach(it=>{ m[String(it.sku).toLowerCase()]=it; }); return m; },[list]);
-  const [fulfilling,setFulfilling]=useState(null); const [grabbed,setGrabbed]=useState({});
+  const [fulfilling,setFulfilling]=useState(null); const [grabbed,setGrabbed]=useState({}); const [packed,setPacked]=useState({}); const [fStep,setFStep]=useState(0);
   const fLines=fulfilling?(fulfilling.lineItems||[]).filter(li=>li&&li.sku).map(li=>{ const it=itBySku[String(li.sku).toLowerCase()]; return {sku:li.sku,name:li.title||li.name||(it&&it.name)||li.sku,loc:(it&&it.loc)||"",qty:+li.qty||+li.quantity||1}; }):[];
   const allGrabbed=fLines.length>0&&fLines.every(l=>grabbed[l.sku.toLowerCase()]);
-  const openFulfill=(o)=>{ setFulfilling(o); setGrabbed({}); };
+  const allPacked=fLines.length>0&&fLines.every(l=>packed[l.sku.toLowerCase()]);
+  const openFulfill=(o)=>{ setFulfilling(o); setGrabbed({}); setPacked({}); setFStep(0); };
+  const shipNow=()=>{ const o=fulfilling; setFulfilling(null); shipOrder&&shipOrder(o); };
   const open=(orders||[]).filter(o=>o&&o.status!=="fulfilled"&&Array.isArray(o.lineItems)&&o.lineItems.length);
   const rows=open.map(o=>{ const lis=(o.lineItems||[]).filter(li=>li&&li.sku); const tracked=lis.filter(li=>String(li.sku).toLowerCase() in stockBySku); const short=tracked.filter(li=>(stockBySku[String(li.sku).toLowerCase()]||0)<(+li.qty||+li.quantity||1)).map(li=>li.sku); const units=lis.reduce((s,li)=>s+(+li.qty||+li.quantity||1),0); const t=Date.parse(o.date||"")||0; return {o,ready:tracked.length>0&&short.length===0,unknown:tracked.length===0,short,units,skus:lis.length,t}; })
     .sort((a,b)=>(a.ready===b.ready?0:a.ready?-1:1)||a.t-b.t);
@@ -11104,7 +11108,10 @@ function ToShip({orders,list,committedBySku,goView,shipOrder}){
   const age=(t)=>{ if(!t)return ""; const m=Math.floor((Date.now()-t)/60000); if(m<60)return m+"m"; const h=Math.floor(m/60); if(h<24)return h+"h"; return Math.floor(h/24)+"d"; };
   const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
   return (<div className="space-y-4">
-    <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Truck className="w-5 h-5 text-[#0086E0]"/>To ship</h2><p className="text-sm text-stone-500 mt-0.5">Your orders waiting to go out, readiest first. Green means every item's in stock — build a pick list and pack them.</p></div>
+    <div className="flex items-start justify-between gap-3 flex-wrap">
+      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Truck className="w-5 h-5 text-[#0086E0]"/>To ship</h2><p className="text-sm text-stone-500 mt-0.5">Your orders waiting to go out, readiest first. Green means every item's in stock — click <b>Fulfill</b> to grab and ship.</p></div>
+      {setFlow&&<div className="shrink-0"><div className="text-[9px] uppercase tracking-widest text-stone-400 pl-1 mb-1">Fulfillment steps</div><div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-xs"><button onClick={()=>setFlow("simple")} className={`px-2.5 py-1.5 rounded-md ${!standard?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`} title="Grab items → ship">One-click</button><button onClick={()=>setFlow("standard")} className={`px-2.5 py-1.5 rounded-md ${standard?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`} title="Pick → verify at pack → ship">Pick → Pack → Ship</button></div></div>}
+    </div>
     <div className="grid grid-cols-3 gap-3">
       <Tile label="Orders to ship" value={rows.length}/>
       <Tile label="Ready now" value={readyN} tone={readyN?"text-emerald-600":"text-stone-900"}/>
@@ -11119,21 +11126,31 @@ function ToShip({orders,list,committedBySku,goView,shipOrder}){
         {shipOrder&&<button onClick={()=>openFulfill(o)} className="shrink-0 text-xs bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1">Fulfill<ChevronRight className="w-3.5 h-3.5"/></button>}
       </div>))}
     </div>
-    {fulfilling&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setFulfilling(null)}>
+    {fulfilling&&(()=>{
+      const packStep=standard&&fStep===1;              // step 1 in standard flow = pack verify
+      const checks=packStep?packed:grabbed; const setChecks=packStep?setPacked:setGrabbed;
+      const allDone=packStep?allPacked:allGrabbed;
+      const pct=fLines.length?Math.round(fLines.filter(l=>checks[l.sku.toLowerCase()]).length/fLines.length*100):0;
+      const STEPS=standard?["Pick","Pack","Ship"]:["Grab","Ship"];
+      const stepIdx=standard?fStep:0;
+      return (<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setFulfilling(null)}>
       <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5 max-h-[92vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-1"><div className="font-semibold text-stone-900">Fulfill {fulfilling.name||fulfilling.id}</div><button onClick={()=>setFulfilling(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
-        <p className="text-xs text-stone-500 mb-3">{fulfilling.customer?fulfilling.customer+" · ":""}Grab each item, check it off, then create the label. Stock counts down automatically when the label prints.</p>
-        <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden mb-3"><div className={`h-full ${allGrabbed?"bg-emerald-500":"bg-[#0086E0]"} transition-all`} style={{width:(fLines.length?Math.round(fLines.filter(l=>grabbed[l.sku.toLowerCase()]).length/fLines.length*100):0)+"%"}}/></div>
+        <div className="flex items-center justify-between mb-2"><div className="font-semibold text-stone-900">Fulfill {fulfilling.name||fulfilling.id}</div><button onClick={()=>setFulfilling(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+        {standard&&<div className="flex items-center gap-1.5 mb-3">{STEPS.map((s,i)=>(<React.Fragment key={s}><span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${i<stepIdx?"bg-emerald-100 text-emerald-700":i===stepIdx?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-400"}`}>{i<stepIdx?"✓ ":""}{s}</span>{i<STEPS.length-1&&<span className="text-stone-300">·</span>}</React.Fragment>))}</div>}
+        <p className="text-xs text-stone-500 mb-3">{fulfilling.customer?fulfilling.customer+" · ":""}{packStep?"Scan or tap each item as it goes in the box.":standard?"Grab each item from its location and check it off.":"Grab each item, check it off, then create the label."} Stock counts down when the label prints.</p>
+        <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden mb-3"><div className={`h-full ${allDone?"bg-emerald-500":"bg-[#0086E0]"} transition-all`} style={{width:pct+"%"}}/></div>
         <div className="space-y-1.5">
-          {fLines.map(l=>{ const on=!!grabbed[l.sku.toLowerCase()]; return (<button key={l.sku} onClick={()=>setGrabbed(g=>({...g,[l.sku.toLowerCase()]:!g[l.sku.toLowerCase()]}))} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left ${on?"bg-emerald-50 border-emerald-200":"bg-white border-stone-200 hover:bg-stone-50"}`}>
+          {fLines.map(l=>{ const on=!!checks[l.sku.toLowerCase()]; return (<button key={l.sku} onClick={()=>setChecks(g=>({...g,[l.sku.toLowerCase()]:!g[l.sku.toLowerCase()]}))} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left ${on?"bg-emerald-50 border-emerald-200":"bg-white border-stone-200 hover:bg-stone-50"}`}>
             {on?<CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0"/>:<div className="w-5 h-5 rounded-full border-2 border-stone-300 shrink-0"/>}
-            <div className="flex-1 min-w-0"><div className={`text-sm ${on?"text-stone-400 line-through":"text-stone-800"}`}>{l.name}</div><div className="text-[11px] text-stone-400 flex items-center gap-1">{l.loc&&<><MapPin className="w-3 h-3"/>{l.loc} · </>}{l.sku}</div></div>
+            <div className="flex-1 min-w-0"><div className={`text-sm ${on?"text-stone-400 line-through":"text-stone-800"}`}>{l.name}</div><div className="text-[11px] text-stone-400 flex items-center gap-1">{!packStep&&l.loc&&<><MapPin className="w-3 h-3"/>{l.loc} · </>}{l.sku}</div></div>
             <div className="text-sm font-semibold text-stone-700 shrink-0">×{l.qty}</div>
           </button>); })}
         </div>
-        <button onClick={()=>{ const o=fulfilling; setFulfilling(null); shipOrder&&shipOrder(o); }} disabled={!allGrabbed} className="w-full mt-4 bg-[#0086E0] text-white rounded-xl py-3 font-semibold hover:bg-[#006db8] disabled:opacity-40 flex items-center justify-center gap-1.5"><Truck className="w-5 h-5"/>{allGrabbed?"Create shipping label":"Grab all items first"}</button>
+        {standard&&!packStep
+          ? <button onClick={()=>setFStep(1)} disabled={!allGrabbed} className="w-full mt-4 bg-[#0086E0] text-white rounded-xl py-3 font-semibold hover:bg-[#006db8] disabled:opacity-40 flex items-center justify-center gap-1.5">{allGrabbed?"Next: pack the box":"Grab all items first"}<ChevronRight className="w-4 h-4"/></button>
+          : <button onClick={shipNow} disabled={!allDone} className="w-full mt-4 bg-[#0086E0] text-white rounded-xl py-3 font-semibold hover:bg-[#006db8] disabled:opacity-40 flex items-center justify-center gap-1.5"><Truck className="w-5 h-5"/>{allDone?"Create shipping label":(packStep?"Pack every item first":"Grab all items first")}</button>}
       </div>
-    </div>}
+    </div>); })()}
   </div>);
 }
 /* Pick lists — pick unfulfilled orders, aggregate their SKUs into a bin-sorted pick sheet. Read-only. */

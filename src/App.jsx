@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v715";
+const BUILD_TAG="addr-v716";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10241,7 +10241,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const NAV_GROUPS=[
     ["Home",[["overview","Overview"]]],
     ["Inventory",[["stock","Stock"],["replenish","Replenish"],["backorder","Backorders"],["count","Cycle Count"],["production","Production"]]],
-    ["Fulfill",[["runner","Runner"],["pick","Pick Lists"],["pack","Pack Verify"],["packgroups","Packing Groups"],["scan","Scan Receive"]]],
+    ["Fulfill",[["toship","To Ship"],["runner","Runner"],["pick","Pick Lists"],["pack","Pack Verify"],["packgroups","Packing Groups"],["scan","Scan Receive"]]],
     ["Purchasing",[["pos","Purchase Orders"],["suppliers","Suppliers"]]],
     ["Setup",[["warehouses","Warehouses"],["containers","Containers"],["links","Links"]]],
     ["Front desk",[["dropoffs","Dropoffs"],["mailboxes","Mail Boxes"]]],
@@ -10251,7 +10251,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const badge=(v)=>v==="pos"&&openPo>0?" ("+openPo+")":v==="replenish"&&lowCount>0?" ("+lowCount+")":v==="backorder"&&boCount>0?" ("+boCount+")":"";
   /* Entry-level "Simple" view shows just the everyday tools; "Show all tools" reveals the full WMS.
      If you're already on an advanced tab, the full nav shows so the active tab stays visible. */
-  const CORE=new Set(["overview","stock","replenish","runner","pick","pack","scan","pos","suppliers"]);
+  const CORE=new Set(["overview","stock","replenish","toship","runner","pick","pack","scan","pos","suppliers"]);
   const Switcher=()=>{ const simple=wmsSimple&&CORE.has(view);
     const groups=NAV_GROUPS.map(([g,tabs])=>[g,simple?tabs.filter(([v])=>CORE.has(v)):tabs]).filter(([g,tabs])=>tabs.length);
     return (<div className="flex flex-wrap gap-x-4 gap-y-2 items-start">
@@ -10267,6 +10267,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   </div>); };
   if(view==="overview") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryOverview list={list} pos={pos} log={log} suppliers={suppliers} orders={orders} showMoney={showMoney} committedBySku={committedBySku} incomingBySku={incomingBySku} goView={setView} onReceive={()=>setView("stock")}/></div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
+  if(view==="toship") return (<div className="max-w-5xl space-y-4"><Switcher/><ToShip orders={orders} list={list} committedBySku={committedBySku} goView={setView}/></div>);
   if(view==="pick") return (<div className="max-w-5xl space-y-4"><Switcher/><PickList orders={orders} items={list}/></div>);
   if(view==="pack") return (<div className="max-w-5xl space-y-4"><Switcher/><PackVerify orders={orders} items={list}/></div>);
   if(view==="scan") return (<div className="max-w-5xl space-y-4"><Switcher/><ScanReceive items={list} onReceived={patch} reload={load}/></div>);
@@ -11079,6 +11080,34 @@ function ScanReceive({items,onReceived,reload}){
         <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{x.name}</div><div className="text-[11px] text-stone-400">{x.sku||x.code}</div></div>
         {x.ok&&x.loc&&<div className="text-[11px] text-[#0086E0] font-medium flex items-center gap-1 shrink-0" title="Put away in this location"><MapPin className="w-3 h-3"/>{x.loc}</div>}
         {x.ok&&<div className="text-sm text-stone-600">+{x.qty} → <b className="text-stone-900">{x.onHand}</b></div>}
+      </div>))}
+    </div>
+  </div>);
+}
+/* To Ship — the warehouse's daily work queue (ShipHero-style). Every unfulfilled order with a stock-
+   readiness badge (ready to pick vs short), sorted so the ready + oldest float up. Read-only; jumps
+   into the pick and pack flows. Deliberately plain so a first-timer knows exactly what to do next. */
+function ToShip({orders,list,committedBySku,goView}){
+  const stockBySku=useMemo(()=>{ const m={}; (list||[]).forEach(it=>{ if(Array.isArray(it.kit)&&it.kit.length&&!it.assembled)return; m[String(it.sku).toLowerCase()]=+it.onHand||0; }); return m; },[list]);
+  const open=(orders||[]).filter(o=>o&&o.status!=="fulfilled"&&Array.isArray(o.lineItems)&&o.lineItems.length);
+  const rows=open.map(o=>{ const lis=(o.lineItems||[]).filter(li=>li&&li.sku); const tracked=lis.filter(li=>String(li.sku).toLowerCase() in stockBySku); const short=tracked.filter(li=>(stockBySku[String(li.sku).toLowerCase()]||0)<(+li.qty||+li.quantity||1)).map(li=>li.sku); const units=lis.reduce((s,li)=>s+(+li.qty||+li.quantity||1),0); const t=Date.parse(o.date||"")||0; return {o,ready:tracked.length>0&&short.length===0,unknown:tracked.length===0,short,units,skus:lis.length,t}; })
+    .sort((a,b)=>(a.ready===b.ready?0:a.ready?-1:1)||a.t-b.t);
+  const readyN=rows.filter(r=>r.ready).length; const shortN=rows.filter(r=>!r.ready&&!r.unknown).length;
+  const age=(t)=>{ if(!t)return ""; const m=Math.floor((Date.now()-t)/60000); if(m<60)return m+"m"; const h=Math.floor(m/60); if(h<24)return h+"h"; return Math.floor(h/24)+"d"; };
+  const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
+  return (<div className="space-y-4">
+    <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Truck className="w-5 h-5 text-[#0086E0]"/>To ship</h2><p className="text-sm text-stone-500 mt-0.5">Your orders waiting to go out, readiest first. Green means every item's in stock — build a pick list and pack them.</p></div>
+    <div className="grid grid-cols-3 gap-3">
+      <Tile label="Orders to ship" value={rows.length}/>
+      <Tile label="Ready now" value={readyN} tone={readyN?"text-emerald-600":"text-stone-900"}/>
+      <Tile label="Waiting on stock" value={shortN} tone={shortN?"text-amber-600":"text-stone-900"}/>
+    </div>
+    {rows.length>0&&<div className="flex gap-2"><button onClick={()=>goView("pick")} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><ClipboardList className="w-4 h-4"/>Build a pick list</button><button onClick={()=>goView("pack")} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-200 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>Pack &amp; verify</button></div>}
+    <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+      {rows.length===0&&<div className="p-8 text-center text-sm text-stone-400">Nothing waiting to ship — you're all caught up. 🎉</div>}
+      {rows.map(({o,ready,unknown,short,units,skus,t})=>(<div key={o.id} className="p-3 flex items-center gap-3 flex-wrap">
+        <div className="shrink-0">{ready?<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700">Ready</span>:unknown?<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-stone-100 text-stone-500">No stock link</span>:<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-amber-100 text-amber-700">Short</span>}</div>
+        <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{o.name||o.id}{o.customer?" · "+o.customer:""}</div><div className="text-[11px] text-stone-400 truncate">{skus} line{skus!==1?"s":""} · {units} unit{units!==1?"s":""}{short.length?" · short: "+short.slice(0,3).join(", "):""}{t?" · "+age(t)+" old":""}</div></div>
       </div>))}
     </div>
   </div>);

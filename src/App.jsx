@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v719";
+const BUILD_TAG="addr-v720";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -11207,10 +11207,27 @@ function InventoryOverview({list,pos,log,suppliers,orders,showMoney,committedByS
   const openPos=(pos||[]).filter(p=>p&&p.status!=="received");
   const expSoon=[]; stock.forEach(it=>{ if(it.trackLot&&Array.isArray(it.lots))it.lots.forEach(l=>{ if(l.expiry&&(Date.parse(l.expiry)-Date.now())<30*864e5)expSoon.push({sku:it.sku,lot:l.lot,expiry:l.expiry}); }); });
   const recent=(log||[]).slice(0,8);
+  // Orders ready to ship right now (every tracked line item in stock).
+  const stockBySku={}; stock.forEach(it=>{ stockBySku[String(it.sku).toLowerCase()]=+it.onHand||0; });
+  const readyToShip=(orders||[]).filter(o=>{ if(!o||o.status==="fulfilled"||!Array.isArray(o.lineItems))return false; const lis=o.lineItems.filter(li=>li&&li.sku&&(String(li.sku).toLowerCase() in stockBySku)); return lis.length>0&&lis.every(li=>(stockBySku[String(li.sku).toLowerCase()]||0)>=(+li.qty||+li.quantity||1)); }).length;
+  /* Next best action — the single clearest thing to do right now, so a first-timer never wonders. */
+  const next=(()=>{
+    if(stock.length===0)return {label:"Add your first product to get started",cta:"Add a product",go:()=>goView("stock"),tone:"sky"};
+    if(readyToShip>0)return {label:readyToShip+" order"+(readyToShip>1?"s":"")+" ready to ship right now",cta:"Fulfill them",go:()=>goView("toship"),tone:"emerald"};
+    if(out.length>0)return {label:out.length+" item"+(out.length>1?"s are":" is")+" out of stock",cta:"Reorder",go:()=>goView("replenish"),tone:"rose"};
+    if(low.length>0)return {label:low.length+" item"+(low.length>1?"s are":" is")+" running low",cta:"Reorder",go:()=>goView("replenish"),tone:"amber"};
+    if(openPos.length>0)return {label:openPos.length+" purchase order"+(openPos.length>1?"s":"")+" waiting to be received",cta:"Receive",go:()=>goView("pos"),tone:"sky"};
+    return null;
+  })();
+  const nextTone={sky:"from-[#f2f8fd] to-white border-[#0086E0]/20 text-[#0086E0]",emerald:"from-emerald-50 to-white border-emerald-200 text-emerald-700",amber:"from-amber-50 to-white border-amber-200 text-amber-700",rose:"from-rose-50 to-white border-rose-200 text-rose-700"};
   const Tile=({label,value,tone,onClick})=>(<button onClick={onClick} disabled={!onClick} className={`text-left border border-stone-200 rounded-xl bg-white px-4 py-3 ${onClick?"hover:border-[#0086E0]/40 transition":""}`}><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></button>);
   const mvLabel={receipt:"Received",ship:"Shipped",adjust:"Adjusted",count:"Counted",transfer:"Moved",build:"Built",consume:"Used in build",new:"Added",removed:"Removed"};
   return (<div className="space-y-4">
     <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Boxes className="w-5 h-5 text-[#0086E0]"/>Warehouse overview</h2><p className="text-sm text-stone-500 mt-0.5">Everything at a glance — what needs attention and what's happening.</p></div>
+    {next&&<div className={`rounded-2xl border bg-gradient-to-br p-4 flex items-center justify-between gap-3 flex-wrap ${nextTone[next.tone]||nextTone.sky}`}>
+      <div className="flex items-center gap-2.5"><div className="text-[10px] uppercase tracking-widest opacity-70">Do this next</div><div className="text-sm font-semibold text-stone-800">{next.label}</div></div>
+      <button onClick={next.go} className="text-sm bg-white/80 border border-current/20 rounded-lg px-4 py-2 font-medium hover:bg-white flex items-center gap-1.5">{next.cta}<ChevronRight className="w-4 h-4"/></button>
+    </div>}
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
       <Tile label="SKUs" value={stock.length} onClick={()=>goView("stock")}/>
       <Tile label="Units on hand" value={totUnits.toLocaleString()}/>

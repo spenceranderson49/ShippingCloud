@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v721";
+const BUILD_TAG="addr-v722";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10084,7 +10084,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     if(!CLOUD.token){ setItems([]); return; }
     const r=await cloudCall({action:"invList",token:CLOUD.token});
     if(r&&r.ok){ setItems(r.items||[]); setLog(r.log||[]); }
-    else { setItems([]); setErr((r&&r.error)||"Couldn't load inventory."); }
+    else { setItems([]); setErr((r&&r.error)||"Couldn't load your warehouse."); }
     const [rp,rs,rw,rc,rpr]=await Promise.all([cloudCall({action:"poList",token:CLOUD.token}),cloudCall({action:"supplierList",token:CLOUD.token}),cloudCall({action:"warehouseList",token:CLOUD.token}),cloudCall({action:"containerList",token:CLOUD.token}),cloudCall({action:"productionList",token:CLOUD.token})]);
     if(rp&&rp.ok)setPos(rp.pos||[]);
     if(rs&&rs.ok)setSuppliers(rs.suppliers||[]);
@@ -10227,7 +10227,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     if(r&&r.ok){ patch(r.item); setAdj(null); flash("Adjusted "+adj.sku+" by "+(d>0?"+"+d:d)+" ("+adj.reason+")."); load(); } else flash((r&&r.error)||"Adjust failed.",true);
   };
   if(!CLOUD.token) return (<div className="max-w-2xl"><div className="border border-stone-200 rounded-xl bg-white p-6 text-sm text-stone-600">Inventory lives in the cloud — sign in to your account to track stock.</div></div>);
-  if(items===null) return (<div className="flex items-center gap-2 text-stone-500 text-sm p-4"><Loader2 className="w-4 h-4 animate-spin"/>Loading inventory…</div>);
+  if(items===null) return (<div className="flex items-center gap-2 text-stone-500 text-sm p-4"><Loader2 className="w-4 h-4 animate-spin"/>Loading warehouse…</div>);
   const list=(items||[]).slice().sort((a,b)=>String(a.name||a.sku).localeCompare(String(b.name||b.sku)));
   const isLow=(it)=>(+it.reorder||0)>0&&(+it.onHand||0)<=(+it.reorder||0)&&!(Array.isArray(it.kit)&&it.kit.length);
   const categories=[...new Set(list.map(it=>it.category).filter(Boolean))].sort();

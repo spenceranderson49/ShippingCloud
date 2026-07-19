@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v675";
+const BUILD_TAG="addr-v676";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -11673,14 +11673,37 @@ function Returns({returns,setReturns,orders,settings,logEmail}){
   const [creating,setCreating]=useState(false);
   const [f,setF]=useState({customer:"",email:"",order:"",reason:"Wrong Size",carrier:"FedEx"});
   const [reqs,setReqs]=useState(null);
+  const [restock,setRestock]=useState(null);   // {rq, lines:[{sku,qty}]}
+  const [rsBusy,setRsBusy]=useState(false);
   useEffect(()=>{ if(!CLOUD.token)return; let dead=false; (async()=>{ const r=await cloudCall({action:"returnList",token:CLOUD.token}); if(!dead&&r&&r.ok)setReqs(r.requests||[]); })(); return ()=>{dead=true;}; },[]);
   const setReqStatus=async(id,status)=>{ const r=await cloudCall({action:"returnSetStatus",token:CLOUD.token,id,status}); if(r&&r.ok)setReqs(r.requests||[]); };
+  const doRestock=async()=>{
+    const lines=(restock.lines||[]).filter(l=>String(l.sku||"").trim()&&+l.qty>0).map(l=>({sku:l.sku.trim(),qty:+l.qty}));
+    if(!lines.length){return;}
+    setRsBusy(true);
+    const r=await cloudCall({action:"invReceive",token:CLOUD.token,lines,ref:"return "+(restock.rq.order||"")});
+    setRsBusy(false);
+    if(r&&r.ok){ setRestock(null); }
+  };
   const fromRequest=(rq)=>{ setF({customer:rq.name||"",email:rq.email||"",order:rq.order||"",reason:rq.reason||"Wrong Size",carrier:"FedEx"}); setCreating(true); setReqStatus(rq.id,"approved"); try{window.scrollTo({top:0,behavior:"smooth"});}catch(e){} };
   const fulfilled=orders.filter(o=>o.status==="fulfilled");
   const create=()=>{if(!f.customer)return;setReturns(r=>[{id:Date.now(),rma:"RMA-"+rnd(4),customer:f.customer,email:(f.email||"").trim(),order:f.order,reason:f.reason,carrier:f.carrier,tracking:"",status:"Requested",date:new Date().toLocaleDateString()},...r]);if(settings?.notify?.returnLabel&&logEmail&&(f.email||"").trim())logEmail({to:(f.email||"").trim(),subject:`We received your return request for ${f.order||"your order"}`,type:"Return"});setCreating(false);setF({customer:"",email:"",order:"",reason:"Wrong Size",carrier:"FedEx"});};
   const tone=s=>s==="Delivered"?"green":s==="In transit"?"amber":s==="Requested"?"stone":"blue";
   return (
     <div className="space-y-3">
+      {restock&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setRestock(null)}>
+        <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5" onClick={e=>e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-1"><div className="font-semibold text-stone-900">Restock — order {restock.rq.order||"—"}</div><button onClick={()=>setRestock(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+          <p className="text-xs text-stone-500 mb-3">Put the returned items back into inventory. Enter the SKU(s) and quantity received back.</p>
+          {(restock.lines||[]).map((l,i)=>(<div key={i} className="flex items-center gap-2 mb-1.5">
+            <input value={l.sku} onChange={e=>setRestock(r=>({...r,lines:r.lines.map((x,j)=>j===i?{...x,sku:e.target.value}:x)}))} placeholder="SKU" className="flex-1 border border-stone-300 rounded-lg px-2 py-1.5 text-sm"/>
+            <input type="number" min="1" value={l.qty} onChange={e=>setRestock(r=>({...r,lines:r.lines.map((x,j)=>j===i?{...x,qty:e.target.value}:x)}))} className="w-16 border border-stone-300 rounded-lg px-2 py-1.5 text-sm"/>
+            <button onClick={()=>setRestock(r=>({...r,lines:r.lines.filter((_,j)=>j!==i)}))} className="text-stone-400 hover:text-rose-600"><Trash2 className="w-4 h-4"/></button>
+          </div>))}
+          <button onClick={()=>setRestock(r=>({...r,lines:[...(r.lines||[]),{sku:"",qty:1}]}))} className="text-xs text-[#0086E0] hover:underline flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add line</button>
+          <div className="flex items-center gap-2 mt-4"><button onClick={doRestock} disabled={rsBusy} className="text-sm bg-teal-600 text-white rounded-lg px-4 py-2 font-medium hover:bg-teal-700 disabled:opacity-40 flex items-center gap-1.5">{rsBusy?<Loader2 className="w-4 h-4 animate-spin"/>:<Boxes className="w-4 h-4"/>}Restock to inventory</button><button onClick={()=>setRestock(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
+        </div>
+      </div>}
       <div className="flex items-center justify-between"><h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Undo2 className="w-4 h-4"/>Returns &amp; RMAs</h2><button onClick={()=>setCreating(v=>!v)} className="flex items-center gap-1 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8]"><Plus className="w-4 h-4"/>Create Return</button></div>
       {reqs&&reqs.length>0&&(()=>{ const byReason={}; reqs.forEach(r=>{ const k=r.reason||"Other"; byReason[k]=(byReason[k]||0)+1; }); const topReasons=Object.keys(byReason).sort((a,b)=>byReason[b]-byReason[a]).slice(0,4); const stTone2={new:"blue",approved:"green",denied:"rose",received:"amber",refunded:"stone",credited:"stone",exchanged:"stone",closed:"stone"}; return (<>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -11702,6 +11725,7 @@ function Returns({returns,setReturns,orders,settings,logEmail}){
             <div className="flex items-center gap-1.5 flex-wrap">
               {rq.status==="new"&&<><button onClick={()=>fromRequest(rq)} className="text-xs bg-[#0086E0] text-white rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#006db8]">Approve &amp; create label</button><button onClick={()=>setReqStatus(rq.id,"denied")} className="text-xs bg-stone-100 text-stone-500 rounded-lg px-2.5 py-1.5 hover:bg-rose-50 hover:text-rose-600">Deny</button></>}
               {rq.status==="approved"&&<button onClick={()=>setReqStatus(rq.id,"received")} className="text-xs bg-amber-100 text-amber-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-amber-200">Mark received</button>}
+              {rq.status==="received"&&<button onClick={()=>setRestock({rq,lines:[{sku:"",qty:1}]})} title="Put returned items back into inventory" className="text-xs bg-teal-100 text-teal-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-teal-200">Restock</button>}
               {rq.status==="received"&&<><button onClick={()=>setReqStatus(rq.id,"refunded")} className="text-xs bg-emerald-100 text-emerald-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-emerald-200">Refunded</button><button onClick={()=>setReqStatus(rq.id,"credited")} className="text-xs bg-violet-100 text-violet-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-violet-200">Store credit</button><button onClick={()=>setReqStatus(rq.id,"exchanged")} className="text-xs bg-sky-100 text-sky-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-sky-200">Exchanged</button></>}
               {["refunded","credited","exchanged","denied","closed"].indexOf(rq.status)<0&&rq.status!=="new"&&<button onClick={()=>setReqStatus(rq.id,"closed")} className="text-xs bg-stone-100 text-stone-400 rounded-lg px-2 py-1.5 hover:bg-stone-200">Close</button>}
             </div>

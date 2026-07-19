@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v684";
+const BUILD_TAG="addr-v685";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10583,12 +10583,12 @@ function PickList({orders,items}){
     {built&&<div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
       <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 flex items-center justify-between"><span>Pick sheet · {built.orders} order(s) · {built.rows.reduce((s,r)=>s+r.qty,0)} units</span><button onClick={printSheet} className="normal-case tracking-normal text-xs bg-white border border-stone-200 rounded px-2 py-1 hover:bg-stone-100 flex items-center gap-1"><Printer className="w-3.5 h-3.5"/>Print</button></div>
       <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-[10px] uppercase tracking-widest text-stone-400"><th className="px-3 py-2">Bin</th><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">Pick</th><th className="px-3 py-2 text-right">On hand</th></tr></thead>
-        <tbody className="divide-y divide-stone-100">{built.rows.map(r=>(<tr key={r.sku} className={r.short?"bg-rose-50/50":""}>
-          <td className="px-3 py-2 text-stone-600">{r.loc||"—"}</td>
+        <tbody className="divide-y divide-stone-100">{(()=>{ let lastZone=null; const out=[]; built.rows.forEach(r=>{ const zone=r.loc||"Unassigned"; if(zone!==lastZone){ lastZone=zone; out.push(<tr key={"z-"+zone} className="bg-[#f2f8fd]"><td colSpan={4} className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-[#0086E0] font-semibold flex items-center gap-1"><MapPin className="w-3 h-3"/>{zone}</td></tr>); } out.push(<tr key={r.sku} className={r.short?"bg-rose-50/50":""}>
+          <td className="px-3 py-2 text-stone-400 text-xs">{r.loc||"—"}</td>
           <td className="px-3 py-2"><div className="text-stone-800">{r.name||r.sku}</div><div className="text-[11px] text-stone-400">{r.sku}</div></td>
           <td className="px-3 py-2 text-right font-semibold text-stone-900">{r.qty}</td>
           <td className={`px-3 py-2 text-right ${r.short?"text-rose-600":"text-stone-500"}`}>{r.onHand==null?"—":r.onHand}{r.short?" (short "+r.short+")":""}</td>
-        </tr>))}</tbody></table></div>
+        </tr>); }); return out; })()}</tbody></table></div>
     </div>}
   </div>);
 }

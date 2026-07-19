@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v687";
+const BUILD_TAG="addr-v688";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10398,7 +10398,7 @@ function PurchaseOrders({pos,setPos,suppliers,items,showMoney,onReload,seed,onSe
     const receipts=Object.keys(receiving.qty||{}).map(sku=>({sku,qty:+receiving.qty[sku]||0})).filter(x=>x.qty>0);
     if(!receipts.length){flash("Enter quantities to receive.",true);return;}
     setBusy("recv");
-    const r=await cloudCall({action:"poReceive",token:CLOUD.token,id:receiving.po.id,receipts});
+    const r=await cloudCall({action:"poReceive",token:CLOUD.token,id:receiving.po.id,receipts,landedCost:receiving.landedCost===""?0:+receiving.landedCost});
     setBusy("");
     if(r&&r.ok){ setPos(p=>(p||[]).map(x=>x.id===r.po.id?r.po:x)); setReceiving(null); flash("Received into stock."); onReload&&onReload(); } else flash((r&&r.error)||"Receive failed.",true);
   };
@@ -10459,6 +10459,10 @@ function PurchaseOrders({pos,setPos,suppliers,items,showMoney,onReload,seed,onSe
               <input type="number" min="0" value={receiving.qty[l.sku]} onChange={e=>setReceiving(r=>({...r,qty:{...r.qty,[l.sku]:e.target.value}}))} className="w-20 border border-stone-300 rounded-lg px-2 py-1.5 text-sm"/>
             </div>);})}
         </div>
+        {showMoney&&<label className="block mt-3 text-xs text-stone-600">Landed cost — freight, duty &amp; fees for this receipt (optional)
+          <input type="number" min="0" step="0.01" value={receiving.landedCost||""} onChange={e=>setReceiving(r=>({...r,landedCost:e.target.value}))} placeholder="0.00" className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm mt-1"/>
+          <span className="text-[11px] text-stone-400 block mt-0.5">Spread evenly across the units you receive and added to their unit cost.</span>
+        </label>}
         <div className="flex items-center gap-2 mt-4"><button onClick={doReceive} disabled={busy==="recv"} className="text-sm bg-emerald-600 text-white rounded-lg px-4 py-2 font-medium hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-1.5">{busy==="recv"?<Loader2 className="w-4 h-4 animate-spin"/>:<CheckCircle2 className="w-4 h-4"/>}Receive into stock</button><button onClick={()=>setReceiving(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
       </div>
     </div>}

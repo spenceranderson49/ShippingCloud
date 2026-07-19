@@ -1064,14 +1064,22 @@ exports.handler = async (event) => {
           received.push({ sku: l.sku, name: l.name, qty: q, cost: l.cost });
           return { ...l, qtyReceived: (l.qtyReceived || 0) + q };
         });
+        /* Landed cost: total freight/duty for this receipt, allocated per unit across everything
+           received so each item's cost reflects its TRUE landed cost (NetSuite/Fishbowl style). */
+        const landed = Math.max(0, money2(body.landedCost || 0));
+        const totalUnits = received.reduce((s, rc) => s + rc.qty, 0);
+        const perUnit = totalUnits > 0 ? landed / totalUnits : 0;
         // Push receipts into inventory (create item if missing), logging each as a PO receipt.
         for (const rc of received) {
           const cur2 = await readItem(rc.sku);
           if (!cur2.ok) return J({ ok: false, retry: true, error: "Couldn't read " + rc.sku + " — try again." });
           const prev = (cur2.value && typeof cur2.value === "object") ? cur2.value : null;
           const it = prev ? { ...prev } : { sku: rc.sku, name: rc.name || "", onHand: 0, createdAt: nowISO };
+          const landedUnitCost = money2((+rc.cost || 0) + perUnit);
           const before = +it.onHand || 0; it.onHand = before + rc.qty;
-          if (rc.cost) it.cost = money2(rc.cost); if (rc.name && !it.name) it.name = rc.name; it.updatedAt = nowISO;
+          if (it.fifo || Array.isArray(it.layers)) { if (!Array.isArray(it.layers)) it.layers = []; it.layers.push({ qty: rc.qty, cost: landedUnitCost, at: nowISO }); if (it.layers.length > 200) it.layers = it.layers.slice(-200); }
+          if (rc.cost || perUnit) it.cost = landedUnitCost;
+          if (rc.name && !it.name) it.name = rc.name; it.updatedAt = nowISO;
           const w2 = await writeItem(rc.sku, it);
           if (!w2.ok) return J({ ok: false, error: "Save failed on " + rc.sku + "." });
           await addLog({ type: "receipt", sku: rc.sku, name: it.name || "", qty: rc.qty, balance: it.onHand, ref: po.number });

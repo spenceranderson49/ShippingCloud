@@ -703,6 +703,20 @@ exports.handler = async (event) => {
          exists, onHand is always re-derived as the sum of its locations, so the two can never drift. */
       const applyStockDelta = (it, delta, preferLoc) => {
         const before = +it.onHand || 0;
+        /* FIFO cost layers: consume oldest-cost stock first on ship, recording COGS on the item.
+           Purely a costing overlay — runs alongside the quantity model below, never replaces it. */
+        if (delta < 0 && Array.isArray(it.layers) && it.layers.length) {
+          let need = -delta, cogs = 0;
+          for (const L of it.layers) { if (need <= 0) break; const take = Math.min(need, +L.qty || 0); cogs += take * (+L.cost || 0); L.qty = (+L.qty || 0) - take; need -= take; }
+          it.layers = it.layers.filter((L) => (+L.qty || 0) > 0);
+          it._lastCogs = Math.round(cogs * 100) / 100;   // read by the ship logger
+        }
+        /* Serial-tracked: on-hand = count of in-stock serials; shipping removes the oldest (FIFO). */
+        if (it.trackSerial && Array.isArray(it.serials)) {
+          if (delta < 0) it.serials = it.serials.slice(-delta);
+          it.onHand = it.serials.length;
+          return;
+        }
         /* Lot-tracked: quantities live in it.lots; shipping consumes first-expiry-first-out (FEFO).
            Backward-compatible — only engages when the item actually has lots. */
         if (Array.isArray(it.lots) && (it.lots.length || it.trackLot)) {
@@ -755,6 +769,8 @@ exports.handler = async (event) => {
         if (body.uom != null) it.uom = String(body.uom).trim().slice(0, 20);        // base unit (each/case/lb…)
         if (body.casePack != null) it.casePack = Math.max(0, Math.round(+body.casePack || 0));  // units per case for case-receiving
         if (body.trackLot != null) { it.trackLot = !!body.trackLot; if (it.trackLot && !Array.isArray(it.lots)) it.lots = []; if (!it.trackLot) delete it.lots; }
+        if (body.trackSerial != null) { it.trackSerial = !!body.trackSerial; if (it.trackSerial && !Array.isArray(it.serials)) it.serials = []; if (!it.trackSerial) delete it.serials; }
+        if (body.fifo != null) { it.fifo = !!body.fifo; if (it.fifo && !Array.isArray(it.layers)) it.layers = []; if (!it.fifo) delete it.layers; }
         /* Kit / bill-of-materials: a list of component SKUs consumed when this item ships. Empty array
            clears it (item becomes a normal stocked SKU again). */
         if (body.kit != null) {
@@ -812,9 +828,10 @@ exports.handler = async (event) => {
           if (!prev) return { skipped: true };   // untracked component/SKU → skip silently
           const it = { ...prev }; const before = +it.onHand || 0;
           applyStockDelta(it, -qty, null); it.updatedAt = nowISO;
+          const cogs = it._lastCogs; delete it._lastCogs;   // transient — record in the log, don't persist
           const w = await writeItem(sku, it);
           if (!w.ok) return { fail: true };
-          await addLog({ type: "ship", sku, name: it.name || "", qty: it.onHand - before, balance: it.onHand, ref, kitOf: kitOf || undefined });
+          await addLog({ type: "ship", sku, name: it.name || "", qty: it.onHand - before, balance: it.onHand, ref, kitOf: kitOf || undefined, cogs: cogs != null ? cogs : undefined });
           return { it };
         };
         for (const ln of lines.slice(0, 200)) {
@@ -849,7 +866,16 @@ exports.handler = async (event) => {
           // receiving
           const it = prev ? { ...prev } : { sku, name: String(ln.name || "").slice(0, 120), onHand: 0, createdAt: nowISO };
           const before = +it.onHand || 0;
-          if (it.trackLot || Array.isArray(it.lots)) {
+          const recvCost = (ln.cost != null && ln.cost !== "") ? money2(ln.cost) : (+it.cost || 0);
+          /* FIFO cost layer for this receipt (if the item uses FIFO). Costing overlay only. */
+          if (it.fifo || Array.isArray(it.layers)) { if (!Array.isArray(it.layers)) it.layers = []; it.layers.push({ qty, cost: recvCost, at: nowISO }); if (it.layers.length > 200) it.layers = it.layers.slice(-200); }
+          if (it.trackSerial || Array.isArray(it.serials)) {
+            /* Serial receive: add each unique serial number. Qty derives from the count. */
+            if (!Array.isArray(it.serials)) it.serials = [];
+            const sns = Array.isArray(ln.serials) ? ln.serials : String(ln.serials || "").split(/[\s,]+/);
+            for (const s of sns) { const v = String(s).trim().slice(0, 60); if (v && !it.serials.includes(v)) it.serials.push(v); }
+            it.onHand = it.serials.length;
+          } else if (it.trackLot || Array.isArray(it.lots)) {
             /* Lot-tracked receive: merge into an existing lot (same lot#+expiry) or add a new one. */
             if (!Array.isArray(it.lots)) it.lots = [];
             const lot = String(ln.lot || "").slice(0, 40); const expiry = String(ln.expiry || "").slice(0, 20);

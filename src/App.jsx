@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v677";
+const BUILD_TAG="addr-v678";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10026,11 +10026,11 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     setBusy("");
     if(r&&r.ok){ patch(r.item); const diff=cnt-(+it.onHand||0); flash(it.sku+" counted → "+cnt+(diff?" ("+(diff>0?"+":"")+diff+" variance)":" (no variance)")); load(); } else flash((r&&r.error)||"Count failed.",true);
   };
-  const openEdit=(it)=>{ setEf({sku:it.sku,name:it.name||"",reorder:it.reorder??"",cost:it.cost??"",loc:it.loc||"",barcode:it.barcode||"",category:it.category||"",uom:it.uom||"",casePack:it.casePack??"",trackLot:!!it.trackLot,kit:Array.isArray(it.kit)?it.kit.map(c=>({sku:c.sku,qty:c.qty})):[]}); setEditSku(it.sku); };
+  const openEdit=(it)=>{ setEf({sku:it.sku,name:it.name||"",reorder:it.reorder??"",maxStock:it.maxStock??"",cost:it.cost??"",loc:it.loc||"",barcode:it.barcode||"",category:it.category||"",uom:it.uom||"",casePack:it.casePack??"",trackLot:!!it.trackLot,kit:Array.isArray(it.kit)?it.kit.map(c=>({sku:c.sku,qty:c.qty})):[]}); setEditSku(it.sku); };
   const saveEdit=async()=>{
     if(!ef)return; setBusy("edit");
     const kit=(ef.kit||[]).filter(c=>String(c.sku||"").trim()).map(c=>({sku:c.sku,qty:Math.max(1,Math.round(+c.qty||1))}));
-    const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:ef.sku,name:ef.name,reorder:ef.reorder===""?0:+ef.reorder,cost:ef.cost===""?"":+ef.cost,loc:ef.loc,barcode:ef.barcode||"",category:ef.category||"",uom:ef.uom||"",casePack:ef.casePack===""?0:+ef.casePack,trackLot:!!ef.trackLot,kit});
+    const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:ef.sku,name:ef.name,reorder:ef.reorder===""?0:+ef.reorder,maxStock:ef.maxStock===""?0:+ef.maxStock,cost:ef.cost===""?"":+ef.cost,loc:ef.loc,barcode:ef.barcode||"",category:ef.category||"",uom:ef.uom||"",casePack:ef.casePack===""?0:+ef.casePack,trackLot:!!ef.trackLot,kit});
     setBusy("");
     if(r&&r.ok){ patch(r.item); setEditSku(null); setEf(null); flash("Saved "+r.item.sku+"."); load(); } else flash((r&&r.error)||"Couldn't save.",true);
   };
@@ -10106,7 +10106,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const reorderLowStock=()=>{
     const low=list.filter(it=>!(Array.isArray(it.kit)&&it.kit.length)&&(+it.reorder||0)>0&&(+it.onHand||0)<=(+it.reorder||0));
     if(!low.length)return;
-    const lines=low.map(it=>{ const target=Math.max((+it.reorder||0)*2,(+it.reorder||0)+1); return {sku:it.sku,name:it.name||"",qtyOrdered:Math.max(1,target-(+it.onHand||0)),qtyReceived:0,cost:it.cost||""}; });
+    const lines=low.map(it=>{ const target=(+it.maxStock>0)?+it.maxStock:Math.max((+it.reorder||0)*2,(+it.reorder||0)+1); return {sku:it.sku,name:it.name||"",qtyOrdered:Math.max(1,target-(+it.onHand||0)),qtyReceived:0,cost:it.cost||""}; });
     setPoSeed({number:"",supplierId:"",expectedAt:"",notes:"Auto-generated from low stock",lines});
     setView("pos");
   };
@@ -10209,7 +10209,8 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
         <div className="flex items-center justify-between mb-3"><div className="font-semibold text-stone-900">Edit {ef.sku}</div><button onClick={()=>{setEf(null);setEditSku(null);}} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
         <div className="grid grid-cols-2 gap-2">
           <Field label="Name"><Input value={ef.name} onChange={e=>setEf({...ef,name:e.target.value})}/></Field>
-          <Field label="Reorder at"><Input type="number" value={ef.reorder} onChange={e=>setEf({...ef,reorder:e.target.value})}/></Field>
+          <Field label="Reorder at (min)"><Input type="number" value={ef.reorder} onChange={e=>setEf({...ef,reorder:e.target.value})}/></Field>
+          <Field label="Reorder up to (max)"><Input type="number" value={ef.maxStock??""} onChange={e=>setEf({...ef,maxStock:e.target.value})} placeholder="target level"/></Field>
           {showMoney&&<Field label="Unit cost"><Input type="number" value={ef.cost} onChange={e=>setEf({...ef,cost:e.target.value})}/></Field>}
           <Field label="Location / bin"><Input value={ef.loc} onChange={e=>setEf({...ef,loc:e.target.value})}/></Field>
           <Field label="Barcode / UPC"><Input value={ef.barcode} onChange={e=>setEf({...ef,barcode:e.target.value})}/></Field>

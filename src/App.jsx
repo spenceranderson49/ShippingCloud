@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v716";
+const BUILD_TAG="addr-v717";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7436,7 +7436,7 @@ function AppInner(){
           {tab==="drafts"&&<Drafts drafts={drafts} setDrafts={setDrafts} goShip={goShip}/>}
           {tab==="returns"&&<Returns returns={returns} setReturns={setReturns} orders={orders} settings={settings} logEmail={logEmail}/>}
           {tab==="pickups"&&<Pickups pickups={pickups} setPickups={setPickups} settings={settings} client={client} isAdmin={isAdmin} showCosts={featureOn("pickupCosts",currentUser,myFlags)}/>}
-          {tab==="inventory"&&<Inventory settings={settings} setSettings={setSettings} client={client} showMoney={showMoney} currentUser={currentUser} orders={orders}/>}
+          {tab==="inventory"&&<Inventory settings={settings} setSettings={setSettings} client={client} showMoney={showMoney} currentUser={currentUser} orders={orders} goShip={goShip}/>}
           {tab==="invoices"&&<Invoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>}
           {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings} client={client} onShipped={onShipped}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
@@ -10027,7 +10027,10 @@ function printLabels(items,opts){
    Company-shared stock, one row per SKU on the server (inv:<clientId>:<sku>). Tracks on-hand,
    reorder point, unit cost and location; receives POs; auto-decrements when orders ship (see the
    invShip hook in AppInner). Money columns hide when the login can't see costs. */
-function Inventory({settings,setSettings,client,showMoney=true,currentUser,orders=[]}){
+function Inventory({settings,setSettings,client,showMoney=true,currentUser,orders=[],goShip}){
+  /* Ship an order straight from the WMS — hands the order to the Ship tab, prefilled, so the warehouse
+     flow (To Ship / Pack) connects to the shipping portal. Mirrors the Orders tab's ship(). */
+  const shipOrder=(o)=>{ if(!goShip||!o)return; goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email,country:o.country||"United States"},weight:o.weight,reference:o.name,fromOrderId:o.id,refulfill:o.status==="fulfilled"}); };
   const [items,setItems]=useState(null);   // null = loading
   const [log,setLog]=useState([]);
   const [err,setErr]=useState(""); const [ok,setOk]=useState("");
@@ -10267,9 +10270,9 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   </div>); };
   if(view==="overview") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryOverview list={list} pos={pos} log={log} suppliers={suppliers} orders={orders} showMoney={showMoney} committedBySku={committedBySku} incomingBySku={incomingBySku} goView={setView} onReceive={()=>setView("stock")}/></div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
-  if(view==="toship") return (<div className="max-w-5xl space-y-4"><Switcher/><ToShip orders={orders} list={list} committedBySku={committedBySku} goView={setView}/></div>);
+  if(view==="toship") return (<div className="max-w-5xl space-y-4"><Switcher/><ToShip orders={orders} list={list} committedBySku={committedBySku} goView={setView} shipOrder={goShip?shipOrder:null}/></div>);
   if(view==="pick") return (<div className="max-w-5xl space-y-4"><Switcher/><PickList orders={orders} items={list}/></div>);
-  if(view==="pack") return (<div className="max-w-5xl space-y-4"><Switcher/><PackVerify orders={orders} items={list}/></div>);
+  if(view==="pack") return (<div className="max-w-5xl space-y-4"><Switcher/><PackVerify orders={orders} items={list} shipOrder={goShip?shipOrder:null}/></div>);
   if(view==="scan") return (<div className="max-w-5xl space-y-4"><Switcher/><ScanReceive items={list} onReceived={patch} reload={load}/></div>);
   if(view==="warehouses") return (<div className="max-w-5xl space-y-4"><Switcher/><WarehousesView warehouses={warehouses} setWarehouses={setWarehouses} items={list}/></div>);
   if(view==="containers") return (<div className="max-w-5xl space-y-4"><Switcher/><ContainerTypes containers={containers} setContainers={setContainers} showMoney={showMoney}/></div>);
@@ -10986,7 +10989,7 @@ function SuppliersView({suppliers,setSuppliers}){
 
 /* Pack-verify station — pick an order, scan each item into the box; the order can't be marked packed
    until every line is fully scanned. Catches mis-picks. Read-only against inventory. */
-function PackVerify({orders,items}){
+function PackVerify({orders,items,shipOrder}){
   const open=(orders||[]).filter(o=>o&&o.status!=="fulfilled"&&Array.isArray(o.lineItems)&&o.lineItems.some(li=>li&&li.sku));
   const [order,setOrder]=useState(null);
   const [scanned,setScanned]=useState({});   // sku(lower) → count
@@ -11033,7 +11036,7 @@ function PackVerify({orders,items}){
             <div className={`text-sm font-semibold ${done?"text-emerald-600":"text-stone-700"}`}>{l.have}/{l.need}</div>
           </div>);})}
         </div>
-        {allDone&&<div className="mt-3 flex items-center gap-2 text-sm text-emerald-700 font-medium"><CheckCircle2 className="w-5 h-5"/>Verified — everything's in the box. Ready to ship.</div>}
+        {allDone&&<div className="mt-3 flex items-center justify-between gap-2 flex-wrap"><div className="flex items-center gap-2 text-sm text-emerald-700 font-medium"><CheckCircle2 className="w-5 h-5"/>Verified — everything's in the box. Ready to ship.</div>{shipOrder&&<button onClick={()=>shipOrder(order)} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Truck className="w-4 h-4"/>Ship this order</button>}</div>}
       </div>
       </>
     )}
@@ -11087,7 +11090,7 @@ function ScanReceive({items,onReceived,reload}){
 /* To Ship — the warehouse's daily work queue (ShipHero-style). Every unfulfilled order with a stock-
    readiness badge (ready to pick vs short), sorted so the ready + oldest float up. Read-only; jumps
    into the pick and pack flows. Deliberately plain so a first-timer knows exactly what to do next. */
-function ToShip({orders,list,committedBySku,goView}){
+function ToShip({orders,list,committedBySku,goView,shipOrder}){
   const stockBySku=useMemo(()=>{ const m={}; (list||[]).forEach(it=>{ if(Array.isArray(it.kit)&&it.kit.length&&!it.assembled)return; m[String(it.sku).toLowerCase()]=+it.onHand||0; }); return m; },[list]);
   const open=(orders||[]).filter(o=>o&&o.status!=="fulfilled"&&Array.isArray(o.lineItems)&&o.lineItems.length);
   const rows=open.map(o=>{ const lis=(o.lineItems||[]).filter(li=>li&&li.sku); const tracked=lis.filter(li=>String(li.sku).toLowerCase() in stockBySku); const short=tracked.filter(li=>(stockBySku[String(li.sku).toLowerCase()]||0)<(+li.qty||+li.quantity||1)).map(li=>li.sku); const units=lis.reduce((s,li)=>s+(+li.qty||+li.quantity||1),0); const t=Date.parse(o.date||"")||0; return {o,ready:tracked.length>0&&short.length===0,unknown:tracked.length===0,short,units,skus:lis.length,t}; })
@@ -11108,6 +11111,7 @@ function ToShip({orders,list,committedBySku,goView}){
       {rows.map(({o,ready,unknown,short,units,skus,t})=>(<div key={o.id} className="p-3 flex items-center gap-3 flex-wrap">
         <div className="shrink-0">{ready?<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700">Ready</span>:unknown?<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-stone-100 text-stone-500">No stock link</span>:<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-amber-100 text-amber-700">Short</span>}</div>
         <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{o.name||o.id}{o.customer?" · "+o.customer:""}</div><div className="text-[11px] text-stone-400 truncate">{skus} line{skus!==1?"s":""} · {units} unit{units!==1?"s":""}{short.length?" · short: "+short.slice(0,3).join(", "):""}{t?" · "+age(t)+" old":""}</div></div>
+        {shipOrder&&<button onClick={()=>shipOrder(o)} className="shrink-0 text-xs bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1"><Truck className="w-3.5 h-3.5"/>Ship</button>}
       </div>))}
     </div>
   </div>);

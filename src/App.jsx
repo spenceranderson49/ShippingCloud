@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v708";
+const BUILD_TAG="addr-v709";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10948,6 +10948,11 @@ function PackVerify({orders,items}){
   const [msg,setMsg]=useState("");
   const inputRef=useRef(null);
   const byCode=useMemo(()=>{ const m={}; (items||[]).forEach(it=>{ if(it.barcode)m[String(it.barcode).trim().toLowerCase()]=String(it.sku).toLowerCase(); m[String(it.sku).toLowerCase()]=m[String(it.sku).toLowerCase()]||String(it.sku).toLowerCase(); }); return m; },[items]);
+  const itBySku=useMemo(()=>{ const m={}; (items||[]).forEach(it=>{ m[String(it.sku).toLowerCase()]=it; }); return m; },[items]);
+  // Cartonization: packing-group rules → suggested box for an order (loaded lazily).
+  const [packgroups,setPackgroups]=useState([]); const [containers,setContainers]=useState([]);
+  useEffect(()=>{ let dead=false; (async()=>{ const [rg,rc]=await Promise.all([cloudCall({action:"wlistGet",token:CLOUD.token,kind:"packgroups"}),cloudCall({action:"containerList",token:CLOUD.token})]); if(!dead){ if(rg&&rg.ok)setPackgroups(rg.items||[]); if(rc&&rc.ok)setContainers(rc.items?rc.items:(rc.containers||[])); } })(); return ()=>{dead=true;}; },[]);
+  const suggestBox=(o)=>{ if(!o||!packgroups.length)return null; for(const li of (o.lineItems||[])){ const it=itBySku[String(li.sku||"").toLowerCase()]; const cat=(it&&it.category||"").toLowerCase(); const hay=((it&&it.name||"")+" "+(li.sku||"")+" "+(li.title||li.name||"")).toLowerCase(); for(const g of packgroups){ const m=String(g.match||"").trim().toLowerCase(); if(!m||!g.container)continue; if(cat===m||hay.includes(m))return g.container; } } return null; };
   const need=useMemo(()=>{ const m={}; if(order){ (order.lineItems||[]).forEach(li=>{ const s=String(li.sku||"").trim().toLowerCase(); if(!s)return; m[s]=(m[s]||0)+(+li.qty||+li.quantity||1); }); } return m; },[order]);
   const start=(o)=>{ setOrder(o); setScanned({}); setMsg(""); setTimeout(()=>{try{inputRef.current&&inputRef.current.focus();}catch(e){}},50); };
   const doScan=(raw)=>{
@@ -10970,6 +10975,7 @@ function PackVerify({orders,items}){
       <>
       <div className={`border rounded-xl p-4 ${allDone?"border-emerald-300 bg-emerald-50/50":"border-stone-200 bg-white"}`}>
         <div className="flex items-center justify-between mb-3"><div className="font-medium text-stone-900">{order.name||order.id} · {order.customer||""}</div><button onClick={()=>setOrder(null)} className="text-xs text-stone-500 hover:text-stone-700">← pick another</button></div>
+        {(()=>{ const box=suggestBox(order); return box?<div className="mb-3 text-xs bg-sky-50 text-[#0086E0] rounded-lg px-3 py-2 flex items-center gap-1.5"><Package className="w-3.5 h-3.5"/>Suggested box: <b>{box}</b></div>:null; })()}
         {!allDone&&<div className="flex items-end gap-2 mb-3">
           <label className="text-xs text-stone-600 flex-1">Scan item<input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();doScan(val);}}} placeholder="Scan barcode or type SKU…" className="mt-1 w-full border border-stone-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#0086E0]" autoFocus/></label>
         </div>}

@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v676";
+const BUILD_TAG="addr-v677";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10567,6 +10567,13 @@ function InventoryAnalytics({list,log,showMoney=true}){
   const expLots=[]; stock.forEach(it=>{ if(!it.trackLot||!Array.isArray(it.lots))return; it.lots.forEach(l=>{ if(l.expiry){ const days=Math.ceil((Date.parse(l.expiry)-Date.now())/864e5); if(days<=30)expLots.push({sku:it.sku,name:it.name,lot:l.lot,qty:l.qty,expiry:l.expiry,days}); } }); }); expLots.sort((a,b)=>a.days-b.days);
   // Demand forecast: days-to-stockout from 30-day velocity, flag items running out within 14 days.
   const forecast=stock.map(it=>{ const v=shipBySku[String(it.sku).toLowerCase()]||0; const daily=v/30; const days=daily>0?Math.floor((+it.onHand||0)/daily):null; const suggest=daily>0?Math.max(1,Math.round(daily*30)-(+it.onHand||0)):0; return {sku:it.sku,name:it.name,onHand:+it.onHand||0,v30:v,days,suggest}; }).filter(x=>x.v30>0&&x.days!=null&&x.days<=14).sort((a,b)=>a.days-b.days);
+  // ABC analysis: rank SKUs by annualized usage value; A = top 80% of value, B = next 15%, C = last 5%.
+  const cogs30=stock.reduce((s,it)=>s+((shipBySku[String(it.sku).toLowerCase()]||0)*(+it.cost||0)),0);   // cost of goods shipped, 30d
+  const turnover=totValue>0?Math.round((cogs30*12/totValue)*10)/10:null;   // annualized inventory turns
+  const abcAll=stock.map(it=>({sku:it.sku,name:it.name,annual:(shipBySku[String(it.sku).toLowerCase()]||0)*12*(+it.cost||0)})).sort((a,b)=>b.annual-a.annual);
+  const abcTotal=abcAll.reduce((s,x)=>s+x.annual,0); let abcCum=0;
+  abcAll.forEach(x=>{ abcCum+=x.annual; x.cls=abcTotal<=0?"C":(abcCum/abcTotal<=0.8?"A":abcCum/abcTotal<=0.95?"B":"C"); });
+  const abcCounts={A:abcAll.filter(x=>x.cls==="A"&&x.annual>0).length,B:abcAll.filter(x=>x.cls==="B"&&x.annual>0).length,C:abcAll.filter(x=>x.cls==="C").length};
   const DEAD_DAYS=60;
   const dead=stock.filter(it=>(+it.onHand||0)>0&&(()=>{ const t=lastShip[String(it.sku).toLowerCase()]; return !t||(Date.now()-t)>DEAD_DAYS*864e5; })());
   const deadValue=dead.reduce((s,it)=>s+(+it.onHand||0)*(+it.cost||0),0);
@@ -10587,7 +10594,17 @@ function InventoryAnalytics({list,log,showMoney=true}){
       <Tile label="Units shipped (30d)" value={ship30.toLocaleString()} sub="from movement log"/>
       <Tile label="Days of cover" value={daysCover!=null?daysCover+"d":"—"} sub={daysCover!=null?"at current pace":"no recent sales"}/>
       <Tile label="Running out soon" value={forecast.length} tone={forecast.length?"text-rose-600":"text-stone-900"} sub="≤14 days at current pace"/>
+      {showMoney&&<Tile label="Inventory turns" value={turnover!=null?turnover+"×":"—"} sub="annualized (COGS ÷ value)"/>}
     </div>
+    {showMoney&&abcTotal>0&&<div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 flex items-center justify-between"><span>ABC analysis — SKUs by usage value</span><span className="normal-case tracking-normal">A {abcCounts.A} · B {abcCounts.B} · C {abcCounts.C}</span></div>
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-[10px] uppercase tracking-widest text-stone-400"><th className="px-3 py-2">Class</th><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">Annual usage value</th></tr></thead>
+        <tbody className="divide-y divide-stone-100">{abcAll.filter(x=>x.annual>0).slice(0,12).map(x=>(<tr key={x.sku}>
+          <td className="px-3 py-2"><span className={`text-[10px] font-bold rounded px-1.5 py-0.5 ${x.cls==="A"?"bg-emerald-100 text-emerald-700":x.cls==="B"?"bg-amber-100 text-amber-700":"bg-stone-100 text-stone-500"}`}>{x.cls}</span></td>
+          <td className="px-3 py-2"><div className="text-stone-800">{x.name||x.sku}</div><div className="text-[11px] text-stone-400">{x.sku}</div></td>
+          <td className="px-3 py-2 text-right text-stone-700">{money(x.annual)}</td>
+        </tr>))}</tbody></table></div>
+    </div>}
     {expLots.length>0&&<div className="border border-amber-200 rounded-xl bg-white overflow-hidden">
       <div className="px-4 py-2 bg-amber-50 text-[10px] uppercase tracking-widest text-amber-600">Expiring lots — within 30 days</div>
       <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-[10px] uppercase tracking-widest text-stone-400"><th className="px-3 py-2">Item</th><th className="px-3 py-2">Lot</th><th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2">Expiry</th><th className="px-3 py-2 text-right">Days</th></tr></thead>

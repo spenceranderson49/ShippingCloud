@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v673";
+const BUILD_TAG="addr-v674";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9991,10 +9991,11 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     const rcvIt=list.find(x=>x.sku===rcv.sku);
     const cp=(rcvIt&&+rcvIt.casePack)||0;
     const units=(rcv.unit==="cases"&&cp>0)?(+rcv.qty*cp):+rcv.qty;   // case-pack conversion
+    if(rcvIt&&rcvIt.trackLot&&!String(rcv.lot||"").trim()){flash("This item tracks lots — enter a lot number.",true);return;}
     setBusy("rcv");
-    const r=await cloudCall({action:"invReceive",token:CLOUD.token,lines:[{sku:rcv.sku,qty:units,cost:rcv.cost===""?"":+rcv.cost}]});
+    const r=await cloudCall({action:"invReceive",token:CLOUD.token,lines:[{sku:rcv.sku,qty:units,cost:rcv.cost===""?"":+rcv.cost,lot:rcv.lot||"",expiry:rcv.expiry||""}]});
     setBusy("");
-    if(r&&r.ok&&r.items&&r.items[0]){ patch(r.items[0]); setRcv({sku:"",qty:"",cost:"",unit:"units"}); flash("Received "+units+" — "+r.items[0].sku+" now "+r.items[0].onHand+"."); load(); }
+    if(r&&r.ok&&r.items&&r.items[0]){ patch(r.items[0]); setRcv({sku:"",qty:"",cost:"",unit:"units",lot:"",expiry:""}); flash("Received "+units+" — "+r.items[0].sku+" now "+r.items[0].onHand+"."); load(); }
     else flash((r&&r.error)||"Receive failed.",true);
   };
   const importCatalog=async()=>{
@@ -10021,11 +10022,11 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     setBusy("");
     if(r&&r.ok){ patch(r.item); const diff=cnt-(+it.onHand||0); flash(it.sku+" counted → "+cnt+(diff?" ("+(diff>0?"+":"")+diff+" variance)":" (no variance)")); load(); } else flash((r&&r.error)||"Count failed.",true);
   };
-  const openEdit=(it)=>{ setEf({sku:it.sku,name:it.name||"",reorder:it.reorder??"",cost:it.cost??"",loc:it.loc||"",barcode:it.barcode||"",category:it.category||"",uom:it.uom||"",casePack:it.casePack??"",kit:Array.isArray(it.kit)?it.kit.map(c=>({sku:c.sku,qty:c.qty})):[]}); setEditSku(it.sku); };
+  const openEdit=(it)=>{ setEf({sku:it.sku,name:it.name||"",reorder:it.reorder??"",cost:it.cost??"",loc:it.loc||"",barcode:it.barcode||"",category:it.category||"",uom:it.uom||"",casePack:it.casePack??"",trackLot:!!it.trackLot,kit:Array.isArray(it.kit)?it.kit.map(c=>({sku:c.sku,qty:c.qty})):[]}); setEditSku(it.sku); };
   const saveEdit=async()=>{
     if(!ef)return; setBusy("edit");
     const kit=(ef.kit||[]).filter(c=>String(c.sku||"").trim()).map(c=>({sku:c.sku,qty:Math.max(1,Math.round(+c.qty||1))}));
-    const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:ef.sku,name:ef.name,reorder:ef.reorder===""?0:+ef.reorder,cost:ef.cost===""?"":+ef.cost,loc:ef.loc,barcode:ef.barcode||"",category:ef.category||"",uom:ef.uom||"",casePack:ef.casePack===""?0:+ef.casePack,kit});
+    const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:ef.sku,name:ef.name,reorder:ef.reorder===""?0:+ef.reorder,cost:ef.cost===""?"":+ef.cost,loc:ef.loc,barcode:ef.barcode||"",category:ef.category||"",uom:ef.uom||"",casePack:ef.casePack===""?0:+ef.casePack,trackLot:!!ef.trackLot,kit});
     setBusy("");
     if(r&&r.ok){ patch(r.item); setEditSku(null); setEf(null); flash("Saved "+r.item.sku+"."); load(); } else flash((r&&r.error)||"Couldn't save.",true);
   };
@@ -10148,6 +10149,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
         <label className="text-xs text-stone-600">SKU<br/><select value={rcv.sku} onChange={e=>setRcv({...rcv,sku:e.target.value})} className="mt-1 border border-stone-300 rounded-lg px-2.5 py-2 text-sm min-w-[180px]"><option value="">— pick an item —</option>{list.map(it=><option key={it.sku} value={it.sku}>{it.name?it.name+" ("+it.sku+")":it.sku}</option>)}</select></label>
         <label className="text-xs text-stone-600">Qty received<br/><input type="number" min="1" value={rcv.qty} onChange={e=>setRcv({...rcv,qty:e.target.value})} className="mt-1 w-24 border border-stone-300 rounded-lg px-2.5 py-2 text-sm"/></label>
         {(()=>{ const ri=list.find(x=>x.sku===rcv.sku); const cp=(ri&&+ri.casePack)||0; if(cp<=0)return null; return <label className="text-xs text-stone-600">Unit<br/><select value={rcv.unit||"units"} onChange={e=>setRcv({...rcv,unit:e.target.value})} className="mt-1 border border-stone-300 rounded-lg px-2 py-2 text-sm"><option value="units">units</option><option value="cases">cases (×{cp})</option></select></label>; })()}
+        {(()=>{ const ri=list.find(x=>x.sku===rcv.sku); if(!ri||!ri.trackLot)return null; return <><label className="text-xs text-stone-600">Lot #<br/><input value={rcv.lot||""} onChange={e=>setRcv({...rcv,lot:e.target.value})} className="mt-1 w-28 border border-stone-300 rounded-lg px-2.5 py-2 text-sm"/></label><label className="text-xs text-stone-600">Expiry<br/><input type="date" value={rcv.expiry||""} onChange={e=>setRcv({...rcv,expiry:e.target.value})} className="mt-1 border border-stone-300 rounded-lg px-2.5 py-2 text-sm"/></label></>; })()}
         {showMoney&&<label className="text-xs text-stone-600">Unit cost <span className="text-stone-400">(optional)</span><br/><input type="number" step="0.01" value={rcv.cost} onChange={e=>setRcv({...rcv,cost:e.target.value})} className="mt-1 w-28 border border-stone-300 rounded-lg px-2.5 py-2 text-sm"/></label>}
         <button onClick={receive} disabled={busy==="rcv"} className="text-sm bg-emerald-600 text-white rounded-lg px-4 py-2 font-medium hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-1.5">{busy==="rcv"?<Loader2 className="w-4 h-4 animate-spin"/>:<Plus className="w-4 h-4"/>}Receive</button>
       </div>
@@ -10165,7 +10167,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
         <tbody className="divide-y divide-stone-100">
           {filtered.length===0&&<tr><td colSpan={showMoney?10:8} className="px-3 py-8 text-center text-stone-400 text-sm">{list.length?"No items match your search.":"No inventory yet — add an item, or import from your product catalog."}</td></tr>}
           {filtered.map(it=>{const isKit=Array.isArray(it.kit)&&it.kit.length>0;const virtualKit=isKit&&!it.assembled;const inc=incomingBySku[String(it.sku).toLowerCase()]||0;const cmt=committedBySku[String(it.sku).toLowerCase()]||0;const avail=Math.max(0,(+it.onHand||0)-cmt);return (<tr key={it.sku} className={isLow(it)?"bg-amber-50/60":""}>
-            <td className="px-3 py-2"><div className="font-medium text-stone-900 flex items-center gap-1.5">{it.name||it.sku}{isKit&&<span className={`text-[9px] uppercase tracking-wide rounded px-1.5 py-0.5 ${it.assembled?"bg-emerald-100 text-emerald-700":"bg-violet-100 text-violet-700"}`}>{it.assembled?"assembly":"kit"}</span>}{it.category?<span className="text-[9px] uppercase tracking-wide bg-stone-100 text-stone-500 rounded px-1.5 py-0.5">{it.category}</span>:null}</div><div className="text-[11px] text-stone-400">{it.sku}{isKit?" · "+it.kit.map(c=>c.qty+"× "+c.sku).join(" + "):""}</div></td>
+            <td className="px-3 py-2"><div className="font-medium text-stone-900 flex items-center gap-1.5">{it.name||it.sku}{isKit&&<span className={`text-[9px] uppercase tracking-wide rounded px-1.5 py-0.5 ${it.assembled?"bg-emerald-100 text-emerald-700":"bg-violet-100 text-violet-700"}`}>{it.assembled?"assembly":"kit"}</span>}{it.category?<span className="text-[9px] uppercase tracking-wide bg-stone-100 text-stone-500 rounded px-1.5 py-0.5">{it.category}</span>:null}{it.trackLot&&(()=>{ const lots=Array.isArray(it.lots)?it.lots:[]; const dated=lots.filter(l=>l.expiry).sort((a,b)=>a.expiry<b.expiry?-1:1); const near=dated[0]; const soon=near&&(Date.parse(near.expiry)-Date.now())<30*864e5; return <span className={`text-[9px] uppercase tracking-wide rounded px-1.5 py-0.5 ${soon?"bg-rose-100 text-rose-700":"bg-amber-100 text-amber-700"}`} title={lots.map(l=>(l.lot||"—")+":"+l.qty+(l.expiry?" exp "+l.expiry:"")).join(" · ")}>{lots.length} lot{lots.length!==1?"s":""}{near?" · exp "+near.expiry:""}</span>; })()}</div><div className="text-[11px] text-stone-400">{it.sku}{isKit?" · "+it.kit.map(c=>c.qty+"× "+c.sku).join(" + "):""}</div></td>
             <td className="px-3 py-2 text-right">{virtualKit?<span className="text-stone-400 text-xs">—</span>:<><span className={`font-semibold ${isLow(it)?"text-amber-600":"text-stone-900"}`}>{+it.onHand||0}</span>{isLow(it)&&<span className="ml-1 text-[10px] uppercase tracking-wide text-amber-600">low</span>}</>}</td>
             <td className="px-3 py-2 text-right text-stone-500">{(!virtualKit&&cmt>0)?<span className="text-amber-600">{cmt}</span>:"—"}</td>
             <td className="px-3 py-2 text-right">{virtualKit?<span className="text-stone-400 text-xs">—</span>:<span className={`font-medium ${avail<=0&&cmt>0?"text-rose-600":"text-stone-800"}`}>{avail}</span>}</td>
@@ -10210,6 +10212,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
           <Field label="Category"><Input value={ef.category||""} onChange={e=>setEf({...ef,category:e.target.value})}/></Field>
           <Field label="Base unit"><Input value={ef.uom||""} onChange={e=>setEf({...ef,uom:e.target.value})} placeholder="each / lb / ft"/></Field>
           <Field label="Units per case"><Input type="number" value={ef.casePack??""} onChange={e=>setEf({...ef,casePack:e.target.value})} placeholder="e.g. 12"/></Field>
+          <div className="col-span-2"><label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!!ef.trackLot} onChange={e=>setEf({...ef,trackLot:e.target.checked})} className="accent-[#0086E0]"/>Track lots &amp; expiry <span className="text-xs text-stone-400">(FEFO — first to expire ships first)</span></label></div>
         </div>
         <div className="mt-4 border-t border-stone-100 pt-3">
           <div className="text-xs font-semibold text-stone-600 mb-1 flex items-center gap-1.5"><Boxes className="w-3.5 h-3.5 text-violet-600"/>Kit / bundle components</div>
@@ -10556,6 +10559,8 @@ function InventoryAnalytics({list,log,showMoney=true}){
   // last ship per SKU from the movement ledger
   const lastShip={}; let ship30=0; const cutoff30=Date.now()-30*864e5; const shipBySku={};
   (log||[]).forEach(mv=>{ if(mv&&mv.type==="ship"){ const k=String(mv.sku||"").toLowerCase(); const t=Date.parse(mv.at||"")||0; if(!lastShip[k]||t>lastShip[k])lastShip[k]=t; if(t>=cutoff30){ship30+=Math.abs(+mv.qty||0);shipBySku[k]=(shipBySku[k]||0)+Math.abs(+mv.qty||0);} } });
+  // Expiring lots (within 30 days) across lot-tracked items
+  const expLots=[]; stock.forEach(it=>{ if(!it.trackLot||!Array.isArray(it.lots))return; it.lots.forEach(l=>{ if(l.expiry){ const days=Math.ceil((Date.parse(l.expiry)-Date.now())/864e5); if(days<=30)expLots.push({sku:it.sku,name:it.name,lot:l.lot,qty:l.qty,expiry:l.expiry,days}); } }); }); expLots.sort((a,b)=>a.days-b.days);
   // Demand forecast: days-to-stockout from 30-day velocity, flag items running out within 14 days.
   const forecast=stock.map(it=>{ const v=shipBySku[String(it.sku).toLowerCase()]||0; const daily=v/30; const days=daily>0?Math.floor((+it.onHand||0)/daily):null; const suggest=daily>0?Math.max(1,Math.round(daily*30)-(+it.onHand||0)):0; return {sku:it.sku,name:it.name,onHand:+it.onHand||0,v30:v,days,suggest}; }).filter(x=>x.v30>0&&x.days!=null&&x.days<=14).sort((a,b)=>a.days-b.days);
   const DEAD_DAYS=60;
@@ -10579,6 +10584,17 @@ function InventoryAnalytics({list,log,showMoney=true}){
       <Tile label="Days of cover" value={daysCover!=null?daysCover+"d":"—"} sub={daysCover!=null?"at current pace":"no recent sales"}/>
       <Tile label="Running out soon" value={forecast.length} tone={forecast.length?"text-rose-600":"text-stone-900"} sub="≤14 days at current pace"/>
     </div>
+    {expLots.length>0&&<div className="border border-amber-200 rounded-xl bg-white overflow-hidden">
+      <div className="px-4 py-2 bg-amber-50 text-[10px] uppercase tracking-widest text-amber-600">Expiring lots — within 30 days</div>
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-[10px] uppercase tracking-widest text-stone-400"><th className="px-3 py-2">Item</th><th className="px-3 py-2">Lot</th><th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2">Expiry</th><th className="px-3 py-2 text-right">Days</th></tr></thead>
+        <tbody className="divide-y divide-stone-100">{expLots.map((x,i)=>(<tr key={i} className={x.days<0?"bg-rose-50/50":""}>
+          <td className="px-3 py-2"><div className="text-stone-800">{x.name||x.sku}</div><div className="text-[11px] text-stone-400">{x.sku}</div></td>
+          <td className="px-3 py-2 text-stone-600 font-mono text-xs">{x.lot||"—"}</td>
+          <td className="px-3 py-2 text-right text-stone-700">{x.qty}</td>
+          <td className="px-3 py-2 text-stone-600">{x.expiry}</td>
+          <td className={`px-3 py-2 text-right font-semibold ${x.days<0?"text-rose-600":x.days<=7?"text-amber-600":"text-stone-700"}`}>{x.days<0?"expired":x.days+"d"}</td>
+        </tr>))}</tbody></table></div>
+    </div>}
     {forecast.length>0&&<div className="border border-rose-200 rounded-xl bg-white overflow-hidden">
       <div className="px-4 py-2 bg-rose-50 text-[10px] uppercase tracking-widest text-rose-500">Reorder forecast — stocking out soon</div>
       <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-[10px] uppercase tracking-widest text-stone-400"><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">On hand</th><th className="px-3 py-2 text-right">Sold 30d</th><th className="px-3 py-2 text-right">Days left</th><th className="px-3 py-2 text-right">Suggest order</th></tr></thead>

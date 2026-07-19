@@ -703,6 +703,20 @@ exports.handler = async (event) => {
          exists, onHand is always re-derived as the sum of its locations, so the two can never drift. */
       const applyStockDelta = (it, delta, preferLoc) => {
         const before = +it.onHand || 0;
+        /* Lot-tracked: quantities live in it.lots; shipping consumes first-expiry-first-out (FEFO).
+           Backward-compatible — only engages when the item actually has lots. */
+        if (Array.isArray(it.lots) && (it.lots.length || it.trackLot)) {
+          if (delta < 0) {
+            let need = -delta;
+            const lots = it.lots.slice().sort((a, b) => { const ea = a.expiry || "9999-99-99", eb = b.expiry || "9999-99-99"; return ea < eb ? -1 : ea > eb ? 1 : 0; });
+            for (const L of lots) { if (need <= 0) break; const take = Math.min(need, +L.qty || 0); L.qty = (+L.qty || 0) - take; need -= take; }
+            it.lots = lots.filter((L) => (+L.qty || 0) > 0);
+          } else {
+            const blank = it.lots.find((L) => !L.lot); if (blank) blank.qty = (+blank.qty || 0) + delta; else it.lots.push({ lot: "", qty: delta, expiry: "" });
+          }
+          it.onHand = it.lots.reduce((s, L) => s + (+L.qty || 0), 0);
+          return;
+        }
         if (!it.byLoc || typeof it.byLoc !== "object") { it.onHand = Math.max(0, before + delta); return; }
         const bl = { ...it.byLoc };
         if (delta >= 0) { const L = (preferLoc && String(preferLoc)) || Object.keys(bl)[0] || "Main"; bl[L] = Math.max(0, (+bl[L] || 0) + delta); }
@@ -739,6 +753,7 @@ exports.handler = async (event) => {
         if (body.category != null) it.category = String(body.category).trim().slice(0, 60);
         if (body.uom != null) it.uom = String(body.uom).trim().slice(0, 20);        // base unit (each/case/lb…)
         if (body.casePack != null) it.casePack = Math.max(0, Math.round(+body.casePack || 0));  // units per case for case-receiving
+        if (body.trackLot != null) { it.trackLot = !!body.trackLot; if (it.trackLot && !Array.isArray(it.lots)) it.lots = []; if (!it.trackLot) delete it.lots; }
         /* Kit / bill-of-materials: a list of component SKUs consumed when this item ships. Empty array
            clears it (item becomes a normal stocked SKU again). */
         if (body.kit != null) {
@@ -833,7 +848,16 @@ exports.handler = async (event) => {
           // receiving
           const it = prev ? { ...prev } : { sku, name: String(ln.name || "").slice(0, 120), onHand: 0, createdAt: nowISO };
           const before = +it.onHand || 0;
-          applyStockDelta(it, qty, ln.loc);
+          if (it.trackLot || Array.isArray(it.lots)) {
+            /* Lot-tracked receive: merge into an existing lot (same lot#+expiry) or add a new one. */
+            if (!Array.isArray(it.lots)) it.lots = [];
+            const lot = String(ln.lot || "").slice(0, 40); const expiry = String(ln.expiry || "").slice(0, 20);
+            const ex = it.lots.find((L) => L.lot === lot && (L.expiry || "") === expiry);
+            if (ex) ex.qty = (+ex.qty || 0) + qty; else it.lots.push({ lot, qty, expiry });
+            it.onHand = it.lots.reduce((s, L) => s + (+L.qty || 0), 0);
+          } else {
+            applyStockDelta(it, qty, ln.loc);
+          }
           if (ln.cost != null && ln.cost !== "") it.cost = money2(ln.cost);
           if (ln.name && !it.name) it.name = String(ln.name).slice(0, 120);
           it.updatedAt = nowISO;

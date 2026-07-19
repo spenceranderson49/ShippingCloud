@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v685";
+const BUILD_TAG="addr-v686";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10132,8 +10132,9 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
   const openPo=(pos||[]).filter(p=>p&&p.status!=="received").length;
   const Switcher=()=>(<div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm flex-wrap">
-    {[["stock","Stock"],["pos","Purchase Orders"],["suppliers","Suppliers"],["warehouses","Warehouses"],["pick","Pick Lists"],["pack","Pack Verify"],["scan","Scan Receive"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}</button>)}
+    {[["overview","Overview"],["stock","Stock"],["pos","Purchase Orders"],["suppliers","Suppliers"],["warehouses","Warehouses"],["pick","Pick Lists"],["pack","Pack Verify"],["scan","Scan Receive"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}</button>)}
   </div>);
+  if(view==="overview") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryOverview list={list} pos={pos} log={log} suppliers={suppliers} orders={orders} showMoney={showMoney} committedBySku={committedBySku} incomingBySku={incomingBySku} goView={setView} onReceive={()=>setView("stock")}/></div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
   if(view==="pick") return (<div className="max-w-5xl space-y-4"><Switcher/><PickList orders={orders} items={list}/></div>);
   if(view==="pack") return (<div className="max-w-5xl space-y-4"><Switcher/><PackVerify orders={orders} items={list}/></div>);
@@ -10590,6 +10591,59 @@ function PickList({orders,items}){
           <td className={`px-3 py-2 text-right ${r.short?"text-rose-600":"text-stone-500"}`}>{r.onHand==null?"—":r.onHand}{r.short?" (short "+r.short+")":""}</td>
         </tr>); }); return out; })()}</tbody></table></div>
     </div>}
+  </div>);
+}
+/* WMS Overview — one home screen tying the whole warehouse together: health tiles, action-needed
+   alerts (low stock, running out, expiring, POs to receive, oversold), and recent activity. Read-only. */
+function InventoryOverview({list,pos,log,suppliers,orders,showMoney,committedBySku,incomingBySku,goView,onReceive}){
+  const stock=(list||[]).filter(it=>!(Array.isArray(it.kit)&&it.kit.length&&!it.assembled));
+  const totUnits=stock.reduce((s,it)=>s+(+it.onHand||0),0);
+  const totValue=stock.reduce((s,it)=>s+(+it.onHand||0)*(+it.cost||0),0);
+  const low=stock.filter(it=>(+it.reorder||0)>0&&(+it.onHand||0)<=(+it.reorder||0));
+  const out=stock.filter(it=>(+it.onHand||0)<=0);
+  const oversold=stock.filter(it=>{ const c=committedBySku[String(it.sku).toLowerCase()]||0; return c>(+it.onHand||0); });
+  const openPos=(pos||[]).filter(p=>p&&p.status!=="received");
+  const expSoon=[]; stock.forEach(it=>{ if(it.trackLot&&Array.isArray(it.lots))it.lots.forEach(l=>{ if(l.expiry&&(Date.parse(l.expiry)-Date.now())<30*864e5)expSoon.push({sku:it.sku,lot:l.lot,expiry:l.expiry}); }); });
+  const recent=(log||[]).slice(0,8);
+  const Tile=({label,value,tone,onClick})=>(<button onClick={onClick} disabled={!onClick} className={`text-left border border-stone-200 rounded-xl bg-white px-4 py-3 ${onClick?"hover:border-[#0086E0]/40 transition":""}`}><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></button>);
+  const mvLabel={receipt:"Received",ship:"Shipped",adjust:"Adjusted",count:"Counted",transfer:"Moved",build:"Built",consume:"Used in build",new:"Added",removed:"Removed"};
+  return (<div className="space-y-4">
+    <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Boxes className="w-5 h-5 text-[#0086E0]"/>Warehouse overview</h2><p className="text-sm text-stone-500 mt-0.5">Everything at a glance — what needs attention and what's happening.</p></div>
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <Tile label="SKUs" value={stock.length} onClick={()=>goView("stock")}/>
+      <Tile label="Units on hand" value={totUnits.toLocaleString()}/>
+      {showMoney&&<Tile label="Stock value" value={money(totValue)} onClick={()=>goView("analytics")}/>}
+      <Tile label="Low stock" value={low.length} tone={low.length?"text-amber-600":"text-stone-900"} onClick={()=>goView("stock")}/>
+    </div>
+    {/* Needs attention */}
+    {(low.length||out.length||oversold.length||openPos.length||expSoon.length)?<div className="border border-stone-200 rounded-xl bg-white p-4 space-y-2">
+      <div className="text-sm font-semibold text-stone-800">Needs attention</div>
+      {out.length>0&&<div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-rose-500"/><span className="text-stone-700"><b>{out.length}</b> out of stock</span><button onClick={()=>goView("stock")} className="text-[11px] text-[#0086E0] hover:underline">view →</button></div>}
+      {low.length>0&&<div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-amber-500"/><span className="text-stone-700"><b>{low.length}</b> below reorder point</span><button onClick={()=>goView("stock")} className="text-[11px] text-[#0086E0] hover:underline">reorder →</button></div>}
+      {oversold.length>0&&<div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-rose-500"/><span className="text-stone-700"><b>{oversold.length}</b> promised more than you have</span></div>}
+      {openPos.length>0&&<div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-sky-500"/><span className="text-stone-700"><b>{openPos.length}</b> purchase order{openPos.length!==1?"s":""} to receive</span><button onClick={()=>goView("pos")} className="text-[11px] text-[#0086E0] hover:underline">receive →</button></div>}
+      {expSoon.length>0&&<div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-amber-500"/><span className="text-stone-700"><b>{expSoon.length}</b> lot{expSoon.length!==1?"s":""} expiring within 30 days</span><button onClick={()=>goView("analytics")} className="text-[11px] text-[#0086E0] hover:underline">view →</button></div>}
+    </div>:<div className="border border-emerald-200 bg-emerald-50/50 rounded-xl p-4 text-sm text-emerald-700 flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>All clear — nothing needs attention right now.</div>}
+    {/* Quick actions */}
+    <div className="flex flex-wrap gap-2">
+      <button onClick={()=>goView("scan")} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><ScanLine className="w-4 h-4"/>Scan receive</button>
+      <button onClick={()=>goView("pos")} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3.5 py-2 font-medium hover:bg-stone-200 flex items-center gap-1.5"><ClipboardList className="w-4 h-4"/>New PO</button>
+      <button onClick={()=>goView("pick")} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3.5 py-2 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-4 h-4"/>Pick list</button>
+      <button onClick={()=>goView("pack")} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3.5 py-2 font-medium hover:bg-stone-200 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>Pack verify</button>
+    </div>
+    {/* Recent activity */}
+    <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500">Recent activity</div>
+      <div className="divide-y divide-stone-100">
+        {recent.length===0&&<div className="p-4 text-sm text-stone-400">No activity yet.</div>}
+        {recent.map(mv=>(<div key={mv.id} className="px-4 py-2 flex items-center gap-3 text-sm">
+          <span className={`w-16 shrink-0 text-xs font-medium ${mv.type==="ship"?"text-rose-600":mv.type==="receipt"||mv.type==="build"?"text-emerald-600":"text-stone-500"}`}>{mvLabel[mv.type]||mv.type}</span>
+          <span className="flex-1 min-w-0 truncate text-stone-700">{mv.name||mv.sku} <span className="text-stone-400">({mv.sku})</span></span>
+          <span className={`shrink-0 font-mono text-xs ${(+mv.qty||0)<0?"text-rose-600":(+mv.qty||0)>0?"text-emerald-600":"text-stone-400"}`}>{(+mv.qty||0)>0?"+":""}{+mv.qty||0}</span>
+          <span className="shrink-0 text-[11px] text-stone-300 w-24 text-right hidden sm:inline">{String(mv.at||"").slice(0,16).replace("T"," ")}</span>
+        </div>))}
+      </div>
+    </div>
   </div>);
 }
 /* Warehouses / storage locations — a company-managed list (warehouse, zone, or bin) used across

@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v682";
+const BUILD_TAG="addr-v683";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10201,6 +10201,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
       <Tile label="Low stock" value={lowCount} tone={lowCount?"text-amber-600":"text-stone-900"}/>
     </div>
     {adding&&<Panel title="New inventory item">
+      <p className="text-xs text-stone-500 mb-2">Only <b>SKU</b> is required — a code for the product (like ABC-001). Everything else you can fill in now or later.</p>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         <Field label="SKU"><Input value={nf.sku} onChange={e=>setNf({...nf,sku:e.target.value})} placeholder="ABC-001"/></Field>
         <Field label="Name"><Input value={nf.name} onChange={e=>setNf({...nf,name:e.target.value})}/></Field>
@@ -10284,7 +10285,8 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
           <Field label="Base unit"><Input value={ef.uom||""} onChange={e=>setEf({...ef,uom:e.target.value})} placeholder="each / lb / ft"/></Field>
           <Field label="Units per case"><Input type="number" value={ef.casePack??""} onChange={e=>setEf({...ef,casePack:e.target.value})} placeholder="e.g. 12"/></Field>
           <div className="col-span-2 space-y-1.5">
-            <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!!ef.trackLot} onChange={e=>setEf({...ef,trackLot:e.target.checked,trackSerial:e.target.checked?false:ef.trackSerial})} className="accent-[#0086E0]"/>Track lots &amp; expiry <span className="text-xs text-stone-400">(FEFO — first to expire ships first)</span></label>
+            <div className="text-[10px] uppercase tracking-widest text-stone-400 pt-1">Advanced — optional, most stores can skip these</div>
+            <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!!ef.trackLot} onChange={e=>setEf({...ef,trackLot:e.target.checked,trackSerial:e.target.checked?false:ef.trackSerial})} className="accent-[#0086E0]"/>Track lots &amp; expiry <span className="text-xs text-stone-400">(for food/cosmetics/pharma — ships soonest-to-expire first)</span></label>
             <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!!ef.trackSerial} onChange={e=>setEf({...ef,trackSerial:e.target.checked,trackLot:e.target.checked?false:ef.trackLot})} className="accent-[#0086E0]"/>Track serial numbers <span className="text-xs text-stone-400">(scan a serial per unit)</span></label>
             <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!!ef.fifo} onChange={e=>setEf({...ef,fifo:e.target.checked})} className="accent-[#0086E0]"/>FIFO costing <span className="text-xs text-stone-400">(true COGS from oldest cost layers)</span></label>
           </div>

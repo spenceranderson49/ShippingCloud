@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v714";
+const BUILD_TAG="addr-v715";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10041,6 +10041,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const [ef,setEf]=useState(null);
   const [xfer,setXfer]=useState(null);
   const [adj,setAdj]=useState(null);
+  const [wmsSimple,setWmsSimple]=usePersist("wmsSimple",true);   // entry-level view on by default; reveals full toolset on demand
   const [view,setView]=useState("stock");
   const [pos,setPos]=useState([]);
   const [suppliers,setSuppliers]=useState([]);
@@ -10248,14 +10249,22 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     ["Business",[["billing","3PL Billing"],["requests","3PL Requests"],["analytics","Analytics"]]],
   ];
   const badge=(v)=>v==="pos"&&openPo>0?" ("+openPo+")":v==="replenish"&&lowCount>0?" ("+lowCount+")":v==="backorder"&&boCount>0?" ("+boCount+")":"";
-  const Switcher=()=>(<div className="flex flex-wrap gap-x-4 gap-y-2">
-    {NAV_GROUPS.map(([g,tabs])=>(<div key={g} className="flex flex-col gap-1">
+  /* Entry-level "Simple" view shows just the everyday tools; "Show all tools" reveals the full WMS.
+     If you're already on an advanced tab, the full nav shows so the active tab stays visible. */
+  const CORE=new Set(["overview","stock","replenish","runner","pick","pack","scan","pos","suppliers"]);
+  const Switcher=()=>{ const simple=wmsSimple&&CORE.has(view);
+    const groups=NAV_GROUPS.map(([g,tabs])=>[g,simple?tabs.filter(([v])=>CORE.has(v)):tabs]).filter(([g,tabs])=>tabs.length);
+    return (<div className="flex flex-wrap gap-x-4 gap-y-2 items-start">
+    {groups.map(([g,tabs])=>(<div key={g} className="flex flex-col gap-1">
       <span className="text-[9px] uppercase tracking-widest text-stone-400 pl-1">{g}</span>
       <div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm flex-wrap">
         {tabs.map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md whitespace-nowrap ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{badge(v)}</button>)}
       </div>
     </div>))}
-  </div>);
+    <div className="flex flex-col gap-1"><span className="text-[9px] uppercase tracking-widest text-stone-400 pl-1">View</span>
+      <button onClick={()=>setWmsSimple(s=>!s)} className="text-sm rounded-lg border border-dashed border-stone-300 bg-white px-3 py-1.5 text-stone-500 hover:bg-stone-50 hover:text-stone-700 whitespace-nowrap" title={simple?"Reveal every WMS tool":"Show just the everyday tools"}>{simple?"＋ Show all tools":"− Simpler view"}</button>
+    </div>
+  </div>); };
   if(view==="overview") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryOverview list={list} pos={pos} log={log} suppliers={suppliers} orders={orders} showMoney={showMoney} committedBySku={committedBySku} incomingBySku={incomingBySku} goView={setView} onReceive={()=>setView("stock")}/></div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
   if(view==="pick") return (<div className="max-w-5xl space-y-4"><Switcher/><PickList orders={orders} items={list}/></div>);

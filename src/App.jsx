@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v693";
+const BUILD_TAG="addr-v694";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10983,6 +10983,11 @@ function InventoryAnalytics({list,log,showMoney=true}){
   const deadValue=dead.reduce((s,it)=>s+(+it.onHand||0)*(+it.cost||0),0);
   const byLoc={}; stock.forEach(it=>{ const l=it.loc||"Unassigned"; if(!byLoc[l])byLoc[l]={units:0,value:0,skus:0}; byLoc[l].units+=(+it.onHand||0); byLoc[l].value+=(+it.onHand||0)*(+it.cost||0); byLoc[l].skus+=1; });
   const locs=Object.keys(byLoc).sort((a,b)=>byLoc[b].value-byLoc[a].value);
+  // Valuation by category — the standard accounting cut of the stock ledger.
+  const byCat={}; stock.forEach(it=>{ const c=it.category||"Uncategorized"; if(!byCat[c])byCat[c]={units:0,value:0,skus:0}; byCat[c].units+=(+it.onHand||0); byCat[c].value+=(+it.onHand||0)*(+it.cost||0); byCat[c].skus+=1; });
+  const cats=Object.keys(byCat).sort((a,b)=>byCat[b].value-byCat[a].value);
+  // How many SKUs value with FIFO cost layers vs a single average cost — informs the valuation basis.
+  const fifoSkus=stock.filter(it=>it.fifo||Array.isArray(it.layers)).length;
   const top=stock.map(it=>({sku:it.sku,name:it.name,val:(+it.onHand||0)*(+it.cost||0),units:+it.onHand||0})).filter(x=>x.val>0).sort((a,b)=>b.val-a.val).slice(0,10);
   const daysCover=ship30>0?Math.round(totUnits/(ship30/30)):null;
   const Tile=({label,value,tone,sub})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div>{sub?<div className="text-[11px] text-stone-400 mt-0.5">{sub}</div>:null}</div>);
@@ -11041,6 +11046,18 @@ function InventoryAnalytics({list,log,showMoney=true}){
           <div className="flex-1 h-2 bg-stone-100 rounded-full overflow-hidden"><div className="h-full bg-[#0086E0]" style={{width:pct+"%"}}/></div>
           <div className="w-16 text-right text-xs text-stone-500">{byLoc[l].units} u</div>
           <div className="w-24 text-right text-sm font-medium text-stone-800">{money(byLoc[l].value)}</div>
+        </div>);})}
+      </div>
+    </div>}
+    {showMoney&&cats.length>0&&<div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 flex items-center justify-between"><span>Valuation by category</span><span className="normal-case tracking-normal text-stone-400">{fifoSkus>0?fifoSkus+" SKU"+(fifoSkus===1?"":"s")+" FIFO · rest at average cost":"at average cost"}</span></div>
+      <div className="divide-y divide-stone-100">
+        {cats.map(c=>{ const pct=totValue>0?Math.round(byCat[c].value/totValue*100):0; return (<div key={c} className="px-4 py-2.5 flex items-center gap-3">
+          <div className="w-40 shrink-0 truncate text-sm text-stone-800">{c}</div>
+          <div className="flex-1 h-2 bg-stone-100 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{width:pct+"%"}}/></div>
+          <div className="w-12 text-right text-[11px] text-stone-400">{byCat[c].skus} sku</div>
+          <div className="w-16 text-right text-xs text-stone-500">{byCat[c].units} u</div>
+          <div className="w-24 text-right text-sm font-medium text-stone-800">{money(byCat[c].value)}</div>
         </div>);})}
       </div>
     </div>}

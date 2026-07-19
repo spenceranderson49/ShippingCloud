@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v695";
+const BUILD_TAG="addr-v696";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10692,6 +10692,36 @@ function PurchaseOrders({pos,setPos,suppliers,items,showMoney,onReload,seed,onSe
   const newPo=()=>setEditing({number:"",supplierId:"",expectedAt:"",notes:"",lines:[blankLine()]});
   const editPo=(po)=>setEditing({...po,supplierId:po.supplierId||"",lines:(po.lines||[]).map(l=>({...l}))});
   const skuName=(sku)=>{ const it=items.find(i=>String(i.sku).toLowerCase()===String(sku).toLowerCase()); return it?it.name:""; };
+  /* Print / PDF a purchase order — opens a clean, self-contained document the user can print or
+     "Save as PDF" and email to the supplier. All values are HTML-escaped. */
+  const printPO=(po)=>{
+    const esc=(s)=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+    const sup=(suppliers||[]).find(s=>s.id===po.supplierId);
+    const lines=(po.lines||[]);
+    const total=lines.reduce((s,l)=>s+(+l.qtyOrdered||0)*(+l.cost||0),0);
+    const money=(n)=>"$"+(Math.round((+n||0)*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    const rows=lines.map(l=>`<tr><td>${esc(l.sku)}</td><td>${esc(l.name||"")}</td><td class="r">${+l.qtyOrdered||0}</td>${showMoney?`<td class="r">${money(l.cost)}</td><td class="r">${money((+l.qtyOrdered||0)*(+l.cost||0))}</td>`:""}</tr>`).join("");
+    const supBlock=sup?`<div><b>${esc(sup.name)}</b>${sup.contact?"<br>"+esc(sup.contact):""}${sup.email?"<br>"+esc(sup.email):""}${sup.phone?"<br>"+esc(sup.phone):""}</div>`:"<div class='muted'>No supplier on file</div>";
+    const html=`<!doctype html><html><head><meta charset="utf-8"><title>Purchase Order ${esc(po.number)}</title>
+      <style>body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1c1917;margin:40px;font-size:13px}
+      h1{font-size:22px;margin:0 0 2px}.muted{color:#78716c}.head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}
+      .grid{display:flex;gap:48px;margin:16px 0 24px}.grid>div>.lbl{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#a8a29e;margin-bottom:4px}
+      table{width:100%;border-collapse:collapse;margin-top:8px}th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#78716c;border-bottom:2px solid #e7e5e4;padding:8px 6px}
+      td{padding:8px 6px;border-bottom:1px solid #f0efed}.r{text-align:right}tfoot td{border:0;font-weight:700;padding-top:12px}
+      .note{margin-top:24px;padding:12px;background:#faf9f7;border-radius:8px;color:#57534e;white-space:pre-wrap}
+      @media print{body{margin:0}}</style></head>
+      <body><div class="head"><div><h1>Purchase Order</h1><div class="muted">${esc(po.number)}</div></div>
+      <div class="r muted" style="text-align:right"><div>Status: ${esc(po.status||"open")}</div>${po.expectedAt?`<div>Expected: ${esc(po.expectedAt)}</div>`:""}</div></div>
+      <div class="grid"><div><div class="lbl">Supplier</div>${supBlock}</div></div>
+      <table><thead><tr><th>SKU</th><th>Description</th><th class="r">Qty</th>${showMoney?'<th class="r">Unit cost</th><th class="r">Line total</th>':""}</tr></thead>
+      <tbody>${rows||'<tr><td colspan="5" class="muted">No line items</td></tr>'}</tbody>
+      ${showMoney?`<tfoot><tr><td colspan="4" class="r">Total</td><td class="r">${money(total)}</td></tr></tfoot>`:""}</table>
+      ${po.notes?`<div class="note">${esc(po.notes)}</div>`:""}
+      <script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>`;
+    const w=window.open("","_blank");
+    if(!w){flash("Allow pop-ups to print the PO.",true);return;}
+    w.document.open(); w.document.write(html); w.document.close();
+  };
   const savePo=async()=>{
     const sup=suppliers.find(s=>s.id===editing.supplierId);
     const lines=(editing.lines||[]).filter(l=>String(l.sku||"").trim()&&+l.qtyOrdered>0).map(l=>({sku:String(l.sku).trim(),name:l.name||skuName(l.sku)||"",qtyOrdered:+l.qtyOrdered,qtyReceived:+l.qtyReceived||0,cost:l.cost===""?0:+l.cost}));
@@ -10729,6 +10759,7 @@ function PurchaseOrders({pos,setPos,suppliers,items,showMoney,onReload,seed,onSe
             <div className="text-[11px] text-stone-400">{po.supplierName||"No supplier"}{po.expectedAt?" · expected "+po.expectedAt:""} · {rec}/{ord} received</div>
           </div>
           {po.status!=="received"&&<button onClick={()=>openReceive(po)} className="text-xs bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-emerald-700">Receive</button>}
+          <button onClick={()=>printPO(po)} className="text-xs bg-stone-100 text-stone-600 rounded-lg px-2.5 py-1.5 hover:bg-stone-200 flex items-center gap-1"><Printer className="w-3.5 h-3.5"/>Print</button>
           <button onClick={()=>editPo(po)} className="text-xs bg-stone-100 text-stone-600 rounded-lg px-2.5 py-1.5 hover:bg-stone-200">Edit</button>
           <button onClick={()=>del(po)} className="text-xs bg-stone-100 text-stone-400 rounded-lg px-2 py-1.5 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="w-3.5 h-3.5"/></button>
         </div>);})}

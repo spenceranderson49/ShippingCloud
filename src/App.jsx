@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v711";
+const BUILD_TAG="addr-v712";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9960,6 +9960,13 @@ const WMS_GLOSSARY=[
   ["Pack verify","Scanning each item into the box so nothing wrong ships."],
   ["Scan-to-pick","A guided pick session where you scan each item off a bin-sorted list and watch progress fill in."],
   ["Barcode label","A printable Code 128 barcode for a SKU. Scanning it drives the pick and pack stations."],
+  ["Vendor price list","Multiple suppliers for one item, each with their own cost, lead time and part number. Replenishment can buy from the cheapest."],
+  ["Container type","A box or mailer in your packaging catalog — its size, weight limit and cost. Used to pick the right box."],
+  ["Packing group","A rule that says which box to use for items matching a category or keyword (cartonization)."],
+  ["Production order","A work order to build an assembly from its components (BOM). Completing it consumes parts and stocks the finished good."],
+  ["Runner portal","The mobile warehouse app — Pull, Put, Receive and Count from a phone or scanner."],
+  ["3PL billing","Bill your clients for warehouse work: a rate card of services, logged charges, and per-client invoices."],
+  ["Landed unit cost","An item's cost including its share of freight/duty — what it truly cost to get on the shelf."],
   ["ABC analysis","Ranks products by how much value they move — A = your top movers."],
 ];
 /* Step-by-step how-to tutorials shown in the Help guide. */
@@ -9972,6 +9979,10 @@ const WMS_TUTORIALS=[
   ["Count stock (cycle count)","🔢",["Open the Cycle Count tab and pick a category (or count everything).","Walk the shelf and type what you physically have next to each item.","The Variance column shows the difference live.","Click Apply — only differences are corrected, and each is logged."]],
   ["Move stock between locations","↔️",["Turn on a couple of Warehouses (or just type bin names).","Click Move on an item, choose from/to and a quantity.","The total stays the same — it's just relocated. Per-location counts show on the row."]],
   ["Print barcode labels & scan-pick","🏷️",["On the Stock tab click Print labels to print scannable Code 128 barcodes for your items.","Stick a label on each bin or product.","In Pick Lists, select orders → Build → Start pick session.","Scan each item as you grab it — progress fills in and lines check off green.","Then Pack Verify scans each item into its box before it ships."]],
+  ["Build an assembly (production order)","🛠️",["Edit an item and add a kit / bill of materials (its components).","Go to Inventory → Production, click New order, pick the assembly and quantity.","Click Complete — the components are consumed and the finished item is stocked."]],
+  ["Bill a 3PL client","💵",["Open Business → 3PL Billing → Rate card and add your services (pick, pack, storage…) with rates.","On the Charges tab, log work as you do it — pick a client, service and quantity.","On Invoices, print a client's invoice and mark it invoiced."]],
+  ["Ring up a walk-in sale (POS)","🧾",["Set a Sell price on your items (edit item).","Open Sell → Point of Sale, scan or search to build a cart.","Take payment and Charge — stock draws down and a receipt prints."]],
+  ["Use the mobile Runner","📱",["Open Fulfill → Runner on a phone.","Receive scans a delivery in; Count fixes a shelf count; Put moves stock to a bin; Pull is the scan-to-pick queue."]],
 ];
 /* Code 128-B barcode renderer. Encodes ASCII 32–126 into the standard 107-symbol module patterns,
    appends the mod-103 checksum and stop bar, and returns SVG bars. Used to print scannable product

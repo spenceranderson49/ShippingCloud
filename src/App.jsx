@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v703";
+const BUILD_TAG="addr-v704";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10141,11 +10141,11 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     setBusy("");
     if(r&&r.ok){ patch(r.item); const diff=cnt-(+it.onHand||0); flash(it.sku+" counted → "+cnt+(diff?" ("+(diff>0?"+":"")+diff+" variance)":" (no variance)")); load(); } else flash((r&&r.error)||"Count failed.",true);
   };
-  const openEdit=(it)=>{ setEf({sku:it.sku,name:it.name||"",reorder:it.reorder??"",maxStock:it.maxStock??"",cost:it.cost??"",loc:it.loc||"",barcode:it.barcode||"",category:it.category||"",uom:it.uom||"",casePack:it.casePack??"",supplierId:it.supplierId||"",trackLot:!!it.trackLot,trackSerial:!!it.trackSerial,fifo:!!it.fifo,kit:Array.isArray(it.kit)?it.kit.map(c=>({sku:c.sku,qty:c.qty})):[]}); setEditSku(it.sku); };
+  const openEdit=(it)=>{ setEf({sku:it.sku,name:it.name||"",reorder:it.reorder??"",maxStock:it.maxStock??"",cost:it.cost??"",price:it.price??"",loc:it.loc||"",barcode:it.barcode||"",category:it.category||"",uom:it.uom||"",casePack:it.casePack??"",supplierId:it.supplierId||"",trackLot:!!it.trackLot,trackSerial:!!it.trackSerial,fifo:!!it.fifo,kit:Array.isArray(it.kit)?it.kit.map(c=>({sku:c.sku,qty:c.qty})):[]}); setEditSku(it.sku); };
   const saveEdit=async()=>{
     if(!ef)return; setBusy("edit");
     const kit=(ef.kit||[]).filter(c=>String(c.sku||"").trim()).map(c=>({sku:c.sku,qty:Math.max(1,Math.round(+c.qty||1))}));
-    const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:ef.sku,name:ef.name,reorder:ef.reorder===""?0:+ef.reorder,maxStock:ef.maxStock===""?0:+ef.maxStock,cost:ef.cost===""?"":+ef.cost,loc:ef.loc,barcode:ef.barcode||"",category:ef.category||"",uom:ef.uom||"",casePack:ef.casePack===""?0:+ef.casePack,supplierId:ef.supplierId||"",trackLot:!!ef.trackLot,trackSerial:!!ef.trackSerial,fifo:!!ef.fifo,kit});
+    const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:ef.sku,name:ef.name,reorder:ef.reorder===""?0:+ef.reorder,maxStock:ef.maxStock===""?0:+ef.maxStock,cost:ef.cost===""?"":+ef.cost,price:ef.price===""?"":+ef.price,loc:ef.loc,barcode:ef.barcode||"",category:ef.category||"",uom:ef.uom||"",casePack:ef.casePack===""?0:+ef.casePack,supplierId:ef.supplierId||"",trackLot:!!ef.trackLot,trackSerial:!!ef.trackSerial,fifo:!!ef.fifo,kit});
     setBusy("");
     if(r&&r.ok){ patch(r.item); setEditSku(null); setEf(null); flash("Saved "+r.item.sku+"."); load(); } else flash((r&&r.error)||"Couldn't save.",true);
   };
@@ -10220,6 +10220,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     ["Fulfill",[["runner","Runner"],["pick","Pick Lists"],["pack","Pack Verify"],["scan","Scan Receive"]]],
     ["Purchasing",[["pos","Purchase Orders"],["suppliers","Suppliers"]]],
     ["Setup",[["warehouses","Warehouses"],["containers","Containers"]]],
+    ["Sell",[["sale","Point of Sale"]]],
     ["Business",[["billing","3PL Billing"],["analytics","Analytics"]]],
   ];
   const badge=(v)=>v==="pos"&&openPo>0?" ("+openPo+")":v==="replenish"&&lowCount>0?" ("+lowCount+")":v==="backorder"&&boCount>0?" ("+boCount+")":"";
@@ -10240,6 +10241,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   if(view==="containers") return (<div className="max-w-5xl space-y-4"><Switcher/><ContainerTypes containers={containers} setContainers={setContainers} showMoney={showMoney}/></div>);
   if(view==="runner") return (<div className="max-w-2xl space-y-4"><Switcher/><RunnerPortal items={list} orders={orders} warehouses={warehouses} onReceived={patch} onReload={load}/></div>);
   if(view==="billing") return (<div className="max-w-5xl space-y-4"><Switcher/><Billing3PL/></div>);
+  if(view==="sale") return (<div className="max-w-5xl space-y-4"><Switcher/><PointOfSale items={list} onReload={load}/></div>);
   if(view==="production") return (<div className="max-w-5xl space-y-4"><Switcher/><ProductionOrders production={production} setProduction={setProduction} items={list} onReload={load}/></div>);
   if(view==="replenish") return (<div className="max-w-5xl space-y-4"><Switcher/><Replenishment list={list} suppliers={suppliers} log={log} incomingBySku={incomingBySku} committedBySku={committedBySku} showMoney={showMoney} onReload={load} onCreated={p=>{setPos(x=>[...p,...(x||[])]);setView("pos");load();}}/></div>);
   if(view==="count") return (<div className="max-w-5xl space-y-4"><Switcher/><CycleCount list={list} showMoney={showMoney} onApplied={load}/></div>);
@@ -10400,6 +10402,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
           <Field label="Reorder at (min)"><Input type="number" value={ef.reorder} onChange={e=>setEf({...ef,reorder:e.target.value})}/></Field>
           <Field label="Reorder up to (max)"><Input type="number" value={ef.maxStock??""} onChange={e=>setEf({...ef,maxStock:e.target.value})} placeholder="target level"/></Field>
           {showMoney&&<Field label="Unit cost"><Input type="number" value={ef.cost} onChange={e=>setEf({...ef,cost:e.target.value})}/></Field>}
+          {showMoney&&<Field label="Sell price (POS)"><Input type="number" value={ef.price} onChange={e=>setEf({...ef,price:e.target.value})}/></Field>}
           <Field label="Location / bin"><Input value={ef.loc} onChange={e=>setEf({...ef,loc:e.target.value})}/></Field>
           <Field label="Barcode / UPC"><Input value={ef.barcode} onChange={e=>setEf({...ef,barcode:e.target.value})}/></Field>
           <Field label="Category"><Input value={ef.category||""} onChange={e=>setEf({...ef,category:e.target.value})}/></Field>
@@ -11150,6 +11153,70 @@ function WarehousesView({warehouses,setWarehouses}){
         <div className="flex items-center gap-2 mt-4"><button onClick={save} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy&&<Loader2 className="w-4 h-4 animate-spin"/>}Save</button><button onClick={()=>setEf(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
       </div>
     </div>}
+  </div>);
+}
+/* Point of Sale — a register that draws down the same inventory. Scan/search to add items to a cart,
+   adjust quantities, take payment, and checkout ships the lines (invShip) so stock decrements and the
+   sale lands in the movement ledger with a POS reference. Prints a receipt. Uses each item's sell
+   price (falls back to cost). Mirrors EliteWorks Point of Sale. */
+function PointOfSale({items,onReload}){
+  const stock=(items||[]).filter(it=>!(Array.isArray(it.kit)&&it.kit.length&&!it.assembled));
+  const [q,setQ]=useState(""); const [cart,setCart]=useState([]); const [busy,setBusy]=useState(false); const [msg,setMsg]=useState(null); const [taxPct,setTaxPct]=useState(0); const [last,setLast]=useState(null);
+  const scanRef=useRef(null);
+  const flash=(m,e)=>{ setMsg(e?{err:m}:{ok:m}); setTimeout(()=>setMsg(null),3500); };
+  const priceOf=(it)=>+it.price>0?+it.price:(+it.cost||0);
+  const add=(it)=>{ setCart(c=>{ const i=c.findIndex(x=>x.sku===it.sku); if(i>=0){ const n=c.slice(); n[i]={...n[i],qty:n[i].qty+1}; return n; } return [...c,{sku:it.sku,name:it.name||it.sku,price:priceOf(it),qty:1,onHand:+it.onHand||0}]; }); };
+  const scanAdd=(e)=>{ e.preventDefault(); const v=q.trim().toLowerCase(); if(!v)return; const it=stock.find(x=>String(x.sku).toLowerCase()===v||String(x.barcode||"").toLowerCase()===v)|| stock.find(x=>(String(x.name||"")+" "+x.sku).toLowerCase().includes(v)); if(it){ add(it); setQ(""); } else flash("No item matches "+q,true); };
+  const setQty=(sku,n)=>setCart(c=>c.map(x=>x.sku===sku?{...x,qty:Math.max(0,n)}:x).filter(x=>x.qty>0));
+  const setPrice=(sku,p)=>setCart(c=>c.map(x=>x.sku===sku?{...x,price:Math.max(0,+p||0)}:x));
+  const sub=cart.reduce((s,x)=>s+x.qty*x.price,0); const tax=Math.round(sub*(+taxPct||0))/100; const total=Math.round((sub+tax)*100)/100;
+  const suggest=q.trim()?stock.filter(x=>(String(x.name||"")+" "+x.sku+" "+(x.barcode||"")).toLowerCase().includes(q.trim().toLowerCase())).slice(0,6):[];
+  const checkout=async()=>{
+    if(!cart.length){flash("Cart is empty.",true);return;}
+    setBusy(true);
+    const lines=cart.map(x=>({sku:x.sku,qty:x.qty}));
+    const r=await cloudCall({action:"invShip",token:CLOUD.token,lines,ref:"POS"});
+    setBusy(false);
+    if(r&&r.ok){ setLast({lines:cart,sub,tax,total,at:new Date().toISOString()}); setCart([]); flash("Sale complete — stock updated."); onReload&&onReload(); try{scanRef.current&&scanRef.current.focus();}catch(e){} }
+    else flash((r&&r.error)||"Checkout failed.",true);
+  };
+  const printReceipt=(sale)=>{
+    const esc=(s)=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+    const money=(n)=>"$"+(Math.round((+n||0)*100)/100).toFixed(2);
+    const rows=sale.lines.map(l=>`<tr><td>${esc(l.name)}</td><td class=r>${l.qty}</td><td class=r>${money(l.price)}</td><td class=r>${money(l.qty*l.price)}</td></tr>`).join("");
+    const html=`<!doctype html><html><head><meta charset=utf-8><title>Receipt</title><style>body{font-family:ui-monospace,Menlo,monospace;margin:24px;max-width:320px;font-size:12px}h3{margin:0 0 8px}table{width:100%;border-collapse:collapse}td{padding:2px 0}.r{text-align:right}.tot td{border-top:1px dashed #999;padding-top:6px;font-weight:700}@media print{body{margin:0}}</style></head><body><h3>Receipt</h3><div>${new Date(sale.at).toLocaleString()}</div><table>${rows}<tr class=tot><td>Subtotal</td><td></td><td></td><td class=r>${money(sale.sub)}</td></tr>${sale.tax?`<tr><td>Tax</td><td></td><td></td><td class=r>${money(sale.tax)}</td></tr>`:""}<tr class=tot><td>Total</td><td></td><td></td><td class=r>${money(sale.total)}</td></tr></table><p style="text-align:center;margin-top:16px">Thank you!</p><script>window.onload=function(){setTimeout(function(){window.print()},200)}<\/script></body></html>`;
+    const w=window.open("","_blank"); if(!w){flash("Allow pop-ups to print.",true);return;} w.document.open(); w.document.write(html); w.document.close();
+  };
+  return (<div className="space-y-4">
+    <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><DollarSign className="w-5 h-5 text-[#0086E0]"/>Point of Sale</h2><p className="text-sm text-stone-500 mt-0.5">Ring up in-person sales — checkout draws the items down from the same inventory and logs the sale. Set a Sell price on items so they price automatically.</p></div>
+    {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
+    <div className="grid md:grid-cols-2 gap-4">
+      <div className="space-y-2">
+        <form onSubmit={scanAdd}><input ref={scanRef} autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="Scan barcode or search name / SKU…" className="w-full border border-stone-300 rounded-xl px-4 py-3 text-base outline-none focus:border-[#0086E0]"/></form>
+        <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100 max-h-80 overflow-y-auto">
+          {(q.trim()?suggest:stock.slice(0,20)).map(it=>(<button key={it.sku} onClick={()=>{add(it);setQ("");}} className="w-full text-left px-3 py-2 hover:bg-stone-50 flex items-center gap-3"><div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{it.name||it.sku}</div><div className="text-[11px] text-stone-400">{it.sku} · {+it.onHand||0} in stock</div></div><div className="text-sm font-medium text-stone-700">${priceOf(it).toFixed(2)}</div></button>))}
+          {stock.length===0&&<div className="p-6 text-center text-sm text-stone-400">No items to sell yet.</div>}
+        </div>
+      </div>
+      <div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
+        <div className="text-sm font-semibold text-stone-700">Cart</div>
+        <div className="space-y-2 max-h-64 overflow-y-auto">
+          {cart.length===0&&<div className="text-sm text-stone-400 py-6 text-center">Cart is empty — add items to sell.</div>}
+          {cart.map(x=>(<div key={x.sku} className="flex items-center gap-2">
+            <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{x.name}</div><div className="text-[11px] text-stone-400 flex items-center gap-1">$<input type="number" value={x.price} onChange={e=>setPrice(x.sku,e.target.value)} className="w-14 border-b border-stone-200 text-[11px] outline-none"/>{x.qty>x.onHand&&<span className="text-rose-500">· only {x.onHand} in stock</span>}</div></div>
+            <button onClick={()=>setQty(x.sku,x.qty-1)} className="w-7 h-7 rounded bg-stone-100 text-stone-600">−</button><span className="w-7 text-center text-sm font-medium">{x.qty}</span><button onClick={()=>setQty(x.sku,x.qty+1)} className="w-7 h-7 rounded bg-[#0086E0]/10 text-[#0086E0]">+</button>
+            <div className="w-16 text-right text-sm font-medium text-stone-800">${(x.qty*x.price).toFixed(2)}</div>
+          </div>))}
+        </div>
+        <div className="border-t border-stone-100 pt-2 space-y-1 text-sm">
+          <div className="flex justify-between text-stone-600"><span>Subtotal</span><span>${sub.toFixed(2)}</span></div>
+          <div className="flex justify-between text-stone-600 items-center"><span className="flex items-center gap-1">Tax <input type="number" value={taxPct} onChange={e=>setTaxPct(e.target.value)} className="w-12 border border-stone-200 rounded px-1 py-0.5 text-xs"/>%</span><span>${tax.toFixed(2)}</span></div>
+          <div className="flex justify-between font-semibold text-stone-900 text-base"><span>Total</span><span>${total.toFixed(2)}</span></div>
+        </div>
+        <button onClick={checkout} disabled={busy||!cart.length} className="w-full bg-emerald-600 text-white rounded-xl py-3 font-semibold hover:bg-emerald-700 disabled:opacity-40 flex items-center justify-center gap-1.5">{busy?<Loader2 className="w-5 h-5 animate-spin"/>:<CheckCircle2 className="w-5 h-5"/>}Charge ${total.toFixed(2)}</button>
+        {last&&<button onClick={()=>printReceipt(last)} className="w-full text-xs text-stone-500 hover:text-stone-700 flex items-center justify-center gap-1"><Printer className="w-3.5 h-3.5"/>Print last receipt (${last.total.toFixed(2)})</button>}
+      </div>
+    </div>
   </div>);
 }
 /* 3PL Billing — a rate card of billable warehouse services (storage, pick, pack, receiving…) plus a

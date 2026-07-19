@@ -766,6 +766,7 @@ exports.handler = async (event) => {
         if (body.reorder != null) it.reorder = Math.max(0, Math.round(+body.reorder || 0));
         if (body.maxStock != null) it.maxStock = Math.max(0, Math.round(+body.maxStock || 0));   // target level for reorder-to-max
         if (body.cost != null && body.cost !== "") it.cost = money2(body.cost);
+        if (body.price != null && body.price !== "") it.price = money2(body.price);   // retail sell price (POS)
         if (body.loc != null) it.loc = String(body.loc).slice(0, 60);
         if (body.barcode != null) it.barcode = String(body.barcode).trim().slice(0, 60);
         if (body.category != null) it.category = String(body.category).trim().slice(0, 60);

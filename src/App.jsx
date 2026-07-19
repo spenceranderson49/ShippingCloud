@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v691";
+const BUILD_TAG="addr-v692";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10170,7 +10170,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   if(view==="pack") return (<div className="max-w-5xl space-y-4"><Switcher/><PackVerify orders={orders} items={list}/></div>);
   if(view==="scan") return (<div className="max-w-5xl space-y-4"><Switcher/><ScanReceive items={list} onReceived={patch} reload={load}/></div>);
   if(view==="warehouses") return (<div className="max-w-5xl space-y-4"><Switcher/><WarehousesView warehouses={warehouses} setWarehouses={setWarehouses}/></div>);
-  if(view==="replenish") return (<div className="max-w-5xl space-y-4"><Switcher/><Replenishment list={list} suppliers={suppliers} incomingBySku={incomingBySku} committedBySku={committedBySku} showMoney={showMoney} onCreated={p=>{setPos(x=>[...p,...(x||[])]);setView("pos");load();}}/></div>);
+  if(view==="replenish") return (<div className="max-w-5xl space-y-4"><Switcher/><Replenishment list={list} suppliers={suppliers} log={log} incomingBySku={incomingBySku} committedBySku={committedBySku} showMoney={showMoney} onCreated={p=>{setPos(x=>[...p,...(x||[])]);setView("pos");load();}}/></div>);
   if(view==="count") return (<div className="max-w-5xl space-y-4"><Switcher/><CycleCount list={list} showMoney={showMoney} onApplied={load}/></div>);
   const reorderLowStock=()=>{
     const low=list.filter(it=>!(Array.isArray(it.kit)&&it.kit.length)&&(+it.reorder||0)>0&&(+it.onHand||0)<=(+it.reorder||0));
@@ -10449,9 +10449,17 @@ function CycleCount({list,showMoney,onApplied}){
 /* Replenishment — Fishbowl/NetSuite-style planner. Finds items at or below their reorder point
    (counting stock already on the way from open POs), suggests a top-up-to-max quantity, groups the
    suggestions by each item's preferred supplier, and creates one draft PO per supplier in a click. */
-function Replenishment({list,suppliers,incomingBySku,committedBySku,showMoney,onCreated}){
+function Replenishment({list,suppliers,log,incomingBySku,committedBySku,showMoney,onCreated}){
   const stock=(list||[]).filter(it=>!(Array.isArray(it.kit)&&it.kit.length));
   const supName=(id)=>{ const s=(suppliers||[]).find(x=>x.id===id); return s?s.name:""; };
+  /* Demand velocity: average units shipped per day over the trailing 30 days, from the ledger.
+     Days of cover = on-hand ÷ velocity — how long today's stock lasts at the recent sell rate. */
+  const velBySku=useMemo(()=>{
+    const cutoff=Date.now()-30*864e5; const m={};
+    (log||[]).forEach(e=>{ if(!e||e.type!=="ship")return; const t=Date.parse(e.at||""); if(!(t>=cutoff))return; const k=String(e.sku||"").toLowerCase(); m[k]=(m[k]||0)+Math.abs(+e.qty||0); });
+    Object.keys(m).forEach(k=>{ m[k]=m[k]/30; });
+    return m;
+  },[log]);
   // Build suggestion rows: net position = onHand + incoming; needy when net <= reorder.
   const initRows=()=>{
     const rows=[];
@@ -10463,14 +10471,18 @@ function Replenishment({list,suppliers,incomingBySku,committedBySku,showMoney,on
       if(net>reorder)return;
       const target=(+it.maxStock>0)?+it.maxStock:Math.max(reorder*2,reorder+1);
       const suggest=Math.max(1,target-net);
-      rows.push({sku:it.sku,name:it.name||"",supplierId:it.supplierId||"",onHand,inc,reorder,target,cost:+it.cost||0,qty:suggest,include:true});
+      const vel=velBySku[String(it.sku).toLowerCase()]||0;
+      const days=vel>0?Math.round(onHand/vel):null;   // null = no recent sales
+      rows.push({sku:it.sku,name:it.name||"",supplierId:it.supplierId||"",onHand,inc,reorder,target,cost:+it.cost||0,vel,days,qty:suggest,include:true});
     });
+    // Most urgent first: fewest days of cover, then lowest net position.
+    rows.sort((a,b)=>{ const da=a.days==null?1e9:a.days, db=b.days==null?1e9:b.days; return da-db||(a.onHand+a.inc)-(b.onHand+b.inc); });
     return rows;
   };
   const [rows,setRows]=useState(initRows);
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState(null);
-  useEffect(()=>{ setRows(initRows()); /* eslint-disable-next-line */ },[list,incomingBySku]);
+  useEffect(()=>{ setRows(initRows()); /* eslint-disable-next-line */ },[list,incomingBySku,velBySku]);
   const flash=(m,e)=>{ setMsg(e?{err:m}:{ok:m}); setTimeout(()=>setMsg(null),4000); };
   const setRow=(sku,patch)=>setRows(rs=>rs.map(r=>r.sku===sku?{...r,...patch}:r));
   // Group included rows by supplier for the "one PO per supplier" preview.
@@ -10494,7 +10506,7 @@ function Replenishment({list,suppliers,incomingBySku,committedBySku,showMoney,on
   };
   return (<div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
-      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ClipboardList className="w-5 h-5 text-[#0086E0]"/>Replenishment</h2><p className="text-sm text-stone-500 mt-0.5">Items at or below their reorder point — counting stock already on the way. We suggest how much to buy to refill to target, grouped by supplier.</p></div>
+      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ClipboardList className="w-5 h-5 text-[#0086E0]"/>Replenishment</h2><p className="text-sm text-stone-500 mt-0.5">Items at or below their reorder point — counting stock already on the way, sorted by urgency. <b className="text-stone-600">Days left</b> is how long today's stock lasts at your 30-day sell rate. We suggest how much to buy to refill to target, grouped by supplier.</p></div>
     </div>
     {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
     {rows.length===0?(
@@ -10505,6 +10517,7 @@ function Replenishment({list,suppliers,incomingBySku,committedBySku,showMoney,on
           <thead className="bg-stone-50 text-stone-500 text-xs"><tr>
             <th className="px-3 py-2 text-left w-8"></th><th className="px-3 py-2 text-left">Item</th>
             <th className="px-3 py-2 text-right">On hand</th><th className="px-3 py-2 text-right">Incoming</th>
+            <th className="px-3 py-2 text-right">Days left</th>
             <th className="px-3 py-2 text-right">Min</th><th className="px-3 py-2 text-right">Target</th>
             <th className="px-3 py-2 text-left">Supplier</th><th className="px-3 py-2 text-right">Order qty</th>
           </tr></thead>
@@ -10514,6 +10527,7 @@ function Replenishment({list,suppliers,incomingBySku,committedBySku,showMoney,on
               <td className="px-3 py-2"><div className="text-stone-800">{r.name||r.sku}</div><div className="text-[11px] text-stone-400">{r.sku}</div></td>
               <td className="px-3 py-2 text-right text-stone-700">{r.onHand}</td>
               <td className="px-3 py-2 text-right text-stone-400">{r.inc||"—"}</td>
+              <td className={`px-3 py-2 text-right ${r.days==null?"text-stone-300":r.days<=7?"text-rose-600 font-medium":r.days<=21?"text-amber-600":"text-stone-500"}`}>{r.days==null?"—":r.days+"d"}</td>
               <td className="px-3 py-2 text-right text-amber-600">{r.reorder}</td>
               <td className="px-3 py-2 text-right text-stone-500">{r.target}</td>
               <td className="px-3 py-2"><select value={r.supplierId} onChange={e=>setRow(r.sku,{supplierId:e.target.value})} className="border border-stone-200 rounded px-1.5 py-1 text-xs max-w-[9rem]"><option value="">No supplier</option>{(suppliers||[]).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></td>

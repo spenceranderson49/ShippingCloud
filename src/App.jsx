@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v713";
+const BUILD_TAG="addr-v714";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10069,6 +10069,9 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     await cloudCall({action:"invUpsert",token:CLOUD.token,sku:"GIFTBOX",name:"Gift Box (T-Shirt + Mug)",category:"Bundles",kit:[{sku:"TSHIRT-BLK-M",qty:1},{sku:"MUG-WHT",qty:1}]});
     await cloudCall({action:"supplierSave",token:CLOUD.token,supplier:{name:"Acme Supply Co.",contact:"Sales",email:"orders@acmesupply.example",leadDays:5}});
     await cloudCall({action:"warehouseSave",token:CLOUD.token,warehouse:{name:"Main Warehouse",code:"WH1",type:"warehouse"}});
+    await cloudCall({action:"containerSave",token:CLOUD.token,container:{name:"Small box",kind:"box",length:8,width:6,height:4,maxWeight:5,cost:0.55}});
+    await cloudCall({action:"containerSave",token:CLOUD.token,container:{name:"Poly mailer",kind:"poly",length:10,width:7,height:1,maxWeight:1,cost:0.15}});
+    await cloudCall({action:"wlistSave",token:CLOUD.token,kind:"packgroups",items:[{id:"wlsample1",name:"Apparel → poly mailer",match:"Apparel",container:"Poly mailer",note:"Soft goods ship in a mailer"}]});
     setBusy(""); flash("Sample warehouse loaded — explore, then delete these items whenever you like."); load();
   };
   const catalog=(settings&&settings.products)||[];

@@ -231,6 +231,31 @@ async function notifyLoginCreated(created, via) {
     await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key }, body: JSON.stringify({ from, to: [to], subject, html }) });
   } catch (e) {}
 }
+/* Branded email to a buyer about their return request (received / approved / denied / refunded /
+   credited / exchanged). Best-effort — a mail hiccup never affects the return record. */
+async function notifyReturnEmail(brand, req, kind) {
+  try {
+    const key = (process.env.RESEND_API_KEY || "").trim(); if (!key || !req || !req.email) return;
+    const baseFrom = (process.env.EMAIL_FROM || "ShippingCloud <notify@shippingcloud.net>").trim();
+    const fromAddr = (baseFrom.match(/<([^>]+)>/) || [null, baseFrom])[1];
+    const storeName = (brand && brand.name) || "The store";
+    const color = (brand && brand.color && /^#?[0-9a-fA-F]{3,8}$/.test(brand.color)) ? (brand.color[0] === "#" ? brand.color : "#" + brand.color) : "#0086E0";
+    const esc = (s) => String(s == null ? "" : s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    const instr = (brand && brand.returnPolicy && brand.returnPolicy.instructions) ? esc(brand.returnPolicy.instructions) : "";
+    const M = {
+      received: ["We got your return request", `Thanks — we've received your return request for order <b>${esc(req.order)}</b>. We'll review it and email you the next steps.`],
+      approved: ["Your return is approved", `Good news — your return for order <b>${esc(req.order)}</b> is approved. ${instr || "We'll follow up with return instructions shortly."}`],
+      denied: ["Update on your return", `We reviewed your return for order <b>${esc(req.order)}</b> and unfortunately it doesn't qualify under our return policy. Reply if you have questions.`],
+      refunded: ["Your refund is on the way", `Your return for order <b>${esc(req.order)}</b> has been refunded. It can take a few days to appear on your statement.`],
+      credited: ["Store credit issued", `We've issued store credit for your return of order <b>${esc(req.order)}</b>. Thanks for shopping with us.`],
+      exchanged: ["Your exchange is underway", `Your exchange for order <b>${esc(req.order)}</b> is being processed. We'll send tracking when it ships.`],
+    };
+    const m = M[kind]; if (!m) return;
+    const logo = (brand && brand.logo) ? `<img src="${esc(brand.logo)}" alt="" style="height:32px;vertical-align:middle">` : `<span style="font-size:18px;font-weight:800;color:#ffffff">${esc(storeName)}</span>`;
+    const html = `<body style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f7f7f5;margin:0;padding:0"><div style="max-width:480px;margin:0 auto"><div style="background:${color};padding:18px 20px">${logo}</div><div style="background:#fff;padding:24px 20px"><div style="font-size:16px;font-weight:700;color:#1c1917">${esc(m[0])}</div><p style="font-size:14px;color:#57534e;line-height:1.6;margin-top:8px">${m[1]}</p>${(brand && brand.supportEmail) ? `<p style="font-size:12px;color:#a8a29e">Questions? <a href="mailto:${esc(brand.supportEmail)}" style="color:${color}">${esc(brand.supportEmail)}</a></p>` : ""}</div><div style="text-align:center;color:#a8a29e;font-size:11px;padding:12px">Powered by ShippingCloud</div></div></body>`;
+    await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + key }, body: JSON.stringify({ from: storeName + " <" + fromAddr + ">", to: [req.email], subject: m[0] + " — " + storeName, html }) });
+  } catch (e) {}
+}
 /* Owner alert on a new FedEx-account request — includes the customer's details and attaches
    the uploaded invoice (whatever they attached) so it's actionable straight from the inbox. */
 async function notifyFedexRequest(req, invoice) {
@@ -627,9 +652,11 @@ exports.handler = async (event) => {
       if (!cur.ok) return J({ ok: false, retry: true, error: "Please try again in a moment." });
       const list = Array.isArray(cur.value) ? cur.value : [];
       const status = policy.autoApprove ? "approved" : "new";   // auto-approve when the merchant's policy allows
-      list.unshift({ id: "ret" + Date.now() + Math.floor(Math.random() * 1000), at: new Date().toISOString(), order, email: email.toLowerCase(), name, items: itemsTxt, reason, resolution, status });
+      const rec = { id: "ret" + Date.now() + Math.floor(Math.random() * 1000), at: new Date().toISOString(), order, email: email.toLowerCase(), name, items: itemsTxt, reason, resolution, status };
+      list.unshift(rec);
       const w = await putStores({ [key]: list.slice(0, 500) });
       if (!w.ok) return J({ ok: false, error: "Couldn't submit — try again." });
+      await notifyReturnEmail(brandRec.value, rec, status === "approved" ? "approved" : "received");
       return J({ ok: true });
     }
 
@@ -957,9 +984,15 @@ exports.handler = async (event) => {
         const id = String(body.id || "");
         const status = ["new", "approved", "denied", "received", "refunded", "credited", "exchanged", "closed"].indexOf(String(body.status)) >= 0 ? String(body.status) : null;
         if (!status) return J({ ok: false, error: "Invalid status." });
+        const target = list.find((r) => r && r.id === id) || null;
         list = list.map((r) => r && r.id === id ? { ...r, status, handledAt: new Date().toISOString() } : r);
         const w = await putStores({ [rKey]: list });
         if (!w.ok) return J({ ok: false, error: "Couldn't update — try again." });
+        /* Email the buyer on meaningful transitions (skip received/closed — internal states). */
+        if (target && ["approved", "denied", "refunded", "credited", "exchanged"].indexOf(status) >= 0) {
+          const br = await getStore("pub:track:" + brandId);
+          await notifyReturnEmail((br.ok && br.value) || null, { ...target, status }, status);
+        }
         return J({ ok: true, requests: list });
       }
 

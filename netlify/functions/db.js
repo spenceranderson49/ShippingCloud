@@ -768,6 +768,7 @@ exports.handler = async (event) => {
         if (body.category != null) it.category = String(body.category).trim().slice(0, 60);
         if (body.uom != null) it.uom = String(body.uom).trim().slice(0, 20);        // base unit (each/case/lb…)
         if (body.casePack != null) it.casePack = Math.max(0, Math.round(+body.casePack || 0));  // units per case for case-receiving
+        if (body.supplierId != null) it.supplierId = String(body.supplierId).slice(0, 40);       // preferred supplier for replenishment
         if (body.trackLot != null) { it.trackLot = !!body.trackLot; if (it.trackLot && !Array.isArray(it.lots)) it.lots = []; if (!it.trackLot) delete it.lots; }
         if (body.trackSerial != null) { it.trackSerial = !!body.trackSerial; if (it.trackSerial && !Array.isArray(it.serials)) it.serials = []; if (!it.trackSerial) delete it.serials; }
         if (body.fifo != null) { it.fifo = !!body.fifo; if (it.fifo && !Array.isArray(it.layers)) it.layers = []; if (!it.fifo) delete it.layers; }

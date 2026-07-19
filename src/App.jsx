@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v688";
+const BUILD_TAG="addr-v689";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10088,11 +10088,11 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     setBusy("");
     if(r&&r.ok){ patch(r.item); const diff=cnt-(+it.onHand||0); flash(it.sku+" counted → "+cnt+(diff?" ("+(diff>0?"+":"")+diff+" variance)":" (no variance)")); load(); } else flash((r&&r.error)||"Count failed.",true);
   };
-  const openEdit=(it)=>{ setEf({sku:it.sku,name:it.name||"",reorder:it.reorder??"",maxStock:it.maxStock??"",cost:it.cost??"",loc:it.loc||"",barcode:it.barcode||"",category:it.category||"",uom:it.uom||"",casePack:it.casePack??"",trackLot:!!it.trackLot,trackSerial:!!it.trackSerial,fifo:!!it.fifo,kit:Array.isArray(it.kit)?it.kit.map(c=>({sku:c.sku,qty:c.qty})):[]}); setEditSku(it.sku); };
+  const openEdit=(it)=>{ setEf({sku:it.sku,name:it.name||"",reorder:it.reorder??"",maxStock:it.maxStock??"",cost:it.cost??"",loc:it.loc||"",barcode:it.barcode||"",category:it.category||"",uom:it.uom||"",casePack:it.casePack??"",supplierId:it.supplierId||"",trackLot:!!it.trackLot,trackSerial:!!it.trackSerial,fifo:!!it.fifo,kit:Array.isArray(it.kit)?it.kit.map(c=>({sku:c.sku,qty:c.qty})):[]}); setEditSku(it.sku); };
   const saveEdit=async()=>{
     if(!ef)return; setBusy("edit");
     const kit=(ef.kit||[]).filter(c=>String(c.sku||"").trim()).map(c=>({sku:c.sku,qty:Math.max(1,Math.round(+c.qty||1))}));
-    const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:ef.sku,name:ef.name,reorder:ef.reorder===""?0:+ef.reorder,maxStock:ef.maxStock===""?0:+ef.maxStock,cost:ef.cost===""?"":+ef.cost,loc:ef.loc,barcode:ef.barcode||"",category:ef.category||"",uom:ef.uom||"",casePack:ef.casePack===""?0:+ef.casePack,trackLot:!!ef.trackLot,trackSerial:!!ef.trackSerial,fifo:!!ef.fifo,kit});
+    const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:ef.sku,name:ef.name,reorder:ef.reorder===""?0:+ef.reorder,maxStock:ef.maxStock===""?0:+ef.maxStock,cost:ef.cost===""?"":+ef.cost,loc:ef.loc,barcode:ef.barcode||"",category:ef.category||"",uom:ef.uom||"",casePack:ef.casePack===""?0:+ef.casePack,supplierId:ef.supplierId||"",trackLot:!!ef.trackLot,trackSerial:!!ef.trackSerial,fifo:!!ef.fifo,kit});
     setBusy("");
     if(r&&r.ok){ patch(r.item); setEditSku(null); setEf(null); flash("Saved "+r.item.sku+"."); load(); } else flash((r&&r.error)||"Couldn't save.",true);
   };
@@ -10158,7 +10158,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
   const openPo=(pos||[]).filter(p=>p&&p.status!=="received").length;
   const Switcher=()=>(<div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm flex-wrap">
-    {[["overview","Overview"],["stock","Stock"],["pos","Purchase Orders"],["suppliers","Suppliers"],["warehouses","Warehouses"],["pick","Pick Lists"],["pack","Pack Verify"],["scan","Scan Receive"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}</button>)}
+    {[["overview","Overview"],["stock","Stock"],["replenish","Replenish"],["pos","Purchase Orders"],["suppliers","Suppliers"],["warehouses","Warehouses"],["pick","Pick Lists"],["pack","Pack Verify"],["scan","Scan Receive"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}{v==="replenish"&&lowCount>0?" ("+lowCount+")":""}</button>)}
   </div>);
   if(view==="overview") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryOverview list={list} pos={pos} log={log} suppliers={suppliers} orders={orders} showMoney={showMoney} committedBySku={committedBySku} incomingBySku={incomingBySku} goView={setView} onReceive={()=>setView("stock")}/></div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
@@ -10166,6 +10166,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   if(view==="pack") return (<div className="max-w-5xl space-y-4"><Switcher/><PackVerify orders={orders} items={list}/></div>);
   if(view==="scan") return (<div className="max-w-5xl space-y-4"><Switcher/><ScanReceive items={list} onReceived={patch} reload={load}/></div>);
   if(view==="warehouses") return (<div className="max-w-5xl space-y-4"><Switcher/><WarehousesView warehouses={warehouses} setWarehouses={setWarehouses}/></div>);
+  if(view==="replenish") return (<div className="max-w-5xl space-y-4"><Switcher/><Replenishment list={list} suppliers={suppliers} incomingBySku={incomingBySku} committedBySku={committedBySku} showMoney={showMoney} onCreated={p=>{setPos(x=>[...p,...(x||[])]);setView("pos");load();}}/></div>);
   const reorderLowStock=()=>{
     const low=list.filter(it=>!(Array.isArray(it.kit)&&it.kit.length)&&(+it.reorder||0)>0&&(+it.onHand||0)<=(+it.reorder||0));
     if(!low.length)return;
@@ -10326,6 +10327,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
           <Field label="Category"><Input value={ef.category||""} onChange={e=>setEf({...ef,category:e.target.value})}/></Field>
           <Field label="Base unit"><Input value={ef.uom||""} onChange={e=>setEf({...ef,uom:e.target.value})} placeholder="each / lb / ft"/></Field>
           <Field label="Units per case"><Input type="number" value={ef.casePack??""} onChange={e=>setEf({...ef,casePack:e.target.value})} placeholder="e.g. 12"/></Field>
+          <Field label="Preferred supplier"><select value={ef.supplierId||""} onChange={e=>setEf({...ef,supplierId:e.target.value})} className="w-full border border-stone-300 rounded-lg px-2 py-2 text-sm"><option value="">—</option>{(suppliers||[]).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
           <div className="col-span-2 space-y-1.5">
             <div className="text-[10px] uppercase tracking-widest text-stone-400 pt-1">Advanced — optional, most stores can skip these</div>
             <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!!ef.trackLot} onChange={e=>setEf({...ef,trackLot:e.target.checked,trackSerial:e.target.checked?false:ef.trackSerial})} className="accent-[#0086E0]"/>Track lots &amp; expiry <span className="text-xs text-stone-400">(for food/cosmetics/pharma — ships soonest-to-expire first)</span></label>
@@ -10369,6 +10371,94 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
         <div className="flex items-center gap-2 mt-4"><button onClick={build} disabled={busy==="build"} className="text-sm bg-violet-600 text-white rounded-lg px-4 py-2 font-medium hover:bg-violet-700 disabled:opacity-40 flex items-center gap-1.5">{busy==="build"?<Loader2 className="w-4 h-4 animate-spin"/>:<Boxes className="w-4 h-4"/>}Build</button><button onClick={()=>setBuilding(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
       </div>
     </div>);})()}
+  </div>);
+}
+
+/* Replenishment — Fishbowl/NetSuite-style planner. Finds items at or below their reorder point
+   (counting stock already on the way from open POs), suggests a top-up-to-max quantity, groups the
+   suggestions by each item's preferred supplier, and creates one draft PO per supplier in a click. */
+function Replenishment({list,suppliers,incomingBySku,committedBySku,showMoney,onCreated}){
+  const stock=(list||[]).filter(it=>!(Array.isArray(it.kit)&&it.kit.length));
+  const supName=(id)=>{ const s=(suppliers||[]).find(x=>x.id===id); return s?s.name:""; };
+  // Build suggestion rows: net position = onHand + incoming; needy when net <= reorder.
+  const initRows=()=>{
+    const rows=[];
+    stock.forEach(it=>{
+      const reorder=+it.reorder||0; if(reorder<=0)return;
+      const onHand=+it.onHand||0;
+      const inc=incomingBySku[String(it.sku).toLowerCase()]||0;
+      const net=onHand+inc;
+      if(net>reorder)return;
+      const target=(+it.maxStock>0)?+it.maxStock:Math.max(reorder*2,reorder+1);
+      const suggest=Math.max(1,target-net);
+      rows.push({sku:it.sku,name:it.name||"",supplierId:it.supplierId||"",onHand,inc,reorder,target,cost:+it.cost||0,qty:suggest,include:true});
+    });
+    return rows;
+  };
+  const [rows,setRows]=useState(initRows);
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState(null);
+  useEffect(()=>{ setRows(initRows()); /* eslint-disable-next-line */ },[list,incomingBySku]);
+  const flash=(m,e)=>{ setMsg(e?{err:m}:{ok:m}); setTimeout(()=>setMsg(null),4000); };
+  const setRow=(sku,patch)=>setRows(rs=>rs.map(r=>r.sku===sku?{...r,...patch}:r));
+  // Group included rows by supplier for the "one PO per supplier" preview.
+  const groups={}; rows.filter(r=>r.include&&+r.qty>0).forEach(r=>{ const k=r.supplierId||""; (groups[k]=groups[k]||[]).push(r); });
+  const groupKeys=Object.keys(groups).sort((a,b)=>(supName(a)||"~").localeCompare(supName(b)||"~"));
+  const totalUnits=rows.filter(r=>r.include).reduce((s,r)=>s+(+r.qty||0),0);
+  const createPOs=async()=>{
+    const active=rows.filter(r=>r.include&&+r.qty>0);
+    if(!active.length){flash("Nothing selected to reorder.",true);return;}
+    setBusy(true);
+    const created=[];
+    for(const k of groupKeys){
+      const g=groups[k];
+      const lines=g.map(r=>({sku:r.sku,name:r.name,qtyOrdered:Math.round(+r.qty||0),qtyReceived:0,cost:showMoney?(r.cost||0):0}));
+      const po={number:"",supplierId:k,supplierName:supName(k),expectedAt:"",notes:"Auto-generated from replenishment",lines};
+      const r=await cloudCall({action:"poSave",token:CLOUD.token,po});
+      if(r&&r.ok)created.push(r.po); else { setBusy(false); flash((r&&r.error)||"Couldn't create a PO.",true); return; }
+    }
+    setBusy(false);
+    onCreated&&onCreated(created);
+  };
+  return (<div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ClipboardList className="w-5 h-5 text-[#0086E0]"/>Replenishment</h2><p className="text-sm text-stone-500 mt-0.5">Items at or below their reorder point — counting stock already on the way. We suggest how much to buy to refill to target, grouped by supplier.</p></div>
+    </div>
+    {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
+    {rows.length===0?(
+      <div className="border border-stone-200 rounded-xl bg-white p-8 text-center text-sm text-stone-400">Nothing needs reordering right now. Set a <b className="text-stone-500">Reorder at (min)</b> on your items and this planner watches them for you.</div>
+    ):(<>
+      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-stone-50 text-stone-500 text-xs"><tr>
+            <th className="px-3 py-2 text-left w-8"></th><th className="px-3 py-2 text-left">Item</th>
+            <th className="px-3 py-2 text-right">On hand</th><th className="px-3 py-2 text-right">Incoming</th>
+            <th className="px-3 py-2 text-right">Min</th><th className="px-3 py-2 text-right">Target</th>
+            <th className="px-3 py-2 text-left">Supplier</th><th className="px-3 py-2 text-right">Order qty</th>
+          </tr></thead>
+          <tbody className="divide-y divide-stone-100">
+            {rows.map(r=>(<tr key={r.sku} className={r.include?"":"opacity-40"}>
+              <td className="px-3 py-2"><input type="checkbox" checked={r.include} onChange={e=>setRow(r.sku,{include:e.target.checked})} className="accent-[#0086E0]"/></td>
+              <td className="px-3 py-2"><div className="text-stone-800">{r.name||r.sku}</div><div className="text-[11px] text-stone-400">{r.sku}</div></td>
+              <td className="px-3 py-2 text-right text-stone-700">{r.onHand}</td>
+              <td className="px-3 py-2 text-right text-stone-400">{r.inc||"—"}</td>
+              <td className="px-3 py-2 text-right text-amber-600">{r.reorder}</td>
+              <td className="px-3 py-2 text-right text-stone-500">{r.target}</td>
+              <td className="px-3 py-2"><select value={r.supplierId} onChange={e=>setRow(r.sku,{supplierId:e.target.value})} className="border border-stone-200 rounded px-1.5 py-1 text-xs max-w-[9rem]"><option value="">No supplier</option>{(suppliers||[]).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></td>
+              <td className="px-3 py-2 text-right"><input type="number" min="0" value={r.qty} onChange={e=>setRow(r.sku,{qty:e.target.value})} className="w-20 border border-stone-300 rounded-lg px-2 py-1 text-sm text-right"/></td>
+            </tr>))}
+          </tbody>
+        </table>
+      </div>
+      <div className="border border-stone-200 rounded-xl bg-white p-4">
+        <div className="text-xs font-semibold text-stone-600 mb-2">This will create {groupKeys.length} draft {groupKeys.length===1?"PO":"POs"} · {totalUnits} units total</div>
+        <div className="space-y-1">
+          {groupKeys.map(k=>(<div key={k||"none"} className="text-sm text-stone-600 flex items-center gap-2"><ClipboardList className="w-3.5 h-3.5 text-stone-400"/><b className="text-stone-800">{supName(k)||"No supplier"}</b><span className="text-stone-400">— {groups[k].length} {groups[k].length===1?"item":"items"}, {groups[k].reduce((s,r)=>s+(+r.qty||0),0)} units{showMoney?" · $"+groups[k].reduce((s,r)=>s+(+r.qty||0)*(r.cost||0),0).toFixed(2):""}</span></div>))}
+        </div>
+        {groupKeys.some(k=>!k)&&<div className="text-[11px] text-amber-600 mt-2">Tip: set a <b>Preferred supplier</b> on items (edit an item) so they group onto the right PO automatically.</div>}
+        <button onClick={createPOs} disabled={busy||!groupKeys.length} className="mt-3 text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy&&<Loader2 className="w-4 h-4 animate-spin"/>}Create draft {groupKeys.length===1?"PO":"POs"}</button>
+      </div>
+    </>)}
   </div>);
 }
 

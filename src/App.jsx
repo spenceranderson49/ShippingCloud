@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v690";
+const BUILD_TAG="addr-v691";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9942,6 +9942,9 @@ const WMS_GLOSSARY=[
   ["Reorder up to (max)","The level you want to refill back to when you reorder."],
   ["Purchase order (PO)","An order you send a supplier to buy more stock. Receive it to add stock in."],
   ["Receiving","Logging stock that arrived — it adds to on-hand."],
+  ["Landed cost","Freight, duty and fees on a shipment, spread across the units so each item's cost reflects what it truly cost to get on your shelf."],
+  ["Preferred supplier","The vendor you'd normally reorder an item from. Replenishment uses it to group items onto the right PO."],
+  ["Replenishment","A planner that lists everything at or below its reorder point and drafts the POs to refill — grouped by supplier."],
   ["Cycle count","Physically counting an item and correcting the number in the system."],
   ["Location / bin","Where an item sits — a warehouse, a zone, or a shelf/bin."],
   ["Transfer","Moving units from one location to another (the total doesn't change)."],
@@ -9958,9 +9961,10 @@ const WMS_GLOSSARY=[
 const WMS_TUTORIALS=[
   ["Add your products","📦",["Click New item (or Import from catalog / Import CSV to add lots at once).","Enter a SKU — a short code for the product. That's the only required field.","Optionally set On hand, a Reorder point, and a Unit cost.","Save — it appears in your Stock list."]],
   ["Receive a purchase order","🚚",["Go to Purchase Orders → New PO.","Pick a supplier and add line items (SKU + quantity + cost).","Save. When the stock arrives, open the PO and click Receive.","Enter how many arrived — it adds to on-hand automatically and closes the PO."]],
-  ["Never run out — reorder points","🔔",["Edit an item and set Reorder at (min) and Reorder up to (max).","When on-hand hits the min, the item shows a Low badge.","Click Reorder low stock to auto-build a PO that fills everything back to max."]],
+  ["Never run out — reorder points","🔔",["Edit an item and set Reorder at (min) and Reorder up to (max).","When on-hand hits the min, the item shows a Low badge.","Open the Replenish tab to draft the POs that refill everything back to max."]],
+  ["Auto-draft your restock POs","🧾",["Set a Preferred supplier on each item (edit the item).","Open the Replenish tab — it lists everything low, counting stock already on the way.","Adjust any order quantities, then click Create draft POs.","You get one PO per supplier, ready to review and send."]],
   ["Ship & watch stock count down","✅",["Ship orders like normal from the Ship or Orders tab.","If the order's items match your SKUs, stock decrements by itself.","Orders show an in-stock / short badge so you know before you ship."]],
-  ["Count stock (cycle count)","🔢",["On the Stock list click Count next to an item.","Enter the number you actually counted.","The system records the difference — no math needed."]],
+  ["Count stock (cycle count)","🔢",["Open the Cycle Count tab and pick a category (or count everything).","Walk the shelf and type what you physically have next to each item.","The Variance column shows the difference live.","Click Apply — only differences are corrected, and each is logged."]],
   ["Move stock between locations","↔️",["Turn on a couple of Warehouses (or just type bin names).","Click Move on an item, choose from/to and a quantity.","The total stays the same — it's just relocated. Per-location counts show on the row."]],
 ];
 /* ════════ INVENTORY ════════

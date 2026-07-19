@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v692";
+const BUILD_TAG="addr-v693";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10159,10 +10159,12 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const totUnits=list.reduce((s,it)=>s+(+it.onHand||0),0);
   const totValue=list.reduce((s,it)=>s+(+it.onHand||0)*(+it.cost||0),0);
   const lowCount=list.filter(isLow).length;
+  // Backorder count: distinct stocked SKUs whose committed demand exceeds on-hand.
+  const boCount=list.filter(it=>{ if(Array.isArray(it.kit)&&it.kit.length&&!it.assembled)return false; const d=committedBySku[String(it.sku).toLowerCase()]||0; return d>(+it.onHand||0); }).length;
   const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
   const openPo=(pos||[]).filter(p=>p&&p.status!=="received").length;
   const Switcher=()=>(<div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm flex-wrap">
-    {[["overview","Overview"],["stock","Stock"],["replenish","Replenish"],["count","Cycle Count"],["pos","Purchase Orders"],["suppliers","Suppliers"],["warehouses","Warehouses"],["pick","Pick Lists"],["pack","Pack Verify"],["scan","Scan Receive"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}{v==="replenish"&&lowCount>0?" ("+lowCount+")":""}</button>)}
+    {[["overview","Overview"],["stock","Stock"],["replenish","Replenish"],["backorder","Backorders"],["count","Cycle Count"],["pos","Purchase Orders"],["suppliers","Suppliers"],["warehouses","Warehouses"],["pick","Pick Lists"],["pack","Pack Verify"],["scan","Scan Receive"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}{v==="replenish"&&lowCount>0?" ("+lowCount+")":""}{v==="backorder"&&boCount>0?" ("+boCount+")":""}</button>)}
   </div>);
   if(view==="overview") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryOverview list={list} pos={pos} log={log} suppliers={suppliers} orders={orders} showMoney={showMoney} committedBySku={committedBySku} incomingBySku={incomingBySku} goView={setView} onReceive={()=>setView("stock")}/></div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
@@ -10172,6 +10174,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   if(view==="warehouses") return (<div className="max-w-5xl space-y-4"><Switcher/><WarehousesView warehouses={warehouses} setWarehouses={setWarehouses}/></div>);
   if(view==="replenish") return (<div className="max-w-5xl space-y-4"><Switcher/><Replenishment list={list} suppliers={suppliers} log={log} incomingBySku={incomingBySku} committedBySku={committedBySku} showMoney={showMoney} onCreated={p=>{setPos(x=>[...p,...(x||[])]);setView("pos");load();}}/></div>);
   if(view==="count") return (<div className="max-w-5xl space-y-4"><Switcher/><CycleCount list={list} showMoney={showMoney} onApplied={load}/></div>);
+  if(view==="backorder") return (<div className="max-w-5xl space-y-4"><Switcher/><Backorders list={list} orders={orders} committedBySku={committedBySku} incomingBySku={incomingBySku} goReplenish={()=>setView("replenish")}/></div>);
   const reorderLowStock=()=>{
     const low=list.filter(it=>!(Array.isArray(it.kit)&&it.kit.length)&&(+it.reorder||0)>0&&(+it.onHand||0)<=(+it.reorder||0));
     if(!low.length)return;
@@ -10376,6 +10379,59 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
         <div className="flex items-center gap-2 mt-4"><button onClick={build} disabled={busy==="build"} className="text-sm bg-violet-600 text-white rounded-lg px-4 py-2 font-medium hover:bg-violet-700 disabled:opacity-40 flex items-center gap-1.5">{busy==="build"?<Loader2 className="w-4 h-4 animate-spin"/>:<Boxes className="w-4 h-4"/>}Build</button><button onClick={()=>setBuilding(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
       </div>
     </div>);})()}
+  </div>);
+}
+
+/* Backorders — demand-vs-supply across all open orders. Aggregates committed demand per SKU, flags
+   every item whose orders exceed on-hand, shows whether inbound POs already cover the gap, and lists
+   the specific orders waiting. The NetSuite/Fishbowl "what am I short on, and who's waiting" screen. */
+function Backorders({list,orders,committedBySku,incomingBySku,goReplenish}){
+  const [open,setOpen]=useState({});
+  const stock=(list||[]).filter(it=>!(Array.isArray(it.kit)&&it.kit.length&&!it.assembled));
+  // Orders that still need fulfilling, with their line quantities per sku.
+  const openOrders=(orders||[]).filter(o=>o&&o.status!=="fulfilled");
+  const ordersForSku=(sku)=>{ const k=String(sku).toLowerCase(); const out=[]; openOrders.forEach(o=>{ const li=(Array.isArray(o.lineItems)?o.lineItems:[]).filter(l=>l&&String(l.sku||"").toLowerCase()===k); const qty=li.reduce((s,l)=>s+(+l.qty||+l.quantity||1),0); if(qty>0)out.push({id:o.id,name:o.name||o.id,customer:o.customer||"",qty}); }); return out.sort((a,b)=>String(a.name).localeCompare(String(b.name))); };
+  const rows=stock.map(it=>{ const k=String(it.sku).toLowerCase(); const demand=committedBySku[k]||0; const onHand=+it.onHand||0; if(demand<=onHand)return null; const inc=incomingBySku[k]||0; const short=demand-onHand; const netShort=Math.max(0,short-inc); return {sku:it.sku,name:it.name||"",demand,onHand,inc,short,netShort}; }).filter(Boolean).sort((a,b)=>b.netShort-a.netShort||b.short-a.short);
+  const affectedOrders=new Set(); rows.forEach(r=>ordersForSku(r.sku).forEach(o=>affectedOrders.add(o.id)));
+  const totalShort=rows.reduce((s,r)=>s+r.short,0);
+  const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
+  return (<div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-amber-500"/>Backorders</h2><p className="text-sm text-stone-500 mt-0.5">Items your open orders need more of than you have in stock. If inbound POs already cover the gap, it shows as on the way; otherwise it still needs reordering.</p></div>
+      {rows.some(r=>r.netShort>0)&&<button onClick={goReplenish} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><ClipboardList className="w-4 h-4"/>Go to Replenish</button>}
+    </div>
+    <div className="grid grid-cols-3 gap-3">
+      <Tile label="SKUs short" value={rows.length} tone={rows.length?"text-amber-600":"text-emerald-600"}/>
+      <Tile label="Orders waiting" value={affectedOrders.size}/>
+      <Tile label="Units backordered" value={totalShort}/>
+    </div>
+    {rows.length===0?(
+      <div className="border border-stone-200 rounded-xl bg-white p-8 text-center text-sm text-stone-400">No backorders — every open order is fully covered by stock. 🎉</div>
+    ):(
+      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-stone-50 text-stone-500 text-xs"><tr>
+            <th className="px-3 py-2 text-left">Item</th><th className="px-3 py-2 text-right">Ordered</th>
+            <th className="px-3 py-2 text-right">On hand</th><th className="px-3 py-2 text-right">Incoming</th>
+            <th className="px-3 py-2 text-right">Short</th><th className="px-3 py-2 text-left">Status</th><th className="px-3 py-2"></th>
+          </tr></thead>
+          <tbody className="divide-y divide-stone-100">
+            {rows.map(r=>{ const ords=ordersForSku(r.sku); const isOpen=!!open[r.sku]; return (<React.Fragment key={r.sku}>
+              <tr className={r.netShort>0?"bg-rose-50/40":"bg-amber-50/30"}>
+                <td className="px-3 py-2"><div className="text-stone-800">{r.name||r.sku}</div><div className="text-[11px] text-stone-400">{r.sku}</div></td>
+                <td className="px-3 py-2 text-right text-stone-700">{r.demand}</td>
+                <td className="px-3 py-2 text-right text-stone-700">{r.onHand}</td>
+                <td className="px-3 py-2 text-right text-stone-400">{r.inc||"—"}</td>
+                <td className="px-3 py-2 text-right font-medium text-rose-600">{r.short}</td>
+                <td className="px-3 py-2">{r.netShort<=0?<span className="text-xs rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700">On the way</span>:<span className="text-xs rounded px-1.5 py-0.5 bg-rose-100 text-rose-700">Reorder {r.netShort}</span>}</td>
+                <td className="px-3 py-2 text-right">{ords.length>0&&<button onClick={()=>setOpen(o=>({...o,[r.sku]:!o[r.sku]}))} className="text-xs text-[#0086E0] hover:underline">{isOpen?"Hide":ords.length+" order"+(ords.length===1?"":"s")}</button>}</td>
+              </tr>
+              {isOpen&&ords.map(o=>(<tr key={r.sku+o.id} className="bg-stone-50/60"><td className="px-3 py-1.5 pl-8 text-xs text-stone-500" colSpan={6}>{o.name}{o.customer?" · "+o.customer:""}</td><td className="px-3 py-1.5 text-right text-xs text-stone-500">{o.qty} needed</td></tr>))}
+            </React.Fragment>);})}
+          </tbody>
+        </table>
+      </div>
+    )}
   </div>);
 }
 

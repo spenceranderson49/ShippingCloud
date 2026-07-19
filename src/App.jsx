@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v694";
+const BUILD_TAG="addr-v695";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9945,6 +9945,9 @@ const WMS_GLOSSARY=[
   ["Landed cost","Freight, duty and fees on a shipment, spread across the units so each item's cost reflects what it truly cost to get on your shelf."],
   ["Preferred supplier","The vendor you'd normally reorder an item from. Replenishment uses it to group items onto the right PO."],
   ["Replenishment","A planner that lists everything at or below its reorder point and drafts the POs to refill — grouped by supplier."],
+  ["Lead time","How many days a supplier takes to deliver after you order. Longer lead time = higher reorder point."],
+  ["Safety stock","A cushion of extra stock so you don't run out if demand spikes or a delivery is late."],
+  ["Days of cover / days left","How many days your current stock lasts at your recent sell rate."],
   ["Cycle count","Physically counting an item and correcting the number in the system."],
   ["Location / bin","Where an item sits — a warehouse, a zone, or a shelf/bin."],
   ["Transfer","Moving units from one location to another (the total doesn't change)."],
@@ -10172,7 +10175,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   if(view==="pack") return (<div className="max-w-5xl space-y-4"><Switcher/><PackVerify orders={orders} items={list}/></div>);
   if(view==="scan") return (<div className="max-w-5xl space-y-4"><Switcher/><ScanReceive items={list} onReceived={patch} reload={load}/></div>);
   if(view==="warehouses") return (<div className="max-w-5xl space-y-4"><Switcher/><WarehousesView warehouses={warehouses} setWarehouses={setWarehouses}/></div>);
-  if(view==="replenish") return (<div className="max-w-5xl space-y-4"><Switcher/><Replenishment list={list} suppliers={suppliers} log={log} incomingBySku={incomingBySku} committedBySku={committedBySku} showMoney={showMoney} onCreated={p=>{setPos(x=>[...p,...(x||[])]);setView("pos");load();}}/></div>);
+  if(view==="replenish") return (<div className="max-w-5xl space-y-4"><Switcher/><Replenishment list={list} suppliers={suppliers} log={log} incomingBySku={incomingBySku} committedBySku={committedBySku} showMoney={showMoney} onReload={load} onCreated={p=>{setPos(x=>[...p,...(x||[])]);setView("pos");load();}}/></div>);
   if(view==="count") return (<div className="max-w-5xl space-y-4"><Switcher/><CycleCount list={list} showMoney={showMoney} onApplied={load}/></div>);
   if(view==="backorder") return (<div className="max-w-5xl space-y-4"><Switcher/><Backorders list={list} orders={orders} committedBySku={committedBySku} incomingBySku={incomingBySku} goReplenish={()=>setView("replenish")}/></div>);
   const reorderLowStock=()=>{
@@ -10502,12 +10505,83 @@ function CycleCount({list,showMoney,onApplied}){
   </div>);
 }
 
+/* Reorder-point advisor — NetSuite-style dynamic reorder points. From each item's 30-day sell rate
+   and its preferred supplier's lead time it recommends a min (cover the lead time + a safety buffer)
+   and a max (min + a review cycle of stock), then writes them back with one click. Pure suggestion —
+   nothing changes until you apply, and only items with recent sales get a recommendation. */
+function ReorderAdvisor({stock,velBySku,supLead,onReload,onClose}){
+  const [lead,setLead]=useState(7);       // fallback lead time (days) when a supplier has none
+  const [safety,setSafety]=useState(50);  // safety buffer, % on top of lead-time demand
+  const [cycle,setCycle]=useState(14);    // review cycle (days of stock between orders) → max
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState(null);
+  const flash=(m,e)=>{ setMsg(e?{err:m}:{ok:m}); setTimeout(()=>setMsg(null),4000); };
+  const recs=useMemo(()=>stock.map(it=>{
+    const daily=velBySku[String(it.sku).toLowerCase()]||0; if(daily<=0)return null;
+    const ld=supLead(it.supplierId)||+lead||0;
+    const recMin=Math.max(1,Math.ceil(daily*ld*(1+(+safety||0)/100)));
+    const recMax=recMin+Math.max(1,Math.ceil(daily*(+cycle||0)));
+    const curMin=+it.reorder||0, curMax=+it.maxStock||0;
+    return {sku:it.sku,name:it.name||"",daily:Math.round(daily*100)/100,ld,curMin,curMax,recMin,recMax,changed:recMin!==curMin||recMax!==curMax,include:recMin!==curMin||recMax!==curMax};
+  }).filter(Boolean).sort((a,b)=>b.daily-a.daily),[stock,velBySku,lead,safety,cycle]);
+  const [sel,setSel]=useState({});
+  const isOn=(r)=>sel[r.sku]!==undefined?sel[r.sku]:r.include;
+  const applyN=recs.filter(r=>r.changed&&isOn(r)).length;
+  const apply=async()=>{
+    const todo=recs.filter(r=>r.changed&&isOn(r));
+    if(!todo.length){flash("Nothing selected.",true);return;}
+    setBusy(true); let ok=0;
+    for(const r of todo){
+      const res=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:r.sku,reorder:r.recMin,maxStock:r.recMax});
+      if(res&&res.ok)ok++; else { setBusy(false); flash("Failed on "+r.sku+". "+ok+" applied.",true); onReload&&onReload(); return; }
+    }
+    setBusy(false); flash("Updated reorder points on "+ok+" item"+(ok===1?"":"s")+"."); onReload&&onReload();
+  };
+  const Num=({label,val,set,suffix})=>(<label className="text-xs text-stone-600">{label}<div className="flex items-center gap-1"><input type="number" min="0" value={val} onChange={e=>set(e.target.value)} className="w-20 border border-stone-300 rounded-lg px-2 py-1 text-sm mt-0.5"/>{suffix?<span className="text-stone-400">{suffix}</span>:null}</div></label>);
+  return (<div className="border border-[#0086E0]/30 rounded-xl bg-sky-50/40 p-4 space-y-3">
+    <div className="flex items-center justify-between"><div className="text-sm font-semibold text-stone-800">Suggested reorder points</div><button onClick={onClose} className="text-stone-400 hover:text-stone-700"><X className="w-4 h-4"/></button></div>
+    <p className="text-xs text-stone-500">Computed from each item's 30-day sell rate and its supplier's lead time. Tweak the assumptions, review, and apply the ones you want.</p>
+    <div className="flex items-end gap-4 flex-wrap">
+      <Num label="Default lead time" val={lead} set={setLead} suffix="days"/>
+      <Num label="Safety buffer" val={safety} set={setSafety} suffix="%"/>
+      <Num label="Review cycle" val={cycle} set={setCycle} suffix="days"/>
+    </div>
+    {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
+    {recs.length===0?(
+      <div className="text-sm text-stone-400 py-4 text-center">No items have recent sales to base a recommendation on yet.</div>
+    ):(<>
+      <div className="bg-white border border-stone-200 rounded-lg overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-stone-50 text-stone-500 text-xs"><tr>
+            <th className="px-3 py-2 text-left w-8"></th><th className="px-3 py-2 text-left">Item</th>
+            <th className="px-3 py-2 text-right">Sold/day</th><th className="px-3 py-2 text-right">Lead</th>
+            <th className="px-3 py-2 text-right">Min now → new</th><th className="px-3 py-2 text-right">Max now → new</th>
+          </tr></thead>
+          <tbody className="divide-y divide-stone-100">
+            {recs.map(r=>(<tr key={r.sku} className={r.changed?"":"opacity-50"}>
+              <td className="px-3 py-2"><input type="checkbox" disabled={!r.changed} checked={r.changed&&isOn(r)} onChange={e=>setSel(s=>({...s,[r.sku]:e.target.checked}))} className="accent-[#0086E0]"/></td>
+              <td className="px-3 py-2"><div className="text-stone-800">{r.name||r.sku}</div><div className="text-[11px] text-stone-400">{r.sku}</div></td>
+              <td className="px-3 py-2 text-right text-stone-600">{r.daily}</td>
+              <td className="px-3 py-2 text-right text-stone-400">{r.ld}d</td>
+              <td className="px-3 py-2 text-right"><span className="text-stone-400">{r.curMin}</span> <span className="text-stone-300">→</span> <b className={r.recMin!==r.curMin?"text-[#0086E0]":"text-stone-500"}>{r.recMin}</b></td>
+              <td className="px-3 py-2 text-right"><span className="text-stone-400">{r.curMax}</span> <span className="text-stone-300">→</span> <b className={r.recMax!==r.curMax?"text-[#0086E0]":"text-stone-500"}>{r.recMax}</b></td>
+            </tr>))}
+          </tbody>
+        </table>
+      </div>
+      <button onClick={apply} disabled={busy||!applyN} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy&&<Loader2 className="w-4 h-4 animate-spin"/>}Apply to {applyN} item{applyN===1?"":"s"}</button>
+    </>)}
+  </div>);
+}
+
 /* Replenishment — Fishbowl/NetSuite-style planner. Finds items at or below their reorder point
    (counting stock already on the way from open POs), suggests a top-up-to-max quantity, groups the
    suggestions by each item's preferred supplier, and creates one draft PO per supplier in a click. */
-function Replenishment({list,suppliers,log,incomingBySku,committedBySku,showMoney,onCreated}){
+function Replenishment({list,suppliers,log,incomingBySku,committedBySku,showMoney,onCreated,onReload}){
   const stock=(list||[]).filter(it=>!(Array.isArray(it.kit)&&it.kit.length));
   const supName=(id)=>{ const s=(suppliers||[]).find(x=>x.id===id); return s?s.name:""; };
+  const supLead=(id)=>{ const s=(suppliers||[]).find(x=>x.id===id); return s&&+s.leadDays>0?+s.leadDays:0; };
+  const [advisor,setAdvisor]=useState(false);
   /* Demand velocity: average units shipped per day over the trailing 30 days, from the ledger.
      Days of cover = on-hand ÷ velocity — how long today's stock lasts at the recent sell rate. */
   const velBySku=useMemo(()=>{
@@ -10563,8 +10637,10 @@ function Replenishment({list,suppliers,log,incomingBySku,committedBySku,showMone
   return (<div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
       <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ClipboardList className="w-5 h-5 text-[#0086E0]"/>Replenishment</h2><p className="text-sm text-stone-500 mt-0.5">Items at or below their reorder point — counting stock already on the way, sorted by urgency. <b className="text-stone-600">Days left</b> is how long today's stock lasts at your 30-day sell rate. We suggest how much to buy to refill to target, grouped by supplier.</p></div>
+      <button onClick={()=>setAdvisor(a=>!a)} className={`text-sm rounded-lg px-3 py-2 font-medium border ${advisor?"bg-[#0086E0] text-white border-[#0086E0]":"bg-white text-stone-600 border-stone-200 hover:bg-stone-50"}`}>Tune reorder points</button>
     </div>
     {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
+    {advisor&&<ReorderAdvisor stock={stock} velBySku={velBySku} supLead={supLead} onReload={onReload} onClose={()=>setAdvisor(false)}/>}
     {rows.length===0?(
       <div className="border border-stone-200 rounded-xl bg-white p-8 text-center text-sm text-stone-400">Nothing needs reordering right now. Set a <b className="text-stone-500">Reorder at (min)</b> on your items and this planner watches them for you.</div>
     ):(<>

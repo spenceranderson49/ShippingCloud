@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v680";
+const BUILD_TAG="addr-v681";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10613,6 +10613,7 @@ function InventoryAnalytics({list,log,showMoney=true}){
       <Tile label="Days of cover" value={daysCover!=null?daysCover+"d":"—"} sub={daysCover!=null?"at current pace":"no recent sales"}/>
       <Tile label="Running out soon" value={forecast.length} tone={forecast.length?"text-rose-600":"text-stone-900"} sub="≤14 days at current pace"/>
       {showMoney&&<Tile label="Inventory turns" value={turnover!=null?turnover+"×":"—"} sub="annualized (COGS ÷ value)"/>}
+      {showMoney&&<Tile label="COGS (30d)" value={money(cogs30)} sub="cost of goods shipped"/>}
     </div>
     {showMoney&&abcTotal>0&&<div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
       <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 flex items-center justify-between"><span>ABC analysis — SKUs by usage value</span><span className="normal-case tracking-normal">A {abcCounts.A} · B {abcCounts.B} · C {abcCounts.C}</span></div>

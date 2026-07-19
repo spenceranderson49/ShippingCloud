@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v718";
+const BUILD_TAG="addr-v719";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -11092,6 +11092,11 @@ function ScanReceive({items,onReceived,reload}){
    into the pick and pack flows. Deliberately plain so a first-timer knows exactly what to do next. */
 function ToShip({orders,list,committedBySku,goView,shipOrder}){
   const stockBySku=useMemo(()=>{ const m={}; (list||[]).forEach(it=>{ if(Array.isArray(it.kit)&&it.kit.length&&!it.assembled)return; m[String(it.sku).toLowerCase()]=+it.onHand||0; }); return m; },[list]);
+  const itBySku=useMemo(()=>{ const m={}; (list||[]).forEach(it=>{ m[String(it.sku).toLowerCase()]=it; }); return m; },[list]);
+  const [fulfilling,setFulfilling]=useState(null); const [grabbed,setGrabbed]=useState({});
+  const fLines=fulfilling?(fulfilling.lineItems||[]).filter(li=>li&&li.sku).map(li=>{ const it=itBySku[String(li.sku).toLowerCase()]; return {sku:li.sku,name:li.title||li.name||(it&&it.name)||li.sku,loc:(it&&it.loc)||"",qty:+li.qty||+li.quantity||1}; }):[];
+  const allGrabbed=fLines.length>0&&fLines.every(l=>grabbed[l.sku.toLowerCase()]);
+  const openFulfill=(o)=>{ setFulfilling(o); setGrabbed({}); };
   const open=(orders||[]).filter(o=>o&&o.status!=="fulfilled"&&Array.isArray(o.lineItems)&&o.lineItems.length);
   const rows=open.map(o=>{ const lis=(o.lineItems||[]).filter(li=>li&&li.sku); const tracked=lis.filter(li=>String(li.sku).toLowerCase() in stockBySku); const short=tracked.filter(li=>(stockBySku[String(li.sku).toLowerCase()]||0)<(+li.qty||+li.quantity||1)).map(li=>li.sku); const units=lis.reduce((s,li)=>s+(+li.qty||+li.quantity||1),0); const t=Date.parse(o.date||"")||0; return {o,ready:tracked.length>0&&short.length===0,unknown:tracked.length===0,short,units,skus:lis.length,t}; })
     .sort((a,b)=>(a.ready===b.ready?0:a.ready?-1:1)||a.t-b.t);
@@ -11111,9 +11116,24 @@ function ToShip({orders,list,committedBySku,goView,shipOrder}){
       {rows.map(({o,ready,unknown,short,units,skus,t})=>(<div key={o.id} className="p-3 flex items-center gap-3 flex-wrap">
         <div className="shrink-0">{ready?<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700">Ready</span>:unknown?<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-stone-100 text-stone-500">No stock link</span>:<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-amber-100 text-amber-700">Short</span>}</div>
         <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{o.name||o.id}{o.customer?" · "+o.customer:""}</div><div className="text-[11px] text-stone-400 truncate">{skus} line{skus!==1?"s":""} · {units} unit{units!==1?"s":""}{short.length?" · short: "+short.slice(0,3).join(", "):""}{t?" · "+age(t)+" old":""}</div></div>
-        {shipOrder&&<button onClick={()=>shipOrder(o)} className="shrink-0 text-xs bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1"><Truck className="w-3.5 h-3.5"/>Ship</button>}
+        {shipOrder&&<button onClick={()=>openFulfill(o)} className="shrink-0 text-xs bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1">Fulfill<ChevronRight className="w-3.5 h-3.5"/></button>}
       </div>))}
     </div>
+    {fulfilling&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setFulfilling(null)}>
+      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5 max-h-[92vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1"><div className="font-semibold text-stone-900">Fulfill {fulfilling.name||fulfilling.id}</div><button onClick={()=>setFulfilling(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+        <p className="text-xs text-stone-500 mb-3">{fulfilling.customer?fulfilling.customer+" · ":""}Grab each item, check it off, then create the label. Stock counts down automatically when the label prints.</p>
+        <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden mb-3"><div className={`h-full ${allGrabbed?"bg-emerald-500":"bg-[#0086E0]"} transition-all`} style={{width:(fLines.length?Math.round(fLines.filter(l=>grabbed[l.sku.toLowerCase()]).length/fLines.length*100):0)+"%"}}/></div>
+        <div className="space-y-1.5">
+          {fLines.map(l=>{ const on=!!grabbed[l.sku.toLowerCase()]; return (<button key={l.sku} onClick={()=>setGrabbed(g=>({...g,[l.sku.toLowerCase()]:!g[l.sku.toLowerCase()]}))} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left ${on?"bg-emerald-50 border-emerald-200":"bg-white border-stone-200 hover:bg-stone-50"}`}>
+            {on?<CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0"/>:<div className="w-5 h-5 rounded-full border-2 border-stone-300 shrink-0"/>}
+            <div className="flex-1 min-w-0"><div className={`text-sm ${on?"text-stone-400 line-through":"text-stone-800"}`}>{l.name}</div><div className="text-[11px] text-stone-400 flex items-center gap-1">{l.loc&&<><MapPin className="w-3 h-3"/>{l.loc} · </>}{l.sku}</div></div>
+            <div className="text-sm font-semibold text-stone-700 shrink-0">×{l.qty}</div>
+          </button>); })}
+        </div>
+        <button onClick={()=>{ const o=fulfilling; setFulfilling(null); shipOrder&&shipOrder(o); }} disabled={!allGrabbed} className="w-full mt-4 bg-[#0086E0] text-white rounded-xl py-3 font-semibold hover:bg-[#006db8] disabled:opacity-40 flex items-center justify-center gap-1.5"><Truck className="w-5 h-5"/>{allGrabbed?"Create shipping label":"Grab all items first"}</button>
+      </div>
+    </div>}
   </div>);
 }
 /* Pick lists — pick unfulfilled orders, aggregate their SKUs into a bin-sorted pick sheet. Read-only. */

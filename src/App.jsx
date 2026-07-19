@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v700";
+const BUILD_TAG="addr-v701";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10213,7 +10213,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
   const openPo=(pos||[]).filter(p=>p&&p.status!=="received").length;
   const Switcher=()=>(<div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm flex-wrap">
-    {[["overview","Overview"],["stock","Stock"],["replenish","Replenish"],["backorder","Backorders"],["count","Cycle Count"],["pos","Purchase Orders"],["production","Production"],["suppliers","Suppliers"],["warehouses","Warehouses"],["containers","Containers"],["pick","Pick Lists"],["pack","Pack Verify"],["scan","Scan Receive"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}{v==="replenish"&&lowCount>0?" ("+lowCount+")":""}{v==="backorder"&&boCount>0?" ("+boCount+")":""}</button>)}
+    {[["overview","Overview"],["stock","Stock"],["runner","Runner"],["replenish","Replenish"],["backorder","Backorders"],["count","Cycle Count"],["pos","Purchase Orders"],["production","Production"],["suppliers","Suppliers"],["warehouses","Warehouses"],["containers","Containers"],["pick","Pick Lists"],["pack","Pack Verify"],["scan","Scan Receive"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}{v==="replenish"&&lowCount>0?" ("+lowCount+")":""}{v==="backorder"&&boCount>0?" ("+boCount+")":""}</button>)}
   </div>);
   if(view==="overview") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryOverview list={list} pos={pos} log={log} suppliers={suppliers} orders={orders} showMoney={showMoney} committedBySku={committedBySku} incomingBySku={incomingBySku} goView={setView} onReceive={()=>setView("stock")}/></div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
@@ -10222,6 +10222,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   if(view==="scan") return (<div className="max-w-5xl space-y-4"><Switcher/><ScanReceive items={list} onReceived={patch} reload={load}/></div>);
   if(view==="warehouses") return (<div className="max-w-5xl space-y-4"><Switcher/><WarehousesView warehouses={warehouses} setWarehouses={setWarehouses}/></div>);
   if(view==="containers") return (<div className="max-w-5xl space-y-4"><Switcher/><ContainerTypes containers={containers} setContainers={setContainers} showMoney={showMoney}/></div>);
+  if(view==="runner") return (<div className="max-w-2xl space-y-4"><Switcher/><RunnerPortal items={list} orders={orders} warehouses={warehouses} onReceived={patch} onReload={load}/></div>);
   if(view==="production") return (<div className="max-w-5xl space-y-4"><Switcher/><ProductionOrders production={production} setProduction={setProduction} items={list} onReload={load}/></div>);
   if(view==="replenish") return (<div className="max-w-5xl space-y-4"><Switcher/><Replenishment list={list} suppliers={suppliers} log={log} incomingBySku={incomingBySku} committedBySku={committedBySku} showMoney={showMoney} onReload={load} onCreated={p=>{setPos(x=>[...p,...(x||[])]);setView("pos");load();}}/></div>);
   if(view==="count") return (<div className="max-w-5xl space-y-4"><Switcher/><CycleCount list={list} showMoney={showMoney} onApplied={load}/></div>);
@@ -11132,6 +11133,90 @@ function WarehousesView({warehouses,setWarehouses}){
         <div className="flex items-center gap-2 mt-4"><button onClick={save} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy&&<Loader2 className="w-4 h-4 animate-spin"/>}Save</button><button onClick={()=>setEf(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
       </div>
     </div>}
+  </div>);
+}
+/* Runner Portal — a mobile-first warehouse app with the four floor tasks: Pull (pick), Put (put stock
+   in a bin), Receive (add stock in), Count (correct a count). Big tap targets, scanner-friendly inputs,
+   one action at a time. Mirrors the EliteWorks runner. All writes reuse the tested server actions. */
+function RunnerPortal({items,orders,warehouses,onReceived,onReload}){
+  const [mode,setMode]=useState("receive");
+  const byCode=useMemo(()=>{ const m={}; (items||[]).forEach(it=>{ if(it.barcode)m[String(it.barcode).trim().toLowerCase()]=it; m[String(it.sku).toLowerCase()]=m[String(it.sku).toLowerCase()]||it; }); return m; },[items]);
+  const locOptions=Array.from(new Set([...(warehouses||[]).map(w=>w.name),...(warehouses||[]).map(w=>w.code),...(items||[]).map(it=>it.loc)].filter(Boolean)));
+  const MODES=[["pull","Pull"],["put","Put"],["receive","Receive"],["count","Count"]];
+  const iconFor={pull:ClipboardList,put:MapPin,receive:ScanLine,count:CheckCircle2};
+  return (<div className="space-y-4">
+    <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Boxes className="w-5 h-5 text-[#0086E0]"/>Runner portal</h2><p className="text-sm text-stone-500 mt-0.5">The mobile warehouse workflow — pull orders, put stock away, receive deliveries, and count. Built for a phone and a scanner.</p></div>
+    <div className="grid grid-cols-4 gap-1.5">
+      {MODES.map(([m,l])=>{ const Ic=iconFor[m]; return (<button key={m} onClick={()=>setMode(m)} className={`rounded-xl py-3 font-semibold text-sm flex flex-col items-center gap-1 border ${mode===m?"bg-[#0086E0] text-white border-[#0086E0]":"bg-white text-stone-600 border-stone-200 hover:bg-stone-50"}`}><Ic className="w-5 h-5"/>{l}</button>); })}
+    </div>
+    {mode==="receive"&&<RunnerReceive byCode={byCode} onReceived={onReceived} onReload={onReload}/>}
+    {mode==="count"&&<RunnerCount byCode={byCode} onReload={onReload}/>}
+    {mode==="put"&&<RunnerPut byCode={byCode} locOptions={locOptions} onReload={onReload}/>}
+    {mode==="pull"&&<RunnerPull orders={orders} items={items}/>}
+  </div>);
+}
+/* Runner · Receive — scan a SKU/barcode, tap a big + to bump the count, Receive adds it to stock. */
+function RunnerReceive({byCode,onReceived,onReload}){
+  const [code,setCode]=useState(""); const [qty,setQty]=useState(1); const [busy,setBusy]=useState(false); const [feed,setFeed]=useState([]); const [msg,setMsg]=useState(null);
+  const ref=useRef(null);
+  const go=async()=>{ const it=byCode[code.trim().toLowerCase()]; if(!it){ setMsg({err:"Not found: "+code+" — add it in Stock first."}); return; } const q=Math.max(1,Math.round(+qty||1)); setBusy(true); const r=await cloudCall({action:"invReceive",token:CLOUD.token,lines:[{sku:it.sku,qty:q}],ref:"runner"}); setBusy(false); if(r&&r.ok&&r.items&&r.items[0]){ onReceived&&onReceived(r.items[0]); setFeed(f=>[{sku:it.sku,name:it.name||it.sku,qty:q,onHand:r.items[0].onHand,loc:it.loc||""},...f].slice(0,40)); setCode(""); setMsg(null); onReload&&onReload(); try{ref.current&&ref.current.focus();}catch(e){} } else setMsg({err:(r&&r.error)||"Receive failed."}); };
+  return (<div className="border border-stone-200 rounded-2xl bg-white p-4 space-y-3">
+    <input ref={ref} autoFocus value={code} onChange={e=>setCode(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();go();}}} placeholder="Scan or type SKU / barcode…" className="w-full border border-stone-300 rounded-xl px-4 py-3 text-base outline-none focus:border-[#0086E0]"/>
+    <div className="flex items-center gap-3"><span className="text-sm text-stone-500">Qty</span><button onClick={()=>setQty(q=>Math.max(1,(+q||1)-1))} className="w-11 h-11 rounded-xl bg-stone-100 text-xl font-semibold text-stone-600">−</button><span className="w-12 text-center text-xl font-semibold">{qty}</span><button onClick={()=>setQty(q=>(+q||1)+1)} className="w-11 h-11 rounded-xl bg-[#0086E0]/10 text-xl font-semibold text-[#0086E0]">+</button>
+      <button onClick={go} disabled={busy||!code.trim()} className="ml-auto bg-emerald-600 text-white rounded-xl px-6 py-3 font-semibold hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-1.5">{busy?<Loader2 className="w-5 h-5 animate-spin"/>:<Plus className="w-5 h-5"/>}Receive</button></div>
+    {msg&&<div className="text-sm rounded-lg px-3 py-2 bg-rose-50 text-rose-600">{msg.err}</div>}
+    {feed.map((x,i)=>(<div key={i} className="flex items-center gap-2 text-sm border-t border-stone-100 pt-2"><CheckCircle2 className="w-4 h-4 text-emerald-500"/><span className="flex-1 truncate text-stone-700">{x.name}</span>{x.loc&&<span className="text-[11px] text-[#0086E0] flex items-center gap-0.5"><MapPin className="w-3 h-3"/>{x.loc}</span>}<span className="text-stone-500">+{x.qty} → <b className="text-stone-900">{x.onHand}</b></span></div>))}
+  </div>);
+}
+/* Runner · Count — scan a SKU, see the system count, enter what's on the shelf, Apply corrects it. */
+function RunnerCount({byCode,onReload}){
+  const [code,setCode]=useState(""); const [it,setIt]=useState(null); const [actual,setActual]=useState(""); const [busy,setBusy]=useState(false); const [msg,setMsg]=useState(null);
+  const ref=useRef(null);
+  const lookup=()=>{ const found=byCode[code.trim().toLowerCase()]; if(!found){ setMsg({err:"Not found: "+code}); setIt(null); return; } if(found.trackSerial||found.trackLot){ setMsg({err:"Serial/lot items are counted by scanning each unit, not here."}); setIt(null); return; } setIt(found); setActual(String(+found.onHand||0)); setMsg(null); };
+  const apply=async()=>{ if(!it)return; const delta=Math.round(+actual||0)-(+it.onHand||0); if(!delta){ setMsg({ok:"Already matches — no change."}); return; } setBusy(true); const r=await cloudCall({action:"invAdjust",token:CLOUD.token,sku:it.sku,delta,reason:"runner count"}); setBusy(false); if(r&&r.ok){ setMsg({ok:"Corrected "+it.sku+" to "+(r.item?r.item.onHand:actual)+"."}); setIt(null); setCode(""); setActual(""); onReload&&onReload(); try{ref.current&&ref.current.focus();}catch(e){} } else setMsg({err:(r&&r.error)||"Couldn't adjust."}); };
+  const variance=it?Math.round(+actual||0)-(+it.onHand||0):0;
+  return (<div className="border border-stone-200 rounded-2xl bg-white p-4 space-y-3">
+    <div className="flex gap-2"><input ref={ref} autoFocus value={code} onChange={e=>setCode(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();lookup();}}} placeholder="Scan or type SKU / barcode…" className="flex-1 border border-stone-300 rounded-xl px-4 py-3 text-base outline-none focus:border-[#0086E0]"/><button onClick={lookup} className="bg-stone-100 text-stone-700 rounded-xl px-4 font-medium">Find</button></div>
+    {it&&<div className="rounded-xl bg-stone-50 p-3 space-y-2">
+      <div className="font-medium text-stone-900">{it.name||it.sku}<span className="text-[11px] text-stone-400 ml-2">{it.sku}</span></div>
+      <div className="flex items-center gap-3"><div className="text-sm text-stone-500">System<div className="text-2xl font-semibold text-stone-800">{+it.onHand||0}</div></div><div className="text-sm text-stone-500">Counted<input type="number" value={actual} onChange={e=>setActual(e.target.value)} className="block w-24 border border-stone-300 rounded-xl px-3 py-2 text-2xl font-semibold mt-0.5"/></div><div className={`text-sm ${variance===0?"text-stone-400":variance>0?"text-emerald-600":"text-rose-600"}`}>Variance<div className="text-2xl font-semibold">{variance>0?"+"+variance:variance}</div></div></div>
+      <button onClick={apply} disabled={busy} className="w-full bg-[#0086E0] text-white rounded-xl py-3 font-semibold hover:bg-[#006db8] disabled:opacity-40 flex items-center justify-center gap-1.5">{busy&&<Loader2 className="w-5 h-5 animate-spin"/>}Apply count</button>
+    </div>}
+    {msg&&<div className={`text-sm rounded-lg px-3 py-2 ${msg.err?"bg-rose-50 text-rose-600":"bg-emerald-50 text-emerald-700"}`}>{msg.err||msg.ok}</div>}
+  </div>);
+}
+/* Runner · Put — put stock into a bin: scan a SKU, choose destination + qty, moves it there. */
+function RunnerPut({byCode,locOptions,onReload}){
+  const [code,setCode]=useState(""); const [it,setIt]=useState(null); const [from,setFrom]=useState(""); const [to,setTo]=useState(""); const [qty,setQty]=useState(1); const [busy,setBusy]=useState(false); const [msg,setMsg]=useState(null);
+  const ref=useRef(null);
+  const lookup=()=>{ const found=byCode[code.trim().toLowerCase()]; if(!found){ setMsg({err:"Not found: "+code}); setIt(null); return; } setIt(found); setFrom((found.byLoc&&Object.keys(found.byLoc)[0])||found.loc||"Main"); setTo(""); setMsg(null); };
+  const go=async()=>{ if(!it){setMsg({err:"Scan an item first."});return;} if(!to.trim()){setMsg({err:"Enter a destination bin."});return;} setBusy(true); const r=await cloudCall({action:"invTransfer",token:CLOUD.token,sku:it.sku,from:from.trim()||"Main",to:to.trim(),qty:Math.max(1,Math.round(+qty||1))}); setBusy(false); if(r&&r.ok){ setMsg({ok:"Put "+qty+"× "+it.sku+" into "+to+"."}); setIt(null); setCode(""); onReload&&onReload(); try{ref.current&&ref.current.focus();}catch(e){} } else setMsg({err:(r&&r.error)||"Couldn't move."}); };
+  return (<div className="border border-stone-200 rounded-2xl bg-white p-4 space-y-3">
+    <div className="flex gap-2"><input ref={ref} autoFocus value={code} onChange={e=>setCode(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();lookup();}}} placeholder="Scan or type SKU / barcode…" className="flex-1 border border-stone-300 rounded-xl px-4 py-3 text-base outline-none focus:border-[#0086E0]"/><button onClick={lookup} className="bg-stone-100 text-stone-700 rounded-xl px-4 font-medium">Find</button></div>
+    {it&&<div className="rounded-xl bg-stone-50 p-3 space-y-2">
+      <div className="font-medium text-stone-900">{it.name||it.sku}<span className="text-[11px] text-stone-400 ml-2">on hand {+it.onHand||0}</span></div>
+      <div className="grid grid-cols-2 gap-2"><label className="text-xs text-stone-600">From<input value={from} onChange={e=>setFrom(e.target.value)} list="runner-locs" className="mt-0.5 w-full border border-stone-300 rounded-lg px-2 py-2 text-sm"/></label><label className="text-xs text-stone-600">To bin<input value={to} onChange={e=>setTo(e.target.value)} list="runner-locs" placeholder="A-12" className="mt-0.5 w-full border border-stone-300 rounded-lg px-2 py-2 text-sm"/></label></div>
+      <datalist id="runner-locs">{locOptions.map(l=><option key={l} value={l}/>)}</datalist>
+      <div className="flex items-center gap-3"><span className="text-sm text-stone-500">Qty</span><button onClick={()=>setQty(q=>Math.max(1,(+q||1)-1))} className="w-11 h-11 rounded-xl bg-stone-100 text-xl font-semibold text-stone-600">−</button><span className="w-12 text-center text-xl font-semibold">{qty}</span><button onClick={()=>setQty(q=>(+q||1)+1)} className="w-11 h-11 rounded-xl bg-[#0086E0]/10 text-xl font-semibold text-[#0086E0]">+</button>
+        <button onClick={go} disabled={busy} className="ml-auto bg-[#0086E0] text-white rounded-xl px-6 py-3 font-semibold hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy&&<Loader2 className="w-5 h-5 animate-spin"/>}Put away</button></div>
+    </div>}
+    {msg&&<div className={`text-sm rounded-lg px-3 py-2 ${msg.err?"bg-rose-50 text-rose-600":"bg-emerald-50 text-emerald-700"}`}>{msg.err||msg.ok}</div>}
+  </div>);
+}
+/* Runner · Pull — the pick queue: everything open orders need, bin-sorted, scan to check off. */
+function RunnerPull({orders,items}){
+  const bySku=useMemo(()=>{ const m={}; (items||[]).forEach(it=>{ m[String(it.sku).toLowerCase()]=it; if(it.barcode)m[String(it.barcode).trim().toLowerCase()]=it; }); return m; },[items]);
+  const rows=useMemo(()=>{ const agg={}; (orders||[]).filter(o=>o&&o.status!=="fulfilled"&&Array.isArray(o.lineItems)).forEach(o=>{ o.lineItems.forEach(li=>{ const sku=String(li.sku||"").trim(); if(!sku)return; const k=sku.toLowerCase(); const it=bySku[k]; if(!agg[k])agg[k]={sku,name:li.title||li.name||(it&&it.name)||"",loc:(it&&it.loc)||"",qty:0}; agg[k].qty+=(+li.qty||+li.quantity||1); }); }); return Object.values(agg).sort((a,b)=>String(a.loc||"~").localeCompare(String(b.loc||"~"))); },[orders,bySku]);
+  const [picked,setPicked]=useState({}); const [scan,setScan]=useState(""); const [msg,setMsg]=useState(null);
+  const need=rows.reduce((s,r)=>s+r.qty,0); const done=rows.reduce((s,r)=>s+Math.min(r.qty,+picked[r.sku.toLowerCase()]||0),0);
+  const doScan=(e)=>{ e.preventDefault(); const v=scan.trim().toLowerCase(); if(!v)return; const it=bySku[v]; const key=it?String(it.sku).toLowerCase():v; const row=rows.find(r=>r.sku.toLowerCase()===key); if(!row){ setMsg({err:"Not on the pull list: "+scan}); } else if((+picked[key]||0)>=row.qty){ setMsg({err:row.sku+" already pulled."}); } else { setPicked(p=>({...p,[key]:Math.min(row.qty,(+p[key]||0)+1)})); setMsg(null); } setScan(""); };
+  if(!rows.length)return <div className="border border-stone-200 rounded-2xl bg-white p-8 text-center text-sm text-stone-400">Nothing to pull — no open orders with SKUs.</div>;
+  const allDone=need>0&&done>=need;
+  return (<div className="border border-stone-200 rounded-2xl bg-white p-4 space-y-3">
+    <div className="flex items-center gap-3"><div className="flex-1 h-2.5 bg-stone-200 rounded-full overflow-hidden"><div className={`h-full ${allDone?"bg-emerald-500":"bg-[#0086E0]"}`} style={{width:(need>0?Math.round(done/need*100):0)+"%"}}/></div><span className="text-xs font-medium text-stone-600">{done}/{need}</span></div>
+    {allDone?<div className="text-sm text-emerald-700 font-medium flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>All pulled — take them to pack.</div>:<form onSubmit={doScan} className="flex gap-2"><input autoFocus value={scan} onChange={e=>setScan(e.target.value)} placeholder="Scan to pull…" className="flex-1 border border-stone-300 rounded-xl px-4 py-3 text-base outline-none focus:border-[#0086E0]"/><button className="bg-[#0086E0] text-white rounded-xl px-5 font-semibold">Pull</button></form>}
+    {msg&&<div className="text-sm rounded-lg px-3 py-2 bg-rose-50 text-rose-600">{msg.err}</div>}
+    <div className="divide-y divide-stone-100">{rows.map(r=>{ const p=Math.min(r.qty,+picked[r.sku.toLowerCase()]||0); const d=p>=r.qty; return (<div key={r.sku} className={`py-2 flex items-center gap-3 ${d?"opacity-50":""}`}>{d?<CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0"/>:<div className="w-5 h-5 rounded-full border-2 border-stone-300 shrink-0"/>}<div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{r.name||r.sku}</div><div className="text-[11px] text-stone-400 flex items-center gap-1">{r.loc&&<><MapPin className="w-3 h-3"/>{r.loc} · </>}{r.sku}</div></div><div className="text-sm font-semibold text-stone-700">{p}/{r.qty}</div></div>); })}</div>
   </div>);
 }
 /* Container / packaging types — the box catalog (dimensions, max weight, cost) used for packing and

@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v697";
+const BUILD_TAG="addr-v698";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9958,6 +9958,8 @@ const WMS_GLOSSARY=[
   ["FIFO costing","Values what you sell using your oldest cost first — true cost of goods."],
   ["Pick list","A sheet telling the warehouse which items to grab for a batch of orders."],
   ["Pack verify","Scanning each item into the box so nothing wrong ships."],
+  ["Scan-to-pick","A guided pick session where you scan each item off a bin-sorted list and watch progress fill in."],
+  ["Barcode label","A printable Code 128 barcode for a SKU. Scanning it drives the pick and pack stations."],
   ["ABC analysis","Ranks products by how much value they move — A = your top movers."],
 ];
 /* Step-by-step how-to tutorials shown in the Help guide. */
@@ -9969,7 +9971,47 @@ const WMS_TUTORIALS=[
   ["Ship & watch stock count down","✅",["Ship orders like normal from the Ship or Orders tab.","If the order's items match your SKUs, stock decrements by itself.","Orders show an in-stock / short badge so you know before you ship."]],
   ["Count stock (cycle count)","🔢",["Open the Cycle Count tab and pick a category (or count everything).","Walk the shelf and type what you physically have next to each item.","The Variance column shows the difference live.","Click Apply — only differences are corrected, and each is logged."]],
   ["Move stock between locations","↔️",["Turn on a couple of Warehouses (or just type bin names).","Click Move on an item, choose from/to and a quantity.","The total stays the same — it's just relocated. Per-location counts show on the row."]],
+  ["Print barcode labels & scan-pick","🏷️",["On the Stock tab click Print labels to print scannable Code 128 barcodes for your items.","Stick a label on each bin or product.","In Pick Lists, select orders → Build → Start pick session.","Scan each item as you grab it — progress fills in and lines check off green.","Then Pack Verify scans each item into its box before it ships."]],
 ];
+/* Code 128-B barcode renderer. Encodes ASCII 32–126 into the standard 107-symbol module patterns,
+   appends the mod-103 checksum and stop bar, and returns SVG bars. Used to print scannable product
+   labels that feed the scan-to-pick and pack-verify stations. Correctness matters — the pattern
+   table and checksum follow the Code 128 spec exactly. */
+const CODE128_PAT=["212222","222122","222221","121223","121322","131222","122213","122312","132212","221213","221312","231212","112232","122132","122231","113222","123122","123221","223211","221132","221231","213212","223112","312131","311222","321122","321221","312212","322112","322211","212123","212321","232121","111323","131123","131321","112313","132113","132311","211313","231113","231311","112133","112331","132131","113123","113321","133121","313121","211331","231131","213113","213311","213131","311123","311321","331121","312113","312311","332111","314111","221411","431111","111224","111422","121124","121421","141122","141221","112214","112412","122114","122411","142112","142211","241211","221114","413111","241112","134111","111242","121142","121241","114212","124112","124211","411212","421112","421211","212141","214121","412121","111143","111341","131141","114113","114311","411113","411311","113141","114131","311141","411131","211412","211214","211232","2331112"];
+function code128BSVG(text,opts){
+  const s=String(text==null?"":text).replace(/[^\x20-\x7e]/g,"");
+  if(!s)return "";
+  const vals=[104]; // Start B
+  for(let i=0;i<s.length;i++)vals.push(s.charCodeAt(i)-32);
+  let sum=104; for(let i=0;i<s.length;i++)sum+=(s.charCodeAt(i)-32)*(i+1);
+  vals.push(sum%103); vals.push(106); // checksum, stop
+  let widths=[]; vals.forEach(v=>{ const p=CODE128_PAT[v]; for(let i=0;i<p.length;i++)widths.push(+p[i]); });
+  const mod=(opts&&opts.mod)||1.6, h=(opts&&opts.height)||44, quiet=10*mod;   // 10-module quiet zone each side
+  const total=widths.reduce((a,b)=>a+b,0)*mod+quiet*2;
+  let x=quiet,bars=""; for(let i=0;i<widths.length;i++){ const w=widths[i]*mod; if(i%2===0)bars+=`<rect x="${(Math.round(x*100)/100)}" y="0" width="${Math.round(w*100)/100}" height="${h}"/>`; x+=w; }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(total)}" height="${h}" viewBox="0 0 ${Math.ceil(total)} ${h}" shape-rendering="crispEdges"><rect x="0" y="0" width="${Math.ceil(total)}" height="${h}" fill="#fff"/><g fill="#000">${bars}</g></svg>`;
+}
+/* Print a sheet of product labels (name, SKU, optional price, scannable Code 128 barcode). */
+function printLabels(items,opts){
+  const esc=(v)=>String(v==null?"":v).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const showPrice=!!(opts&&opts.showPrice);
+  const cells=(items||[]).filter(it=>it&&it.sku).map(it=>{
+    const code=String(it.barcode||it.sku||"").trim();
+    const svg=code128BSVG(code,{mod:1.5,height:40});
+    const price=showPrice&&it.cost?("$"+(Math.round((+it.cost||0)*100)/100).toFixed(2)):"";
+    return `<div class="lbl"><div class="nm">${esc(it.name||it.sku)}</div><div class="bc">${svg}</div><div class="sk">${esc(code)}${price?` &nbsp;·&nbsp; ${esc(price)}`:""}</div></div>`;
+  }).join("");
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Product labels</title><style>
+    body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:16px}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .lbl{border:1px solid #e5e5e5;border-radius:6px;padding:8px 10px;text-align:center;page-break-inside:avoid}
+    .nm{font-size:12px;font-weight:600;color:#1c1917;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .bc{margin:4px 0}.bc svg{max-width:100%;height:40px}.sk{font-size:11px;color:#57534e;font-family:ui-monospace,Menlo,monospace}
+    @media print{body{margin:0}.lbl{border-color:#ddd}}</style></head>
+    <body><div class="grid">${cells||'<div>No items to label.</div>'}</div>
+    <script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>`;
+  const w=window.open("","_blank"); if(!w)return false; w.document.open(); w.document.write(html); w.document.close(); return true;
+}
 /* ════════ INVENTORY ════════
    Company-shared stock, one row per SKU on the server (inv:<clientId>:<sku>). Tracks on-hand,
    reorder point, unit cost and location; receives POs; auto-decrements when orders ship (see the
@@ -10284,6 +10326,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
       <button onClick={()=>setLowOnly(v=>!v)} className={`text-xs rounded-lg px-2.5 py-2 border font-medium ${lowOnly?"bg-amber-100 text-amber-700 border-amber-200":"bg-white text-stone-500 border-stone-200 hover:bg-stone-50"}`}>Low stock only{lowCount?" ("+lowCount+")":""}</button>
       {categories.length>0&&<select value={catFilter} onChange={e=>setCatFilter(e.target.value)} className="text-xs rounded-lg px-2 py-2 border border-stone-200 bg-white text-stone-600"><option value="">All categories</option>{categories.map(c=><option key={c} value={c}>{c}</option>)}</select>}
       {lowCount>0&&<button onClick={reorderLowStock} className="text-xs rounded-lg px-2.5 py-2 bg-[#0086E0] text-white font-medium hover:bg-[#006db8] flex items-center gap-1"><ClipboardList className="w-3.5 h-3.5"/>Reorder low stock</button>}
+      {filtered.some(it=>!(Array.isArray(it.kit)&&it.kit.length))&&<button onClick={()=>printLabels(filtered.filter(it=>!(Array.isArray(it.kit)&&it.kit.length)),{showPrice:showMoney})} className="text-xs rounded-lg px-2.5 py-2 border border-stone-200 bg-white text-stone-600 font-medium hover:bg-stone-50 flex items-center gap-1" title="Print scannable Code 128 barcode labels for the items shown"><Printer className="w-3.5 h-3.5"/>Print labels</button>}
       <button onClick={()=>setShowLog(s=>!s)} className="text-xs text-stone-500 hover:text-stone-700 flex items-center gap-1 ml-auto">{showLog?"Hide":"Show"} movement log ({log.length})</button>
     </div>
     <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">

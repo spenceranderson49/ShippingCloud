@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v707";
+const BUILD_TAG="addr-v708";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10691,7 +10691,14 @@ function Replenishment({list,suppliers,log,incomingBySku,committedBySku,showMone
       const suggest=Math.max(1,target-net);
       const vel=velBySku[String(it.sku).toLowerCase()]||0;
       const days=vel>0?Math.round(onHand/vel):null;   // null = no recent sales
-      rows.push({sku:it.sku,name:it.name||"",supplierId:it.supplierId||"",onHand,inc,reorder,target,cost:+it.cost||0,vel,days,qty:suggest,include:true});
+      /* Sourcing: prefer the item's preferred supplier; otherwise auto-pick the cheapest vendor from
+         its vendor price list (Fishbowl). Use that vendor's cost on the PO line when we have it. */
+      const vendors=Array.isArray(it.vendors)?it.vendors:[];
+      let supplierId=it.supplierId||"", cost=+it.cost||0;
+      const prefV=vendors.find(v=>v.supplierId===it.supplierId);
+      if(prefV&&+prefV.cost>0)cost=+prefV.cost;
+      if(!supplierId&&vendors.length){ const cheap=vendors.slice().filter(v=>v.supplierId).sort((a,b)=>(+a.cost||1e9)-(+b.cost||1e9))[0]; if(cheap){ supplierId=cheap.supplierId; if(+cheap.cost>0)cost=+cheap.cost; } }
+      rows.push({sku:it.sku,name:it.name||"",supplierId,onHand,inc,reorder,target,cost,vel,days,qty:suggest,include:true});
     });
     // Most urgent first: fewest days of cover, then lowest net position.
     rows.sort((a,b)=>{ const da=a.days==null?1e9:a.days, db=b.days==null?1e9:b.days; return da-db||(a.onHand+a.inc)-(b.onHand+b.inc); });

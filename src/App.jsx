@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v683";
+const BUILD_TAG="addr-v684";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10215,6 +10215,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
       <div className="flex items-center gap-2 mt-2"><button onClick={addItem} disabled={busy==="add"} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-1.5 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy==="add"&&<Loader2 className="w-4 h-4 animate-spin"/>}Save item</button><button onClick={()=>setAdding(false)} className="text-sm text-stone-500 px-2 py-1.5">Cancel</button></div>
     </Panel>}
     <Panel title="Receive stock">
+      {(()=>{ const ri=list.find(x=>x.sku===rcv.sku); if(!ri)return null; const locs=(ri.byLoc&&Object.keys(ri.byLoc).length)?Object.keys(ri.byLoc).join(", "):(ri.loc||""); if(!locs)return null; return <div className="text-[11px] text-stone-500 mb-2 flex items-center gap-1"><MapPin className="w-3 h-3 text-[#0086E0]"/>Put away to <b className="text-stone-700">{locs}</b> <span className="text-stone-400">— where this item already lives</span></div>; })()}
       <div className="flex flex-wrap items-end gap-2">
         <label className="text-xs text-stone-600">SKU<br/><select value={rcv.sku} onChange={e=>setRcv({...rcv,sku:e.target.value})} className="mt-1 border border-stone-300 rounded-lg px-2.5 py-2 text-sm min-w-[180px]"><option value="">— pick an item —</option>{list.map(it=><option key={it.sku} value={it.sku}>{it.name?it.name+" ("+it.sku+")":it.sku}</option>)}</select></label>
         <label className="text-xs text-stone-600">Qty received<br/><input type="number" min="1" value={rcv.qty} onChange={e=>setRcv({...rcv,qty:e.target.value})} className="mt-1 w-24 border border-stone-300 rounded-lg px-2.5 py-2 text-sm"/></label>

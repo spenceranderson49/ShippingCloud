@@ -94,7 +94,7 @@ const FEATURE_CATALOG=[
   {id:"invoices",label:"Invoice Audit",desc:"Carrier invoice auditing",default:false},   /* off unless the admin grants it per login */
   {id:"pickupCosts",label:"Pickup fee display",desc:"Show the on-call pickup fee on the Pickups tab. OFF by default — turn on per customer once their pickup pricing is set",default:false},
   {id:"companyMarkup",label:"Company rate markup",desc:"Let THIS company admin add their own margin on top of the rates their team sees (Company Admin → Rate Markup). OFF by default — turn it on for a reseller who marks shipping up to their own departments/customers",default:false},
-  {id:"inventory",label:"Inventory",desc:"Track stock on hand per SKU, receive purchase orders, set reorder points, and auto-decrement when orders ship. OFF by default — turn on per customer",default:false},
+  {id:"inventory",label:"WMS mode (Inventory & Warehouse)",desc:"The full warehouse suite in one switch: stock, purchase orders, suppliers, warehouses/bins, multi-location, lot/expiry (FEFO), kits & assemblies, pick lists, pack verify, barcode scan-receive, cycle counts, analytics & forecasting — and it auto-decrements stock when orders ship, shows fulfillability on Orders, and syncs to Shopify. OFF by default — flip it on to turn a customer into a full WMS.",default:false},
   {id:"brandedTracking",label:"Branded tracking & returns",desc:"Customer-facing branded tracking page + self-service returns portal (Settings → Branded Tracking). OFF by default — turn on per customer",default:false},
   {id:"rules",label:"Autopilot",desc:"Autopilot mode — automation rules",default:true},
   {id:"scan",label:"Scan",desc:"Barcode scan station",default:true},
@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v674";
+const BUILD_TAG="addr-v675";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9022,6 +9022,10 @@ function LiveEstRate({o,client,settings,rateRules,ruleset}){
 function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,openOrderId=null,onOpenedOrder,showMoney=true}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // Est. rate shows the SELL estimate — raw carrier cost must never render in a customer-visible table
   const [ruleset]=usePersist("ruleset",SEED_RULESET);              // Autopilot rules drive the service the rate column prices
+  /* WMS connection: pull on-hand so each order can show whether it ships from stock. null = WMS off. */
+  const [invAvail,setInvAvail]=useState(null);
+  useEffect(()=>{ if(!CLOUD.token)return; let dead=false; (async()=>{ const r=await cloudCall({action:"invList",token:CLOUD.token}); if(!dead&&r&&r.ok){ const m={}; (r.items||[]).forEach(it=>{ if(!(Array.isArray(it.kit)&&it.kit.length&&!it.assembled))m[String(it.sku).toLowerCase()]=+it.onHand||0; }); setInvAvail(m); } })(); return ()=>{dead=true;}; /* eslint-disable-next-line */ },[]);
+  const fulfillability=(o)=>{ if(!invAvail||!o||o.status==="fulfilled")return null; const items=(Array.isArray(o.lineItems)?o.lineItems:[]).filter(li=>li&&li.sku&&(String(li.sku).toLowerCase() in invAvail)); if(!items.length)return null; const short=items.filter(li=>(invAvail[String(li.sku).toLowerCase()]||0)<(+li.qty||+li.quantity||1)).map(li=>li.sku); return short.length?{ok:false,short}:{ok:true}; };
   useEffect(()=>{ if(!openOrderId)return; const found=orders.find(o=>o.id===openOrderId); if(found)setOpen(found); if(onOpenedOrder)onOpenedOrder(); },[openOrderId,orders]);
   const custom=cz(settings||{});
   const ordPad=custom.density==="compact"?"px-3 py-1":"px-3 py-2.5";
@@ -9157,7 +9161,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
                       <td className={ordPad+" whitespace-nowrap"}><div className="font-semibold text-stone-800 flex items-center gap-1.5">{o.name}{o.source&&<Badge tone={SOURCE_TONE[o.source]||"stone"}>{o.source}</Badge>}</div></td>
                       {!hideCol.has("age")&&<td className="px-3 py-2.5 text-stone-500 whitespace-nowrap">{orderAge(o)}</td>}
                       {!hideCol.has("date")&&<td className="px-3 py-2.5 text-stone-500 whitespace-nowrap">{o.date||"—"}</td>}
-                      {!hideCol.has("items")&&<td className={ordPad}><div className="text-stone-700 truncate max-w-[220px]">{o.items||"—"}</div>{o.lineItems&&o.lineItems[0]&&o.lineItems[0].sku?<div className="text-[11px] text-stone-400 truncate max-w-[220px]">SKU {o.lineItems[0].sku}</div>:null}</td>}
+                      {!hideCol.has("items")&&<td className={ordPad}><div className="text-stone-700 truncate max-w-[220px] flex items-center gap-1.5">{o.items||"—"}{(()=>{ const f=fulfillability(o); if(!f)return null; return f.ok?<span title="All items are in stock" className="shrink-0 text-[9px] uppercase tracking-wide bg-emerald-100 text-emerald-700 rounded px-1.5 py-0.5">in stock</span>:<span title={"Short: "+f.short.join(", ")} className="shrink-0 text-[9px] uppercase tracking-wide bg-rose-100 text-rose-700 rounded px-1.5 py-0.5">short</span>; })()}</div>{o.lineItems&&o.lineItems[0]&&o.lineItems[0].sku?<div className="text-[11px] text-stone-400 truncate max-w-[220px]">SKU {o.lineItems[0].sku}</div>:null}</td>}
                       {!hideCol.has("recipient")&&<td className={ordPad}><div className="text-stone-800 truncate max-w-[160px]">{o.customer||"—"}</div><div className="text-[11px] text-stone-400 truncate max-w-[160px]">{o.city}{o.state?`, ${o.state}`:""}</div></td>}
                       {!hideCol.has("requested")&&<td className="px-3 py-2.5 text-stone-500 whitespace-nowrap">{o.shippingService||"—"}</td>}
                       {filter!=="fulfilled"&&custom.autopilotPreview&&!hideCol.has("autopilot")&&<td className="px-3 py-2.5 whitespace-nowrap">{o.status==="fulfilled"?<span className="text-stone-300">—</span>:<AutopilotCell o={o} ruleset={ruleset} fromZip={(client&&client.origin)||(settings&&settings.sender&&settings.sender.zip)||""}/>}</td>}

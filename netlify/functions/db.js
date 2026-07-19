@@ -670,7 +670,7 @@ exports.handler = async (event) => {
        Every login of a company shares its inventory; a platform admin may target a specific
        company via body.clientId. All reads refuse-and-retry on failure so stock is never
        silently zeroed by a transient DB hiccup. */
-    if (["invList", "invUpsert", "invAdjust", "invReceive", "invShip", "invDelete", "invTransfer", "invBuild", "poList", "poSave", "poReceive", "poDelete", "supplierList", "supplierSave", "supplierDelete", "warehouseList", "warehouseSave", "warehouseDelete", "returnList", "returnSetStatus", "containerList", "containerSave", "containerDelete", "productionList", "productionSave", "productionComplete", "productionDelete"].indexOf(action) >= 0) {
+    if (["invList", "invUpsert", "invAdjust", "invReceive", "invShip", "invDelete", "invTransfer", "invBuild", "poList", "poSave", "poReceive", "poDelete", "supplierList", "supplierSave", "supplierDelete", "warehouseList", "warehouseSave", "warehouseDelete", "returnList", "returnSetStatus", "containerList", "containerSave", "containerDelete", "productionList", "productionSave", "productionComplete", "productionDelete", "billingGet", "billingSave"].indexOf(action) >= 0) {
       const curU = await getStore("users");
       if (!curU.ok) return J({ ok: false, retry: true, error: "Storage is briefly unavailable — try again." });
       const allU = Array.isArray(curU.value) ? curU.value : [];
@@ -687,6 +687,7 @@ exports.handler = async (event) => {
       const whKey = "invwh:" + cid;
       const ctKey = "invct:" + cid;   // container / packaging types (box catalog)
       const proKey = "invpro:" + cid; // production orders
+      const billKey = "bill:" + cid;  // 3PL billing: {items:[rate card], charges:[usage]}
       const nowISO = new Date().toISOString();
       const money2 = (n) => Math.round((+n || 0) * 100) / 100;
       const readItem = (s) => getStore(skuKey(s));
@@ -1082,6 +1083,39 @@ exports.handler = async (event) => {
         const w = await putStores({ [proKey]: list });
         if (!w.ok) return J({ ok: false, error: "Built, but couldn't update the order — refresh." });
         return J({ ok: true, production: list, item: it });
+      }
+
+      /* ── 3PL billing — a rate card of billable services + a log of charges per client. The whole
+         blob is small and edited by one operator, so it's read/written as a unit. ── */
+      if (action === "billingGet") {
+        const cur = await getStore(billKey);
+        if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't load billing — try again." });
+        const v = (cur.value && typeof cur.value === "object") ? cur.value : {};
+        return J({ ok: true, items: Array.isArray(v.items) ? v.items : [], charges: Array.isArray(v.charges) ? v.charges : [] });
+      }
+      if (action === "billingSave") {
+        const money2b = (n) => Math.round((+n || 0) * 100) / 100;
+        const items = (Array.isArray(body.items) ? body.items : []).slice(0, 200).map((s) => ({
+          id: String((s && s.id) || ("bi" + Date.now() + Math.floor(Math.random() * 1e6))),
+          name: String((s && s.name) || "").slice(0, 80),
+          unit: String((s && s.unit) || "each").slice(0, 24),
+          rate: money2b(s && s.rate),
+        })).filter((x) => x.name);
+        const charges = (Array.isArray(body.charges) ? body.charges : []).slice(0, 2000).map((s) => ({
+          id: String((s && s.id) || ("bc" + Date.now() + Math.floor(Math.random() * 1e6))),
+          date: String((s && s.date) || nowISO).slice(0, 30),
+          client: String((s && s.client) || "").slice(0, 80),
+          itemId: String((s && s.itemId) || "").slice(0, 40),
+          name: String((s && s.name) || "").slice(0, 80),
+          qty: Math.round((+((s && s.qty)) || 0) * 100) / 100,
+          rate: money2b(s && s.rate),
+          amount: money2b(s && s.amount),
+          note: String((s && s.note) || "").slice(0, 200),
+          invoiced: !!(s && s.invoiced),
+        }));
+        const w = await putStores({ [billKey]: { items, charges } });
+        if (!w.ok) return J({ ok: false, error: "Save failed — try again." });
+        return J({ ok: true, items, charges });
       }
 
       /* ── Build / assemble (Fishbowl-style work order): consume a kit's components and add the

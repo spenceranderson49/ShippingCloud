@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v701";
+const BUILD_TAG="addr-v702";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10213,7 +10213,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
   const openPo=(pos||[]).filter(p=>p&&p.status!=="received").length;
   const Switcher=()=>(<div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm flex-wrap">
-    {[["overview","Overview"],["stock","Stock"],["runner","Runner"],["replenish","Replenish"],["backorder","Backorders"],["count","Cycle Count"],["pos","Purchase Orders"],["production","Production"],["suppliers","Suppliers"],["warehouses","Warehouses"],["containers","Containers"],["pick","Pick Lists"],["pack","Pack Verify"],["scan","Scan Receive"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}{v==="replenish"&&lowCount>0?" ("+lowCount+")":""}{v==="backorder"&&boCount>0?" ("+boCount+")":""}</button>)}
+    {[["overview","Overview"],["stock","Stock"],["runner","Runner"],["replenish","Replenish"],["backorder","Backorders"],["count","Cycle Count"],["pos","Purchase Orders"],["production","Production"],["suppliers","Suppliers"],["warehouses","Warehouses"],["containers","Containers"],["pick","Pick Lists"],["pack","Pack Verify"],["scan","Scan Receive"],["billing","3PL Billing"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}{v==="replenish"&&lowCount>0?" ("+lowCount+")":""}{v==="backorder"&&boCount>0?" ("+boCount+")":""}</button>)}
   </div>);
   if(view==="overview") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryOverview list={list} pos={pos} log={log} suppliers={suppliers} orders={orders} showMoney={showMoney} committedBySku={committedBySku} incomingBySku={incomingBySku} goView={setView} onReceive={()=>setView("stock")}/></div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
@@ -10223,6 +10223,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   if(view==="warehouses") return (<div className="max-w-5xl space-y-4"><Switcher/><WarehousesView warehouses={warehouses} setWarehouses={setWarehouses}/></div>);
   if(view==="containers") return (<div className="max-w-5xl space-y-4"><Switcher/><ContainerTypes containers={containers} setContainers={setContainers} showMoney={showMoney}/></div>);
   if(view==="runner") return (<div className="max-w-2xl space-y-4"><Switcher/><RunnerPortal items={list} orders={orders} warehouses={warehouses} onReceived={patch} onReload={load}/></div>);
+  if(view==="billing") return (<div className="max-w-5xl space-y-4"><Switcher/><Billing3PL/></div>);
   if(view==="production") return (<div className="max-w-5xl space-y-4"><Switcher/><ProductionOrders production={production} setProduction={setProduction} items={list} onReload={load}/></div>);
   if(view==="replenish") return (<div className="max-w-5xl space-y-4"><Switcher/><Replenishment list={list} suppliers={suppliers} log={log} incomingBySku={incomingBySku} committedBySku={committedBySku} showMoney={showMoney} onReload={load} onCreated={p=>{setPos(x=>[...p,...(x||[])]);setView("pos");load();}}/></div>);
   if(view==="count") return (<div className="max-w-5xl space-y-4"><Switcher/><CycleCount list={list} showMoney={showMoney} onApplied={load}/></div>);
@@ -11131,6 +11132,94 @@ function WarehousesView({warehouses,setWarehouses}){
           <div className="col-span-2"><Field label="Address / notes"><Input value={ef.address} onChange={e=>setEf({...ef,address:e.target.value})}/></Field></div>
         </div>
         <div className="flex items-center gap-2 mt-4"><button onClick={save} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy&&<Loader2 className="w-4 h-4 animate-spin"/>}Save</button><button onClick={()=>setEf(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
+      </div>
+    </div>}
+  </div>);
+}
+/* 3PL Billing — a rate card of billable warehouse services (storage, pick, pack, receiving…) plus a
+   log of charges per client, summarized into per-client invoices. Self-loading; niche, so it isn't
+   pulled into the main inventory load. Mirrors EliteWorks 3pl > Billable Items / Requests. */
+function Billing3PL(){
+  const [items,setItems]=useState(null);   // rate card; null = loading
+  const [charges,setCharges]=useState([]);
+  const [tab,setTab]=useState("charges");
+  const [busy,setBusy]=useState(false); const [msg,setMsg]=useState(null);
+  const [ef,setEf]=useState(null);          // rate-card editor
+  const [cf,setCf]=useState(null);          // new-charge form
+  const flash=(m,e)=>{ setMsg(e?{err:m}:{ok:m}); setTimeout(()=>setMsg(null),4000); };
+  useEffect(()=>{ let dead=false; (async()=>{ const r=await cloudCall({action:"billingGet",token:CLOUD.token}); if(!dead){ if(r&&r.ok){ setItems(r.items||[]); setCharges(r.charges||[]); } else { setItems([]); flash((r&&r.error)||"Couldn't load billing.",true); } } })(); return ()=>{dead=true;}; },[]);
+  const persist=async(nextItems,nextCharges)=>{ setBusy(true); const r=await cloudCall({action:"billingSave",token:CLOUD.token,items:nextItems,charges:nextCharges}); setBusy(false); if(r&&r.ok){ setItems(r.items||[]); setCharges(r.charges||[]); return true; } flash((r&&r.error)||"Save failed.",true); return false; };
+  const SEED=[["Storage — per bin / month","bin·mo"],["Pick fee — per unit","unit"],["Pack / order","order"],["Receiving — per unit","unit"],["Return processing","return"],["Kitting — per unit","unit"]];
+  const seedRates=async()=>{ const seeded=SEED.map(([name,unit])=>({name,unit,rate:0})); if(await persist(seeded,charges))flash("Added starter services — set your rates."); };
+  const saveRate=async()=>{ if(!ef.name||!ef.name.trim()){flash("Name required.",true);return;} const next=ef.id?items.map(x=>x.id===ef.id?ef:x):[...items,{...ef,id:"bi"+Date.now()}]; if(await persist(next,charges)){ setEf(null); flash("Saved."); } };
+  const delRate=async(id)=>{ if(!await uiConfirm("Delete this service?"))return; await persist(items.filter(x=>x.id!==id),charges); };
+  const addCharge=async()=>{ const it=items.find(x=>x.id===cf.itemId); if(!it){flash("Pick a service.",true);return;} if(!cf.client||!cf.client.trim()){flash("Enter a client.",true);return;} const qty=Math.max(0,+cf.qty||0); const amount=Math.round(qty*(+it.rate||0)*100)/100; const rec={id:"bc"+Date.now(),date:new Date().toISOString(),client:cf.client.trim(),itemId:it.id,name:it.name,qty,rate:+it.rate||0,amount,note:cf.note||"",invoiced:false}; if(await persist(items,[rec,...charges])){ setCf({client:cf.client,itemId:cf.itemId,qty:"",note:""}); flash("Charge added."); } };
+  const delCharge=async(id)=>{ await persist(items,charges.filter(x=>x.id!==id)); };
+  const clients=Array.from(new Set(charges.map(c=>c.client).filter(Boolean))).sort();
+  const byClient={}; charges.forEach(c=>{ const k=c.client||"—"; if(!byClient[k])byClient[k]={total:0,uninvoiced:0,count:0}; byClient[k].total+=(+c.amount||0); if(!c.invoiced)byClient[k].uninvoiced+=(+c.amount||0); byClient[k].count++; });
+  const clientKeys=Object.keys(byClient).sort((a,b)=>byClient[b].uninvoiced-byClient[a].uninvoiced);
+  const invoiceClient=async(client)=>{ const next=charges.map(c=>c.client===client?{...c,invoiced:true}:c); await persist(items,next); flash("Marked "+client+"'s charges invoiced."); };
+  const printInvoice=(client)=>{
+    const esc=(s)=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+    const rows=charges.filter(c=>c.client===client);
+    const total=rows.reduce((s,c)=>s+(+c.amount||0),0);
+    const money=(n)=>"$"+(Math.round((+n||0)*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    const tr=rows.map(c=>`<tr><td>${esc(String(c.date).slice(0,10))}</td><td>${esc(c.name)}</td><td class="r">${c.qty}</td><td class="r">${money(c.rate)}</td><td class="r">${money(c.amount)}</td></tr>`).join("");
+    const html=`<!doctype html><html><head><meta charset="utf-8"><title>Invoice — ${esc(client)}</title><style>body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:40px;color:#1c1917;font-size:13px}h1{font-size:22px;margin:0}table{width:100%;border-collapse:collapse;margin-top:16px}th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#78716c;border-bottom:2px solid #e7e5e4;padding:8px 6px}td{padding:8px 6px;border-bottom:1px solid #f0efed}.r{text-align:right}tfoot td{border:0;font-weight:700;padding-top:12px}@media print{body{margin:0}}</style></head><body><h1>Invoice</h1><div style="color:#78716c">${esc(client)} · ${new Date().toISOString().slice(0,10)}</div><table><thead><tr><th>Date</th><th>Service</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amount</th></tr></thead><tbody>${tr||'<tr><td colspan=5>No charges.</td></tr>'}</tbody><tfoot><tr><td colspan="4" class="r">Total due</td><td class="r">${money(total)}</td></tr></tfoot></table><script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>`;
+    const w=window.open("","_blank"); if(!w){flash("Allow pop-ups to print.",true);return;} w.document.open(); w.document.write(html); w.document.close();
+  };
+  if(items===null)return <div className="border border-stone-200 rounded-xl bg-white p-8 text-center text-sm text-stone-400 flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>Loading billing…</div>;
+  return (<div className="space-y-4">
+    <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><DollarSign className="w-5 h-5 text-[#0086E0]"/>3PL Billing</h2><p className="text-sm text-stone-500 mt-0.5">Bill your clients for warehouse work — set a rate card, log charges as you fulfill, and print per-client invoices.</p></div>
+    {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
+    <div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm">
+      {[["charges","Charges"],["rates","Rate card"],["invoices","Invoices"]].map(([v,l])=><button key={v} onClick={()=>setTab(v)} className={`px-3 py-1.5 rounded-md ${tab===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}</button>)}
+    </div>
+    {tab==="rates"&&<div className="space-y-3">
+      <div className="flex items-center justify-between"><div className="text-sm text-stone-500">Services you charge for and their rates.</div><div className="flex gap-2">{items.length===0&&<button onClick={seedRates} disabled={busy} className="text-xs bg-stone-100 text-stone-600 rounded-lg px-3 py-2 font-medium hover:bg-stone-200">Add starter services</button>}<button onClick={()=>setEf({name:"",unit:"each",rate:""})} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>New service</button></div></div>
+      <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+        {items.length===0&&<div className="p-8 text-center text-sm text-stone-400">No billable services yet.</div>}
+        {items.map(it=>(<div key={it.id} className="p-3 flex items-center gap-3"><div className="flex-1 min-w-0"><div className="font-medium text-stone-900">{it.name}</div><div className="text-[11px] text-stone-400">per {it.unit}</div></div><div className="text-sm font-semibold text-stone-800">${(+it.rate||0).toFixed(2)}</div><button onClick={()=>setEf(it)} className="text-xs bg-stone-100 text-stone-600 rounded-lg px-2.5 py-1.5 hover:bg-stone-200">Edit</button><button onClick={()=>delRate(it.id)} className="text-xs bg-stone-100 text-stone-400 rounded-lg px-2 py-1.5 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="w-3.5 h-3.5"/></button></div>))}
+      </div>
+    </div>}
+    {tab==="charges"&&<div className="space-y-3">
+      <div className="border border-stone-200 rounded-xl bg-white p-4">
+        <div className="text-sm font-semibold text-stone-700 mb-2">Log a charge</div>
+        {items.length===0?<div className="text-sm text-stone-400">Add services on the Rate card tab first.</div>:
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 items-end">
+          <label className="text-xs text-stone-600 col-span-2 sm:col-span-1">Client<input value={(cf&&cf.client)||""} onChange={e=>setCf(c=>({...(c||{}),client:e.target.value}))} list="bill-clients" placeholder="Brand name" className="mt-0.5 w-full border border-stone-300 rounded-lg px-2 py-2 text-sm"/></label>
+          <datalist id="bill-clients">{clients.map(c=><option key={c} value={c}/>)}</datalist>
+          <label className="text-xs text-stone-600">Service<select value={(cf&&cf.itemId)||""} onChange={e=>setCf(c=>({...(c||{}),itemId:e.target.value}))} className="mt-0.5 w-full border border-stone-300 rounded-lg px-2 py-2 text-sm"><option value="">—</option>{items.map(it=><option key={it.id} value={it.id}>{it.name} (${(+it.rate||0).toFixed(2)}/{it.unit})</option>)}</select></label>
+          <label className="text-xs text-stone-600">Qty<input type="number" min="0" value={(cf&&cf.qty)||""} onChange={e=>setCf(c=>({...(c||{}),qty:e.target.value}))} className="mt-0.5 w-full border border-stone-300 rounded-lg px-2 py-2 text-sm"/></label>
+          <button onClick={addCharge} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center justify-center gap-1.5">{busy&&<Loader2 className="w-4 h-4 animate-spin"/>}Add</button>
+        </div>}
+      </div>
+      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+        <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500">Charges ({charges.length})</div>
+        <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-[10px] uppercase tracking-widest text-stone-400"><th className="px-3 py-2">Date</th><th className="px-3 py-2">Client</th><th className="px-3 py-2">Service</th><th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2"></th><th className="px-3 py-2"></th></tr></thead>
+          <tbody className="divide-y divide-stone-100">{charges.length===0&&<tr><td colSpan={7} className="px-3 py-8 text-center text-stone-400">No charges logged yet.</td></tr>}
+            {charges.map(c=>(<tr key={c.id}><td className="px-3 py-2 text-stone-500">{String(c.date).slice(0,10)}</td><td className="px-3 py-2 text-stone-800">{c.client}</td><td className="px-3 py-2 text-stone-600">{c.name}</td><td className="px-3 py-2 text-right text-stone-600">{c.qty}</td><td className="px-3 py-2 text-right font-medium text-stone-900">${(+c.amount||0).toFixed(2)}</td><td className="px-3 py-2">{c.invoiced?<span className="text-[10px] uppercase rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700">invoiced</span>:<span className="text-[10px] uppercase rounded px-1.5 py-0.5 bg-amber-100 text-amber-700">open</span>}</td><td className="px-3 py-2 text-right"><button onClick={()=>delCharge(c.id)} className="text-stone-300 hover:text-rose-600"><Trash2 className="w-3.5 h-3.5"/></button></td></tr>))}
+          </tbody></table></div>
+      </div>
+    </div>}
+    {tab==="invoices"&&<div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+      {clientKeys.length===0&&<div className="p-8 text-center text-sm text-stone-400">No charges yet — log some on the Charges tab.</div>}
+      {clientKeys.map(k=>(<div key={k} className="p-3 flex items-center gap-3 flex-wrap">
+        <div className="flex-1 min-w-0"><div className="font-medium text-stone-900">{k}</div><div className="text-[11px] text-stone-400">{byClient[k].count} charge{byClient[k].count===1?"":"s"} · ${byClient[k].total.toFixed(2)} total</div></div>
+        <div className="text-right"><div className="text-[11px] text-stone-400">Open balance</div><div className={`text-sm font-semibold ${byClient[k].uninvoiced>0?"text-amber-600":"text-emerald-600"}`}>${byClient[k].uninvoiced.toFixed(2)}</div></div>
+        <button onClick={()=>printInvoice(k)} className="text-xs bg-stone-100 text-stone-600 rounded-lg px-2.5 py-1.5 hover:bg-stone-200 flex items-center gap-1"><Printer className="w-3.5 h-3.5"/>Invoice</button>
+        {byClient[k].uninvoiced>0&&<button onClick={()=>invoiceClient(k)} disabled={busy} className="text-xs bg-emerald-600 text-white rounded-lg px-2.5 py-1.5 font-medium hover:bg-emerald-700 disabled:opacity-40">Mark invoiced</button>}
+      </div>))}
+    </div>}
+    {ef&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setEf(null)}>
+      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3"><div className="font-semibold text-stone-900">{ef.id?"Edit service":"New service"}</div><button onClick={()=>setEf(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="col-span-2"><Field label="Service name"><Input value={ef.name} onChange={e=>setEf({...ef,name:e.target.value})} placeholder="Pick fee — per unit"/></Field></div>
+          <Field label="Unit"><Input value={ef.unit} onChange={e=>setEf({...ef,unit:e.target.value})} placeholder="unit / order / mo"/></Field>
+          <Field label="Rate ($)"><Input type="number" value={ef.rate} onChange={e=>setEf({...ef,rate:e.target.value})}/></Field>
+        </div>
+        <div className="flex items-center gap-2 mt-4"><button onClick={saveRate} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy&&<Loader2 className="w-4 h-4 animate-spin"/>}Save</button><button onClick={()=>setEf(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
       </div>
     </div>}
   </div>);

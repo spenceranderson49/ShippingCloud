@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v702";
+const BUILD_TAG="addr-v703";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10212,8 +10212,24 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const boCount=list.filter(it=>{ if(Array.isArray(it.kit)&&it.kit.length&&!it.assembled)return false; const d=committedBySku[String(it.sku).toLowerCase()]||0; return d>(+it.onHand||0); }).length;
   const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
   const openPo=(pos||[]).filter(p=>p&&p.status!=="received").length;
-  const Switcher=()=>(<div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm flex-wrap">
-    {[["overview","Overview"],["stock","Stock"],["runner","Runner"],["replenish","Replenish"],["backorder","Backorders"],["count","Cycle Count"],["pos","Purchase Orders"],["production","Production"],["suppliers","Suppliers"],["warehouses","Warehouses"],["containers","Containers"],["pick","Pick Lists"],["pack","Pack Verify"],["scan","Scan Receive"],["billing","3PL Billing"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}{v==="replenish"&&lowCount>0?" ("+lowCount+")":""}{v==="backorder"&&boCount>0?" ("+boCount+")":""}</button>)}
+  /* Grouped navigation — 16 tools organized into labeled clusters so the WMS stays approachable.
+     Presentation only; every tab still just calls setView. */
+  const NAV_GROUPS=[
+    ["Home",[["overview","Overview"]]],
+    ["Inventory",[["stock","Stock"],["replenish","Replenish"],["backorder","Backorders"],["count","Cycle Count"],["production","Production"]]],
+    ["Fulfill",[["runner","Runner"],["pick","Pick Lists"],["pack","Pack Verify"],["scan","Scan Receive"]]],
+    ["Purchasing",[["pos","Purchase Orders"],["suppliers","Suppliers"]]],
+    ["Setup",[["warehouses","Warehouses"],["containers","Containers"]]],
+    ["Business",[["billing","3PL Billing"],["analytics","Analytics"]]],
+  ];
+  const badge=(v)=>v==="pos"&&openPo>0?" ("+openPo+")":v==="replenish"&&lowCount>0?" ("+lowCount+")":v==="backorder"&&boCount>0?" ("+boCount+")":"";
+  const Switcher=()=>(<div className="flex flex-wrap gap-x-4 gap-y-2">
+    {NAV_GROUPS.map(([g,tabs])=>(<div key={g} className="flex flex-col gap-1">
+      <span className="text-[9px] uppercase tracking-widest text-stone-400 pl-1">{g}</span>
+      <div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm flex-wrap">
+        {tabs.map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md whitespace-nowrap ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{badge(v)}</button>)}
+      </div>
+    </div>))}
   </div>);
   if(view==="overview") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryOverview list={list} pos={pos} log={log} suppliers={suppliers} orders={orders} showMoney={showMoney} committedBySku={committedBySku} incomingBySku={incomingBySku} goView={setView} onReceive={()=>setView("stock")}/></div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);

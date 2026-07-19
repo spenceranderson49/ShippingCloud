@@ -670,7 +670,7 @@ exports.handler = async (event) => {
        Every login of a company shares its inventory; a platform admin may target a specific
        company via body.clientId. All reads refuse-and-retry on failure so stock is never
        silently zeroed by a transient DB hiccup. */
-    if (["invList", "invUpsert", "invAdjust", "invReceive", "invShip", "invDelete", "invTransfer", "invBuild", "poList", "poSave", "poReceive", "poDelete", "supplierList", "supplierSave", "supplierDelete", "warehouseList", "warehouseSave", "warehouseDelete", "returnList", "returnSetStatus", "containerList", "containerSave", "containerDelete", "productionList", "productionSave", "productionComplete", "productionDelete", "billingGet", "billingSave"].indexOf(action) >= 0) {
+    if (["invList", "invUpsert", "invAdjust", "invReceive", "invShip", "invDelete", "invTransfer", "invBuild", "poList", "poSave", "poReceive", "poDelete", "supplierList", "supplierSave", "supplierDelete", "warehouseList", "warehouseSave", "warehouseDelete", "returnList", "returnSetStatus", "containerList", "containerSave", "containerDelete", "productionList", "productionSave", "productionComplete", "productionDelete", "billingGet", "billingSave", "wlistGet", "wlistSave"].indexOf(action) >= 0) {
       const curU = await getStore("users");
       if (!curU.ok) return J({ ok: false, retry: true, error: "Storage is briefly unavailable — try again." });
       const allU = Array.isArray(curU.value) ? curU.value : [];
@@ -1084,6 +1084,33 @@ exports.handler = async (event) => {
         const w = await putStores({ [proKey]: list });
         if (!w.ok) return J({ ok: false, error: "Built, but couldn't update the order — refresh." });
         return J({ ok: true, production: list, item: it });
+      }
+
+      /* ── Generic company-shared lists — powers the simpler modules (custom links, packing groups,
+         3PL requests, dropoffs, mailboxes, print groups) without a bespoke handler each. Each item is
+         a flat object; values are string/number/boolean-capped so nothing huge or nested is stored. ── */
+      if (action === "wlistGet" || action === "wlistSave") {
+        const WLIST_KINDS = ["links", "packgroups", "requests", "dropoffs", "mailboxes", "printgroups"];
+        const kind = String(body.kind || "");
+        if (WLIST_KINDS.indexOf(kind) < 0) return J({ ok: false, error: "Unknown list." });
+        const key = "wlist:" + cid + ":" + kind;
+        if (action === "wlistGet") {
+          const cur = await getStore(key);
+          if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't load — try again." });
+          return J({ ok: true, kind, items: Array.isArray(cur.value) ? cur.value : [] });
+        }
+        const cap = (v) => {
+          if (typeof v === "string") return v.slice(0, 2000);
+          if (typeof v === "number") return isFinite(v) ? v : 0;
+          if (typeof v === "boolean") return v;
+          if (Array.isArray(v)) return v.slice(0, 200).map((x) => (typeof x === "object" && x ? cleanObj(x) : (typeof x === "string" ? x.slice(0, 500) : x)));
+          return undefined;
+        };
+        const cleanObj = (o) => { const r = {}; if (o && typeof o === "object") for (const k of Object.keys(o).slice(0, 60)) { const cv = cap(o[k]); if (cv !== undefined) r[String(k).slice(0, 60)] = cv; } return r; };
+        const items = (Array.isArray(body.items) ? body.items : []).slice(0, 2000).map((o) => cleanObj(o));
+        const w = await putStores({ [key]: items });
+        if (!w.ok) return J({ ok: false, error: "Save failed — try again." });
+        return J({ ok: true, kind, items });
       }
 
       /* ── 3PL billing — a rate card of billable services + a log of charges per client. The whole

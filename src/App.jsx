@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v704";
+const BUILD_TAG="addr-v705";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10217,11 +10217,12 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const NAV_GROUPS=[
     ["Home",[["overview","Overview"]]],
     ["Inventory",[["stock","Stock"],["replenish","Replenish"],["backorder","Backorders"],["count","Cycle Count"],["production","Production"]]],
-    ["Fulfill",[["runner","Runner"],["pick","Pick Lists"],["pack","Pack Verify"],["scan","Scan Receive"]]],
+    ["Fulfill",[["runner","Runner"],["pick","Pick Lists"],["pack","Pack Verify"],["packgroups","Packing Groups"],["scan","Scan Receive"]]],
     ["Purchasing",[["pos","Purchase Orders"],["suppliers","Suppliers"]]],
-    ["Setup",[["warehouses","Warehouses"],["containers","Containers"]]],
+    ["Setup",[["warehouses","Warehouses"],["containers","Containers"],["links","Links"]]],
+    ["Front desk",[["dropoffs","Dropoffs"],["mailboxes","Mail Boxes"]]],
     ["Sell",[["sale","Point of Sale"]]],
-    ["Business",[["billing","3PL Billing"],["analytics","Analytics"]]],
+    ["Business",[["billing","3PL Billing"],["requests","3PL Requests"],["analytics","Analytics"]]],
   ];
   const badge=(v)=>v==="pos"&&openPo>0?" ("+openPo+")":v==="replenish"&&lowCount>0?" ("+lowCount+")":v==="backorder"&&boCount>0?" ("+boCount+")":"";
   const Switcher=()=>(<div className="flex flex-wrap gap-x-4 gap-y-2">
@@ -10242,6 +10243,11 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   if(view==="runner") return (<div className="max-w-2xl space-y-4"><Switcher/><RunnerPortal items={list} orders={orders} warehouses={warehouses} onReceived={patch} onReload={load}/></div>);
   if(view==="billing") return (<div className="max-w-5xl space-y-4"><Switcher/><Billing3PL/></div>);
   if(view==="sale") return (<div className="max-w-5xl space-y-4"><Switcher/><PointOfSale items={list} onReload={load}/></div>);
+  if(view==="packgroups") return (<div className="max-w-3xl space-y-4"><Switcher/><PackingGroups/></div>);
+  if(view==="links") return (<div className="max-w-3xl space-y-4"><Switcher/><ThirdPartyLinks/></div>);
+  if(view==="dropoffs") return (<div className="max-w-3xl space-y-4"><Switcher/><Dropoffs/></div>);
+  if(view==="mailboxes") return (<div className="max-w-3xl space-y-4"><Switcher/><MailBoxes/></div>);
+  if(view==="requests") return (<div className="max-w-3xl space-y-4"><Switcher/><Requests3PL/></div>);
   if(view==="production") return (<div className="max-w-5xl space-y-4"><Switcher/><ProductionOrders production={production} setProduction={setProduction} items={list} onReload={load}/></div>);
   if(view==="replenish") return (<div className="max-w-5xl space-y-4"><Switcher/><Replenishment list={list} suppliers={suppliers} log={log} incomingBySku={incomingBySku} committedBySku={committedBySku} showMoney={showMoney} onReload={load} onCreated={p=>{setPos(x=>[...p,...(x||[])]);setView("pos");load();}}/></div>);
   if(view==="count") return (<div className="max-w-5xl space-y-4"><Switcher/><CycleCount list={list} showMoney={showMoney} onApplied={load}/></div>);
@@ -11154,6 +11160,90 @@ function WarehousesView({warehouses,setWarehouses}){
       </div>
     </div>}
   </div>);
+}
+/* WListManager — a generic company-shared list module (loads/saves via the wlist actions). Powers the
+   simpler EliteWorks modules (custom links, packing groups, 3PL requests, dropoffs, mailboxes) from a
+   small field schema so each is a thin wrapper. Optional inline status cycling and a primary/secondary
+   row renderer keep them distinct. */
+function WListManager({kind,title,subtitle,Icon,fields,addLabel,statuses,defaults,renderPrimary,renderSecondary,dateStamp}){
+  const [items,setItems]=useState(null); const [busy,setBusy]=useState(false); const [msg,setMsg]=useState(null); const [ef,setEf]=useState(null);
+  const flash=(m,e)=>{ setMsg(e?{err:m}:{ok:m}); setTimeout(()=>setMsg(null),3500); };
+  useEffect(()=>{ let dead=false; (async()=>{ const r=await cloudCall({action:"wlistGet",token:CLOUD.token,kind}); if(!dead){ if(r&&r.ok)setItems(r.items||[]); else { setItems([]); flash((r&&r.error)||"Couldn't load.",true);} } })(); return ()=>{dead=true;}; },[kind]);
+  const persist=async(next)=>{ setBusy(true); const r=await cloudCall({action:"wlistSave",token:CLOUD.token,kind,items:next}); setBusy(false); if(r&&r.ok){ setItems(r.items||[]); return true; } flash((r&&r.error)||"Save failed.",true); return false; };
+  const blank=()=>{ const o={...(defaults||{})}; fields.forEach(f=>{ if(o[f.key]===undefined)o[f.key]=f.type==="number"?"":""; }); if(statuses&&!o.status)o.status=statuses[0]; return o; };
+  const save=async()=>{ const req=fields.find(f=>f.required&&!String(ef[f.key]||"").trim()); if(req){flash(req.label+" is required.",true);return;} let rec={...ef}; if(!rec.id){ rec.id="wl"+Date.now()+Math.floor(Math.random()*1000); if(dateStamp)rec.date=new Date().toISOString(); } const next=ef.id?items.map(x=>x.id===ef.id?rec:x):[rec,...items]; if(await persist(next)){ setEf(null); flash("Saved."); } };
+  const del=async(id)=>{ if(!await uiConfirm("Delete this entry?"))return; await persist(items.filter(x=>x.id!==id)); };
+  const cycle=async(it)=>{ if(!statuses)return; const i=statuses.indexOf(it.status); const nextStatus=statuses[(i+1)%statuses.length]; await persist(items.map(x=>x.id===it.id?{...x,status:nextStatus}:x)); };
+  const stTone=(s)=>{ const i=statuses?statuses.indexOf(s):-1; return i<=0?"bg-amber-100 text-amber-700":i===statuses.length-1?"bg-emerald-100 text-emerald-700":"bg-sky-100 text-sky-700"; };
+  if(items===null)return <div className="border border-stone-200 rounded-xl bg-white p-8 text-center text-sm text-stone-400 flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>Loading…</div>;
+  return (<div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Icon className="w-5 h-5 text-[#0086E0]"/>{title}</h2><p className="text-sm text-stone-500 mt-0.5">{subtitle}</p></div>
+      <button onClick={()=>setEf(blank())} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>{addLabel||"New"}</button>
+    </div>
+    {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
+    <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+      {items.length===0&&<div className="p-8 text-center text-sm text-stone-400">Nothing here yet.</div>}
+      {items.map(it=>(<div key={it.id} className="p-3 flex items-center gap-3 flex-wrap">
+        <div className="flex-1 min-w-0"><div className="font-medium text-stone-900 flex items-center gap-2">{renderPrimary?renderPrimary(it):(it.name||it.title||"—")}{statuses&&<button onClick={()=>cycle(it)} className={`text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 ${stTone(it.status)}`} title="Click to advance status">{it.status}</button>}</div><div className="text-[11px] text-stone-400 truncate">{renderSecondary?renderSecondary(it):""}</div></div>
+        <button onClick={()=>setEf({...it})} className="text-xs bg-stone-100 text-stone-600 rounded-lg px-2.5 py-1.5 hover:bg-stone-200">Edit</button>
+        <button onClick={()=>del(it.id)} className="text-xs bg-stone-100 text-stone-400 rounded-lg px-2 py-1.5 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="w-3.5 h-3.5"/></button>
+      </div>))}
+    </div>
+    {ef&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setEf(null)}>
+      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5 max-h-[92vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3"><div className="font-semibold text-stone-900">{ef.id?"Edit":addLabel||"New"}</div><button onClick={()=>setEf(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+        <div className="grid grid-cols-2 gap-2">
+          {fields.map(f=>(<div key={f.key} className={f.full?"col-span-2":""}><Field label={f.label}>
+            {f.type==="textarea"?<textarea value={ef[f.key]||""} onChange={e=>setEf({...ef,[f.key]:e.target.value})} rows={3} className="w-full border border-stone-300 rounded-lg px-2 py-1.5 text-sm"/>:
+             f.type==="select"?<select value={ef[f.key]||""} onChange={e=>setEf({...ef,[f.key]:e.target.value})} className="w-full border border-stone-300 rounded-lg px-2 py-2 text-sm"><option value="">—</option>{(f.options||[]).map(o=>{ const val=typeof o==="object"?o.value:o; const lab=typeof o==="object"?o.label:o; return <option key={val} value={val}>{lab}</option>; })}</select>:
+             <Input type={f.type==="number"?"number":f.type==="date"?"date":"text"} value={ef[f.key]||""} onChange={e=>setEf({...ef,[f.key]:e.target.value})} placeholder={f.placeholder||""}/>}
+          </Field></div>))}
+          {statuses&&ef.id&&<div><Field label="Status"><select value={ef.status||statuses[0]} onChange={e=>setEf({...ef,status:e.target.value})} className="w-full border border-stone-300 rounded-lg px-2 py-2 text-sm">{statuses.map(s=><option key={s} value={s}>{s}</option>)}</select></Field></div>}
+        </div>
+        <div className="flex items-center gap-2 mt-4"><button onClick={save} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy&&<Loader2 className="w-4 h-4 animate-spin"/>}Save</button><button onClick={()=>setEf(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
+      </div>
+    </div>}
+  </div>);
+}
+/* Third Party Links — a per-company bar of custom shortcut links (EliteWorks Third Party Links). */
+function ThirdPartyLinks(){
+  return <WListManager kind="links" title="Third-party links" subtitle="Quick links to the other tools your team uses — carrier portals, spreadsheets, trackers." Icon={ExternalLink} addLabel="New link"
+    fields={[{key:"name",label:"Label",required:true,placeholder:"FedEx portal"},{key:"url",label:"URL",required:true,full:true,placeholder:"https://…"}]}
+    renderPrimary={it=><a href={/^https?:\/\//.test(it.url||"")?it.url:"https://"+(it.url||"")} target="_blank" rel="noreferrer" className="text-[#0086E0] hover:underline">{it.name}</a>}
+    renderSecondary={it=>it.url}/>;
+}
+/* 3PL Requests — a client request/ticket queue (EliteWorks 3pl > Requests). */
+function Requests3PL(){
+  return <WListManager kind="requests" title="3PL Requests" subtitle="Client requests and tickets — inbound shipments, special projects, one-off asks — tracked to done." Icon={FileText} addLabel="New request" dateStamp statuses={["open","in progress","done"]}
+    fields={[{key:"client",label:"Client",required:true,placeholder:"Brand name"},{key:"type",label:"Type",type:"select",options:["Inbound shipment","Special project","Kitting","Returns","Other"]},{key:"subject",label:"Subject",required:true,full:true},{key:"details",label:"Details",type:"textarea",full:true}]}
+    renderPrimary={it=><span>{it.subject} <span className="text-stone-400 font-normal">· {it.client}</span></span>}
+    renderSecondary={it=>[it.type,it.date?String(it.date).slice(0,10):"",it.details].filter(Boolean).join(" · ")}/>;
+}
+/* Dropoffs — package intake log for a shipping counter (EliteWorks Dropoffs). */
+function Dropoffs(){
+  return <WListManager kind="dropoffs" title="Dropoffs" subtitle="Log packages customers drop off to ship — track them from received to shipped." Icon={Boxes} addLabel="Log dropoff" dateStamp statuses={["pending","shipped"]}
+    fields={[{key:"customer",label:"Customer",required:true},{key:"carrier",label:"Carrier",type:"select",options:["FedEx","UPS","USPS","DHL"]},{key:"tracking",label:"Tracking #",full:true},{key:"pieces",label:"Pieces",type:"number"},{key:"note",label:"Note",type:"textarea",full:true}]}
+    renderPrimary={it=><span>{it.customer}{it.pieces?" · "+it.pieces+" pcs":""}</span>}
+    renderSecondary={it=>[it.carrier,it.tracking,it.date?String(it.date).slice(0,10):""].filter(Boolean).join(" · ")}/>;
+}
+/* Mail Boxes — mailbox rental registry (EliteWorks Mail Boxes). */
+function MailBoxes(){
+  return <WListManager kind="mailboxes" title="Mail boxes" subtitle="Mailbox rentals — who has which box, their contact, and status." Icon={Mail} addLabel="New mailbox" statuses={["active","vacant","overdue"]}
+    fields={[{key:"box",label:"Box #",required:true,placeholder:"101"},{key:"renter",label:"Renter",required:true},{key:"email",label:"Email"},{key:"phone",label:"Phone"},{key:"renewal",label:"Renews on",type:"date"},{key:"notes",label:"Notes",type:"textarea",full:true}]}
+    renderPrimary={it=><span>Box {it.box} <span className="text-stone-400 font-normal">· {it.renter}</span></span>}
+    renderSecondary={it=>[it.email,it.phone,it.renewal?"renews "+it.renewal:""].filter(Boolean).join(" · ")}/>;
+}
+/* Packing Groups — rules that map an item category or keyword to the container it should ship in, so
+   packers grab the right box (cartonization). Loads the container catalog for the box picker. */
+function PackingGroups(){
+  const [containers,setContainers]=useState([]);
+  useEffect(()=>{ let dead=false; (async()=>{ const r=await cloudCall({action:"containerList",token:CLOUD.token}); if(!dead&&r&&r.ok)setContainers(r.containers||[]); })(); return ()=>{dead=true;}; },[]);
+  const opts=(containers||[]).map(c=>c.name).filter(Boolean);
+  return <WListManager kind="packgroups" title="Packing groups" subtitle="Rules that tell packers which box to use — match a category or keyword to a container. Add boxes under Setup → Containers." Icon={Package} addLabel="New rule"
+    fields={[{key:"name",label:"Rule name",required:true,placeholder:"Apparel → poly"},{key:"match",label:"Match category / keyword",required:true,full:true,placeholder:"Apparel  (or a word in the item name)"},{key:"container",label:"Use container",type:"select",options:opts},{key:"note",label:"Note",type:"textarea",full:true}]}
+    renderPrimary={it=><span>{it.name}</span>}
+    renderSecondary={it=>[it.match?"matches “"+it.match+"”":"",it.container?"→ "+it.container:"(no box set)"].filter(Boolean).join("  ")}/>;
 }
 /* Point of Sale — a register that draws down the same inventory. Scan/search to add items to a cart,
    adjust quantities, take payment, and checkout ships the lines (invShip) so stock decrements and the

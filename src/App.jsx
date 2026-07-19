@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v681";
+const BUILD_TAG="addr-v682";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9923,7 +9923,38 @@ function Shipments({shipments,setShipments,goShip,pendingShips=[],onCheckLabels,
   );
 }
 
-/* ════════ INVENTORY (Phase 1) ════════
+/* Small ? help bubble with a plain-English definition on hover — used across the WMS so a
+   first-timer can learn every term in place. */
+function InfoDot({children,w="w-56"}){
+  return (<span className="relative inline-flex group align-middle">
+    <span className="w-3.5 h-3.5 rounded-full bg-stone-200 text-stone-500 text-[9px] font-bold flex items-center justify-center cursor-help select-none">?</span>
+    <span className={`pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 ${w} bg-stone-900 text-white text-[11px] leading-snug rounded-lg px-2.5 py-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-[60] shadow-lg normal-case tracking-normal font-normal text-left`}>{children}</span>
+  </span>);
+}
+/* Plain-English glossary of every WMS term — surfaced in the help panel and via InfoDots. */
+const WMS_GLOSSARY=[
+  ["SKU","A unique code for one product (Stock Keeping Unit). Every item you track has one."],
+  ["On hand","How many units you physically have in the warehouse right now."],
+  ["Committed","Units already promised to open orders that haven't shipped yet."],
+  ["Available","What you can still sell = On hand − Committed."],
+  ["Incoming","Units on the way in from purchase orders you haven't received yet."],
+  ["Reorder point (min)","When on-hand drops to this number, it's time to buy more."],
+  ["Reorder up to (max)","The level you want to refill back to when you reorder."],
+  ["Purchase order (PO)","An order you send a supplier to buy more stock. Receive it to add stock in."],
+  ["Receiving","Logging stock that arrived — it adds to on-hand."],
+  ["Cycle count","Physically counting an item and correcting the number in the system."],
+  ["Location / bin","Where an item sits — a warehouse, a zone, or a shelf/bin."],
+  ["Transfer","Moving units from one location to another (the total doesn't change)."],
+  ["Kit / bundle","A product made of other SKUs. Selling it uses up its parts."],
+  ["Assembly (build)","A kit you pre-build: it consumes the parts and stocks the finished item."],
+  ["Lot / batch (FEFO)","A group received together, often with an expiry date. FEFO ships the soonest-to-expire first."],
+  ["Serial number","A unique code per single unit (great for electronics). Scanned in and out."],
+  ["FIFO costing","Values what you sell using your oldest cost first — true cost of goods."],
+  ["Pick list","A sheet telling the warehouse which items to grab for a batch of orders."],
+  ["Pack verify","Scanning each item into the box so nothing wrong ships."],
+  ["ABC analysis","Ranks products by how much value they move — A = your top movers."],
+];
+/* ════════ INVENTORY ════════
    Company-shared stock, one row per SKU on the server (inv:<clientId>:<sku>). Tracks on-hand,
    reorder point, unit cost and location; receives POs; auto-decrements when orders ship (see the
    invShip hook in AppInner). Money columns hide when the login can't see costs. */
@@ -9948,6 +9979,9 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const [warehouses,setWarehouses]=useState([]);
   const [catFilter,setCatFilter]=useState("");
   const [building,setBuilding]=useState(null);
+  const [showHelp,setShowHelp]=useState(false);
+  const [setupHid,setSetupHid]=useState(()=>{ try{ return !!lsGet("wms.setupHid."+((currentUser&&currentUser.id)||"g"),false); }catch(e){ return false; } });
+  const hideSetup=()=>{ setSetupHid(true); try{ lsSet("wms.setupHid."+((currentUser&&currentUser.id)||"g"),true); }catch(e){} };
   const catalog=(settings&&settings.products)||[];
   const flash=(m,isErr)=>{ if(isErr){setErr(m);setOk("");}else{setOk(m);setErr("");} setTimeout(()=>{setErr("");setOk("");},4500); };
   const load=async()=>{
@@ -10125,12 +10159,31 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
         {shopConns.length>0&&list.length>0&&<button onClick={syncShopify} disabled={busy==="shopify"} title="Push on-hand quantities to Shopify so it can't oversell" className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5">{busy==="shopify"?<Loader2 className="w-4 h-4 animate-spin"/>:<ShoppingBag className="w-4 h-4"/>}Sync to Shopify</button>}
         {shopConns.length>0&&setSettings&&<label className="flex items-center gap-1.5 text-xs text-stone-600 cursor-pointer" title="Automatically push the new level to Shopify each time an order ships"><input type="checkbox" checked={!!settings.autoShopifyStock} onChange={e=>setSettings(s=>({...s,autoShopifyStock:e.target.checked}))} className="accent-[#0086E0]"/>auto on ship</label>}
         <label className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 flex items-center gap-1.5 cursor-pointer">{busy==="importcsv"?<Loader2 className="w-4 h-4 animate-spin"/>:<Upload className="w-4 h-4"/>}Import CSV<input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
+        <button onClick={()=>setShowHelp(h=>!h)} className={`text-sm rounded-lg px-3 py-2 font-medium flex items-center gap-1.5 border ${showHelp?"bg-[#E6F4FF] text-[#006FBF] border-[#99D6FF]":"bg-stone-100 text-stone-700 border-stone-200 hover:bg-stone-200"}`}><MessageCircle className="w-4 h-4"/>Help</button>
         {list.length>0&&<button onClick={exportCSV} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 flex items-center gap-1.5"><Download className="w-4 h-4"/>Export</button>}
         {catalog.length>0&&<button onClick={importCatalog} disabled={busy==="import"} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5">{busy==="import"?<Loader2 className="w-4 h-4 animate-spin"/>:<Download className="w-4 h-4"/>}Import from catalog</button>}
         <button onClick={()=>setAdding(a=>!a)} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>New item</button>
       </div>
     </div>
     {(err||ok)&&<div className={`text-xs rounded px-3 py-2 border ${err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{err||ok}</div>}
+    {showHelp&&<div className="rounded-2xl border border-stone-200 bg-white p-5">
+      <div className="flex items-center justify-between mb-1"><div className="text-base font-semibold text-stone-900 flex items-center gap-2"><MessageCircle className="w-4 h-4 text-[#0086E0]"/>How the warehouse works — in plain English</div><button onClick={()=>setShowHelp(false)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+      <p className="text-sm text-stone-500 mb-3">Every term you'll see, explained. Hover the little <span className="inline-flex w-3.5 h-3.5 rounded-full bg-stone-200 text-stone-500 text-[9px] font-bold items-center justify-center align-middle">?</span> anywhere for a quick reminder.</p>
+      <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">{WMS_GLOSSARY.map(([t,d])=>(<div key={t}><div className="text-sm font-semibold text-stone-800">{t}</div><div className="text-xs text-stone-500 leading-snug">{d}</div></div>))}</div>
+      <div className="mt-4 pt-3 border-t border-stone-100 text-xs text-stone-500"><b className="text-stone-700">The short version:</b> add your products → say how many you have → ship orders like normal. Stock counts itself down, warns you when it's low, and helps you reorder. Everything else is optional and there when you need it.</div>
+    </div>}
+    {list.length>0&&!setupHid&&(()=>{ const setup=[
+      {label:"Add your products",done:list.length>0,cta:null},
+      {label:"Enter how many you have on hand",done:list.some(it=>(+it.onHand||0)>0),cta:list.some(it=>(+it.onHand||0)>0)?null:{t:"Receive stock",go:()=>{}}},
+      {label:"Set a reorder point so you're warned when low",done:list.some(it=>(+it.reorder||0)>0),cta:null},
+      {label:"Add a supplier to reorder from",done:(suppliers||[]).length>0,cta:(suppliers||[]).length>0?null:{t:"Suppliers",go:()=>setView("suppliers")}},
+      {label:"Ship an order — watch stock count itself down",done:(log||[]).some(m=>m&&m.type==="ship"),cta:null},
+    ]; const doneN=setup.filter(s=>s.done).length; if(doneN>=setup.length)return null; return (
+      <div className="rounded-2xl border border-[#0086E0]/20 bg-gradient-to-br from-[#f2f8fd] to-white p-5">
+        <div className="flex items-center justify-between"><div className="text-sm font-semibold text-stone-900 flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-[#0086E0]"/>Getting set up — {doneN} of {setup.length} done</div><button onClick={hideSetup} className="text-[11px] text-stone-400 hover:text-stone-600">dismiss</button></div>
+        <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden mt-2 mb-3"><div className="h-full bg-[#0086E0]" style={{width:Math.round(doneN/setup.length*100)+"%"}}/></div>
+        <div className="space-y-1.5">{setup.map((s,i)=>(<div key={i} className="flex items-center gap-2.5 text-sm">{s.done?<CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0"/>:<div className="w-4 h-4 rounded-full border-2 border-stone-300 shrink-0"/>}<span className={s.done?"text-stone-400 line-through":"text-stone-700"}>{s.label}</span>{!s.done&&s.cta?<button onClick={s.cta.go} className="text-[11px] text-[#0086E0] hover:underline">{s.cta.t} →</button>:null}</div>))}</div>
+      </div>);})()}
     {list.length===0&&!adding&&<div className="rounded-2xl border border-[#0086E0]/20 bg-gradient-to-br from-[#f2f8fd] to-white p-6">
       <div className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Boxes className="w-5 h-5 text-[#0086E0]"/>Welcome to your warehouse</div>
       <p className="text-sm text-stone-600 mt-1 max-w-xl">Let's get your stock in. Pick the fastest way to start — you can always add locations, lots, and suppliers later as you grow.</p>
@@ -10180,7 +10233,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     </div>
     <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
       <div className="overflow-x-auto"><table className="w-full text-sm">
-        <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 text-left"><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">On hand</th><th className="px-3 py-2 text-right" title="Promised to open orders">Committed</th><th className="px-3 py-2 text-right" title="On hand − committed">Available</th><th className="px-3 py-2 text-right">Incoming</th><th className="px-3 py-2 text-right">Reorder</th>{showMoney&&<th className="px-3 py-2 text-right">Unit cost</th>}{showMoney&&<th className="px-3 py-2 text-right">Value</th>}<th className="px-3 py-2">Location</th><th className="px-3 py-2"></th></tr></thead>
+        <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 text-left"><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right"><span className="inline-flex items-center gap-1 justify-end">On hand <InfoDot>How many units you physically have right now.</InfoDot></span></th><th className="px-3 py-2 text-right"><span className="inline-flex items-center gap-1 justify-end">Committed <InfoDot>Units promised to open orders that haven't shipped yet.</InfoDot></span></th><th className="px-3 py-2 text-right"><span className="inline-flex items-center gap-1 justify-end">Available <InfoDot>What you can still sell — on hand minus committed.</InfoDot></span></th><th className="px-3 py-2 text-right"><span className="inline-flex items-center gap-1 justify-end">Incoming <InfoDot>On the way in from purchase orders you haven't received yet.</InfoDot></span></th><th className="px-3 py-2 text-right"><span className="inline-flex items-center gap-1 justify-end">Reorder <InfoDot>When on-hand hits this number, it's time to buy more.</InfoDot></span></th>{showMoney&&<th className="px-3 py-2 text-right">Unit cost</th>}{showMoney&&<th className="px-3 py-2 text-right">Value</th>}<th className="px-3 py-2">Location</th><th className="px-3 py-2"></th></tr></thead>
         <tbody className="divide-y divide-stone-100">
           {filtered.length===0&&<tr><td colSpan={showMoney?10:8} className="px-3 py-8 text-center text-stone-400 text-sm">{list.length?"No items match your search.":"No inventory yet — add an item, or import from your product catalog."}</td></tr>}
           {filtered.map(it=>{const isKit=Array.isArray(it.kit)&&it.kit.length>0;const virtualKit=isKit&&!it.assembled;const inc=incomingBySku[String(it.sku).toLowerCase()]||0;const cmt=committedBySku[String(it.sku).toLowerCase()]||0;const avail=Math.max(0,(+it.onHand||0)-cmt);return (<tr key={it.sku} className={isLow(it)?"bg-amber-50/60":""}>

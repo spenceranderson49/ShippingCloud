@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v709";
+const BUILD_TAG="addr-v710";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10410,7 +10410,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
           {showMoney&&<Field label="Unit cost"><Input type="number" value={ef.cost} onChange={e=>setEf({...ef,cost:e.target.value})}/></Field>}
           {showMoney&&<Field label="Sell price (POS)"><Input type="number" value={ef.price} onChange={e=>setEf({...ef,price:e.target.value})}/></Field>}
           <Field label="Location / bin"><Input value={ef.loc} onChange={e=>setEf({...ef,loc:e.target.value})}/></Field>
-          <Field label="Barcode / UPC"><div className="flex gap-1"><Input value={ef.barcode} onChange={e=>setEf({...ef,barcode:e.target.value})}/><button type="button" onClick={()=>setEf({...ef,barcode:"2"+String(Date.now()).slice(-11)})} className="shrink-0 text-xs bg-stone-100 text-stone-600 rounded-lg px-2 hover:bg-stone-200" title="Generate a barcode">Gen</button></div></Field>
+          <Field label="Barcode / UPC"><div className="flex gap-1"><Input value={ef.barcode} onChange={e=>setEf({...ef,barcode:e.target.value})}/><button type="button" onClick={()=>setEf({...ef,barcode:"2"+String(Date.now()).slice(-11)})} className="shrink-0 text-xs bg-stone-100 text-stone-600 rounded-lg px-2 hover:bg-stone-200" title="Generate a barcode">Gen</button></div>{ef.barcode&&<div className="mt-1" dangerouslySetInnerHTML={{__html:code128BSVG(ef.barcode,{mod:1.3,height:32})}}/>}</Field>
           <Field label="Category"><Input value={ef.category||""} onChange={e=>setEf({...ef,category:e.target.value})}/></Field>
           <Field label="Base unit"><Input value={ef.uom||""} onChange={e=>setEf({...ef,uom:e.target.value})} placeholder="each / lb / ft"/></Field>
           <Field label="Units per case"><Input type="number" value={ef.casePack??""} onChange={e=>setEf({...ef,casePack:e.target.value})} placeholder="e.g. 12"/></Field>

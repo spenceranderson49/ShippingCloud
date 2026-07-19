@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v679";
+const BUILD_TAG="addr-v680";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10131,6 +10131,16 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
       </div>
     </div>
     {(err||ok)&&<div className={`text-xs rounded px-3 py-2 border ${err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{err||ok}</div>}
+    {list.length===0&&!adding&&<div className="rounded-2xl border border-[#0086E0]/20 bg-gradient-to-br from-[#f2f8fd] to-white p-6">
+      <div className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Boxes className="w-5 h-5 text-[#0086E0]"/>Welcome to your warehouse</div>
+      <p className="text-sm text-stone-600 mt-1 max-w-xl">Let's get your stock in. Pick the fastest way to start — you can always add locations, lots, and suppliers later as you grow.</p>
+      <div className="grid sm:grid-cols-3 gap-3 mt-4">
+        {catalog.length>0&&<button onClick={importCatalog} disabled={busy==="import"} className="text-left border border-stone-200 bg-white rounded-xl p-4 hover:border-[#0086E0]/40 transition disabled:opacity-40"><div className="w-9 h-9 rounded-lg bg-[#E6F4FF] text-[#0086E0] flex items-center justify-center mb-2">{busy==="import"?<Loader2 className="w-5 h-5 animate-spin"/>:<Download className="w-5 h-5"/>}</div><div className="text-sm font-semibold text-stone-800">Import from catalog</div><div className="text-xs text-stone-500 mt-0.5">Pull your {catalog.length} product SKUs in one click.</div></button>}
+        <label className="text-left border border-stone-200 bg-white rounded-xl p-4 hover:border-[#0086E0]/40 transition cursor-pointer"><div className="w-9 h-9 rounded-lg bg-[#E6F4FF] text-[#0086E0] flex items-center justify-center mb-2"><Upload className="w-5 h-5"/></div><div className="text-sm font-semibold text-stone-800">Import a spreadsheet</div><div className="text-xs text-stone-500 mt-0.5">Upload a CSV — SKU, name, qty, cost.</div><input type="file" accept=".csv,text/csv" onChange={importCSV} className="hidden"/></label>
+        <button onClick={()=>setAdding(true)} className="text-left border border-stone-200 bg-white rounded-xl p-4 hover:border-[#0086E0]/40 transition"><div className="w-9 h-9 rounded-lg bg-[#E6F4FF] text-[#0086E0] flex items-center justify-center mb-2"><Plus className="w-5 h-5"/></div><div className="text-sm font-semibold text-stone-800">Add an item by hand</div><div className="text-xs text-stone-500 mt-0.5">Type in your first SKU to get going.</div></button>
+      </div>
+      <div className="text-[11px] text-stone-400 mt-4">Once you have stock, shipping an order automatically counts it down — and Orders, the Dashboard, and Shopify all stay in sync.</div>
+    </div>}
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
       <Tile label="SKUs tracked" value={list.length}/>
       <Tile label="Units on hand" value={totUnits.toLocaleString()}/>

@@ -773,6 +773,17 @@ exports.handler = async (event) => {
         if (body.uom != null) it.uom = String(body.uom).trim().slice(0, 20);        // base unit (each/case/lb…)
         if (body.casePack != null) it.casePack = Math.max(0, Math.round(+body.casePack || 0));  // units per case for case-receiving
         if (body.supplierId != null) it.supplierId = String(body.supplierId).slice(0, 40);       // preferred supplier for replenishment
+        /* Vendor price list (Fishbowl): multiple suppliers per item, each with their own cost, lead
+           time and vendor SKU. Empty array clears it. */
+        if (body.vendors != null) {
+          const vs = Array.isArray(body.vendors) ? body.vendors.slice(0, 20).map((v) => ({
+            supplierId: String((v && v.supplierId) || "").slice(0, 40),
+            cost: Math.max(0, money2(v && v.cost)),
+            leadDays: Math.max(0, Math.round(+((v && v.leadDays)) || 0)),
+            vendorSku: String((v && v.vendorSku) || "").slice(0, 80),
+          })).filter((v) => v.supplierId) : [];
+          if (vs.length) it.vendors = vs; else delete it.vendors;
+        }
         if (body.trackLot != null) { it.trackLot = !!body.trackLot; if (it.trackLot && !Array.isArray(it.lots)) it.lots = []; if (!it.trackLot) delete it.lots; }
         if (body.trackSerial != null) { it.trackSerial = !!body.trackSerial; if (it.trackSerial && !Array.isArray(it.serials)) it.serials = []; if (!it.trackSerial) delete it.serials; }
         if (body.fifo != null) { it.fifo = !!body.fifo; if (it.fifo && !Array.isArray(it.layers)) it.layers = []; if (!it.fifo) delete it.layers; }

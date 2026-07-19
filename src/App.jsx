@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v706";
+const BUILD_TAG="addr-v707";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10141,11 +10141,11 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     setBusy("");
     if(r&&r.ok){ patch(r.item); const diff=cnt-(+it.onHand||0); flash(it.sku+" counted → "+cnt+(diff?" ("+(diff>0?"+":"")+diff+" variance)":" (no variance)")); load(); } else flash((r&&r.error)||"Count failed.",true);
   };
-  const openEdit=(it)=>{ setEf({sku:it.sku,name:it.name||"",reorder:it.reorder??"",maxStock:it.maxStock??"",cost:it.cost??"",price:it.price??"",loc:it.loc||"",barcode:it.barcode||"",category:it.category||"",uom:it.uom||"",casePack:it.casePack??"",supplierId:it.supplierId||"",trackLot:!!it.trackLot,trackSerial:!!it.trackSerial,fifo:!!it.fifo,kit:Array.isArray(it.kit)?it.kit.map(c=>({sku:c.sku,qty:c.qty})):[]}); setEditSku(it.sku); };
+  const openEdit=(it)=>{ setEf({sku:it.sku,name:it.name||"",reorder:it.reorder??"",maxStock:it.maxStock??"",cost:it.cost??"",price:it.price??"",loc:it.loc||"",barcode:it.barcode||"",category:it.category||"",uom:it.uom||"",casePack:it.casePack??"",supplierId:it.supplierId||"",vendors:Array.isArray(it.vendors)?it.vendors.map(v=>({...v})):[],trackLot:!!it.trackLot,trackSerial:!!it.trackSerial,fifo:!!it.fifo,kit:Array.isArray(it.kit)?it.kit.map(c=>({sku:c.sku,qty:c.qty})):[]}); setEditSku(it.sku); };
   const saveEdit=async()=>{
     if(!ef)return; setBusy("edit");
     const kit=(ef.kit||[]).filter(c=>String(c.sku||"").trim()).map(c=>({sku:c.sku,qty:Math.max(1,Math.round(+c.qty||1))}));
-    const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:ef.sku,name:ef.name,reorder:ef.reorder===""?0:+ef.reorder,maxStock:ef.maxStock===""?0:+ef.maxStock,cost:ef.cost===""?"":+ef.cost,price:ef.price===""?"":+ef.price,loc:ef.loc,barcode:ef.barcode||"",category:ef.category||"",uom:ef.uom||"",casePack:ef.casePack===""?0:+ef.casePack,supplierId:ef.supplierId||"",trackLot:!!ef.trackLot,trackSerial:!!ef.trackSerial,fifo:!!ef.fifo,kit});
+    const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:ef.sku,name:ef.name,reorder:ef.reorder===""?0:+ef.reorder,maxStock:ef.maxStock===""?0:+ef.maxStock,cost:ef.cost===""?"":+ef.cost,price:ef.price===""?"":+ef.price,loc:ef.loc,barcode:ef.barcode||"",category:ef.category||"",uom:ef.uom||"",casePack:ef.casePack===""?0:+ef.casePack,supplierId:ef.supplierId||"",vendors:(ef.vendors||[]).filter(v=>v.supplierId).map(v=>({supplierId:v.supplierId,cost:v.cost===""?0:+v.cost,leadDays:v.leadDays===""?0:+v.leadDays,vendorSku:v.vendorSku||""})),trackLot:!!ef.trackLot,trackSerial:!!ef.trackSerial,fifo:!!ef.fifo,kit});
     setBusy("");
     if(r&&r.ok){ patch(r.item); setEditSku(null); setEf(null); flash("Saved "+r.item.sku+"."); load(); } else flash((r&&r.error)||"Couldn't save.",true);
   };
@@ -10432,6 +10432,18 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
           </div>))}
           <button onClick={()=>setEf({...ef,kit:[...(ef.kit||[]),{sku:"",qty:1}]})} className="text-xs text-[#0086E0] hover:underline flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add component</button>
         </div>
+        {(suppliers||[]).length>0&&<div className="mt-4 border-t border-stone-100 pt-3">
+          <div className="text-xs font-semibold text-stone-600 mb-1 flex items-center gap-1.5"><Building2 className="w-3.5 h-3.5 text-[#0086E0]"/>Vendor price list</div>
+          <p className="text-[11px] text-stone-400 mb-2">Buy this item from more than one supplier? List each vendor's price, lead time and their part number.</p>
+          {(ef.vendors||[]).map((v,i)=>(<div key={i} className="flex items-center gap-2 mb-1.5">
+            <select value={v.supplierId} onChange={e=>{const k=[...ef.vendors];k[i]={...k[i],supplierId:e.target.value};setEf({...ef,vendors:k});}} className="flex-1 border border-stone-300 rounded-lg px-2 py-1.5 text-sm"><option value="">— supplier —</option>{(suppliers||[]).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
+            {showMoney&&<input type="number" step="0.01" value={v.cost} onChange={e=>{const k=[...ef.vendors];k[i]={...k[i],cost:e.target.value};setEf({...ef,vendors:k});}} placeholder="Cost" className="w-20 border border-stone-300 rounded-lg px-2 py-1.5 text-sm" title="Vendor cost"/>}
+            <input type="number" value={v.leadDays} onChange={e=>{const k=[...ef.vendors];k[i]={...k[i],leadDays:e.target.value};setEf({...ef,vendors:k});}} placeholder="Lead" className="w-16 border border-stone-300 rounded-lg px-2 py-1.5 text-sm" title="Lead days"/>
+            <input value={v.vendorSku} onChange={e=>{const k=[...ef.vendors];k[i]={...k[i],vendorSku:e.target.value};setEf({...ef,vendors:k});}} placeholder="Vendor SKU" className="w-24 border border-stone-300 rounded-lg px-2 py-1.5 text-sm"/>
+            <button onClick={()=>{const k=ef.vendors.filter((_,j)=>j!==i);setEf({...ef,vendors:k});}} className="text-stone-400 hover:text-rose-600"><Trash2 className="w-4 h-4"/></button>
+          </div>))}
+          <button onClick={()=>setEf({...ef,vendors:[...(ef.vendors||[]),{supplierId:"",cost:"",leadDays:"",vendorSku:""}]})} className="text-xs text-[#0086E0] hover:underline flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add vendor</button>
+        </div>}
         <div className="flex items-center gap-2 mt-5"><button onClick={saveEdit} disabled={busy==="edit"} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy==="edit"&&<Loader2 className="w-4 h-4 animate-spin"/>}Save</button><button onClick={()=>{setEf(null);setEditSku(null);}} className="text-sm text-stone-500 px-2">Cancel</button></div>
       </div>
     </div>}

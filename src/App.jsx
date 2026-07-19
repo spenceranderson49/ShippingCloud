@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v670";
+const BUILD_TAG="addr-v671";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9954,6 +9954,8 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   };
   useEffect(()=>{ load(); /* eslint-disable-next-line */ },[]);
   const incomingBySku=useMemo(()=>{ const m={}; (pos||[]).forEach(po=>{ if(po.status==="received")return; (po.lines||[]).forEach(l=>{ const rem=Math.max(0,(+l.qtyOrdered||0)-(+l.qtyReceived||0)); if(rem>0){ const k=String(l.sku||"").toLowerCase(); m[k]=(m[k]||0)+rem; } }); }); return m; },[pos]);
+  /* Committed = units promised to open (unfulfilled) orders. Available-to-promise = onHand − committed. */
+  const committedBySku=useMemo(()=>{ const m={}; (orders||[]).forEach(o=>{ if(!o||o.status==="fulfilled")return; (Array.isArray(o.lineItems)?o.lineItems:[]).forEach(li=>{ const sku=String((li&&li.sku)||"").trim().toLowerCase(); if(!sku)return; m[sku]=(m[sku]||0)+(+li.qty||+li.quantity||1); }); }); return m; },[orders]);
   const patch=(it)=>setItems(arr=>{ const a=Array.isArray(arr)?[...arr]:[]; const i=a.findIndex(x=>String(x.sku).toLowerCase()===String(it.sku).toLowerCase()); if(i>=0)a[i]=it; else a.push(it); return a; });
   const addItem=async()=>{
     if(!nf.sku.trim()){flash("Enter a SKU.",true);return;}
@@ -10044,7 +10046,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const shopConns=shopifyConns(settings);
   const syncShopify=async()=>{
     if(!shopConns.length)return;
-    const updates=list.filter(it=>!(Array.isArray(it.kit)&&it.kit.length)&&it.sku).map(it=>({sku:it.sku,available:+it.onHand||0}));
+    const updates=list.filter(it=>!(Array.isArray(it.kit)&&it.kit.length)&&it.sku).map(it=>({sku:it.sku,available:Math.max(0,(+it.onHand||0)-(committedBySku[String(it.sku).toLowerCase()]||0))}));
     if(!updates.length){flash("No stock to sync yet.",true);return;}
     setBusy("shopify");
     let synced=0,skipped=0,reconnect=false;
@@ -10140,12 +10142,14 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     </div>
     <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
       <div className="overflow-x-auto"><table className="w-full text-sm">
-        <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 text-left"><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">On hand</th><th className="px-3 py-2 text-right">Incoming</th><th className="px-3 py-2 text-right">Reorder</th>{showMoney&&<th className="px-3 py-2 text-right">Unit cost</th>}{showMoney&&<th className="px-3 py-2 text-right">Value</th>}<th className="px-3 py-2">Location</th><th className="px-3 py-2"></th></tr></thead>
+        <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 text-left"><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">On hand</th><th className="px-3 py-2 text-right" title="Promised to open orders">Committed</th><th className="px-3 py-2 text-right" title="On hand − committed">Available</th><th className="px-3 py-2 text-right">Incoming</th><th className="px-3 py-2 text-right">Reorder</th>{showMoney&&<th className="px-3 py-2 text-right">Unit cost</th>}{showMoney&&<th className="px-3 py-2 text-right">Value</th>}<th className="px-3 py-2">Location</th><th className="px-3 py-2"></th></tr></thead>
         <tbody className="divide-y divide-stone-100">
-          {filtered.length===0&&<tr><td colSpan={showMoney?8:6} className="px-3 py-8 text-center text-stone-400 text-sm">{list.length?"No items match your search.":"No inventory yet — add an item, or import from your product catalog."}</td></tr>}
-          {filtered.map(it=>{const isKit=Array.isArray(it.kit)&&it.kit.length>0;const inc=incomingBySku[String(it.sku).toLowerCase()]||0;return (<tr key={it.sku} className={isLow(it)?"bg-amber-50/60":""}>
+          {filtered.length===0&&<tr><td colSpan={showMoney?10:8} className="px-3 py-8 text-center text-stone-400 text-sm">{list.length?"No items match your search.":"No inventory yet — add an item, or import from your product catalog."}</td></tr>}
+          {filtered.map(it=>{const isKit=Array.isArray(it.kit)&&it.kit.length>0;const inc=incomingBySku[String(it.sku).toLowerCase()]||0;const cmt=committedBySku[String(it.sku).toLowerCase()]||0;const avail=Math.max(0,(+it.onHand||0)-cmt);return (<tr key={it.sku} className={isLow(it)?"bg-amber-50/60":""}>
             <td className="px-3 py-2"><div className="font-medium text-stone-900 flex items-center gap-1.5">{it.name||it.sku}{isKit&&<span className="text-[9px] uppercase tracking-wide bg-violet-100 text-violet-700 rounded px-1.5 py-0.5">kit</span>}</div><div className="text-[11px] text-stone-400">{it.sku}{isKit?" · "+it.kit.map(c=>c.qty+"× "+c.sku).join(" + "):""}</div></td>
             <td className="px-3 py-2 text-right">{isKit?<span className="text-stone-400 text-xs">—</span>:<><span className={`font-semibold ${isLow(it)?"text-amber-600":"text-stone-900"}`}>{+it.onHand||0}</span>{isLow(it)&&<span className="ml-1 text-[10px] uppercase tracking-wide text-amber-600">low</span>}</>}</td>
+            <td className="px-3 py-2 text-right text-stone-500">{(!isKit&&cmt>0)?<span className="text-amber-600">{cmt}</span>:"—"}</td>
+            <td className="px-3 py-2 text-right">{isKit?<span className="text-stone-400 text-xs">—</span>:<span className={`font-medium ${avail<=0&&cmt>0?"text-rose-600":"text-stone-800"}`}>{avail}</span>}</td>
             <td className="px-3 py-2 text-right text-stone-500">{inc>0?<span className="text-sky-600">+{inc}</span>:"—"}</td>
             <td className="px-3 py-2 text-right text-stone-500">{(+it.reorder||0)||"—"}</td>
             {showMoney&&<td className="px-3 py-2 text-right text-stone-500">{it.cost?money(it.cost):"—"}</td>}

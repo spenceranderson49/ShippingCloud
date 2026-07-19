@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v699";
+const BUILD_TAG="addr-v700";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10035,6 +10035,8 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const [lowOnly,setLowOnly]=useState(false);
   const [poSeed,setPoSeed]=useState(null);
   const [warehouses,setWarehouses]=useState([]);
+  const [containers,setContainers]=useState([]);
+  const [production,setProduction]=useState([]);
   const [catFilter,setCatFilter]=useState("");
   const [building,setBuilding]=useState(null);
   const [showHelp,setShowHelp]=useState(false);
@@ -10064,10 +10066,12 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     const r=await cloudCall({action:"invList",token:CLOUD.token});
     if(r&&r.ok){ setItems(r.items||[]); setLog(r.log||[]); }
     else { setItems([]); setErr((r&&r.error)||"Couldn't load inventory."); }
-    const [rp,rs,rw]=await Promise.all([cloudCall({action:"poList",token:CLOUD.token}),cloudCall({action:"supplierList",token:CLOUD.token}),cloudCall({action:"warehouseList",token:CLOUD.token})]);
+    const [rp,rs,rw,rc,rpr]=await Promise.all([cloudCall({action:"poList",token:CLOUD.token}),cloudCall({action:"supplierList",token:CLOUD.token}),cloudCall({action:"warehouseList",token:CLOUD.token}),cloudCall({action:"containerList",token:CLOUD.token}),cloudCall({action:"productionList",token:CLOUD.token})]);
     if(rp&&rp.ok)setPos(rp.pos||[]);
     if(rs&&rs.ok)setSuppliers(rs.suppliers||[]);
     if(rw&&rw.ok)setWarehouses(rw.warehouses||[]);
+    if(rc&&rc.ok)setContainers(rc.containers||[]);
+    if(rpr&&rpr.ok)setProduction(rpr.production||[]);
   };
   const build=async()=>{
     if(!building||!(+building.qty>0)){flash("Enter a quantity to build.",true);return;}
@@ -10209,7 +10213,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
   const openPo=(pos||[]).filter(p=>p&&p.status!=="received").length;
   const Switcher=()=>(<div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm flex-wrap">
-    {[["overview","Overview"],["stock","Stock"],["replenish","Replenish"],["backorder","Backorders"],["count","Cycle Count"],["pos","Purchase Orders"],["suppliers","Suppliers"],["warehouses","Warehouses"],["pick","Pick Lists"],["pack","Pack Verify"],["scan","Scan Receive"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}{v==="replenish"&&lowCount>0?" ("+lowCount+")":""}{v==="backorder"&&boCount>0?" ("+boCount+")":""}</button>)}
+    {[["overview","Overview"],["stock","Stock"],["replenish","Replenish"],["backorder","Backorders"],["count","Cycle Count"],["pos","Purchase Orders"],["production","Production"],["suppliers","Suppliers"],["warehouses","Warehouses"],["containers","Containers"],["pick","Pick Lists"],["pack","Pack Verify"],["scan","Scan Receive"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}{v==="replenish"&&lowCount>0?" ("+lowCount+")":""}{v==="backorder"&&boCount>0?" ("+boCount+")":""}</button>)}
   </div>);
   if(view==="overview") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryOverview list={list} pos={pos} log={log} suppliers={suppliers} orders={orders} showMoney={showMoney} committedBySku={committedBySku} incomingBySku={incomingBySku} goView={setView} onReceive={()=>setView("stock")}/></div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
@@ -10217,6 +10221,8 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   if(view==="pack") return (<div className="max-w-5xl space-y-4"><Switcher/><PackVerify orders={orders} items={list}/></div>);
   if(view==="scan") return (<div className="max-w-5xl space-y-4"><Switcher/><ScanReceive items={list} onReceived={patch} reload={load}/></div>);
   if(view==="warehouses") return (<div className="max-w-5xl space-y-4"><Switcher/><WarehousesView warehouses={warehouses} setWarehouses={setWarehouses}/></div>);
+  if(view==="containers") return (<div className="max-w-5xl space-y-4"><Switcher/><ContainerTypes containers={containers} setContainers={setContainers} showMoney={showMoney}/></div>);
+  if(view==="production") return (<div className="max-w-5xl space-y-4"><Switcher/><ProductionOrders production={production} setProduction={setProduction} items={list} onReload={load}/></div>);
   if(view==="replenish") return (<div className="max-w-5xl space-y-4"><Switcher/><Replenishment list={list} suppliers={suppliers} log={log} incomingBySku={incomingBySku} committedBySku={committedBySku} showMoney={showMoney} onReload={load} onCreated={p=>{setPos(x=>[...p,...(x||[])]);setView("pos");load();}}/></div>);
   if(view==="count") return (<div className="max-w-5xl space-y-4"><Switcher/><CycleCount list={list} showMoney={showMoney} onApplied={load}/></div>);
   if(view==="backorder") return (<div className="max-w-5xl space-y-4"><Switcher/><Backorders list={list} orders={orders} committedBySku={committedBySku} incomingBySku={incomingBySku} goReplenish={()=>setView("replenish")}/></div>);
@@ -11124,6 +11130,89 @@ function WarehousesView({warehouses,setWarehouses}){
           <div className="col-span-2"><Field label="Address / notes"><Input value={ef.address} onChange={e=>setEf({...ef,address:e.target.value})}/></Field></div>
         </div>
         <div className="flex items-center gap-2 mt-4"><button onClick={save} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy&&<Loader2 className="w-4 h-4 animate-spin"/>}Save</button><button onClick={()=>setEf(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
+      </div>
+    </div>}
+  </div>);
+}
+/* Container / packaging types — the box catalog (dimensions, max weight, cost) used for packing and
+   cartonization. A company-managed list mirroring warehouses. */
+function ContainerTypes({containers,setContainers,showMoney}){
+  const [msg,setMsg]=useState(null); const [busy,setBusy]=useState(false); const [ef,setEf]=useState(null);
+  const flash=(m,e)=>{ setMsg(e?{err:m}:{ok:m}); setTimeout(()=>setMsg(null),3500); };
+  const save=async()=>{ if(!ef.name||!ef.name.trim()){flash("A name is required.",true);return;} setBusy(true); const r=await cloudCall({action:"containerSave",token:CLOUD.token,container:ef}); setBusy(false); if(r&&r.ok){ setContainers(r.containers); setEf(null); flash("Saved."); } else flash((r&&r.error)||"Couldn't save.",true); };
+  const del=async(c)=>{ if(!await uiConfirm("Delete "+c.name+"?"))return; const r=await cloudCall({action:"containerDelete",token:CLOUD.token,id:c.id}); if(r&&r.ok)setContainers(r.containers); };
+  const dims=(c)=>[c.length,c.width,c.height].every(v=>+v>0)?`${c.length}×${c.width}×${c.height} in`:"";
+  return (<div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Package className="w-5 h-5 text-[#0086E0]"/>Container types</h2><p className="text-sm text-stone-500 mt-0.5">Your box &amp; packaging catalog — dimensions, weight limits, and cost. Used when packing and to pick the right-size box.</p></div>
+      <button onClick={()=>setEf({name:"",kind:"box",length:"",width:"",height:"",maxWeight:"",cost:"",notes:""})} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>New container</button>
+    </div>
+    {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
+    <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+      {(containers||[]).length===0&&<div className="p-8 text-center text-sm text-stone-400">No container types yet. Add the boxes and mailers you ship in.</div>}
+      {(containers||[]).map(c=>(<div key={c.id} className="p-3 flex items-center gap-3">
+        <div className="flex-1 min-w-0"><div className="font-medium text-stone-900 flex items-center gap-2">{c.name}<Badge tone="stone">{c.kind}</Badge></div><div className="text-[11px] text-stone-400 truncate">{[dims(c),+c.maxWeight>0?"max "+c.maxWeight+" lb":"",showMoney&&+c.cost>0?"$"+(+c.cost).toFixed(2)+" ea":"",c.notes].filter(Boolean).join(" · ")||"—"}</div></div>
+        <button onClick={()=>setEf(c)} className="text-xs bg-stone-100 text-stone-600 rounded-lg px-2.5 py-1.5 hover:bg-stone-200">Edit</button>
+        <button onClick={()=>del(c)} className="text-xs bg-stone-100 text-stone-400 rounded-lg px-2 py-1.5 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="w-3.5 h-3.5"/></button>
+      </div>))}
+    </div>
+    {ef&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setEf(null)}>
+      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3"><div className="font-semibold text-stone-900">{ef.id?"Edit container":"New container"}</div><button onClick={()=>setEf(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Name"><Input value={ef.name} onChange={e=>setEf({...ef,name:e.target.value})} placeholder="Small box"/></Field>
+          <Field label="Type"><select value={ef.kind} onChange={e=>setEf({...ef,kind:e.target.value})} className="w-full border border-stone-300 rounded-lg px-2 py-2 text-sm"><option value="box">Box</option><option value="poly">Poly mailer</option><option value="envelope">Envelope</option><option value="tube">Tube</option><option value="pallet">Pallet</option><option value="tote">Tote</option></select></Field>
+          <Field label="Length (in)"><Input type="number" value={ef.length} onChange={e=>setEf({...ef,length:e.target.value})}/></Field>
+          <Field label="Width (in)"><Input type="number" value={ef.width} onChange={e=>setEf({...ef,width:e.target.value})}/></Field>
+          <Field label="Height (in)"><Input type="number" value={ef.height} onChange={e=>setEf({...ef,height:e.target.value})}/></Field>
+          <Field label="Max weight (lb)"><Input type="number" value={ef.maxWeight} onChange={e=>setEf({...ef,maxWeight:e.target.value})}/></Field>
+          {showMoney&&<Field label="Cost each ($)"><Input type="number" value={ef.cost} onChange={e=>setEf({...ef,cost:e.target.value})}/></Field>}
+          <div className="col-span-2"><Field label="Notes"><Input value={ef.notes} onChange={e=>setEf({...ef,notes:e.target.value})}/></Field></div>
+        </div>
+        <div className="flex items-center gap-2 mt-4"><button onClick={save} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy&&<Loader2 className="w-4 h-4 animate-spin"/>}Save</button><button onClick={()=>setEf(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
+      </div>
+    </div>}
+  </div>);
+}
+/* Production orders — formal work orders around a BOM/kit. Create a draft against an assembly SKU and
+   quantity, then Complete it: components are consumed and the finished good is added to stock (server
+   validates availability). Mirrors EliteWorks Production Orders / Fishbowl work orders. */
+function ProductionOrders({production,setProduction,items,onReload}){
+  const [msg,setMsg]=useState(null); const [busy,setBusy]=useState(""); const [ef,setEf]=useState(null);
+  const flash=(m,e)=>{ setMsg(e?{err:m}:{ok:m}); setTimeout(()=>setMsg(null),4000); };
+  const assemblies=(items||[]).filter(it=>Array.isArray(it.kit)&&it.kit.length);
+  const skuName=(sku)=>{ const it=(items||[]).find(i=>String(i.sku).toLowerCase()===String(sku).toLowerCase()); return it?it.name:""; };
+  const bom=(sku)=>{ const it=(items||[]).find(i=>String(i.sku).toLowerCase()===String(sku).toLowerCase()); return (it&&Array.isArray(it.kit))?it.kit:[]; };
+  const save=async()=>{ if(!ef.sku){flash("Pick an assembly to build.",true);return;} setBusy("save"); const r=await cloudCall({action:"productionSave",token:CLOUD.token,order:{...ef,name:skuName(ef.sku)}}); setBusy(""); if(r&&r.ok){ setProduction(r.production); setEf(null); flash("Saved."); } else flash((r&&r.error)||"Couldn't save.",true); };
+  const complete=async(o)=>{ if(!await uiConfirm("Complete "+o.number+"? This consumes the components and adds "+o.qty+"× "+(o.name||o.sku)+" to stock."))return; setBusy(o.id); const r=await cloudCall({action:"productionComplete",token:CLOUD.token,id:o.id}); setBusy(""); if(r&&r.ok){ setProduction(r.production); flash("Built "+o.qty+"× "+(o.name||o.sku)+"."); onReload&&onReload(); } else flash((r&&r.error)||"Couldn't complete.",true); };
+  const del=async(o)=>{ if(!await uiConfirm("Delete "+o.number+"?"))return; const r=await cloudCall({action:"productionDelete",token:CLOUD.token,id:o.id}); if(r&&r.ok)setProduction(r.production); };
+  const stTone={draft:"bg-stone-100 text-stone-600",complete:"bg-emerald-100 text-emerald-700"};
+  const sorted=(production||[]).slice().sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
+  return (<div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ClipboardList className="w-5 h-5 text-[#0086E0]"/>Production orders</h2><p className="text-sm text-stone-500 mt-0.5">Build assemblies from their components (BOM). Create an order, then complete it to consume parts and stock the finished good.</p></div>
+      <button onClick={()=>setEf({sku:assemblies[0]?assemblies[0].sku:"",qty:1,notes:""})} disabled={!assemblies.length} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5"><Plus className="w-4 h-4"/>New order</button>
+    </div>
+    {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
+    {!assemblies.length&&<div className="border border-stone-200 rounded-xl bg-white p-6 text-sm text-stone-500">No assemblies yet. Edit an item and add a kit / bill of materials (components), then you can build it here.</div>}
+    <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+      {sorted.length===0&&assemblies.length>0&&<div className="p-8 text-center text-sm text-stone-400">No production orders yet.</div>}
+      {sorted.map(o=>(<div key={o.id} className="p-3 flex items-center gap-3 flex-wrap">
+        <div className="flex-1 min-w-0"><div className="font-medium text-stone-900 flex items-center gap-2">{o.number}<span className={`text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 ${stTone[o.status]||stTone.draft}`}>{o.status}</span></div><div className="text-[11px] text-stone-400 truncate">{o.qty}× {o.name||o.sku} <span className="text-stone-300">·</span> {o.sku}{o.completedAt?" · built "+String(o.completedAt).slice(0,10):""}</div></div>
+        {o.status!=="complete"&&<button onClick={()=>complete(o)} disabled={busy===o.id} className="text-xs bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-1">{busy===o.id&&<Loader2 className="w-3.5 h-3.5 animate-spin"/>}Complete</button>}
+        <button onClick={()=>del(o)} className="text-xs bg-stone-100 text-stone-400 rounded-lg px-2 py-1.5 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="w-3.5 h-3.5"/></button>
+      </div>))}
+    </div>
+    {ef&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setEf(null)}>
+      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3"><div className="font-semibold text-stone-900">New production order</div><button onClick={()=>setEf(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+        <div className="space-y-2">
+          <Field label="Assembly to build"><select value={ef.sku} onChange={e=>setEf({...ef,sku:e.target.value})} className="w-full border border-stone-300 rounded-lg px-2 py-2 text-sm">{assemblies.map(a=><option key={a.sku} value={a.sku}>{a.name||a.sku} ({a.sku})</option>)}</select></Field>
+          <Field label="Quantity to build"><Input type="number" value={ef.qty} onChange={e=>setEf({...ef,qty:e.target.value})}/></Field>
+          {ef.sku&&<div className="border border-stone-100 rounded-lg bg-stone-50 p-2.5"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Consumes per build ×{Math.max(1,Math.round(+ef.qty||1))}</div><div className="space-y-0.5">{bom(ef.sku).map(c=>(<div key={c.sku} className="text-xs text-stone-600 flex justify-between"><span>{c.sku}</span><span className="text-stone-500">{c.qty}× → {c.qty*Math.max(1,Math.round(+ef.qty||1))}</span></div>))}</div></div>}
+          <Field label="Notes"><Input value={ef.notes} onChange={e=>setEf({...ef,notes:e.target.value})}/></Field>
+        </div>
+        <div className="flex items-center gap-2 mt-4"><button onClick={save} disabled={busy==="save"} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy==="save"&&<Loader2 className="w-4 h-4 animate-spin"/>}Save order</button><button onClick={()=>setEf(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
       </div>
     </div>}
   </div>);

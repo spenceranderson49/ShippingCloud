@@ -670,7 +670,7 @@ exports.handler = async (event) => {
        Every login of a company shares its inventory; a platform admin may target a specific
        company via body.clientId. All reads refuse-and-retry on failure so stock is never
        silently zeroed by a transient DB hiccup. */
-    if (["invList", "invUpsert", "invAdjust", "invReceive", "invShip", "invDelete", "invTransfer", "invBuild", "poList", "poSave", "poReceive", "poDelete", "supplierList", "supplierSave", "supplierDelete", "warehouseList", "warehouseSave", "warehouseDelete", "returnList", "returnSetStatus"].indexOf(action) >= 0) {
+    if (["invList", "invUpsert", "invAdjust", "invReceive", "invShip", "invDelete", "invTransfer", "invBuild", "poList", "poSave", "poReceive", "poDelete", "supplierList", "supplierSave", "supplierDelete", "warehouseList", "warehouseSave", "warehouseDelete", "returnList", "returnSetStatus", "containerList", "containerSave", "containerDelete", "productionList", "productionSave", "productionComplete", "productionDelete"].indexOf(action) >= 0) {
       const curU = await getStore("users");
       if (!curU.ok) return J({ ok: false, retry: true, error: "Storage is briefly unavailable — try again." });
       const allU = Array.isArray(curU.value) ? curU.value : [];
@@ -685,6 +685,8 @@ exports.handler = async (event) => {
       const poKey = (id) => "po:" + cid + ":" + String(id).replace(/[^a-zA-Z0-9]/g, "").slice(0, 40);
       const supKey = "invsup:" + cid;
       const whKey = "invwh:" + cid;
+      const ctKey = "invct:" + cid;   // container / packaging types (box catalog)
+      const proKey = "invpro:" + cid; // production orders
       const nowISO = new Date().toISOString();
       const money2 = (n) => Math.round((+n || 0) * 100) / 100;
       const readItem = (s) => getStore(skuKey(s));
@@ -981,6 +983,105 @@ exports.handler = async (event) => {
         const w = await putStores({ [whKey]: list });
         if (!w.ok) return J({ ok: false, error: "Save failed — try again." });
         return J({ ok: true, warehouses: list });
+      }
+
+      /* ── Container / packaging types (box catalog, company-shared) — feeds cartonization & packing ── */
+      if (action === "containerList") {
+        const cur = await getStore(ctKey);
+        if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't load containers — try again." });
+        return J({ ok: true, containers: Array.isArray(cur.value) ? cur.value : [] });
+      }
+      if (action === "containerSave" || action === "containerDelete") {
+        const cur = await getStore(ctKey);
+        if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read containers — try again." });
+        let list = Array.isArray(cur.value) ? cur.value.slice() : [];
+        if (action === "containerDelete") {
+          list = list.filter((x) => x && x.id !== String(body.id || ""));
+        } else {
+          const s = body.container && typeof body.container === "object" ? body.container : {};
+          const dim = (v) => Math.max(0, Math.round((+v || 0) * 100) / 100);
+          const rec = { id: String(s.id || ("ct" + Date.now() + Math.floor(Math.random() * 1000))), name: String(s.name || "").slice(0, 80), kind: ["box", "poly", "envelope", "tube", "pallet", "tote"].indexOf(String(s.kind)) >= 0 ? String(s.kind) : "box", length: dim(s.length), width: dim(s.width), height: dim(s.height), maxWeight: dim(s.maxWeight), cost: dim(s.cost), notes: String(s.notes || "").slice(0, 200) };
+          if (!rec.name) return J({ ok: false, error: "A name is required." });
+          const i = list.findIndex((x) => x && x.id === rec.id);
+          if (i >= 0) list[i] = rec; else list.push(rec);
+          if (list.length > 300) return J({ ok: false, error: "Too many container types." });
+        }
+        const w = await putStores({ [ctKey]: list });
+        if (!w.ok) return J({ ok: false, error: "Save failed — try again." });
+        return J({ ok: true, containers: list });
+      }
+
+      /* ── Production orders (formal work orders around a BOM/kit). A PO is created draft, then
+         "completed" which runs the same component-consume + finished-good-add as invBuild. ── */
+      if (action === "productionList") {
+        const cur = await getStore(proKey);
+        if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't load production orders — try again." });
+        return J({ ok: true, production: Array.isArray(cur.value) ? cur.value : [] });
+      }
+      if (action === "productionSave" || action === "productionDelete") {
+        const cur = await getStore(proKey);
+        if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read production orders — try again." });
+        let list = Array.isArray(cur.value) ? cur.value.slice() : [];
+        if (action === "productionDelete") {
+          list = list.filter((x) => x && x.id !== String(body.id || ""));
+        } else {
+          const s = body.order && typeof body.order === "object" ? body.order : {};
+          const prevRec = list.find((x) => x && x.id === String(s.id || ""));
+          if (prevRec && prevRec.status === "complete") return J({ ok: false, error: "That production order is already complete." });
+          const rec = {
+            id: String(s.id || ("pr" + Date.now() + Math.floor(Math.random() * 1000))),
+            number: String(s.number || (prevRec && prevRec.number) || ("MO-" + String(Date.now()).slice(-6))).slice(0, 40),
+            sku: String(s.sku || "").trim().slice(0, 80), name: String(s.name || "").slice(0, 120),
+            qty: Math.max(1, Math.round(+s.qty || 1)), status: "draft",
+            notes: String(s.notes || "").slice(0, 300),
+            createdAt: (prevRec && prevRec.createdAt) || nowISO, updatedAt: nowISO,
+          };
+          if (!normSku(rec.sku)) return J({ ok: false, error: "Pick an assembly to build." });
+          const i = list.findIndex((x) => x && x.id === rec.id);
+          if (i >= 0) list[i] = rec; else list.unshift(rec);
+          if (list.length > 500) list = list.slice(0, 500);
+        }
+        const w = await putStores({ [proKey]: list });
+        if (!w.ok) return J({ ok: false, error: "Save failed — try again." });
+        return J({ ok: true, production: list });
+      }
+      if (action === "productionComplete") {
+        const cur = await getStore(proKey);
+        if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read production orders — try again." });
+        let list = Array.isArray(cur.value) ? cur.value.slice() : [];
+        const rec = list.find((x) => x && x.id === String(body.id || ""));
+        if (!rec) return J({ ok: false, error: "That production order no longer exists." });
+        if (rec.status === "complete") return J({ ok: false, error: "Already completed." });
+        // Reuse the build logic: consume components, add finished good.
+        const cur2 = await readItem(rec.sku);
+        if (!cur2.ok) return J({ ok: false, retry: true, error: "Couldn't read " + rec.sku + " — try again." });
+        if (!(cur2.value && typeof cur2.value === "object")) return J({ ok: false, error: "That SKU isn't tracked yet." });
+        const it = { ...cur2.value };
+        if (!Array.isArray(it.kit) || !it.kit.length) return J({ ok: false, error: "This SKU has no components (add a kit/BOM first)." });
+        const comps = [];
+        for (const comp of it.kit.slice(0, 50)) {
+          const cs = String(comp && comp.sku || "").trim(); const need = Math.max(1, Math.round(+(comp && comp.qty) || 1)) * rec.qty;
+          if (!normSku(cs)) continue;
+          const cc = await readItem(cs);
+          if (!cc.ok) return J({ ok: false, retry: true, error: "Couldn't read " + cs + " — try again." });
+          const cv = (cc.value && typeof cc.value === "object") ? cc.value : null;
+          if (!cv || (+cv.onHand || 0) < need) return J({ ok: false, error: "Short on " + cs + " — need " + need + ", have " + ((cv && +cv.onHand) || 0) + "." });
+          comps.push({ sku: cs, item: { ...cv }, need });
+        }
+        for (const c of comps) {
+          applyStockDelta(c.item, -c.need, null); c.item.updatedAt = nowISO;
+          const w = await writeItem(c.sku, c.item);
+          if (!w.ok) return J({ ok: false, error: "Save failed on " + c.sku + "." });
+          await addLog({ type: "consume", sku: c.sku, name: c.item.name || "", qty: -c.need, balance: c.item.onHand, ref: rec.number });
+        }
+        const beforeF = +it.onHand || 0; it.assembled = true; applyStockDelta(it, rec.qty, null); it.updatedAt = nowISO;
+        const wf = await writeItem(rec.sku, it);
+        if (!wf.ok) return J({ ok: false, error: "Save failed on " + rec.sku + "." });
+        await addLog({ type: "build", sku: rec.sku, name: it.name || "", qty: rec.qty, balance: it.onHand, ref: rec.number });
+        rec.status = "complete"; rec.completedAt = nowISO; rec.updatedAt = nowISO;
+        const w = await putStores({ [proKey]: list });
+        if (!w.ok) return J({ ok: false, error: "Built, but couldn't update the order — refresh." });
+        return J({ ok: true, production: list, item: it });
       }
 
       /* ── Build / assemble (Fishbowl-style work order): consume a kit's components and add the

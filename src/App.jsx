@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v726";
+const BUILD_TAG="addr-v727";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -11435,7 +11435,7 @@ function PackingGroups(){
    price (falls back to cost). Mirrors EliteWorks Point of Sale. */
 function PointOfSale({items,onReload}){
   const stock=(items||[]).filter(it=>!(Array.isArray(it.kit)&&it.kit.length&&!it.assembled));
-  const [q,setQ]=useState(""); const [cart,setCart]=useState([]); const [busy,setBusy]=useState(false); const [msg,setMsg]=useState(null); const [taxPct,setTaxPct]=useState(0); const [last,setLast]=useState(null);
+  const [q,setQ]=useState(""); const [cart,setCart]=useState([]); const [busy,setBusy]=useState(false); const [msg,setMsg]=useState(null); const [taxPct,setTaxPct]=useState(0); const [last,setLast]=useState(null); const [pay,setPay]=useState("Card");
   const scanRef=useRef(null);
   const flash=(m,e)=>{ setMsg(e?{err:m}:{ok:m}); setTimeout(()=>setMsg(null),3500); };
   const priceOf=(it)=>+it.price>0?+it.price:(+it.cost||0);
@@ -11451,14 +11451,14 @@ function PointOfSale({items,onReload}){
     const lines=cart.map(x=>({sku:x.sku,qty:x.qty}));
     const r=await cloudCall({action:"invShip",token:CLOUD.token,lines,ref:"POS"});
     setBusy(false);
-    if(r&&r.ok){ setLast({lines:cart,sub,tax,total,at:new Date().toISOString()}); setCart([]); flash("Sale complete — stock updated."); onReload&&onReload(); try{scanRef.current&&scanRef.current.focus();}catch(e){} }
+    if(r&&r.ok){ setLast({lines:cart,sub,tax,total,pay,at:new Date().toISOString()}); setCart([]); flash("Sale complete ("+pay+") — stock updated."); onReload&&onReload(); try{scanRef.current&&scanRef.current.focus();}catch(e){} }
     else flash((r&&r.error)||"Checkout failed.",true);
   };
   const printReceipt=(sale)=>{
     const esc=(s)=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
     const money=(n)=>"$"+(Math.round((+n||0)*100)/100).toFixed(2);
     const rows=sale.lines.map(l=>`<tr><td>${esc(l.name)}</td><td class=r>${l.qty}</td><td class=r>${money(l.price)}</td><td class=r>${money(l.qty*l.price)}</td></tr>`).join("");
-    const html=`<!doctype html><html><head><meta charset=utf-8><title>Receipt</title><style>body{font-family:ui-monospace,Menlo,monospace;margin:24px;max-width:320px;font-size:12px}h3{margin:0 0 8px}table{width:100%;border-collapse:collapse}td{padding:2px 0}.r{text-align:right}.tot td{border-top:1px dashed #999;padding-top:6px;font-weight:700}@media print{body{margin:0}}</style></head><body><h3>Receipt</h3><div>${new Date(sale.at).toLocaleString()}</div><table>${rows}<tr class=tot><td>Subtotal</td><td></td><td></td><td class=r>${money(sale.sub)}</td></tr>${sale.tax?`<tr><td>Tax</td><td></td><td></td><td class=r>${money(sale.tax)}</td></tr>`:""}<tr class=tot><td>Total</td><td></td><td></td><td class=r>${money(sale.total)}</td></tr></table><p style="text-align:center;margin-top:16px">Thank you!</p><script>window.onload=function(){setTimeout(function(){window.print()},200)}<\/script></body></html>`;
+    const html=`<!doctype html><html><head><meta charset=utf-8><title>Receipt</title><style>body{font-family:ui-monospace,Menlo,monospace;margin:24px;max-width:320px;font-size:12px}h3{margin:0 0 8px}table{width:100%;border-collapse:collapse}td{padding:2px 0}.r{text-align:right}.tot td{border-top:1px dashed #999;padding-top:6px;font-weight:700}@media print{body{margin:0}}</style></head><body><h3>Receipt</h3><div>${new Date(sale.at).toLocaleString()}</div><table>${rows}<tr class=tot><td>Subtotal</td><td></td><td></td><td class=r>${money(sale.sub)}</td></tr>${sale.tax?`<tr><td>Tax</td><td></td><td></td><td class=r>${money(sale.tax)}</td></tr>`:""}<tr class=tot><td>Total</td><td></td><td></td><td class=r>${money(sale.total)}</td></tr></table>${sale.pay?`<div style="margin-top:8px">Paid: ${esc(sale.pay)}</div>`:""}<p style="text-align:center;margin-top:16px">Thank you!</p><script>window.onload=function(){setTimeout(function(){window.print()},200)}<\/script></body></html>`;
     const w=window.open("","_blank"); if(!w){flash("Allow pop-ups to print.",true);return;} w.document.open(); w.document.write(html); w.document.close();
   };
   return (<div className="space-y-4">
@@ -11487,7 +11487,8 @@ function PointOfSale({items,onReload}){
           <div className="flex justify-between text-stone-600 items-center"><span className="flex items-center gap-1">Tax <input type="number" value={taxPct} onChange={e=>setTaxPct(e.target.value)} className="w-12 border border-stone-200 rounded px-1 py-0.5 text-xs"/>%</span><span>${tax.toFixed(2)}</span></div>
           <div className="flex justify-between font-semibold text-stone-900 text-base"><span>Total</span><span>${total.toFixed(2)}</span></div>
         </div>
-        <button onClick={checkout} disabled={busy||!cart.length} className="w-full bg-emerald-600 text-white rounded-xl py-3 font-semibold hover:bg-emerald-700 disabled:opacity-40 flex items-center justify-center gap-1.5">{busy?<Loader2 className="w-5 h-5 animate-spin"/>:<CheckCircle2 className="w-5 h-5"/>}Charge ${total.toFixed(2)}</button>
+        <div className="flex items-center gap-1.5">{["Card","Cash","Other"].map(m=><button key={m} onClick={()=>setPay(m)} className={`flex-1 text-xs rounded-lg py-1.5 border font-medium ${pay===m?"bg-[#0086E0] text-white border-[#0086E0]":"bg-white text-stone-600 border-stone-200 hover:bg-stone-50"}`}>{m}</button>)}</div>
+        <button onClick={checkout} disabled={busy||!cart.length} className="w-full bg-emerald-600 text-white rounded-xl py-3 font-semibold hover:bg-emerald-700 disabled:opacity-40 flex items-center justify-center gap-1.5">{busy?<Loader2 className="w-5 h-5 animate-spin"/>:<CheckCircle2 className="w-5 h-5"/>}Charge ${total.toFixed(2)} · {pay}</button>
         {last&&<button onClick={()=>printReceipt(last)} className="w-full text-xs text-stone-500 hover:text-stone-700 flex items-center justify-center gap-1"><Printer className="w-3.5 h-3.5"/>Print last receipt (${last.total.toFixed(2)})</button>}
       </div>
     </div>

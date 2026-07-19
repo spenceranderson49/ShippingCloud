@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v669";
+const BUILD_TAG="addr-v670";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10481,8 +10481,10 @@ function InventoryAnalytics({list,log,showMoney=true}){
   const totValue=stock.reduce((s,it)=>s+(+it.onHand||0)*(+it.cost||0),0);
   const skuCount=stock.length;
   // last ship per SKU from the movement ledger
-  const lastShip={}; let ship30=0; const cutoff30=Date.now()-30*864e5;
-  (log||[]).forEach(mv=>{ if(mv&&mv.type==="ship"){ const k=String(mv.sku||"").toLowerCase(); const t=Date.parse(mv.at||"")||0; if(!lastShip[k]||t>lastShip[k])lastShip[k]=t; if(t>=cutoff30)ship30+=Math.abs(+mv.qty||0); } });
+  const lastShip={}; let ship30=0; const cutoff30=Date.now()-30*864e5; const shipBySku={};
+  (log||[]).forEach(mv=>{ if(mv&&mv.type==="ship"){ const k=String(mv.sku||"").toLowerCase(); const t=Date.parse(mv.at||"")||0; if(!lastShip[k]||t>lastShip[k])lastShip[k]=t; if(t>=cutoff30){ship30+=Math.abs(+mv.qty||0);shipBySku[k]=(shipBySku[k]||0)+Math.abs(+mv.qty||0);} } });
+  // Demand forecast: days-to-stockout from 30-day velocity, flag items running out within 14 days.
+  const forecast=stock.map(it=>{ const v=shipBySku[String(it.sku).toLowerCase()]||0; const daily=v/30; const days=daily>0?Math.floor((+it.onHand||0)/daily):null; const suggest=daily>0?Math.max(1,Math.round(daily*30)-(+it.onHand||0)):0; return {sku:it.sku,name:it.name,onHand:+it.onHand||0,v30:v,days,suggest}; }).filter(x=>x.v30>0&&x.days!=null&&x.days<=14).sort((a,b)=>a.days-b.days);
   const DEAD_DAYS=60;
   const dead=stock.filter(it=>(+it.onHand||0)>0&&(()=>{ const t=lastShip[String(it.sku).toLowerCase()]; return !t||(Date.now()-t)>DEAD_DAYS*864e5; })());
   const deadValue=dead.reduce((s,it)=>s+(+it.onHand||0)*(+it.cost||0),0);
@@ -10502,7 +10504,19 @@ function InventoryAnalytics({list,log,showMoney=true}){
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
       <Tile label="Units shipped (30d)" value={ship30.toLocaleString()} sub="from movement log"/>
       <Tile label="Days of cover" value={daysCover!=null?daysCover+"d":"—"} sub={daysCover!=null?"at current pace":"no recent sales"}/>
+      <Tile label="Running out soon" value={forecast.length} tone={forecast.length?"text-rose-600":"text-stone-900"} sub="≤14 days at current pace"/>
     </div>
+    {forecast.length>0&&<div className="border border-rose-200 rounded-xl bg-white overflow-hidden">
+      <div className="px-4 py-2 bg-rose-50 text-[10px] uppercase tracking-widest text-rose-500">Reorder forecast — stocking out soon</div>
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-[10px] uppercase tracking-widest text-stone-400"><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">On hand</th><th className="px-3 py-2 text-right">Sold 30d</th><th className="px-3 py-2 text-right">Days left</th><th className="px-3 py-2 text-right">Suggest order</th></tr></thead>
+        <tbody className="divide-y divide-stone-100">{forecast.map(x=>(<tr key={x.sku}>
+          <td className="px-3 py-2"><div className="text-stone-800">{x.name||x.sku}</div><div className="text-[11px] text-stone-400">{x.sku}</div></td>
+          <td className="px-3 py-2 text-right text-stone-700">{x.onHand}</td>
+          <td className="px-3 py-2 text-right text-stone-500">{x.v30}</td>
+          <td className={`px-3 py-2 text-right font-semibold ${x.days<=3?"text-rose-600":x.days<=7?"text-amber-600":"text-stone-700"}`}>{x.days}d</td>
+          <td className="px-3 py-2 text-right text-[#0086E0] font-medium">+{x.suggest}</td>
+        </tr>))}</tbody></table></div>
+    </div>}
     {showMoney&&<div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
       <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500">Value by location</div>
       <div className="divide-y divide-stone-100">

@@ -1151,6 +1151,7 @@ exports.handler = async (event) => {
           amount: money2b(s && s.amount),
           note: String((s && s.note) || "").slice(0, 200),
           invoiced: !!(s && s.invoiced),
+          ref: String((s && s.ref) || "").slice(0, 80),   // source shipment id, so auto-billing never double-charges
         }));
         const w = await putStores({ [billKey]: { items, charges } });
         if (!w.ok) return J({ ok: false, error: "Save failed — try again." });

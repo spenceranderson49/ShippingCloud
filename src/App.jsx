@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v724";
+const BUILD_TAG="addr-v725";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10282,7 +10282,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   if(view==="warehouses") return (<div className="max-w-5xl space-y-4"><Switcher/><WarehousesView warehouses={warehouses} setWarehouses={setWarehouses} items={list}/></div>);
   if(view==="containers") return (<div className="max-w-5xl space-y-4"><Switcher/><ContainerTypes containers={containers} setContainers={setContainers} showMoney={showMoney}/></div>);
   if(view==="runner") return (<div className="max-w-5xl space-y-4"><Switcher/><RunnerPortal items={list} orders={orders} warehouses={warehouses} onReceived={patch} onReload={load}/></div>);
-  if(view==="billing") return (<div className="max-w-5xl space-y-4"><Switcher/><Billing3PL/></div>);
+  if(view==="billing") return (<div className="max-w-5xl space-y-4"><Switcher/><Billing3PL orders={orders}/></div>);
   if(view==="sale") return (<div className="max-w-5xl space-y-4"><Switcher/><PointOfSale items={list} onReload={load}/></div>);
   if(view==="packgroups") return (<div className="max-w-5xl space-y-4"><Switcher/><PackingGroups/></div>);
   if(view==="links") return (<div className="max-w-5xl space-y-4"><Switcher/><ThirdPartyLinks/></div>);
@@ -11493,13 +11493,14 @@ function PointOfSale({items,onReload}){
 /* 3PL Billing — a rate card of billable warehouse services (storage, pick, pack, receiving…) plus a
    log of charges per client, summarized into per-client invoices. Self-loading; niche, so it isn't
    pulled into the main inventory load. Mirrors EliteWorks 3pl > Billable Items / Requests. */
-function Billing3PL(){
+function Billing3PL({orders=[]}){
   const [items,setItems]=useState(null);   // rate card; null = loading
   const [charges,setCharges]=useState([]);
   const [tab,setTab]=useState("charges");
   const [busy,setBusy]=useState(false); const [msg,setMsg]=useState(null);
   const [ef,setEf]=useState(null);          // rate-card editor
   const [cf,setCf]=useState(null);          // new-charge form
+  const [gen,setGen]=useState({perOrder:"",perUnit:"",days:30});   // auto-generate config
   const flash=(m,e)=>{ setMsg(e?{err:m}:{ok:m}); setTimeout(()=>setMsg(null),4000); };
   useEffect(()=>{ let dead=false; (async()=>{ const r=await cloudCall({action:"billingGet",token:CLOUD.token}); if(!dead){ if(r&&r.ok){ setItems(r.items||[]); setCharges(r.charges||[]); } else { setItems([]); flash((r&&r.error)||"Couldn't load billing.",true); } } })(); return ()=>{dead=true;}; },[]);
   const persist=async(nextItems,nextCharges)=>{ setBusy(true); const r=await cloudCall({action:"billingSave",token:CLOUD.token,items:nextItems,charges:nextCharges}); setBusy(false); if(r&&r.ok){ setItems(r.items||[]); setCharges(r.charges||[]); return true; } flash((r&&r.error)||"Save failed.",true); return false; };
@@ -11507,6 +11508,23 @@ function Billing3PL(){
   const seedRates=async()=>{ const seeded=SEED.map(([name,unit])=>({name,unit,rate:0})); if(await persist(seeded,charges))flash("Added starter services — set your rates."); };
   const saveRate=async()=>{ if(!ef.name||!ef.name.trim()){flash("Name required.",true);return;} const next=ef.id?items.map(x=>x.id===ef.id?ef:x):[...items,{...ef,id:"bi"+Date.now()}]; if(await persist(next,charges)){ setEf(null); flash("Saved."); } };
   const delRate=async(id)=>{ if(!await uiConfirm("Delete this service?"))return; await persist(items.filter(x=>x.id!==id),charges); };
+  /* Auto-meter: turn shipped orders into charges. Each fulfilled order in the window that hasn't
+     already been billed (matched by ref = order id) gets a per-order fee and/or a per-unit fee, billed
+     to its client (store source, else customer). Nothing double-charges. */
+  const autoGenerate=async()=>{
+    const perOrder=items.find(x=>x.id===gen.perOrder), perUnit=items.find(x=>x.id===gen.perUnit);
+    if(!perOrder&&!perUnit){flash("Pick a per-order and/or per-unit service first.",true);return;}
+    const cutoff=Date.now()-(Math.max(1,+gen.days||30))*864e5;
+    const billed=new Set(charges.map(c=>c.ref).filter(Boolean));
+    const fulfilled=(orders||[]).filter(o=>o&&o.status==="fulfilled"&&!billed.has("ord:"+o.id)&&(Date.parse(o.date||"")||Date.now())>=cutoff);
+    if(!fulfilled.length){flash("No new shipped orders to bill in the last "+(+gen.days||30)+" days.",true);return;}
+    const add=[];
+    fulfilled.forEach(o=>{ const ref="ord:"+o.id; const client=o.source||o.customer||"House"; const date=(new Date(Date.parse(o.date||"")||Date.now())).toISOString(); const units=(Array.isArray(o.lineItems)?o.lineItems:[]).reduce((s,li)=>s+(+li.qty||+li.quantity||1),0)||1;
+      if(perOrder){ add.push({id:"bc"+Date.now()+Math.floor(Math.random()*1e6),date,client,itemId:perOrder.id,name:perOrder.name,qty:1,rate:+perOrder.rate||0,amount:Math.round((+perOrder.rate||0)*100)/100,ref,invoiced:false}); }
+      if(perUnit){ add.push({id:"bc"+Date.now()+Math.floor(Math.random()*1e6)+"u",date,client,itemId:perUnit.id,name:perUnit.name,qty:units,rate:+perUnit.rate||0,amount:Math.round(units*(+perUnit.rate||0)*100)/100,ref,invoiced:false}); }
+    });
+    if(await persist(items,[...add,...charges]))flash("Billed "+fulfilled.length+" shipped order"+(fulfilled.length===1?"":"s")+" — "+add.length+" charge"+(add.length===1?"":"s")+" added.");
+  };
   const addCharge=async()=>{ const it=items.find(x=>x.id===cf.itemId); if(!it){flash("Pick a service.",true);return;} if(!cf.client||!cf.client.trim()){flash("Enter a client.",true);return;} const qty=Math.max(0,+cf.qty||0); const amount=Math.round(qty*(+it.rate||0)*100)/100; const rec={id:"bc"+Date.now(),date:new Date().toISOString(),client:cf.client.trim(),itemId:it.id,name:it.name,qty,rate:+it.rate||0,amount,note:cf.note||"",invoiced:false}; if(await persist(items,[rec,...charges])){ setCf({client:cf.client,itemId:cf.itemId,qty:"",note:""}); flash("Charge added."); } };
   const delCharge=async(id)=>{ await persist(items,charges.filter(x=>x.id!==id)); };
   const clients=Array.from(new Set(charges.map(c=>c.client).filter(Boolean))).sort();
@@ -11537,8 +11555,18 @@ function Billing3PL(){
       </div>
     </div>}
     {tab==="charges"&&<div className="space-y-3">
+      {items.length>0&&<div className="border border-[#0086E0]/25 rounded-xl bg-sky-50/40 p-4">
+        <div className="text-sm font-semibold text-stone-700 mb-1 flex items-center gap-1.5"><Zap className="w-4 h-4 text-[#0086E0]"/>Auto-bill shipped orders</div>
+        <p className="text-xs text-stone-500 mb-2.5">Turn each shipped order into charges automatically — a per-order fee and/or a per-unit fee, billed to the order's store. Already-billed orders are skipped.</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 items-end">
+          <label className="text-xs text-stone-600">Per-order fee<select value={gen.perOrder} onChange={e=>setGen(g=>({...g,perOrder:e.target.value}))} className="mt-0.5 w-full border border-stone-300 rounded-lg px-2 py-2 text-sm"><option value="">— none —</option>{items.map(it=><option key={it.id} value={it.id}>{it.name}</option>)}</select></label>
+          <label className="text-xs text-stone-600">Per-unit fee<select value={gen.perUnit} onChange={e=>setGen(g=>({...g,perUnit:e.target.value}))} className="mt-0.5 w-full border border-stone-300 rounded-lg px-2 py-2 text-sm"><option value="">— none —</option>{items.map(it=><option key={it.id} value={it.id}>{it.name}</option>)}</select></label>
+          <label className="text-xs text-stone-600">Last … days<input type="number" min="1" value={gen.days} onChange={e=>setGen(g=>({...g,days:e.target.value}))} className="mt-0.5 w-full border border-stone-300 rounded-lg px-2 py-2 text-sm"/></label>
+          <button onClick={autoGenerate} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center justify-center gap-1.5">{busy&&<Loader2 className="w-4 h-4 animate-spin"/>}Generate</button>
+        </div>
+      </div>}
       <div className="border border-stone-200 rounded-xl bg-white p-4">
-        <div className="text-sm font-semibold text-stone-700 mb-2">Log a charge</div>
+        <div className="text-sm font-semibold text-stone-700 mb-2">Log a charge by hand</div>
         {items.length===0?<div className="text-sm text-stone-400">Add services on the Rate card tab first.</div>:
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 items-end">
           <label className="text-xs text-stone-600 col-span-2 sm:col-span-1">Client<input value={(cf&&cf.client)||""} onChange={e=>setCf(c=>({...(c||{}),client:e.target.value}))} list="bill-clients" placeholder="Brand name" className="mt-0.5 w-full border border-stone-300 rounded-lg px-2 py-2 text-sm"/></label>

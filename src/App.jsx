@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v710";
+const BUILD_TAG="addr-v711";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10238,7 +10238,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   if(view==="pick") return (<div className="max-w-5xl space-y-4"><Switcher/><PickList orders={orders} items={list}/></div>);
   if(view==="pack") return (<div className="max-w-5xl space-y-4"><Switcher/><PackVerify orders={orders} items={list}/></div>);
   if(view==="scan") return (<div className="max-w-5xl space-y-4"><Switcher/><ScanReceive items={list} onReceived={patch} reload={load}/></div>);
-  if(view==="warehouses") return (<div className="max-w-5xl space-y-4"><Switcher/><WarehousesView warehouses={warehouses} setWarehouses={setWarehouses}/></div>);
+  if(view==="warehouses") return (<div className="max-w-5xl space-y-4"><Switcher/><WarehousesView warehouses={warehouses} setWarehouses={setWarehouses} items={list}/></div>);
   if(view==="containers") return (<div className="max-w-5xl space-y-4"><Switcher/><ContainerTypes containers={containers} setContainers={setContainers} showMoney={showMoney}/></div>);
   if(view==="runner") return (<div className="max-w-2xl space-y-4"><Switcher/><RunnerPortal items={list} orders={orders} warehouses={warehouses} onReceived={patch} onReload={load}/></div>);
   if(view==="billing") return (<div className="max-w-5xl space-y-4"><Switcher/><Billing3PL/></div>);
@@ -11152,9 +11152,12 @@ function InventoryOverview({list,pos,log,suppliers,orders,showMoney,committedByS
 }
 /* Warehouses / storage locations — a company-managed list (warehouse, zone, or bin) used across
    receiving and transfers. */
-function WarehousesView({warehouses,setWarehouses}){
+function WarehousesView({warehouses,setWarehouses,items}){
   const [msg,setMsg]=useState(null); const [busy,setBusy]=useState(false); const [ef,setEf]=useState(null);
   const flash=(m,e)=>{ setMsg(e?{err:m}:{ok:m}); setTimeout(()=>setMsg(null),3500); };
+  /* Bin contents — what's stored in each location, from byLoc (or the item's single loc). */
+  const contents=useMemo(()=>{ const m={}; (items||[]).forEach(it=>{ if(Array.isArray(it.kit)&&it.kit.length&&!it.assembled)return; const add=(loc,qty)=>{ if(!(+qty))return; const k=loc||"Unassigned"; if(!m[k])m[k]={skus:0,units:0,list:[]}; m[k].skus++; m[k].units+=+qty; if(m[k].list.length<50)m[k].list.push({sku:it.sku,name:it.name,qty:+qty}); }; if(it.byLoc&&typeof it.byLoc==="object"&&Object.keys(it.byLoc).length){ Object.keys(it.byLoc).forEach(loc=>add(loc,it.byLoc[loc])); } else add(it.loc||"",+it.onHand||0); }); return m; },[items]);
+  const [openLoc,setOpenLoc]=useState(null);
   const save=async()=>{ if(!ef.name||!ef.name.trim()){flash("A name is required.",true);return;} setBusy(true); const r=await cloudCall({action:"warehouseSave",token:CLOUD.token,warehouse:ef}); setBusy(false); if(r&&r.ok){ setWarehouses(r.warehouses); setEf(null); flash("Saved."); } else flash((r&&r.error)||"Couldn't save.",true); };
   const del=async(w)=>{ if(!await uiConfirm("Delete "+w.name+"?"))return; const r=await cloudCall({action:"warehouseDelete",token:CLOUD.token,id:w.id}); if(r&&r.ok)setWarehouses(r.warehouses); };
   const typeTone={warehouse:"blue",zone:"stone",bin:"green"};
@@ -11172,6 +11175,20 @@ function WarehousesView({warehouses,setWarehouses}){
         <button onClick={()=>del(w)} className="text-xs bg-stone-100 text-stone-400 rounded-lg px-2 py-1.5 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="w-3.5 h-3.5"/></button>
       </div>))}
     </div>
+    {Object.keys(contents).length>0&&<div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500">Bin contents — what's stored where</div>
+      <div className="divide-y divide-stone-100">
+        {Object.keys(contents).sort((a,b)=>contents[b].units-contents[a].units).map(loc=>(<div key={loc}>
+          <button onClick={()=>setOpenLoc(openLoc===loc?null:loc)} className="w-full px-4 py-2.5 flex items-center gap-3 hover:bg-stone-50 text-left">
+            <MapPin className="w-4 h-4 text-[#0086E0] shrink-0"/>
+            <span className="flex-1 min-w-0 truncate text-sm text-stone-800">{loc}</span>
+            <span className="text-[11px] text-stone-400">{contents[loc].skus} SKU{contents[loc].skus!==1?"s":""} · {contents[loc].units} units</span>
+            <ChevronRight className={`w-4 h-4 text-stone-300 transition ${openLoc===loc?"rotate-90":""}`}/>
+          </button>
+          {openLoc===loc&&<div className="px-4 pb-2 pl-11 space-y-0.5">{contents[loc].list.map(x=>(<div key={x.sku} className="text-xs text-stone-500 flex justify-between"><span className="truncate">{x.name||x.sku} <span className="text-stone-300">· {x.sku}</span></span><span className="text-stone-600 font-medium ml-2">{x.qty}</span></div>))}</div>}
+        </div>))}
+      </div>
+    </div>}
     {ef&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setEf(null)}>
       <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5" onClick={e=>e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3"><div className="font-semibold text-stone-900">{ef.id?"Edit location":"New location"}</div><button onClick={()=>setEf(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>

@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v712";
+const BUILD_TAG="addr-v713";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10040,6 +10040,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const [editSku,setEditSku]=useState(null);
   const [ef,setEf]=useState(null);
   const [xfer,setXfer]=useState(null);
+  const [adj,setAdj]=useState(null);
   const [view,setView]=useState("stock");
   const [pos,setPos]=useState([]);
   const [suppliers,setSuppliers]=useState([]);
@@ -10209,6 +10210,14 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     const r=await cloudCall({action:"invTransfer",token:CLOUD.token,sku:xfer.sku,from:xfer.from,to:xfer.to.trim(),qty:+xfer.qty});
     setBusy("");
     if(r&&r.ok){ patch(r.item); setXfer(null); flash("Moved "+(+xfer.qty)+" "+xfer.sku+" → "+xfer.to.trim()+"."); load(); } else flash((r&&r.error)||"Transfer failed.",true);
+  };
+  const openAdj=(it)=>setAdj({sku:it.sku,name:it.name||"",onHand:+it.onHand||0,delta:"",reason:"shrinkage"});
+  const doAdj=async()=>{
+    const d=Math.round(+adj.delta||0); if(!d){flash("Enter a + or − quantity to adjust.",true);return;}
+    setBusy("adj");
+    const r=await cloudCall({action:"invAdjust",token:CLOUD.token,sku:adj.sku,delta:d,reason:adj.reason});
+    setBusy("");
+    if(r&&r.ok){ patch(r.item); setAdj(null); flash("Adjusted "+adj.sku+" by "+(d>0?"+"+d:d)+" ("+adj.reason+")."); load(); } else flash((r&&r.error)||"Adjust failed.",true);
   };
   if(!CLOUD.token) return (<div className="max-w-2xl"><div className="border border-stone-200 rounded-xl bg-white p-6 text-sm text-stone-600">Inventory lives in the cloud — sign in to your account to track stock.</div></div>);
   if(items===null) return (<div className="flex items-center gap-2 text-stone-500 text-sm p-4"><Loader2 className="w-4 h-4 animate-spin"/>Loading inventory…</div>);
@@ -10391,6 +10400,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
               {isKit&&<button onClick={()=>setBuilding({sku:it.sku,qty:1})} title="Build/assemble from components" className="text-[11px] rounded px-2 py-1 bg-violet-100 text-violet-700 hover:bg-violet-200 mr-1">Build</button>}
               {!virtualKit&&<button onClick={()=>count(it)} disabled={busy==="cnt"+it.sku} title="Cycle count" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200 mr-1">Count</button>}
               {!virtualKit&&<button onClick={()=>adjust(it)} disabled={busy==="adj"+it.sku} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200 mr-1">Adjust</button>}
+              {!virtualKit&&<button onClick={()=>openAdj(it)} title="Adjust stock (damage, shrinkage, found…)" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200 mr-1">Adjust</button>}
               {!virtualKit&&<button onClick={()=>openXfer(it)} title="Move stock between locations" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200 mr-1">Move</button>}
               <button onClick={()=>openEdit(it)} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200 mr-1">Edit</button>
               <button onClick={()=>del(it)} disabled={busy==="del"+it.sku} title="Stop tracking" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="w-3.5 h-3.5"/></button>
@@ -10456,6 +10466,18 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
           <button onClick={()=>setEf({...ef,vendors:[...(ef.vendors||[]),{supplierId:"",cost:"",leadDays:"",vendorSku:""}]})} className="text-xs text-[#0086E0] hover:underline flex items-center gap-1"><Plus className="w-3.5 h-3.5"/>Add vendor</button>
         </div>}
         <div className="flex items-center gap-2 mt-5"><button onClick={saveEdit} disabled={busy==="edit"} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy==="edit"&&<Loader2 className="w-4 h-4 animate-spin"/>}Save</button><button onClick={()=>{setEf(null);setEditSku(null);}} className="text-sm text-stone-500 px-2">Cancel</button></div>
+      </div>
+    </div>}
+    {adj&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setAdj(null)}>
+      <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-5" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1"><div className="font-semibold text-stone-900">Adjust stock — {adj.sku}</div><button onClick={()=>setAdj(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+        <p className="text-xs text-stone-500 mb-3">On hand now: <b className="text-stone-700">{adj.onHand}</b>. Enter a positive number to add or a negative to remove — it's logged with the reason.</p>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="text-xs text-stone-600">Adjust by<input type="number" value={adj.delta} onChange={e=>setAdj({...adj,delta:e.target.value})} placeholder="e.g. -2" className="mt-1 w-full border border-stone-300 rounded-lg px-2 py-2 text-sm" autoFocus/></label>
+          <label className="text-xs text-stone-600">Reason<select value={adj.reason} onChange={e=>setAdj({...adj,reason:e.target.value})} className="mt-1 w-full border border-stone-300 rounded-lg px-2 py-2 text-sm">{["shrinkage","damage","found","returned to stock","expired","cycle count","correction","sample","other"].map(r=><option key={r} value={r}>{r}</option>)}</select></label>
+        </div>
+        {adj.delta!==""&&<div className="text-xs text-stone-500 mt-2">New on hand: <b className="text-stone-800">{Math.max(0,adj.onHand+Math.round(+adj.delta||0))}</b></div>}
+        <div className="flex items-center gap-2 mt-4"><button onClick={doAdj} disabled={busy==="adj"} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy==="adj"&&<Loader2 className="w-4 h-4 animate-spin"/>}Apply adjustment</button><button onClick={()=>setAdj(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
       </div>
     </div>}
     {xfer&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setXfer(null)}>

@@ -670,7 +670,7 @@ exports.handler = async (event) => {
        Every login of a company shares its inventory; a platform admin may target a specific
        company via body.clientId. All reads refuse-and-retry on failure so stock is never
        silently zeroed by a transient DB hiccup. */
-    if (["invList", "invUpsert", "invAdjust", "invReceive", "invShip", "invDelete", "invTransfer", "poList", "poSave", "poReceive", "poDelete", "supplierList", "supplierSave", "supplierDelete", "returnList", "returnSetStatus"].indexOf(action) >= 0) {
+    if (["invList", "invUpsert", "invAdjust", "invReceive", "invShip", "invDelete", "invTransfer", "invBuild", "poList", "poSave", "poReceive", "poDelete", "supplierList", "supplierSave", "supplierDelete", "warehouseList", "warehouseSave", "warehouseDelete", "returnList", "returnSetStatus"].indexOf(action) >= 0) {
       const curU = await getStore("users");
       if (!curU.ok) return J({ ok: false, retry: true, error: "Storage is briefly unavailable — try again." });
       const allU = Array.isArray(curU.value) ? curU.value : [];
@@ -684,6 +684,7 @@ exports.handler = async (event) => {
       const logKey = "invlog:" + cid;
       const poKey = (id) => "po:" + cid + ":" + String(id).replace(/[^a-zA-Z0-9]/g, "").slice(0, 40);
       const supKey = "invsup:" + cid;
+      const whKey = "invwh:" + cid;
       const nowISO = new Date().toISOString();
       const money2 = (n) => Math.round((+n || 0) * 100) / 100;
       const readItem = (s) => getStore(skuKey(s));
@@ -735,6 +736,9 @@ exports.handler = async (event) => {
         if (body.cost != null && body.cost !== "") it.cost = money2(body.cost);
         if (body.loc != null) it.loc = String(body.loc).slice(0, 60);
         if (body.barcode != null) it.barcode = String(body.barcode).trim().slice(0, 60);
+        if (body.category != null) it.category = String(body.category).trim().slice(0, 60);
+        if (body.uom != null) it.uom = String(body.uom).trim().slice(0, 20);        // base unit (each/case/lb…)
+        if (body.casePack != null) it.casePack = Math.max(0, Math.round(+body.casePack || 0));  // units per case for case-receiving
         /* Kit / bill-of-materials: a list of component SKUs consumed when this item ships. Empty array
            clears it (item becomes a normal stocked SKU again). */
         if (body.kit != null) {
@@ -805,8 +809,9 @@ exports.handler = async (event) => {
           const prev = (cur.value && typeof cur.value === "object") ? cur.value : null;
 
           if (!receiving) {
-            /* Kit/BOM: shipping a kit depletes its COMPONENTS, not the kit itself (kits aren't stocked). */
-            if (prev && Array.isArray(prev.kit) && prev.kit.length) {
+            /* Kit/BOM: shipping a VIRTUAL kit depletes its COMPONENTS. An ASSEMBLED kit (built via a
+               work order) is stocked in its own right, so it ships from its own on-hand instead. */
+            if (prev && Array.isArray(prev.kit) && prev.kit.length && !prev.assembled) {
               for (const comp of prev.kit.slice(0, 50)) {
                 const cs = String(comp && comp.sku || "").trim(); const cq = Math.max(1, Math.round(+ (comp && comp.qty) || 1));
                 if (!normSku(cs)) continue;
@@ -899,6 +904,68 @@ exports.handler = async (event) => {
         const w = await putStores({ [supKey]: list });
         if (!w.ok) return J({ ok: false, error: "Save failed — try again." });
         return J({ ok: true, suppliers: list });
+      }
+
+      /* ── Warehouses / storage locations (company-shared list) ── */
+      if (action === "warehouseList") {
+        const cur = await getStore(whKey);
+        if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't load warehouses — try again." });
+        return J({ ok: true, warehouses: Array.isArray(cur.value) ? cur.value : [] });
+      }
+      if (action === "warehouseSave" || action === "warehouseDelete") {
+        const cur = await getStore(whKey);
+        if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read warehouses — try again." });
+        let list = Array.isArray(cur.value) ? cur.value.slice() : [];
+        if (action === "warehouseDelete") {
+          list = list.filter((x) => x && x.id !== String(body.id || ""));
+        } else {
+          const s = body.warehouse && typeof body.warehouse === "object" ? body.warehouse : {};
+          const rec = { id: String(s.id || ("wh" + Date.now() + Math.floor(Math.random() * 1000))), name: String(s.name || "").slice(0, 80), code: String(s.code || "").slice(0, 20), type: ["warehouse", "zone", "bin"].indexOf(String(s.type)) >= 0 ? String(s.type) : "warehouse", address: String(s.address || "").slice(0, 200), notes: String(s.notes || "").slice(0, 200) };
+          if (!rec.name) return J({ ok: false, error: "A name is required." });
+          const i = list.findIndex((x) => x && x.id === rec.id);
+          if (i >= 0) list[i] = rec; else list.push(rec);
+          if (list.length > 500) return J({ ok: false, error: "Too many locations." });
+        }
+        const w = await putStores({ [whKey]: list });
+        if (!w.ok) return J({ ok: false, error: "Save failed — try again." });
+        return J({ ok: true, warehouses: list });
+      }
+
+      /* ── Build / assemble (Fishbowl-style work order): consume a kit's components and add the
+         finished good to stock. Requires the item to have a BOM (kit). Logged as build/consume. ── */
+      if (action === "invBuild") {
+        const sku = String(body.sku || "").trim();
+        const qty = Math.round(+body.qty || 0);
+        if (!normSku(sku) || qty <= 0) return J({ ok: false, error: "Pick an assembly and a quantity." });
+        const cur = await readItem(sku);
+        if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read that item — try again." });
+        if (!(cur.value && typeof cur.value === "object")) return J({ ok: false, error: "That SKU isn't tracked yet." });
+        const it = { ...cur.value };
+        if (!Array.isArray(it.kit) || !it.kit.length) return J({ ok: false, error: "This SKU has no components (add a kit/BOM first)." });
+        // Check component availability
+        const comps = [];
+        for (const comp of it.kit.slice(0, 50)) {
+          const cs = String(comp.sku || "").trim(); const cq = Math.max(1, Math.round(+comp.qty || 1)) * qty;
+          if (!normSku(cs)) continue;
+          const c2 = await readItem(cs);
+          if (!c2.ok) return J({ ok: false, retry: true, error: "Couldn't read " + cs + " — try again." });
+          const cit = (c2.value && typeof c2.value === "object") ? c2.value : null;
+          if (!cit || (+cit.onHand || 0) < cq) return J({ ok: false, error: "Not enough " + cs + " to build (" + cq + " needed, " + (cit ? +cit.onHand || 0 : 0) + " on hand)." });
+          comps.push({ sku: cs, need: cq, it: { ...cit } });
+        }
+        // Consume components
+        for (const c of comps) {
+          const before = +c.it.onHand || 0; applyStockDelta(c.it, -c.need, null); c.it.updatedAt = nowISO;
+          const w2 = await writeItem(c.sku, c.it);
+          if (!w2.ok) return J({ ok: false, error: "Save failed on " + c.sku + "." });
+          await addLog({ type: "consume", sku: c.sku, name: c.it.name || "", qty: c.it.onHand - before, balance: c.it.onHand, ref: "build " + sku });
+        }
+        // Add the finished good — as a STOCKED assembly (drop the virtual-kit flag so shipping now draws its own stock)
+        const beforeF = +it.onHand || 0; it.assembled = true; applyStockDelta(it, qty, null); it.updatedAt = nowISO;
+        const wf = await writeItem(sku, it);
+        if (!wf.ok) return J({ ok: false, error: "Save failed on " + sku + "." });
+        await addLog({ type: "build", sku, name: it.name || "", qty: it.onHand - beforeF, balance: it.onHand });
+        return J({ ok: true, item: it });
       }
 
       /* ── Purchase Orders (one row per PO: po:<cid>:<id>) ── */

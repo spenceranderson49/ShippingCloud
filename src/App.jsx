@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v671";
+const BUILD_TAG="addr-v672";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9941,6 +9941,9 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const [suppliers,setSuppliers]=useState([]);
   const [lowOnly,setLowOnly]=useState(false);
   const [poSeed,setPoSeed]=useState(null);
+  const [warehouses,setWarehouses]=useState([]);
+  const [catFilter,setCatFilter]=useState("");
+  const [building,setBuilding]=useState(null);
   const catalog=(settings&&settings.products)||[];
   const flash=(m,isErr)=>{ if(isErr){setErr(m);setOk("");}else{setOk(m);setErr("");} setTimeout(()=>{setErr("");setOk("");},4500); };
   const load=async()=>{
@@ -9948,9 +9951,17 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     const r=await cloudCall({action:"invList",token:CLOUD.token});
     if(r&&r.ok){ setItems(r.items||[]); setLog(r.log||[]); }
     else { setItems([]); setErr((r&&r.error)||"Couldn't load inventory."); }
-    const [rp,rs]=await Promise.all([cloudCall({action:"poList",token:CLOUD.token}),cloudCall({action:"supplierList",token:CLOUD.token})]);
+    const [rp,rs,rw]=await Promise.all([cloudCall({action:"poList",token:CLOUD.token}),cloudCall({action:"supplierList",token:CLOUD.token}),cloudCall({action:"warehouseList",token:CLOUD.token})]);
     if(rp&&rp.ok)setPos(rp.pos||[]);
     if(rs&&rs.ok)setSuppliers(rs.suppliers||[]);
+    if(rw&&rw.ok)setWarehouses(rw.warehouses||[]);
+  };
+  const build=async()=>{
+    if(!building||!(+building.qty>0)){flash("Enter a quantity to build.",true);return;}
+    setBusy("build");
+    const r=await cloudCall({action:"invBuild",token:CLOUD.token,sku:building.sku,qty:+building.qty});
+    setBusy("");
+    if(r&&r.ok){ setBuilding(null); flash("Built "+(+building.qty)+" × "+building.sku+" — components consumed."); load(); } else flash((r&&r.error)||"Build failed.",true);
   };
   useEffect(()=>{ load(); /* eslint-disable-next-line */ },[]);
   const incomingBySku=useMemo(()=>{ const m={}; (pos||[]).forEach(po=>{ if(po.status==="received")return; (po.lines||[]).forEach(l=>{ const rem=Math.max(0,(+l.qtyOrdered||0)-(+l.qtyReceived||0)); if(rem>0){ const k=String(l.sku||"").toLowerCase(); m[k]=(m[k]||0)+rem; } }); }); return m; },[pos]);
@@ -9960,7 +9971,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const addItem=async()=>{
     if(!nf.sku.trim()){flash("Enter a SKU.",true);return;}
     setBusy("add");
-    const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:nf.sku.trim(),name:nf.name,onHand:nf.onHand===""?0:+nf.onHand,reorder:nf.reorder===""?0:+nf.reorder,cost:nf.cost===""?"":+nf.cost,loc:nf.loc,barcode:nf.barcode});
+    const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:nf.sku.trim(),name:nf.name,onHand:nf.onHand===""?0:+nf.onHand,reorder:nf.reorder===""?0:+nf.reorder,cost:nf.cost===""?"":+nf.cost,loc:nf.loc,barcode:nf.barcode,category:nf.category||""});
     setBusy("");
     if(r&&r.ok){ patch(r.item); setNf({sku:"",name:"",onHand:"",reorder:"",cost:"",loc:"",barcode:""}); setAdding(false); flash("Added "+r.item.sku+"."); load(); }
     else flash((r&&r.error)||"Couldn't save.",true);
@@ -10007,11 +10018,11 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     setBusy("");
     if(r&&r.ok){ patch(r.item); const diff=cnt-(+it.onHand||0); flash(it.sku+" counted → "+cnt+(diff?" ("+(diff>0?"+":"")+diff+" variance)":" (no variance)")); load(); } else flash((r&&r.error)||"Count failed.",true);
   };
-  const openEdit=(it)=>{ setEf({sku:it.sku,name:it.name||"",reorder:it.reorder??"",cost:it.cost??"",loc:it.loc||"",barcode:it.barcode||"",kit:Array.isArray(it.kit)?it.kit.map(c=>({sku:c.sku,qty:c.qty})):[]}); setEditSku(it.sku); };
+  const openEdit=(it)=>{ setEf({sku:it.sku,name:it.name||"",reorder:it.reorder??"",cost:it.cost??"",loc:it.loc||"",barcode:it.barcode||"",category:it.category||"",kit:Array.isArray(it.kit)?it.kit.map(c=>({sku:c.sku,qty:c.qty})):[]}); setEditSku(it.sku); };
   const saveEdit=async()=>{
     if(!ef)return; setBusy("edit");
     const kit=(ef.kit||[]).filter(c=>String(c.sku||"").trim()).map(c=>({sku:c.sku,qty:Math.max(1,Math.round(+c.qty||1))}));
-    const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:ef.sku,name:ef.name,reorder:ef.reorder===""?0:+ef.reorder,cost:ef.cost===""?"":+ef.cost,loc:ef.loc,barcode:ef.barcode||"",kit});
+    const r=await cloudCall({action:"invUpsert",token:CLOUD.token,sku:ef.sku,name:ef.name,reorder:ef.reorder===""?0:+ef.reorder,cost:ef.cost===""?"":+ef.cost,loc:ef.loc,barcode:ef.barcode||"",category:ef.category||"",kit});
     setBusy("");
     if(r&&r.ok){ patch(r.item); setEditSku(null); setEf(null); flash("Saved "+r.item.sku+"."); load(); } else flash((r&&r.error)||"Couldn't save.",true);
   };
@@ -10069,19 +10080,21 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   if(items===null) return (<div className="flex items-center gap-2 text-stone-500 text-sm p-4"><Loader2 className="w-4 h-4 animate-spin"/>Loading inventory…</div>);
   const list=(items||[]).slice().sort((a,b)=>String(a.name||a.sku).localeCompare(String(b.name||b.sku)));
   const isLow=(it)=>(+it.reorder||0)>0&&(+it.onHand||0)<=(+it.reorder||0)&&!(Array.isArray(it.kit)&&it.kit.length);
-  const filtered=(q.trim()?list.filter(it=>(String(it.sku)+" "+String(it.name||"")).toLowerCase().includes(q.trim().toLowerCase())):list).filter(it=>!lowOnly||isLow(it));
+  const categories=[...new Set(list.map(it=>it.category).filter(Boolean))].sort();
+  const filtered=(q.trim()?list.filter(it=>(String(it.sku)+" "+String(it.name||"")+" "+String(it.barcode||"")).toLowerCase().includes(q.trim().toLowerCase())):list).filter(it=>!lowOnly||isLow(it)).filter(it=>!catFilter||it.category===catFilter);
   const totUnits=list.reduce((s,it)=>s+(+it.onHand||0),0);
   const totValue=list.reduce((s,it)=>s+(+it.onHand||0)*(+it.cost||0),0);
   const lowCount=list.filter(isLow).length;
   const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
   const openPo=(pos||[]).filter(p=>p&&p.status!=="received").length;
   const Switcher=()=>(<div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm flex-wrap">
-    {[["stock","Stock"],["pos","Purchase Orders"],["suppliers","Suppliers"],["pick","Pick Lists"],["pack","Pack Verify"],["scan","Scan Receive"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}</button>)}
+    {[["stock","Stock"],["pos","Purchase Orders"],["suppliers","Suppliers"],["warehouses","Warehouses"],["pick","Pick Lists"],["pack","Pack Verify"],["scan","Scan Receive"],["analytics","Analytics"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-1.5 rounded-md ${view===v?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>{l}{v==="pos"&&openPo>0?" ("+openPo+")":""}</button>)}
   </div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
   if(view==="pick") return (<div className="max-w-5xl space-y-4"><Switcher/><PickList orders={orders} items={list}/></div>);
   if(view==="pack") return (<div className="max-w-5xl space-y-4"><Switcher/><PackVerify orders={orders} items={list}/></div>);
   if(view==="scan") return (<div className="max-w-5xl space-y-4"><Switcher/><ScanReceive items={list} onReceived={patch} reload={load}/></div>);
+  if(view==="warehouses") return (<div className="max-w-5xl space-y-4"><Switcher/><WarehousesView warehouses={warehouses} setWarehouses={setWarehouses}/></div>);
   const reorderLowStock=()=>{
     const low=list.filter(it=>!(Array.isArray(it.kit)&&it.kit.length)&&(+it.reorder||0)>0&&(+it.onHand||0)<=(+it.reorder||0));
     if(!low.length)return;
@@ -10123,6 +10136,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
         {showMoney&&<Field label="Unit cost"><Input type="number" value={nf.cost} onChange={e=>setNf({...nf,cost:e.target.value})} placeholder="0.00"/></Field>}
         <Field label="Location"><Input value={nf.loc} onChange={e=>setNf({...nf,loc:e.target.value})} placeholder="Aisle / bin"/></Field>
         <Field label="Barcode / UPC"><Input value={nf.barcode} onChange={e=>setNf({...nf,barcode:e.target.value})} placeholder="scan or type"/></Field>
+        <Field label="Category"><Input value={nf.category||""} onChange={e=>setNf({...nf,category:e.target.value})} placeholder="e.g. Apparel"/></Field>
       </div>
       <div className="flex items-center gap-2 mt-2"><button onClick={addItem} disabled={busy==="add"} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-1.5 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy==="add"&&<Loader2 className="w-4 h-4 animate-spin"/>}Save item</button><button onClick={()=>setAdding(false)} className="text-sm text-stone-500 px-2 py-1.5">Cancel</button></div>
     </Panel>}
@@ -10137,6 +10151,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     <div className="flex items-center gap-2 flex-wrap">
       <div className="relative flex-1 max-w-xs min-w-[160px]"><Search className="w-4 h-4 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search SKU or name…" className="w-full border border-stone-300 rounded-lg pl-8 pr-3 py-2 text-sm"/></div>
       <button onClick={()=>setLowOnly(v=>!v)} className={`text-xs rounded-lg px-2.5 py-2 border font-medium ${lowOnly?"bg-amber-100 text-amber-700 border-amber-200":"bg-white text-stone-500 border-stone-200 hover:bg-stone-50"}`}>Low stock only{lowCount?" ("+lowCount+")":""}</button>
+      {categories.length>0&&<select value={catFilter} onChange={e=>setCatFilter(e.target.value)} className="text-xs rounded-lg px-2 py-2 border border-stone-200 bg-white text-stone-600"><option value="">All categories</option>{categories.map(c=><option key={c} value={c}>{c}</option>)}</select>}
       {lowCount>0&&<button onClick={reorderLowStock} className="text-xs rounded-lg px-2.5 py-2 bg-[#0086E0] text-white font-medium hover:bg-[#006db8] flex items-center gap-1"><ClipboardList className="w-3.5 h-3.5"/>Reorder low stock</button>}
       <button onClick={()=>setShowLog(s=>!s)} className="text-xs text-stone-500 hover:text-stone-700 flex items-center gap-1 ml-auto">{showLog?"Hide":"Show"} movement log ({log.length})</button>
     </div>
@@ -10145,20 +10160,21 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
         <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 text-left"><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">On hand</th><th className="px-3 py-2 text-right" title="Promised to open orders">Committed</th><th className="px-3 py-2 text-right" title="On hand − committed">Available</th><th className="px-3 py-2 text-right">Incoming</th><th className="px-3 py-2 text-right">Reorder</th>{showMoney&&<th className="px-3 py-2 text-right">Unit cost</th>}{showMoney&&<th className="px-3 py-2 text-right">Value</th>}<th className="px-3 py-2">Location</th><th className="px-3 py-2"></th></tr></thead>
         <tbody className="divide-y divide-stone-100">
           {filtered.length===0&&<tr><td colSpan={showMoney?10:8} className="px-3 py-8 text-center text-stone-400 text-sm">{list.length?"No items match your search.":"No inventory yet — add an item, or import from your product catalog."}</td></tr>}
-          {filtered.map(it=>{const isKit=Array.isArray(it.kit)&&it.kit.length>0;const inc=incomingBySku[String(it.sku).toLowerCase()]||0;const cmt=committedBySku[String(it.sku).toLowerCase()]||0;const avail=Math.max(0,(+it.onHand||0)-cmt);return (<tr key={it.sku} className={isLow(it)?"bg-amber-50/60":""}>
-            <td className="px-3 py-2"><div className="font-medium text-stone-900 flex items-center gap-1.5">{it.name||it.sku}{isKit&&<span className="text-[9px] uppercase tracking-wide bg-violet-100 text-violet-700 rounded px-1.5 py-0.5">kit</span>}</div><div className="text-[11px] text-stone-400">{it.sku}{isKit?" · "+it.kit.map(c=>c.qty+"× "+c.sku).join(" + "):""}</div></td>
-            <td className="px-3 py-2 text-right">{isKit?<span className="text-stone-400 text-xs">—</span>:<><span className={`font-semibold ${isLow(it)?"text-amber-600":"text-stone-900"}`}>{+it.onHand||0}</span>{isLow(it)&&<span className="ml-1 text-[10px] uppercase tracking-wide text-amber-600">low</span>}</>}</td>
-            <td className="px-3 py-2 text-right text-stone-500">{(!isKit&&cmt>0)?<span className="text-amber-600">{cmt}</span>:"—"}</td>
-            <td className="px-3 py-2 text-right">{isKit?<span className="text-stone-400 text-xs">—</span>:<span className={`font-medium ${avail<=0&&cmt>0?"text-rose-600":"text-stone-800"}`}>{avail}</span>}</td>
+          {filtered.map(it=>{const isKit=Array.isArray(it.kit)&&it.kit.length>0;const virtualKit=isKit&&!it.assembled;const inc=incomingBySku[String(it.sku).toLowerCase()]||0;const cmt=committedBySku[String(it.sku).toLowerCase()]||0;const avail=Math.max(0,(+it.onHand||0)-cmt);return (<tr key={it.sku} className={isLow(it)?"bg-amber-50/60":""}>
+            <td className="px-3 py-2"><div className="font-medium text-stone-900 flex items-center gap-1.5">{it.name||it.sku}{isKit&&<span className={`text-[9px] uppercase tracking-wide rounded px-1.5 py-0.5 ${it.assembled?"bg-emerald-100 text-emerald-700":"bg-violet-100 text-violet-700"}`}>{it.assembled?"assembly":"kit"}</span>}{it.category?<span className="text-[9px] uppercase tracking-wide bg-stone-100 text-stone-500 rounded px-1.5 py-0.5">{it.category}</span>:null}</div><div className="text-[11px] text-stone-400">{it.sku}{isKit?" · "+it.kit.map(c=>c.qty+"× "+c.sku).join(" + "):""}</div></td>
+            <td className="px-3 py-2 text-right">{virtualKit?<span className="text-stone-400 text-xs">—</span>:<><span className={`font-semibold ${isLow(it)?"text-amber-600":"text-stone-900"}`}>{+it.onHand||0}</span>{isLow(it)&&<span className="ml-1 text-[10px] uppercase tracking-wide text-amber-600">low</span>}</>}</td>
+            <td className="px-3 py-2 text-right text-stone-500">{(!virtualKit&&cmt>0)?<span className="text-amber-600">{cmt}</span>:"—"}</td>
+            <td className="px-3 py-2 text-right">{virtualKit?<span className="text-stone-400 text-xs">—</span>:<span className={`font-medium ${avail<=0&&cmt>0?"text-rose-600":"text-stone-800"}`}>{avail}</span>}</td>
             <td className="px-3 py-2 text-right text-stone-500">{inc>0?<span className="text-sky-600">+{inc}</span>:"—"}</td>
             <td className="px-3 py-2 text-right text-stone-500">{(+it.reorder||0)||"—"}</td>
             {showMoney&&<td className="px-3 py-2 text-right text-stone-500">{it.cost?money(it.cost):"—"}</td>}
-            {showMoney&&<td className="px-3 py-2 text-right text-stone-700">{(!isKit&&it.cost)?money((+it.onHand||0)*(+it.cost||0)):"—"}</td>}
+            {showMoney&&<td className="px-3 py-2 text-right text-stone-700">{(!virtualKit&&it.cost)?money((+it.onHand||0)*(+it.cost||0)):"—"}</td>}
             <td className="px-3 py-2 text-stone-500">{(it.byLoc&&Object.keys(it.byLoc).length)?<span className="text-xs">{Object.keys(it.byLoc).map(k=><span key={k} className="inline-block mr-1.5 whitespace-nowrap"><span className="text-stone-700 font-medium">{it.byLoc[k]}</span> {k}</span>)}</span>:(it.loc||"—")}</td>
             <td className="px-3 py-2 text-right whitespace-nowrap">
-              {!isKit&&<button onClick={()=>count(it)} disabled={busy==="cnt"+it.sku} title="Cycle count" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200 mr-1">Count</button>}
-              {!isKit&&<button onClick={()=>adjust(it)} disabled={busy==="adj"+it.sku} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200 mr-1">Adjust</button>}
-              {!isKit&&<button onClick={()=>openXfer(it)} title="Move stock between locations" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200 mr-1">Move</button>}
+              {isKit&&<button onClick={()=>setBuilding({sku:it.sku,qty:1})} title="Build/assemble from components" className="text-[11px] rounded px-2 py-1 bg-violet-100 text-violet-700 hover:bg-violet-200 mr-1">Build</button>}
+              {!virtualKit&&<button onClick={()=>count(it)} disabled={busy==="cnt"+it.sku} title="Cycle count" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200 mr-1">Count</button>}
+              {!virtualKit&&<button onClick={()=>adjust(it)} disabled={busy==="adj"+it.sku} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200 mr-1">Adjust</button>}
+              {!virtualKit&&<button onClick={()=>openXfer(it)} title="Move stock between locations" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200 mr-1">Move</button>}
               <button onClick={()=>openEdit(it)} className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200 mr-1">Edit</button>
               <button onClick={()=>del(it)} disabled={busy==="del"+it.sku} title="Stop tracking" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="w-3.5 h-3.5"/></button>
             </td>
@@ -10187,6 +10203,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
           {showMoney&&<Field label="Unit cost"><Input type="number" value={ef.cost} onChange={e=>setEf({...ef,cost:e.target.value})}/></Field>}
           <Field label="Location / bin"><Input value={ef.loc} onChange={e=>setEf({...ef,loc:e.target.value})}/></Field>
           <Field label="Barcode / UPC"><Input value={ef.barcode} onChange={e=>setEf({...ef,barcode:e.target.value})}/></Field>
+          <Field label="Category"><Input value={ef.category||""} onChange={e=>setEf({...ef,category:e.target.value})}/></Field>
         </div>
         <div className="mt-4 border-t border-stone-100 pt-3">
           <div className="text-xs font-semibold text-stone-600 mb-1 flex items-center gap-1.5"><Boxes className="w-3.5 h-3.5 text-violet-600"/>Kit / bundle components</div>
@@ -10208,12 +10225,22 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
         <div className="text-xs text-stone-500 mb-2">Currently: {Object.keys(xfer.byLoc).map(k=><span key={k} className="inline-block mr-2"><b className="text-stone-700">{xfer.byLoc[k]}</b> at {k}</span>)}</div>
         <div className="grid grid-cols-3 gap-2 items-end">
           <label className="text-xs text-stone-600 col-span-1">From<select value={xfer.from} onChange={e=>setXfer({...xfer,from:e.target.value})} className="mt-1 w-full border border-stone-300 rounded-lg px-2 py-2 text-sm">{Object.keys(xfer.byLoc).map(k=><option key={k} value={k}>{k} ({xfer.byLoc[k]})</option>)}</select></label>
-          <label className="text-xs text-stone-600 col-span-1">To<input list="xfer-locs" value={xfer.to} onChange={e=>setXfer({...xfer,to:e.target.value})} placeholder="Aisle / bin" className="mt-1 w-full border border-stone-300 rounded-lg px-2 py-2 text-sm"/><datalist id="xfer-locs">{[...new Set(list.flatMap(it=>it.byLoc?Object.keys(it.byLoc):(it.loc?[it.loc]:[])))].map(l=><option key={l} value={l}/>)}</datalist></label>
+          <label className="text-xs text-stone-600 col-span-1">To<input list="xfer-locs" value={xfer.to} onChange={e=>setXfer({...xfer,to:e.target.value})} placeholder="Aisle / bin" className="mt-1 w-full border border-stone-300 rounded-lg px-2 py-2 text-sm"/><datalist id="xfer-locs">{[...new Set([...(warehouses||[]).map(w=>w.code||w.name),...list.flatMap(it=>it.byLoc?Object.keys(it.byLoc):(it.loc?[it.loc]:[]))])].filter(Boolean).map(l=><option key={l} value={l}/>)}</datalist></label>
           <label className="text-xs text-stone-600 col-span-1">Qty<input type="number" min="1" value={xfer.qty} onChange={e=>setXfer({...xfer,qty:e.target.value})} className="mt-1 w-full border border-stone-300 rounded-lg px-2 py-2 text-sm"/></label>
         </div>
         <div className="flex items-center gap-2 mt-4"><button onClick={doXfer} disabled={busy==="xfer"} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy==="xfer"?<Loader2 className="w-4 h-4 animate-spin"/>:<ArrowLeftRight className="w-4 h-4"/>}Move</button><button onClick={()=>setXfer(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
       </div>
     </div>}
+    {building&&(()=>{ const it=list.find(x=>x.sku===building.sku)||{}; const comps=Array.isArray(it.kit)?it.kit:[]; const maxBuild=comps.length?Math.max(0,Math.min(...comps.map(c=>{ const ci=list.find(x=>String(x.sku).toLowerCase()===String(c.sku).toLowerCase()); return Math.floor((ci?(+ci.onHand||0):0)/Math.max(1,+c.qty||1)); }))):0; return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setBuilding(null)}>
+      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1"><div className="font-semibold text-stone-900">Build {it.name||building.sku}</div><button onClick={()=>setBuilding(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+        <p className="text-xs text-stone-500 mb-3">Assemble finished units from components — components are consumed and the assembly is added to stock. You can build up to <b>{maxBuild}</b> now.</p>
+        <div className="space-y-1 mb-3 border border-stone-100 rounded-lg p-2 bg-stone-50">{comps.map(c=>{ const ci=list.find(x=>String(x.sku).toLowerCase()===String(c.sku).toLowerCase()); const have=ci?(+ci.onHand||0):0; const need=(+c.qty||1)*(+building.qty||0); return <div key={c.sku} className="flex items-center justify-between text-xs"><span className="text-stone-600">{c.qty}× {c.sku}</span><span className={need>have?"text-rose-600":"text-stone-400"}>need {need} · {have} on hand</span></div>; })}</div>
+        <label className="text-xs text-stone-600">Quantity to build<input type="number" min="1" value={building.qty} onChange={e=>setBuilding({...building,qty:e.target.value})} className="mt-1 w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"/></label>
+        <div className="flex items-center gap-2 mt-4"><button onClick={build} disabled={busy==="build"} className="text-sm bg-violet-600 text-white rounded-lg px-4 py-2 font-medium hover:bg-violet-700 disabled:opacity-40 flex items-center gap-1.5">{busy==="build"?<Loader2 className="w-4 h-4 animate-spin"/>:<Boxes className="w-4 h-4"/>}Build</button><button onClick={()=>setBuilding(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
+      </div>
+    </div>);})()}
   </div>);
 }
 
@@ -10475,6 +10502,42 @@ function PickList({orders,items}){
           <td className="px-3 py-2 text-right font-semibold text-stone-900">{r.qty}</td>
           <td className={`px-3 py-2 text-right ${r.short?"text-rose-600":"text-stone-500"}`}>{r.onHand==null?"—":r.onHand}{r.short?" (short "+r.short+")":""}</td>
         </tr>))}</tbody></table></div>
+    </div>}
+  </div>);
+}
+/* Warehouses / storage locations — a company-managed list (warehouse, zone, or bin) used across
+   receiving and transfers. */
+function WarehousesView({warehouses,setWarehouses}){
+  const [msg,setMsg]=useState(null); const [busy,setBusy]=useState(false); const [ef,setEf]=useState(null);
+  const flash=(m,e)=>{ setMsg(e?{err:m}:{ok:m}); setTimeout(()=>setMsg(null),3500); };
+  const save=async()=>{ if(!ef.name||!ef.name.trim()){flash("A name is required.",true);return;} setBusy(true); const r=await cloudCall({action:"warehouseSave",token:CLOUD.token,warehouse:ef}); setBusy(false); if(r&&r.ok){ setWarehouses(r.warehouses); setEf(null); flash("Saved."); } else flash((r&&r.error)||"Couldn't save.",true); };
+  const del=async(w)=>{ if(!await uiConfirm("Delete "+w.name+"?"))return; const r=await cloudCall({action:"warehouseDelete",token:CLOUD.token,id:w.id}); if(r&&r.ok)setWarehouses(r.warehouses); };
+  const typeTone={warehouse:"blue",zone:"stone",bin:"green"};
+  return (<div className="space-y-4">
+    <div className="flex items-center justify-between flex-wrap gap-2">
+      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Warehouse className="w-5 h-5 text-[#0086E0]"/>Warehouses &amp; locations</h2><p className="text-sm text-stone-500 mt-0.5">Name your warehouses, zones, and bins — they populate the location pickers when you receive and transfer stock.</p></div>
+      <button onClick={()=>setEf({name:"",code:"",type:"warehouse",address:"",notes:""})} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>New location</button>
+    </div>
+    {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
+    <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+      {(warehouses||[]).length===0&&<div className="p-8 text-center text-sm text-stone-400">No locations yet. Add your first warehouse or bin.</div>}
+      {(warehouses||[]).map(w=>(<div key={w.id} className="p-3 flex items-center gap-3">
+        <div className="flex-1 min-w-0"><div className="font-medium text-stone-900 flex items-center gap-2">{w.name}{w.code?<span className="text-[11px] text-stone-400 font-mono">{w.code}</span>:null}<Badge tone={typeTone[w.type]||"stone"}>{w.type}</Badge></div><div className="text-[11px] text-stone-400 truncate">{[w.address,w.notes].filter(Boolean).join(" · ")||"—"}</div></div>
+        <button onClick={()=>setEf(w)} className="text-xs bg-stone-100 text-stone-600 rounded-lg px-2.5 py-1.5 hover:bg-stone-200">Edit</button>
+        <button onClick={()=>del(w)} className="text-xs bg-stone-100 text-stone-400 rounded-lg px-2 py-1.5 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="w-3.5 h-3.5"/></button>
+      </div>))}
+    </div>
+    {ef&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setEf(null)}>
+      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3"><div className="font-semibold text-stone-900">{ef.id?"Edit location":"New location"}</div><button onClick={()=>setEf(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Name"><Input value={ef.name} onChange={e=>setEf({...ef,name:e.target.value})}/></Field>
+          <Field label="Code"><Input value={ef.code} onChange={e=>setEf({...ef,code:e.target.value})} placeholder="WH1 / A-12"/></Field>
+          <Field label="Type"><select value={ef.type} onChange={e=>setEf({...ef,type:e.target.value})} className="w-full border border-stone-300 rounded-lg px-2 py-2 text-sm"><option value="warehouse">Warehouse</option><option value="zone">Zone</option><option value="bin">Bin</option></select></Field>
+          <div className="col-span-2"><Field label="Address / notes"><Input value={ef.address} onChange={e=>setEf({...ef,address:e.target.value})}/></Field></div>
+        </div>
+        <div className="flex items-center gap-2 mt-4"><button onClick={save} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy&&<Loader2 className="w-4 h-4 animate-spin"/>}Save</button><button onClick={()=>setEf(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
+      </div>
     </div>}
   </div>);
 }

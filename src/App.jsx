@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v705";
+const BUILD_TAG="addr-v706";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10336,7 +10336,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
         <Field label="Reorder at"><Input type="number" value={nf.reorder} onChange={e=>setNf({...nf,reorder:e.target.value})} placeholder="e.g. 10"/></Field>
         {showMoney&&<Field label="Unit cost"><Input type="number" value={nf.cost} onChange={e=>setNf({...nf,cost:e.target.value})} placeholder="0.00"/></Field>}
         <Field label="Location"><Input value={nf.loc} onChange={e=>setNf({...nf,loc:e.target.value})} placeholder="Aisle / bin"/></Field>
-        <Field label="Barcode / UPC"><Input value={nf.barcode} onChange={e=>setNf({...nf,barcode:e.target.value})} placeholder="scan or type"/></Field>
+        <Field label="Barcode / UPC"><div className="flex gap-1"><Input value={nf.barcode} onChange={e=>setNf({...nf,barcode:e.target.value})} placeholder="scan or type"/><button type="button" onClick={()=>setNf({...nf,barcode:"2"+String(Date.now()).slice(-11)})} className="shrink-0 text-xs bg-stone-100 text-stone-600 rounded-lg px-2 hover:bg-stone-200" title="Generate a barcode">Gen</button></div></Field>
         <Field label="Category"><Input value={nf.category||""} onChange={e=>setNf({...nf,category:e.target.value})} placeholder="e.g. Apparel"/></Field>
       </div>
       <div className="flex items-center gap-2 mt-2"><button onClick={addItem} disabled={busy==="add"} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-1.5 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy==="add"&&<Loader2 className="w-4 h-4 animate-spin"/>}Save item</button><button onClick={()=>setAdding(false)} className="text-sm text-stone-500 px-2 py-1.5">Cancel</button></div>
@@ -10410,7 +10410,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
           {showMoney&&<Field label="Unit cost"><Input type="number" value={ef.cost} onChange={e=>setEf({...ef,cost:e.target.value})}/></Field>}
           {showMoney&&<Field label="Sell price (POS)"><Input type="number" value={ef.price} onChange={e=>setEf({...ef,price:e.target.value})}/></Field>}
           <Field label="Location / bin"><Input value={ef.loc} onChange={e=>setEf({...ef,loc:e.target.value})}/></Field>
-          <Field label="Barcode / UPC"><Input value={ef.barcode} onChange={e=>setEf({...ef,barcode:e.target.value})}/></Field>
+          <Field label="Barcode / UPC"><div className="flex gap-1"><Input value={ef.barcode} onChange={e=>setEf({...ef,barcode:e.target.value})}/><button type="button" onClick={()=>setEf({...ef,barcode:"2"+String(Date.now()).slice(-11)})} className="shrink-0 text-xs bg-stone-100 text-stone-600 rounded-lg px-2 hover:bg-stone-200" title="Generate a barcode">Gen</button></div></Field>
           <Field label="Category"><Input value={ef.category||""} onChange={e=>setEf({...ef,category:e.target.value})}/></Field>
           <Field label="Base unit"><Input value={ef.uom||""} onChange={e=>setEf({...ef,uom:e.target.value})} placeholder="each / lb / ft"/></Field>
           <Field label="Units per case"><Input type="number" value={ef.casePack??""} onChange={e=>setEf({...ef,casePack:e.target.value})} placeholder="e.g. 12"/></Field>
@@ -11567,6 +11567,9 @@ function ProductionOrders({production,setProduction,items,onReload}){
 /* Inventory analytics — valuation, value by location, dead stock, movement, top items. Read-only. */
 function InventoryAnalytics({list,log,showMoney=true}){
   const stock=(list||[]).filter(it=>!(Array.isArray(it.kit)&&it.kit.length));
+  // Kit / bundle margins: sell price vs rolled-up component cost (BOM). Only kits with a price set.
+  const costBySku={}; (list||[]).forEach(it=>{ costBySku[String(it.sku).toLowerCase()]=+it.cost||0; });
+  const kitMargins=(list||[]).filter(it=>Array.isArray(it.kit)&&it.kit.length&&+it.price>0).map(it=>{ const cost=it.kit.reduce((s,c)=>s+(costBySku[String(c.sku).toLowerCase()]||0)*(+c.qty||1),0); const price=+it.price||0; const margin=price-cost; const pct=price>0?Math.round(margin/price*100):0; return {sku:it.sku,name:it.name,price,cost:Math.round(cost*100)/100,margin:Math.round(margin*100)/100,pct}; }).sort((a,b)=>b.margin-a.margin);
   const totUnits=stock.reduce((s,it)=>s+(+it.onHand||0),0);
   const totValue=stock.reduce((s,it)=>s+(+it.onHand||0)*(+it.cost||0),0);
   const skuCount=stock.length;
@@ -11619,6 +11622,17 @@ function InventoryAnalytics({list,log,showMoney=true}){
           <td className="px-3 py-2"><span className={`text-[10px] font-bold rounded px-1.5 py-0.5 ${x.cls==="A"?"bg-emerald-100 text-emerald-700":x.cls==="B"?"bg-amber-100 text-amber-700":"bg-stone-100 text-stone-500"}`}>{x.cls}</span></td>
           <td className="px-3 py-2"><div className="text-stone-800">{x.name||x.sku}</div><div className="text-[11px] text-stone-400">{x.sku}</div></td>
           <td className="px-3 py-2 text-right text-stone-700">{money(x.annual)}</td>
+        </tr>))}</tbody></table></div>
+    </div>}
+    {showMoney&&kitMargins.length>0&&<div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500">Kit &amp; bundle margins — sell price vs component cost</div>
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-[10px] uppercase tracking-widest text-stone-400"><th className="px-3 py-2">Bundle</th><th className="px-3 py-2 text-right">Sell price</th><th className="px-3 py-2 text-right">Component cost</th><th className="px-3 py-2 text-right">Margin</th><th className="px-3 py-2 text-right">Margin %</th></tr></thead>
+        <tbody className="divide-y divide-stone-100">{kitMargins.map(k=>(<tr key={k.sku}>
+          <td className="px-3 py-2"><div className="text-stone-800">{k.name||k.sku}</div><div className="text-[11px] text-stone-400">{k.sku}</div></td>
+          <td className="px-3 py-2 text-right text-stone-700">{money(k.price)}</td>
+          <td className="px-3 py-2 text-right text-stone-500">{money(k.cost)}</td>
+          <td className={`px-3 py-2 text-right font-medium ${k.margin<0?"text-rose-600":"text-emerald-700"}`}>{money(k.margin)}</td>
+          <td className={`px-3 py-2 text-right ${k.pct<0?"text-rose-600":k.pct<20?"text-amber-600":"text-stone-600"}`}>{k.pct}%</td>
         </tr>))}</tbody></table></div>
     </div>}
     {expLots.length>0&&<div className="border border-amber-200 rounded-xl bg-white overflow-hidden">

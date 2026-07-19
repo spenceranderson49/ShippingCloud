@@ -1233,11 +1233,20 @@ exports.handler = async (event) => {
         const recv = Array.isArray(body.receipts) ? body.receipts : [];   // [{sku, qty}]
         const byS = {}; recv.forEach((r) => { const s = String(r.sku || "").trim(); const q = Math.round(+r.qty || 0); if (s && q > 0) byS[s] = (byS[s] || 0) + q; });
         const received = [];
-        po.lines = (po.lines || []).map((l) => {
-          const q = byS[l.sku] || 0; if (!q) return l;
-          const take = Math.min(q, Math.max(0, (l.qtyOrdered || 0) - (l.qtyReceived || 0))) || q;   // allow over-receipt if line already met
-          received.push({ sku: l.sku, name: l.name, qty: q, cost: l.cost });
-          return { ...l, qtyReceived: (l.qtyReceived || 0) + q };
+        /* Allocate each SKU's received qty ACROSS its lines (a PO can list the same SKU twice): fill
+           each line's outstanding first, then dump any remainder (over-receipt) on the last such line —
+           so total received == qty entered, never double-counted. */
+        const remain = { ...byS }; const lastIdx = {};
+        (po.lines || []).forEach((l, i) => { if (byS[l.sku]) lastIdx[l.sku] = i; });
+        po.lines = (po.lines || []).map((l, i) => {
+          if (!byS[l.sku]) return l;
+          const avail = remain[l.sku] || 0; if (avail <= 0) return l;
+          const outstanding = Math.max(0, (l.qtyOrdered || 0) - (l.qtyReceived || 0));
+          const take = (i === lastIdx[l.sku]) ? avail : Math.min(avail, outstanding);   // last line for this SKU takes the remainder
+          if (take <= 0) return l;
+          remain[l.sku] = avail - take;
+          received.push({ sku: l.sku, name: l.name, qty: take, cost: l.cost });
+          return { ...l, qtyReceived: (l.qtyReceived || 0) + take };
         });
         /* Landed cost: total freight/duty for this receipt, allocated per unit across everything
            received so each item's cost reflects its TRUE landed cost (NetSuite/Fishbowl style). */
@@ -1251,7 +1260,7 @@ exports.handler = async (event) => {
           const prev = (cur2.value && typeof cur2.value === "object") ? cur2.value : null;
           const it = prev ? { ...prev } : { sku: rc.sku, name: rc.name || "", onHand: 0, createdAt: nowISO };
           const landedUnitCost = money2((+rc.cost || 0) + perUnit);
-          const before = +it.onHand || 0; it.onHand = before + rc.qty;
+          applyStockDelta(it, rc.qty, body.loc);   // keeps byLoc/onHand in sync for multi-location items (was: raw onHand bump, which lost stock on the next transfer)
           if (it.fifo || Array.isArray(it.layers)) { if (!Array.isArray(it.layers)) it.layers = []; it.layers.push({ qty: rc.qty, cost: landedUnitCost, at: nowISO }); if (it.layers.length > 200) it.layers = it.layers.slice(-200); }
           if (rc.cost || perUnit) it.cost = landedUnitCost;
           if (rc.name && !it.name) it.name = rc.name; it.updatedAt = nowISO;

@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v723";
+const BUILD_TAG="addr-v724";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10009,7 +10009,7 @@ function printLabels(items,opts){
   const cells=(items||[]).filter(it=>it&&it.sku).map(it=>{
     const code=String(it.barcode||it.sku||"").trim();
     const svg=code128BSVG(code,{mod:1.5,height:40});
-    const price=showPrice&&it.cost?("$"+(Math.round((+it.cost||0)*100)/100).toFixed(2)):"";
+    const price=showPrice&&+it.price>0?("$"+(Math.round((+it.price||0)*100)/100).toFixed(2)):"";   // retail sell price on labels — never wholesale cost
     return `<div class="lbl"><div class="nm">${esc(it.name||it.sku)}</div><div class="bc">${svg}</div><div class="sk">${esc(code)}${price?` &nbsp;·&nbsp; ${esc(price)}`:""}</div></div>`;
   }).join("");
   const html=`<!doctype html><html><head><meta charset="utf-8"><title>Product labels</title><style>
@@ -10102,8 +10102,12 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   };
   useEffect(()=>{ load(); /* eslint-disable-next-line */ },[]);
   const incomingBySku=useMemo(()=>{ const m={}; (pos||[]).forEach(po=>{ if(po.status==="received")return; (po.lines||[]).forEach(l=>{ const rem=Math.max(0,(+l.qtyOrdered||0)-(+l.qtyReceived||0)); if(rem>0){ const k=String(l.sku||"").toLowerCase(); m[k]=(m[k]||0)+rem; } }); }); return m; },[pos]);
-  /* Committed = units promised to open (unfulfilled) orders. Available-to-promise = onHand − committed. */
-  const committedBySku=useMemo(()=>{ const m={}; (orders||[]).forEach(o=>{ if(!o||o.status==="fulfilled")return; (Array.isArray(o.lineItems)?o.lineItems:[]).forEach(li=>{ const sku=String((li&&li.sku)||"").trim().toLowerCase(); if(!sku)return; m[sku]=(m[sku]||0)+(+li.qty||+li.quantity||1); }); }); return m; },[orders]);
+  /* Virtual kits (unbuilt bundles) deplete their COMPONENTS when they ship, so demand for a kit must
+     reserve the components, not the kit SKU. Map each virtual kit → its BOM. */
+  const kitBySku=useMemo(()=>{ const m={}; (items||[]).forEach(it=>{ if(Array.isArray(it.kit)&&it.kit.length&&!it.assembled)m[String(it.sku).toLowerCase()]=it.kit; }); return m; },[items]);
+  /* Committed = units promised to open (unfulfilled) orders. Available-to-promise = onHand − committed.
+     A virtual-kit line explodes into its components so the parts read as committed/short, not the kit. */
+  const committedBySku=useMemo(()=>{ const m={}; (orders||[]).forEach(o=>{ if(!o||o.status==="fulfilled")return; (Array.isArray(o.lineItems)?o.lineItems:[]).forEach(li=>{ const sku=String((li&&li.sku)||"").trim().toLowerCase(); if(!sku)return; const qty=(+li.qty||+li.quantity||1); const kit=kitBySku[sku]; if(kit){ kit.forEach(c=>{ const cs=String((c&&c.sku)||"").toLowerCase(); if(cs)m[cs]=(m[cs]||0)+qty*(+c.qty||1); }); } else { m[sku]=(m[sku]||0)+qty; } }); }); return m; },[orders,kitBySku]);
   const patch=(it)=>setItems(arr=>{ const a=Array.isArray(arr)?[...arr]:[]; const i=a.findIndex(x=>String(x.sku).toLowerCase()===String(it.sku).toLowerCase()); if(i>=0)a[i]=it; else a.push(it); return a; });
   const addItem=async()=>{
     if(!nf.sku.trim()){flash("Enter a SKU.",true);return;}
@@ -11002,7 +11006,7 @@ function PackVerify({orders,items,shipOrder}){
   // Cartonization: packing-group rules → suggested box for an order (loaded lazily).
   const [packgroups,setPackgroups]=useState([]); const [containers,setContainers]=useState([]);
   useEffect(()=>{ let dead=false; (async()=>{ const [rg,rc]=await Promise.all([cloudCall({action:"wlistGet",token:CLOUD.token,kind:"packgroups"}),cloudCall({action:"containerList",token:CLOUD.token})]); if(!dead){ if(rg&&rg.ok)setPackgroups(rg.items||[]); if(rc&&rc.ok)setContainers(rc.items?rc.items:(rc.containers||[])); } })(); return ()=>{dead=true;}; },[]);
-  const suggestBox=(o)=>{ if(!o||!packgroups.length)return null; for(const li of (o.lineItems||[])){ const it=itBySku[String(li.sku||"").toLowerCase()]; const cat=(it&&it.category||"").toLowerCase(); const hay=((it&&it.name||"")+" "+(li.sku||"")+" "+(li.title||li.name||"")).toLowerCase(); for(const g of packgroups){ const m=String(g.match||"").trim().toLowerCase(); if(!m||!g.container)continue; if(cat===m||hay.includes(m))return g.container; } } return null; };
+  const suggestBox=(o)=>{ if(!o||!packgroups.length)return null; for(const li of (o.lineItems||[])){ const it=itBySku[String(li.sku||"").toLowerCase()]; const cat=(it&&it.category||"").toLowerCase(); const hay=((it&&it.name||"")+" "+(li.sku||"")+" "+(li.title||li.name||"")).toLowerCase(); for(const g of packgroups){ const m=String(g.match||"").trim().toLowerCase(); if(!m||!g.container)continue; if(cat===m||hay.includes(m)){ const c=(containers||[]).find(x=>x.name===g.container); const dims=c&&[c.length,c.width,c.height].every(v=>+v>0)?`${c.length}×${c.width}×${c.height} in`:""; return {name:g.container,dims}; } } } return null; };
   const need=useMemo(()=>{ const m={}; if(order){ (order.lineItems||[]).forEach(li=>{ const s=String(li.sku||"").trim().toLowerCase(); if(!s)return; m[s]=(m[s]||0)+(+li.qty||+li.quantity||1); }); } return m; },[order]);
   const start=(o)=>{ setOrder(o); setScanned({}); setMsg(""); setTimeout(()=>{try{inputRef.current&&inputRef.current.focus();}catch(e){}},50); };
   const doScan=(raw)=>{
@@ -11025,7 +11029,7 @@ function PackVerify({orders,items,shipOrder}){
       <>
       <div className={`border rounded-xl p-4 ${allDone?"border-emerald-300 bg-emerald-50/50":"border-stone-200 bg-white"}`}>
         <div className="flex items-center justify-between mb-3"><div className="font-medium text-stone-900">{order.name||order.id} · {order.customer||""}</div><button onClick={()=>setOrder(null)} className="text-xs text-stone-500 hover:text-stone-700">← pick another</button></div>
-        {(()=>{ const box=suggestBox(order); return box?<div className="mb-3 text-xs bg-sky-50 text-[#0086E0] rounded-lg px-3 py-2 flex items-center gap-1.5"><Package className="w-3.5 h-3.5"/>Suggested box: <b>{box}</b></div>:null; })()}
+        {(()=>{ const box=suggestBox(order); return box?<div className="mb-3 text-xs bg-sky-50 text-[#0086E0] rounded-lg px-3 py-2 flex items-center gap-1.5"><Package className="w-3.5 h-3.5"/>Suggested box: <b>{box.name}</b>{box.dims?<span className="text-[#0086E0]/70">· {box.dims}</span>:null}</div>:null; })()}
         {!allDone&&<div className="flex items-end gap-2 mb-3">
           <label className="text-xs text-stone-600 flex-1">Scan item<input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();doScan(val);}}} placeholder="Scan barcode or type SKU…" className="mt-1 w-full border border-stone-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#0086E0]" autoFocus/></label>
         </div>}
@@ -11102,7 +11106,9 @@ function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFl
   const openFulfill=(o)=>{ setFulfilling(o); setGrabbed({}); setPacked({}); setFStep(0); };
   const shipNow=()=>{ const o=fulfilling; setFulfilling(null); shipOrder&&shipOrder(o); };
   const open=(orders||[]).filter(o=>o&&o.status!=="fulfilled"&&Array.isArray(o.lineItems)&&o.lineItems.length);
-  const rows=open.map(o=>{ const lis=(o.lineItems||[]).filter(li=>li&&li.sku); const tracked=lis.filter(li=>String(li.sku).toLowerCase() in stockBySku); const short=tracked.filter(li=>(stockBySku[String(li.sku).toLowerCase()]||0)<(+li.qty||+li.quantity||1)).map(li=>li.sku); const units=lis.reduce((s,li)=>s+(+li.qty||+li.quantity||1),0); const t=Date.parse(o.date||"")||0; return {o,ready:tracked.length>0&&short.length===0,unknown:tracked.length===0,short,units,skus:lis.length,t}; })
+  // Explode a line into what actually depletes stock — a virtual kit becomes its components.
+  const expand=(li)=>{ const it=itBySku[String(li.sku).toLowerCase()]; const q=(+li.qty||+li.quantity||1); if(it&&Array.isArray(it.kit)&&it.kit.length&&!it.assembled)return it.kit.map(c=>({sku:String((c&&c.sku)||"").toLowerCase(),qty:q*(+c.qty||1)})).filter(x=>x.sku); return [{sku:String(li.sku).toLowerCase(),qty:q}]; };
+  const rows=open.map(o=>{ const lis=(o.lineItems||[]).filter(li=>li&&li.sku); const needs=lis.flatMap(expand); const tracked=needs.filter(n=>n.sku in stockBySku); const short=[...new Set(tracked.filter(n=>(stockBySku[n.sku]||0)<n.qty).map(n=>n.sku))]; const units=lis.reduce((s,li)=>s+(+li.qty||+li.quantity||1),0); const t=Date.parse(o.date||"")||0; return {o,ready:tracked.length>0&&short.length===0,unknown:tracked.length===0,short,units,skus:lis.length,t}; })
     .sort((a,b)=>(a.ready===b.ready?0:a.ready?-1:1)||a.t-b.t);
   const readyN=rows.filter(r=>r.ready).length; const shortN=rows.filter(r=>!r.ready&&!r.unknown).length;
   const age=(t)=>{ if(!t)return ""; const m=Math.floor((Date.now()-t)/60000); if(m<60)return m+"m"; const h=Math.floor(m/60); if(h<24)return h+"h"; return Math.floor(h/24)+"d"; };
@@ -11743,7 +11749,7 @@ function ProductionOrders({production,setProduction,items,onReload}){
 }
 /* Inventory analytics — valuation, value by location, dead stock, movement, top items. Read-only. */
 function InventoryAnalytics({list,log,showMoney=true}){
-  const stock=(list||[]).filter(it=>!(Array.isArray(it.kit)&&it.kit.length));
+  const stock=(list||[]).filter(it=>!(Array.isArray(it.kit)&&it.kit.length&&!it.assembled));   // include ASSEMBLED kits (they hold real stock/value); only virtual kits are excluded
   // Kit / bundle margins: sell price vs rolled-up component cost (BOM). Only kits with a price set.
   const costBySku={}; (list||[]).forEach(it=>{ costBySku[String(it.sku).toLowerCase()]=+it.cost||0; });
   const kitMargins=(list||[]).filter(it=>Array.isArray(it.kit)&&it.kit.length&&+it.price>0).map(it=>{ const cost=it.kit.reduce((s,c)=>s+(costBySku[String(c.sku).toLowerCase()]||0)*(+c.qty||1),0); const price=+it.price||0; const margin=price-cost; const pct=price>0?Math.round(margin/price*100):0; return {sku:it.sku,name:it.name,price,cost:Math.round(cost*100)/100,margin:Math.round(margin*100)/100,pct}; }).sort((a,b)=>b.margin-a.margin);

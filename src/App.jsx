@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="orders-merge-v745";
+const BUILD_TAG="inline-ship-v746";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7514,7 +7514,7 @@ function AppInner(){
           {tab==="returns"&&<Returns returns={returns} setReturns={setReturns} orders={orders} settings={settings} logEmail={logEmail}/>}
           {tab==="pickups"&&<Pickups pickups={pickups} setPickups={setPickups} settings={settings} client={client} isAdmin={isAdmin} showCosts={featureOn("pickupCosts",currentUser,myFlags)}/>}
           {tab==="inventory"&&((isAdmin||isDemo||featureOn("inventory",currentUser,myFlags))
-            ? <Inventory settings={settings} setSettings={setSettings} client={client} showMoney={showMoney} currentUser={currentUser} orders={orders} goShip={goShip} initialView={pendingWmsView} seedPickIds={pendingPickIds} onWmsNavConsumed={()=>{setPendingWmsView(null);setPendingPickIds(null);}}/>
+            ? <Inventory settings={settings} setSettings={setSettings} client={client} showMoney={showMoney} currentUser={currentUser} orders={orders} setOrders={setOrders} onShipped={onShipped} goShip={goShip} initialView={pendingWmsView} seedPickIds={pendingPickIds} onWmsNavConsumed={()=>{setPendingWmsView(null);setPendingPickIds(null);}}/>
             : <WmsPreview currentUser={currentUser}/>)}
           {tab==="invoices"&&<Invoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>}
           {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings} client={client} onShipped={onShipped}/>}
@@ -10296,7 +10296,7 @@ function WmsPreview({currentUser}){
     </div>
   </div>);
 }
-function Inventory({settings,setSettings,client,showMoney=true,currentUser,orders=[],goShip,initialView=null,seedPickIds=null,onWmsNavConsumed}){
+function Inventory({settings,setSettings,client,showMoney=true,currentUser,orders=[],setOrders,onShipped,goShip,initialView=null,seedPickIds=null,onWmsNavConsumed}){
   /* Ship an order straight from the WMS — hands the order to the Ship tab, prefilled, so the warehouse
      flow (To Ship / Pack) connects to the shipping portal. Mirrors the Orders tab's ship(). */
   const shipOrder=(o)=>{ if(!goShip||!o)return; goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email,country:o.country||"United States"},weight:o.weight,reference:o.name,fromOrderId:o.id,refulfill:o.status==="fulfilled"}); };
@@ -10572,7 +10572,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   if(view==="analytics") return (<div className="max-w-5xl space-y-4">{Switcher()}<InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
   if(view==="health") return (<div className="max-w-5xl space-y-4">{Switcher()}<StockHealth list={list} committedBySku={committedBySku} goView={setView} showMoney={showMoney}/></div>);
   if(view==="guide") return (<div className="max-w-5xl space-y-4">{Switcher()}<WmsGuide goView={setView} onReplay={()=>setWelcomed(false)}/></div>);
-  if(view==="toship") return (<div className="max-w-5xl space-y-4">{Switcher()}<ToShip orders={orders} list={list} committedBySku={committedBySku} goView={setView} shipOrder={goShip?shipOrder:null} flow={wmsFlow} setFlow={setWmsFlow}/></div>);
+  if(view==="toship") return (<div className="max-w-5xl space-y-4">{Switcher()}<ToShip orders={orders} list={list} committedBySku={committedBySku} goView={setView} shipOrder={goShip?shipOrder:null} flow={wmsFlow} setFlow={setWmsFlow} client={client} settings={settings} setOrders={setOrders} onShipped={onShipped} goShip={goShip}/></div>);
   if(view==="pick") return (<div className="max-w-5xl space-y-4">{Switcher()}<PickList orders={orders} items={list} seedIds={seedPickIds}/></div>);
   if(view==="pack") return (<div className="max-w-5xl space-y-4">{Switcher()}<PackVerify orders={orders} items={list} shipOrder={goShip?shipOrder:null} settings={settings}/></div>);
   if(view==="scan") return (<div className="max-w-5xl space-y-4">{Switcher()}<ScanReceive items={list} onReceived={patch} reload={load}/></div>);
@@ -11536,8 +11536,11 @@ function PracticeRehearsal({onClose}){
     </div>
   </div>);
 }
-function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFlow}){
+function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFlow,client,settings,setOrders,onShipped,goShip}){
   const standard=flow==="standard";
+  const [shipModal,setShipModal]=useState(null);   // in-place ship: opens the full rate→buy→label modal without leaving the Warehouse
+  const canInlineShip=!!(setOrders&&onShipped&&settings);
+  const openShip=(o)=>{ if(canInlineShip)setShipModal(o); else shipOrder&&shipOrder(o); };
   const stockBySku=useMemo(()=>{ const m={}; (list||[]).forEach(it=>{ if(Array.isArray(it.kit)&&it.kit.length&&!it.assembled)return; m[String(it.sku).toLowerCase()]=+it.onHand||0; }); return m; },[list]);
   const itBySku=useMemo(()=>{ const m={}; (list||[]).forEach(it=>{ m[String(it.sku).toLowerCase()]=it; }); return m; },[list]);
   const [fulfilling,setFulfilling]=useState(null); const [grabbed,setGrabbed]=useState({}); const [packed,setPacked]=useState({}); const [fStep,setFStep]=useState(0);
@@ -11548,7 +11551,7 @@ function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFl
   const [bigPractice,setBigPractice]=useState(false);   // the full guided rehearsal (receive→pick→pack→ship→reorder)
   const openFulfill=(o,isPractice)=>{ setPractice(!!isPractice); setFulfilling(o); setGrabbed({}); setPacked({}); setFStep(0); };
   const startPractice=()=>openFulfill({id:"practice",name:"Practice order #DEMO",customer:"Sample Customer",lineItems:[{sku:"DEMO-SHIRT",title:"Demo T-Shirt (Medium)",qty:1,loc:"A1"},{sku:"DEMO-MUG",title:"Demo Coffee Mug",qty:2,loc:"B2"},{sku:"DEMO-STICKER",title:"Demo Sticker Pack",qty:3,loc:"C3"}]},true);
-  const shipNow=()=>{ const o=fulfilling; setFulfilling(null); if(practice){ setPraiseMsg("🎉 Nice — that's the whole flow! On a real order this would open the Ship tab with your label ready, and your stock would count down when it prints."); setTimeout(()=>setPraiseMsg(null),9000); return; } shipOrder&&shipOrder(o); };
+  const shipNow=()=>{ const o=fulfilling; setFulfilling(null); if(practice){ setPraiseMsg("🎉 Nice — that's the whole flow! On a real order this would open the label ready to buy, right here, and your stock would count down when it prints."); setTimeout(()=>setPraiseMsg(null),9000); return; } openShip(o); };
   const open=(orders||[]).filter(o=>o&&o.status!=="fulfilled"&&Array.isArray(o.lineItems)&&o.lineItems.length);
   // Explode a line into what actually depletes stock — a virtual kit becomes its components.
   const expand=(li)=>{ const it=itBySku[String(li.sku).toLowerCase()]; const q=(+li.qty||+li.quantity||1); if(it&&Array.isArray(it.kit)&&it.kit.length&&!it.assembled)return it.kit.map(c=>({sku:String((c&&c.sku)||"").toLowerCase(),qty:q*(+c.qty||1)})).filter(x=>x.sku); return [{sku:String(li.sku).toLowerCase(),qty:q}]; };
@@ -11571,6 +11574,7 @@ function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFl
       </div>
     </div>
     {bigPractice&&<PracticeRehearsal onClose={()=>setBigPractice(false)}/>}
+    {shipModal&&<OrderShipModal o={shipModal} orderList={open} onNav={setShipModal} setOrders={setOrders} client={client} settings={settings} onShipped={onShipped} goShip={goShip} onClose={()=>setShipModal(null)}/>}
     <div className="grid grid-cols-3 gap-3">
       <Tile label="Orders to ship" value={rows.length}/>
       <Tile label="Ready now" value={readyN} tone={readyN?"text-emerald-600":"text-stone-900"}/>
@@ -11583,7 +11587,7 @@ function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFl
         <div className="shrink-0">{ready?<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700">Ready</span>:unknown?<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-stone-100 text-stone-500">No stock link</span>:<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-amber-100 text-amber-700">Short</span>}</div>
         <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{o.name||o.id}{o.customer?" · "+o.customer:""}</div><div className="text-[11px] text-stone-400 truncate">{skus} line{skus!==1?"s":""} · {units} unit{units!==1?"s":""}{short.length?" · short: "+short.slice(0,3).join(", "):""}{t?" · "+age(t)+" old":""}</div></div>
         {shipOrder&&<div className="shrink-0 flex items-center gap-1.5">
-          <button onClick={()=>shipOrder(o)} title="Open the shipping label right now — skips the pick/pack checklist, just like shipping from Orders" className="text-xs bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1"><Truck className="w-3.5 h-3.5"/>Ship now</button>
+          <button onClick={()=>openShip(o)} title={canInlineShip?"Rate and buy the label right here — no need to leave the Warehouse":"Open the shipping label, skipping the pick/pack checklist"} className="text-xs bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1"><Truck className="w-3.5 h-3.5"/>Ship now</button>
           <button onClick={()=>openFulfill(o)} title="Grab &amp; check off each item first, then ship" className="text-xs bg-white border border-stone-200 text-stone-600 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-50 flex items-center gap-1">Fulfill<ChevronRight className="w-3.5 h-3.5"/></button>
         </div>}
       </div>))}

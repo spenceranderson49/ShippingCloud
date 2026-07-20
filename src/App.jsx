@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v730";
+const BUILD_TAG="addr-v731";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10049,6 +10049,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const [adj,setAdj]=useState(null);
   const [wmsSimple,setWmsSimple]=usePersist("wmsSimple",true);   // entry-level view on by default; reveals full toolset on demand
   const [wmsFlow,setWmsFlow]=usePersist("wmsFlow","simple");      // fulfillment flow: "simple" (grab→ship) or "standard" (pick→pack→ship)
+  const [helpFor,setHelpFor]=useState(null);                       // per-tab help panel (holds the current view id)
   const [view,setView]=useState("stock");
   const [pos,setPos]=useState([]);
   const [suppliers,setSuppliers]=useState([]);
@@ -10273,8 +10274,12 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
       </div>
     </div>))}
     <div className="flex flex-col gap-1"><span className="text-[9px] uppercase tracking-widest text-stone-400 pl-1">View</span>
-      <button onClick={()=>setWmsSimple(s=>!s)} className="text-sm rounded-lg border border-dashed border-stone-300 bg-white px-3 py-1.5 text-stone-500 hover:bg-stone-50 hover:text-stone-700 whitespace-nowrap" title={simple?"Reveal every WMS tool":"Show just the everyday tools"}>{simple?"＋ Show all tools":"− Simpler view"}</button>
+      <div className="flex gap-1.5">
+        <button onClick={()=>setWmsSimple(s=>!s)} className="text-sm rounded-lg border border-dashed border-stone-300 bg-white px-3 py-1.5 text-stone-500 hover:bg-stone-50 hover:text-stone-700 whitespace-nowrap" title={simple?"Reveal every WMS tool":"Show just the everyday tools"}>{simple?"＋ Show all tools":"− Simpler view"}</button>
+        <button onClick={()=>setHelpFor(view)} className="text-sm rounded-lg border border-[#0086E0]/30 bg-[#E6F4FF] text-[#006FBF] px-2.5 py-1.5 font-medium hover:bg-[#d3ecff] flex items-center gap-1 whitespace-nowrap" title="Help & answers for this tab"><Info className="w-4 h-4"/>Help</button>
+      </div>
     </div>
+    {helpFor&&<WmsHelp viewId={helpFor} viewLabel={(NAV_GROUPS.flatMap(g=>g[1]).find(t=>t[0]===helpFor)||[helpFor,helpFor])[1]} onClose={()=>setHelpFor(null)} goGuide={()=>setView("guide")}/>}
   </div>); };
   if(view==="overview") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryOverview list={list} pos={pos} log={log} suppliers={suppliers} orders={orders} showMoney={showMoney} committedBySku={committedBySku} incomingBySku={incomingBySku} goView={setView} onReceive={()=>setView("stock")}/></div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
@@ -11783,6 +11788,64 @@ function ProductionOrders({production,setProduction,items,onReload}){
 }
 /* WMS Guide — an in-app rundown of every tool: what it is, why it helps, and how to use it. Grouped
    to mirror the navigation; each section is collapsible so it stays scannable. */
+/* Per-tab help — a plain-English intro plus real "where people get stuck" Q&A. Keyed by view id;
+   unknown views fall back to a friendly default that points at the Guide. */
+const HELP_CONTENT={
+  overview:{tip:"This is your home base. It gathers the most important things from every other tab so you know where to start.",faqs:[
+    ["What is the blue “Do this next” banner?","It's the single most important thing to do right now — ship ready orders, reorder low items, etc. Click its button to jump straight there."],
+    ["What counts as “needs attention”?","Items that are out of stock, below their reorder point, promised to more orders than you have, POs waiting to be received, or lots expiring soon."],
+    ["Nothing shows up here — is it broken?","No — it means you haven't added products yet, or everything's healthy. Add items on the Stock tab and this fills in."],
+  ]},
+  stock:{tip:"The master list of every product and how many you have. Every other screen reads and changes these numbers.",faqs:[
+    ["How do I add my products?","Click Import from catalog (if you have one), Import a spreadsheet (CSV), or New item. Only a SKU (a short product code) is required.","What's a SKU?"],
+    ["What do On hand / Committed / Available mean?","On hand = what's physically on the shelf. Committed = already promised to open orders. Available = what you can still sell (on hand minus committed)."],
+    ["Why should I set a “Reorder at” number?","When on-hand drops to it, the item shows as Low and appears on Replenish so you reorder before running out."],
+    ["An item's count is wrong — how do I fix it?","Click Adjust on the row, enter a + or − amount and a reason (damage, found, shrinkage…). For a full shelf recount use the Cycle Count tab."],
+    ["What does Move do?","Shifts units between two bins/locations. The total doesn't change — it's just relocating stock."],
+  ]},
+  health:{tip:"A colored picture of your whole inventory so you can see what needs buying at a glance.",faqs:[
+    ["What do the colors mean?","Red = out of stock, orange = low (at/below reorder point), green = healthy, purple = overstocked (above your max)."],
+    ["What's the tick mark on each bar?","That's the item's reorder point — where it flips to “low.” Set it by editing the item."],
+    ["What's the Value $ toggle?","It switches from counting products to showing dollars of stock, so you see where your money is tied up."],
+  ]},
+  replenish:{tip:"Your shopping list — everything that's low, and the draft purchase orders to refill it.",faqs:[
+    ["How does it decide what's low?","Anything where on-hand plus stock already on the way is at or below the reorder point you set."],
+    ["What does “Days left” mean?","How many days until you run out at your recent sell rate. Lower = more urgent."],
+    ["What happens when I click Create draft POs?","It makes one purchase order per supplier with the suggested quantities. They're drafts — review and send them from Purchase Orders."],
+    ["It's empty but I feel low on stuff.","Set a Reorder at number on those items (edit them). Replenish only watches items that have one."],
+  ]},
+  toship:{tip:"Your daily to-do list of orders waiting to go out. This is where the shipping side connects to the warehouse.",faqs:[
+    ["What do Ready / Short / No stock link mean?","Ready = every item is in stock. Short = you're missing some. No stock link = the order's products aren't matched to your inventory yet."],
+    ["What's the difference between One-click and Pick → Pack → Ship?","One-click: grab the items and ship. Pick → Pack → Ship: check items twice (once picking, once packing) for extra accuracy. Pick whichever your team needs."],
+    ["What does Fulfill actually do?","Opens a checklist of the order's items with their locations. Check them off, then Create shipping label — which opens the Ship tab ready to print. Stock drops when it prints."],
+  ]},
+  pick:{tip:"Turns many orders into one shelf-sorted list so you grab everything in a single walk.",faqs:[
+    ["How do I use it?","Tick the orders you want, click Build pick list, then Start pick session and scan each item — lines turn green as you pick."],
+    ["Do I need a barcode scanner?","No — you can type the SKU too. A scanner is just faster."],
+  ]},
+  pack:{tip:"A safety check: scan each item into the box before it ships so nothing wrong goes out.",faqs:[
+    ["What if an item won't scan?","Type its SKU or barcode instead. If it says “isn't on this order,” it's the wrong item for that order."],
+    ["What's the suggested box?","If you've set up Packing Groups + Containers, it tells the packer which box to use."],
+  ]},
+  scan:{tip:"The fast way to add a delivery to your stock — scan each item and it counts up.",faqs:[
+    ["What's a put-away location?","The shelf/bin where that item belongs — shown after each scan so you know where to shelve it."],
+    ["It says “not found.”","That product isn't in your Stock yet, or its barcode isn't set. Add it on the Stock tab first."],
+  ]},
+  pos:{tip:"A checkout register for in-person sales that pulls from the same stock as your online orders.",faqs:[
+    ["Does it charge a credit card?","Not yet — it records the sale, drops the stock, and prints a receipt. You take payment on your own terminal and mark it Card/Cash/Other."],
+    ["Why is an item's price $0?","Set a Sell price on the item (edit it). Point of Sale uses that price."],
+  ]},
+  billing:{tip:"If you store and ship for other brands, this bills them for the work — and can do it automatically.",faqs:[
+    ["How do I bill automatically?","Rate card → add your services and prices. Then Charges → Auto-bill shipped orders → pick a per-order and/or per-unit fee → Generate. Each shipped order becomes charges."],
+    ["Will it double-charge an order?","No — every order is billed once; already-billed orders are skipped."],
+    ["How do I send an invoice?","Invoices tab → Invoice to print a client's bill, then Mark invoiced when they've paid."],
+  ]},
+  pos_default:{},
+};
+const HELP_DEFAULT={tip:"Here's what this tool does and answers to common questions. For the full picture, open the Guide.",faqs:[
+  ["I'm not sure what this tab is for.","Open the Guide (Home → Guide) — it explains every tool in plain English and how they connect."],
+  ["Did I break something?","Almost certainly not. Nothing here deletes stock unless you confirm it. When unsure, close this and check the Guide."],
+]};
 /* The big-picture loop, in plain English — the mental model a first-timer needs before the tools. */
 const WMS_LOOP=[
   ["Add what you sell","List your products and how many you have on the shelf. This is the count the system keeps for you."],
@@ -11836,6 +11899,39 @@ const FEATURE_GUIDE=[
     ["Dropoffs · Mail Boxes · 3PL Requests · Links","Extra counter tools: log packages customers drop off, track mailbox rentals, keep a client request list, and pin quick links.","Everything a busy shipping store or 3PL front desk needs.",["Open each and add entries; click a status to move it along (e.g. pending → shipped)."],"These stand on their own — handy add-ons, not part of the core stock loop."],
   ]],
 ];
+/* WmsHelp — a slide-in help panel for the current tab: a plain-English intro + a searchable FAQ of the
+   places people get stuck, with a link to the full Guide. Rendered from the Switcher so it's on every tab. */
+function WmsHelp({viewId,viewLabel,onClose,goGuide}){
+  const c=HELP_CONTENT[viewId]||HELP_DEFAULT;
+  const [q,setQ]=useState(""); const [open,setOpen]=useState(0);
+  const faqs=(c.faqs||[]).filter(f=>!q.trim()||((f[0]+" "+f[1]).toLowerCase().includes(q.trim().toLowerCase())));
+  return (<div className="fixed inset-0 z-[60] flex justify-end" onClick={onClose}>
+    <div className="absolute inset-0 bg-black/30"/>
+    <div className="relative bg-white w-full max-w-md h-full shadow-xl overflow-y-auto" onClick={e=>e.stopPropagation()}>
+      <div className="sticky top-0 bg-white border-b border-stone-200 px-5 py-3.5 flex items-center justify-between">
+        <div className="font-semibold text-stone-900 flex items-center gap-2"><MessageCircle className="w-4.5 h-4.5 text-[#0086E0]"/>Help · {viewLabel}</div>
+        <button onClick={onClose} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button>
+      </div>
+      <div className="p-5 space-y-4">
+        <p className="text-sm text-stone-600">{c.tip||HELP_DEFAULT.tip}</p>
+        {(c.faqs||[]).length>3&&<div className="relative"><Search className="w-4 h-4 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search questions…" className="w-full border border-stone-300 rounded-lg pl-8 pr-3 py-2 text-sm"/></div>}
+        <div className="space-y-2">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400">Common questions</div>
+          {faqs.length===0&&<div className="text-sm text-stone-400">No questions match — try the full Guide.</div>}
+          {faqs.map((f,i)=>{ const isOpen=open===i; return (<div key={i} className="border border-stone-200 rounded-lg overflow-hidden">
+            <button onClick={()=>setOpen(isOpen?-1:i)} className="w-full text-left px-3 py-2.5 flex items-start gap-2 hover:bg-stone-50">
+              <span className="text-sm font-medium text-stone-800 flex-1">{f[0]}</span>
+              <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 mt-0.5 transition ${isOpen?"rotate-90":""}`}/>
+            </button>
+            {isOpen&&<div className="px-3 pb-3 text-[13px] text-stone-600">{f[1]}</div>}
+          </div>); })}
+        </div>
+        <button onClick={()=>{onClose();goGuide&&goGuide();}} className="w-full text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2.5 font-medium hover:bg-stone-200 flex items-center justify-center gap-1.5"><MessageCircle className="w-4 h-4"/>Open the full Guide</button>
+        <p className="text-[11px] text-stone-400 text-center">Still stuck? The Guide walks through the whole system step by step.</p>
+      </div>
+    </div>
+  </div>);
+}
 function WmsGuide({goView}){
   const [open,setOpen]=useState(-1); const [words,setWords]=useState(false);
   return (<div className="space-y-3 max-w-3xl">

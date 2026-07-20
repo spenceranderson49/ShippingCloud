@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v729";
+const BUILD_TAG="addr-v730";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -11783,45 +11783,78 @@ function ProductionOrders({production,setProduction,items,onReload}){
 }
 /* WMS Guide — an in-app rundown of every tool: what it is, why it helps, and how to use it. Grouped
    to mirror the navigation; each section is collapsible so it stays scannable. */
+/* The big-picture loop, in plain English — the mental model a first-timer needs before the tools. */
+const WMS_LOOP=[
+  ["Add what you sell","List your products and how many you have on the shelf. This is the count the system keeps for you."],
+  ["An order comes in","A customer buys something. It shows up in your orders, waiting to be sent."],
+  ["Grab, pack, and ship it","You collect the items, put them in a box, and print the shipping label — same as you do today."],
+  ["The count drops by itself","The second that label prints, the system subtracts those items. You never re-count by hand, and your online store updates so you can't oversell."],
+  ["It warns you when low","When something gets down to the level you set, it flags it and helps you buy more from your supplier."],
+  ["New stock arrives → count goes up","You scan the delivery in, and the shelf count climbs back up. Then the loop repeats."],
+];
+const WMS_WORDS=[
+  ["SKU","Just a short code for one product, like TSHIRT-BLK-M. Every product has one so the system can tell them apart."],
+  ["On hand","How many you physically have on the shelf right now."],
+  ["Committed","Units already promised to orders that haven't shipped yet."],
+  ["Available","What you can still sell — on hand minus committed."],
+  ["Reorder point","A low-water mark you set. Drop to it and the system says \"time to buy more.\""],
+  ["Bin / location","Where an item lives — a shelf, a zone, or a whole warehouse."],
+  ["Purchase order (PO)","An order you send your supplier to restock. \"Receiving\" it adds the stock back in."],
+];
+/* Each tool: name, what it is (plain), why it helps, exactly how to use it, and how it connects. */
 const FEATURE_GUIDE=[
-  ["Start here","Turn on WMS mode (Admin → Features) and the daily loop is: an order comes in → To Ship → Fulfill (pick & pack) → the Ship tab prints the label → stock counts itself down and Shopify updates. Beginners see a lean set of tools; ＋ Show all tools reveals the rest.",[]],
-  ["Home",null,[
-    ["Overview","Your command center — health tiles, alerts, and recent activity.","See what needs attention the moment you open the warehouse, with a “Do this next” banner that names the single most important task.",["Open Warehouse — it lands here.","Read the Do-this-next banner and Needs-attention list.","Use the quick actions to jump to the right tool."]],
-    ["Guide","This page.","Learn any feature without leaving the app.","Click a section to expand it."],
-    ["Health","A color-coded chart of every item’s stock level.","Spot what’s out, low, healthy, or overstocked at a glance instead of scanning a table.",["Open Health.","Click a colored card (Out / Low / Healthy / Over) to filter.","The tick on each bar is that item’s reorder point."]],
+  ["🏠 Home — where you land",null,[
+    ["Overview","The front page of your warehouse. It shows a big \"Do this next\" line, anything that needs attention (low stock, orders to ship), and what happened recently.","You never have to wonder where to start — it tells you the one thing to do right now.",["Click the Warehouse tab — you land here.","Read the blue \"Do this next\" banner and do what it says.","Or tap a quick-action button to jump straight to a tool."],"This is your home base. Everything it points to lives in the other tabs — it just gathers the important bits in one place."],
+    ["Guide","This page you're reading.","Learn any part of the system without leaving the app or calling anyone.",["Tap a section to open it.","Tap a tool to read what it does and exactly how to use it."],"It doesn't change anything — it's here whenever you're unsure."],
+    ["Health","A colored picture of your whole inventory. Every product is a bar: red = out, orange = low, green = healthy, purple = too much. Flip to \"Value $\" to see it in dollars.","See what needs buying in two seconds instead of reading a spreadsheet.",["Open Health.","Glance at the four colored cards up top — click one (say, orange \"Low\") to see just those.","Each bar's little tick mark is that product's reorder point."],"It reads straight from your Stock counts. Click \"Reorder low stock\" and it hands the low items to Replenish."],
   ]],
-  ["Inventory",null,[
-    ["Stock","Every item with on-hand, committed, available and incoming.","One shared source of truth; edit, adjust, move, import, and print labels from one place.",["Add items (import, CSV, or by hand).","Set on-hand and a Reorder at number.","Use Adjust for shrinkage/damage, Move to shift between bins, Print labels for barcodes."]],
-    ["Replenish","Everything at or below its reorder point, counting inbound stock.","Never run out and never over-order — it forecasts days-left and drafts POs to the cheapest vendor.",["Open Replenish.","Review suggested quantities and Days left.","Create draft POs (one per supplier), or Tune reorder points from your sell rate."]],
-    ["Backorders","Where open orders need more than you have.","Know exactly what’s short and who’s waiting before customers ask.",["Open Backorders.","See short SKUs and whether inbound POs cover them.","Expand a row to see the waiting orders."]],
-    ["Cycle Count","Count a shelf and reconcile it to the system.","Keep your numbers honest with a full audit trail — only differences are changed.",["Open Cycle Count, pick a category.","Type what you physically have.","Apply — variances post to the ledger."]],
-    ["Production","Build bundles from their parts (a bill of materials).","Turn components into finished kits and keep both counts accurate.",["Add a kit/BOM to an item (edit item).","Production → New order → pick the assembly and quantity.","Complete — parts are consumed, the finished good is stocked."]],
+  ["📦 Inventory — what you have",null,[
+    ["Stock","The master list of every product with its counts: on hand, committed, available, and on the way. This is the heart of the system.","One honest number for every product, shared by everyone on your team.",["Add products — Import from your catalog, upload a spreadsheet, or click New item (only a SKU is required).","Type how many you have on hand.","Set a \"Reorder at\" number so it warns you before you run out.","Use Adjust for damage/shrinkage, Move to shift between bins, or Print labels for barcodes."],"Everything else reads and writes this. When you ship, sell, receive, or count, THIS is the number that changes."],
+    ["Replenish","Your shopping list. It shows everything that's low — after counting stock already on the way — and how many days you have left before it runs out.","Never run out, never over-buy, and always order from the cheapest supplier automatically.",["Open Replenish (the number in the tab is how many are low).","Check the suggested quantities and \"Days left.\"","Click Create draft POs — it makes one order per supplier for you to review and send."],"It reads your Stock and Suppliers, and the orders it creates go straight to the Purchase Orders tab."],
+    ["Backorders","A list of products where your orders need more than you have on the shelf.","Know exactly what you're short on — and which customers are waiting — before they email you.",["Open Backorders.","See each short product and whether stock already on order will cover it.","Click a row to see which orders are waiting."],"It compares your open orders against your Stock. Fixing it usually means a trip to Replenish."],
+    ["Cycle Count","A stock-check tool. Pick a shelf, count what's really there, and it fixes the number for you.","Keeps your counts honest — miscounts and quiet losses get caught, with a record of every change.",["Open Cycle Count and pick a category.","Walk the shelf and type what you actually see.","Click Apply — only the differences are corrected, and each is logged."],"It writes corrections back to Stock, so every other screen instantly shows the true number."],
+    ["Production","For when you build a product out of other products (like a gift set made of a mug + a shirt).","Turn parts into finished bundles while keeping both counts correct — no manual math.",["First, on the product, list its parts (edit the item → add a kit).","Production → New order → pick the bundle and how many to build.","Click Complete — the parts are used up and the finished bundle is added to Stock."],"It pulls the parts from Stock and adds the finished item back to Stock."],
   ]],
-  ["Fulfill",null,[
-    ["To Ship","The daily work queue of orders to send out.","Always know what’s ready to ship and fulfill it in one guided click.",["Open To Ship.","Pick your Fulfillment steps: One-click or Pick → Pack → Ship.","Click Fulfill, check items off, Create shipping label."]],
-    ["Runner","The mobile app for a phone + scanner.","Do warehouse work on the floor with big buttons, one task at a time.",["Open Runner on a phone.","Pick Pull, Put, Receive, or Count.","Scan and go."]],
-    ["Pick Lists","Batch-pick many orders into one bin-sorted sheet.","Walk the warehouse once for many orders, with scan-to-pick progress.",["Select open orders → Build pick list.","Start pick session and scan each item.","Lines check off green as you go."]],
-    ["Pack Verify","Scan each item into the box before shipping.","Stop mis-ships — nothing’s verified until every line matches — and get the right box suggested.",["Open Pack Verify, pick an order.","Scan each item in.","When verified, Ship this order."]],
-    ["Packing Groups","Rules that pick the right box automatically.","Consistent, correct cartonization without guesswork.",["Add boxes under Setup → Containers.","Packing Groups → New rule → match a category/keyword to a box.","Pack Verify then suggests it."]],
-    ["Scan Receive","Scan a delivery in.","Fast put-away — each scan adds stock and tells you which bin it goes in.",["Open Scan Receive.","Scan a barcode or type a SKU, set qty.","It shows the put-away location."]],
+  ["🚚 Fulfill — getting orders out",null,[
+    ["To Ship","Your daily to-do list of orders waiting to go out, greenest (ready) first. This is where most days start.","Always know what's ready and finish an order in one guided flow, without hunting around.",["Open To Ship.","Up top, choose how careful you want to be: One-click (grab → ship) or Pick → Pack → Ship (check items twice).","Click Fulfill on an order, tick off each item, then Create shipping label."],"This is the bridge to the shipping side: finishing an order here opens the Ship tab with the label ready, and once it prints your Stock drops automatically."],
+    ["Runner","A phone-friendly version of the warehouse for someone walking the floor with a scanner.","Big buttons, one job at a time — no laptop needed at the shelf.",["Open Runner on a phone.","Tap Pull (grab for orders), Put (put away), Receive (scan a delivery in), or Count.","Scan and go."],"Every button here does the same thing as the full tabs — it just writes to the same Stock, from your pocket."],
+    ["Pick Lists","When you have lots of orders, this makes one tidy list sorted by shelf location so you grab everything in one walk.","Fewer trips around the warehouse; scan items off as you grab them.",["Tick the orders you want, click Build pick list.","Click Start pick session and scan each item.","Lines turn green as you pick them."],"It gathers items across many To Ship orders; after picking you move to Pack Verify."],
+    ["Pack Verify","A safety check at the packing table: scan each item into the box before it ships.","Stops wrong items going out — the order isn't \"done\" until every item is scanned.",["Open Pack Verify and pick an order.","Scan each item as it goes in the box (it even suggests which box).","When everything matches, click Ship this order."],"It's the last stop before the label. It reads the order's items and hands off to the Ship tab."],
+    ["Packing Groups","Simple rules that tell the packer which box to use for which products.","Consistent boxing without anyone guessing.",["First add your boxes under Setup → Containers.","Packing Groups → New rule → match a category or word to a box.","Now Pack Verify suggests that box automatically."],"It connects your Containers list to the Pack Verify step."],
+    ["Scan Receive","The fast way to put a delivery into stock: scan each item and it adds to the count.","Speedy restocking, and it tells you which shelf each item belongs on.",["Open Scan Receive.","Scan a barcode (or type a SKU) and set how many.","It shows the put-away location so you know where to shelve it."],"Each scan adds to Stock — the opposite of shipping. Great after a supplier delivery arrives."],
   ]],
-  ["Purchasing",null,[
-    ["Purchase Orders","Order stock from suppliers and receive it.","Track what’s on the way and land true costs including freight.",["New PO → pick supplier, add lines.","Receive when it arrives (add Landed cost for freight).","Print to email the vendor."]],
-    ["Suppliers","Your vendor list.","Faster purchasing and smarter replenishment (lead times).",["New supplier → name, contact, lead time.","Used by POs and Replenish."]],
+  ["🛒 Purchasing — buying more",null,[
+    ["Purchase Orders","Where you order stock from suppliers and check it in when it arrives.","Track what's on the way, and record true costs including freight.",["Click New PO, pick a supplier, add the products and quantities.","When the boxes arrive, open the PO and click Receive (add a Landed cost for freight if you want accurate costs).","Print the PO to email it to your vendor."],"Replenish creates these for you; receiving one adds the stock to your Stock counts."],
+    ["Suppliers","Your address book of vendors — who you buy from, and how long they take to deliver.","Faster ordering and smarter reorder timing.",["Click New supplier and fill in the name, contact, and lead time (delivery days)."],"Purchase Orders and Replenish both use this list."],
   ]],
-  ["Setup & the rest",null,[
-    ["Warehouses","Name your warehouses, zones and bins — and see what’s in each.","Directed put-away and a clear picture of where stock lives.",["Add locations (warehouse / zone / bin).","Expand a location to see its contents."]],
-    ["Containers","Your box & mailer catalog.","Feeds packing suggestions and cartonization.",["Add each box with size, weight limit, cost."]],
-    ["Point of Sale","A register that draws down the same stock.","Sell in person without a separate system.",["Set Sell prices on items.","Scan to a cart, pick Card/Cash/Other, Charge.","Stock drops, receipt prints."]],
-    ["3PL Billing","Bill clients for warehouse work.","Turn fulfillment into revenue — automatically.",["Rate card → add services & rates.","Charges → Auto-bill shipped orders (per-order/per-unit).","Invoices → print, mark invoiced."]],
-    ["Analytics","Valuation, ABC, turns, dead stock, forecast, kit margins.","Understand what your inventory is worth and doing.",["Open Analytics — read the tiles and tables."]],
-    ["Dropoffs / Mail Boxes / 3PL Requests / Links","Front-desk logs, mailbox rentals, a client request queue, and custom shortcuts.","Round out a full shipping-store / 3PL counter.",["Open each and add entries; statuses advance on click."]],
+  ["⚙️ Setup & extras",null,[
+    ["Warehouses / Bins","Name your storage spots — warehouses, zones, or shelves — and see what's stored in each.","Tell staff exactly where to put and find things.",["Add your locations (a whole warehouse, a zone, or a single bin).","Expand any location to see what's inside it."],"These locations show up when you receive, move, and put away stock."],
+    ["Containers","Your list of boxes and mailers, with their sizes and weight limits.","Feeds the \"suggested box\" at packing.",["Add each box with its size, weight limit, and cost."],"Packing Groups points rules at these boxes; Pack Verify shows the suggestion."],
+    ["Point of Sale","A checkout register for selling in person — it pulls from the same stock as your online orders.","Sell over a counter without a separate system or double-counting.",["Set a Sell price on your products (edit the item).","Open Point of Sale, scan items into the cart, pick Card / Cash / Other, and click Charge.","Stock drops and a receipt prints."],"A sale here lowers the same Stock your online orders use."],
+    ["3PL Billing","If you store and ship for other brands, this bills them for the work.","Turn your warehouse work into invoices — automatically.",["Rate card → add your services and prices (pick fee, pack fee, storage…).","Charges → Auto-bill shipped orders → pick a per-order and/or per-unit fee → Generate.","Invoices → print a client's bill and mark it paid."],"It reads your shipped orders and turns each into charges — no manual tallying."],
+    ["Analytics","The numbers behind your stock — what it's worth, what's selling, what's collecting dust.","Understand your inventory like a pro without a spreadsheet.",["Open Analytics and read the tiles and tables (value, best/worst sellers, dead stock, forecast)."],"It's a read-only view of everything your Stock and shipments have recorded."],
+    ["Dropoffs · Mail Boxes · 3PL Requests · Links","Extra counter tools: log packages customers drop off, track mailbox rentals, keep a client request list, and pin quick links.","Everything a busy shipping store or 3PL front desk needs.",["Open each and add entries; click a status to move it along (e.g. pending → shipped)."],"These stand on their own — handy add-ons, not part of the core stock loop."],
   ]],
 ];
 function WmsGuide({goView}){
-  const [open,setOpen]=useState(0);
+  const [open,setOpen]=useState(-1); const [words,setWords]=useState(false);
   return (<div className="space-y-3 max-w-3xl">
-    <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><MessageCircle className="w-5 h-5 text-[#0086E0]"/>Warehouse guide</h2><p className="text-sm text-stone-500 mt-0.5">Every tool — what it is, why it helps, and how to use it. Tap a section to open it.</p></div>
+    <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><MessageCircle className="w-5 h-5 text-[#0086E0]"/>Warehouse guide</h2><p className="text-sm text-stone-500 mt-0.5">New here? Start with the big picture, then open any tool for exactly what it does and how to use it.</p></div>
+    {/* Big picture — always open */}
+    <div className="rounded-2xl border border-[#0086E0]/25 bg-gradient-to-br from-[#f2f8fd] to-white p-5">
+      <div className="text-sm font-semibold text-stone-900 mb-1">The big picture — how it all works together</div>
+      <p className="text-[13px] text-stone-600 mb-3">Think of it as a smart stockroom that keeps count for you. It's one simple loop:</p>
+      <div className="space-y-2">
+        {WMS_LOOP.map(([t,d],i)=>(<div key={i} className="flex gap-3 items-start"><div className="w-6 h-6 rounded-full bg-[#0086E0] text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{i+1}</div><div><span className="text-[13px] font-semibold text-stone-800">{t}.</span> <span className="text-[13px] text-stone-600">{d}</span></div></div>))}
+      </div>
+      <p className="text-[13px] text-stone-500 mt-3">Every tool below is just a helper for one of those six steps.</p>
+    </div>
+    {/* Words to know */}
+    <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <button onClick={()=>setWords(w=>!w)} className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-stone-50"><span className="text-sm font-semibold text-stone-900 flex-1">A few words to know</span><ChevronRight className={`w-4 h-4 text-stone-400 transition ${words?"rotate-90":""}`}/></button>
+      {words&&<div className="px-4 pb-4 space-y-2">{WMS_WORDS.map(([w,d])=>(<div key={w} className="text-[13px]"><b className="text-stone-800">{w}</b> <span className="text-stone-500">— {d}</span></div>))}</div>}
+    </div>
+    {/* Tool sections */}
     {FEATURE_GUIDE.map(([title,blurb,tools],i)=>{ const isOpen=open===i; return (<div key={title} className="border border-stone-200 rounded-xl bg-white overflow-hidden">
       <button onClick={()=>setOpen(isOpen?-1:i)} className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-stone-50">
         <span className="text-sm font-semibold text-stone-900 flex-1">{title}</span>
@@ -11829,11 +11862,12 @@ function WmsGuide({goView}){
       </button>
       {isOpen&&<div className="px-4 pb-4 space-y-3">
         {blurb&&<p className="text-sm text-stone-600 -mt-1">{blurb}</p>}
-        {(tools||[]).map(([name,what,benefit,how])=>(<div key={name} className="border border-stone-100 rounded-lg p-3 bg-stone-50/50">
+        {(tools||[]).map(([name,what,benefit,how,fits])=>(<div key={name} className="border border-stone-100 rounded-lg p-3.5 bg-stone-50/50">
           <div className="text-sm font-semibold text-stone-800">{name}</div>
-          <div className="text-[13px] text-stone-600 mt-0.5">{what}</div>
-          <div className="text-[13px] text-emerald-700 mt-1 flex items-start gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0"/>{benefit}</div>
-          {Array.isArray(how)&&how.length>0&&<ol className="mt-1.5 space-y-0.5 text-[13px] text-stone-500 list-decimal list-inside">{how.map((h,j)=><li key={j}>{h}</li>)}</ol>}
+          <div className="text-[13px] text-stone-600 mt-1">{what}</div>
+          <div className="text-[13px] text-emerald-700 mt-1.5 flex items-start gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0"/><span><b>Why it helps:</b> {benefit}</span></div>
+          {Array.isArray(how)&&how.length>0&&<div className="mt-2"><div className="text-[11px] uppercase tracking-wide text-stone-400 mb-0.5">How to use it</div><ol className="space-y-0.5 text-[13px] text-stone-600 list-decimal list-inside">{how.map((h,j)=><li key={j}>{h}</li>)}</ol></div>}
+          {fits&&<div className="text-[12px] text-[#0086E0] mt-2 flex items-start gap-1.5 bg-sky-50/70 rounded-lg px-2.5 py-1.5"><Boxes className="w-3.5 h-3.5 mt-0.5 shrink-0"/><span><b>How it connects:</b> {fits}</span></div>}
         </div>))}
       </div>}
     </div>); })}

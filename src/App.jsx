@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v728";
+const BUILD_TAG="addr-v729";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10278,7 +10278,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   </div>); };
   if(view==="overview") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryOverview list={list} pos={pos} log={log} suppliers={suppliers} orders={orders} showMoney={showMoney} committedBySku={committedBySku} incomingBySku={incomingBySku} goView={setView} onReceive={()=>setView("stock")}/></div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
-  if(view==="health") return (<div className="max-w-5xl space-y-4"><Switcher/><StockHealth list={list} committedBySku={committedBySku} goView={setView}/></div>);
+  if(view==="health") return (<div className="max-w-5xl space-y-4"><Switcher/><StockHealth list={list} committedBySku={committedBySku} goView={setView} showMoney={showMoney}/></div>);
   if(view==="guide") return (<div className="max-w-5xl space-y-4"><Switcher/><WmsGuide goView={setView}/></div>);
   if(view==="toship") return (<div className="max-w-5xl space-y-4"><Switcher/><ToShip orders={orders} list={list} committedBySku={committedBySku} goView={setView} shipOrder={goShip?shipOrder:null} flow={wmsFlow} setFlow={setWmsFlow}/></div>);
   if(view==="pick") return (<div className="max-w-5xl space-y-4"><Switcher/><PickList orders={orders} items={list}/></div>);
@@ -11848,8 +11848,9 @@ const HEALTH_STAT={
   ok:{label:"Healthy",bar:"bg-emerald-500",tile:"text-emerald-600",pill:"bg-emerald-100 text-emerald-700",dot:"bg-emerald-500"},
   over:{label:"Overstocked",bar:"bg-violet-500",tile:"text-violet-600",pill:"bg-violet-100 text-violet-700",dot:"bg-violet-500"},
 };
-function StockHealth({list,committedBySku,goView}){
-  const [filter,setFilter]=useState("all"); const [q,setQ]=useState("");
+function StockHealth({list,committedBySku,goView,showMoney=true}){
+  const [filter,setFilter]=useState("all"); const [q,setQ]=useState(""); const [metric,setMetric]=useState("units");
+  const money=metric==="value"&&showMoney;
   const stock=(list||[]).filter(it=>!(Array.isArray(it.kit)&&it.kit.length&&!it.assembled));
   const rows=stock.map(it=>{
     const onHand=+it.onHand||0, reorder=+it.reorder||0, max=+it.maxStock||0;
@@ -11857,21 +11858,32 @@ function StockHealth({list,committedBySku,goView}){
     let status="ok";
     if(onHand<=0)status="out"; else if(reorder>0&&onHand<=reorder)status="low"; else if(max>0&&onHand>max)status="over";
     const ceil=Math.max(onHand,max,reorder*2,1);
-    return {sku:it.sku,name:it.name||it.sku,cat:it.category||"",onHand,reorder,max,cmt,avail,status,fillPct:Math.round(onHand/ceil*100),minPct:reorder>0?Math.round(reorder/ceil*100):null,maxPct:max>0?Math.round(max/ceil*100):null};
+    return {sku:it.sku,name:it.name||it.sku,cat:it.category||"",onHand,reorder,max,cmt,avail,cost:+it.cost||0,value:Math.round(onHand*(+it.cost||0)*100)/100,status,fillPct:Math.round(onHand/ceil*100),minPct:reorder>0?Math.round(reorder/ceil*100):null,maxPct:max>0?Math.round(max/ceil*100):null};
   });
   const rank={out:0,low:1,over:2,ok:3};
-  const counts={out:0,low:0,ok:0,over:0}; rows.forEach(r=>counts[r.status]++);
-  const total=rows.length||1;
+  // counts = number of SKUs per state; vals = dollar value of stock per state.
+  const counts={out:0,low:0,ok:0,over:0}; const vals={out:0,low:0,ok:0,over:0}; rows.forEach(r=>{counts[r.status]++; vals[r.status]+=r.value;});
+  const metricOf=(k)=>money?vals[k]:counts[k];
+  const total=(money?rows.reduce((s,r)=>s+r.value,0):rows.length)||1;
+  const totalValue=Math.round(rows.reduce((s,r)=>s+r.value,0)*100)/100;
+  const fmtMoney=(n)=>"$"+(Math.round((+n||0))).toLocaleString();
   const shown=rows.filter(r=>(filter==="all"||r.status===filter)&&(!q.trim()||(r.sku+" "+r.name).toLowerCase().includes(q.trim().toLowerCase()))).sort((a,b)=>rank[a.status]-rank[b.status]||String(a.name).localeCompare(b.name));
-  const Tile=({k})=>{ const s=HEALTH_STAT[k]; const on=filter===k; return (<button onClick={()=>setFilter(on?"all":k)} className={`text-left border rounded-xl bg-white px-4 py-3 transition ${on?"border-current "+s.tile:"border-stone-200 hover:border-stone-300"}`}><div className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 rounded-full ${s.dot}`}></span><div className="text-[11px] uppercase tracking-wide text-stone-400">{s.label}</div></div><div className={`text-2xl font-semibold mt-0.5 ${counts[k]?s.tile:"text-stone-300"}`}>{counts[k]}</div></button>); };
+  const Tile=({k})=>{ const s=HEALTH_STAT[k]; const on=filter===k; const v=metricOf(k); return (<button onClick={()=>setFilter(on?"all":k)} className={`text-left border rounded-xl bg-white px-4 py-3 transition ${on?"border-current "+s.tile:"border-stone-200 hover:border-stone-300"}`}><div className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 rounded-full ${s.dot}`}></span><div className="text-[11px] uppercase tracking-wide text-stone-400">{s.label}</div></div><div className={`text-2xl font-semibold mt-0.5 tabular-nums ${v?s.tile:"text-stone-300"}`}>{money?fmtMoney(v):v}</div>{money&&<div className="text-[11px] text-stone-400">{counts[k]} SKU{counts[k]!==1?"s":""}</div>}</button>); };
+  // Plain-English summary — one friendly sentence about what needs attention.
+  const needN=counts.out+counts.low; const needV=Math.round((vals.out+vals.low)*100)/100;
+  const summary=rows.length===0?"Add a few products on the Stock tab and this fills in.":needN===0?"Everything's in good shape — nothing's low or out right now. 🎉":`${needN} of your ${rows.length} products ${needN===1?"needs":"need"} attention${showMoney&&needV>0?` (about ${fmtMoney(needV)} of stock)`:""} — they're low or out. Reordering keeps you from running dry.`;
   return (<div className="space-y-4">
-    <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-[#0086E0]"/>Stock health</h2><p className="text-sm text-stone-500 mt-0.5">Every item by how much stock it has — <b className="text-rose-600">out</b>, <b className="text-amber-600">low</b>, <b className="text-emerald-600">healthy</b>, or <b className="text-violet-600">overstocked</b>. Click a card to filter; the tick on each bar is its reorder point.</p></div>
+    <div className="flex items-start justify-between gap-3 flex-wrap">
+      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-[#0086E0]"/>Stock health</h2><p className="text-sm text-stone-500 mt-0.5">Every item by how much stock it has — <b className="text-rose-600">out</b>, <b className="text-amber-600">low</b>, <b className="text-emerald-600">healthy</b>, or <b className="text-violet-600">overstocked</b>. Click a card to filter; the tick on each bar is its reorder point.</p></div>
+      {showMoney&&<div className="shrink-0"><div className="text-[9px] uppercase tracking-widest text-stone-400 pl-1 mb-1">Show</div><div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-xs"><button onClick={()=>setMetric("units")} className={`px-2.5 py-1.5 rounded-md ${!money?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>Count</button><button onClick={()=>setMetric("value")} className={`px-2.5 py-1.5 rounded-md ${money?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}>Value $</button></div></div>}
+    </div>
+    <div className={`rounded-xl border px-4 py-3 text-sm ${needN>0?"bg-amber-50/60 border-amber-200 text-amber-800":"bg-emerald-50/50 border-emerald-200 text-emerald-800"}`}>{summary}</div>
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{["out","low","ok","over"].map(k=><Tile key={k} k={k}/>)}</div>
     {/* Distribution bar */}
     <div className="border border-stone-200 rounded-xl bg-white p-4">
-      <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Mix across {rows.length} SKU{rows.length!==1?"s":""}</div>
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2 flex items-center justify-between"><span>Mix across {rows.length} SKU{rows.length!==1?"s":""}{money?" — by value":""}</span>{showMoney&&<span className="normal-case tracking-normal text-stone-500">Total stock value {fmtMoney(totalValue)}</span>}</div>
       <div className="flex h-3 rounded-full overflow-hidden bg-stone-100 gap-[2px]">
-        {["out","low","ok","over"].map(k=>counts[k]>0?<div key={k} className={HEALTH_STAT[k].bar} style={{width:(counts[k]/total*100)+"%"}} title={`${HEALTH_STAT[k].label}: ${counts[k]}`}/>:null)}
+        {["out","low","ok","over"].map(k=>metricOf(k)>0?<div key={k} className={HEALTH_STAT[k].bar} style={{width:(metricOf(k)/total*100)+"%"}} title={`${HEALTH_STAT[k].label}: ${money?fmtMoney(metricOf(k)):metricOf(k)}`}/>:null)}
       </div>
     </div>
     <div className="flex items-center gap-2 flex-wrap">
@@ -11885,7 +11897,7 @@ function StockHealth({list,committedBySku,goView}){
         <div className="flex items-center gap-2 mb-1.5">
           <span className={`text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 ${s.pill} shrink-0`}>{r.status==="ok"?"Healthy":r.status==="out"?"Out":r.status==="low"?"Low":"Over"}</span>
           <div className="flex-1 min-w-0"><span className="text-sm text-stone-800">{r.name}</span> <span className="text-[11px] text-stone-400">{r.sku}{r.cat?" · "+r.cat:""}</span></div>
-          <div className="text-sm shrink-0 tabular-nums"><b className="text-stone-900">{r.onHand}</b><span className="text-stone-400 text-xs">{r.max>0?" / "+r.max:""} on hand</span></div>
+          <div className="text-sm shrink-0 tabular-nums text-right"><b className="text-stone-900">{r.onHand}</b><span className="text-stone-400 text-xs">{r.max>0?" / "+r.max:""} on hand</span>{money&&<span className="block text-[11px] text-stone-500">{fmtMoney(r.value)} in stock</span>}</div>
         </div>
         <div className="relative h-2.5 rounded-full bg-stone-100 overflow-hidden" title={`${r.name}: ${r.onHand} on hand${r.reorder?", reorder at "+r.reorder:""}${r.max?", max "+r.max:""}${r.cmt?", "+r.cmt+" committed":""}`}>
           <div className={`h-full rounded-full ${s.bar}`} style={{width:Math.max(r.onHand>0?4:0,r.fillPct)+"%"}}/>

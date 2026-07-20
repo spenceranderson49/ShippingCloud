@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="ratesafe-v736";
+const BUILD_TAG="shipwelcome-v737";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7345,6 +7345,7 @@ function AppInner(){
      really happens: signing out in ANOTHER tab clears the shared "session" key and the storage
      listener re-renders this tab with currentUser=null. */
   const [fedexPrompt,setFedexPrompt]=usePersist("fedexPrompt",{seen:false});
+  const [shipWelcome,setShipWelcome]=usePersist("shipWelcome",{seen:false});
   // The "Get your own FedEx account" welcome popup is for BRAND-NEW signups only —
   // never nag an existing login with it. Accounts carry a createdAt at signup; a
   // recent one means new, a missing/old one means an established (or legacy) login.
@@ -7372,7 +7373,9 @@ function AppInner(){
         <button onClick={()=>{lsSet("postDemo","request");lsSet("session",null);window.location.reload();}} className="bg-white/20 hover:bg-white/30 rounded-lg px-2.5 py-1 text-xs font-semibold">Create Your Real Account</button>
         <button onClick={()=>{lsSet("session",null);window.location.reload();}} className="bg-white/10 hover:bg-white/20 rounded-lg px-2.5 py-1 text-xs">Exit Demo</button>
       </div>}
-      {!isDemo&&!isAdmin&&!adminReturn&&CLOUD.mode==="cloud"&&!fedexPrompt.seen&&isNewAccount&&<FirstRunFedEx user={currentUser} onClose={()=>setFedexPrompt({seen:true})}/>}
+      {!isDemo&&!isAdmin&&!isCompanyAdmin&&!adminReturn&&CLOUD.mode==="cloud"&&!shipWelcome.seen&&isNewAccount&&<ShipWelcome brandName={(brand&&(brand.name1||brand.name2)?((brand.name1||"")+(brand.name2||"")).trim():BRAND.product)||"your shipping portal"} goTab={(t)=>setTab(t)} onClose={()=>setShipWelcome({seen:true})}/>}
+      {/* FedEx-account offer waits until the welcome tour is done so two modals never stack */}
+      {!isDemo&&!isAdmin&&!adminReturn&&CLOUD.mode==="cloud"&&shipWelcome.seen&&!fedexPrompt.seen&&isNewAccount&&<FirstRunFedEx user={currentUser} onClose={()=>setFedexPrompt({seen:true})}/>}
       {!custom.hideAssistant&&<AssistantChat who={isDemo?"demo":isAdmin?"admin":"customer"} getContext={assistantContext} onAction={onAssistantAction}/>}
       {shopPush&&<div className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] max-w-lg w-[92vw] sm:w-auto rounded-xl shadow-2xl border px-4 py-3 text-sm flex items-start gap-2.5 ${shopPush.ok?"bg-emerald-50 border-emerald-300 text-emerald-800":"bg-rose-50 border-rose-300 text-rose-800"}`}>
         {shopPush.ok?<CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5"/>:<AlertTriangle className="w-5 h-5 shrink-0 mt-0.5"/>}
@@ -12164,6 +12167,53 @@ function WmsWelcome({onClose,goView}){
           <button onClick={()=>go("stock")} className="text-xs border border-stone-200 rounded-xl px-2 py-3 hover:border-[#0086E0]/40 font-medium text-stone-700 flex flex-col items-center gap-1"><Plus className="w-4 h-4 text-[#0086E0]"/>Add products</button>
           <button onClick={()=>go("toship")} className="text-xs border border-stone-200 rounded-xl px-2 py-3 hover:border-[#0086E0]/40 font-medium text-stone-700 flex flex-col items-center gap-1"><Sparkles className="w-4 h-4 text-[#0086E0]"/>Practice order</button>
           <button onClick={()=>go("guide")} className="text-xs border border-stone-200 rounded-xl px-2 py-3 hover:border-[#0086E0]/40 font-medium text-stone-700 flex flex-col items-center gap-1"><MessageCircle className="w-4 h-4 text-[#0086E0]"/>Read the Guide</button>
+        </div>
+      ):null}
+      <div className="flex items-center justify-between mt-5">
+        <button onClick={onClose} className="text-sm text-stone-400 hover:text-stone-600">Skip</button>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-stone-400 tabular-nums">{step+1} / {STEPS.length}</span>
+          {step>0&&<button onClick={()=>setStep(step-1)} className="text-sm text-stone-500 px-2">Back</button>}
+          {!last?<button onClick={()=>setStep(step+1)} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1">Next<ChevronRight className="w-4 h-4"/></button>:<button onClick={onClose} className="text-sm bg-stone-100 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-200">Got it</button>}
+        </div>
+      </div>
+    </div>
+  </div>);
+}
+/* First-run welcome for the SHIPPING portal — same shape/quality as WmsWelcome, but it
+   orients a brand-new account to quoting, labels, orders and tracking. Shown once to new
+   non-admin cloud logins; replayable and skippable. goTab jumps to a real tab. */
+function ShipWelcome({onClose,goTab,brandName}){
+  const [step,setStep]=useState(0);
+  const STEPS=[
+    {emoji:"👋",title:"Welcome to "+(brandName||"your shipping portal"),body:"This is where you quote, buy, and print shipping labels — and keep every order and tracking number in one place. Let's take a quick minute; nothing here is fragile, so click around.",
+      points:["Everything is saved to your account automatically.","There's live help in the chat bubble anytime.","This shows just once — click through at your own pace."]},
+    {emoji:"⚡",title:"Quote & ship in seconds",body:"The Ship tab is the heart of it — from addresses to a printed label:",
+      points:["Type where it's going and what's in the box.","Compare live rates and pick the service you want.","Buy the label and print — the tracking number is yours instantly."]},
+    {emoji:"📥",title:"Your orders flow in",body:"Sales don't need retyping — Orders pulls them in and pushes tracking back.",
+      points:["Connect Shopify or import a spreadsheet.","Fulfill an order and it becomes a label in one step.","Tracking is written back to the store and emailed to the buyer."]},
+    {emoji:"📖",title:"Save addresses & senders",body:"Set it up once and stop retyping every ship-from and repeat customer.",
+      points:["The Address Book remembers everyone you ship to.","Your sender/return address lives in Settings.","Pick a saved address on the Ship tab with one click."]},
+    {emoji:"🧾",title:"Everything is tracked",body:"Every label you buy is logged — find, reprint, refund, or return in a click.",
+      points:["Shipments lists every label with its live status.","Reprint or void a label if something changed.","Send a customer a self-serve return label when they need one."]},
+    {emoji:"⚙️",title:"Make it yours",body:"A few settings tailor it to your business — all optional.",
+      points:["Add your box sizes so rates and packing are accurate.","Put your logo on labels, emails, and tracking pages.","Autopilot can auto-select the cheapest service and email tracking for you."]},
+    {emoji:"🚀",title:"Let's print your first label",body:"My tip: start on Ship with a real order you have sitting on the desk right now.",points:[]},
+  ];
+  const s=STEPS[step]; const last=step===STEPS.length-1;
+  const go=(v)=>{ onClose&&onClose(); goTab&&goTab(v); };
+  return (<div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 max-h-[92vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+      <div className="text-4xl mb-2">{s.emoji}</div>
+      <div className="text-xl font-semibold text-stone-900">{s.title}</div>
+      <p className="text-sm text-stone-600 mt-1.5">{s.body}</p>
+      {(s.points||[]).length>0&&<ul className="mt-3 space-y-1.5">{s.points.map((p,i)=>(<li key={i} className="flex gap-2 text-[13.5px] text-stone-700"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5"/><span>{p}</span></li>))}</ul>}
+      <div className="flex items-center gap-1.5 mt-4">{STEPS.map((_,i)=><button key={i} onClick={()=>setStep(i)} className={`h-1.5 rounded-full transition-all ${i===step?"w-6 bg-[#0086E0]":"w-1.5 bg-stone-200 hover:bg-stone-300"}`} aria-label={"Step "+(i+1)}/>)}</div>
+      {last?(
+        <div className="grid grid-cols-3 gap-2 mt-4">
+          <button onClick={()=>go("ship")} className="text-xs border border-stone-200 rounded-xl px-2 py-3 hover:border-[#0086E0]/40 font-medium text-stone-700 flex flex-col items-center gap-1"><Package className="w-4 h-4 text-[#0086E0]"/>Make a label</button>
+          <button onClick={()=>go("orders")} className="text-xs border border-stone-200 rounded-xl px-2 py-3 hover:border-[#0086E0]/40 font-medium text-stone-700 flex flex-col items-center gap-1"><ShoppingBag className="w-4 h-4 text-[#0086E0]"/>Import orders</button>
+          <button onClick={()=>go("settings")} className="text-xs border border-stone-200 rounded-xl px-2 py-3 hover:border-[#0086E0]/40 font-medium text-stone-700 flex flex-col items-center gap-1"><Cog className="w-4 h-4 text-[#0086E0]"/>Set it up</button>
         </div>
       ):null}
       <div className="flex items-center justify-between mt-5">

@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="helpgaps-v740";
+const BUILD_TAG="wmsfast-v741";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10125,12 +10125,17 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const [welcomed,setWelcomed]=usePersist("wmsWelcomed",false);    // first-run welcome walkthrough (shows once)
   const [practiceTour,setPracticeTour]=useState(false);            // full guided rehearsal — launchable from welcome, guide, or To Ship
   const [view,setView]=useState("stock");
-  const [pos,setPos]=useState([]);
-  const [suppliers,setSuppliers]=useState([]);
+  /* Cache-first for the secondary lists too, so Purchase Orders, Suppliers, Warehouses and
+     Production paint from the last-known data instantly instead of flashing empty while the
+     background refresh runs. Same pattern as items above. */
+  const cacheOf=(name)=>{ try{ const c=lsGet("wms."+name+"."+((currentUser&&currentUser.clientId)||(currentUser&&currentUser.id)||"g"),null); return Array.isArray(c)?c:[]; }catch(e){ return []; } };
+  const putCache=(name,v)=>{ try{ lsSet("wms."+name+"."+((currentUser&&currentUser.clientId)||(currentUser&&currentUser.id)||"g"),v||[]); }catch(e){} };
+  const [pos,setPos]=useState(()=>cacheOf("pos"));
+  const [suppliers,setSuppliers]=useState(()=>cacheOf("suppliers"));
   const [lowOnly,setLowOnly]=useState(false);
   const [poSeed,setPoSeed]=useState(null);
-  const [warehouses,setWarehouses]=useState([]);
-  const [production,setProduction]=useState([]);
+  const [warehouses,setWarehouses]=useState(()=>cacheOf("warehouses"));
+  const [production,setProduction]=useState(()=>cacheOf("production"));
   const [catFilter,setCatFilter]=useState("");
   const [building,setBuilding]=useState(null);
   const [showHelp,setShowHelp]=useState(false);
@@ -10159,14 +10164,23 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const flash=(m,isErr)=>{ if(isErr){setErr(m);setOk("");}else{setOk(m);setErr("");} setTimeout(()=>{setErr("");setOk("");},4500); };
   const load=async()=>{
     if(!CLOUD.token){ setItems([]); return; }
-    const r=await cloudCall({action:"invList",token:CLOUD.token});
+    /* Fire ALL of the warehouse's reads at once instead of waiting for the item list to come back
+       before starting the other four. On cold serverless functions that's the difference between
+       one round trip and two — the tab already painted from cache, so this just makes the refresh
+       land sooner. Each list also writes its own cache so its tab paints instantly next time. */
+    const [r,rp,rs,rw,rpr]=await Promise.all([
+      cloudCall({action:"invList",token:CLOUD.token}),
+      cloudCall({action:"poList",token:CLOUD.token}),
+      cloudCall({action:"supplierList",token:CLOUD.token}),
+      cloudCall({action:"warehouseList",token:CLOUD.token}),
+      cloudCall({action:"productionList",token:CLOUD.token}),
+    ]);
     if(r&&r.ok){ setItems(r.items||[]); setLog(r.log||[]); try{ lsSet(invCacheKey,r.items||[]); }catch(e){} }
     else { setItems(prev=>prev===null?[]:prev); setErr((r&&r.error)||"Couldn't load your warehouse."); }   // keep the cached view on a transient error
-    const [rp,rs,rw,rpr]=await Promise.all([cloudCall({action:"poList",token:CLOUD.token}),cloudCall({action:"supplierList",token:CLOUD.token}),cloudCall({action:"warehouseList",token:CLOUD.token}),cloudCall({action:"productionList",token:CLOUD.token})]);
-    if(rp&&rp.ok)setPos(rp.pos||[]);
-    if(rs&&rs.ok)setSuppliers(rs.suppliers||[]);
-    if(rw&&rw.ok)setWarehouses(rw.warehouses||[]);
-    if(rpr&&rpr.ok)setProduction(rpr.production||[]);
+    if(rp&&rp.ok){ setPos(rp.pos||[]); putCache("pos",rp.pos); }
+    if(rs&&rs.ok){ setSuppliers(rs.suppliers||[]); putCache("suppliers",rs.suppliers); }
+    if(rw&&rw.ok){ setWarehouses(rw.warehouses||[]); putCache("warehouses",rw.warehouses); }
+    if(rpr&&rpr.ok){ setProduction(rpr.production||[]); putCache("production",rpr.production); }
   };
   const build=async()=>{
     if(!building||!(+building.qty>0)){flash("Enter a quantity to build.",true);return;}

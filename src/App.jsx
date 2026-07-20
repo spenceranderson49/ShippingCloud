@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="ratesafe-v738";
+const BUILD_TAG="practicetour-v739";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10123,6 +10123,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const [wmsFlow,setWmsFlow]=usePersist("wmsFlow","simple");      // fulfillment flow: "simple" (grab→ship) or "standard" (pick→pack→ship)
   const [helpFor,setHelpFor]=useState(null);                       // per-tab help panel (holds the current view id)
   const [welcomed,setWelcomed]=usePersist("wmsWelcomed",false);    // first-run welcome walkthrough (shows once)
+  const [practiceTour,setPracticeTour]=useState(false);            // full guided rehearsal — launchable from welcome, guide, or To Ship
   const [view,setView]=useState("stock");
   const [pos,setPos]=useState([]);
   const [suppliers,setSuppliers]=useState([]);
@@ -10350,7 +10351,8 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
       </div>
     </div>
     {helpFor&&<WmsHelp viewId={helpFor} viewLabel={(NAV_GROUPS.flatMap(g=>g[1]).find(t=>t[0]===helpFor)||[helpFor,helpFor])[1]} onClose={()=>setHelpFor(null)} goGuide={()=>setView("guide")}/>}
-    {!welcomed&&items&&<WmsWelcome onClose={()=>setWelcomed(true)} goView={setView}/>}
+    {!welcomed&&items&&<WmsWelcome onClose={()=>setWelcomed(true)} goView={setView} onPractice={()=>{setWelcomed(true);setPracticeTour(true);}}/>}
+    {practiceTour&&<PracticeRehearsal onClose={()=>setPracticeTour(false)}/>}
   </div>); };
   if(view==="overview") return (<div className="max-w-5xl space-y-4">{Switcher()}<InventoryOverview list={list} pos={pos} log={log} suppliers={suppliers} orders={orders} showMoney={showMoney} committedBySku={committedBySku} incomingBySku={incomingBySku} goView={setView} onReceive={()=>setView("stock")}/></div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4">{Switcher()}<InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
@@ -11180,6 +11182,124 @@ function ScanReceive({items,onReceived,reload}){
 /* To Ship — the warehouse's daily work queue (ShipHero-style). Every unfulfilled order with a stock-
    readiness badge (ready to pick vs short), sorted so the ready + oldest float up. Read-only; jumps
    into the pick and pack flows. Deliberately plain so a first-timer knows exactly what to do next. */
+/* PracticeRehearsal — a full, hands-on tour of the ENTIRE warehouse loop on throwaway sample data:
+   receive → order lands → pick (with a scan) → pack into the suggested box → ship → watch stock
+   count down → low-stock alert → reorder. Nothing here touches real inventory, orders, or the cloud;
+   it's a sandbox with its own numbers so a brand-new user can feel every step before doing it live. */
+function PracticeRehearsal({onClose}){
+  const SEED=[
+    {sku:"DEMO-SHIRT",name:"Demo T-Shirt (Medium)",loc:"A1",bin:"Aisle A · Bin 1",onHand:0,reorder:6,arriving:24,order:1,box:"Small mailer"},
+    {sku:"DEMO-MUG",name:"Demo Coffee Mug",loc:"B2",bin:"Aisle B · Bin 2",onHand:0,reorder:8,arriving:10,order:2,box:"Medium box"},
+    {sku:"DEMO-STICKER",name:"Demo Sticker Pack",loc:"C3",bin:"Aisle C · Bin 3",onHand:0,reorder:12,arriving:60,order:3,box:"Small mailer"},
+  ];
+  const [scene,setScene]=useState(0);
+  const [stock,setStock]=useState(()=>SEED.map(s=>({...s})));
+  const [picked,setPicked]=useState({});
+  const [packed,setPacked]=useState({});
+  const [scan,setScan]=useState("");
+  const [scanErr,setScanErr]=useState("");
+  const set=(sku,fn)=>setStock(st=>st.map(s=>s.sku===sku?{...s,...fn(s)}:s));
+  const allPicked=stock.every(s=>picked[s.sku]);
+  const allPacked=stock.every(s=>packed[s.sku]);
+  const lowNow=stock.filter(s=>s.onHand<=s.reorder);
+  const money=(n)=>"$"+n.toFixed(2);
+  // the box the packer should reach for = the largest box any line needs (mirrors cartonization intent)
+  const suggestBox=stock.some(s=>s.box==="Medium box")?"Medium box":"Small mailer";
+  const receive=()=>{ setStock(st=>st.map(s=>({...s,onHand:s.arriving}))); setScene(2); };
+  const doScan=()=>{ const v=scan.trim().toUpperCase(); const hit=stock.find(s=>s.sku.toUpperCase()===v); if(!hit){ setScanErr("No item here has that barcode — try one of the SKUs shown (e.g. "+stock.find(s=>!picked[s.sku])?.sku+")."); return;} if(picked[hit.sku]){ setScanErr(hit.sku+" is already picked."); setScan(""); return;} setPicked(p=>({...p,[hit.sku]:true})); setScan(""); setScanErr(""); };
+  const ship=()=>{ setStock(st=>st.map(s=>({...s,onHand:Math.max(0,s.onHand-s.order)}))); setScene(6); };
+  const StepBar=()=>{ const steps=["Receive","Order","Pick","Pack","Ship","Stock","Reorder"]; const idx=Math.max(0,scene-1); return (
+    <div className="flex flex-wrap items-center gap-1 mb-4">{steps.map((s,i)=>(<React.Fragment key={s}><span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${i<idx?"bg-emerald-100 text-emerald-700":i===idx?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-400"}`}>{i<idx?"✓ ":""}{s}</span>{i<steps.length-1&&<span className="text-stone-300 text-[9px]">›</span>}</React.Fragment>))}</div>); };
+  const Row=({s,right,dim})=>(<div className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border ${dim?"bg-stone-50 border-stone-200":"bg-white border-stone-200"}`}>
+    <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{s.name}</div><div className="text-[11px] text-stone-400 flex items-center gap-1"><MapPin className="w-3 h-3"/>{s.bin} · {s.sku}</div></div>
+    {right}
+  </div>);
+  const Next=({label,on,go})=>(<button onClick={go} disabled={on===false} className="w-full mt-4 bg-[#0086E0] text-white rounded-xl py-3 font-semibold hover:bg-[#006db8] disabled:opacity-40 flex items-center justify-center gap-1.5">{label}<ChevronRight className="w-4 h-4"/></button>);
+  const scenes=[
+    // 0 — intro
+    (<div>
+      <div className="text-center py-2"><div className="text-4xl mb-2">🎓</div><div className="text-lg font-semibold text-stone-900">The whole warehouse, in 2 minutes</div><p className="text-sm text-stone-500 mt-1.5 max-w-sm mx-auto">You'll run one order end-to-end on pretend stock — receive it, pick it, pack it, ship it, then watch the count drop and reorder. Nothing here is real, so click freely.</p></div>
+      <div className="mt-4 grid grid-cols-3 gap-2 text-center">{["📥 Receive","🛒 Pick & pack","📦 Ship & reorder"].map(t=><div key={t} className="border border-stone-200 rounded-xl py-3 text-xs font-medium text-stone-600">{t}</div>)}</div>
+      <Next label="Start the tour" go={()=>setScene(1)}/>
+    </div>),
+    // 1 — receive
+    (<div>
+      <div className="text-sm font-semibold text-stone-900 mb-1 flex items-center gap-2"><Boxes className="w-4 h-4 text-[#0086E0]"/>1 · Receiving — stock just arrived</div>
+      <p className="text-xs text-stone-500 mb-3">A delivery showed up. In the real app you'd scan the PO; here, just click <b>Receive all</b> and watch each SKU go from 0 to on-hand.</p>
+      <div className="space-y-1.5">{stock.map(s=><Row key={s.sku} s={s} right={<div className="text-sm font-semibold shrink-0"><span className="text-stone-400">{0}</span> <ArrowRight className="w-3 h-3 inline text-stone-300"/> <span className={s.onHand>0?"text-emerald-600":"text-stone-400"}>{s.onHand}</span></div>}/>)}</div>
+      {stock[0].onHand===0
+        ? <button onClick={receive} className="w-full mt-4 bg-[#0086E0] text-white rounded-xl py-3 font-semibold hover:bg-[#006db8] flex items-center justify-center gap-1.5"><Download className="w-4 h-4"/>Receive all</button>
+        : <Next label="Nice — now an order comes in" go={()=>setScene(2)}/>}
+    </div>),
+    // 2 — order lands
+    (<div>
+      <div className="text-sm font-semibold text-stone-900 mb-1 flex items-center gap-2"><ShoppingBag className="w-4 h-4 text-[#0086E0]"/>2 · An order lands</div>
+      <p className="text-xs text-stone-500 mb-3">Order <b>#DEMO-1042</b> for <b>Sample Customer</b> just synced from your store. It needs:</p>
+      <div className="space-y-1.5">{stock.map(s=><Row key={s.sku} s={s} right={<div className="text-sm font-semibold text-stone-700 shrink-0">×{s.order}</div>}/>)}</div>
+      <div className="mt-3 text-[11px] text-emerald-700 bg-emerald-50 rounded px-2.5 py-1.5 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5"/>Every item's in stock, so this order shows <b>Ready</b> on your To-Ship list.</div>
+      <Next label="Go pick it" go={()=>setScene(3)}/>
+    </div>),
+    // 3 — pick (scan)
+    (<div>
+      <div className="text-sm font-semibold text-stone-900 mb-1 flex items-center gap-2"><ScanLine className="w-4 h-4 text-[#0086E0]"/>3 · Pick — scan each item at its bin</div>
+      <p className="text-xs text-stone-500 mb-3">Walk to each bin and scan the item. Type a SKU below and hit Scan (or tap a row) to simulate the scanner.</p>
+      <div className="flex gap-2 mb-2"><input value={scan} onChange={e=>{setScan(e.target.value);setScanErr("");}} onKeyDown={e=>e.key==="Enter"&&doScan()} placeholder="Scan or type a SKU…" className="flex-1 border border-stone-300 rounded-lg px-3 py-2 text-sm"/><button onClick={doScan} className="bg-stone-800 text-white rounded-lg px-4 text-sm font-medium hover:bg-stone-700">Scan</button></div>
+      {scanErr&&<div className="text-[11px] text-rose-600 mb-2">{scanErr}</div>}
+      <div className="space-y-1.5">{stock.map(s=>{ const on=!!picked[s.sku]; return (<button key={s.sku} onClick={()=>setPicked(p=>({...p,[s.sku]:!p[s.sku]}))} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left ${on?"bg-emerald-50 border-emerald-200":"bg-white border-stone-200 hover:bg-stone-50"}`}>
+        {on?<CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0"/>:<div className="w-5 h-5 rounded-full border-2 border-stone-300 shrink-0"/>}
+        <div className="flex-1 min-w-0"><div className={`text-sm ${on?"text-stone-400 line-through":"text-stone-800"}`}>{s.name}</div><div className="text-[11px] text-stone-400 flex items-center gap-1"><MapPin className="w-3 h-3"/>{s.bin} · {s.sku}</div></div>
+        <div className="text-sm font-semibold text-stone-700 shrink-0">×{s.order}</div></button>); })}</div>
+      <Next label={allPicked?"All picked — pack the box":"Pick every item first"} on={allPicked} go={()=>setScene(4)}/>
+    </div>),
+    // 4 — pack
+    (<div>
+      <div className="text-sm font-semibold text-stone-900 mb-1 flex items-center gap-2"><Package className="w-4 h-4 text-[#0086E0]"/>4 · Pack — verify into the box</div>
+      <div className="text-[11px] text-[#006FBF] bg-sky-50 rounded px-2.5 py-1.5 mb-3 flex items-center gap-1.5"><Boxes className="w-3.5 h-3.5"/>Suggested box: <b>{suggestBox}</b> — the app picks the smallest box your items fit in (that's cartonization).</div>
+      <p className="text-xs text-stone-500 mb-3">Tap each item as it goes in the box — this catches a mis-pick before it ships.</p>
+      <div className="space-y-1.5">{stock.map(s=>{ const on=!!packed[s.sku]; return (<button key={s.sku} onClick={()=>setPacked(p=>({...p,[s.sku]:!p[s.sku]}))} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left ${on?"bg-emerald-50 border-emerald-200":"bg-white border-stone-200 hover:bg-stone-50"}`}>
+        {on?<CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0"/>:<div className="w-5 h-5 rounded-full border-2 border-stone-300 shrink-0"/>}
+        <div className="flex-1 min-w-0"><div className={`text-sm ${on?"text-stone-400 line-through":"text-stone-800"}`}>{s.name}</div><div className="text-[11px] text-stone-400">{s.sku}</div></div>
+        <div className="text-sm font-semibold text-stone-700 shrink-0">×{s.order}</div></button>); })}</div>
+      <Next label={allPacked?"Box is verified — ship it":"Pack every item first"} on={allPacked} go={()=>setScene(5)}/>
+    </div>),
+    // 5 — ship
+    (<div>
+      <div className="text-sm font-semibold text-stone-900 mb-1 flex items-center gap-2"><Truck className="w-4 h-4 text-[#0086E0]"/>5 · Ship — print the label</div>
+      <p className="text-xs text-stone-500 mb-3">One click buys the cheapest label for the box and address. The moment it prints, your stock counts itself down — no separate step to remember.</p>
+      <div className="rounded-xl border border-stone-200 p-4 text-center"><div className="text-[11px] uppercase tracking-wide text-stone-400">Cheapest rate for this box</div><div className="text-2xl font-semibold text-stone-900 mt-1">{money(7.82)}</div><div className="text-[11px] text-stone-400 mt-0.5">Ground · 2 days · via your negotiated rate</div></div>
+      <button onClick={ship} className="w-full mt-4 bg-[#0086E0] text-white rounded-xl py-3 font-semibold hover:bg-[#006db8] flex items-center justify-center gap-1.5"><Truck className="w-4 h-4"/>Buy label &amp; ship</button>
+    </div>),
+    // 6 — stock drops + low-stock
+    (<div>
+      <div className="text-sm font-semibold text-stone-900 mb-1 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-emerald-600"/>6 · Stock counted itself down</div>
+      <p className="text-xs text-stone-500 mb-3">Label printed. Here's on-hand <b>after</b> shipping — each SKU dropped by what the order took. You never touched a spreadsheet.</p>
+      <div className="space-y-1.5">{stock.map(s=>{ const low=s.onHand<=s.reorder; return (<div key={s.sku} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border ${low?"bg-amber-50 border-amber-200":"bg-white border-stone-200"}`}>
+        <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{s.name}</div><div className="text-[11px] text-stone-400">reorder at {s.reorder}</div></div>
+        <div className="text-sm font-semibold shrink-0"><span className="text-stone-400">{s.onHand+s.order}</span> <ArrowRight className="w-3 h-3 inline text-stone-300"/> <span className={low?"text-amber-600":"text-stone-800"}>{s.onHand}</span></div>
+        {low&&<AlertTriangle className="w-4 h-4 text-amber-500 shrink-0"/>}
+      </div>); })}</div>
+      {lowNow.length>0&&<div className="mt-3 text-[11px] text-amber-700 bg-amber-50 rounded px-2.5 py-1.5 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/><span><b>{lowNow.length} item{lowNow.length>1?"s":""}</b> hit the reorder point — the app flags {lowNow.length>1?"them":"it"} so you never run out mid-week.</span></div>}
+      <Next label="Last step — reorder" go={()=>setScene(7)}/>
+    </div>),
+    // 7 — reorder + recap
+    (<div>
+      <div className="text-sm font-semibold text-stone-900 mb-1 flex items-center gap-2"><ClipboardList className="w-4 h-4 text-[#0086E0]"/>7 · Reorder the low item</div>
+      <p className="text-xs text-stone-500 mb-3">The app already drafted a purchase order to your cheapest supplier for anything below its reorder point. Approve it and you're covered.</p>
+      {lowNow.map(s=>(<div key={s.sku} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-stone-200 bg-white mb-1.5"><Package className="w-4 h-4 text-stone-400 shrink-0"/><div className="flex-1 min-w-0"><div className="text-sm text-stone-800">{s.name}</div><div className="text-[11px] text-stone-400">suggested order qty: {s.arriving}</div></div><span className="text-[10px] uppercase rounded px-1.5 py-0.5 bg-[#E6F4FF] text-[#006FBF]">Draft PO</span></div>))}
+      <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4"><div className="text-sm font-semibold text-emerald-900 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>That's the whole loop.</div>
+        <p className="text-[12px] text-emerald-800/90 mt-1">Receive → an order lands → pick → pack → ship → stock drops → reorder. The warehouse does the counting; you just move boxes. Everything you clicked here works the same on real orders — nothing you did was saved.</p></div>
+      <button onClick={onClose} className="w-full mt-4 bg-emerald-600 text-white rounded-xl py-3 font-semibold hover:bg-emerald-700 flex items-center justify-center gap-1.5"><CheckCircle2 className="w-5 h-5"/>Finish — I've got it</button>
+    </div>),
+  ];
+  return (<div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={onClose}>
+    <div className="absolute inset-0 bg-black/50"/>
+    <div className="relative bg-white rounded-2xl shadow-xl max-w-md w-full p-5 max-h-[92vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+      <div className="flex items-center justify-between mb-3"><div className="flex items-center gap-2"><span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-[#E6F4FF] text-[#006FBF]">Practice</span><span className="text-[11px] text-stone-400">nothing here is real</span></div><button onClick={onClose} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+      {scene>0&&<StepBar/>}
+      {scenes[scene]}
+    </div>
+  </div>);
+}
 function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFlow}){
   const standard=flow==="standard";
   const stockBySku=useMemo(()=>{ const m={}; (list||[]).forEach(it=>{ if(Array.isArray(it.kit)&&it.kit.length&&!it.assembled)return; m[String(it.sku).toLowerCase()]=+it.onHand||0; }); return m; },[list]);
@@ -11189,6 +11309,7 @@ function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFl
   const allGrabbed=fLines.length>0&&fLines.every(l=>grabbed[l.sku.toLowerCase()]);
   const allPacked=fLines.length>0&&fLines.every(l=>packed[l.sku.toLowerCase()]);
   const [practice,setPractice]=useState(false); const [praiseMsg,setPraiseMsg]=useState(null);
+  const [bigPractice,setBigPractice]=useState(false);   // the full guided rehearsal (receive→pick→pack→ship→reorder)
   const openFulfill=(o,isPractice)=>{ setPractice(!!isPractice); setFulfilling(o); setGrabbed({}); setPacked({}); setFStep(0); };
   const startPractice=()=>openFulfill({id:"practice",name:"Practice order #DEMO",customer:"Sample Customer",lineItems:[{sku:"DEMO-SHIRT",title:"Demo T-Shirt (Medium)",qty:1,loc:"A1"},{sku:"DEMO-MUG",title:"Demo Coffee Mug",qty:2,loc:"B2"},{sku:"DEMO-STICKER",title:"Demo Sticker Pack",qty:3,loc:"C3"}]},true);
   const shipNow=()=>{ const o=fulfilling; setFulfilling(null); if(practice){ setPraiseMsg("🎉 Nice — that's the whole flow! On a real order this would open the Ship tab with your label ready, and your stock would count down when it prints."); setTimeout(()=>setPraiseMsg(null),9000); return; } shipOrder&&shipOrder(o); };
@@ -11207,9 +11328,13 @@ function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFl
     </div>
     {praiseMsg&&<div className="rounded-xl border border-emerald-200 bg-emerald-50/70 text-emerald-800 text-sm px-4 py-3">{praiseMsg}</div>}
     <div className="rounded-xl border border-dashed border-[#0086E0]/40 bg-sky-50/40 px-4 py-2.5 flex items-center justify-between gap-2 flex-wrap">
-      <span className="text-sm text-stone-600">New to this? <b className="text-stone-800">Rehearse the whole flow</b> with a pretend order — nothing ships and no stock changes.</span>
-      <button onClick={startPractice} className="text-sm bg-white border border-[#0086E0]/40 text-[#006FBF] rounded-lg px-3.5 py-1.5 font-medium hover:bg-[#E6F4FF] flex items-center gap-1.5 shrink-0"><Sparkles className="w-4 h-4"/>Try a practice order</button>
+      <span className="text-sm text-stone-600">New to this? <b className="text-stone-800">Rehearse the whole loop</b> — receive, pick, pack, ship, watch stock drop, and reorder — on pretend stock. Nothing is saved.</span>
+      <div className="flex items-center gap-2 shrink-0">
+        <button onClick={()=>setBigPractice(true)} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Sparkles className="w-4 h-4"/>Guided practice tour</button>
+        <button onClick={startPractice} className="text-sm bg-white border border-[#0086E0]/40 text-[#006FBF] rounded-lg px-3 py-1.5 font-medium hover:bg-[#E6F4FF] flex items-center gap-1.5" title="Just rehearse pick → pack → ship on one order">Quick order</button>
+      </div>
     </div>
+    {bigPractice&&<PracticeRehearsal onClose={()=>setBigPractice(false)}/>}
     <div className="grid grid-cols-3 gap-3">
       <Tile label="Orders to ship" value={rows.length}/>
       <Tile label="Ready now" value={readyN} tone={readyN?"text-emerald-600":"text-stone-900"}/>
@@ -12180,9 +12305,10 @@ function WmsHelp({viewId,viewLabel,onClose,goGuide}){
     </div>
   </div>);
 }
-/* WmsWelcome — a friendly first-run walkthrough. A 3-step carousel that explains the loop and points
-   at the first thing to do. Shows once (persisted), and the Guide can reopen it. */
-function WmsWelcome({onClose,goView}){
+/* WmsWelcome — a friendly first-run walkthrough. A 7-step carousel that explains the whole loop and
+   hands off to a real next step — including launching the full guided practice tour. Shows once
+   (persisted), and the Guide can reopen it. */
+function WmsWelcome({onClose,goView,onPractice}){
   const [step,setStep]=useState(0);
   const STEPS=[
     {emoji:"👋",title:"Welcome to your Warehouse",body:"This is a smart stockroom that counts for you. Let's take a minute to see how it all works — you can't break anything, so relax and click through.",
@@ -12211,7 +12337,7 @@ function WmsWelcome({onClose,goView}){
       {last?(
         <div className="grid grid-cols-3 gap-2 mt-4">
           <button onClick={()=>go("stock")} className="text-xs border border-stone-200 rounded-xl px-2 py-3 hover:border-[#0086E0]/40 font-medium text-stone-700 flex flex-col items-center gap-1"><Plus className="w-4 h-4 text-[#0086E0]"/>Add products</button>
-          <button onClick={()=>go("toship")} className="text-xs border border-stone-200 rounded-xl px-2 py-3 hover:border-[#0086E0]/40 font-medium text-stone-700 flex flex-col items-center gap-1"><Sparkles className="w-4 h-4 text-[#0086E0]"/>Practice order</button>
+          <button onClick={()=>{ if(onPractice)onPractice(); else go("toship"); }} className="text-xs border border-[#0086E0]/40 bg-sky-50/60 rounded-xl px-2 py-3 hover:border-[#0086E0] font-medium text-stone-700 flex flex-col items-center gap-1"><Sparkles className="w-4 h-4 text-[#0086E0]"/>Practice tour</button>
           <button onClick={()=>go("guide")} className="text-xs border border-stone-200 rounded-xl px-2 py-3 hover:border-[#0086E0]/40 font-medium text-stone-700 flex flex-col items-center gap-1"><MessageCircle className="w-4 h-4 text-[#0086E0]"/>Read the Guide</button>
         </div>
       ):null}

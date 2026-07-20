@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v731";
+const BUILD_TAG="addr-v732";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -11113,8 +11113,10 @@ function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFl
   const fLines=fulfilling?(fulfilling.lineItems||[]).filter(li=>li&&li.sku).map(li=>{ const it=itBySku[String(li.sku).toLowerCase()]; return {sku:li.sku,name:li.title||li.name||(it&&it.name)||li.sku,loc:(it&&it.loc)||"",qty:+li.qty||+li.quantity||1}; }):[];
   const allGrabbed=fLines.length>0&&fLines.every(l=>grabbed[l.sku.toLowerCase()]);
   const allPacked=fLines.length>0&&fLines.every(l=>packed[l.sku.toLowerCase()]);
-  const openFulfill=(o)=>{ setFulfilling(o); setGrabbed({}); setPacked({}); setFStep(0); };
-  const shipNow=()=>{ const o=fulfilling; setFulfilling(null); shipOrder&&shipOrder(o); };
+  const [practice,setPractice]=useState(false); const [praiseMsg,setPraiseMsg]=useState(null);
+  const openFulfill=(o,isPractice)=>{ setPractice(!!isPractice); setFulfilling(o); setGrabbed({}); setPacked({}); setFStep(0); };
+  const startPractice=()=>openFulfill({id:"practice",name:"Practice order #DEMO",customer:"Sample Customer",lineItems:[{sku:"DEMO-SHIRT",title:"Demo T-Shirt (Medium)",qty:1},{sku:"DEMO-MUG",title:"Demo Coffee Mug",qty:2}]},true);
+  const shipNow=()=>{ const o=fulfilling; setFulfilling(null); if(practice){ setPraiseMsg("🎉 Nice — that's the whole flow! On a real order this would open the Ship tab with your label ready, and your stock would count down when it prints."); setTimeout(()=>setPraiseMsg(null),9000); return; } shipOrder&&shipOrder(o); };
   const open=(orders||[]).filter(o=>o&&o.status!=="fulfilled"&&Array.isArray(o.lineItems)&&o.lineItems.length);
   // Explode a line into what actually depletes stock — a virtual kit becomes its components.
   const expand=(li)=>{ const it=itBySku[String(li.sku).toLowerCase()]; const q=(+li.qty||+li.quantity||1); if(it&&Array.isArray(it.kit)&&it.kit.length&&!it.assembled)return it.kit.map(c=>({sku:String((c&&c.sku)||"").toLowerCase(),qty:q*(+c.qty||1)})).filter(x=>x.sku); return [{sku:String(li.sku).toLowerCase(),qty:q}]; };
@@ -11127,6 +11129,11 @@ function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFl
     <div className="flex items-start justify-between gap-3 flex-wrap">
       <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Truck className="w-5 h-5 text-[#0086E0]"/>To ship</h2><p className="text-sm text-stone-500 mt-0.5">Your orders waiting to go out, readiest first. Green means every item's in stock — click <b>Fulfill</b> to grab and ship.</p></div>
       {setFlow&&<div className="shrink-0"><div className="text-[9px] uppercase tracking-widest text-stone-400 pl-1 mb-1">Fulfillment steps</div><div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-xs"><button onClick={()=>setFlow("simple")} className={`px-2.5 py-1.5 rounded-md ${!standard?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`} title="Grab items → ship">One-click</button><button onClick={()=>setFlow("standard")} className={`px-2.5 py-1.5 rounded-md ${standard?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`} title="Pick → verify at pack → ship">Pick → Pack → Ship</button></div></div>}
+    </div>
+    {praiseMsg&&<div className="rounded-xl border border-emerald-200 bg-emerald-50/70 text-emerald-800 text-sm px-4 py-3">{praiseMsg}</div>}
+    <div className="rounded-xl border border-dashed border-[#0086E0]/40 bg-sky-50/40 px-4 py-2.5 flex items-center justify-between gap-2 flex-wrap">
+      <span className="text-sm text-stone-600">New to this? <b className="text-stone-800">Rehearse the whole flow</b> with a pretend order — nothing ships and no stock changes.</span>
+      <button onClick={startPractice} className="text-sm bg-white border border-[#0086E0]/40 text-[#006FBF] rounded-lg px-3.5 py-1.5 font-medium hover:bg-[#E6F4FF] flex items-center gap-1.5 shrink-0"><Sparkles className="w-4 h-4"/>Try a practice order</button>
     </div>
     <div className="grid grid-cols-3 gap-3">
       <Tile label="Orders to ship" value={rows.length}/>
@@ -11151,7 +11158,8 @@ function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFl
       const stepIdx=standard?fStep:0;
       return (<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setFulfilling(null)}>
       <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5 max-h-[92vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-2"><div className="font-semibold text-stone-900">Fulfill {fulfilling.name||fulfilling.id}</div><button onClick={()=>setFulfilling(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+        <div className="flex items-center justify-between mb-2"><div className="font-semibold text-stone-900 flex items-center gap-2">{practice&&<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-[#E6F4FF] text-[#006FBF]">Practice</span>}Fulfill {fulfilling.name||fulfilling.id}</div><button onClick={()=>setFulfilling(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+        {practice&&<p className="text-[11px] text-[#006FBF] bg-sky-50 rounded px-2 py-1 mb-2">This is a rehearsal — no real order, nothing ships, and your stock won't change. Just click through it.</p>}
         {standard&&<div className="flex items-center gap-1.5 mb-3">{STEPS.map((s,i)=>(<React.Fragment key={s}><span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${i<stepIdx?"bg-emerald-100 text-emerald-700":i===stepIdx?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-400"}`}>{i<stepIdx?"✓ ":""}{s}</span>{i<STEPS.length-1&&<span className="text-stone-300">·</span>}</React.Fragment>))}</div>}
         <p className="text-xs text-stone-500 mb-3">{fulfilling.customer?fulfilling.customer+" · ":""}{packStep?"Scan or tap each item as it goes in the box.":standard?"Grab each item from its location and check it off.":"Grab each item, check it off, then create the label."} Stock counts down when the label prints.</p>
         <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden mb-3"><div className={`h-full ${allDone?"bg-emerald-500":"bg-[#0086E0]"} transition-all`} style={{width:pct+"%"}}/></div>
@@ -11164,7 +11172,7 @@ function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFl
         </div>
         {standard&&!packStep
           ? <button onClick={()=>setFStep(1)} disabled={!allGrabbed} className="w-full mt-4 bg-[#0086E0] text-white rounded-xl py-3 font-semibold hover:bg-[#006db8] disabled:opacity-40 flex items-center justify-center gap-1.5">{allGrabbed?"Next: pack the box":"Grab all items first"}<ChevronRight className="w-4 h-4"/></button>
-          : <button onClick={shipNow} disabled={!allDone} className="w-full mt-4 bg-[#0086E0] text-white rounded-xl py-3 font-semibold hover:bg-[#006db8] disabled:opacity-40 flex items-center justify-center gap-1.5"><Truck className="w-5 h-5"/>{allDone?"Create shipping label":(packStep?"Pack every item first":"Grab all items first")}</button>}
+          : <button onClick={shipNow} disabled={!allDone} className="w-full mt-4 bg-[#0086E0] text-white rounded-xl py-3 font-semibold hover:bg-[#006db8] disabled:opacity-40 flex items-center justify-center gap-1.5">{practice?<CheckCircle2 className="w-5 h-5"/>:<Truck className="w-5 h-5"/>}{allDone?(practice?"Finish practice":"Create shipping label"):(packStep?"Pack every item first":"Grab all items first")}</button>}
       </div>
     </div>); })()}
   </div>);

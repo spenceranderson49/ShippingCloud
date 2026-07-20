@@ -932,6 +932,9 @@ exports.handler = async (event) => {
         if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read that item — try again." });
         if (!(cur.value && typeof cur.value === "object")) return J({ ok: false, error: "That SKU isn't tracked yet." });
         const it = { ...cur.value };
+        // Serial/lot items track units in their own arrays, not per-location — moving them as plain
+        // quantities would drift onHand from the serial/lot detail, so block it with a clear message.
+        if (it.trackSerial || it.trackLot) return J({ ok: false, error: "Serial/lot-tracked items can't be bin-transferred (their units are tracked individually). Adjust or re-scan instead." });
         // First transfer splits the flat on-hand into locations, seeding the item's current label (or "Main").
         if (!it.byLoc || typeof it.byLoc !== "object" || !Object.keys(it.byLoc).length) it.byLoc = { [(it.loc && String(it.loc)) || "Main"]: +it.onHand || 0 };
         const bl = { ...it.byLoc };
@@ -1118,7 +1121,7 @@ exports.handler = async (event) => {
           return undefined;
         };
         const cleanObj = (o) => { const r = {}; if (o && typeof o === "object") for (const k of Object.keys(o).slice(0, 60)) { const cv = cap(o[k]); if (cv !== undefined) r[String(k).slice(0, 60)] = cv; } return r; };
-        const items = (Array.isArray(body.items) ? body.items : []).slice(0, 2000).map((o) => cleanObj(o));
+        const items = (Array.isArray(body.items) ? body.items : []).slice(0, 5000).map((o) => cleanObj(o));
         const w = await putStores({ [key]: items });
         if (!w.ok) return J({ ok: false, error: "Save failed — try again." });
         return J({ ok: true, kind, items });
@@ -1140,7 +1143,7 @@ exports.handler = async (event) => {
           unit: String((s && s.unit) || "each").slice(0, 24),
           rate: money2b(s && s.rate),
         })).filter((x) => x.name);
-        const charges = (Array.isArray(body.charges) ? body.charges : []).slice(0, 2000).map((s) => ({
+        const charges = (Array.isArray(body.charges) ? body.charges : []).slice(0, 20000).map((s) => ({
           id: String((s && s.id) || ("bc" + Date.now() + Math.floor(Math.random() * 1e6))),
           date: String((s && s.date) || nowISO).slice(0, 30),
           client: String((s && s.client) || "").slice(0, 80),
@@ -1261,7 +1264,21 @@ exports.handler = async (event) => {
           const prev = (cur2.value && typeof cur2.value === "object") ? cur2.value : null;
           const it = prev ? { ...prev } : { sku: rc.sku, name: rc.name || "", onHand: 0, createdAt: nowISO };
           const landedUnitCost = money2((+rc.cost || 0) + perUnit);
-          applyStockDelta(it, rc.qty, body.loc);   // keeps byLoc/onHand in sync for multi-location items (was: raw onHand bump, which lost stock on the next transfer)
+          /* Add stock the way the item is tracked (mirrors invReceive), so serial/lot items don't lose
+             the received quantity: serials get placeholders (edit them later), lot qty lands in a
+             blank lot, and plain/multi-location items go through the byLoc-safe path. */
+          if (it.trackSerial || Array.isArray(it.serials)) {
+            if (!Array.isArray(it.serials)) it.serials = [];
+            const poTag = String(po.number || "PO").replace(/[^A-Za-z0-9]/g, "").slice(0, 20);
+            for (let i = 0; i < rc.qty; i++) it.serials.push(poTag + "-" + (it.serials.length + 1));
+            it.onHand = it.serials.length;
+          } else if (it.trackLot || Array.isArray(it.lots)) {
+            if (!Array.isArray(it.lots)) it.lots = [];
+            const blank = it.lots.find((L) => !L.lot); if (blank) blank.qty = (+blank.qty || 0) + rc.qty; else it.lots.push({ lot: "", qty: rc.qty, expiry: "" });
+            it.onHand = it.lots.reduce((s, L) => s + (+L.qty || 0), 0);
+          } else {
+            applyStockDelta(it, rc.qty, body.loc);   // byLoc-safe for multi-location; plain otherwise
+          }
           if (it.fifo || Array.isArray(it.layers)) { if (!Array.isArray(it.layers)) it.layers = []; it.layers.push({ qty: rc.qty, cost: landedUnitCost, at: nowISO }); if (it.layers.length > 200) it.layers = it.layers.slice(-200); }
           if (rc.cost || perUnit) it.cost = landedUnitCost;
           if (rc.name && !it.name) it.name = rc.name; it.updatedAt = nowISO;

@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v733";
+const BUILD_TAG="addr-v734";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10034,7 +10034,10 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   /* Ship an order straight from the WMS — hands the order to the Ship tab, prefilled, so the warehouse
      flow (To Ship / Pack) connects to the shipping portal. Mirrors the Orders tab's ship(). */
   const shipOrder=(o)=>{ if(!goShip||!o)return; goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email,country:o.country||"United States"},weight:o.weight,reference:o.name,fromOrderId:o.id,refulfill:o.status==="fulfilled"}); };
-  const [items,setItems]=useState(null);   // null = loading
+  /* Fast load: show the last-known stock from a local cache instantly, then refresh from the server in
+     the background — so the Warehouse tab isn't a spinner every time you open it. */
+  const invCacheKey="wms.items."+((currentUser&&currentUser.clientId)||(currentUser&&currentUser.id)||"g");
+  const [items,setItems]=useState(()=>{ try{ const c=lsGet(invCacheKey,null); return Array.isArray(c)?c:null; }catch(e){ return null; } });   // null = loading
   const [log,setLog]=useState([]);
   const [err,setErr]=useState(""); const [ok,setOk]=useState("");
   const [busy,setBusy]=useState("");
@@ -10089,8 +10092,8 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const load=async()=>{
     if(!CLOUD.token){ setItems([]); return; }
     const r=await cloudCall({action:"invList",token:CLOUD.token});
-    if(r&&r.ok){ setItems(r.items||[]); setLog(r.log||[]); }
-    else { setItems([]); setErr((r&&r.error)||"Couldn't load your warehouse."); }
+    if(r&&r.ok){ setItems(r.items||[]); setLog(r.log||[]); try{ lsSet(invCacheKey,r.items||[]); }catch(e){} }
+    else { setItems(prev=>prev===null?[]:prev); setErr((r&&r.error)||"Couldn't load your warehouse."); }   // keep the cached view on a transient error
     const [rp,rs,rw,rc,rpr]=await Promise.all([cloudCall({action:"poList",token:CLOUD.token}),cloudCall({action:"supplierList",token:CLOUD.token}),cloudCall({action:"warehouseList",token:CLOUD.token}),cloudCall({action:"containerList",token:CLOUD.token}),cloudCall({action:"productionList",token:CLOUD.token})]);
     if(rp&&rp.ok)setPos(rp.pos||[]);
     if(rs&&rs.ok)setSuppliers(rs.suppliers||[]);
@@ -10277,7 +10280,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     <div className="flex flex-col gap-1"><span className="text-[9px] uppercase tracking-widest text-stone-400 pl-1">View</span>
       <div className="flex gap-1.5">
         <button onClick={()=>setWmsSimple(s=>!s)} className="text-sm rounded-lg border border-dashed border-stone-300 bg-white px-3 py-1.5 text-stone-500 hover:bg-stone-50 hover:text-stone-700 whitespace-nowrap" title={simple?"Reveal every WMS tool":"Show just the everyday tools"}>{simple?"＋ Show all tools":"− Simpler view"}</button>
-        <button onClick={()=>setHelpFor(view)} className="text-sm rounded-lg border border-[#0086E0]/30 bg-[#E6F4FF] text-[#006FBF] px-2.5 py-1.5 font-medium hover:bg-[#d3ecff] flex items-center gap-1 whitespace-nowrap" title="Help & answers for this tab"><Info className="w-4 h-4"/>Help</button>
+        <button onClick={()=>setHelpFor(view)} className="text-sm rounded-lg border border-[#0086E0]/30 bg-[#E6F4FF] text-[#006FBF] px-2.5 py-1.5 font-medium hover:bg-[#d3ecff] flex items-center gap-1 whitespace-nowrap" title="Help & answers for this tab"><MessageCircle className="w-4 h-4"/>Help</button>
       </div>
     </div>
     {helpFor&&<WmsHelp viewId={helpFor} viewLabel={(NAV_GROUPS.flatMap(g=>g[1]).find(t=>t[0]===helpFor)||[helpFor,helpFor])[1]} onClose={()=>setHelpFor(null)} goGuide={()=>setView("guide")}/>}
@@ -11043,7 +11046,7 @@ function PackVerify({orders,items,shipOrder}){
         <div className="flex items-center justify-between mb-3"><div className="font-medium text-stone-900">{order.name||order.id} · {order.customer||""}</div><button onClick={()=>setOrder(null)} className="text-xs text-stone-500 hover:text-stone-700">← pick another</button></div>
         {(()=>{ const box=suggestBox(order); return box?<div className="mb-3 text-xs bg-sky-50 text-[#0086E0] rounded-lg px-3 py-2 flex items-center gap-1.5"><Package className="w-3.5 h-3.5"/>Suggested box: <b>{box.name}</b>{box.dims?<span className="text-[#0086E0]/70">· {box.dims}</span>:null}</div>:null; })()}
         {!allDone&&<div className="flex items-end gap-2 mb-3">
-          <label className="text-xs text-stone-600 flex-1">Scan item<input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();doScan(val);}}} placeholder="Scan barcode or type SKU…" className="mt-1 w-full border border-stone-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#0086E0]" autoFocus/></label>
+          <label className="text-xs text-stone-600 flex-1">Scan item<input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();doScan(val);}}} placeholder="Scan barcode or type SKU…" className="mt-1 w-full border border-stone-300 rounded-lg px-4 py-3 text-base outline-none focus:border-[#0086E0]" autoFocus/></label>
         </div>}
         {msg&&<div className="text-xs text-amber-600 mb-2">{msg}</div>}
         <div className="space-y-1.5">
@@ -11087,7 +11090,7 @@ function ScanReceive({items,onReceived,reload}){
     <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ScanLine className="w-5 h-5 text-[#0086E0]"/>Scan to receive</h2><p className="text-sm text-stone-500 mt-0.5">Scan a barcode (or type a SKU) and press Enter — each scan adds to stock and shows the item's put-away location. Great for putting away a delivery.</p></div>
     <div className="border border-stone-200 rounded-xl bg-white p-4">
       <div className="flex items-end gap-3 flex-wrap">
-        <label className="text-xs text-stone-600 flex-1 min-w-[220px]">Scan / SKU<input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();submit(val);}}} placeholder="Scan barcode or type SKU…" className="mt-1 w-full border border-stone-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#0086E0]" autoFocus/></label>
+        <label className="text-xs text-stone-600 flex-1 min-w-[220px]">Scan / SKU<input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();submit(val);}}} placeholder="Scan barcode or type SKU…" className="mt-1 w-full border border-stone-300 rounded-lg px-4 py-3 text-base outline-none focus:border-[#0086E0]" autoFocus/></label>
         <label className="text-xs text-stone-600">Qty per scan<input type="number" min="1" value={qtyPer} onChange={e=>setQtyPer(e.target.value)} className="mt-1 w-20 border border-stone-300 rounded-lg px-2 py-2.5 text-sm"/></label>
         <button onClick={()=>submit(val)} disabled={busy||!val.trim()} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2.5 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<Plus className="w-4 h-4"/>}Receive</button>
       </div>
@@ -11122,7 +11125,7 @@ function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFl
   const open=(orders||[]).filter(o=>o&&o.status!=="fulfilled"&&Array.isArray(o.lineItems)&&o.lineItems.length);
   // Explode a line into what actually depletes stock — a virtual kit becomes its components.
   const expand=(li)=>{ const it=itBySku[String(li.sku).toLowerCase()]; const q=(+li.qty||+li.quantity||1); if(it&&Array.isArray(it.kit)&&it.kit.length&&!it.assembled)return it.kit.map(c=>({sku:String((c&&c.sku)||"").toLowerCase(),qty:q*(+c.qty||1)})).filter(x=>x.sku); return [{sku:String(li.sku).toLowerCase(),qty:q}]; };
-  const rows=open.map(o=>{ const lis=(o.lineItems||[]).filter(li=>li&&li.sku); const needs=lis.flatMap(expand); const tracked=needs.filter(n=>n.sku in stockBySku); const short=[...new Set(tracked.filter(n=>(stockBySku[n.sku]||0)<n.qty).map(n=>n.sku))]; const units=lis.reduce((s,li)=>s+(+li.qty||+li.quantity||1),0); const t=Date.parse(o.date||"")||0; return {o,ready:tracked.length>0&&short.length===0,unknown:tracked.length===0,short,units,skus:lis.length,t}; })
+  const rows=open.map(o=>{ const lis=(o.lineItems||[]).filter(li=>li&&li.sku); const needBySku={}; lis.flatMap(expand).forEach(n=>{ needBySku[n.sku]=(needBySku[n.sku]||0)+n.qty; }); const trackedSkus=Object.keys(needBySku).filter(s=>s in stockBySku); const short=trackedSkus.filter(s=>(stockBySku[s]||0)<needBySku[s]); const units=lis.reduce((s,li)=>s+(+li.qty||+li.quantity||1),0); const t=Date.parse(o.date||"")||0; return {o,ready:trackedSkus.length>0&&short.length===0,unknown:trackedSkus.length===0,short,units,skus:lis.length,t}; })
     .sort((a,b)=>(a.ready===b.ready?0:a.ready?-1:1)||a.t-b.t);
   const readyN=rows.filter(r=>r.ready).length; const shortN=rows.filter(r=>!r.ready&&!r.unknown).length;
   const age=(t)=>{ if(!t)return ""; const m=Math.floor((Date.now()-t)/60000); if(m<60)return m+"m"; const h=Math.floor(m/60); if(h<24)return h+"h"; return Math.floor(h/24)+"d"; };
@@ -11801,58 +11804,116 @@ function ProductionOrders({production,setProduction,items,onReload}){
 /* Per-tab help — a plain-English intro plus real "where people get stuck" Q&A. Keyed by view id;
    unknown views fall back to a friendly default that points at the Guide. */
 const HELP_CONTENT={
-  overview:{tip:"This is your home base. It gathers the most important things from every other tab so you know where to start.",faqs:[
-    ["What is the blue “Do this next” banner?","It's the single most important thing to do right now — ship ready orders, reorder low items, etc. Click its button to jump straight there."],
-    ["What counts as “needs attention”?","Items that are out of stock, below their reorder point, promised to more orders than you have, POs waiting to be received, or lots expiring soon."],
-    ["Nothing shows up here — is it broken?","No — it means you haven't added products yet, or everything's healthy. Add items on the Stock tab and this fills in."],
-  ]},
-  stock:{tip:"The master list of every product and how many you have. Every other screen reads and changes these numbers.",faqs:[
-    ["How do I add my products?","Click Import from catalog (if you have one), Import a spreadsheet (CSV), or New item. Only a SKU (a short product code) is required.","What's a SKU?"],
-    ["What do On hand / Committed / Available mean?","On hand = what's physically on the shelf. Committed = already promised to open orders. Available = what you can still sell (on hand minus committed)."],
-    ["Why should I set a “Reorder at” number?","When on-hand drops to it, the item shows as Low and appears on Replenish so you reorder before running out."],
-    ["An item's count is wrong — how do I fix it?","Click Adjust on the row, enter a + or − amount and a reason (damage, found, shrinkage…). For a full shelf recount use the Cycle Count tab."],
-    ["What does Move do?","Shifts units between two bins/locations. The total doesn't change — it's just relocating stock."],
-  ]},
-  health:{tip:"A colored picture of your whole inventory so you can see what needs buying at a glance.",faqs:[
-    ["What do the colors mean?","Red = out of stock, orange = low (at/below reorder point), green = healthy, purple = overstocked (above your max)."],
-    ["What's the tick mark on each bar?","That's the item's reorder point — where it flips to “low.” Set it by editing the item."],
-    ["What's the Value $ toggle?","It switches from counting products to showing dollars of stock, so you see where your money is tied up."],
-  ]},
-  replenish:{tip:"Your shopping list — everything that's low, and the draft purchase orders to refill it.",faqs:[
-    ["How does it decide what's low?","Anything where on-hand plus stock already on the way is at or below the reorder point you set."],
-    ["What does “Days left” mean?","How many days until you run out at your recent sell rate. Lower = more urgent."],
-    ["What happens when I click Create draft POs?","It makes one purchase order per supplier with the suggested quantities. They're drafts — review and send them from Purchase Orders."],
-    ["It's empty but I feel low on stuff.","Set a Reorder at number on those items (edit them). Replenish only watches items that have one."],
-  ]},
-  toship:{tip:"Your daily to-do list of orders waiting to go out. This is where the shipping side connects to the warehouse.",faqs:[
-    ["What do Ready / Short / No stock link mean?","Ready = every item is in stock. Short = you're missing some. No stock link = the order's products aren't matched to your inventory yet."],
-    ["What's the difference between One-click and Pick → Pack → Ship?","One-click: grab the items and ship. Pick → Pack → Ship: check items twice (once picking, once packing) for extra accuracy. Pick whichever your team needs."],
-    ["What does Fulfill actually do?","Opens a checklist of the order's items with their locations. Check them off, then Create shipping label — which opens the Ship tab ready to print. Stock drops when it prints."],
-  ]},
-  pick:{tip:"Turns many orders into one shelf-sorted list so you grab everything in a single walk.",faqs:[
-    ["How do I use it?","Tick the orders you want, click Build pick list, then Start pick session and scan each item — lines turn green as you pick."],
-    ["Do I need a barcode scanner?","No — you can type the SKU too. A scanner is just faster."],
-  ]},
-  pack:{tip:"A safety check: scan each item into the box before it ships so nothing wrong goes out.",faqs:[
-    ["What if an item won't scan?","Type its SKU or barcode instead. If it says “isn't on this order,” it's the wrong item for that order."],
-    ["What's the suggested box?","If you've set up Packing Groups + Containers, it tells the packer which box to use."],
-  ]},
-  scan:{tip:"The fast way to add a delivery to your stock — scan each item and it counts up.",faqs:[
-    ["What's a put-away location?","The shelf/bin where that item belongs — shown after each scan so you know where to shelve it."],
-    ["It says “not found.”","That product isn't in your Stock yet, or its barcode isn't set. Add it on the Stock tab first."],
-  ]},
-  pos:{tip:"A checkout register for in-person sales that pulls from the same stock as your online orders.",faqs:[
-    ["Does it charge a credit card?","Not yet — it records the sale, drops the stock, and prints a receipt. You take payment on your own terminal and mark it Card/Cash/Other."],
-    ["Why is an item's price $0?","Set a Sell price on the item (edit it). Point of Sale uses that price."],
-  ]},
-  billing:{tip:"If you store and ship for other brands, this bills them for the work — and can do it automatically.",faqs:[
-    ["How do I bill automatically?","Rate card → add your services and prices. Then Charges → Auto-bill shipped orders → pick a per-order and/or per-unit fee → Generate. Each shipped order becomes charges."],
-    ["Will it double-charge an order?","No — every order is billed once; already-billed orders are skipped."],
-    ["How do I send an invoice?","Invoices tab → Invoice to print a client's bill, then Mark invoiced when they've paid."],
-  ]},
-  pos_default:{},
+  overview:{tip:"This is your home base — the front page of your warehouse. It doesn't do anything itself; it gathers the most important things from every other tab so you always know where to start.",
+    steps:["Read the blue “Do this next” banner at the top and do what it says.","Scan the “Needs attention” list for anything low, out, or oversold.","Tap a quick-action button to jump straight to the right tool.","Check “Recent activity” to see what's been received, shipped, or adjusted."],
+    mistakes:["Ignoring the “Do this next” banner — it's the single most useful thing on the page.","Thinking it's blank because it's broken. If you haven't added products yet, there's nothing to show — start on Stock."],
+    faqs:[
+      ["What is the blue “Do this next” banner?","The single most important thing to do right now — ship ready orders, reorder low items, receive a delivery. Click its button to jump straight there."],
+      ["What counts as “needs attention”?","Items out of stock, below their reorder point, promised to more orders than you have (oversold), POs waiting to be received, or lots expiring soon."],
+    ]},
+  stock:{tip:"The master list of every product and how many you have. This is the heart of the system — every other screen reads and changes these numbers.",
+    steps:["Add products: Import from catalog, Import a spreadsheet (CSV), or New item. Only a SKU is required.","Type how many you have On hand.","Set a “Reorder at” number so it warns you before you run out.","Use Adjust for corrections, Move to shift between bins, or Print labels for barcodes."],
+    mistakes:["Not setting a “Reorder at” number — without it, low-stock warnings and Replenish can't help that item.","Editing on-hand to fix a miscount instead of using Adjust — Adjust records a reason and keeps an audit trail.","Forgetting to set a barcode — the scan tools (Pick, Pack, Scan Receive) work best when items have one (use the Gen button)."],
+    faqs:[
+      ["What is a SKU?","Just a short code for one product, like TSHIRT-BLK-M. Every product needs one so the system can tell them apart."],
+      ["What do On hand / Committed / Available mean?","On hand = what's physically on the shelf. Committed = already promised to open orders. Available = what you can still sell (on hand minus committed)."],
+      ["An item's count is wrong — how do I fix it?","Click Adjust on the row, enter a + or − amount and a reason (damage, found, shrinkage). For a full shelf recount, use Cycle Count."],
+    ]},
+  health:{tip:"A colored picture of your whole inventory so you can see what needs buying in two seconds instead of reading a spreadsheet. Every product is a bar; the color is its state.",
+    steps:["Glance at the four colored cards up top (Out / Low / Healthy / Over).","Click a card to filter to just those items.","Flip the Count / Value $ toggle to see dollars of stock instead of unit counts.","Click “Reorder low stock” to send the low items to Replenish."],
+    mistakes:["Not setting reorder points and max levels — without them everything looks “healthy” and the colors can't help.","Reading it as out-of-date — it's live, straight from your Stock counts."],
+    faqs:[
+      ["What do the colors mean?","Red = out of stock, orange = low (at/below reorder point), green = healthy, purple = overstocked (above your max)."],
+      ["What's the tick mark on each bar?","The item's reorder point — where it flips to “low.” Set it by editing the item."],
+      ["What's the Value $ toggle?","It switches from counting products to showing dollars of stock, so you see where your money is tied up."],
+    ]},
+  replenish:{tip:"Your shopping list. It shows everything that's low — after counting stock already on the way — and drafts the purchase orders to refill it, from the cheapest supplier.",
+    steps:["Open Replenish (the number in the tab is how many are low).","Review the suggested quantities and “Days left.”","Adjust any quantities you want.","Click Create draft POs — one order per supplier, ready to review and send from Purchase Orders."],
+    mistakes:["Expecting items to appear without a reorder point — Replenish only watches items that have one.","Sending the drafts without reviewing — they're suggestions; check quantities and suppliers first.","Not setting a Preferred supplier on items — then everything lands on a “no supplier” PO."],
+    faqs:[
+      ["How does it decide what's low?","Anything where on-hand plus stock already on the way is at or below the reorder point you set."],
+      ["What does “Days left” mean?","How many days until you run out at your recent sell rate. Lower = more urgent."],
+      ["What's the “Tune reorder points” button?","It suggests smart min/max levels from your real sell rate and supplier lead time, so you don't have to guess."],
+    ]},
+  backorder:{tip:"A list of products where your open orders need more than you have on the shelf — so you know what you're short on and who's waiting.",
+    steps:["Open Backorders.","See each short product and whether stock already on order will cover it.","Click a row to see which orders are waiting.","Head to Replenish to reorder what's genuinely short."],
+    mistakes:["Panicking over items marked “On the way” — those are already covered by an inbound PO.","Forgetting kits — a bundle's shortage shows up under its component parts, not the bundle."],
+    faqs:[["Why is something backordered when I just restocked?","The orders were promised before the stock arrived. Once you receive the PO, it clears."]]},
+  count:{tip:"A stock-check tool. Pick a shelf, count what's really there, and it fixes the number for you — with a record of every change.",
+    steps:["Open Cycle Count and pick a category.","Walk the shelf and type what you actually see next to each item.","The Variance column shows the difference live.","Click Apply — only the differences are corrected, and each is logged."],
+    mistakes:["Counting the whole warehouse at once — do a category or shelf at a time (that's the “cycle” idea).","Serial/lot items won't appear here — those are counted by scanning each unit."],
+    faqs:[["Will it overwrite my counts?","Only where you typed a number that differs. Blank rows are left alone."]]},
+  production:{tip:"For when you build a product out of other products (a gift set from a mug + a shirt). It turns parts into finished bundles and keeps both counts correct.",
+    steps:["First, on the product, list its parts (edit the item → add a kit / bill of materials).","Production → New order → pick the bundle and how many to build.","Review the parts it will consume.","Click Complete — the parts are used up and the finished bundle is added to Stock."],
+    mistakes:["Trying to build something with no kit set — add the components to the item first.","Building more than you have parts for — it checks availability and won't let you go negative."],
+    faqs:[["What's a BOM?","“Bill of materials” — just the list of parts that make up a bundle."]]},
+  toship:{tip:"Your daily to-do list of orders waiting to go out, greenest (ready) first. This is where the shipping side meets the warehouse.",
+    steps:["Choose your Fulfillment steps up top: One-click, or Pick → Pack → Ship.","Click Fulfill on an order.","Tick off each item (with its location).","Create shipping label — it opens the Ship tab ready to print, and stock drops when it prints."],
+    mistakes:["Skipping the “Try a practice order” button when you're new — it's the safest way to learn.","Worrying about “No stock link” orders — it just means those products aren't matched to your inventory yet."],
+    faqs:[
+      ["Ready / Short / No stock link — what do they mean?","Ready = every item's in stock. Short = you're missing some. No stock link = the order's products aren't matched to your inventory yet."],
+      ["One-click vs Pick → Pack → Ship?","One-click: grab and ship (fastest). Pick → Pack → Ship: check items twice for extra accuracy. Pick whichever your team needs."],
+    ]},
+  runner:{tip:"A phone-friendly version of the warehouse for someone walking the floor with a scanner. Big buttons, one job at a time — no laptop needed.",
+    steps:["Open Runner on a phone or tablet.","Tap Pull (grab for orders), Put (put stock away), Receive (scan a delivery in), or Count.","Scan a barcode or type a SKU and go."],
+    mistakes:["Using it on a tiny phone in the office — it shines on the warehouse floor.","Forgetting that every action here changes the same live Stock as the desktop."],
+    faqs:[["Does it work offline?","It needs a connection to save each action, but it's built to be quick over warehouse Wi-Fi."]]},
+  pick:{tip:"When you have lots of orders, this makes one tidy list sorted by shelf location so you grab everything in a single walk.",
+    steps:["Tick the orders you want to pick.","Click Build pick list.","Click Start pick session and scan each item as you grab it.","Lines turn green as you pick — then move to Pack Verify."],
+    mistakes:["Building a giant list you can't carry — pick a manageable batch.","Not using the scan session — it stops you grabbing the wrong item."],
+    faqs:[["Do I need a barcode scanner?","No — you can type the SKU too. A scanner is just faster."]]},
+  pack:{tip:"A safety check at the packing table: scan each item into the box before it ships. The order isn't “done” until every item is scanned.",
+    steps:["Pick an order.","Scan each item as it goes in the box.","When everything matches (it even suggests the box), click Ship this order."],
+    mistakes:["Overriding a mismatch — if an item “isn't on this order,” it's the wrong item; don't force it.","Skipping pack verify on fragile/high-value orders where a mis-ship is costly."],
+    faqs:[
+      ["What if an item won't scan?","Type its SKU or barcode instead."],
+      ["What's the suggested box?","If you've set up Packing Groups + Containers, it tells the packer which box to use."],
+    ]},
+  packgroups:{tip:"Simple rules that tell the packer which box to use for which products — so boxing is consistent and nobody guesses.",
+    steps:["First add your boxes under Setup → Containers.","New rule → match a category or a word to a box.","Now Pack Verify suggests that box automatically."],
+    mistakes:["Making a rule before adding any Containers — there's nothing to point it at.","Matching too broadly (a word that hits everything) — be specific."],
+    faqs:[["What does “match” mean?","A category name (like Apparel) or any word in the product name/SKU. If it matches, that box is suggested."]]},
+  scan:{tip:"The fast way to put a delivery into stock: scan each item and it adds to the count, and tells you which shelf it belongs on.",
+    steps:["Open Scan Receive.","Scan a barcode (or type a SKU) and set how many.","Read the put-away location and shelve it there."],
+    mistakes:["Scanning an item that isn't in Stock yet — add it first, or set its barcode.","Leaving the qty at 1 when a case has many — set the quantity per scan."],
+    faqs:[["It says “not found.”","That product isn't in your Stock yet, or its barcode isn't set. Add it on the Stock tab first."]]},
+  pos:{tip:"A checkout register for in-person sales that pulls from the same stock as your online orders — no separate system, no double-counting.",
+    steps:["Set a Sell price on your products (edit the item).","Scan items into the cart.","Pick Card / Cash / Other and click Charge.","Stock drops and a receipt prints."],
+    mistakes:["Selling an item with no Sell price (it rings up $0) — set the price first.","Expecting it to charge a card — it records the sale; you take payment on your own terminal."],
+    faqs:[["Does it charge a credit card?","Not yet — it records the sale, drops the stock, and prints a receipt. Mark it Card/Cash/Other for your records."]]},
+  suppliers:{tip:"Your address book of vendors — who you buy from and how long they take to deliver.",
+    steps:["Click New supplier.","Fill in the name, contact, and lead time (delivery days).","Now it's available on Purchase Orders and drives Replenish timing."],
+    mistakes:["Leaving lead time blank — Replenish uses it to time reorders."],
+    faqs:[["Do I have to add suppliers?","No, but purchasing and replenishment are smarter when you do."]]},
+  warehouses:{tip:"Name your storage spots — warehouses, zones, or shelves/bins — and see what's stored in each.",
+    steps:["Add your locations (a whole warehouse, a zone, or a single bin).","Expand any location to see what's inside it.","These show up when you receive, move, and put stock away."],
+    mistakes:["Over-complicating bins on day one — start simple (even one “Main”) and add detail as you grow."],
+    faqs:[["What's the difference between a warehouse, zone, and bin?","Just how specific the location is — a building, an area, or a single shelf. Use what fits your space."]]},
+  containers:{tip:"Your list of boxes and mailers, with their sizes and weight limits. It feeds the “suggested box” at packing.",
+    steps:["Add each box with its size, weight limit, and cost.","Then create Packing Groups rules that point products at these boxes."],
+    mistakes:["Adding boxes but no Packing Groups rules — the suggestion needs both."],
+    faqs:[["Do I need this?","Only if you want automatic box suggestions at packing. It's optional."]]},
+  billing:{tip:"If you store and ship for other brands (a 3PL), this bills them for the work — and can do it automatically from your shipped orders.",
+    steps:["Rate card → add your services and prices (pick fee, pack fee, storage).","Charges → Auto-bill shipped orders → pick a per-order and/or per-unit fee → Generate.","Invoices → print a client's bill and Mark invoiced when they've paid."],
+    mistakes:["Logging charges by hand when Auto-bill can do it from shipped orders.","Forgetting to set rates first — a $0 rate bills $0."],
+    faqs:[
+      ["Will it double-charge an order?","No — every order is billed once; already-billed orders are skipped."],
+      ["Who is the “client” on a charge?","The order's store/source (or the customer name), so charges group per brand you fulfill for."],
+    ]},
+  requests:{tip:"A simple queue of client requests and tickets — inbound shipments, special projects, one-off asks — tracked to done.",
+    steps:["New request → pick the client and type.","Fill in the subject and details.","Click the status pill to move it along (open → in progress → done)."],
+    mistakes:["Using it as a chat — it's a task tracker; keep entries actionable."],
+    faqs:[["Is this tied to billing?","No — it's a to-do list for client work. Bill the work on the 3PL Billing tab."]]},
+  analytics:{tip:"The numbers behind your stock — what it's worth, what's selling, and what's collecting dust.",
+    steps:["Open Analytics.","Read the tiles (value, turns, days of cover) and tables (ABC, dead stock, forecast, kit margins)."],
+    mistakes:["Reading value without setting unit costs — value is on-hand × cost, so costs must be entered."],
+    faqs:[["What is ABC analysis?","It ranks products by how much value they move — A = your top movers, C = the slow ones."]]},
+  guide:{tip:"The full plain-English handbook for the whole warehouse. Start with the big picture, then open any tool.",
+    steps:["Read “The big picture” to see how it all connects.","Open “A few words to know” for the jargon.","Tap any section to read what each tool does and how to use it."],
+    mistakes:[],faqs:[["Where do I start as a total beginner?","Read the big picture here, then use the Help button on any tab and the “Try a practice order” button on To Ship."]]},
 };
-const HELP_DEFAULT={tip:"Here's what this tool does and answers to common questions. For the full picture, open the Guide.",faqs:[
+const HELP_DEFAULT={tip:"Here's what this tool does and answers to common questions. For the full picture, open the Guide.",
+  steps:[],mistakes:[],faqs:[
   ["I'm not sure what this tab is for.","Open the Guide (Home → Guide) — it explains every tool in plain English and how they connect."],
   ["Did I break something?","Almost certainly not. Nothing here deletes stock unless you confirm it. When unsure, close this and check the Guide."],
 ]};
@@ -11913,7 +11974,7 @@ const FEATURE_GUIDE=[
    places people get stuck, with a link to the full Guide. Rendered from the Switcher so it's on every tab. */
 function WmsHelp({viewId,viewLabel,onClose,goGuide}){
   const c=HELP_CONTENT[viewId]||HELP_DEFAULT;
-  const [q,setQ]=useState(""); const [open,setOpen]=useState(0);
+  const [q,setQ]=useState(""); const [open,setOpen]=useState(null);
   const faqs=(c.faqs||[]).filter(f=>!q.trim()||((f[0]+" "+f[1]).toLowerCase().includes(q.trim().toLowerCase())));
   return (<div className="fixed inset-0 z-[60] flex justify-end" onClick={onClose}>
     <div className="absolute inset-0 bg-black/30"/>
@@ -11922,22 +11983,35 @@ function WmsHelp({viewId,viewLabel,onClose,goGuide}){
         <div className="font-semibold text-stone-900 flex items-center gap-2"><MessageCircle className="w-4.5 h-4.5 text-[#0086E0]"/>Help · {viewLabel}</div>
         <button onClick={onClose} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button>
       </div>
-      <div className="p-5 space-y-4">
-        <p className="text-sm text-stone-600">{c.tip||HELP_DEFAULT.tip}</p>
-        {(c.faqs||[]).length>3&&<div className="relative"><Search className="w-4 h-4 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search questions…" className="w-full border border-stone-300 rounded-lg pl-8 pr-3 py-2 text-sm"/></div>}
-        <div className="space-y-2">
-          <div className="text-[10px] uppercase tracking-widest text-stone-400">Common questions</div>
-          {faqs.length===0&&<div className="text-sm text-stone-400">No questions match — try the full Guide.</div>}
-          {faqs.map((f,i)=>{ const isOpen=open===i; return (<div key={i} className="border border-stone-200 rounded-lg overflow-hidden">
-            <button onClick={()=>setOpen(isOpen?-1:i)} className="w-full text-left px-3 py-2.5 flex items-start gap-2 hover:bg-stone-50">
-              <span className="text-sm font-medium text-stone-800 flex-1">{f[0]}</span>
-              <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 mt-0.5 transition ${isOpen?"rotate-90":""}`}/>
-            </button>
-            {isOpen&&<div className="px-3 pb-3 text-[13px] text-stone-600">{f[1]}</div>}
-          </div>); })}
-        </div>
-        <button onClick={()=>{onClose();goGuide&&goGuide();}} className="w-full text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2.5 font-medium hover:bg-stone-200 flex items-center justify-center gap-1.5"><MessageCircle className="w-4 h-4"/>Open the full Guide</button>
-        <p className="text-[11px] text-stone-400 text-center">Still stuck? The Guide walks through the whole system step by step.</p>
+      <div className="p-5 space-y-5">
+        {/* What it is */}
+        <p className="text-sm text-stone-700 leading-relaxed">{c.tip||HELP_DEFAULT.tip}</p>
+        {/* How to use it */}
+        {(c.steps||[]).length>0&&<div>
+          <div className="text-[10px] uppercase tracking-widest text-[#0086E0] font-semibold mb-2">How to use it</div>
+          <ol className="space-y-2">{c.steps.map((s,i)=>(<li key={i} className="flex gap-2.5 text-[13.5px] text-stone-700"><span className="w-5 h-5 rounded-full bg-[#E6F4FF] text-[#006FBF] text-[11px] font-bold flex items-center justify-center shrink-0 mt-0.5">{i+1}</span><span>{s}</span></li>))}</ol>
+        </div>}
+        {/* Common mistakes */}
+        {(c.mistakes||[]).length>0&&<div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+          <div className="text-[10px] uppercase tracking-widest text-amber-700 font-semibold mb-2 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5"/>Common mistakes</div>
+          <ul className="space-y-1.5">{c.mistakes.map((m,i)=>(<li key={i} className="text-[13px] text-stone-700 flex gap-2"><span className="text-amber-500 shrink-0">•</span><span>{m}</span></li>))}</ul>
+        </div>}
+        {/* FAQ */}
+        {(c.faqs||[]).length>0&&<div>
+          <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-2">Questions &amp; answers</div>
+          {(c.faqs||[]).length>4&&<div className="relative mb-2"><Search className="w-4 h-4 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search questions…" className="w-full border border-stone-300 rounded-lg pl-8 pr-3 py-2 text-sm"/></div>}
+          <div className="space-y-2">
+            {faqs.length===0&&<div className="text-sm text-stone-400">No questions match your search.</div>}
+            {faqs.map((f)=>{ const isOpen=open===f[0]; return (<div key={f[0]} className="border border-stone-200 rounded-lg overflow-hidden">
+              <button onClick={()=>setOpen(isOpen?null:f[0])} className="w-full text-left px-3 py-2.5 flex items-start gap-2 hover:bg-stone-50">
+                <span className="text-sm font-medium text-stone-800 flex-1">{f[0]}</span>
+                <ChevronRight className={`w-4 h-4 text-stone-400 shrink-0 mt-0.5 transition ${isOpen?"rotate-90":""}`}/>
+              </button>
+              {isOpen&&<div className="px-3 pb-3 text-[13px] text-stone-600">{f[1]}</div>}
+            </div>); })}
+          </div>
+        </div>}
+        <button onClick={()=>{onClose();goGuide&&goGuide();}} className="w-full text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2.5 font-medium hover:bg-stone-200 flex items-center justify-center gap-1.5"><MessageCircle className="w-4 h-4"/>See the whole system in the Guide</button>
       </div>
     </div>
   </div>);

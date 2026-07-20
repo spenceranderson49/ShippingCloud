@@ -1743,12 +1743,26 @@ exports.handler = async (event) => {
            snapshot below still runs for everything that IS allowed, so any change stays restorable.) */
         const bigShrink = !wipes && Array.isArray(curVal) && Array.isArray(nv) && curSize >= 5 && nvSize <= curSize * 0.4;
         if (wipes || bigShrink) { delete toWrite[key]; rejected.push(key + (bigShrink ? " (refused: would drop from " + curSize + " to " + nvSize + " entries — looks like a stale tab overwrote the full list; reload and try again)" : " (refused: would erase " + curSize + " existing entries — reload and try again)")); continue; }
-        /* F20: protect loaded rate cards — a rateRules save that drops ALL cost tables (baseCosts)
-           when some were loaded is a stale-tab overwrite, not a real edit. Refuse it. */
+        /* F20 (hardened 2026-07-20): protect loaded rate cards. The old check only looked at
+           baseCosts, so a mount-time DEFAULT_RATE_RULES ({profiles:[one empty default], assign:{},
+           baseCosts:{}}) coming from a fresh/customer tab could still REPLACE real negotiated
+           rates whenever those rates lived in profile services/surcharges + per-client assignments
+           rather than baseCosts — that is how "lagence and other clients" lost their rates. Now we
+           measure ALL rate content (per-client assignments + every profile's services/surcharges +
+           cost tables). If the stored value has real content and the incoming write has NONE of it
+           (i.e. it is structurally the empty default), refuse and keep the snapshot. A genuine edit
+           always retains at least some content, so this never blocks real work. */
         if (key === "rateRules" && curVal && nv) {
-          const curBC = (curVal.baseCosts && typeof curVal.baseCosts === "object") ? Object.keys(curVal.baseCosts).length : 0;
-          const nvBC = (nv.baseCosts && typeof nv.baseCosts === "object") ? Object.keys(nv.baseCosts).length : 0;
-          if (curBC >= 1 && nvBC === 0) { delete toWrite[key]; rejected.push("rateRules (refused: would drop " + curBC + " loaded rate card(s)/cost table(s) — reload and try again)"); continue; }
+          const rateContent = (v) => {
+            if (!v || typeof v !== "object") return 0;
+            let n = 0;
+            if (v.assign && typeof v.assign === "object") n += Object.keys(v.assign).length;
+            if (v.baseCosts && typeof v.baseCosts === "object") n += Object.keys(v.baseCosts).length;
+            if (Array.isArray(v.profiles)) v.profiles.forEach((p) => { if (p && typeof p === "object") { if (p.services && typeof p.services === "object") n += Object.keys(p.services).length; if (p.surcharges && typeof p.surcharges === "object") n += Object.keys(p.surcharges).length; } });
+            return n;
+          };
+          const curRC = rateContent(curVal), nvRC = rateContent(nv);
+          if (curRC >= 1 && nvRC === 0) { delete toWrite[key]; rejected.push("rateRules (refused: would replace " + curRC + " loaded rate setting(s) — assignments/services/cost tables — with an empty default; reload and try again)"); continue; }
         }
         if (curVal !== undefined) {
           try {
@@ -1781,6 +1795,38 @@ exports.handler = async (event) => {
           try {
             const ts = new Date().toISOString().replace(/[:.]/g, "-");
             await putStores({ ["bak:" + key + ":" + ts]: curArr });
+            const lr = await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=like." + encodeURIComponent("bak:" + key + ":") + "*&select=key&order=key.desc");
+            const bkeys = (Array.isArray(lr.data) ? lr.data : []).map((r2) => r2.key);
+            for (const bk of bkeys.slice(5)) { await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=eq." + encodeURIComponent(bk), { method: "DELETE" }); }
+          } catch (e) { /* backup must never block the save itself */ }
+        }
+      }
+      /* SETTINGS BOX-CATALOG GUARD (2026-07-20): each customer's box/container catalog lives in
+         settings.boxes (the unified source shared by the shipping-side box presets and the WMS
+         Container Types). settings is a whole-object last-write-wins save, so a mount-time default
+         (empty/seed boxes) from a stale or freshly-loaded tab could silently wipe a customer's real
+         catalog. If the stored settings has a populated boxes array and the incoming write drops it
+         to empty/missing, refuse and snapshot; a big shrink is snapshotted so it stays restorable. */
+      for (const key of Object.keys(toWrite)) {
+        if (!/^u\/[^/]+\/settings$/.test(key)) continue;
+        const nv = toWrite[key];
+        if (!nv || typeof nv !== "object") continue;
+        const curP = await getStore(key);
+        const curV = (curP.ok && curP.value && typeof curP.value === "object") ? curP.value : null;
+        const curBoxes = curV && Array.isArray(curV.boxes) ? curV.boxes : null;
+        if (!curBoxes || !curBoxes.length) continue;                       // nothing to protect yet
+        const nvBoxes = Array.isArray(nv.boxes) ? nv.boxes : null;
+        const nvLen = nvBoxes ? nvBoxes.length : 0;
+        if (!nvBoxes || nvLen === 0) {
+          // would erase the whole catalog — keep the existing boxes, let the rest of settings save
+          toWrite[key] = { ...nv, boxes: curBoxes };
+          rejected.push(key + " (kept " + curBoxes.length + " existing box catalog entr" + (curBoxes.length === 1 ? "y" : "ies") + " — incoming save had none)");
+          continue;
+        }
+        if (curBoxes.length >= 4 && nvLen <= curBoxes.length * 0.5) {
+          try {
+            const ts = new Date().toISOString().replace(/[:.]/g, "-");
+            await putStores({ ["bak:" + key + ":" + ts]: curV });
             const lr = await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=like." + encodeURIComponent("bak:" + key + ":") + "*&select=key&order=key.desc");
             const bkeys = (Array.isArray(lr.data) ? lr.data : []).map((r2) => r2.key);
             for (const bk of bkeys.slice(5)) { await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=eq." + encodeURIComponent(bk), { method: "DELETE" }); }
@@ -2033,13 +2079,20 @@ exports.handler = async (event) => {
        getting restored by the next cloud poll) and deletes the stored invoice blob. */
     if (action === "fedexRequestResolve") {
       if (auth.role !== "admin") return J({ ok: false, error: "Admin only." });
-      const id = String(body.id || ""), uid = String(body.uid || "");
+      const id = String(body.id || ""), uid = String(body.uid || ""), sig = String(body.sig || "");
+      const all = !!body.all;   // "Dismiss all" clears the whole queue in one click
       const cur = await getStore("fedexRequests");
       if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read current requests — try again." });   // else [] would drop the other pending requests
       const reqs = Array.isArray(cur.value) ? cur.value : [];
-      const gone = reqs.filter((r) => r && (r.id === id || (uid && r.uid === uid)));
-      const kept = reqs.filter((r) => !(r && (r.id === id || (uid && r.uid === uid))));
-      for (const g of gone) { if (g.invoiceKey) { try { await blobOp(g.invoiceKey, { method: "DELETE" }); } catch (e) {} } }
+      /* Legacy/seed rows (e.g. the old "Test" / "Granite Seed" entries) carry NO id and NO uid, so the
+         old id/uid-only match removed nothing — the row bounced right back on the next render and
+         "Done" looked broken. Match on a stable signature of the row so any request the admin dismisses
+         actually leaves, id or not. Empty id/uid never match (guarded) so we can't nuke unrelated rows. */
+      const sigOf = (r) => [r && r.id, r && r.uid, r && r.email, r && r.name, r && r.requestedAt].map((x) => (x == null ? "" : String(x))).join("|");
+      const match = (r) => all || (!!r && ((id && r.id === id) || (uid && r.uid === uid) || (sig && sigOf(r) === sig)));
+      const gone = reqs.filter(match);
+      const kept = reqs.filter((r) => !match(r));
+      for (const g of gone) { if (g && g.invoiceKey) { try { await blobOp(g.invoiceKey, { method: "DELETE" }); } catch (e) {} } }
       const w = await putStores({ fedexRequests: kept });
       if (!w.ok) return J({ ok: false, error: "Couldn't update — try again." });
       return J({ ok: true, fedexRequests: kept });

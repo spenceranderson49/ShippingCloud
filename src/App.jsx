@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v734";
+const BUILD_TAG="ratesafe-v736";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -5333,13 +5333,17 @@ function UsersAdmin({users,setUsers,clients,setClients,currentUser,signupRequest
       <p className="text-[11px] text-stone-500">Approving gives this person a Company admin tab where they can create logins for their own company and set each login’s tabs. It never touches other companies or your Admin portal.</p>
     </div>}
     {CLOUD.mode==="cloud"&&fedexRequests.length>0&&<div className="border border-emerald-200 bg-emerald-50/50 rounded-lg p-4 space-y-2">
-      <div className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Truck className="w-4 h-4 text-emerald-600"/>FedEx account requests<Badge tone="green">{fedexRequests.length}</Badge></div>
-      {fedexRequests.map(r=>(<div key={r.id||r.uid} className="flex flex-wrap items-center gap-3 bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm">
-        <div className="flex-1 min-w-[180px]"><div className="font-medium">{r.name||r.email}</div><div className="text-[11px] text-stone-400">{r.email}{r.volume?<> · {r.volume}/mo</>:null}{r.carrier?<> · ships {r.carrier}</>:null} · {r.requestedAt?new Date(r.requestedAt).toLocaleDateString():"recently"}</div></div>
+      <div className="flex items-center gap-2">
+        <div className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Truck className="w-4 h-4 text-emerald-600"/>FedEx account requests<Badge tone="green">{fedexRequests.length}</Badge></div>
+        <span className="flex-1"/>
+        <button onClick={async()=>{ if(!await uiConfirm("Dismiss ALL "+fedexRequests.length+" FedEx account request"+(fedexRequests.length>1?"s":"")+"? This clears the whole list and deletes any uploaded invoices. Use it to wipe old test/seed rows.")) return; setFedexRequests&&setFedexRequests([]); try{ const res=await cloudCall({action:"fedexRequestResolve",token:CLOUD.token,all:true}); if(res&&res.ok&&Array.isArray(res.fedexRequests))setFedexRequests&&setFedexRequests(res.fedexRequests); }catch(e){} }} className="text-[11px] text-stone-500 hover:text-rose-600 hover:bg-rose-50 rounded px-2 py-1">Dismiss all</button>
+      </div>
+      {fedexRequests.map((r,i)=>(<div key={r.id||r.uid||("fx"+i)} className="flex flex-wrap items-center gap-3 bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm">
+        <div className="flex-1 min-w-[180px]"><div className="font-medium">{r.name||r.email||"(unnamed request)"}</div><div className="text-[11px] text-stone-400">{r.email}{r.volume?<> · {r.volume}/mo</>:null}{r.carrier?<> · ships {r.carrier}</>:null} · {r.requestedAt?new Date(r.requestedAt).toLocaleDateString():"recently"}</div></div>
         {r.invoiceKey&&<button onClick={async()=>{const res=await cloudCall({action:"getUpload",token:CLOUD.token,key:r.invoiceKey});if(!res||!res.ok){uiAlert((res&&res.error)||"Could not fetch the file.");return;}const bytes=atob(res.data);const arr=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);const url=URL.createObjectURL(new Blob([arr],{type:res.type}));const a=document.createElement("a");a.href=url;a.download=res.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);}} className="text-xs border border-[#0086E0]/40 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>Carrier Invoice</button>}
-        <button onClick={async()=>{ setFedexRequests&&setFedexRequests(rs=>rs.filter(x=>x!==r)); try{ const res=await cloudCall({action:"fedexRequestResolve",token:CLOUD.token,id:r.id||"",uid:r.uid||""}); if(res&&res.ok&&Array.isArray(res.fedexRequests))setFedexRequests&&setFedexRequests(res.fedexRequests); }catch(e){} }} className="text-xs border border-stone-300 text-stone-600 rounded px-3 py-1.5 hover:bg-stone-50">Done</button>
+        <button onClick={async()=>{ const sig=[r.id,r.uid,r.email,r.name,r.requestedAt].map(x=>x==null?"":String(x)).join("|"); setFedexRequests&&setFedexRequests(rs=>rs.filter(x=>x!==r)); try{ const res=await cloudCall({action:"fedexRequestResolve",token:CLOUD.token,id:r.id||"",uid:r.uid||"",sig}); if(res&&res.ok&&Array.isArray(res.fedexRequests))setFedexRequests&&setFedexRequests(res.fedexRequests); }catch(e){} }} className="text-xs border border-stone-300 text-stone-600 rounded px-3 py-1.5 hover:bg-stone-50">Done</button>
       </div>))}
-      <p className="text-[11px] text-stone-400">These come from the welcome popup after a user’s first sign-in. Provision their England/FedEx account, drop the credentials into their customer card, then hit Done.</p>
+      <p className="text-[11px] text-stone-400">These come from the welcome popup after a user’s first sign-in. Provision their England/FedEx account, drop the credentials into their customer card, then hit Done. <b>Done</b> clears one row; <b>Dismiss all</b> wipes the whole list.</p>
     </div>}
     {CLOUD.mode==="cloud"&&signupRequests.length>0&&<div className="border border-blue-200 bg-blue-50/50 rounded-lg p-4 space-y-2">
       <div className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Users className="w-4 h-4 text-[#0086E0]"/>Access requests<Badge tone="blue">{signupRequests.length}</Badge></div>
@@ -5635,7 +5639,21 @@ function usePersist(key,initial){
     window.addEventListener("storage",onStorage);
     return ()=>{ bus.delete(setVal); window.removeEventListener("storage",onStorage); };
   },[nsKey]);
-  useEffect(()=>{lsSet(nsKey,val);cloudQueue(nsKey,val);},[nsKey,val]);
+  /* WIPE GUARD — a component's mount-time value must NEVER reach the cloud. On the first render for
+     a given key `val` is either (a) the real cached/snapshot value we just loaded (re-writing it is
+     pointless) or (b) the built-in default because this device hadn't cached that store yet. Case (b)
+     is exactly how a fresh or customer tab used to overwrite real client rateRules/settings with an
+     empty default before cloudLoadAll finished — wiping negotiated rates. Only SUBSEQUENT changes
+     (genuine edits, or values pushed in by the cloud load) are ever synced. GLOBAL stores (rateRules,
+     users, clients…) are additionally HELD until the first full cloud load completes; any global edit
+     made in that window is re-queued by cloudLoadAll's recovery pass, so nothing is lost. */
+  const seenKey=React.useRef("");
+  useEffect(()=>{
+    lsSet(nsKey,val);
+    if(seenKey.current!==nsKey){ seenKey.current=nsKey; return; }   // first render for this key: never push the mount/default value
+    if(GLOBAL_KEYS[key]&&!CLOUD.loaded)return;                       // hold global writes until real cloud data has loaded
+    cloudQueue(nsKey,val);
+  },[nsKey,val]);
   const setShared=React.useCallback((v)=>{ const bus=PERSIST_BUS[nsKey]; if(bus&&bus.size){ bus.forEach(fn=>{ try{ fn(v); }catch(_){ } }); } else setVal(v); },[nsKey]);
   return [val,setShared];
 }
@@ -5647,7 +5665,7 @@ function usePersist(key,initial){
    source of truth. If the cloud isn't configured, the app runs in local
    mode exactly as before. */
 const DB_ENDPOINT="/.netlify/functions/db";
-const CLOUD={mode:"unknown",token:lsGet("cloud.token",null),user:null,snapshot:null,baseline:{},queue:{},timer:null,offline:false};
+const CLOUD={mode:"unknown",token:lsGet("cloud.token",null),user:null,snapshot:null,baseline:{},queue:{},timer:null,offline:false,loaded:false};
 async function cloudCall(payload,timeoutMs=15000){
   try{
     const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),timeoutMs);
@@ -5788,6 +5806,11 @@ async function cloudLoadAll(){
          user is mid-edit on (in the flush queue). Mirrors the 20s poll's safety. */
       if(prevRaw!==j && !(k in CLOUD.queue)){ const bus=PERSIST_BUS[k]; if(bus&&bus.size)bus.forEach(fn=>{try{fn(cloud[k]);}catch(_){}}); }
     }
+    /* Real cloud data is now loaded and baselined — it is finally safe to let global-store edits
+       (rates, users, clients…) flow to the server. Set this BEFORE re-queuing recovered edits so
+       they aren't held. Any global save attempted before this point was intentionally suppressed by
+       usePersist to guarantee a mount-time default can never overwrite real client data. */
+    CLOUD.loaded=true;
     // re-queue recovered edits so they actually reach the server this session
     if(recovered.length){ for(const k of recovered){ delete CLOUD.baseline[k]; cloudQueue(k,cloud[k]); } }
     return {ok:true,recovered};
@@ -6699,7 +6722,7 @@ export default function App(){
        say so and offer Retry — local mode is reserved for a truly unconfigured backend. */
     let ping=null;
     for(let i=0;i<3;i++){ ping=await cloudCall({action:"ping"}); if(ping&&!ping.network)break; await new Promise(r=>setTimeout(r,700*(i+1))); }
-    if(ping&&ping.ok&&!ping.configured){ CLOUD.mode="local"; setPhase("local"); return; }
+    if(ping&&ping.ok&&!ping.configured){ CLOUD.mode="local"; CLOUD.loaded=true; setPhase("local"); return; }
     if(!ping||ping.network){
       CLOUD.mode="cloud"; CLOUD.offline=true;
       if(lsGet("session",null)&&CLOUD.token){ setPhase("ready"); setBootMsg("Can’t reach the server right now — showing this device’s saved data; changes sync when the connection returns."); return; }
@@ -6710,7 +6733,7 @@ export default function App(){
     if(sess&&sess.id==="demo"){
       // self-heal: if the stored demo seed predates the current seed definition, re-seed so Take-a-peek always reflects the latest demo
       try{ if(lsGet("u/demo/seedV",null)!==DEMO_SEED_V){ const d=makeDemoData(); lsSet("u/demo/settings",d.settings);lsSet("u/demo/orders",d.orders);lsSet("u/demo/shipments",d.shipments);lsSet("u/demo/returns",d.returns);lsSet("u/demo/seedV",DEMO_SEED_V); } }catch(e){}
-      setPhase("ready"); return; }   // demo sandbox: no token, no cloud load — pure local
+      CLOUD.loaded=true; setPhase("ready"); return; }   // demo sandbox: no token, no cloud load — pure local
     if(!CLOUD.token){ setPhase("login"); return; }
     setPhase("loading");
     const res=await cloudLoadAll();
@@ -10060,7 +10083,6 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const [lowOnly,setLowOnly]=useState(false);
   const [poSeed,setPoSeed]=useState(null);
   const [warehouses,setWarehouses]=useState([]);
-  const [containers,setContainers]=useState([]);
   const [production,setProduction]=useState([]);
   const [catFilter,setCatFilter]=useState("");
   const [building,setBuilding]=useState(null);
@@ -10082,8 +10104,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     await cloudCall({action:"invUpsert",token:CLOUD.token,sku:"GIFTBOX",name:"Gift Box (T-Shirt + Mug)",category:"Bundles",kit:[{sku:"TSHIRT-BLK-M",qty:1},{sku:"MUG-WHT",qty:1}]});
     await cloudCall({action:"supplierSave",token:CLOUD.token,supplier:{name:"Acme Supply Co.",contact:"Sales",email:"orders@acmesupply.example",leadDays:5}});
     await cloudCall({action:"warehouseSave",token:CLOUD.token,warehouse:{name:"Main Warehouse",code:"WH1",type:"warehouse"}});
-    await cloudCall({action:"containerSave",token:CLOUD.token,container:{name:"Small box",kind:"box",length:8,width:6,height:4,maxWeight:5,cost:0.55}});
-    await cloudCall({action:"containerSave",token:CLOUD.token,container:{name:"Poly mailer",kind:"poly",length:10,width:7,height:1,maxWeight:1,cost:0.15}});
+    if(setSettings)setSettings(p=>{ const boxes=Array.isArray(p.boxes)?p.boxes.slice():[]; const add=[{id:"bxs1",name:"Small box",kind:"box",L:8,W:6,H:4,maxWt:5,empty:0.3,cost:0.55},{id:"bxs2",name:"Poly mailer",kind:"poly",L:10,W:7,H:1,maxWt:1,empty:0.1,cost:0.15}]; add.forEach(b=>{ if(!boxes.some(x=>x.name===b.name))boxes.push(b); }); return {...p,boxes}; });
     await cloudCall({action:"wlistSave",token:CLOUD.token,kind:"packgroups",items:[{id:"wlsample1",name:"Apparel → poly mailer",match:"Apparel",container:"Poly mailer",note:"Soft goods ship in a mailer"}]});
     setBusy(""); flash("Sample warehouse loaded — explore, then delete these items whenever you like."); load();
   };
@@ -10094,11 +10115,10 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     const r=await cloudCall({action:"invList",token:CLOUD.token});
     if(r&&r.ok){ setItems(r.items||[]); setLog(r.log||[]); try{ lsSet(invCacheKey,r.items||[]); }catch(e){} }
     else { setItems(prev=>prev===null?[]:prev); setErr((r&&r.error)||"Couldn't load your warehouse."); }   // keep the cached view on a transient error
-    const [rp,rs,rw,rc,rpr]=await Promise.all([cloudCall({action:"poList",token:CLOUD.token}),cloudCall({action:"supplierList",token:CLOUD.token}),cloudCall({action:"warehouseList",token:CLOUD.token}),cloudCall({action:"containerList",token:CLOUD.token}),cloudCall({action:"productionList",token:CLOUD.token})]);
+    const [rp,rs,rw,rpr]=await Promise.all([cloudCall({action:"poList",token:CLOUD.token}),cloudCall({action:"supplierList",token:CLOUD.token}),cloudCall({action:"warehouseList",token:CLOUD.token}),cloudCall({action:"productionList",token:CLOUD.token})]);
     if(rp&&rp.ok)setPos(rp.pos||[]);
     if(rs&&rs.ok)setSuppliers(rs.suppliers||[]);
     if(rw&&rw.ok)setWarehouses(rw.warehouses||[]);
-    if(rc&&rc.ok)setContainers(rc.containers||[]);
     if(rpr&&rpr.ok)setProduction(rpr.production||[]);
   };
   const build=async()=>{
@@ -10286,28 +10306,28 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     {helpFor&&<WmsHelp viewId={helpFor} viewLabel={(NAV_GROUPS.flatMap(g=>g[1]).find(t=>t[0]===helpFor)||[helpFor,helpFor])[1]} onClose={()=>setHelpFor(null)} goGuide={()=>setView("guide")}/>}
     {!welcomed&&items&&<WmsWelcome onClose={()=>setWelcomed(true)} goView={setView}/>}
   </div>); };
-  if(view==="overview") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryOverview list={list} pos={pos} log={log} suppliers={suppliers} orders={orders} showMoney={showMoney} committedBySku={committedBySku} incomingBySku={incomingBySku} goView={setView} onReceive={()=>setView("stock")}/></div>);
-  if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
-  if(view==="health") return (<div className="max-w-5xl space-y-4"><Switcher/><StockHealth list={list} committedBySku={committedBySku} goView={setView} showMoney={showMoney}/></div>);
-  if(view==="guide") return (<div className="max-w-5xl space-y-4"><Switcher/><WmsGuide goView={setView} onReplay={()=>setWelcomed(false)}/></div>);
-  if(view==="toship") return (<div className="max-w-5xl space-y-4"><Switcher/><ToShip orders={orders} list={list} committedBySku={committedBySku} goView={setView} shipOrder={goShip?shipOrder:null} flow={wmsFlow} setFlow={setWmsFlow}/></div>);
-  if(view==="pick") return (<div className="max-w-5xl space-y-4"><Switcher/><PickList orders={orders} items={list}/></div>);
-  if(view==="pack") return (<div className="max-w-5xl space-y-4"><Switcher/><PackVerify orders={orders} items={list} shipOrder={goShip?shipOrder:null}/></div>);
-  if(view==="scan") return (<div className="max-w-5xl space-y-4"><Switcher/><ScanReceive items={list} onReceived={patch} reload={load}/></div>);
-  if(view==="warehouses") return (<div className="max-w-5xl space-y-4"><Switcher/><WarehousesView warehouses={warehouses} setWarehouses={setWarehouses} items={list}/></div>);
-  if(view==="containers") return (<div className="max-w-5xl space-y-4"><Switcher/><ContainerTypes containers={containers} setContainers={setContainers} showMoney={showMoney}/></div>);
-  if(view==="runner") return (<div className="max-w-5xl space-y-4"><Switcher/><RunnerPortal items={list} orders={orders} warehouses={warehouses} onReceived={patch} onReload={load}/></div>);
-  if(view==="billing") return (<div className="max-w-5xl space-y-4"><Switcher/><Billing3PL orders={orders}/></div>);
-  if(view==="sale") return (<div className="max-w-5xl space-y-4"><Switcher/><PointOfSale items={list} onReload={load}/></div>);
-  if(view==="packgroups") return (<div className="max-w-5xl space-y-4"><Switcher/><PackingGroups/></div>);
-  if(view==="links") return (<div className="max-w-5xl space-y-4"><Switcher/><ThirdPartyLinks/></div>);
-  if(view==="dropoffs") return (<div className="max-w-5xl space-y-4"><Switcher/><Dropoffs/></div>);
-  if(view==="mailboxes") return (<div className="max-w-5xl space-y-4"><Switcher/><MailBoxes/></div>);
-  if(view==="requests") return (<div className="max-w-5xl space-y-4"><Switcher/><Requests3PL/></div>);
-  if(view==="production") return (<div className="max-w-5xl space-y-4"><Switcher/><ProductionOrders production={production} setProduction={setProduction} items={list} onReload={load}/></div>);
-  if(view==="replenish") return (<div className="max-w-5xl space-y-4"><Switcher/><Replenishment list={list} suppliers={suppliers} log={log} incomingBySku={incomingBySku} committedBySku={committedBySku} showMoney={showMoney} onReload={load} onCreated={p=>{setPos(x=>[...p,...(x||[])]);setView("pos");load();}}/></div>);
-  if(view==="count") return (<div className="max-w-5xl space-y-4"><Switcher/><CycleCount list={list} showMoney={showMoney} onApplied={load}/></div>);
-  if(view==="backorder") return (<div className="max-w-5xl space-y-4"><Switcher/><Backorders list={list} orders={orders} committedBySku={committedBySku} incomingBySku={incomingBySku} goReplenish={()=>setView("replenish")}/></div>);
+  if(view==="overview") return (<div className="max-w-5xl space-y-4">{Switcher()}<InventoryOverview list={list} pos={pos} log={log} suppliers={suppliers} orders={orders} showMoney={showMoney} committedBySku={committedBySku} incomingBySku={incomingBySku} goView={setView} onReceive={()=>setView("stock")}/></div>);
+  if(view==="analytics") return (<div className="max-w-5xl space-y-4">{Switcher()}<InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
+  if(view==="health") return (<div className="max-w-5xl space-y-4">{Switcher()}<StockHealth list={list} committedBySku={committedBySku} goView={setView} showMoney={showMoney}/></div>);
+  if(view==="guide") return (<div className="max-w-5xl space-y-4">{Switcher()}<WmsGuide goView={setView} onReplay={()=>setWelcomed(false)}/></div>);
+  if(view==="toship") return (<div className="max-w-5xl space-y-4">{Switcher()}<ToShip orders={orders} list={list} committedBySku={committedBySku} goView={setView} shipOrder={goShip?shipOrder:null} flow={wmsFlow} setFlow={setWmsFlow}/></div>);
+  if(view==="pick") return (<div className="max-w-5xl space-y-4">{Switcher()}<PickList orders={orders} items={list}/></div>);
+  if(view==="pack") return (<div className="max-w-5xl space-y-4">{Switcher()}<PackVerify orders={orders} items={list} shipOrder={goShip?shipOrder:null} settings={settings}/></div>);
+  if(view==="scan") return (<div className="max-w-5xl space-y-4">{Switcher()}<ScanReceive items={list} onReceived={patch} reload={load}/></div>);
+  if(view==="warehouses") return (<div className="max-w-5xl space-y-4">{Switcher()}<WarehousesView warehouses={warehouses} setWarehouses={setWarehouses} items={list}/></div>);
+  if(view==="containers") return (<div className="max-w-5xl space-y-4">{Switcher()}<ContainerTypes settings={settings} setSettings={setSettings} showMoney={showMoney}/></div>);
+  if(view==="runner") return (<div className="max-w-5xl space-y-4">{Switcher()}<RunnerPortal items={list} orders={orders} warehouses={warehouses} onReceived={patch} onReload={load}/></div>);
+  if(view==="billing") return (<div className="max-w-5xl space-y-4">{Switcher()}<Billing3PL orders={orders}/></div>);
+  if(view==="sale") return (<div className="max-w-5xl space-y-4">{Switcher()}<PointOfSale items={list} onReload={load}/></div>);
+  if(view==="packgroups") return (<div className="max-w-5xl space-y-4">{Switcher()}<PackingGroups settings={settings}/></div>);
+  if(view==="links") return (<div className="max-w-5xl space-y-4">{Switcher()}<ThirdPartyLinks/></div>);
+  if(view==="dropoffs") return (<div className="max-w-5xl space-y-4">{Switcher()}<Dropoffs/></div>);
+  if(view==="mailboxes") return (<div className="max-w-5xl space-y-4">{Switcher()}<MailBoxes/></div>);
+  if(view==="requests") return (<div className="max-w-5xl space-y-4">{Switcher()}<Requests3PL/></div>);
+  if(view==="production") return (<div className="max-w-5xl space-y-4">{Switcher()}<ProductionOrders production={production} setProduction={setProduction} items={list} onReload={load}/></div>);
+  if(view==="replenish") return (<div className="max-w-5xl space-y-4">{Switcher()}<Replenishment list={list} suppliers={suppliers} log={log} incomingBySku={incomingBySku} committedBySku={committedBySku} showMoney={showMoney} onReload={load} onCreated={p=>{setPos(x=>[...p,...(x||[])]);setView("pos");load();}}/></div>);
+  if(view==="count") return (<div className="max-w-5xl space-y-4">{Switcher()}<CycleCount list={list} showMoney={showMoney} onApplied={load}/></div>);
+  if(view==="backorder") return (<div className="max-w-5xl space-y-4">{Switcher()}<Backorders list={list} orders={orders} committedBySku={committedBySku} incomingBySku={incomingBySku} goReplenish={()=>setView("replenish")}/></div>);
   const reorderLowStock=()=>{
     const low=list.filter(it=>!(Array.isArray(it.kit)&&it.kit.length)&&(+it.reorder||0)>0&&(+it.onHand||0)<=(+it.reorder||0));
     if(!low.length)return;
@@ -10315,10 +10335,10 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     setPoSeed({number:"",supplierId:"",expectedAt:"",notes:"Auto-generated from low stock",lines});
     setView("pos");
   };
-  if(view==="pos") return (<div className="max-w-5xl space-y-4"><Switcher/><PurchaseOrders pos={pos} setPos={setPos} suppliers={suppliers} items={list} showMoney={showMoney} onReload={load} seed={poSeed} onSeedUsed={()=>setPoSeed(null)}/></div>);
-  if(view==="suppliers") return (<div className="max-w-5xl space-y-4"><Switcher/><SuppliersView suppliers={suppliers} setSuppliers={setSuppliers}/></div>);
+  if(view==="pos") return (<div className="max-w-5xl space-y-4">{Switcher()}<PurchaseOrders pos={pos} setPos={setPos} suppliers={suppliers} items={list} showMoney={showMoney} onReload={load} seed={poSeed} onSeedUsed={()=>setPoSeed(null)}/></div>);
+  if(view==="suppliers") return (<div className="max-w-5xl space-y-4">{Switcher()}<SuppliersView suppliers={suppliers} setSuppliers={setSuppliers}/></div>);
   return (<div className="max-w-5xl space-y-4">
-    <Switcher/>
+    {Switcher()}
     <div className="flex items-center justify-between flex-wrap gap-2">
       <div>
         <h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Boxes className="w-5 h-5 text-[#0086E0]"/>Inventory</h2>
@@ -11009,7 +11029,7 @@ function SuppliersView({suppliers,setSuppliers}){
 
 /* Pack-verify station — pick an order, scan each item into the box; the order can't be marked packed
    until every line is fully scanned. Catches mis-picks. Read-only against inventory. */
-function PackVerify({orders,items,shipOrder}){
+function PackVerify({orders,items,shipOrder,settings}){
   const open=(orders||[]).filter(o=>o&&o.status!=="fulfilled"&&Array.isArray(o.lineItems)&&o.lineItems.some(li=>li&&li.sku));
   const [order,setOrder]=useState(null);
   const [scanned,setScanned]=useState({});   // sku(lower) → count
@@ -11018,10 +11038,11 @@ function PackVerify({orders,items,shipOrder}){
   const inputRef=useRef(null);
   const byCode=useMemo(()=>{ const m={}; (items||[]).forEach(it=>{ if(it.barcode)m[String(it.barcode).trim().toLowerCase()]=String(it.sku).toLowerCase(); m[String(it.sku).toLowerCase()]=m[String(it.sku).toLowerCase()]||String(it.sku).toLowerCase(); }); return m; },[items]);
   const itBySku=useMemo(()=>{ const m={}; (items||[]).forEach(it=>{ m[String(it.sku).toLowerCase()]=it; }); return m; },[items]);
-  // Cartonization: packing-group rules → suggested box for an order (loaded lazily).
-  const [packgroups,setPackgroups]=useState([]); const [containers,setContainers]=useState([]);
-  useEffect(()=>{ let dead=false; (async()=>{ const [rg,rc]=await Promise.all([cloudCall({action:"wlistGet",token:CLOUD.token,kind:"packgroups"}),cloudCall({action:"containerList",token:CLOUD.token})]); if(!dead){ if(rg&&rg.ok)setPackgroups(rg.items||[]); if(rc&&rc.ok)setContainers(rc.items?rc.items:(rc.containers||[])); } })(); return ()=>{dead=true;}; },[]);
-  const suggestBox=(o)=>{ if(!o||!packgroups.length)return null; for(const li of (o.lineItems||[])){ const it=itBySku[String(li.sku||"").toLowerCase()]; const cat=(it&&it.category||"").toLowerCase(); const hay=((it&&it.name||"")+" "+(li.sku||"")+" "+(li.title||li.name||"")).toLowerCase(); for(const g of packgroups){ const m=String(g.match||"").trim().toLowerCase(); if(!m||!g.container)continue; if(cat===m||hay.includes(m)){ const c=(containers||[]).find(x=>x.name===g.container); const dims=c&&[c.length,c.width,c.height].every(v=>+v>0)?`${c.length}×${c.width}×${c.height} in`:""; return {name:g.container,dims}; } } } return null; };
+  // Cartonization: packing-group rules → suggested box. Boxes come from the shared catalog (settings.boxes).
+  const [packgroups,setPackgroups]=useState([]);
+  const containers=(settings&&settings.boxes)||[];
+  useEffect(()=>{ let dead=false; (async()=>{ const rg=await cloudCall({action:"wlistGet",token:CLOUD.token,kind:"packgroups"}); if(!dead&&rg&&rg.ok)setPackgroups(rg.items||[]); })(); return ()=>{dead=true;}; },[]);
+  const suggestBox=(o)=>{ if(!o||!packgroups.length)return null; for(const li of (o.lineItems||[])){ const it=itBySku[String(li.sku||"").toLowerCase()]; const cat=(it&&it.category||"").toLowerCase(); const hay=((it&&it.name||"")+" "+(li.sku||"")+" "+(li.title||li.name||"")).toLowerCase(); for(const g of packgroups){ const m=String(g.match||"").trim().toLowerCase(); if(!m||!g.container)continue; if(cat===m||hay.includes(m)){ const c=(containers||[]).find(x=>x.name===g.container); const dims=c&&[c.L,c.W,c.H].every(v=>+v>0)?`${c.L}×${c.W}×${c.H} in`:""; return {name:g.container,dims}; } } } return null; };
   const need=useMemo(()=>{ const m={}; if(order){ (order.lineItems||[]).forEach(li=>{ const s=String(li.sku||"").trim().toLowerCase(); if(!s)return; m[s]=(m[s]||0)+(+li.qty||+li.quantity||1); }); } return m; },[order]);
   const start=(o)=>{ setOrder(o); setScanned({}); setMsg(""); setTimeout(()=>{try{inputRef.current&&inputRef.current.focus();}catch(e){}},50); };
   const doScan=(raw)=>{
@@ -11115,12 +11136,12 @@ function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFl
   const stockBySku=useMemo(()=>{ const m={}; (list||[]).forEach(it=>{ if(Array.isArray(it.kit)&&it.kit.length&&!it.assembled)return; m[String(it.sku).toLowerCase()]=+it.onHand||0; }); return m; },[list]);
   const itBySku=useMemo(()=>{ const m={}; (list||[]).forEach(it=>{ m[String(it.sku).toLowerCase()]=it; }); return m; },[list]);
   const [fulfilling,setFulfilling]=useState(null); const [grabbed,setGrabbed]=useState({}); const [packed,setPacked]=useState({}); const [fStep,setFStep]=useState(0);
-  const fLines=fulfilling?(fulfilling.lineItems||[]).filter(li=>li&&li.sku).map(li=>{ const it=itBySku[String(li.sku).toLowerCase()]; return {sku:li.sku,name:li.title||li.name||(it&&it.name)||li.sku,loc:(it&&it.loc)||"",qty:+li.qty||+li.quantity||1}; }):[];
+  const fLines=fulfilling?(fulfilling.lineItems||[]).filter(li=>li&&li.sku).map(li=>{ const it=itBySku[String(li.sku).toLowerCase()]; return {sku:li.sku,name:li.title||li.name||(it&&it.name)||li.sku,loc:(it&&it.loc)||li.loc||"",qty:+li.qty||+li.quantity||1}; }):[];
   const allGrabbed=fLines.length>0&&fLines.every(l=>grabbed[l.sku.toLowerCase()]);
   const allPacked=fLines.length>0&&fLines.every(l=>packed[l.sku.toLowerCase()]);
   const [practice,setPractice]=useState(false); const [praiseMsg,setPraiseMsg]=useState(null);
   const openFulfill=(o,isPractice)=>{ setPractice(!!isPractice); setFulfilling(o); setGrabbed({}); setPacked({}); setFStep(0); };
-  const startPractice=()=>openFulfill({id:"practice",name:"Practice order #DEMO",customer:"Sample Customer",lineItems:[{sku:"DEMO-SHIRT",title:"Demo T-Shirt (Medium)",qty:1},{sku:"DEMO-MUG",title:"Demo Coffee Mug",qty:2}]},true);
+  const startPractice=()=>openFulfill({id:"practice",name:"Practice order #DEMO",customer:"Sample Customer",lineItems:[{sku:"DEMO-SHIRT",title:"Demo T-Shirt (Medium)",qty:1,loc:"A1"},{sku:"DEMO-MUG",title:"Demo Coffee Mug",qty:2,loc:"B2"},{sku:"DEMO-STICKER",title:"Demo Sticker Pack",qty:3,loc:"C3"}]},true);
   const shipNow=()=>{ const o=fulfilling; setFulfilling(null); if(practice){ setPraiseMsg("🎉 Nice — that's the whole flow! On a real order this would open the Ship tab with your label ready, and your stock would count down when it prints."); setTimeout(()=>setPraiseMsg(null),9000); return; } shipOrder&&shipOrder(o); };
   const open=(orders||[]).filter(o=>o&&o.status!=="fulfilled"&&Array.isArray(o.lineItems)&&o.lineItems.length);
   // Explode a line into what actually depletes stock — a virtual kit becomes its components.
@@ -11155,18 +11176,19 @@ function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFl
       </div>))}
     </div>
     {fulfilling&&(()=>{
-      const packStep=standard&&fStep===1;              // step 1 in standard flow = pack verify
+      const std=standard||practice;                    // practice always walks the full pick→pack→ship
+      const packStep=std&&fStep===1;                   // step 1 = pack verify
       const checks=packStep?packed:grabbed; const setChecks=packStep?setPacked:setGrabbed;
       const allDone=packStep?allPacked:allGrabbed;
       const pct=fLines.length?Math.round(fLines.filter(l=>checks[l.sku.toLowerCase()]).length/fLines.length*100):0;
-      const STEPS=standard?["Pick","Pack","Ship"]:["Grab","Ship"];
-      const stepIdx=standard?fStep:0;
+      const STEPS=std?["Pick","Pack","Ship"]:["Grab","Ship"];
+      const stepIdx=std?fStep:0;
       return (<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setFulfilling(null)}>
       <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5 max-h-[92vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
         <div className="flex items-center justify-between mb-2"><div className="font-semibold text-stone-900 flex items-center gap-2">{practice&&<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-[#E6F4FF] text-[#006FBF]">Practice</span>}Fulfill {fulfilling.name||fulfilling.id}</div><button onClick={()=>setFulfilling(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
         {practice&&<p className="text-[11px] text-[#006FBF] bg-sky-50 rounded px-2 py-1 mb-2">This is a rehearsal — no real order, nothing ships, and your stock won't change. Just click through it.</p>}
-        {standard&&<div className="flex items-center gap-1.5 mb-3">{STEPS.map((s,i)=>(<React.Fragment key={s}><span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${i<stepIdx?"bg-emerald-100 text-emerald-700":i===stepIdx?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-400"}`}>{i<stepIdx?"✓ ":""}{s}</span>{i<STEPS.length-1&&<span className="text-stone-300">·</span>}</React.Fragment>))}</div>}
-        <p className="text-xs text-stone-500 mb-3">{fulfilling.customer?fulfilling.customer+" · ":""}{packStep?"Scan or tap each item as it goes in the box.":standard?"Grab each item from its location and check it off.":"Grab each item, check it off, then create the label."} Stock counts down when the label prints.</p>
+        {std&&<div className="flex items-center gap-1.5 mb-3">{STEPS.map((s,i)=>(<React.Fragment key={s}><span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${i<stepIdx?"bg-emerald-100 text-emerald-700":i===stepIdx?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-400"}`}>{i<stepIdx?"✓ ":""}{s}</span>{i<STEPS.length-1&&<span className="text-stone-300">·</span>}</React.Fragment>))}</div>}
+        <p className="text-xs text-stone-500 mb-3">{fulfilling.customer?fulfilling.customer+" · ":""}{packStep?"Now pack: tap each item as it goes in the box.":std?"Grab each item from its location and check it off.":"Grab each item, check it off, then create the label."} Stock counts down when the label prints.</p>
         <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden mb-3"><div className={`h-full ${allDone?"bg-emerald-500":"bg-[#0086E0]"} transition-all`} style={{width:pct+"%"}}/></div>
         <div className="space-y-1.5">
           {fLines.map(l=>{ const on=!!checks[l.sku.toLowerCase()]; return (<button key={l.sku} onClick={()=>setChecks(g=>({...g,[l.sku.toLowerCase()]:!g[l.sku.toLowerCase()]}))} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left ${on?"bg-emerald-50 border-emerald-200":"bg-white border-stone-200 hover:bg-stone-50"}`}>
@@ -11175,7 +11197,7 @@ function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFl
             <div className="text-sm font-semibold text-stone-700 shrink-0">×{l.qty}</div>
           </button>); })}
         </div>
-        {standard&&!packStep
+        {std&&!packStep
           ? <button onClick={()=>setFStep(1)} disabled={!allGrabbed} className="w-full mt-4 bg-[#0086E0] text-white rounded-xl py-3 font-semibold hover:bg-[#006db8] disabled:opacity-40 flex items-center justify-center gap-1.5">{allGrabbed?"Next: pack the box":"Grab all items first"}<ChevronRight className="w-4 h-4"/></button>
           : <button onClick={shipNow} disabled={!allDone} className="w-full mt-4 bg-[#0086E0] text-white rounded-xl py-3 font-semibold hover:bg-[#006db8] disabled:opacity-40 flex items-center justify-center gap-1.5">{practice?<CheckCircle2 className="w-5 h-5"/>:<Truck className="w-5 h-5"/>}{allDone?(practice?"Finish practice":"Create shipping label"):(packStep?"Pack every item first":"Grab all items first")}</button>}
       </div>
@@ -11440,10 +11462,8 @@ function MailBoxes(){
 }
 /* Packing Groups — rules that map an item category or keyword to the container it should ship in, so
    packers grab the right box (cartonization). Loads the container catalog for the box picker. */
-function PackingGroups(){
-  const [containers,setContainers]=useState([]);
-  useEffect(()=>{ let dead=false; (async()=>{ const r=await cloudCall({action:"containerList",token:CLOUD.token}); if(!dead&&r&&r.ok)setContainers(r.containers||[]); })(); return ()=>{dead=true;}; },[]);
-  const opts=(containers||[]).map(c=>c.name).filter(Boolean);
+function PackingGroups({settings}){
+  const opts=((settings&&settings.boxes)||[]).map(c=>c.name).filter(Boolean);   // boxes come from the shared Containers list (settings.boxes)
   return <WListManager kind="packgroups" title="Packing groups" subtitle="Rules that tell packers which box to use — match a category or keyword to a container. Add boxes under Setup → Containers." Icon={Package} addLabel="New rule"
     fields={[{key:"name",label:"Rule name",required:true,placeholder:"Apparel → poly"},{key:"match",label:"Match category / keyword",required:true,full:true,placeholder:"Apparel  (or a word in the item name)"},{key:"container",label:"Use container",type:"select",options:opts},{key:"note",label:"Note",type:"textarea",full:true}]}
     renderPrimary={it=><span>{it.name}</span>}
@@ -11718,40 +11738,48 @@ function RunnerPull({orders,items}){
 }
 /* Container / packaging types — the box catalog (dimensions, max weight, cost) used for packing and
    cartonization. A company-managed list mirroring warehouses. */
-function ContainerTypes({containers,setContainers,showMoney}){
-  const [msg,setMsg]=useState(null); const [busy,setBusy]=useState(false); const [ef,setEf]=useState(null);
+/* Container types = the SAME box catalog the shipping side uses (settings.boxes) — define a box once
+   here and it appears in the Ship tab's box picker, powers cartonization, and drives the WMS packing
+   suggestion. Shipping fields (id,name,L,W,H,maxWt,empty) are preserved; kind/cost/notes are extras. */
+function ContainerTypes({settings,setSettings,showMoney}){
+  const [msg,setMsg]=useState(null); const [ef,setEf]=useState(null);
   const flash=(m,e)=>{ setMsg(e?{err:m}:{ok:m}); setTimeout(()=>setMsg(null),3500); };
-  const save=async()=>{ if(!ef.name||!ef.name.trim()){flash("A name is required.",true);return;} setBusy(true); const r=await cloudCall({action:"containerSave",token:CLOUD.token,container:ef}); setBusy(false); if(r&&r.ok){ setContainers(r.containers); setEf(null); flash("Saved."); } else flash((r&&r.error)||"Couldn't save.",true); };
-  const del=async(c)=>{ if(!await uiConfirm("Delete "+c.name+"?"))return; const r=await cloudCall({action:"containerDelete",token:CLOUD.token,id:c.id}); if(r&&r.ok)setContainers(r.containers); };
-  const dims=(c)=>[c.length,c.width,c.height].every(v=>+v>0)?`${c.length}×${c.width}×${c.height} in`:"";
+  const boxes=(settings&&Array.isArray(settings.boxes))?settings.boxes:[];
+  const persist=(next)=>setSettings&&setSettings(p=>({...p,boxes:next}));
+  const save=()=>{ if(!ef.name||!ef.name.trim()){flash("A name is required.",true);return;}
+    const rec={id:ef.id||("bx"+Date.now()+Math.floor(Math.random()*1000)),name:ef.name.trim(),kind:ef.kind||"box",L:+ef.L||0,W:+ef.W||0,H:+ef.H||0,maxWt:+ef.maxWt||0,empty:+ef.empty||0,cost:+ef.cost||0,notes:ef.notes||""};
+    persist(ef.id?boxes.map(b=>b.id===ef.id?rec:b):[...boxes,rec]); setEf(null); flash("Saved — this box is now available on the Ship tab too."); };
+  const del=async(b)=>{ if(!await uiConfirm("Delete "+b.name+"?"))return; persist(boxes.filter(x=>x.id!==b.id)); };
+  const dims=(b)=>[b.L,b.W,b.H].every(v=>+v>0)?`${b.L}×${b.W}×${b.H} in`:"";
   return (<div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
-      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Package className="w-5 h-5 text-[#0086E0]"/>Container types</h2><p className="text-sm text-stone-500 mt-0.5">Your box &amp; packaging catalog — dimensions, weight limits, and cost. Used when packing and to pick the right-size box.</p></div>
-      <button onClick={()=>setEf({name:"",kind:"box",length:"",width:"",height:"",maxWeight:"",cost:"",notes:""})} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>New container</button>
+      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Package className="w-5 h-5 text-[#0086E0]"/>Containers &amp; boxes</h2><p className="text-sm text-stone-500 mt-0.5">Your box &amp; mailer catalog — dimensions, weight limits, cost. <b className="text-stone-600">These are the same boxes the Ship tab uses</b>, so define each one once here and it works everywhere.</p></div>
+      <button onClick={()=>setEf({name:"",kind:"box",L:"",W:"",H:"",maxWt:"",empty:"",cost:"",notes:""})} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>New box</button>
     </div>
     {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
     <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
-      {(containers||[]).length===0&&<div className="p-8 text-center text-sm text-stone-400">No container types yet. Add the boxes and mailers you ship in.</div>}
-      {(containers||[]).map(c=>(<div key={c.id} className="p-3 flex items-center gap-3">
-        <div className="flex-1 min-w-0"><div className="font-medium text-stone-900 flex items-center gap-2">{c.name}<Badge tone="stone">{c.kind}</Badge></div><div className="text-[11px] text-stone-400 truncate">{[dims(c),+c.maxWeight>0?"max "+c.maxWeight+" lb":"",showMoney&&+c.cost>0?"$"+(+c.cost).toFixed(2)+" ea":"",c.notes].filter(Boolean).join(" · ")||"—"}</div></div>
-        <button onClick={()=>setEf(c)} className="text-xs bg-stone-100 text-stone-600 rounded-lg px-2.5 py-1.5 hover:bg-stone-200">Edit</button>
+      {boxes.length===0&&<div className="p-8 text-center text-sm text-stone-400">No boxes yet. Add the boxes and mailers you ship in.</div>}
+      {boxes.map(c=>(<div key={c.id} className="p-3 flex items-center gap-3">
+        <div className="flex-1 min-w-0"><div className="font-medium text-stone-900 flex items-center gap-2">{c.name}{c.kind?<Badge tone="stone">{c.kind}</Badge>:null}</div><div className="text-[11px] text-stone-400 truncate">{[dims(c),+c.maxWt>0?"max "+c.maxWt+" lb":"",showMoney&&+c.cost>0?"$"+(+c.cost).toFixed(2)+" ea":"",c.notes].filter(Boolean).join(" · ")||"—"}</div></div>
+        <button onClick={()=>setEf({id:c.id,name:c.name||"",kind:c.kind||"box",L:c.L??"",W:c.W??"",H:c.H??"",maxWt:c.maxWt??"",empty:c.empty??"",cost:c.cost??"",notes:c.notes||""})} className="text-xs bg-stone-100 text-stone-600 rounded-lg px-2.5 py-1.5 hover:bg-stone-200">Edit</button>
         <button onClick={()=>del(c)} className="text-xs bg-stone-100 text-stone-400 rounded-lg px-2 py-1.5 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="w-3.5 h-3.5"/></button>
       </div>))}
     </div>
     {ef&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setEf(null)}>
       <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5" onClick={e=>e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-3"><div className="font-semibold text-stone-900">{ef.id?"Edit container":"New container"}</div><button onClick={()=>setEf(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+        <div className="flex items-center justify-between mb-3"><div className="font-semibold text-stone-900">{ef.id?"Edit box":"New box"}</div><button onClick={()=>setEf(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
         <div className="grid grid-cols-2 gap-2">
           <Field label="Name"><Input value={ef.name} onChange={e=>setEf({...ef,name:e.target.value})} placeholder="Small box"/></Field>
           <Field label="Type"><select value={ef.kind} onChange={e=>setEf({...ef,kind:e.target.value})} className="w-full border border-stone-300 rounded-lg px-2 py-2 text-sm"><option value="box">Box</option><option value="poly">Poly mailer</option><option value="envelope">Envelope</option><option value="tube">Tube</option><option value="pallet">Pallet</option><option value="tote">Tote</option></select></Field>
-          <Field label="Length (in)"><Input type="number" value={ef.length} onChange={e=>setEf({...ef,length:e.target.value})}/></Field>
-          <Field label="Width (in)"><Input type="number" value={ef.width} onChange={e=>setEf({...ef,width:e.target.value})}/></Field>
-          <Field label="Height (in)"><Input type="number" value={ef.height} onChange={e=>setEf({...ef,height:e.target.value})}/></Field>
-          <Field label="Max weight (lb)"><Input type="number" value={ef.maxWeight} onChange={e=>setEf({...ef,maxWeight:e.target.value})}/></Field>
+          <Field label="Length (in)"><Input type="number" value={ef.L} onChange={e=>setEf({...ef,L:e.target.value})}/></Field>
+          <Field label="Width (in)"><Input type="number" value={ef.W} onChange={e=>setEf({...ef,W:e.target.value})}/></Field>
+          <Field label="Height (in)"><Input type="number" value={ef.H} onChange={e=>setEf({...ef,H:e.target.value})}/></Field>
+          <Field label="Max weight (lb)"><Input type="number" value={ef.maxWt} onChange={e=>setEf({...ef,maxWt:e.target.value})}/></Field>
+          <Field label="Empty box weight (lb)"><Input type="number" value={ef.empty} onChange={e=>setEf({...ef,empty:e.target.value})}/></Field>
           {showMoney&&<Field label="Cost each ($)"><Input type="number" value={ef.cost} onChange={e=>setEf({...ef,cost:e.target.value})}/></Field>}
           <div className="col-span-2"><Field label="Notes"><Input value={ef.notes} onChange={e=>setEf({...ef,notes:e.target.value})}/></Field></div>
         </div>
-        <div className="flex items-center gap-2 mt-4"><button onClick={save} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy&&<Loader2 className="w-4 h-4 animate-spin"/>}Save</button><button onClick={()=>setEf(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
+        <div className="flex items-center gap-2 mt-4"><button onClick={save} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5">Save</button><button onClick={()=>setEf(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
       </div>
     </div>}
   </div>);
@@ -11806,111 +11834,198 @@ function ProductionOrders({production,setProduction,items,onReload}){
 const HELP_CONTENT={
   overview:{tip:"This is your home base — the front page of your warehouse. It doesn't do anything itself; it gathers the most important things from every other tab so you always know where to start.",
     steps:["Read the blue “Do this next” banner at the top and do what it says.","Scan the “Needs attention” list for anything low, out, or oversold.","Tap a quick-action button to jump straight to the right tool.","Check “Recent activity” to see what's been received, shipped, or adjusted."],
-    mistakes:["Ignoring the “Do this next” banner — it's the single most useful thing on the page.","Thinking it's blank because it's broken. If you haven't added products yet, there's nothing to show — start on Stock."],
+    mistakes:["Ignoring the “Do this next” banner — it's the single most useful thing on the page.","Thinking it's blank because it's broken. If you haven't added products yet, there's nothing to show — start on Stock.","Not clicking the “view →” links in Needs attention — they take you straight to the fix."],
     faqs:[
       ["What is the blue “Do this next” banner?","The single most important thing to do right now — ship ready orders, reorder low items, receive a delivery. Click its button to jump straight there."],
       ["What counts as “needs attention”?","Items out of stock, below their reorder point, promised to more orders than you have (oversold), POs waiting to be received, or lots expiring soon."],
+      ["What do the tiles at the top mean?","Quick totals — how many products (SKUs) you track, total units on hand, total stock value, and how many are low. Click one to drill in."],
+      ["Why does it say “All clear”?","Nothing needs attention — no low stock, no oversells, no POs to receive. You're caught up."],
+      ["Does the Overview change anything?","No — it's read-only. It just points you at the tools that do the work."],
+      ["How often does it update?","Live — every time you open it, it reflects your latest stock, orders, and POs."],
     ]},
   stock:{tip:"The master list of every product and how many you have. This is the heart of the system — every other screen reads and changes these numbers.",
     steps:["Add products: Import from catalog, Import a spreadsheet (CSV), or New item. Only a SKU is required.","Type how many you have On hand.","Set a “Reorder at” number so it warns you before you run out.","Use Adjust for corrections, Move to shift between bins, or Print labels for barcodes."],
-    mistakes:["Not setting a “Reorder at” number — without it, low-stock warnings and Replenish can't help that item.","Editing on-hand to fix a miscount instead of using Adjust — Adjust records a reason and keeps an audit trail.","Forgetting to set a barcode — the scan tools (Pick, Pack, Scan Receive) work best when items have one (use the Gen button)."],
+    mistakes:["Not setting a “Reorder at” number — without it, low-stock warnings and Replenish can't help that item.","Editing on-hand to fix a miscount instead of using Adjust — Adjust records a reason and keeps an audit trail.","Forgetting to set a barcode — the scan tools work best when items have one (use the Gen button).","Turning on lot/serial/FIFO you don't need — leave the Advanced boxes off unless you truly track those."],
     faqs:[
-      ["What is a SKU?","Just a short code for one product, like TSHIRT-BLK-M. Every product needs one so the system can tell them apart."],
-      ["What do On hand / Committed / Available mean?","On hand = what's physically on the shelf. Committed = already promised to open orders. Available = what you can still sell (on hand minus committed)."],
+      ["What is a SKU?","Just a short code for one product, like TSHIRT-BLK-M. Every product needs one so the system can tell them apart. Keep it short and consistent."],
+      ["What do On hand / Committed / Available / Incoming mean?","On hand = what's physically on the shelf. Committed = promised to open orders. Available = what you can still sell (on hand − committed). Incoming = on the way from a PO."],
       ["An item's count is wrong — how do I fix it?","Click Adjust on the row, enter a + or − amount and a reason (damage, found, shrinkage). For a full shelf recount, use Cycle Count."],
+      ["How do I import a spreadsheet?","Click Import CSV and upload a file with columns like SKU, name, quantity, cost — it matches them for you."],
+      ["What's the difference between cost and sell price?","Cost = what you pay for it (drives inventory value). Sell price = what you charge (used by Point of Sale). Set both if you sell in person."],
+      ["What is a kit / bundle?","A product made of other products. Selling it uses up its parts. Add the parts under Edit item → kit; it then shows as a “kit” badge."],
+      ["Should I use lots, serials, or FIFO?","Only if you need them: lots for expiry dates (food/cosmetics), serials for one-of-a-kind units (electronics), FIFO for exact cost-of-goods. Most stores leave all three off."],
+      ["Can I delete a product?","Yes — but only do it for items you never stocked. If it has history, consider setting it to 0 instead."],
     ]},
   health:{tip:"A colored picture of your whole inventory so you can see what needs buying in two seconds instead of reading a spreadsheet. Every product is a bar; the color is its state.",
     steps:["Glance at the four colored cards up top (Out / Low / Healthy / Over).","Click a card to filter to just those items.","Flip the Count / Value $ toggle to see dollars of stock instead of unit counts.","Click “Reorder low stock” to send the low items to Replenish."],
-    mistakes:["Not setting reorder points and max levels — without them everything looks “healthy” and the colors can't help.","Reading it as out-of-date — it's live, straight from your Stock counts."],
+    mistakes:["Not setting reorder points and max levels — without them everything looks “healthy” and the colors can't help.","Reading it as out-of-date — it's live, straight from your Stock counts.","Ignoring purple (overstocked) — that's cash tied up in stock you're not selling."],
     faqs:[
       ["What do the colors mean?","Red = out of stock, orange = low (at/below reorder point), green = healthy, purple = overstocked (above your max)."],
       ["What's the tick mark on each bar?","The item's reorder point — where it flips to “low.” Set it by editing the item."],
       ["What's the Value $ toggle?","It switches from counting products to showing dollars of stock, so you see where your money is tied up."],
+      ["What's the “Days left” idea?","Related tool: Replenish shows how many days until you run out at your recent sell rate. Health shows the current level; Replenish shows the runway."],
+      ["Nothing is red or orange — is that good?","Yes! It means nothing's out or below its reorder point. Green across the board is healthy."],
+      ["How do I fix “overstocked” (purple)?","Lower your max, run a promo, or stop reordering it for a while. It's money sitting on the shelf."],
     ]},
   replenish:{tip:"Your shopping list. It shows everything that's low — after counting stock already on the way — and drafts the purchase orders to refill it, from the cheapest supplier.",
     steps:["Open Replenish (the number in the tab is how many are low).","Review the suggested quantities and “Days left.”","Adjust any quantities you want.","Click Create draft POs — one order per supplier, ready to review and send from Purchase Orders."],
-    mistakes:["Expecting items to appear without a reorder point — Replenish only watches items that have one.","Sending the drafts without reviewing — they're suggestions; check quantities and suppliers first.","Not setting a Preferred supplier on items — then everything lands on a “no supplier” PO."],
+    mistakes:["Expecting items to appear without a reorder point — Replenish only watches items that have one.","Sending the drafts without reviewing — they're suggestions; check quantities and suppliers first.","Not setting a Preferred supplier on items — then everything lands on a “no supplier” PO.","Reordering things already “on the way” — it already subtracts inbound POs, so trust the number."],
     faqs:[
       ["How does it decide what's low?","Anything where on-hand plus stock already on the way is at or below the reorder point you set."],
       ["What does “Days left” mean?","How many days until you run out at your recent sell rate. Lower = more urgent."],
       ["What's the “Tune reorder points” button?","It suggests smart min/max levels from your real sell rate and supplier lead time, so you don't have to guess."],
+      ["How does it pick the supplier?","It uses each item's Preferred supplier, or the cheapest vendor from the item's vendor price list, and puts that cost on the PO."],
+      ["What happens after I click Create draft POs?","It makes one purchase order per supplier and drops you on the Purchase Orders tab to review and send them."],
+      ["The list is empty — why?","Either nothing is low, or your items don't have a reorder point set yet. Set “Reorder at” on the items you care about."],
+      ["Can I order more than it suggests?","Yes — the Order qty on each row is editable before you create the POs."],
     ]},
   backorder:{tip:"A list of products where your open orders need more than you have on the shelf — so you know what you're short on and who's waiting.",
     steps:["Open Backorders.","See each short product and whether stock already on order will cover it.","Click a row to see which orders are waiting.","Head to Replenish to reorder what's genuinely short."],
-    mistakes:["Panicking over items marked “On the way” — those are already covered by an inbound PO.","Forgetting kits — a bundle's shortage shows up under its component parts, not the bundle."],
-    faqs:[["Why is something backordered when I just restocked?","The orders were promised before the stock arrived. Once you receive the PO, it clears."]]},
+    mistakes:["Panicking over items marked “On the way” — those are already covered by an inbound PO.","Forgetting kits — a bundle's shortage shows up under its component parts, not the bundle.","Not reordering the ones marked “Reorder” — those aren't covered yet."],
+    faqs:[
+      ["Why is something backordered when I just restocked?","The orders were promised before the stock arrived. Once you receive the PO, it clears."],
+      ["What does “On the way” vs “Reorder” mean?","On the way = an inbound PO already covers the shortage. Reorder = it doesn't, so you still need to buy more."],
+      ["It says 3 orders waiting — where are they?","Click the order-count on that row to expand the list of specific orders."],
+      ["Does this include in-person (POS) sales?","No — it's about open online orders. POS sales draw down stock immediately at checkout."],
+    ]},
   count:{tip:"A stock-check tool. Pick a shelf, count what's really there, and it fixes the number for you — with a record of every change.",
     steps:["Open Cycle Count and pick a category.","Walk the shelf and type what you actually see next to each item.","The Variance column shows the difference live.","Click Apply — only the differences are corrected, and each is logged."],
-    mistakes:["Counting the whole warehouse at once — do a category or shelf at a time (that's the “cycle” idea).","Serial/lot items won't appear here — those are counted by scanning each unit."],
-    faqs:[["Will it overwrite my counts?","Only where you typed a number that differs. Blank rows are left alone."]]},
+    mistakes:["Counting the whole warehouse at once — do a category or shelf at a time (that's the “cycle” idea).","Serial/lot items won't appear here — those are counted by scanning each unit.","Leaving a row blank when you meant zero — blank = skip, 0 = none on the shelf."],
+    faqs:[
+      ["Will it overwrite my counts?","Only where you typed a number that differs. Blank rows are left alone."],
+      ["What's a variance?","The difference between what the system thinks you have and what you actually counted. Positive = found extra, negative = missing."],
+      ["Where do the corrections show up?","In the movement ledger as an “adjust · cycle count” entry, so there's a record of who changed what."],
+      ["How often should I count?","A little and often beats one big count a year — do a category each week (that's “cycle counting”)."],
+    ]},
   production:{tip:"For when you build a product out of other products (a gift set from a mug + a shirt). It turns parts into finished bundles and keeps both counts correct.",
     steps:["First, on the product, list its parts (edit the item → add a kit / bill of materials).","Production → New order → pick the bundle and how many to build.","Review the parts it will consume.","Click Complete — the parts are used up and the finished bundle is added to Stock."],
-    mistakes:["Trying to build something with no kit set — add the components to the item first.","Building more than you have parts for — it checks availability and won't let you go negative."],
-    faqs:[["What's a BOM?","“Bill of materials” — just the list of parts that make up a bundle."]]},
+    mistakes:["Trying to build something with no kit set — add the components to the item first.","Building more than you have parts for — it checks availability and won't let you go negative.","Confusing a virtual kit (made when sold) with an assembly (pre-built here) — Production is for pre-building."],
+    faqs:[
+      ["What's a BOM?","“Bill of materials” — just the list of parts that make up a bundle."],
+      ["Do I have to pre-build kits?","No. If you leave a product as a plain kit, selling it just uses the parts automatically. Production is only for pre-assembling stock."],
+      ["What if I'm short a part?","It tells you which part and how many you're missing, and won't complete until you have enough."],
+      ["Can I undo a completed build?","Not directly — do a stock Adjust to correct if you built by mistake."],
+    ]},
   toship:{tip:"Your daily to-do list of orders waiting to go out, greenest (ready) first. This is where the shipping side meets the warehouse.",
     steps:["Choose your Fulfillment steps up top: One-click, or Pick → Pack → Ship.","Click Fulfill on an order.","Tick off each item (with its location).","Create shipping label — it opens the Ship tab ready to print, and stock drops when it prints."],
-    mistakes:["Skipping the “Try a practice order” button when you're new — it's the safest way to learn.","Worrying about “No stock link” orders — it just means those products aren't matched to your inventory yet."],
+    mistakes:["Skipping the “Try a practice order” button when you're new — it's the safest way to learn.","Worrying about “No stock link” orders — it just means those products aren't matched to your inventory yet.","Assuming stock drops when you click Fulfill — it drops when the label actually prints on the Ship tab."],
     faqs:[
       ["Ready / Short / No stock link — what do they mean?","Ready = every item's in stock. Short = you're missing some. No stock link = the order's products aren't matched to your inventory yet."],
       ["One-click vs Pick → Pack → Ship?","One-click: grab and ship (fastest). Pick → Pack → Ship: check items twice for extra accuracy. Pick whichever your team needs."],
+      ["What does Fulfill actually do?","Opens a checklist of the order's items with their locations. Check them off, then Create shipping label opens the Ship tab ready to print."],
+      ["When does my stock go down?","The moment the shipping label prints — not when you check items off. Then the order is marked fulfilled and Shopify updates."],
+      ["How is this different from Pick Lists?","To Ship is order-by-order. Pick Lists batch many orders into one shelf walk. Use whichever fits your volume."],
+      ["Why is an order still here after I shipped it?","It should drop off once fulfilled. If it lingers, refresh — it reflects live order status."],
     ]},
   runner:{tip:"A phone-friendly version of the warehouse for someone walking the floor with a scanner. Big buttons, one job at a time — no laptop needed.",
     steps:["Open Runner on a phone or tablet.","Tap Pull (grab for orders), Put (put stock away), Receive (scan a delivery in), or Count.","Scan a barcode or type a SKU and go."],
-    mistakes:["Using it on a tiny phone in the office — it shines on the warehouse floor.","Forgetting that every action here changes the same live Stock as the desktop."],
-    faqs:[["Does it work offline?","It needs a connection to save each action, but it's built to be quick over warehouse Wi-Fi."]]},
+    mistakes:["Using it on a tiny phone in the office — it shines on the warehouse floor.","Forgetting that every action here changes the same live Stock as the desktop.","Doing a full recount here — use Cycle Count on a computer for big audits."],
+    faqs:[
+      ["Does it work offline?","It needs a connection to save each action, but it's built to be quick over warehouse Wi-Fi."],
+      ["What's the difference between Pull and Pick Lists?","Same idea — Pull is the mobile version: a scan-to-grab queue for open orders."],
+      ["What does Put do?","Moves received stock into a bin — scan the item, pick the destination, done."],
+      ["Can I use an iPad?","Yes — it's built for phones and tablets, great mounted on a cart or at a station."],
+    ]},
   pick:{tip:"When you have lots of orders, this makes one tidy list sorted by shelf location so you grab everything in a single walk.",
     steps:["Tick the orders you want to pick.","Click Build pick list.","Click Start pick session and scan each item as you grab it.","Lines turn green as you pick — then move to Pack Verify."],
-    mistakes:["Building a giant list you can't carry — pick a manageable batch.","Not using the scan session — it stops you grabbing the wrong item."],
-    faqs:[["Do I need a barcode scanner?","No — you can type the SKU too. A scanner is just faster."]]},
+    mistakes:["Building a giant list you can't carry — pick a manageable batch.","Not using the scan session — it stops you grabbing the wrong item.","Forgetting to head to Pack Verify after — picking gathers items; packing checks them into boxes."],
+    faqs:[
+      ["Do I need a barcode scanner?","No — you can type the SKU too. A scanner is just faster."],
+      ["Why is the list sorted by location?","So you walk the warehouse in order instead of back and forth — that's the time-saver."],
+      ["What if I'm short an item mid-pick?","The row shows the shortfall. Pick what you have and reorder the rest from Replenish."],
+      ["Can I print the pick list?","Yes — there's a Print button so a picker can carry paper instead of a device."],
+    ]},
   pack:{tip:"A safety check at the packing table: scan each item into the box before it ships. The order isn't “done” until every item is scanned.",
     steps:["Pick an order.","Scan each item as it goes in the box.","When everything matches (it even suggests the box), click Ship this order."],
-    mistakes:["Overriding a mismatch — if an item “isn't on this order,” it's the wrong item; don't force it.","Skipping pack verify on fragile/high-value orders where a mis-ship is costly."],
+    mistakes:["Overriding a mismatch — if an item “isn't on this order,” it's the wrong item; don't force it.","Skipping pack verify on fragile/high-value orders where a mis-ship is costly.","Not setting barcodes on items — then you're typing SKUs instead of scanning."],
     faqs:[
       ["What if an item won't scan?","Type its SKU or barcode instead."],
       ["What's the suggested box?","If you've set up Packing Groups + Containers, it tells the packer which box to use."],
+      ["It says an item “isn't on this order.”","You scanned something that doesn't belong to this order — double-check you grabbed the right item."],
+      ["What happens when everything's scanned?","The order shows as verified and a Ship this order button appears to print the label."],
     ]},
   packgroups:{tip:"Simple rules that tell the packer which box to use for which products — so boxing is consistent and nobody guesses.",
     steps:["First add your boxes under Setup → Containers.","New rule → match a category or a word to a box.","Now Pack Verify suggests that box automatically."],
-    mistakes:["Making a rule before adding any Containers — there's nothing to point it at.","Matching too broadly (a word that hits everything) — be specific."],
-    faqs:[["What does “match” mean?","A category name (like Apparel) or any word in the product name/SKU. If it matches, that box is suggested."]]},
+    mistakes:["Making a rule before adding any Containers — there's nothing to point it at.","Matching too broadly (a word that hits everything) — be specific.","Expecting it to enforce a box — it suggests; the packer still decides."],
+    faqs:[
+      ["What does “match” mean?","A category name (like Apparel) or any word in the product name/SKU. If it matches, that box is suggested."],
+      ["Do I need packing groups?","Only if you want automatic box suggestions. It's optional — skip it if you eyeball boxes."],
+      ["Which rule wins if two match?","The first matching rule in the list."],
+    ]},
   scan:{tip:"The fast way to put a delivery into stock: scan each item and it adds to the count, and tells you which shelf it belongs on.",
     steps:["Open Scan Receive.","Scan a barcode (or type a SKU) and set how many.","Read the put-away location and shelve it there."],
-    mistakes:["Scanning an item that isn't in Stock yet — add it first, or set its barcode.","Leaving the qty at 1 when a case has many — set the quantity per scan."],
-    faqs:[["It says “not found.”","That product isn't in your Stock yet, or its barcode isn't set. Add it on the Stock tab first."]]},
+    mistakes:["Scanning an item that isn't in Stock yet — add it first, or set its barcode.","Leaving the qty at 1 when a case has many — set the quantity per scan.","Using this for a PO — if it's a purchase order, receive it on the Purchase Orders tab so the PO closes."],
+    faqs:[
+      ["It says “not found.”","That product isn't in your Stock yet, or its barcode isn't set. Add it on the Stock tab first."],
+      ["What's a put-away location?","The shelf/bin where that item belongs — shown after each scan so you know where to shelve it."],
+      ["When should I use this vs Purchase Orders → Receive?","Use Scan Receive for quick, ad-hoc restocking. Use PO → Receive when the stock came from a purchase order (it closes the PO and records landed cost)."],
+    ]},
   pos:{tip:"A checkout register for in-person sales that pulls from the same stock as your online orders — no separate system, no double-counting.",
     steps:["Set a Sell price on your products (edit the item).","Scan items into the cart.","Pick Card / Cash / Other and click Charge.","Stock drops and a receipt prints."],
-    mistakes:["Selling an item with no Sell price (it rings up $0) — set the price first.","Expecting it to charge a card — it records the sale; you take payment on your own terminal."],
-    faqs:[["Does it charge a credit card?","Not yet — it records the sale, drops the stock, and prints a receipt. Mark it Card/Cash/Other for your records."]]},
+    mistakes:["Selling an item with no Sell price (it rings up $0) — set the price first.","Expecting it to charge a card — it records the sale; you take payment on your own terminal.","Forgetting tax — set the tax % once and it applies to the cart."],
+    faqs:[
+      ["Does it charge a credit card?","Not yet — it records the sale, drops the stock, and prints a receipt. Mark it Card/Cash/Other for your records."],
+      ["Why is an item's price $0?","Set a Sell price on the item (edit it). POS uses that price."],
+      ["Does a POS sale affect my online stock?","Yes — it draws from the same shelf, so you can't oversell across channels."],
+      ["Can I change the price at checkout?","Yes — the price on each cart line is editable for that sale."],
+      ["Where do past sales go?","Each sale posts to the movement ledger as a shipment with a POS reference; the receipt reprints from the last sale."],
+    ]},
   suppliers:{tip:"Your address book of vendors — who you buy from and how long they take to deliver.",
     steps:["Click New supplier.","Fill in the name, contact, and lead time (delivery days).","Now it's available on Purchase Orders and drives Replenish timing."],
-    mistakes:["Leaving lead time blank — Replenish uses it to time reorders."],
-    faqs:[["Do I have to add suppliers?","No, but purchasing and replenishment are smarter when you do."]]},
+    mistakes:["Leaving lead time blank — Replenish uses it to time reorders.","Not setting a Preferred supplier on your items — then Replenish can't group orders by vendor."],
+    faqs:[
+      ["Do I have to add suppliers?","No, but purchasing and replenishment are smarter when you do."],
+      ["What is lead time?","How many days a supplier takes to deliver after you order. Longer lead time = you reorder sooner."],
+      ["Can an item have more than one supplier?","Yes — set a vendor price list on the item (edit it) and Replenish will buy from the cheapest."],
+    ]},
   warehouses:{tip:"Name your storage spots — warehouses, zones, or shelves/bins — and see what's stored in each.",
     steps:["Add your locations (a whole warehouse, a zone, or a single bin).","Expand any location to see what's inside it.","These show up when you receive, move, and put stock away."],
-    mistakes:["Over-complicating bins on day one — start simple (even one “Main”) and add detail as you grow."],
-    faqs:[["What's the difference between a warehouse, zone, and bin?","Just how specific the location is — a building, an area, or a single shelf. Use what fits your space."]]},
+    mistakes:["Over-complicating bins on day one — start simple (even one “Main”) and add detail as you grow.","Making bins you never assign items to — they only help once stock lives in them."],
+    faqs:[
+      ["What's the difference between a warehouse, zone, and bin?","Just how specific the location is — a building, an area, or a single shelf. Use what fits your space."],
+      ["How does stock get into a bin?","Move an item between locations on the Stock tab, or receive/put-away into one. Then it shows under Bin contents here."],
+      ["Do I need locations at all?","No — plenty of small stores run with one “Main.” Add bins when finding things gets slow."],
+    ]},
   containers:{tip:"Your list of boxes and mailers, with their sizes and weight limits. It feeds the “suggested box” at packing.",
     steps:["Add each box with its size, weight limit, and cost.","Then create Packing Groups rules that point products at these boxes."],
-    mistakes:["Adding boxes but no Packing Groups rules — the suggestion needs both."],
-    faqs:[["Do I need this?","Only if you want automatic box suggestions at packing. It's optional."]]},
+    mistakes:["Adding boxes but no Packing Groups rules — the suggestion needs both.","Guessing dimensions — measure your real boxes so the suggestion is useful."],
+    faqs:[
+      ["Do I need this?","Only if you want automatic box suggestions at packing. It's optional."],
+      ["What are the dimensions used for?","Right now, to show the packer the right box. (Connecting them to the shipping label's dimensions is a planned upgrade.)"],
+    ]},
   billing:{tip:"If you store and ship for other brands (a 3PL), this bills them for the work — and can do it automatically from your shipped orders.",
     steps:["Rate card → add your services and prices (pick fee, pack fee, storage).","Charges → Auto-bill shipped orders → pick a per-order and/or per-unit fee → Generate.","Invoices → print a client's bill and Mark invoiced when they've paid."],
-    mistakes:["Logging charges by hand when Auto-bill can do it from shipped orders.","Forgetting to set rates first — a $0 rate bills $0."],
+    mistakes:["Logging charges by hand when Auto-bill can do it from shipped orders.","Forgetting to set rates first — a $0 rate bills $0.","Generating before shipping any orders — there's nothing to bill yet."],
     faqs:[
       ["Will it double-charge an order?","No — every order is billed once; already-billed orders are skipped."],
       ["Who is the “client” on a charge?","The order's store/source (or the customer name), so charges group per brand you fulfill for."],
+      ["What's a per-order vs per-unit fee?","Per-order charges once per shipment (e.g. a pack fee). Per-unit charges for each item shipped (e.g. a pick fee)."],
+      ["How do I actually get paid?","Print the invoice from the Invoices tab and send it to your client; mark it invoiced once paid. (Card processing isn't built in yet.)"],
+      ["Do I have to use 3PL Billing?","Only if you ship for other brands. If you only ship your own orders, skip it entirely."],
     ]},
   requests:{tip:"A simple queue of client requests and tickets — inbound shipments, special projects, one-off asks — tracked to done.",
     steps:["New request → pick the client and type.","Fill in the subject and details.","Click the status pill to move it along (open → in progress → done)."],
-    mistakes:["Using it as a chat — it's a task tracker; keep entries actionable."],
-    faqs:[["Is this tied to billing?","No — it's a to-do list for client work. Bill the work on the 3PL Billing tab."]]},
+    mistakes:["Using it as a chat — it's a task tracker; keep entries actionable.","Leaving everything “open” — advance the status so you can see what's actually pending."],
+    faqs:[
+      ["Is this tied to billing?","No — it's a to-do list for client work. Bill the work on the 3PL Billing tab."],
+      ["How do I mark something done?","Click the colored status pill on the row to cycle it forward."],
+    ]},
   analytics:{tip:"The numbers behind your stock — what it's worth, what's selling, and what's collecting dust.",
     steps:["Open Analytics.","Read the tiles (value, turns, days of cover) and tables (ABC, dead stock, forecast, kit margins)."],
-    mistakes:["Reading value without setting unit costs — value is on-hand × cost, so costs must be entered."],
-    faqs:[["What is ABC analysis?","It ranks products by how much value they move — A = your top movers, C = the slow ones."]]},
+    mistakes:["Reading value without setting unit costs — value is on-hand × cost, so costs must be entered.","Ignoring dead stock — it's cash sitting still that you could discount or stop reordering."],
+    faqs:[
+      ["What is ABC analysis?","It ranks products by how much value they move — A = your top movers, C = the slow ones. Focus your attention on A items."],
+      ["What are inventory turns?","How many times a year you sell through your average stock. Higher = your money isn't sitting still."],
+      ["What's dead stock?","Items that haven't sold in a while — money tied up on the shelf. Consider a promo or stopping reorders."],
+      ["What are kit margins?","For bundles: the sell price minus the rolled-up cost of the parts — so you see which bundles actually make money."],
+    ]},
   guide:{tip:"The full plain-English handbook for the whole warehouse. Start with the big picture, then open any tool.",
     steps:["Read “The big picture” to see how it all connects.","Open “A few words to know” for the jargon.","Tap any section to read what each tool does and how to use it."],
-    mistakes:[],faqs:[["Where do I start as a total beginner?","Read the big picture here, then use the Help button on any tab and the “Try a practice order” button on To Ship."]]},
+    mistakes:[],faqs:[
+      ["Where do I start as a total beginner?","Read the big picture here, then use the Help button on any tab and the “Try a practice order” button on To Ship."],
+      ["What's the difference between the Guide and the Help button?","The Guide is the whole handbook in one place. The Help button gives you this focused help for the exact tab you're on."],
+      ["Can I replay the welcome tour?","Yes — the “Replay welcome” link at the top of the Guide reopens it."],
+    ]},
 };
 const HELP_DEFAULT={tip:"Here's what this tool does and answers to common questions. For the full picture, open the Guide.",
   steps:[],mistakes:[],faqs:[
@@ -11976,11 +12091,11 @@ function WmsHelp({viewId,viewLabel,onClose,goGuide}){
   const c=HELP_CONTENT[viewId]||HELP_DEFAULT;
   const [q,setQ]=useState(""); const [open,setOpen]=useState(null);
   const faqs=(c.faqs||[]).filter(f=>!q.trim()||((f[0]+" "+f[1]).toLowerCase().includes(q.trim().toLowerCase())));
-  return (<div className="fixed inset-0 z-[60] flex justify-end" onClick={onClose}>
-    <div className="absolute inset-0 bg-black/30"/>
-    <div className="relative bg-white w-full max-w-md h-full shadow-xl overflow-y-auto" onClick={e=>e.stopPropagation()}>
-      <div className="sticky top-0 bg-white border-b border-stone-200 px-5 py-3.5 flex items-center justify-between">
-        <div className="font-semibold text-stone-900 flex items-center gap-2"><MessageCircle className="w-4.5 h-4.5 text-[#0086E0]"/>Help · {viewLabel}</div>
+  return (<div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={onClose}>
+    <div className="absolute inset-0 bg-black/40"/>
+    <div className="relative bg-white w-full max-w-lg max-h-[88vh] rounded-2xl shadow-xl overflow-y-auto" onClick={e=>e.stopPropagation()}>
+      <div className="sticky top-0 bg-white border-b border-stone-200 px-5 py-3.5 flex items-center justify-between rounded-t-2xl">
+        <div className="font-semibold text-stone-900 flex items-center gap-2"><MessageCircle className="w-5 h-5 text-[#0086E0]"/>Help · {viewLabel}</div>
         <button onClick={onClose} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button>
       </div>
       <div className="p-5 space-y-5">
@@ -12021,18 +12136,29 @@ function WmsHelp({viewId,viewLabel,onClose,goGuide}){
 function WmsWelcome({onClose,goView}){
   const [step,setStep]=useState(0);
   const STEPS=[
-    {emoji:"👋",title:"Welcome to your Warehouse",body:"This is a smart stockroom that keeps count for you. Let's take 20 seconds to see how it works — you can't break anything."},
-    {emoji:"🔄",title:"It's one simple loop",body:"Add what you sell → an order comes in → you pack & ship it → the count drops by itself → it warns you when you're low → you restock. That's the whole thing."},
-    {emoji:"🚀",title:"Where to start",body:"Add your products first, then rehearse an order with nothing at stake. The blue Help button on any tab answers questions, and the Guide explains everything."},
+    {emoji:"👋",title:"Welcome to your Warehouse",body:"This is a smart stockroom that counts for you. Let's take a minute to see how it all works — you can't break anything, so relax and click through.",
+      points:["Everything below is optional — use what you need.","There's a blue Help button on every tab.","You can replay this tour anytime from the Guide."]},
+    {emoji:"🔄",title:"The whole thing is one loop",body:"Once you get this, you get the warehouse:",
+      points:["Add what you sell and how many you have.","An order comes in → you pack & ship it.","The count drops by itself the moment the label prints.","It warns you when you're low, and helps you restock.","New stock arrives → you scan it in → repeat."]},
+    {emoji:"📦",title:"Stock is the heart of it",body:"Everything reads from one master list of your products.",
+      points:["Add products by import, spreadsheet, or by hand.","Set a “Reorder at” number so it warns you before you run out.","The Health tab shows it all color-coded — red, orange, green, purple."]},
+    {emoji:"🚚",title:"Getting orders out",body:"When an order's ready, fulfilling it is one guided flow.",
+      points:["To Ship lists what's waiting, greenest first.","Fulfill walks you: grab the items → pack → print the label.","Pick Lists and the mobile Runner help when you're busy."]},
+    {emoji:"🛒",title:"Never run out",body:"The system watches your levels and does the buying legwork.",
+      points:["Replenish shows what's low and drafts the purchase orders.","It even picks the cheapest supplier for you.","Receive a delivery and the count climbs back up."]},
+    {emoji:"🧰",title:"There's more when you're ready",body:"Advanced tools stay hidden until you flip “Show all tools.”",
+      points:["Cycle counts, production/assemblies, 3PL billing, Point of Sale.","Turn them on only if you need them — they're all optional.","The Guide explains every single one in plain English."]},
+    {emoji:"🚀",title:"Let's get you started",body:"Pick where to begin. My tip: add a few products, then rehearse an order with nothing at stake.",points:[]},
   ];
   const s=STEPS[step]; const last=step===STEPS.length-1;
   const go=(v)=>{ onClose&&onClose(); goView&&goView(v); };
   return (<div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-    <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6" onClick={e=>e.stopPropagation()}>
+    <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 max-h-[92vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
       <div className="text-4xl mb-2">{s.emoji}</div>
       <div className="text-xl font-semibold text-stone-900">{s.title}</div>
       <p className="text-sm text-stone-600 mt-1.5">{s.body}</p>
-      <div className="flex items-center gap-1.5 mt-4">{STEPS.map((_,i)=><span key={i} className={`h-1.5 rounded-full transition-all ${i===step?"w-6 bg-[#0086E0]":"w-1.5 bg-stone-200"}`}/>)}</div>
+      {(s.points||[]).length>0&&<ul className="mt-3 space-y-1.5">{s.points.map((p,i)=>(<li key={i} className="flex gap-2 text-[13.5px] text-stone-700"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5"/><span>{p}</span></li>))}</ul>}
+      <div className="flex items-center gap-1.5 mt-4">{STEPS.map((_,i)=><button key={i} onClick={()=>setStep(i)} className={`h-1.5 rounded-full transition-all ${i===step?"w-6 bg-[#0086E0]":"w-1.5 bg-stone-200 hover:bg-stone-300"}`} aria-label={"Step "+(i+1)}/>)}</div>
       {last?(
         <div className="grid grid-cols-3 gap-2 mt-4">
           <button onClick={()=>go("stock")} className="text-xs border border-stone-200 rounded-xl px-2 py-3 hover:border-[#0086E0]/40 font-medium text-stone-700 flex flex-col items-center gap-1"><Plus className="w-4 h-4 text-[#0086E0]"/>Add products</button>
@@ -12043,6 +12169,7 @@ function WmsWelcome({onClose,goView}){
       <div className="flex items-center justify-between mt-5">
         <button onClick={onClose} className="text-sm text-stone-400 hover:text-stone-600">Skip</button>
         <div className="flex items-center gap-2">
+          <span className="text-[11px] text-stone-400 tabular-nums">{step+1} / {STEPS.length}</span>
           {step>0&&<button onClick={()=>setStep(step-1)} className="text-sm text-stone-500 px-2">Back</button>}
           {!last?<button onClick={()=>setStep(step+1)} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1">Next<ChevronRight className="w-4 h-4"/></button>:<button onClick={onClose} className="text-sm bg-stone-100 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-200">Got it</button>}
         </div>

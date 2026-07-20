@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="wmshelp-v742";
+const BUILD_TAG="wmsflow-v743";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10041,20 +10041,120 @@ const WMS_GLOSSARY=[
   ["Landed unit cost","An item's cost including its share of freight/duty — what it truly cost to get on the shelf."],
   ["ABC analysis","Ranks products by how much value they move — A = your top movers."],
 ];
-/* Step-by-step how-to tutorials shown in the Help guide. */
+/* Step-by-step how-to tutorials shown in the Help guide. Shape: [title, icon, steps[], why, tip]. */
 const WMS_TUTORIALS=[
-  ["Add your products","📦",["Click New item (or Import from catalog / Import CSV to add lots at once).","Enter a SKU — a short code for the product. That's the only required field.","Optionally set On hand, a Reorder point, and a Unit cost.","Save — it appears in your Stock list."]],
-  ["Receive a purchase order","🚚",["Go to Purchase Orders → New PO.","Pick a supplier and add line items (SKU + quantity + cost).","Save. When the stock arrives, open the PO and click Receive.","Enter how many arrived — it adds to on-hand automatically and closes the PO."]],
-  ["Never run out — reorder points","🔔",["Edit an item and set Reorder at (min) and Reorder up to (max).","When on-hand hits the min, the item shows a Low badge.","Open the Replenish tab to draft the POs that refill everything back to max."]],
-  ["Auto-draft your restock POs","🧾",["Set a Preferred supplier on each item (edit the item).","Open the Replenish tab — it lists everything low, counting stock already on the way.","Adjust any order quantities, then click Create draft POs.","You get one PO per supplier, ready to review and send."]],
-  ["Ship & watch stock count down","✅",["Ship orders like normal from the Ship or Orders tab.","If the order's items match your SKUs, stock decrements by itself.","Orders show an in-stock / short badge so you know before you ship."]],
-  ["Count stock (cycle count)","🔢",["Open the Cycle Count tab and pick a category (or count everything).","Walk the shelf and type what you physically have next to each item.","The Variance column shows the difference live.","Click Apply — only differences are corrected, and each is logged."]],
-  ["Move stock between locations","↔️",["Turn on a couple of Warehouses (or just type bin names).","Click Move on an item, choose from/to and a quantity.","The total stays the same — it's just relocated. Per-location counts show on the row."]],
-  ["Print barcode labels & scan-pick","🏷️",["On the Stock tab click Print labels to print scannable Code 128 barcodes for your items.","Stick a label on each bin or product.","In Pick Lists, select orders → Build → Start pick session.","Scan each item as you grab it — progress fills in and lines check off green.","Then Pack Verify scans each item into its box before it ships."]],
-  ["Build an assembly (production order)","🛠️",["Edit an item and add a kit / bill of materials (its components).","Go to Inventory → Production, click New order, pick the assembly and quantity.","Click Complete — the components are consumed and the finished item is stocked."]],
-  ["Bill a 3PL client","💵",["Open Business → 3PL Billing → Rate card and add your services (pick, pack, storage…) with rates.","On the Charges tab, log work as you do it — pick a client, service and quantity.","On Invoices, print a client's invoice and mark it invoiced."]],
-  ["Ring up a walk-in sale (POS)","🧾",["Set a Sell price on your items (edit item).","Open Sell → Point of Sale, scan or search to build a cart.","Take payment and Charge — stock draws down and a receipt prints."]],
-  ["Use the mobile Runner","📱",["Open Fulfill → Runner on a phone.","Receive scans a delivery in; Count fixes a shelf count; Put moves stock to a bin; Pull is the scan-to-pick queue."]],
+  ["Add your products","📦",[
+    "Open the Stock tab. You'll add products one of three ways: New item (one at a time), Import from catalog (pull from your existing shipping catalog), or Import CSV (a spreadsheet for adding lots at once).",
+    "For a single item, click New item and enter a SKU — a short code like TSHIRT-BLK-M. This is the only required field; it's how every screen tells your products apart, so keep it short and consistent.",
+    "Fill in the Name, and type how many you physically have in On hand. If you're not sure, put your best estimate now and fix it later with a cycle count.",
+    "Set a Reorder at (min) number — this is the low-water mark that triggers alerts and Replenish. Skip it and this item can never warn you before it runs out.",
+    "Optionally set a Unit cost (drives inventory value and margins) and a Sell price (used by Point of Sale).",
+    "Click the Gen button next to Barcode to auto-create a scannable barcode, so the pick and pack scanners work on this item.",
+    "Save — it appears in your Stock list and every other screen can now see it.",
+  ],"This is the foundation — every other tool reads and writes these products. Do this first.","Importing a CSV? Include columns for SKU, name, quantity and cost and it maps them for you — hundreds of items in one go."],
+  ["Fix a wrong count (adjust vs. cycle count)","🔧",[
+    "For a single item you know is wrong, click Adjust on its Stock row.",
+    "Enter the change as a + or − number (e.g. -3 for three damaged) — not the new total.",
+    "Pick or type a reason: damaged, found, shrinkage, correction. This is logged, so there's an audit trail of who changed what and why.",
+    "Save — on-hand updates immediately and the change lands in the movement ledger.",
+    "For a whole shelf or category, use Cycle Count instead (see that tutorial) — it corrects many items at once.",
+  ],"Keeping counts honest is what makes every other number trustworthy. Always adjust with a reason instead of silently editing on-hand.","Never type over the On hand field to fix a miscount — Adjust records the reason; a silent edit doesn't."],
+  ["Receive a purchase order","🚚",[
+    "Go to Purchase Orders → New PO.",
+    "Pick a supplier (add one first under Suppliers if the list is empty).",
+    "Add line items: SKU, quantity ordered, and the unit cost you're paying.",
+    "Save the PO. Its quantity now shows as Incoming on those items' Stock rows — bought, not yet arrived.",
+    "Print or copy the PO details and send them to your supplier.",
+    "When the delivery arrives, open the PO and click Receive.",
+    "Enter how many actually arrived (receive the real amount if only part came — the PO stays open for the rest).",
+    "Optionally add a Landed cost for freight/duty so the item's true cost is right.",
+    "On-hand climbs by what you received, Incoming drops, and the PO closes (or stays partial).",
+  ],"Receiving is how bought stock becomes shelf stock — and it keeps a clean paper trail.","Always Receive the PO instead of hand-editing on-hand when a delivery lands — it clears Incoming and records landed cost."],
+  ["Never run out — reorder points","🔔",[
+    "Edit an item and set Reorder at (min) — the level where it should warn you — and Reorder up to (max), the level to refill back to.",
+    "Not sure what numbers to use? On the Replenish tab, click Tune reorder points — it suggests smart min/max from your real sell rate and each supplier's lead time.",
+    "When on-hand drops to the min, the item shows a Low badge and appears on the Overview's Needs attention list.",
+    "The Stock Health tab turns these into colors — orange = low, red = out — so you can eyeball your whole catalog in seconds.",
+    "Open Replenish to draft the purchase orders that refill everything back to max.",
+  ],"Reorder points are the difference between the system watching your stock for you and you finding out you're out when a customer complains.","Set reorder points on your top sellers first — those are the ones that hurt when they go out."],
+  ["Auto-draft your restock POs (Replenish)","🧾",[
+    "Set a Preferred supplier on each item (edit the item), and a lead time on each supplier.",
+    "Open the Replenish tab — it lists everything at or below its reorder point, already subtracting stock that's on the way from open POs.",
+    "Read the Days left column to see what's most urgent, and review the suggested order quantities.",
+    "Adjust any quantities you want — every Order qty is editable.",
+    "Click Create draft POs. It makes one purchase order per supplier (buying from the cheapest vendor on each item), and drops you on Purchase Orders to review and send.",
+  ],"This turns 'what do I need to buy?' from an afternoon with a spreadsheet into a two-minute review.","Trust the low list — it already counts inbound POs, so you won't double-order something that's already on the way."],
+  ["Ship an order & watch stock count down","✅",[
+    "Orders land on the To Ship tab, readiest first. Green 'Ready' means every item is in stock.",
+    "Fastest path: click Ship now on the row — it jumps straight to the shipping label with the address prefilled (just like shipping from Orders).",
+    "Careful path: click Fulfill to open a checklist, tick each item off (with its shelf location), then Create shipping label.",
+    "Extra-careful path: switch Fulfillment steps to Pick → Pack → Ship to scan each item into the box before the label prints.",
+    "Print the label. The moment it prints, stock for those items counts down by itself and the order is marked fulfilled.",
+    "If the order's items match your SKUs, everything reconciles automatically — no re-counting, and your online store updates so you can't oversell.",
+  ],"This is the everyday loop — where the shipping side and the warehouse meet. Stock stays right without you touching it.","Stock drops when the label prints, not when you tick items off — so a half-finished fulfill never miscounts your shelf."],
+  ["Count stock (cycle count)","🔢",[
+    "Open the Cycle Count tab and pick one category or shelf — not the whole warehouse (that's the 'cycle' idea: a little and often).",
+    "Walk that shelf and type what you physically see next to each item.",
+    "The Variance column shows the difference from the system live — positive means you found extra, negative means some is missing.",
+    "Leave a row blank to skip it; type 0 to record 'none on the shelf'.",
+    "Click Apply — only the rows that differ are corrected, and each correction is logged as a cycle-count adjustment.",
+  ],"Regular small counts catch shrinkage and miscounts before they snowball, without ever shutting down to do one giant annual count.","Count your fastest-moving or highest-value shelf weekly; slow movers can wait a month.","Serial and lot items aren't counted here — those are counted by scanning each unit."],
+  ["Move stock between locations","↔️",[
+    "Set up your locations under Warehouses — a whole building, a zone, or individual shelves/bins.",
+    "On a Stock row, click Move.",
+    "Choose the from-location, the to-location, and how many units to move.",
+    "Confirm — the total on-hand doesn't change; it's just relocated. Per-location counts show on the row and under Warehouses → Bin contents.",
+  ],"Locations tell your team exactly where to put and find things — the bigger you get, the more time this saves.","Start with one 'Main' location and only add finer bins once finding things gets slow. Don't over-engineer on day one."],
+  ["Print barcode labels & scan-pick a batch","🏷️",[
+    "On the Stock tab, select items and click Print labels to print scannable Code 128 barcodes (or the Gen button sets a barcode on a single item).",
+    "Stick a label on each bin or product.",
+    "Go to Pick Lists, tick the orders you want to pick, and click Build pick list — it sorts everything into one location-ordered walk.",
+    "Click Start pick session and scan each item as you grab it; lines turn green and progress fills in.",
+    "If a scan doesn't match the list, it stops you — that's the wrong item.",
+    "When the walk's done, head to Pack Verify: scan each item into its box (it even suggests which box) before the label prints.",
+  ],"Scanning is what stops the two costliest mistakes — grabbing the wrong item and shipping a short order.","No scanner? You can type SKUs instead — a USB scanner just types them for you and is faster."],
+  ["Sell bundles — kits & assemblies","🎁",[
+    "Decide which kind you need: a virtual kit (assembled only when it sells) or a pre-built assembly (built ahead of time and stocked).",
+    "Edit the product and add its parts under kit / bill of materials (BOM) — each component SKU and how many.",
+    "For a virtual kit, you're done: selling it automatically uses up the component stock.",
+    "For a pre-built assembly, go to Production → New order, pick the bundle and how many to build, review the parts it will consume, and click Complete.",
+    "Completing a build consumes the components and adds the finished bundle to Stock.",
+  ],"Bundles let you sell combos without double-counting — the system always knows the true parts you have left.","Check Analytics → kit margins to see which bundles actually make money after the rolled-up cost of their parts."],
+  ["Set up automatic box suggestions (cartonization)","📐",[
+    "Add your real boxes under Containers (Setup) — name, dimensions, weight limit, and cost. This is the same catalog as the shipping side's Package Sizes.",
+    "Measure your boxes accurately — the dimensions flow onto the shipping label, so wrong numbers mean wrong rates.",
+    "Go to Packing Groups → New rule and match a category or a word (in the product name/SKU) to one of your boxes.",
+    "Now at Pack Verify, the right box is suggested automatically for each order.",
+    "On the Ship tab, picking that box fills the label's length/width/height for you.",
+  ],"Consistent boxing means accurate rates and fewer 'what box does this go in?' pauses at the packing table.","Define each box once in Containers and it's shared everywhere — there's no separate box list on the shipping side anymore."],
+  ["Handle backorders","⏳",[
+    "Open the Backorders tab — it lists every product your open orders need more of than you have.",
+    "Read each row's status: 'On the way' means an inbound PO already covers the shortage; 'Reorder' means it doesn't yet.",
+    "Click a row to see exactly which customer orders are waiting on that item.",
+    "For anything marked Reorder, head to Replenish to order more.",
+    "Once the covering PO is received, the backorder clears on its own.",
+  ],"Knowing what you're short on — and who's waiting — before customers email you is what keeps them happy.","Don't panic over 'On the way' items — those are already handled by a PO. Focus only on the 'Reorder' ones."],
+  ["Bill a 3PL client","💵",[
+    "Open 3PL Billing → Rate card and add your services with prices — pick fee, pack fee, per-unit, storage.",
+    "On the Charges tab, click Auto-bill shipped orders, choose a per-order and/or per-unit fee, and Generate — it reads your shipped orders and creates the charges for you.",
+    "Or log one-off charges by hand: pick a client, service, and quantity.",
+    "On Invoices, print a client's invoice and Mark invoiced once they've paid.",
+  ],"If you ship for other brands, this turns the work you already did into invoices without any manual tallying.","Every order is billed once — already-billed orders are skipped automatically, so you can't double-charge."],
+  ["Ring up a walk-in sale (POS)","🛒",[
+    "Set a Sell price on your items first (edit item) — no price rings up as $0.",
+    "Open Point of Sale and scan or search to build a cart; each line's price is editable for that sale.",
+    "Set your tax % once and it applies to the cart.",
+    "Pick Card / Cash / Other and click Charge.",
+    "Stock draws down from the same shelf as your online orders, and a receipt prints.",
+  ],"Sell in person without a second system — one shelf count covers both your store and your website.","POS records the sale and drops stock; take the actual card payment on your own terminal."],
+  ["Use the mobile Runner on the floor","📱",[
+    "Open the Runner tab on a phone or tablet — it's built for the warehouse floor, not the office desk.",
+    "Tap Pull to work the scan-to-pick queue for open orders.",
+    "Tap Receive to scan a delivery straight into stock.",
+    "Tap Put to shelve received stock into a bin (scan the item, pick the destination).",
+    "Tap Count to fix a shelf count on the spot.",
+    "Every action writes to the same live Stock as the desktop — no syncing, no laptop.",
+  ],"The Runner puts the whole warehouse in your pocket, so your floor team never walks back to a computer.","Mount a tablet on a picking cart — it's ideal for a full pick round."],
 ];
 /* Code 128-B barcode renderer. Encodes ASCII 32–126 into the standard 107-symbol module patterns,
    appends the mod-103 checksum and stop bar, and returns SVG bars. Used to print scannable product
@@ -10429,9 +10529,11 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
           <div className="text-sm text-stone-700"><b>New here?</b> Load a sample warehouse and click around — no risk.</div>
           <button onClick={loadSample} disabled={busy==="sample"} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy==="sample"?<Loader2 className="w-4 h-4 animate-spin"/>:<Boxes className="w-4 h-4"/>}Load sample warehouse</button>
         </div>
-        <div className="space-y-3">{WMS_TUTORIALS.map(([t,icon,steps])=>(<div key={t} className="border border-stone-100 rounded-xl p-3">
-          <div className="text-sm font-semibold text-stone-800 mb-1.5">{icon} {t}</div>
-          <ol className="list-decimal ml-5 space-y-0.5 text-xs text-stone-600">{steps.map((s,i)=><li key={i}>{s}</li>)}</ol>
+        <div className="space-y-3">{WMS_TUTORIALS.map(([t,icon,steps,why,tip])=>(<div key={t} className="border border-stone-100 rounded-xl p-3.5">
+          <div className="text-sm font-semibold text-stone-800 mb-1">{icon} {t}</div>
+          {why&&<p className="text-[12px] text-stone-500 mb-2 leading-snug">{why}</p>}
+          <ol className="list-decimal ml-5 space-y-1 text-xs text-stone-600 leading-relaxed">{steps.map((s,i)=><li key={i}>{s}</li>)}</ol>
+          {tip&&<div className="mt-2 text-[11.5px] text-emerald-800 bg-emerald-50/70 border border-emerald-100 rounded-lg px-2.5 py-1.5 flex gap-1.5"><span className="shrink-0">💡</span><span><b>Tip:</b> {tip}</span></div>}
         </div>))}</div>
         <div className="mt-4 pt-3 border-t border-stone-100 text-xs text-stone-500"><b className="text-stone-700">The short version:</b> add your products → say how many you have → ship orders like normal. Stock counts itself down, warns you when it's low, and helps you reorder. Everything else is optional and there when you need it.</div>
       </div>:<div>
@@ -11207,11 +11309,15 @@ function PracticeRehearsal({onClose}){
     {sku:"DEMO-STICKER",name:"Demo Sticker Pack",loc:"C3",bin:"Aisle C · Bin 3",onHand:0,reorder:12,arriving:60,order:3,box:"Small mailer"},
   ];
   const [scene,setScene]=useState(0);
+  const [maxScene,setMaxScene]=useState(0);
+  useEffect(()=>{ setMaxScene(m=>Math.max(m,scene)); },[scene]);
   const [stock,setStock]=useState(()=>SEED.map(s=>({...s})));
   const [picked,setPicked]=useState({});
   const [packed,setPacked]=useState({});
   const [scan,setScan]=useState("");
   const [scanErr,setScanErr]=useState("");
+  const [counted,setCounted]=useState("");      // cycle-count scene: what the user "counts"
+  const [applied,setApplied]=useState(false);
   const set=(sku,fn)=>setStock(st=>st.map(s=>s.sku===sku?{...s,...fn(s)}:s));
   const allPicked=stock.every(s=>picked[s.sku]);
   const allPacked=stock.every(s=>packed[s.sku]);
@@ -11222,8 +11328,8 @@ function PracticeRehearsal({onClose}){
   const receive=()=>{ setStock(st=>st.map(s=>({...s,onHand:s.arriving}))); setScene(2); };
   const doScan=()=>{ const v=scan.trim().toUpperCase(); const hit=stock.find(s=>s.sku.toUpperCase()===v); if(!hit){ setScanErr("No item here has that barcode — try one of the SKUs shown (e.g. "+stock.find(s=>!picked[s.sku])?.sku+")."); return;} if(picked[hit.sku]){ setScanErr(hit.sku+" is already picked."); setScan(""); return;} setPicked(p=>({...p,[hit.sku]:true})); setScan(""); setScanErr(""); };
   const ship=()=>{ setStock(st=>st.map(s=>({...s,onHand:Math.max(0,s.onHand-s.order)}))); setScene(6); };
-  const StepBar=()=>{ const steps=["Receive","Order","Pick","Pack","Ship","Stock","Reorder"]; const idx=Math.max(0,scene-1); return (
-    <div className="flex flex-wrap items-center gap-1 mb-4">{steps.map((s,i)=>(<React.Fragment key={s}><span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${i<idx?"bg-emerald-100 text-emerald-700":i===idx?"bg-[#0086E0] text-white":"bg-stone-100 text-stone-400"}`}>{i<idx?"✓ ":""}{s}</span>{i<steps.length-1&&<span className="text-stone-300 text-[9px]">›</span>}</React.Fragment>))}</div>); };
+  const StepBar=()=>{ const steps=["Receive","Order","Pick","Pack","Ship","Stock","Reorder","Count"]; const idx=Math.max(0,scene-1); return (
+    <div className="flex flex-wrap items-center gap-1 mb-4">{steps.map((s,i)=>{ const visited=(i+1)<=maxScene; const cur=i===idx; return (<React.Fragment key={s}><button disabled={!visited} onClick={()=>visited&&setScene(i+1)} title={visited?"Jump to "+s:"Not reached yet"} className={`text-[10px] font-medium px-2 py-0.5 rounded-full transition ${cur?"bg-[#0086E0] text-white":i<idx?"bg-emerald-100 text-emerald-700 hover:bg-emerald-200":visited?"bg-stone-100 text-stone-500 hover:bg-stone-200":"bg-stone-100 text-stone-300 cursor-default"}`}>{i<idx?"✓ ":""}{s}</button>{i<steps.length-1&&<span className="text-stone-300 text-[9px]">›</span>}</React.Fragment>); })}</div>); };
   const Row=({s,right,dim})=>(<div className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border ${dim?"bg-stone-50 border-stone-200":"bg-white border-stone-200"}`}>
     <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{s.name}</div><div className="text-[11px] text-stone-400 flex items-center gap-1"><MapPin className="w-3 h-3"/>{s.bin} · {s.sku}</div></div>
     {right}
@@ -11300,10 +11406,26 @@ function PracticeRehearsal({onClose}){
       <div className="text-sm font-semibold text-stone-900 mb-1 flex items-center gap-2"><ClipboardList className="w-4 h-4 text-[#0086E0]"/>7 · Reorder the low item</div>
       <p className="text-xs text-stone-500 mb-3">The app already drafted a purchase order to your cheapest supplier for anything below its reorder point. Approve it and you're covered.</p>
       {lowNow.map(s=>(<div key={s.sku} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-stone-200 bg-white mb-1.5"><Package className="w-4 h-4 text-stone-400 shrink-0"/><div className="flex-1 min-w-0"><div className="text-sm text-stone-800">{s.name}</div><div className="text-[11px] text-stone-400">suggested order qty: {s.arriving}</div></div><span className="text-[10px] uppercase rounded px-1.5 py-0.5 bg-[#E6F4FF] text-[#006FBF]">Draft PO</span></div>))}
-      <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4"><div className="text-sm font-semibold text-emerald-900 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>That's the whole loop.</div>
-        <p className="text-[12px] text-emerald-800/90 mt-1">Receive → an order lands → pick → pack → ship → stock drops → reorder. The warehouse does the counting; you just move boxes. Everything you clicked here works the same on real orders — nothing you did was saved.</p></div>
-      <button onClick={onClose} className="w-full mt-4 bg-emerald-600 text-white rounded-xl py-3 font-semibold hover:bg-emerald-700 flex items-center justify-center gap-1.5"><CheckCircle2 className="w-5 h-5"/>Finish — I've got it</button>
+      <Next label="One more habit — keeping the count honest" go={()=>setScene(8)}/>
     </div>),
+    // 8 — cycle count / fix a miscount, then recap + finish
+    (()=>{ const item=stock[1]||stock[0]; const sys=item.onHand; const realCount=Math.max(0,sys-2); const c=counted===""?null:Math.max(0,parseInt(counted,10)||0); const variance=c===null?null:c-sys; return (<div>
+      <div className="text-sm font-semibold text-stone-900 mb-1 flex items-center gap-2"><ClipboardList className="w-4 h-4 text-[#0086E0]"/>8 · Keep the count honest — cycle count</div>
+      <p className="text-xs text-stone-500 mb-3">Shelves drift over time — a dropped box, a mis-scan. Instead of one giant yearly count, you count a shelf at a time. The system thinks you have <b>{sys}</b> of <b>{item.name}</b>. Walk the shelf and enter what's really there (say you find <b>{realCount}</b>).</p>
+      <div className="rounded-xl border border-stone-200 p-3 space-y-2">
+        <div className="flex items-center justify-between text-sm"><span className="text-stone-500">System count</span><span className="font-semibold text-stone-800">{sys}</span></div>
+        <div className="flex items-center justify-between gap-3"><span className="text-sm text-stone-500">You counted</span><input value={counted} onChange={e=>{setCounted(e.target.value.replace(/[^0-9]/g,""));setApplied(false);}} placeholder={String(realCount)} inputMode="numeric" className="w-24 border border-stone-300 rounded-lg px-3 py-1.5 text-sm text-right"/></div>
+        {variance!==null&&<div className={`flex items-center justify-between text-sm border-t border-stone-100 pt-2 ${variance===0?"text-stone-500":variance<0?"text-amber-600":"text-emerald-600"}`}><span>Variance</span><span className="font-semibold">{variance>0?"+":""}{variance}{variance<0?" (missing)":variance>0?" (found)":" (spot on)"}</span></div>}
+      </div>
+      {!applied
+        ? <button onClick={()=>{ if(c===null){setCounted(String(realCount));} setApplied(true); }} className="w-full mt-4 bg-[#0086E0] text-white rounded-xl py-3 font-semibold hover:bg-[#006db8] flex items-center justify-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>Apply the count</button>
+        : <>
+          <div className="mt-3 text-[11px] text-emerald-700 bg-emerald-50 rounded px-2.5 py-1.5 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5"/>Corrected — only the difference was changed, and it's logged with a reason so there's an audit trail.</div>
+          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4"><div className="text-sm font-semibold text-emerald-900 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>That's the whole loop.</div>
+            <p className="text-[12px] text-emerald-800/90 mt-1">Receive → an order lands → pick → pack → ship → stock drops → reorder → count to keep it honest. The warehouse does the counting; you just move boxes. Everything you clicked here works the same on real orders — nothing you did was saved.</p></div>
+          <button onClick={onClose} className="w-full mt-4 bg-emerald-600 text-white rounded-xl py-3 font-semibold hover:bg-emerald-700 flex items-center justify-center gap-1.5"><CheckCircle2 className="w-5 h-5"/>Finish — I've got it</button>
+        </>}
+    </div>); })(),
   ];
   return (<div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={onClose}>
     <div className="absolute inset-0 bg-black/50"/>
@@ -11360,7 +11482,10 @@ function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFl
       {rows.map(({o,ready,unknown,short,units,skus,t})=>(<div key={o.id} className="p-3 flex items-center gap-3 flex-wrap">
         <div className="shrink-0">{ready?<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700">Ready</span>:unknown?<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-stone-100 text-stone-500">No stock link</span>:<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-amber-100 text-amber-700">Short</span>}</div>
         <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{o.name||o.id}{o.customer?" · "+o.customer:""}</div><div className="text-[11px] text-stone-400 truncate">{skus} line{skus!==1?"s":""} · {units} unit{units!==1?"s":""}{short.length?" · short: "+short.slice(0,3).join(", "):""}{t?" · "+age(t)+" old":""}</div></div>
-        {shipOrder&&<button onClick={()=>openFulfill(o)} className="shrink-0 text-xs bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1">Fulfill<ChevronRight className="w-3.5 h-3.5"/></button>}
+        {shipOrder&&<div className="shrink-0 flex items-center gap-1.5">
+          <button onClick={()=>shipOrder(o)} title="Open the shipping label right now — skips the pick/pack checklist, just like shipping from Orders" className="text-xs bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1"><Truck className="w-3.5 h-3.5"/>Ship now</button>
+          <button onClick={()=>openFulfill(o)} title="Grab &amp; check off each item first, then ship" className="text-xs bg-white border border-stone-200 text-stone-600 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-50 flex items-center gap-1">Fulfill<ChevronRight className="w-3.5 h-3.5"/></button>
+        </div>}
       </div>))}
     </div>
     {fulfilling&&(()=>{

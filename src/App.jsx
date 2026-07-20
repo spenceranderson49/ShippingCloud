@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="inline-ship-v746";
+const BUILD_TAG="print-slips-v747";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9238,6 +9238,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
             <button onClick={saveView} className="inline-flex items-center gap-1 border border-dashed border-stone-300 text-stone-400 hover:text-[#0086E0] hover:border-[#99D6FF] rounded-full px-2.5 py-1 font-medium">+ Save view</button>
             <span className="flex-1"/>
             {selIds.length>0&&<><span className="text-xs text-stone-500 self-center">{selIds.length} selected</span>
+              <button onClick={()=>{const chosen=sorted.filter(o=>selIds.includes(o.id));if(chosen.length)printPackingSlips(chosen.map(o=>slipFromOrder(o,(settings&&settings.sender)||{})));}} title="Print a packing slip for each selected order — all in one go" className="inline-flex items-center gap-1.5 bg-white border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-100"><FileText className="w-3.5 h-3.5"/>Print slips</button>
               <button onClick={doMerge} disabled={selIds.length<2} title={selIds.length<2?"Select 2 or more orders to merge":"Combine the selected orders into one shipment"} className="inline-flex items-center gap-1.5 bg-[#0086E0] text-white rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#006db8] disabled:opacity-40"><ArrowLeftRight className="w-3.5 h-3.5"/>Merge {selIds.length} order{selIds.length>1?"s":""}</button>
               <button onClick={()=>setSel({})} className="text-xs text-stone-400 hover:text-stone-600 self-center px-1">Clear</button></>}
             <button onClick={()=>printPickList(sorted.filter(o=>o.status!=="fulfilled"))} disabled={!sorted.some(o=>o.status!=="fulfilled")} title="One sheet: every item across the open orders in this view, with checkboxes" className="inline-flex items-center gap-1.5 bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40"><ClipboardList className="w-3.5 h-3.5"/>Pick List</button>

@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v732";
+const BUILD_TAG="addr-v733";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10050,6 +10050,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const [wmsSimple,setWmsSimple]=usePersist("wmsSimple",true);   // entry-level view on by default; reveals full toolset on demand
   const [wmsFlow,setWmsFlow]=usePersist("wmsFlow","simple");      // fulfillment flow: "simple" (grab→ship) or "standard" (pick→pack→ship)
   const [helpFor,setHelpFor]=useState(null);                       // per-tab help panel (holds the current view id)
+  const [welcomed,setWelcomed]=usePersist("wmsWelcomed",false);    // first-run welcome walkthrough (shows once)
   const [view,setView]=useState("stock");
   const [pos,setPos]=useState([]);
   const [suppliers,setSuppliers]=useState([]);
@@ -10280,11 +10281,12 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
       </div>
     </div>
     {helpFor&&<WmsHelp viewId={helpFor} viewLabel={(NAV_GROUPS.flatMap(g=>g[1]).find(t=>t[0]===helpFor)||[helpFor,helpFor])[1]} onClose={()=>setHelpFor(null)} goGuide={()=>setView("guide")}/>}
+    {!welcomed&&items&&<WmsWelcome onClose={()=>setWelcomed(true)} goView={setView}/>}
   </div>); };
   if(view==="overview") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryOverview list={list} pos={pos} log={log} suppliers={suppliers} orders={orders} showMoney={showMoney} committedBySku={committedBySku} incomingBySku={incomingBySku} goView={setView} onReceive={()=>setView("stock")}/></div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
   if(view==="health") return (<div className="max-w-5xl space-y-4"><Switcher/><StockHealth list={list} committedBySku={committedBySku} goView={setView} showMoney={showMoney}/></div>);
-  if(view==="guide") return (<div className="max-w-5xl space-y-4"><Switcher/><WmsGuide goView={setView}/></div>);
+  if(view==="guide") return (<div className="max-w-5xl space-y-4"><Switcher/><WmsGuide goView={setView} onReplay={()=>setWelcomed(false)}/></div>);
   if(view==="toship") return (<div className="max-w-5xl space-y-4"><Switcher/><ToShip orders={orders} list={list} committedBySku={committedBySku} goView={setView} shipOrder={goShip?shipOrder:null} flow={wmsFlow} setFlow={setWmsFlow}/></div>);
   if(view==="pick") return (<div className="max-w-5xl space-y-4"><Switcher/><PickList orders={orders} items={list}/></div>);
   if(view==="pack") return (<div className="max-w-5xl space-y-4"><Switcher/><PackVerify orders={orders} items={list} shipOrder={goShip?shipOrder:null}/></div>);
@@ -11940,10 +11942,44 @@ function WmsHelp({viewId,viewLabel,onClose,goGuide}){
     </div>
   </div>);
 }
-function WmsGuide({goView}){
+/* WmsWelcome — a friendly first-run walkthrough. A 3-step carousel that explains the loop and points
+   at the first thing to do. Shows once (persisted), and the Guide can reopen it. */
+function WmsWelcome({onClose,goView}){
+  const [step,setStep]=useState(0);
+  const STEPS=[
+    {emoji:"👋",title:"Welcome to your Warehouse",body:"This is a smart stockroom that keeps count for you. Let's take 20 seconds to see how it works — you can't break anything."},
+    {emoji:"🔄",title:"It's one simple loop",body:"Add what you sell → an order comes in → you pack & ship it → the count drops by itself → it warns you when you're low → you restock. That's the whole thing."},
+    {emoji:"🚀",title:"Where to start",body:"Add your products first, then rehearse an order with nothing at stake. The blue Help button on any tab answers questions, and the Guide explains everything."},
+  ];
+  const s=STEPS[step]; const last=step===STEPS.length-1;
+  const go=(v)=>{ onClose&&onClose(); goView&&goView(v); };
+  return (<div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6" onClick={e=>e.stopPropagation()}>
+      <div className="text-4xl mb-2">{s.emoji}</div>
+      <div className="text-xl font-semibold text-stone-900">{s.title}</div>
+      <p className="text-sm text-stone-600 mt-1.5">{s.body}</p>
+      <div className="flex items-center gap-1.5 mt-4">{STEPS.map((_,i)=><span key={i} className={`h-1.5 rounded-full transition-all ${i===step?"w-6 bg-[#0086E0]":"w-1.5 bg-stone-200"}`}/>)}</div>
+      {last?(
+        <div className="grid grid-cols-3 gap-2 mt-4">
+          <button onClick={()=>go("stock")} className="text-xs border border-stone-200 rounded-xl px-2 py-3 hover:border-[#0086E0]/40 font-medium text-stone-700 flex flex-col items-center gap-1"><Plus className="w-4 h-4 text-[#0086E0]"/>Add products</button>
+          <button onClick={()=>go("toship")} className="text-xs border border-stone-200 rounded-xl px-2 py-3 hover:border-[#0086E0]/40 font-medium text-stone-700 flex flex-col items-center gap-1"><Sparkles className="w-4 h-4 text-[#0086E0]"/>Practice order</button>
+          <button onClick={()=>go("guide")} className="text-xs border border-stone-200 rounded-xl px-2 py-3 hover:border-[#0086E0]/40 font-medium text-stone-700 flex flex-col items-center gap-1"><MessageCircle className="w-4 h-4 text-[#0086E0]"/>Read the Guide</button>
+        </div>
+      ):null}
+      <div className="flex items-center justify-between mt-5">
+        <button onClick={onClose} className="text-sm text-stone-400 hover:text-stone-600">Skip</button>
+        <div className="flex items-center gap-2">
+          {step>0&&<button onClick={()=>setStep(step-1)} className="text-sm text-stone-500 px-2">Back</button>}
+          {!last?<button onClick={()=>setStep(step+1)} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1">Next<ChevronRight className="w-4 h-4"/></button>:<button onClick={onClose} className="text-sm bg-stone-100 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-200">Got it</button>}
+        </div>
+      </div>
+    </div>
+  </div>);
+}
+function WmsGuide({goView,onReplay}){
   const [open,setOpen]=useState(-1); const [words,setWords]=useState(false);
   return (<div className="space-y-3 max-w-3xl">
-    <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><MessageCircle className="w-5 h-5 text-[#0086E0]"/>Warehouse guide</h2><p className="text-sm text-stone-500 mt-0.5">New here? Start with the big picture, then open any tool for exactly what it does and how to use it.</p></div>
+    <div className="flex items-start justify-between gap-3 flex-wrap"><div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><MessageCircle className="w-5 h-5 text-[#0086E0]"/>Warehouse guide</h2><p className="text-sm text-stone-500 mt-0.5">New here? Start with the big picture, then open any tool for exactly what it does and how to use it.</p></div>{onReplay&&<button onClick={onReplay} className="text-xs text-[#0086E0] hover:underline shrink-0 flex items-center gap-1"><Sparkles className="w-3.5 h-3.5"/>Replay welcome</button>}</div>
     {/* Big picture — always open */}
     <div className="rounded-2xl border border-[#0086E0]/25 bg-gradient-to-br from-[#f2f8fd] to-white p-5">
       <div className="text-sm font-semibold text-stone-900 mb-1">The big picture — how it all works together</div>

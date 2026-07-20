@@ -2086,12 +2086,25 @@ exports.handler = async (event) => {
       const reqs = Array.isArray(cur.value) ? cur.value : [];
       /* Legacy/seed rows (e.g. the old "Test" / "Granite Seed" entries) carry NO id and NO uid, so the
          old id/uid-only match removed nothing — the row bounced right back on the next render and
-         "Done" looked broken. Match on a stable signature of the row so any request the admin dismisses
-         actually leaves, id or not. Empty id/uid never match (guarded) so we can't nuke unrelated rows. */
+         "Done" looked broken. We now match on several signals so ANY displayed row actually leaves:
+           1. id / uid (modern rows)
+           2. a stable string signature of the row (id|uid|email|name|requestedAt)
+           3. a full deep-equal of the exact row object the client is looking at (rowJson) — this can
+              never drift, so even a hand-seeded row with odd fields is removed for certain
+           4. an index fallback (idx + the length the client saw) for the pathological case where a row
+              has no id/uid/email/name/requestedAt at all
+         Empty id/uid/sig never match (guarded), so we can never nuke an unrelated row by accident. */
+      const norm = (o) => { try { return JSON.stringify(o); } catch (e) { return null; } };
+      const rowJson = body.row != null ? norm(body.row) : null;
+      const idx = Number.isInteger(body.idx) ? body.idx : -1;
+      const clientLen = Number.isInteger(body.len) ? body.len : -1;
       const sigOf = (r) => [r && r.id, r && r.uid, r && r.email, r && r.name, r && r.requestedAt].map((x) => (x == null ? "" : String(x))).join("|");
-      const match = (r) => all || (!!r && ((id && r.id === id) || (uid && r.uid === uid) || (sig && sigOf(r) === sig)));
-      const gone = reqs.filter(match);
-      const kept = reqs.filter((r) => !match(r));
+      const match = (r, i) => all
+        || (!!r && ((id && r.id === id) || (uid && r.uid === uid) || (sig && sigOf(r) === sig)))
+        || (rowJson != null && norm(r) === rowJson)
+        || (idx >= 0 && idx === i && clientLen === reqs.length);   // index only trusted when the list hasn't changed under us
+      const gone = reqs.filter((r, i) => match(r, i));
+      const kept = reqs.filter((r, i) => !match(r, i));
       for (const g of gone) { if (g && g.invoiceKey) { try { await blobOp(g.invoiceKey, { method: "DELETE" }); } catch (e) {} } }
       const w = await putStores({ fedexRequests: kept });
       if (!w.ok) return J({ ok: false, error: "Couldn't update — try again." });

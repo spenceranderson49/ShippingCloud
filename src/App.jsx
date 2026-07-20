@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="shipwelcome-v737";
+const BUILD_TAG="ratesafe-v738";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -4283,6 +4283,25 @@ function DraftBar({dirty,onSave,onUndo,onReset,resetLabel,savedNote,saveLabel}){
   </div>);
 }
 /* ════════ ADMIN → RATES (v196) — the rate markup database ════════ */
+/* A calm, always-visible confirmation that negotiated rates are protected — plus a one-click manual
+   restore point. Reassurance where the admin actually edits rates, so they never fear a repeat wipe. */
+function RateSafetyBanner({rules}){
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState("");
+  const n=rateContentCount(rules);
+  const profN=(rules&&Array.isArray(rules.profiles)?rules.profiles.length:0);
+  const asgN=(rules&&rules.assign?Object.keys(rules.assign).length:0);
+  const backup=async()=>{ setBusy(true); setMsg(""); try{ const r=await cloudCall({action:"backupNow",token:CLOUD.token},30000); setMsg(r&&r.ok?"Saved a fresh restore point.":"Couldn't back up — try Backups & Restore."); }catch(e){ setMsg("Couldn't back up — try Backups & Restore."); } setBusy(false); setTimeout(()=>setMsg(""),4000); };
+  if(CLOUD.mode!=="cloud")return null;
+  return (<div className="border border-emerald-200 bg-emerald-50/60 rounded-lg px-3.5 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0"/>
+    <span className="text-[13px] text-emerald-900 font-medium">Rates protected</span>
+    <span className="text-[12px] text-emerald-800/80">{n} rate setting{n===1?"":"s"} live{profN?" · "+profN+" profile"+(profN===1?"":"s"):""}{asgN?" · "+asgN+" client assignment"+(asgN===1?"":"s"):""} — auto-snapshotted on every save. A stale or empty tab can never overwrite these.</span>
+    <span className="flex-1"/>
+    {msg&&<span className="text-[11px] text-emerald-700">{msg}</span>}
+    <button onClick={backup} disabled={busy} title="Force a fresh restore point before anything risky" className="text-[11px] bg-white border border-emerald-300 text-emerald-800 rounded px-2.5 py-1 font-medium hover:bg-emerald-100 disabled:opacity-40 inline-flex items-center gap-1.5">{busy?<Loader2 className="w-3 h-3 animate-spin"/>:<RotateCcw className="w-3 h-3"/>}Back up now</button>
+  </div>);
+}
 function RatesAdmin({clients=[],brand}){
   const [storeRules,commitRules]=usePersist("rateRules",DEFAULT_RATE_RULES);
   const _d=useDraft(storeRules,commitRules,DEFAULT_RATE_RULES);
@@ -4498,6 +4517,7 @@ function RatesAdmin({clients=[],brand}){
   const surRow=(prof.surcharges||{});
   return (<div className="space-y-4">
     <DraftBar dirty={_d.dirty} onSave={_d.save} onUndo={_d.undo} onReset={async()=>{ if(await uiConfirm("Reset ALL rate rules to the blank default? This clears every profile, markup, and imported cost. You'll still need to click Save to make it permanent.")) _d.reset(); }} resetLabel="Reset all rates to default" savedNote="Rates saved" saveLabel="Save rates"/>
+    <RateSafetyBanner rules={storeRules}/>
     <div className="border border-stone-200 rounded-lg bg-white p-3 flex flex-wrap items-center gap-3">
       <div className="text-sm font-semibold text-stone-800">England tier</div>
       <Select value={rules.englandTier||""} onChange={e=>upRules({englandTier:e.target.value})} className="w-56">
@@ -5341,7 +5361,7 @@ function UsersAdmin({users,setUsers,clients,setClients,currentUser,signupRequest
       {fedexRequests.map((r,i)=>(<div key={r.id||r.uid||("fx"+i)} className="flex flex-wrap items-center gap-3 bg-white border border-stone-200 rounded-lg px-3 py-2 text-sm">
         <div className="flex-1 min-w-[180px]"><div className="font-medium">{r.name||r.email||"(unnamed request)"}</div><div className="text-[11px] text-stone-400">{r.email}{r.volume?<> · {r.volume}/mo</>:null}{r.carrier?<> · ships {r.carrier}</>:null} · {r.requestedAt?new Date(r.requestedAt).toLocaleDateString():"recently"}</div></div>
         {r.invoiceKey&&<button onClick={async()=>{const res=await cloudCall({action:"getUpload",token:CLOUD.token,key:r.invoiceKey});if(!res||!res.ok){uiAlert((res&&res.error)||"Could not fetch the file.");return;}const bytes=atob(res.data);const arr=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);const url=URL.createObjectURL(new Blob([arr],{type:res.type}));const a=document.createElement("a");a.href=url;a.download=res.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),4000);}} className="text-xs border border-[#0086E0]/40 text-[#0086E0] rounded px-3 py-1.5 hover:bg-blue-50 flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>Carrier Invoice</button>}
-        <button onClick={async()=>{ const sig=[r.id,r.uid,r.email,r.name,r.requestedAt].map(x=>x==null?"":String(x)).join("|"); setFedexRequests&&setFedexRequests(rs=>rs.filter(x=>x!==r)); try{ const res=await cloudCall({action:"fedexRequestResolve",token:CLOUD.token,id:r.id||"",uid:r.uid||"",sig}); if(res&&res.ok&&Array.isArray(res.fedexRequests))setFedexRequests&&setFedexRequests(res.fedexRequests); }catch(e){} }} className="text-xs border border-stone-300 text-stone-600 rounded px-3 py-1.5 hover:bg-stone-50">Done</button>
+        <button onClick={async()=>{ const sig=[r.id,r.uid,r.email,r.name,r.requestedAt].map(x=>x==null?"":String(x)).join("|"); const len=fedexRequests.length; setFedexRequests&&setFedexRequests(rs=>rs.filter(x=>x!==r)); try{ const res=await cloudCall({action:"fedexRequestResolve",token:CLOUD.token,id:r.id||"",uid:r.uid||"",sig,row:r,idx:i,len}); if(res&&res.ok&&Array.isArray(res.fedexRequests))setFedexRequests&&setFedexRequests(res.fedexRequests); }catch(e){} }} className="text-xs border border-stone-300 text-stone-600 rounded px-3 py-1.5 hover:bg-stone-50">Done</button>
       </div>))}
       <p className="text-[11px] text-stone-400">These come from the welcome popup after a user’s first sign-in. Provision their England/FedEx account, drop the credentials into their customer card, then hit Done. <b>Done</b> clears one row; <b>Dismiss all</b> wipes the whole list.</p>
     </div>}
@@ -5675,8 +5695,31 @@ async function cloudCall(payload,timeoutMs=15000){
   }catch(e){ return {ok:false,network:true,error:(e&&e.message)||"Network error"}; }
 }
 const cloudSyncable=(key)=>CLOUD.mode==="cloud"&&!!CLOUD.token&&key!=="session"&&key!=="myFeatures"&&!isScratch(String(key).replace(/^u\/[^/]+\//,""))&&key!=="cloud.token";
+/* Rate content = every meaningful rate setting (per-client assignments + each profile's
+   services/surcharges + cost tables). Mirrors the server's rateContent() so the client and
+   server agree on what "empty" means. */
+function rateContentCount(v){
+  if(!v||typeof v!=="object")return 0;
+  let n=0;
+  if(v.assign&&typeof v.assign==="object")n+=Object.keys(v.assign).length;
+  if(v.baseCosts&&typeof v.baseCosts==="object")n+=Object.keys(v.baseCosts).length;
+  if(Array.isArray(v.profiles))v.profiles.forEach(p=>{ if(p&&typeof p==="object"){ if(p.services&&typeof p.services==="object")n+=Object.keys(p.services).length; if(p.surcharges&&typeof p.surcharges==="object")n+=Object.keys(p.surcharges).length; } });
+  return n;
+}
 function cloudQueue(key,val){
   if(!cloudSyncable(key))return;
+  /* DEFENSE IN DEPTH (client) — a rateRules write that carries ZERO rate content must never even
+     leave this browser when the last-known-good value had content. The server refuses it too, but
+     stopping it here means a stale/empty tab can't so much as attempt the wipe. Only a literal
+     empty default is blocked; any genuine edit keeps at least some content. */
+  if(key==="rateRules"||String(key).endsWith("/rateRules")){
+    const nvRC=rateContentCount(val);
+    if(nvRC===0){
+      let baseRC=0; try{ baseRC=rateContentCount(JSON.parse(CLOUD.baseline[key]||"null")); }catch(e){}
+      if(baseRC===0){ try{ baseRC=rateContentCount(JSON.parse(lsRaw(key)||"null")); }catch(e){} }
+      if(baseRC>0){ try{ console.warn("cloud: blocked an empty rateRules write ("+baseRC+" settings would be lost) — not queued."); }catch(e){} return; }
+    }
+  }
   const j=JSON.stringify(val===undefined?null:val);
   if(CLOUD.baseline[key]===j)return;
   CLOUD.queue[key]=val; CLOUD.baseline[key]=j;
@@ -10358,7 +10401,9 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
       </div>
     </div>
     {(err||ok)&&<div className={`text-xs rounded px-3 py-2 border ${err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{err||ok}</div>}
-    {showHelp&&<div className="rounded-2xl border border-stone-200 bg-white p-5">
+    {showHelp&&<div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={()=>setShowHelp(false)}>
+      <div className="absolute inset-0 bg-black/40"/>
+      <div className="relative bg-white w-full max-w-2xl max-h-[88vh] rounded-2xl shadow-xl overflow-y-auto p-5" onClick={e=>e.stopPropagation()}>
       <div className="flex items-center justify-between mb-3"><div className="text-base font-semibold text-stone-900 flex items-center gap-2"><MessageCircle className="w-4 h-4 text-[#0086E0]"/>WMS guide</div><button onClick={()=>setShowHelp(false)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
       <div className="inline-flex rounded-lg border border-stone-200 bg-stone-50 p-0.5 text-sm mb-4">
         {[["start","Get started"],["defs","Definitions"]].map(([v,l])=><button key={v} onClick={()=>setHelpTab(v)} className={`px-3 py-1.5 rounded-md ${helpTab===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500"}`}>{l}</button>)}
@@ -10377,6 +10422,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
         <p className="text-sm text-stone-500 mb-3">Every term you'll see, explained. Hover the little <span className="inline-flex w-3.5 h-3.5 rounded-full bg-stone-200 text-stone-500 text-[9px] font-bold items-center justify-center align-middle">?</span> anywhere for a quick reminder.</p>
         <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">{WMS_GLOSSARY.map(([t,d])=>(<div key={t}><div className="text-sm font-semibold text-stone-800">{t}</div><div className="text-xs text-stone-500 leading-snug">{d}</div></div>))}</div>
       </div>}
+      </div>
     </div>}
     {list.length>0&&!setupHid&&(()=>{ const setup=[
       {label:"Add your products",done:list.length>0,cta:null},

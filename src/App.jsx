@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="wmsflow-v743";
+const BUILD_TAG="wmstie-v744";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6842,7 +6842,9 @@ function AppInner(){
   useEffect(()=>{ const h=(e)=>{ if(SC_DIRTY.size){ e.preventDefault(); e.returnValue="You have unsaved changes. Leave without saving?"; return e.returnValue; } }; window.addEventListener("beforeunload",h); return ()=>window.removeEventListener("beforeunload",h); },[]);
   const [pendingOpenOrderId,setPendingOpenOrderId]=useState(null);
   const [pendingOpenShipTracking,setPendingOpenShipTracking]=useState(null);
-  useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};if(d.tab)setTab(d.tab);if(d.openOrderId)setPendingOpenOrderId(d.openOrderId);if(d.openShipTracking)setPendingOpenShipTracking(d.openShipTracking);if(d.batchCmd)setBatchCmd({...d.batchCmd,ts:Date.now()});};window.addEventListener("sc-nav",h);return()=>window.removeEventListener("sc-nav",h);},[]);
+  const [pendingWmsView,setPendingWmsView]=useState(null);   // land the Warehouse tab on a specific view (e.g. "pick")
+  const [pendingPickIds,setPendingPickIds]=useState(null);   // pre-select these orders in the Warehouse pick list
+  useEffect(()=>{const h=(e)=>{const d=(e&&e.detail)||{};if(d.tab)setTab(d.tab);if(d.openOrderId)setPendingOpenOrderId(d.openOrderId);if(d.openShipTracking)setPendingOpenShipTracking(d.openShipTracking);if(d.wmsView)setPendingWmsView(d.wmsView);if(d.pickIds)setPendingPickIds(d.pickIds);if(d.batchCmd)setBatchCmd({...d.batchCmd,ts:Date.now()});};window.addEventListener("sc-nav",h);return()=>window.removeEventListener("sc-nav",h);},[]);
   /* Shopify push toast: success (created / replaced tracking) and FAILURE (with the real reason)
      both surface on screen — a failed push must never die silently in a system log. */
   const [shopPush,setShopPush]=useState(null);
@@ -7362,7 +7364,10 @@ function AppInner(){
        through the "Advanced" link on any customer's Rates tab — hidden, not deleted. */
     if(BRAND.admin&&isAdmin)return adminSectionsFor(currentUser).filter(([k])=>k!=="rates").map(([k,l])=>["admin:"+k,l,ADMIN_SECTION_ICONS[k]||ShieldCheck]);
     if(isAdmin)return applyPrefs(ALL_TABS);
-    const t=ALL_TABS.filter(x=>x[0]!=="admin"&&(x[0]==="ship"||featureOn(x[0],currentUser,myFlags)));
+    /* "inventory" (Warehouse) is shown to EVERYONE as a free preview so they can discover and explore it;
+       when the admin hasn't switched WMS on for them, the tab renders an explore/landing page instead of
+       the live warehouse (the live data stays gated behind the feature flag — see the tab content). */
+    const t=ALL_TABS.filter(x=>x[0]!=="admin"&&(x[0]==="ship"||x[0]==="inventory"||featureOn(x[0],currentUser,myFlags)));
     if(isCompanyAdmin){const entry=["companyadmin","Company Admin",Building2];const i=t.findIndex(x=>x[0]==="settings");i>=0?t.splice(i,0,entry):t.push(entry);}
     return applyPrefs(t);
   },[isAdmin,isCompanyAdmin,currentUser,myFlags,custom.hiddenTabs,custom.tabOrder]);
@@ -7370,7 +7375,7 @@ function AppInner(){
   /* Feature-enabled tab keys for THIS login, before the user's own hide/reorder prefs — feeds
      the Customize tab lists so nobody can see or deploy prefs for features the platform admin
      hasn't switched on for them (admins get null = unfiltered). */
-  const featTabKeys=useMemo(()=>isAdmin?null:new Set(ALL_TABS.filter(x=>x[0]!=="admin"&&(x[0]==="ship"||featureOn(x[0],currentUser,myFlags))).map(x=>x[0])),[isAdmin,currentUser,myFlags]);
+  const featTabKeys=useMemo(()=>isAdmin?null:new Set(ALL_TABS.filter(x=>x[0]!=="admin"&&(x[0]==="ship"||x[0]==="inventory"||featureOn(x[0],currentUser,myFlags))).map(x=>x[0])),[isAdmin,currentUser,myFlags]);
   /* Enforce feature toggles at the CONTENT level, not just the sidebar: if a non-admin lands on a
      tab whose feature the admin has switched OFF (via a saved tab, keyboard shortcut, or nav event),
      bounce them to Ship. Without this, "off" only hid the nav button — the page could still be
@@ -7496,7 +7501,7 @@ function AppInner(){
           {tab==="dashboard"&&<Dashboard shipments={shipments} orders={orders} returns={returns} goTab={setTab} showMoney={showMoney}/>}
           {tab==="ship"&&<Ship client={client} priceAs={adminPriceAs} setPriceAs={setAdminPriceAs} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={ruleset} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders} currentUser={currentUser} setUsers={setUsers} setCurrentUser={setCurrentUser} clients={clients} labels={labelStore}/>}
           {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
-          {tab==="orders"&&<Orders showMoney={showMoney} orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} setSettings={setSettings} onShipped={onShipped} openOrderId={pendingOpenOrderId} onOpenedOrder={()=>setPendingOpenOrderId(null)}/>}
+          {tab==="orders"&&<Orders showMoney={showMoney} orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} setSettings={setSettings} onShipped={onShipped} openOrderId={pendingOpenOrderId} onOpenedOrder={()=>setPendingOpenOrderId(null)} wmsOn={isAdmin||featureOn("inventory",currentUser,myFlags)}/>}
           {tab==="batch"&&<Batch showMoney={showMoney} orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} setSettings={setSettings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
           {tab==="shipments"&&<Shipments showMoney={showMoney} openShipTracking={pendingOpenShipTracking} onOpenedShip={()=>setPendingOpenShipTracking(null)} isAdmin={isAdmin} labels={labelStore} shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels} settings={settings} client={client} clients={clients}/>}
           {hkHelp&&<div onClick={()=>setHkHelp(false)} className="fixed bottom-4 right-4 z-50 bg-stone-900 text-white rounded-xl shadow-lg p-4 text-xs space-y-1.5 cursor-pointer">
@@ -7508,7 +7513,9 @@ function AppInner(){
           {tab==="drafts"&&<Drafts drafts={drafts} setDrafts={setDrafts} goShip={goShip}/>}
           {tab==="returns"&&<Returns returns={returns} setReturns={setReturns} orders={orders} settings={settings} logEmail={logEmail}/>}
           {tab==="pickups"&&<Pickups pickups={pickups} setPickups={setPickups} settings={settings} client={client} isAdmin={isAdmin} showCosts={featureOn("pickupCosts",currentUser,myFlags)}/>}
-          {tab==="inventory"&&<Inventory settings={settings} setSettings={setSettings} client={client} showMoney={showMoney} currentUser={currentUser} orders={orders} goShip={goShip}/>}
+          {tab==="inventory"&&((isAdmin||isDemo||featureOn("inventory",currentUser,myFlags))
+            ? <Inventory settings={settings} setSettings={setSettings} client={client} showMoney={showMoney} currentUser={currentUser} orders={orders} goShip={goShip} initialView={pendingWmsView} seedPickIds={pendingPickIds} onWmsNavConsumed={()=>{setPendingWmsView(null);setPendingPickIds(null);}}/>
+            : <WmsPreview currentUser={currentUser}/>)}
           {tab==="invoices"&&<Invoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>}
           {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings} client={client} onShipped={onShipped}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
@@ -9091,7 +9098,7 @@ function LiveEstRate({o,client,settings,rateRules,ruleset}){
   if(v.none)return <span className="text-stone-300">—</span>;
   return <span className="text-stone-600 whitespace-nowrap" title={v.label+(v.ruled?" — picked by your Autopilot rule":"")}>{money(v.sell)}<span className="text-stone-300 font-sans"> {v.live?"live":"est."}</span>{v.ruled&&<Zap className="w-3 h-3 inline ml-0.5 text-[#0086E0]" />}</span>;
 }
-function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,openOrderId=null,onOpenedOrder,showMoney=true}){
+function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,openOrderId=null,onOpenedOrder,showMoney=true,wmsOn=false}){
   const [rateRules]=usePersist("rateRules",DEFAULT_RATE_RULES);   // Est. rate shows the SELL estimate — raw carrier cost must never render in a customer-visible table
   const [ruleset]=usePersist("ruleset",SEED_RULESET);              // Autopilot rules drive the service the rate column prices
   /* WMS connection: pull on-hand so each order can show whether it ships from stock. null = WMS off. */
@@ -9202,6 +9209,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
             <button onClick={saveView} className="inline-flex items-center gap-1 border border-dashed border-stone-300 text-stone-400 hover:text-[#0086E0] hover:border-[#99D6FF] rounded-full px-2.5 py-1 font-medium">+ Save view</button>
             <span className="flex-1"/>
             <button onClick={()=>printPickList(sorted.filter(o=>o.status!=="fulfilled"))} disabled={!sorted.some(o=>o.status!=="fulfilled")} title="One sheet: every item across the open orders in this view, with checkboxes" className="inline-flex items-center gap-1.5 bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40"><ClipboardList className="w-3.5 h-3.5"/>Pick List</button>
+            {wmsOn&&<button onClick={()=>{const ids=sorted.filter(o=>o.status!=="fulfilled").map(o=>o.id);try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"inventory",wmsView:"pick",pickIds:ids}}));}catch(e){}}} disabled={!sorted.some(o=>o.status!=="fulfilled")} title="Open a tracked scan-to-pick session in the Warehouse with these orders pre-selected — one pipeline instead of two" className="inline-flex items-center gap-1.5 bg-[#E6F4FF] border border-[#0086E0]/30 text-[#006FBF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#d3ecff] disabled:opacity-40"><ScanLine className="w-3.5 h-3.5"/>Pick in Warehouse</button>}
           </div>
           <div className="border border-stone-200 rounded-lg overflow-hidden bg-white">
             <div className="overflow-x-auto">
@@ -10199,7 +10207,61 @@ function printLabels(items,opts){
    Company-shared stock, one row per SKU on the server (inv:<clientId>:<sku>). Tracks on-hand,
    reorder point, unit cost and location; receives POs; auto-decrements when orders ship (see the
    invShip hook in AppInner). Money columns hide when the login can't see costs. */
-function Inventory({settings,setSettings,client,showMoney=true,currentUser,orders=[],goShip}){
+/* WmsPreview — the Warehouse tab as everyone sees it BEFORE WMS is switched on for their account.
+   A free explore/landing page: what it does, a no-stakes 2-minute tour (touches nothing), and a
+   one-click request to turn it on. The live warehouse (real stock/POs) stays gated behind the
+   inventory feature flag — this page never reads or writes their real data. */
+function WmsPreview({currentUser}){
+  const [tour,setTour]=useState(false);
+  const [sent,setSent]=useState(false);
+  const requestOn=()=>{
+    setSent(true);
+    try{
+      const host=(typeof location!=="undefined"&&location.hostname)||"";
+      const parts=host.split(".").filter(Boolean);
+      const domain=parts.length>=2?parts.slice(-2).join("."):"shippingcloud.net";
+      const to="support@"+domain;
+      const subj=encodeURIComponent("Please turn on Warehouse (WMS) for my account");
+      const body=encodeURIComponent("Hi — I'd like the Warehouse / WMS module enabled for "+((currentUser&&currentUser.email)||"my account")+". Thanks!");
+      window.open("mailto:"+to+"?subject="+subj+"&body="+body,"_self");
+    }catch(e){}
+  };
+  const feats=[
+    [Boxes,"Live stock counts","One honest number per product — on hand, committed, available."],
+    [Truck,"Fulfill from orders","Pick, pack-verify, and ship; stock counts itself down at the label."],
+    [ClipboardList,"Never run out","Reorder points, low-stock alerts, and auto-drafted purchase orders."],
+    [ScanLine,"Barcodes & scanning","Scan-to-pick and scan-receive so the wrong item never ships."],
+    [BarChart3,"Analytics","Inventory value, best/worst sellers, dead stock, forecasting."],
+    [Receipt,"3PL billing & POS","Bill brands you fulfill for, and ring up walk-in sales — same stock."],
+  ];
+  return (<div className="max-w-4xl space-y-5">
+    {tour&&<PracticeRehearsal onClose={()=>setTour(false)}/>}
+    <div className="rounded-2xl border border-[#0086E0]/25 bg-gradient-to-b from-sky-50/70 to-white p-6 sm:p-8">
+      <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-[#006FBF] bg-white/70 border border-[#0086E0]/20 rounded-full px-2.5 py-1 mb-3"><Sparkles className="w-3.5 h-3.5"/>Included free to explore</div>
+      <h1 className="text-2xl sm:text-3xl font-bold text-stone-900 tracking-tight">Turn ShippingCloud into a full warehouse</h1>
+      <p className="text-stone-600 mt-2 max-w-2xl">A smart stockroom that counts for you: add what you sell, ship orders like normal, and watch the count drop by itself — with low-stock alerts and one-click restock POs. It's built in and included; it just needs switching on for your account.</p>
+      <div className="flex flex-wrap items-center gap-2.5 mt-5">
+        <button onClick={()=>setTour(true)} className="bg-[#0086E0] text-white rounded-xl px-4 py-2.5 font-semibold hover:bg-[#006db8] flex items-center gap-1.5"><Sparkles className="w-4 h-4"/>Take the 2-minute tour</button>
+        {!sent
+          ? <button onClick={requestOn} className="bg-white border border-[#0086E0]/40 text-[#006FBF] rounded-xl px-4 py-2.5 font-semibold hover:bg-[#E6F4FF] flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>Turn it on for my account</button>
+          : <span className="inline-flex items-center gap-1.5 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 font-medium"><CheckCircle2 className="w-4 h-4"/>Request noted — we'll enable it for you shortly.</span>}
+      </div>
+      <p className="text-[11px] text-stone-400 mt-3">The tour uses pretend stock — nothing here touches your real data. Your live warehouse appears here the moment it's switched on.</p>
+    </div>
+    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {feats.map(([Ic,h,d])=>(<div key={h} className="border border-stone-200 rounded-xl bg-white p-4">
+        <div className="w-9 h-9 rounded-lg bg-[#E6F4FF] text-[#0086E0] flex items-center justify-center mb-2.5"><Ic className="w-5 h-5"/></div>
+        <div className="text-sm font-semibold text-stone-900">{h}</div>
+        <div className="text-[12.5px] text-stone-500 mt-0.5 leading-snug">{d}</div>
+      </div>))}
+    </div>
+    <div className="border border-stone-200 rounded-2xl bg-white p-5">
+      <div className="text-sm font-semibold text-stone-900 mb-3 flex items-center gap-2"><RefreshCw className="w-4 h-4 text-[#0086E0]"/>How it works — one simple loop</div>
+      <div className="space-y-2.5">{WMS_LOOP.map(([t,d],i)=>(<div key={i} className="flex gap-3 items-start"><div className="w-6 h-6 rounded-full bg-[#0086E0] text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{i+1}</div><div><span className="text-[13px] font-semibold text-stone-800">{t}.</span> <span className="text-[13px] text-stone-600">{d}</span></div></div>))}</div>
+    </div>
+  </div>);
+}
+function Inventory({settings,setSettings,client,showMoney=true,currentUser,orders=[],goShip,initialView=null,seedPickIds=null,onWmsNavConsumed}){
   /* Ship an order straight from the WMS — hands the order to the Ship tab, prefilled, so the warehouse
      flow (To Ship / Pack) connects to the shipping portal. Mirrors the Orders tab's ship(). */
   const shipOrder=(o)=>{ if(!goShip||!o)return; goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email,country:o.country||"United States"},weight:o.weight,reference:o.name,fromOrderId:o.id,refulfill:o.status==="fulfilled"}); };
@@ -10225,6 +10287,9 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const [welcomed,setWelcomed]=usePersist("wmsWelcomed",false);    // first-run welcome walkthrough (shows once)
   const [practiceTour,setPracticeTour]=useState(false);            // full guided rehearsal — launchable from welcome, guide, or To Ship
   const [view,setView]=useState("stock");
+  /* Deep-link from the shipping side (e.g. Orders → "Pick in Warehouse"): land on the requested view.
+     The order pre-selection (seedPickIds) is consumed by PickList; we clear the pending nav here. */
+  useEffect(()=>{ if(initialView){ setView(initialView); onWmsNavConsumed&&onWmsNavConsumed(); } /* eslint-disable-next-line */ },[initialView]);
   /* Cache-first for the secondary lists too, so Purchase Orders, Suppliers, Warehouses and
      Production paint from the last-known data instantly instead of flashing empty while the
      background refresh runs. Same pattern as items above. */
@@ -10473,7 +10538,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   if(view==="health") return (<div className="max-w-5xl space-y-4">{Switcher()}<StockHealth list={list} committedBySku={committedBySku} goView={setView} showMoney={showMoney}/></div>);
   if(view==="guide") return (<div className="max-w-5xl space-y-4">{Switcher()}<WmsGuide goView={setView} onReplay={()=>setWelcomed(false)}/></div>);
   if(view==="toship") return (<div className="max-w-5xl space-y-4">{Switcher()}<ToShip orders={orders} list={list} committedBySku={committedBySku} goView={setView} shipOrder={goShip?shipOrder:null} flow={wmsFlow} setFlow={setWmsFlow}/></div>);
-  if(view==="pick") return (<div className="max-w-5xl space-y-4">{Switcher()}<PickList orders={orders} items={list}/></div>);
+  if(view==="pick") return (<div className="max-w-5xl space-y-4">{Switcher()}<PickList orders={orders} items={list} seedIds={seedPickIds}/></div>);
   if(view==="pack") return (<div className="max-w-5xl space-y-4">{Switcher()}<PackVerify orders={orders} items={list} shipOrder={goShip?shipOrder:null} settings={settings}/></div>);
   if(view==="scan") return (<div className="max-w-5xl space-y-4">{Switcher()}<ScanReceive items={list} onReceived={patch} reload={load}/></div>);
   if(view==="warehouses") return (<div className="max-w-5xl space-y-4">{Switcher()}<WarehousesView warehouses={warehouses} setWarehouses={setWarehouses} items={list}/></div>);
@@ -11518,9 +11583,12 @@ function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFl
   </div>);
 }
 /* Pick lists — pick unfulfilled orders, aggregate their SKUs into a bin-sorted pick sheet. Read-only. */
-function PickList({orders,items}){
+function PickList({orders,items,seedIds=null}){
   const open=(orders||[]).filter(o=>o&&o.status!=="fulfilled"&&Array.isArray(o.lineItems)&&o.lineItems.some(li=>li&&li.sku));
   const [sel,setSel]=useState({});
+  /* Deep-linked from the shipping side with a batch of orders — pre-tick them so the tracked pick
+     session starts on exactly the orders you were about to ship (ties the two pick lists together). */
+  useEffect(()=>{ if(seedIds&&seedIds.length){ const m={}; seedIds.forEach(id=>{ if(id!=null)m[id]=true; }); setSel(m); } },[seedIds]);
   const [built,setBuilt]=useState(null);
   const [picked,setPicked]=useState({});   // sku(lower) -> units picked, for the interactive pick session
   const [session,setSession]=useState(false); // guided scan-to-pick mode
@@ -13966,7 +14034,7 @@ function Returns({returns,setReturns,orders,settings,logEmail}){
       {restock&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setRestock(null)}>
         <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5" onClick={e=>e.stopPropagation()}>
           <div className="flex items-center justify-between mb-1"><div className="font-semibold text-stone-900">Restock — order {restock.rq.order||"—"}</div><button onClick={()=>setRestock(null)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
-          <p className="text-xs text-stone-500 mb-3">Put the returned items back into inventory. Enter the SKU(s) and quantity received back.</p>
+          <p className="text-xs text-stone-500 mb-3">{restock.auto?<>Pre-filled from order <b>{restock.rq.order}</b> — check the quantities you actually got back (adjust or remove any the customer kept), then restock.</>:<>Put the returned items back into inventory. Enter the SKU(s) and quantity received back.</>}</p>
           {(restock.lines||[]).map((l,i)=>(<div key={i} className="flex items-center gap-2 mb-1.5">
             <input value={l.sku} onChange={e=>setRestock(r=>({...r,lines:r.lines.map((x,j)=>j===i?{...x,sku:e.target.value}:x)}))} placeholder="SKU" className="flex-1 border border-stone-300 rounded-lg px-2 py-1.5 text-sm"/>
             <input type="number" min="1" value={l.qty} onChange={e=>setRestock(r=>({...r,lines:r.lines.map((x,j)=>j===i?{...x,qty:e.target.value}:x)}))} className="w-16 border border-stone-300 rounded-lg px-2 py-1.5 text-sm"/>
@@ -13997,7 +14065,7 @@ function Returns({returns,setReturns,orders,settings,logEmail}){
             <div className="flex items-center gap-1.5 flex-wrap">
               {rq.status==="new"&&<><button onClick={()=>fromRequest(rq)} className="text-xs bg-[#0086E0] text-white rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#006db8]">Approve &amp; create label</button><button onClick={()=>setReqStatus(rq.id,"denied")} className="text-xs bg-stone-100 text-stone-500 rounded-lg px-2.5 py-1.5 hover:bg-rose-50 hover:text-rose-600">Deny</button></>}
               {rq.status==="approved"&&<button onClick={()=>setReqStatus(rq.id,"received")} className="text-xs bg-amber-100 text-amber-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-amber-200">Mark received</button>}
-              {rq.status==="received"&&<button onClick={()=>setRestock({rq,lines:[{sku:"",qty:1}]})} title="Put returned items back into inventory" className="text-xs bg-teal-100 text-teal-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-teal-200">Restock</button>}
+              {rq.status==="received"&&<button onClick={()=>{ const ord=(orders||[]).find(o=>o&&(o.name===rq.order||o.id===rq.order)); const lines=(ord&&Array.isArray(ord.lineItems)?ord.lineItems:[]).filter(li=>li&&li.sku).map(li=>({sku:li.sku,qty:+li.qty||+li.quantity||1})); setRestock({rq,lines:lines.length?lines:[{sku:"",qty:1}],auto:lines.length>0}); }} title="Put the returned items back into inventory — pre-filled from the original order" className="text-xs bg-teal-100 text-teal-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-teal-200">Restock</button>}
               {rq.status==="received"&&<><button onClick={()=>setReqStatus(rq.id,"refunded")} className="text-xs bg-emerald-100 text-emerald-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-emerald-200">Refunded</button><button onClick={()=>setReqStatus(rq.id,"credited")} className="text-xs bg-violet-100 text-violet-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-violet-200">Store credit</button><button onClick={()=>setReqStatus(rq.id,"exchanged")} className="text-xs bg-sky-100 text-sky-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-sky-200">Exchanged</button></>}
               {["refunded","credited","exchanged","denied","closed"].indexOf(rq.status)<0&&rq.status!=="new"&&<button onClick={()=>setReqStatus(rq.id,"closed")} className="text-xs bg-stone-100 text-stone-400 rounded-lg px-2 py-1.5 hover:bg-stone-200">Close</button>}
             </div>

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import qrcodegen from "qrcode-generator";
-import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, Search, Calendar, Settings as Cog, Calculator, Pause, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, EyeOff, MessageCircle, Sparkles, ClipboardList, Ban, Tag, Copy, Sliders, Save,Image as ImageIcon} from "lucide-react";
+import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, ArrowRight, Search, Calendar, Settings as Cog, Calculator, Pause, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, EyeOff, MessageCircle, Sparkles, ClipboardList, Ban, Tag, Copy, Sliders, Save,Image as ImageIcon} from "lucide-react";
 const FW_BLUE="#0099FF";
 const FW_DARK="#111418";
 function BrandCloud({className,color,style}){return (
@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="wmstie-v744";
+const BUILD_TAG="orders-merge-v745";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9122,6 +9122,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
   const [sort,setSort]=useState("date");
   const [adding,setAdding]=useState(false);
   const [storeFilter,setStoreFilter]=useState("all");
+  const [sel,setSel]=useState({});   // order id -> selected, for merging
   const stores=Array.from(new Set(orders.map(o=>o.source||"Manual")));
   const storeCount=(s)=>orders.filter(o=>(o.source||"Manual")===s).length;
   const statusCount=(st)=>st==="all"?orders.length:orders.filter(o=>o.status===st).length;
@@ -9136,6 +9137,34 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
     return String(b.id).localeCompare(String(a.id)); // date / newest
   }),[filtered,sort]);
   const ship=(o)=>goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email,country:o.country||"United States"},weight:o.weight,reference:o.name,fromOrderId:o.id,refulfill:o.status==="fulfilled"});
+  /* Merge orders — combine several open orders into a single shipment (e.g. the same customer placed
+     three orders in a day). Concatenates line items, sums weight/total/qty, keeps the first order's
+     ship-to. Originals are stashed on the merged order (mergedFrom) so nothing is lost and it can be
+     un-merged. Only unfulfilled orders can be merged. */
+  const selectableIds=useMemo(()=>new Set(sorted.filter(o=>o.status!=="fulfilled").map(o=>o.id)),[sorted]);
+  const selIds=Object.keys(sel).filter(k=>sel[k]&&selectableIds.has(k));
+  const toggleSel=(id)=>setSel(s=>({...s,[id]:!s[id]}));
+  const doMerge=async()=>{
+    const chosen=sorted.filter(o=>sel[o.id]&&o.status!=="fulfilled");
+    if(chosen.length<2){return;}
+    const addrKey=(o)=>[o.customer,o.zip,o.address1].map(x=>String(x||"").trim().toLowerCase()).join("|");
+    const differ=new Set(chosen.map(addrKey)).size>1;
+    const msg=differ
+      ? `Heads up — these ${chosen.length} orders don't all share the same recipient/address. Merge them into ONE shipment to ${chosen[0].customer||"the first order's address"} (${chosen[0].city||"—"}) anyway?`
+      : `Merge these ${chosen.length} orders for ${chosen[0].customer||"this recipient"} into one shipment? Their items are combined and the originals are folded into the merged order.`;
+    if(!await uiConfirm(msg))return;
+    const base=chosen[0];
+    const lineItems=chosen.flatMap(o=>Array.isArray(o.lineItems)?o.lineItems:[]);
+    const weight=chosen.reduce((s,o)=>s+(+o.weight||0),0);
+    const total=chosen.reduce((s,o)=>s+(parseFloat(o.total)||0),0);
+    const itemCount=chosen.reduce((s,o)=>s+(+o.itemCount||0),0);
+    const itemsStr=Array.from(new Set(chosen.map(o=>o.items).filter(Boolean))).join(", ");
+    const merged={...base,id:"m"+Date.now(),name:base.name+" +"+(chosen.length-1),lineItems,weight:weight||base.weight,total:total?total.toFixed(2):base.total,itemCount:itemCount||base.itemCount,items:itemsStr||base.items,status:"unfulfilled",merged:true,mergedFrom:chosen.map(o=>({id:o.id,name:o.name,data:o})),note:[base.note,"Merged from "+chosen.map(o=>o.name).join(", ")].filter(Boolean).join(" · ")};
+    const ids=new Set(chosen.map(o=>o.id));
+    setOrders(os=>[merged,...os.filter(o=>!ids.has(o.id))]);
+    setSel({});
+  };
+  const unmerge=(o)=>{ if(!o||!Array.isArray(o.mergedFrom)||!o.mergedFrom.length)return; setOrders(os=>[...o.mergedFrom.map(m=>m.data).filter(Boolean),...os.filter(x=>x.id!==o.id)]); setOpen(null); };
   const [syncing,setSyncing]=useState(false);
   const [syncMsg,setSyncMsg]=useState(null);
   // Every connected platform that can supply orders (Shopify + token/OAuth connectors flagged orders:true)
@@ -9208,6 +9237,9 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
             </span>))}
             <button onClick={saveView} className="inline-flex items-center gap-1 border border-dashed border-stone-300 text-stone-400 hover:text-[#0086E0] hover:border-[#99D6FF] rounded-full px-2.5 py-1 font-medium">+ Save view</button>
             <span className="flex-1"/>
+            {selIds.length>0&&<><span className="text-xs text-stone-500 self-center">{selIds.length} selected</span>
+              <button onClick={doMerge} disabled={selIds.length<2} title={selIds.length<2?"Select 2 or more orders to merge":"Combine the selected orders into one shipment"} className="inline-flex items-center gap-1.5 bg-[#0086E0] text-white rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#006db8] disabled:opacity-40"><ArrowLeftRight className="w-3.5 h-3.5"/>Merge {selIds.length} order{selIds.length>1?"s":""}</button>
+              <button onClick={()=>setSel({})} className="text-xs text-stone-400 hover:text-stone-600 self-center px-1">Clear</button></>}
             <button onClick={()=>printPickList(sorted.filter(o=>o.status!=="fulfilled"))} disabled={!sorted.some(o=>o.status!=="fulfilled")} title="One sheet: every item across the open orders in this view, with checkboxes" className="inline-flex items-center gap-1.5 bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40"><ClipboardList className="w-3.5 h-3.5"/>Pick List</button>
             {wmsOn&&<button onClick={()=>{const ids=sorted.filter(o=>o.status!=="fulfilled").map(o=>o.id);try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"inventory",wmsView:"pick",pickIds:ids}}));}catch(e){}}} disabled={!sorted.some(o=>o.status!=="fulfilled")} title="Open a tracked scan-to-pick session in the Warehouse with these orders pre-selected — one pipeline instead of two" className="inline-flex items-center gap-1.5 bg-[#E6F4FF] border border-[#0086E0]/30 text-[#006FBF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#d3ecff] disabled:opacity-40"><ScanLine className="w-3.5 h-3.5"/>Pick in Warehouse</button>}
           </div>
@@ -9216,6 +9248,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 border-b border-stone-200">
+                    <th className="px-2 py-2 w-8"><input type="checkbox" title="Select all open orders in view" checked={selIds.length>0&&selIds.length===selectableIds.size} ref={el=>{if(el)el.indeterminate=selIds.length>0&&selIds.length<selectableIds.size;}} onChange={e=>{ if(e.target.checked){ const m={}; sorted.forEach(o=>{ if(o.status!=="fulfilled")m[o.id]=true; }); setSel(m); } else setSel({}); }} className="accent-[#0086E0] align-middle"/></th>
                     <th className="text-left font-medium px-3 py-2 whitespace-nowrap">Order #</th>
                     {!hideCol.has("age")&&<th className="text-left font-medium px-3 py-2 whitespace-nowrap">Age</th>}
                     {!hideCol.has("date")&&<th className="text-left font-medium px-3 py-2 whitespace-nowrap">Order date</th>}
@@ -9231,14 +9264,15 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
-                  {sorted.length===0&&(()=>{const fv=(storeFilter!=="all"||filter!=="all"||q);return <tr><td colSpan={10} className="px-3 py-14 text-center">
+                  {sorted.length===0&&(()=>{const fv=(storeFilter!=="all"||filter!=="all"||q);return <tr><td colSpan={12} className="px-3 py-14 text-center">
                     <ShoppingBag className="w-8 h-8 text-stone-300 mx-auto mb-3"/>
                     <div className="text-stone-600 font-medium">{fv?"No orders match this view":"No orders yet"}</div>
                     <div className="text-sm text-stone-400 mt-1 max-w-sm mx-auto">{fv?"Try clearing your search or filters to see more.":"Connect a store or add an order and it’ll show up here, ready to rate and print."}</div>
                   </td></tr>;})()}
                   {sorted.map(o=>(
-                    <tr key={o.id} className="hover:bg-stone-50 cursor-pointer" onClick={()=>setOpen(o)}>
-                      <td className={ordPad+" whitespace-nowrap"}><div className="font-semibold text-stone-800 flex items-center gap-1.5">{o.name}{o.source&&<Badge tone={SOURCE_TONE[o.source]||"stone"}>{o.source}</Badge>}</div></td>
+                    <tr key={o.id} className={`hover:bg-stone-50 cursor-pointer ${sel[o.id]?"bg-[#F0F8FF]":""}`} onClick={()=>setOpen(o)}>
+                      <td className="px-2 py-2.5 w-8" onClick={e=>e.stopPropagation()}>{o.status!=="fulfilled"?<input type="checkbox" checked={!!sel[o.id]} onChange={()=>toggleSel(o.id)} className="accent-[#0086E0] align-middle"/>:null}</td>
+                      <td className={ordPad+" whitespace-nowrap"}><div className="font-semibold text-stone-800 flex items-center gap-1.5">{o.name}{o.merged&&<span title={"Merged order — "+(o.mergedFrom?o.mergedFrom.map(m=>m.name).join(", "):"")}><Badge tone="blue">Merged</Badge></span>}{o.source&&<Badge tone={SOURCE_TONE[o.source]||"stone"}>{o.source}</Badge>}</div></td>
                       {!hideCol.has("age")&&<td className="px-3 py-2.5 text-stone-500 whitespace-nowrap">{orderAge(o)}</td>}
                       {!hideCol.has("date")&&<td className="px-3 py-2.5 text-stone-500 whitespace-nowrap">{o.date||"—"}</td>}
                       {!hideCol.has("items")&&<td className={ordPad}><div className="text-stone-700 truncate max-w-[220px] flex items-center gap-1.5">{o.items||"—"}{(()=>{ const f=fulfillability(o); if(!f)return null; return f.ok?<span title="All items are in stock" className="shrink-0 text-[9px] uppercase tracking-wide bg-emerald-100 text-emerald-700 rounded px-1.5 py-0.5">in stock</span>:<span title={"Short: "+f.short.join(", ")} className="shrink-0 text-[9px] uppercase tracking-wide bg-rose-100 text-rose-700 rounded px-1.5 py-0.5">short</span>; })()}</div>{o.lineItems&&o.lineItems[0]&&o.lineItems[0].sku?<div className="text-[11px] text-stone-400 truncate max-w-[220px]">SKU {o.lineItems[0].sku}</div>:null}</td>}
@@ -9252,6 +9286,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
                       <td className="px-3 py-2.5 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button onClick={(e)=>{e.stopPropagation();setOpen(o);}} className={`text-sm rounded px-3 py-1.5 font-medium ${o.status==="fulfilled"?"bg-stone-100 text-stone-600 hover:bg-stone-200":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{o.status==="fulfilled"?"View":"Ship"}</button>
+                          {o.merged&&Array.isArray(o.mergedFrom)&&o.mergedFrom.length>0&&<button onClick={async(e)=>{e.stopPropagation();if(await uiConfirm(`Un-merge ${o.name} back into ${o.mergedFrom.length} separate orders (${o.mergedFrom.map(m=>m.name).join(", ")})?`))unmerge(o);}} title="Split this back into the original orders" className="text-stone-300 hover:text-[#0086E0] p-1"><Undo2 className="w-4 h-4"/></button>}
                           <button onClick={async(e)=>{e.stopPropagation();if(await uiConfirm(`Delete order ${o.name}? This removes it from ${BRAND.product} completely.`))setOrders(os=>os.filter(x=>x.id!==o.id));}} title="Delete order" className="text-stone-300 hover:text-rose-500 p-1"><Trash2 className="w-4 h-4"/></button>
                         </div>
                       </td>

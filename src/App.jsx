@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="addr-v727";
+const BUILD_TAG="addr-v728";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -10250,8 +10250,8 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   /* Grouped navigation — 16 tools organized into labeled clusters so the WMS stays approachable.
      Presentation only; every tab still just calls setView. */
   const NAV_GROUPS=[
-    ["Home",[["overview","Overview"]]],
-    ["Inventory",[["stock","Stock"],["replenish","Replenish"],["backorder","Backorders"],["count","Cycle Count"],["production","Production"]]],
+    ["Home",[["overview","Overview"],["guide","Guide"]]],
+    ["Inventory",[["stock","Stock"],["health","Health"],["replenish","Replenish"],["backorder","Backorders"],["count","Cycle Count"],["production","Production"]]],
     ["Fulfill",[["toship","To Ship"],["runner","Runner"],["pick","Pick Lists"],["pack","Pack Verify"],["packgroups","Packing Groups"],["scan","Scan Receive"]]],
     ["Purchasing",[["pos","Purchase Orders"],["suppliers","Suppliers"]]],
     ["Setup",[["warehouses","Warehouses"],["containers","Containers"],["links","Links"]]],
@@ -10262,7 +10262,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const badge=(v)=>v==="pos"&&openPo>0?" ("+openPo+")":v==="replenish"&&lowCount>0?" ("+lowCount+")":v==="backorder"&&boCount>0?" ("+boCount+")":"";
   /* Entry-level "Simple" view shows just the everyday tools; "Show all tools" reveals the full WMS.
      If you're already on an advanced tab, the full nav shows so the active tab stays visible. */
-  const CORE=new Set(["overview","stock","replenish","toship","runner","pick","pack","scan","pos","suppliers"]);
+  const CORE=new Set(["overview","guide","stock","health","replenish","toship","runner","pick","pack","scan","pos","suppliers"]);
   const Switcher=()=>{ const simple=wmsSimple&&CORE.has(view);
     const groups=NAV_GROUPS.map(([g,tabs])=>[g,simple?tabs.filter(([v])=>CORE.has(v)):tabs]).filter(([g,tabs])=>tabs.length);
     return (<div className="flex flex-wrap gap-x-4 gap-y-2 items-start">
@@ -10278,6 +10278,8 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   </div>); };
   if(view==="overview") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryOverview list={list} pos={pos} log={log} suppliers={suppliers} orders={orders} showMoney={showMoney} committedBySku={committedBySku} incomingBySku={incomingBySku} goView={setView} onReceive={()=>setView("stock")}/></div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4"><Switcher/><InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
+  if(view==="health") return (<div className="max-w-5xl space-y-4"><Switcher/><StockHealth list={list} committedBySku={committedBySku} goView={setView}/></div>);
+  if(view==="guide") return (<div className="max-w-5xl space-y-4"><Switcher/><WmsGuide goView={setView}/></div>);
   if(view==="toship") return (<div className="max-w-5xl space-y-4"><Switcher/><ToShip orders={orders} list={list} committedBySku={committedBySku} goView={setView} shipOrder={goShip?shipOrder:null} flow={wmsFlow} setFlow={setWmsFlow}/></div>);
   if(view==="pick") return (<div className="max-w-5xl space-y-4"><Switcher/><PickList orders={orders} items={list}/></div>);
   if(view==="pack") return (<div className="max-w-5xl space-y-4"><Switcher/><PackVerify orders={orders} items={list} shipOrder={goShip?shipOrder:null}/></div>);
@@ -11777,6 +11779,122 @@ function ProductionOrders({production,setProduction,items,onReload}){
         <div className="flex items-center gap-2 mt-4"><button onClick={save} disabled={busy==="save"} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy==="save"&&<Loader2 className="w-4 h-4 animate-spin"/>}Save order</button><button onClick={()=>setEf(null)} className="text-sm text-stone-500 px-2">Cancel</button></div>
       </div>
     </div>}
+  </div>);
+}
+/* WMS Guide — an in-app rundown of every tool: what it is, why it helps, and how to use it. Grouped
+   to mirror the navigation; each section is collapsible so it stays scannable. */
+const FEATURE_GUIDE=[
+  ["Start here","Turn on WMS mode (Admin → Features) and the daily loop is: an order comes in → To Ship → Fulfill (pick & pack) → the Ship tab prints the label → stock counts itself down and Shopify updates. Beginners see a lean set of tools; ＋ Show all tools reveals the rest.",[]],
+  ["Home",null,[
+    ["Overview","Your command center — health tiles, alerts, and recent activity.","See what needs attention the moment you open the warehouse, with a “Do this next” banner that names the single most important task.",["Open Warehouse — it lands here.","Read the Do-this-next banner and Needs-attention list.","Use the quick actions to jump to the right tool."]],
+    ["Guide","This page.","Learn any feature without leaving the app.","Click a section to expand it."],
+    ["Health","A color-coded chart of every item’s stock level.","Spot what’s out, low, healthy, or overstocked at a glance instead of scanning a table.",["Open Health.","Click a colored card (Out / Low / Healthy / Over) to filter.","The tick on each bar is that item’s reorder point."]],
+  ]],
+  ["Inventory",null,[
+    ["Stock","Every item with on-hand, committed, available and incoming.","One shared source of truth; edit, adjust, move, import, and print labels from one place.",["Add items (import, CSV, or by hand).","Set on-hand and a Reorder at number.","Use Adjust for shrinkage/damage, Move to shift between bins, Print labels for barcodes."]],
+    ["Replenish","Everything at or below its reorder point, counting inbound stock.","Never run out and never over-order — it forecasts days-left and drafts POs to the cheapest vendor.",["Open Replenish.","Review suggested quantities and Days left.","Create draft POs (one per supplier), or Tune reorder points from your sell rate."]],
+    ["Backorders","Where open orders need more than you have.","Know exactly what’s short and who’s waiting before customers ask.",["Open Backorders.","See short SKUs and whether inbound POs cover them.","Expand a row to see the waiting orders."]],
+    ["Cycle Count","Count a shelf and reconcile it to the system.","Keep your numbers honest with a full audit trail — only differences are changed.",["Open Cycle Count, pick a category.","Type what you physically have.","Apply — variances post to the ledger."]],
+    ["Production","Build bundles from their parts (a bill of materials).","Turn components into finished kits and keep both counts accurate.",["Add a kit/BOM to an item (edit item).","Production → New order → pick the assembly and quantity.","Complete — parts are consumed, the finished good is stocked."]],
+  ]],
+  ["Fulfill",null,[
+    ["To Ship","The daily work queue of orders to send out.","Always know what’s ready to ship and fulfill it in one guided click.",["Open To Ship.","Pick your Fulfillment steps: One-click or Pick → Pack → Ship.","Click Fulfill, check items off, Create shipping label."]],
+    ["Runner","The mobile app for a phone + scanner.","Do warehouse work on the floor with big buttons, one task at a time.",["Open Runner on a phone.","Pick Pull, Put, Receive, or Count.","Scan and go."]],
+    ["Pick Lists","Batch-pick many orders into one bin-sorted sheet.","Walk the warehouse once for many orders, with scan-to-pick progress.",["Select open orders → Build pick list.","Start pick session and scan each item.","Lines check off green as you go."]],
+    ["Pack Verify","Scan each item into the box before shipping.","Stop mis-ships — nothing’s verified until every line matches — and get the right box suggested.",["Open Pack Verify, pick an order.","Scan each item in.","When verified, Ship this order."]],
+    ["Packing Groups","Rules that pick the right box automatically.","Consistent, correct cartonization without guesswork.",["Add boxes under Setup → Containers.","Packing Groups → New rule → match a category/keyword to a box.","Pack Verify then suggests it."]],
+    ["Scan Receive","Scan a delivery in.","Fast put-away — each scan adds stock and tells you which bin it goes in.",["Open Scan Receive.","Scan a barcode or type a SKU, set qty.","It shows the put-away location."]],
+  ]],
+  ["Purchasing",null,[
+    ["Purchase Orders","Order stock from suppliers and receive it.","Track what’s on the way and land true costs including freight.",["New PO → pick supplier, add lines.","Receive when it arrives (add Landed cost for freight).","Print to email the vendor."]],
+    ["Suppliers","Your vendor list.","Faster purchasing and smarter replenishment (lead times).",["New supplier → name, contact, lead time.","Used by POs and Replenish."]],
+  ]],
+  ["Setup & the rest",null,[
+    ["Warehouses","Name your warehouses, zones and bins — and see what’s in each.","Directed put-away and a clear picture of where stock lives.",["Add locations (warehouse / zone / bin).","Expand a location to see its contents."]],
+    ["Containers","Your box & mailer catalog.","Feeds packing suggestions and cartonization.",["Add each box with size, weight limit, cost."]],
+    ["Point of Sale","A register that draws down the same stock.","Sell in person without a separate system.",["Set Sell prices on items.","Scan to a cart, pick Card/Cash/Other, Charge.","Stock drops, receipt prints."]],
+    ["3PL Billing","Bill clients for warehouse work.","Turn fulfillment into revenue — automatically.",["Rate card → add services & rates.","Charges → Auto-bill shipped orders (per-order/per-unit).","Invoices → print, mark invoiced."]],
+    ["Analytics","Valuation, ABC, turns, dead stock, forecast, kit margins.","Understand what your inventory is worth and doing.",["Open Analytics — read the tiles and tables."]],
+    ["Dropoffs / Mail Boxes / 3PL Requests / Links","Front-desk logs, mailbox rentals, a client request queue, and custom shortcuts.","Round out a full shipping-store / 3PL counter.",["Open each and add entries; statuses advance on click."]],
+  ]],
+];
+function WmsGuide({goView}){
+  const [open,setOpen]=useState(0);
+  return (<div className="space-y-3 max-w-3xl">
+    <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><MessageCircle className="w-5 h-5 text-[#0086E0]"/>Warehouse guide</h2><p className="text-sm text-stone-500 mt-0.5">Every tool — what it is, why it helps, and how to use it. Tap a section to open it.</p></div>
+    {FEATURE_GUIDE.map(([title,blurb,tools],i)=>{ const isOpen=open===i; return (<div key={title} className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <button onClick={()=>setOpen(isOpen?-1:i)} className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-stone-50">
+        <span className="text-sm font-semibold text-stone-900 flex-1">{title}</span>
+        <ChevronRight className={`w-4 h-4 text-stone-400 transition ${isOpen?"rotate-90":""}`}/>
+      </button>
+      {isOpen&&<div className="px-4 pb-4 space-y-3">
+        {blurb&&<p className="text-sm text-stone-600 -mt-1">{blurb}</p>}
+        {(tools||[]).map(([name,what,benefit,how])=>(<div key={name} className="border border-stone-100 rounded-lg p-3 bg-stone-50/50">
+          <div className="text-sm font-semibold text-stone-800">{name}</div>
+          <div className="text-[13px] text-stone-600 mt-0.5">{what}</div>
+          <div className="text-[13px] text-emerald-700 mt-1 flex items-start gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0"/>{benefit}</div>
+          {Array.isArray(how)&&how.length>0&&<ol className="mt-1.5 space-y-0.5 text-[13px] text-stone-500 list-decimal list-inside">{how.map((h,j)=><li key={j}>{h}</li>)}</ol>}
+        </div>))}
+      </div>}
+    </div>); })}
+  </div>);
+}
+/* Stock Health — a color-coded picture of every SKU's stock level: Out (critical) / Low (warning) /
+   Healthy (good) / Overstocked (notice). Each item is a bar from 0→its ceiling with a reorder-point
+   tick; states carry a labeled pill, never color alone. Click a state tile to filter. */
+const HEALTH_STAT={
+  out:{label:"Out of stock",bar:"bg-rose-500",tile:"text-rose-600",pill:"bg-rose-100 text-rose-700",dot:"bg-rose-500"},
+  low:{label:"Running low",bar:"bg-amber-500",tile:"text-amber-600",pill:"bg-amber-100 text-amber-700",dot:"bg-amber-500"},
+  ok:{label:"Healthy",bar:"bg-emerald-500",tile:"text-emerald-600",pill:"bg-emerald-100 text-emerald-700",dot:"bg-emerald-500"},
+  over:{label:"Overstocked",bar:"bg-violet-500",tile:"text-violet-600",pill:"bg-violet-100 text-violet-700",dot:"bg-violet-500"},
+};
+function StockHealth({list,committedBySku,goView}){
+  const [filter,setFilter]=useState("all"); const [q,setQ]=useState("");
+  const stock=(list||[]).filter(it=>!(Array.isArray(it.kit)&&it.kit.length&&!it.assembled));
+  const rows=stock.map(it=>{
+    const onHand=+it.onHand||0, reorder=+it.reorder||0, max=+it.maxStock||0;
+    const cmt=committedBySku[String(it.sku).toLowerCase()]||0; const avail=Math.max(0,onHand-cmt);
+    let status="ok";
+    if(onHand<=0)status="out"; else if(reorder>0&&onHand<=reorder)status="low"; else if(max>0&&onHand>max)status="over";
+    const ceil=Math.max(onHand,max,reorder*2,1);
+    return {sku:it.sku,name:it.name||it.sku,cat:it.category||"",onHand,reorder,max,cmt,avail,status,fillPct:Math.round(onHand/ceil*100),minPct:reorder>0?Math.round(reorder/ceil*100):null,maxPct:max>0?Math.round(max/ceil*100):null};
+  });
+  const rank={out:0,low:1,over:2,ok:3};
+  const counts={out:0,low:0,ok:0,over:0}; rows.forEach(r=>counts[r.status]++);
+  const total=rows.length||1;
+  const shown=rows.filter(r=>(filter==="all"||r.status===filter)&&(!q.trim()||(r.sku+" "+r.name).toLowerCase().includes(q.trim().toLowerCase()))).sort((a,b)=>rank[a.status]-rank[b.status]||String(a.name).localeCompare(b.name));
+  const Tile=({k})=>{ const s=HEALTH_STAT[k]; const on=filter===k; return (<button onClick={()=>setFilter(on?"all":k)} className={`text-left border rounded-xl bg-white px-4 py-3 transition ${on?"border-current "+s.tile:"border-stone-200 hover:border-stone-300"}`}><div className="flex items-center gap-1.5"><span className={`w-2.5 h-2.5 rounded-full ${s.dot}`}></span><div className="text-[11px] uppercase tracking-wide text-stone-400">{s.label}</div></div><div className={`text-2xl font-semibold mt-0.5 ${counts[k]?s.tile:"text-stone-300"}`}>{counts[k]}</div></button>); };
+  return (<div className="space-y-4">
+    <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-[#0086E0]"/>Stock health</h2><p className="text-sm text-stone-500 mt-0.5">Every item by how much stock it has — <b className="text-rose-600">out</b>, <b className="text-amber-600">low</b>, <b className="text-emerald-600">healthy</b>, or <b className="text-violet-600">overstocked</b>. Click a card to filter; the tick on each bar is its reorder point.</p></div>
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{["out","low","ok","over"].map(k=><Tile key={k} k={k}/>)}</div>
+    {/* Distribution bar */}
+    <div className="border border-stone-200 rounded-xl bg-white p-4">
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Mix across {rows.length} SKU{rows.length!==1?"s":""}</div>
+      <div className="flex h-3 rounded-full overflow-hidden bg-stone-100 gap-[2px]">
+        {["out","low","ok","over"].map(k=>counts[k]>0?<div key={k} className={HEALTH_STAT[k].bar} style={{width:(counts[k]/total*100)+"%"}} title={`${HEALTH_STAT[k].label}: ${counts[k]}`}/>:null)}
+      </div>
+    </div>
+    <div className="flex items-center gap-2 flex-wrap">
+      <div className="relative flex-1 max-w-xs min-w-[160px]"><Search className="w-4 h-4 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search SKU or name…" className="w-full border border-stone-300 rounded-lg pl-8 pr-3 py-2 text-sm"/></div>
+      {filter!=="all"&&<button onClick={()=>setFilter("all")} className="text-xs text-stone-500 hover:underline">Clear filter</button>}
+      <button onClick={()=>goView("replenish")} className="text-xs rounded-lg px-3 py-2 bg-[#0086E0] text-white font-medium hover:bg-[#006db8] ml-auto">Reorder low stock →</button>
+    </div>
+    <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+      {shown.length===0&&<div className="p-8 text-center text-sm text-stone-400">{rows.length?"No items match.":"No stock yet — add items on the Stock tab."}</div>}
+      {shown.map(r=>{ const s=HEALTH_STAT[r.status]; return (<div key={r.sku} className="p-3">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className={`text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 ${s.pill} shrink-0`}>{r.status==="ok"?"Healthy":r.status==="out"?"Out":r.status==="low"?"Low":"Over"}</span>
+          <div className="flex-1 min-w-0"><span className="text-sm text-stone-800">{r.name}</span> <span className="text-[11px] text-stone-400">{r.sku}{r.cat?" · "+r.cat:""}</span></div>
+          <div className="text-sm shrink-0 tabular-nums"><b className="text-stone-900">{r.onHand}</b><span className="text-stone-400 text-xs">{r.max>0?" / "+r.max:""} on hand</span></div>
+        </div>
+        <div className="relative h-2.5 rounded-full bg-stone-100 overflow-hidden" title={`${r.name}: ${r.onHand} on hand${r.reorder?", reorder at "+r.reorder:""}${r.max?", max "+r.max:""}${r.cmt?", "+r.cmt+" committed":""}`}>
+          <div className={`h-full rounded-full ${s.bar}`} style={{width:Math.max(r.onHand>0?4:0,r.fillPct)+"%"}}/>
+          {r.minPct!=null&&<div className="absolute top-[-2px] bottom-[-2px] w-[2px] bg-stone-500/60" style={{left:`calc(${r.minPct}% - 1px)`}} title={"Reorder at "+r.reorder}/>}
+        </div>
+        {r.cmt>0&&<div className="text-[11px] text-stone-400 mt-1">{r.avail} available · {r.cmt} committed to orders</div>}
+      </div>); })}
+    </div>
+    <p className="text-[11px] text-stone-400">Set a <b>Reorder at (min)</b> and <b>Reorder up to (max)</b> on items (edit an item) to sharpen these bands. The tick marks the reorder point.</p>
   </div>);
 }
 /* Inventory analytics — valuation, value by location, dead stock, movement, top items. Read-only. */

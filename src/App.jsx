@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="practicetour-v739";
+const BUILD_TAG="helpgaps-v740";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -12134,7 +12134,7 @@ const HELP_CONTENT={
       ["What's a put-away location?","The shelf/bin where that item belongs — shown after each scan so you know where to shelve it."],
       ["When should I use this vs Purchase Orders → Receive?","Use Scan Receive for quick, ad-hoc restocking. Use PO → Receive when the stock came from a purchase order (it closes the PO and records landed cost)."],
     ]},
-  pos:{tip:"A checkout register for in-person sales that pulls from the same stock as your online orders — no separate system, no double-counting.",
+  sale:{tip:"A checkout register for in-person sales that pulls from the same stock as your online orders — no separate system, no double-counting.",
     steps:["Set a Sell price on your products (edit the item).","Scan items into the cart.","Pick Card / Cash / Other and click Charge.","Stock drops and a receipt prints."],
     mistakes:["Selling an item with no Sell price (it rings up $0) — set the price first.","Expecting it to charge a card — it records the sale; you take payment on your own terminal.","Forgetting tax — set the tax % once and it applies to the cart."],
     faqs:[
@@ -12143,6 +12143,45 @@ const HELP_CONTENT={
       ["Does a POS sale affect my online stock?","Yes — it draws from the same shelf, so you can't oversell across channels."],
       ["Can I change the price at checkout?","Yes — the price on each cart line is editable for that sale."],
       ["Where do past sales go?","Each sale posts to the movement ledger as a shipment with a POS reference; the receipt reprints from the last sale."],
+      ["Do I need a barcode scanner?","No — you can type or click items into the cart. A USB scanner just makes it faster; it types the SKU for you."],
+      ["Can I sell something that isn't in my catalog?","Add it as a product first (even a quick one with just a SKU and price) so stock and reporting stay correct."],
+    ]},
+  pos:{tip:"Purchase Orders — what you've ordered from your suppliers and haven't received yet. Raising a PO tells the system stock is Incoming; receiving it adds that stock to the shelf.",
+    steps:["New PO → pick a supplier and add the items and quantities you're buying.","Send it to your supplier (print or copy the details).","When the delivery arrives, open the PO and Receive it — enter what actually came.","On-hand climbs by the received amount and the PO closes (or stays partial)."],
+    mistakes:["Editing on-hand by hand when a delivery arrives instead of receiving the PO — receiving keeps the paper trail and clears “Incoming.”","Receiving the whole PO when only part arrived — receive the real amount so “Incoming” stays accurate.","Not picking a supplier — then Replenish can't group or reorder for you.","Forgetting Replenish can draft POs for you automatically from low stock."],
+    faqs:[
+      ["What's the difference between a PO and Replenish?","Replenish decides WHAT to buy (what's low) and drafts the orders; Purchase Orders is where those orders live, get sent, and get received."],
+      ["What does “Incoming” mean on my stock?","The total quantity on open POs — stock you've bought that hasn't arrived yet. It clears as you receive."],
+      ["What if only part of the order shows up?","Receive just what arrived. The PO stays partially open for the rest, and Incoming reflects what's still coming."],
+      ["Does receiving update my costs?","Yes — the unit cost on the PO updates that item's cost, so inventory value and margins stay right."],
+      ["Can the system reorder for me?","Replenish drafts POs for anything below its reorder point and picks the cheapest supplier — you just review and send."],
+      ["Do I have to use Purchase Orders?","Only if you restock from suppliers. If new stock just appears (you make it, or receive without a PO), use Scan Receive or Adjust instead."],
+    ]},
+  dropoffs:{tip:"A front-desk log for packages a walk-in customer physically hands you to ship — think a UPS-Store-style counter. It's a retail add-on, not part of the core stock loop, and only useful if you take in-person drop-offs.",
+    steps:["New drop-off → record who dropped it, a description, and any reference.","It starts as Pending (in your possession, not yet shipped).","When you ship it, click the status to move it Pending → Shipped.","Use the list as your accountability trail for what's on the counter."],
+    mistakes:["Turning this on when you're a pure ecommerce/3PL shop — you don't take walk-ins, so it's just clutter. Leave it off.","Using it to track your own outbound orders — those belong on To Ship, not here."],
+    faqs:[
+      ["What is this actually for?","Retail shipping counters that accept packages from the public to send out. It's an intake log so nothing on the counter gets lost."],
+      ["Do I need it?","Only if you (or a client) run a walk-in pack-and-ship storefront. For fulfillment/ecommerce, no — skip it."],
+      ["Does it buy labels or touch my stock?","No. It's a standalone log. Buy the label on the Ship side as usual; this just tracks custody and status."],
+      ["Can I hide it?","Yes — it lives under the “Front desk” group. If you don't want it, we can gate it off so it never shows."],
+    ]},
+  mailboxes:{tip:"A rental registry for physical mailboxes you rent out — who rents which box, their contact, and whether the rental is active, vacant, or overdue. A retail counter add-on; ignore it unless you rent mailboxes.",
+    steps:["Add each physical box (its number/size).","Assign a renter with their contact details and rental dates.","Use the status (active / vacant / overdue) to see what's rented and what's free.","Mark a box vacant when a rental ends."],
+    mistakes:["Confusing this with shipping — it has nothing to do with labels or stock; it's a tenant list.","Turning it on if you don't rent mailboxes — it's pure clutter for most businesses."],
+    faqs:[
+      ["What is this for?","Stores (like a mailbox/parcel shop) that rent PO-box-style mailboxes to the public. It tracks who has which box."],
+      ["Do I need it?","Only if renting out mailboxes is part of your business. Otherwise, no — leave it off."],
+      ["Does it send mail or notifications?","No — it's a registry only. Overdue is just a status you set so you know who to chase."],
+      ["Can I hide it?","Yes — like Dropoffs it's a “Front desk” tool and can be gated off if you never rent boxes."],
+    ]},
+  links:{tip:"A place to pin quick links — the outside tools and pages your team opens all day (carrier portals, a supplier site, a shared sheet) so they're one click from the warehouse.",
+    steps:["Add a link with a label and its URL.","Click it anytime to open that tool in a new tab.","Keep the handful your team actually uses — it's a shortcut bar, not a bookmark dump."],
+    mistakes:["Pasting private/tokenized URLs that anyone with access can then open — only pin what's safe to share with your team.","Hoarding dozens of links — a short, curated list is what makes it useful."],
+    faqs:[
+      ["What should I put here?","The outside pages your team opens repeatedly — a carrier's claims portal, a supplier login page, a shared spreadsheet, a help doc."],
+      ["Is it shared with my whole company?","Yes — links are part of your account's shared settings, so your team sees the same list."],
+      ["Does it do anything besides open a page?","No — it's purely a shortcut list. Nothing syncs or imports through it."],
     ]},
   suppliers:{tip:"Your address book of vendors — who you buy from and how long they take to deliver.",
     steps:["Click New supplier.","Fill in the name, contact, and lead time (delivery days).","Now it's available on Purchase Orders and drives Replenish timing."],
@@ -12160,12 +12199,14 @@ const HELP_CONTENT={
       ["How does stock get into a bin?","Move an item between locations on the Stock tab, or receive/put-away into one. Then it shows under Bin contents here."],
       ["Do I need locations at all?","No — plenty of small stores run with one “Main.” Add bins when finding things gets slow."],
     ]},
-  containers:{tip:"Your list of boxes and mailers, with their sizes and weight limits. It feeds the “suggested box” at packing.",
-    steps:["Add each box with its size, weight limit, and cost.","Then create Packing Groups rules that point products at these boxes."],
-    mistakes:["Adding boxes but no Packing Groups rules — the suggestion needs both.","Guessing dimensions — measure your real boxes so the suggestion is useful."],
+  containers:{tip:"Your one box catalog — every box and mailer with its size, weight limit, and cost. This is the SAME list as Settings → Package Sizes on the shipping side: define a box once here and it's used everywhere.",
+    steps:["Add each box with its size, weight limit, and cost.","Create Packing Groups rules that point products at these boxes (drives the “suggested box” at packing).","On the Ship tab, pick the box on a package and its dimensions fill in automatically for the label."],
+    mistakes:["Adding boxes but no Packing Groups rules — the suggestion needs both.","Guessing dimensions — measure your real boxes; the numbers now flow to the shipping label, so wrong dims mean wrong rates.","Keeping a separate box list on the shipping side — there isn't one anymore; it's this same catalog."],
     faqs:[
-      ["Do I need this?","Only if you want automatic box suggestions at packing. It's optional."],
-      ["What are the dimensions used for?","Right now, to show the packer the right box. (Connecting them to the shipping label's dimensions is a planned upgrade.)"],
+      ["Is this the same as the shipping side's Package Sizes?","Yes — it's one shared catalog (settings.boxes). Add or edit a box here and it appears in Settings → Package Sizes, and vice-versa. Define a box once."],
+      ["What are the dimensions used for?","Two things now: the “suggested box” at packing (cartonization), and the actual dimensions on the shipping label when you pick that box on the Ship tab."],
+      ["Do I need this?","For the box suggestion at packing, yes. Even if you skip Packing Groups, keeping accurate box sizes here means correct label dimensions and rates on the Ship side."],
+      ["I edited a box on the Ship side — will Containers show it?","Yes, immediately — they're the same underlying list, so there's no syncing to do."],
     ]},
   billing:{tip:"If you store and ship for other brands (a 3PL), this bills them for the work — and can do it automatically from your shipped orders.",
     steps:["Rate card → add your services and prices (pick fee, pack fee, storage).","Charges → Auto-bill shipped orders → pick a per-order and/or per-unit fee → Generate.","Invoices → print a client's bill and Mark invoiced when they've paid."],

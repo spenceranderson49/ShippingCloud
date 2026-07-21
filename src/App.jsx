@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="england-connect-v754";
+const BUILD_TAG="command-center-v755";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3422,6 +3422,16 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection,cli
      tracking · est. margin · quote), hourly/daily/weekly margin+count charts, and a by-customer
      rollup, all switchable Today / Week / Month / All. */
   const [period,setPeriod]=useState("today");
+  /* Back-office command-center KPIs — read the ELEMS stores so the Dashboard shows the numbers
+     that matter (margin, losses, AR) at a glance, each a shortcut into its module. */
+  const [abAll]=usePersist("airbills",[]);
+  const [arAll]=usePersist("arInvoices",[]);
+  const boMargin=abAll.reduce((s,a)=>s+((+a.custCharge||0)-(+a.agentCost||0)),0);
+  const boNeg=abAll.filter(a=>((+a.custCharge||0)-(+a.agentCost||0))<0);
+  const boNegAmt=boNeg.reduce((s,a)=>s+((+a.custCharge||0)-(+a.agentCost||0)),0);
+  const arBalOf=(i)=>Math.max(0,(+i.amount||0)+(+i.lateFee||0)-(+i.paid||0)-(+i.adjustments||0));
+  const arBalTot=arAll.reduce((s,i)=>s+arBalOf(i),0);
+  const arOverdue=arAll.reduce((s,i)=>s+(((Date.now()-(Date.parse(i.dueDate)||Date.now()))>0)?arBalOf(i):0),0);
   const ships=platform.ships||[];
   const partial=!!platform._partial;   // cloud snapshot not in yet — numbers below are this login only
   const tsOf=(x)=>(typeof x.id==="number"&&x.id>1e12)?x.id:(new Date(x.date).getTime()||0);
@@ -3474,6 +3484,12 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection,cli
   const timeOf=(x)=>{const t=tsOf(x);const d=t?new Date(t):null;const sameDay=d&&d.getTime()>=dayStart;return d?(sameDay?d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}):d.toLocaleDateString([],{month:"numeric",day:"numeric"})+" "+d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})):(x.time||x.date||"—");};
   const PERIODS=[["today","Today"],["7d","Week"],["30d","Month"],["all","All"]];
   return (<div className="space-y-4">
+    {(abAll.length>0||arAll.length>0)&&<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <button onClick={()=>openSection&&openSection("margins")} className="text-left border border-stone-200 rounded-xl bg-white px-4 py-3 hover:border-[#0086E0]/40 transition"><div className="text-[11px] uppercase tracking-wide text-stone-400">Agency margin loaded</div><div className="text-xl font-semibold text-stone-900 tabular-nums">{money(boMargin)}</div></button>
+      <button onClick={()=>openSection&&openSection("margins")} className="text-left border border-rose-200 rounded-xl bg-rose-50/50 px-4 py-3 hover:border-rose-300 transition"><div className="text-[11px] uppercase tracking-wide text-rose-500">Negative margins</div><div className="text-xl font-semibold text-rose-700 tabular-nums">{boNeg.length} · {money(boNegAmt)}</div></button>
+      <button onClick={()=>openSection&&openSection("receivables")} className="text-left border border-stone-200 rounded-xl bg-white px-4 py-3 hover:border-[#0086E0]/40 transition"><div className="text-[11px] uppercase tracking-wide text-stone-400">AR outstanding</div><div className="text-xl font-semibold text-stone-900 tabular-nums">{money(arBalTot)}</div></button>
+      <button onClick={()=>openSection&&openSection("receivables")} className="text-left border border-amber-200 rounded-xl bg-amber-50/40 px-4 py-3 hover:border-amber-300 transition"><div className="text-[11px] uppercase tracking-wide text-amber-600">Overdue</div><div className="text-xl font-semibold text-amber-700 tabular-nums">{money(arOverdue)}</div></button>
+    </div>}
     <div className="flex flex-wrap items-center gap-2">
       <div className="flex bg-stone-100 rounded-lg p-0.5 text-sm">{PERIODS.map(([v,l])=><button key={v} onClick={()=>setPeriod(v)} className={"px-3 py-1.5 rounded-lg "+(period===v?"bg-white shadow-sm text-stone-900 font-medium":"text-stone-500")}>{l}</button>)}</div>
       <div className="relative"><Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2"/><input value={feedQ} onChange={e=>setFeedQ(e.target.value)} placeholder="Search tracking, customer, service…" className="bg-white border border-stone-200 rounded-lg pl-8 pr-2.5 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300 w-64"/></div>

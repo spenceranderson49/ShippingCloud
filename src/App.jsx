@@ -103,8 +103,8 @@ const FEATURE_CATALOG=[
   {id:"fedexLocations",label:"FedEx Location Finder",desc:"Find nearest FedEx drop-off / pickup locations by ZIP or current location",default:true},
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own NON-FedEx carrier accounts (the FedEx Account settings page always shows for every customer; admins always have this)",default:false},
 ];
-const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All Logins"],["rates","Rates & Dim Divisors"],["margins","Margins"],["othercarriers","Other Carriers"],["labelcert","FedEx Labels"],["customizations","Features & Access"],["branding","Branding"],["apiadmin","API"],["billing","Billing & Invoices"],["domains","Domains"],["backups","Backups & Restore"]];
-const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,margins:TrendingUp,othercarriers:Truck,labelcert:Printer,customizations:Sliders,branding:Sparkles,apiadmin:Plug,billing:Receipt,domains:ExternalLink,backups:RotateCcw};
+const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All Logins"],["rates","Rates & Dim Divisors"],["margins","Margins"],["receivables","Receivables"],["othercarriers","Other Carriers"],["labelcert","FedEx Labels"],["customizations","Features & Access"],["branding","Branding"],["apiadmin","API"],["billing","Billing & Invoices"],["domains","Domains"],["backups","Backups & Restore"]];
+const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,margins:TrendingUp,receivables:Wallet,othercarriers:Truck,labelcert:Printer,customizations:Sliders,branding:Sparkles,apiadmin:Plug,billing:Receipt,domains:ExternalLink,backups:RotateCcw};
 /* A restricted admin ALWAYS keeps access to "users" — without it there is no self-service way
    to ever fix a permission set that’s missing something, for yourself or anyone else. A wrong
    restriction otherwise becomes a permanent lockout with no way back in. */
@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="margins-v749";
+const BUILD_TAG="receivables-v750";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -4780,6 +4780,117 @@ function RatesAdmin({clients=[],brand}){
 /* ════════ Admin → Billing & invoices: generate invoices from recorded shipments,
    track paid/unpaid, record payments. Admin-only; a customer sees nothing until the
    'invoicePortal' flag is turned on for their login. ════════ */
+/* ── RECEIVABLES (ELEMS parity: Customer Aging + Statements) ───────────────────
+   AR invoices per customer with terms/credit. Aging buckets are computed from each
+   unpaid invoice's due date relative to an as-of date. Statements = one customer's
+   invoice ledger. Fed by the weekly invoice import; admin-only. */
+const SEED_AR=[
+  {id:"ar1",number:"20602352AAG28",custNo:"20602352",customer:"Environmental Seeds West",salesRep:"sanderson",terms:30,creditLimit:25000,invoiceDate:"2026-07-28",dueDate:"2026-08-27",amount:734.53,lateFee:73.45,paid:0,adjustments:0,type:"FedEx"},
+  {id:"ar2",number:"20602352AAG21",custNo:"20602352",customer:"Environmental Seeds West",salesRep:"sanderson",terms:30,creditLimit:25000,invoiceDate:"2026-07-21",dueDate:"2026-08-20",amount:6848.86,lateFee:684.89,paid:0,adjustments:0,type:"FedEx"},
+  {id:"ar3",number:"20602352AAG14",custNo:"20602352",customer:"Environmental Seeds West",salesRep:"sanderson",terms:30,creditLimit:25000,invoiceDate:"2026-07-14",dueDate:"2026-08-13",amount:3487.74,lateFee:348.77,paid:0,adjustments:0,type:"FedEx"},
+  {id:"ar4",number:"20602352AAG07",custNo:"20602352",customer:"Environmental Seeds West",salesRep:"sanderson",terms:30,creditLimit:25000,invoiceDate:"2026-07-07",dueDate:"2026-08-06",amount:1206.32,lateFee:120.63,paid:0,adjustments:0,type:"FedEx"},
+  {id:"ar5",number:"20601709AAF30",custNo:"20601709",customer:"Los Angeles Collective",salesRep:"sanderson",terms:15,creditLimit:50000,invoiceDate:"2026-06-12",dueDate:"2026-06-27",amount:9241.10,lateFee:0,paid:9241.10,adjustments:0,type:"FedEx"},
+  {id:"ar6",number:"20601709AAG05",custNo:"20601709",customer:"Los Angeles Collective",salesRep:"sanderson",terms:15,creditLimit:50000,invoiceDate:"2026-06-19",dueDate:"2026-07-04",amount:5120.44,lateFee:512.04,paid:0,adjustments:0,type:"FedEx"},
+  {id:"ar7",number:"20602019AAG18",custNo:"20602019",customer:"Buck Mason Inc",salesRep:"lee",terms:30,creditLimit:15000,invoiceDate:"2026-07-18",dueDate:"2026-08-17",amount:1797.14,lateFee:0,paid:0,adjustments:0,type:"FedEx"},
+  {id:"ar8",number:"20602029AAF10",custNo:"20602029",customer:"Glymed Plus",salesRep:"sanderson",terms:30,creditLimit:100000,invoiceDate:"2026-05-01",dueDate:"2026-05-31",amount:12040.00,lateFee:1204.00,paid:2000,adjustments:0,type:"FedEx"},
+  {id:"ar9",number:"20602029AAF24",custNo:"20602029",customer:"Glymed Plus",salesRep:"sanderson",terms:30,creditLimit:100000,invoiceDate:"2026-06-24",dueDate:"2026-07-24",amount:7390.75,lateFee:0,paid:0,adjustments:0,type:"FedEx"},
+];
+const arBalance=(inv)=>Math.max(0,(+inv.amount||0)+(+inv.lateFee||0)-(+inv.paid||0)-(+inv.adjustments||0));
+const arDaysOverdue=(inv,asOf)=>Math.floor(((asOf.getTime())-(Date.parse(inv.dueDate)||asOf.getTime()))/86400000);
+const AR_BUCKETS=[["cur","≤ 0 days",-1e9,0],["b1","1–30",1,30],["b2","31–45",31,45],["b3","46–60",46,60],["b4","61–90",61,90],["b5","91–120",91,120],["b6","120+",121,1e9]];
+function ReceivablesAdmin({clients=[],currentUser}){
+  const [invoices,setInvoices]=usePersist("arInvoices",SEED_AR);
+  const [tab,setTab]=useState("aging");         // "aging" | "statements"
+  const [rep,setRep]=useState("all");
+  const [asOfStr,setAsOfStr]=useState("");        // yyyy-mm-dd; blank = today
+  const [pickCust,setPickCust]=useState("");
+  const [balDueOnly,setBalDueOnly]=useState(true);
+  const asOf=useMemo(()=>{ const d=asOfStr?new Date(asOfStr+"T00:00:00"):new Date(); return isNaN(d.getTime())?new Date():d; },[asOfStr]);
+  const repNames=useMemo(()=>Array.from(new Set(invoices.map(i=>i.salesRep).filter(Boolean))).sort(),[invoices]);
+  const custList=useMemo(()=>{ const m={}; invoices.forEach(i=>{ if(!m[i.custNo])m[i.custNo]={custNo:i.custNo,customer:i.customer}; }); return Object.values(m).sort((a,b)=>a.customer.localeCompare(b.customer)); },[invoices]);
+
+  // AGING — group unpaid balances by customer into buckets
+  const aging=useMemo(()=>{
+    const rows=invoices.filter(i=>rep==="all"||i.salesRep===rep);
+    const m={};
+    rows.forEach(inv=>{ const bal=arBalance(inv); if(bal<=0)return; const cn=inv.custNo||inv.customer; if(!m[cn])m[cn]={custNo:inv.custNo,customer:inv.customer,salesRep:inv.salesRep,creditLimit:inv.creditLimit,total:0,overdue:0,cur:0,b1:0,b2:0,b3:0,b4:0,b5:0,b6:0};
+      const d=arDaysOverdue(inv,asOf); const bk=AR_BUCKETS.find(([k,l,lo,hi])=>d>=lo&&d<=hi); if(bk)m[cn][bk[0]]+=bal; m[cn].total+=bal; if(d>0)m[cn].overdue+=bal; });
+    return Object.values(m).sort((a,b)=>b.total-a.total);
+  },[invoices,rep,asOf]);
+  const agingTot=aging.reduce((s,r)=>{ AR_BUCKETS.forEach(([k])=>s[k]=(s[k]||0)+r[k]); s.total+=r.total; s.overdue+=r.overdue; return s; },{total:0,overdue:0});
+
+  // STATEMENTS — one customer's invoices
+  const stmtRows=useMemo(()=>invoices.filter(i=>(!pickCust||i.custNo===pickCust)&&(!balDueOnly||arBalance(i)>0)).sort((a,b)=>(Date.parse(b.invoiceDate)||0)-(Date.parse(a.invoiceDate)||0)),[invoices,pickCust,balDueOnly]);
+  const stmtCust=custList.find(c=>c.custNo===pickCust);
+  const stmtCreditLimit=stmtRows[0]&&stmtRows[0].creditLimit;
+  const stmtBalance=stmtRows.reduce((s,i)=>s+arBalance(i),0);
+
+  return (<div className="space-y-4">
+    <div className="flex items-start justify-between gap-3 flex-wrap">
+      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Wallet className="w-5 h-5 text-[#0086E0]"/>Receivables</h2><p className="text-sm text-stone-500 mt-0.5">Who owes what, and how overdue — customer aging and per-customer statements, straight from your invoices.</p></div>
+      <button onClick={()=>downloadCSV("aging.csv",[["Customer","Cust #","Rep","Total Due","Overdue",...AR_BUCKETS.map(b=>b[1])],...aging.map(r=>[r.customer,r.custNo,r.salesRep,r.total.toFixed(2),r.overdue.toFixed(2),...AR_BUCKETS.map(b=>r[b[0]].toFixed(2))])])} className="text-sm text-stone-500 hover:text-stone-700 flex items-center gap-1.5 px-2 py-1.5 shrink-0"><Download className="w-4 h-4"/>Export aging</button>
+    </div>
+    <div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm">
+      <button onClick={()=>setTab("aging")} className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 ${tab==="aging"?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}><BarChart3 className="w-4 h-4"/>Customer aging</button>
+      <button onClick={()=>setTab("statements")} className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 ${tab==="statements"?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}><FileText className="w-4 h-4"/>Statements</button>
+    </div>
+
+    {tab==="aging"?<>
+      <div className="flex items-center gap-2 flex-wrap text-sm">
+        <span className="text-stone-500">As of</span><input type="date" value={asOfStr} onChange={e=>setAsOfStr(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5"/>
+        <span className="text-stone-500 ml-2">Sales rep</span><select value={rep} onChange={e=>setRep(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5"><option value="all">All</option>{repNames.map(r=><option key={r} value={r}>{r}</option>)}</select>
+      </div>
+      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+        <div className="overflow-x-auto"><table className="w-full text-sm">
+          <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 border-b border-stone-200">
+            <th className="text-left font-medium px-3 py-2">Customer</th><th className="text-right font-medium px-3 py-2">Total due</th><th className="text-right font-medium px-3 py-2">Overdue</th>{AR_BUCKETS.map(b=><th key={b[0]} className="text-right font-medium px-3 py-2 whitespace-nowrap">{b[1]}</th>)}
+          </tr></thead>
+          <tbody className="divide-y divide-stone-100">
+            {aging.length===0&&<tr><td colSpan={9} className="px-3 py-12 text-center text-stone-400">No open balances for this filter.</td></tr>}
+            {aging.map(r=>(<tr key={r.custNo} className="hover:bg-stone-50">
+              <td className="px-3 py-2"><div className="text-stone-800">{r.customer}</div><div className="text-[11px] text-stone-400">{r.custNo}{r.salesRep?" · "+r.salesRep:""}</div></td>
+              <td className="px-3 py-2 text-right font-semibold text-stone-800 tabular-nums">{money(r.total)}</td>
+              <td className={`px-3 py-2 text-right tabular-nums ${r.overdue>0?"text-rose-600 font-medium":"text-stone-400"}`}>{money(r.overdue)}</td>
+              {AR_BUCKETS.map(b=><td key={b[0]} className={`px-3 py-2 text-right tabular-nums ${r[b[0]]>0?(b[0]==="cur"?"text-stone-700":b[0]==="b6"||b[0]==="b5"?"text-rose-600":"text-amber-600"):"text-stone-300"}`}>{r[b[0]]>0?money(r[b[0]]):"—"}</td>)}
+            </tr>))}
+          </tbody>
+          {aging.length>0&&<tfoot><tr className="bg-stone-50 font-semibold text-stone-800 border-t border-stone-200"><td className="px-3 py-2">Totals</td><td className="px-3 py-2 text-right tabular-nums">{money(agingTot.total)}</td><td className="px-3 py-2 text-right tabular-nums">{money(agingTot.overdue)}</td>{AR_BUCKETS.map(b=><td key={b[0]} className="px-3 py-2 text-right tabular-nums">{money(agingTot[b[0]]||0)}</td>)}</tr></tfoot>}
+        </table></div>
+      </div>
+    </>:<>
+      <div className="flex items-center gap-2 flex-wrap text-sm">
+        <span className="text-stone-500">Customer</span>
+        <select value={pickCust} onChange={e=>setPickCust(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 min-w-[220px]"><option value="">Select customer…</option>{custList.map(c=><option key={c.custNo} value={c.custNo}>{c.customer} ({c.custNo})</option>)}</select>
+        <label className="flex items-center gap-1.5 text-stone-500 ml-2 cursor-pointer"><input type="checkbox" checked={balDueOnly} onChange={e=>setBalDueOnly(e.target.checked)} className="accent-[#0086E0]"/>Balance due only</label>
+      </div>
+      {stmtCust&&<div className="flex items-center gap-4 flex-wrap text-sm bg-white border border-stone-200 rounded-xl px-4 py-3">
+        <div><div className="text-[11px] uppercase tracking-wide text-stone-400">Customer</div><div className="font-semibold text-stone-900">{stmtCust.customer}</div></div>
+        <div><div className="text-[11px] uppercase tracking-wide text-stone-400">Balance due</div><div className="font-semibold text-stone-900 tabular-nums">{money(stmtBalance)}</div></div>
+        {stmtCreditLimit!=null&&<div><div className="text-[11px] uppercase tracking-wide text-stone-400">Credit remaining</div><div className="font-semibold text-emerald-700 tabular-nums">{money(Math.max(0,(+stmtCreditLimit||0)-stmtBalance))}</div></div>}
+      </div>}
+      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+        <div className="overflow-x-auto"><table className="w-full text-sm">
+          <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 border-b border-stone-200">
+            <th className="text-left font-medium px-3 py-2">Invoice #</th><th className="text-left font-medium px-3 py-2">Invoice date</th><th className="text-left font-medium px-3 py-2">Due date</th><th className="text-right font-medium px-3 py-2">Amount</th><th className="text-right font-medium px-3 py-2">Late fee</th><th className="text-right font-medium px-3 py-2">Total</th><th className="text-right font-medium px-3 py-2">Paid</th><th className="text-right font-medium px-3 py-2">Remaining</th>
+          </tr></thead>
+          <tbody className="divide-y divide-stone-100">
+            {stmtRows.length===0&&<tr><td colSpan={8} className="px-3 py-12 text-center text-stone-400">{pickCust?"No invoices for this customer.":"Pick a customer to see their statement."}</td></tr>}
+            {stmtRows.map(inv=>{ const bal=arBalance(inv); const over=arDaysOverdue(inv,asOf)>0&&bal>0; return (<tr key={inv.id} className="hover:bg-stone-50">
+              <td className="px-3 py-2 font-medium text-stone-800 whitespace-nowrap">{inv.number}</td>
+              <td className="px-3 py-2 text-stone-600 whitespace-nowrap">{inv.invoiceDate}</td>
+              <td className={`px-3 py-2 whitespace-nowrap ${over?"text-rose-600 font-medium":"text-stone-600"}`}>{inv.dueDate}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-stone-700">{money(+inv.amount||0)}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-stone-500">{(+inv.lateFee||0)?money(+inv.lateFee):"—"}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-stone-800">{money((+inv.amount||0)+(+inv.lateFee||0))}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-stone-500">{(+inv.paid||0)?money(+inv.paid):"$0"}</td>
+              <td className={`px-3 py-2 text-right tabular-nums font-semibold ${bal>0?"text-stone-900":"text-emerald-600"}`}>{money(bal)}</td>
+            </tr>); })}
+          </tbody>
+        </table></div>
+      </div>
+    </>}
+  </div>);
+}
 /* ── AIRBILL MARGINS (ELEMS parity) ───────────────────────────────────────────
    Each airbill = one shipment's economics: what we charged the customer (custCharge)
    vs. what the carrier (FedEx/England) charged us (agentCost). Margin = charge − cost;
@@ -5310,6 +5421,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
       {k==="apiadmin"&&<ApiAdmin clients={clients} platform={platform} openCustomer={openCustomer}/>}
       {k==="billing"&&<BillingAdmin clients={clients} platform={platform} openCustomer={openCustomer}/>}
       {k==="margins"&&<MarginsAdmin clients={clients} currentUser={currentUser}/>}
+      {k==="receivables"&&<ReceivablesAdmin clients={clients} currentUser={currentUser}/>}
       {k==="backups"&&<BackupsAdmin clients={clients} setClients={setClients} users={users} setUsers={setUsers}/>}
   </>);
   return (
@@ -5652,7 +5764,7 @@ const lsDel=(k)=>{ if(!LS_OK)return; try{window.localStorage.removeItem("sc_"+k)
 // Which login is active. Every non-global key is stored under this account so each login keeps its OWN settings/data.
 const activeUid=()=>{ try{const s=lsGet("session",null); const id=s&&(s.id||s.email); return id?String(id):"guest"; }catch(e){return "guest";} };
 // Shared across all logins (never namespaced): the accounts list + who is signed in.
-const GLOBAL_KEYS={session:1,salesReps:1,invoicesIssued:1,billingSettings:1,proposalReports:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1,customFeatures:1,fedexRequests:1,publicBrand:1,myAccess:1,companyUsers:1,companyFlags:1,companyAdminRequests:1,rateRules:1,clients:1,airbills:1};
+const GLOBAL_KEYS={session:1,salesReps:1,invoicesIssued:1,billingSettings:1,proposalReports:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1,customFeatures:1,fedexRequests:1,publicBrand:1,myAccess:1,companyUsers:1,companyFlags:1,companyAdminRequests:1,rateRules:1,clients:1,airbills:1,arInvoices:1};
 // Scratch = the in-progress shipment. Per-login, but starts blank on each login (never migrated/inherited).
 const isScratch=(key)=>String(key).indexOf("ship.")===0;
 // Scratch keys wiped on login so the receiver + package dims are always blank for a fresh session.

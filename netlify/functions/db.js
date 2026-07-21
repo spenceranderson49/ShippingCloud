@@ -520,7 +520,11 @@ exports.handler = async (event) => {
          customer + attach the login" step, and the app never runs unassigned (at raw cost). */
       const clients = (curC.ok && Array.isArray(curC.value)) ? curC.value : [];
       const newClientId = "c" + Date.now() + Math.floor(Math.random() * 1000);
-      const newClient = { id: newClientId, name: company || name, contact: name, email, phone: "", origin: "", markup: "", status: "active", since: new Date().toISOString().slice(0, 7), plan: "Standard", selfSignup: true, createdAt: new Date().toISOString(), blockedServices: [...DEFAULT_BLOCKED_SERVICES] };
+      /* Record which brand/portal this customer signed up on (from the request origin) so an admin's
+         "Log In As" can mirror exactly what they see — ShippingCloud vs Freightwire ShippingHub. */
+      const _signupOrigin = String((event.headers && (event.headers.origin || event.headers.Origin)) || "").toLowerCase();
+      const _signupBrand = /freightwireship\.com/.test(_signupOrigin) ? "freightwire" : /shippingcloud\.net/.test(_signupOrigin) ? "shippingcloud" : "";
+      const newClient = { id: newClientId, name: company || name, contact: name, email, phone: "", origin: "", markup: "", status: "active", since: new Date().toISOString().slice(0, 7), plan: "Standard", selfSignup: true, brand: _signupBrand, createdAt: new Date().toISOString(), blockedServices: [...DEFAULT_BLOCKED_SERVICES] };
       const newUser = { id: "u" + Date.now() + Math.floor(Math.random() * 1000), name, company, email, role: "customer", clientId: newClientId, status: "active", password: "", passHash: hashPw(password), volume, carrier, createdAt: new Date().toISOString(), lastLogin: new Date().toLocaleDateString() };
       const writes = { users: [...users, newUser], clients: [...clients, newClient] };
       const reqs = (curR.ok && Array.isArray(curR.value)) ? curR.value : [];

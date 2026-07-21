@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="fix-landed-crash-v767";
+const BUILD_TAG="loginas-brand-mirror-v768";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -183,6 +183,23 @@ const BRAND=(()=>{ let k="shippingcloud"; try{ k=(import.meta.env&&import.meta.e
   return (k==="freightwire"||k==="shiphub")
     ?{key:"freightwire",fw:true,name:"ShippingHub",short:"ShippingHub",product:"ShippingHub",accent:"#1e3a5f",accent2:"#2d5a8e"}
     :{key:"shippingcloud",fw:false,name:"ShippingCloud",short:"ShippingCloud",product:"ShippingCloud",accent:"#0086E0",accent2:"#0072BE"}; })();
+/* IMPERSONATION BRAND MIRROR — when an admin uses "Log In As", they should see EXACTLY the brand the
+   customer sees (a ShippingCloud customer in the ShippingCloud skin, a Freightwire customer in the
+   ShippingHub skin), even though this is the admin build. On boot, if we're impersonating (an
+   `adminReturn` is stashed) AND a target brand was recorded, overwrite BRAND's fields IN PLACE — here,
+   before the favicon/title logic and every downstream BRAND read. Cleared on "Return to Admin". */
+const BRAND_SKINS={
+  shippingcloud:{key:"shippingcloud",fw:false,admin:false,name:"ShippingCloud",short:"ShippingCloud",product:"ShippingCloud",accent:"#0086E0",accent2:"#0072BE"},
+  freightwire:{key:"freightwire",fw:true,admin:false,name:"ShippingHub",short:"ShippingHub",product:"ShippingHub",accent:"#1e3a5f",accent2:"#2d5a8e"},
+};
+try{
+  if(typeof window!=="undefined"){
+    const _imp=window.localStorage.getItem("sc_adminReturn");
+    let _bk=window.localStorage.getItem("sc_impersonateBrand")||"";
+    if(_bk==="shiphub")_bk="freightwire";
+    if(_imp&&BRAND_SKINS[_bk])Object.assign(BRAND,BRAND_SKINS[_bk]);
+  }
+}catch(e){}
 /* The site's own origin — integration redirect-URI instructions must show THIS site's domain,
    not a hardcoded one, so the white-label builds never leak another brand's URL. */
 const APP_ORIGIN=(()=>{ try{ return (typeof window!=="undefined"&&window.location&&window.location.origin)||"https://shippingcloud.net"; }catch(e){ return "https://shippingcloud.net"; } })();
@@ -3870,7 +3887,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         <div key={u.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
           <div className="flex-1 min-w-[180px] grid grid-cols-2 gap-2"><Input value={u.name||""} onChange={e=>setUsers(us=>us.map(x=>x.id===u.id?{...x,name:e.target.value}:x))}/><Input value={u.email||""} onChange={e=>setUsers(us=>us.map(x=>x.id===u.id?{...x,email:e.target.value}:x))}/></div>
           <span className="text-[11px] text-stone-400 w-20">{u.lastLogin||"—"}</span>
-          <button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }} title="Open the app exactly as this person sees it" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Log In As</button>
+          <button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); try{ const _b=(c&&c.brand)||""; if(_b)window.localStorage.setItem("sc_impersonateBrand",_b); else window.localStorage.removeItem("sc_impersonateBrand"); }catch(e){} lsSet("session",u); window.location.reload(); }} title="Open the app exactly as this person sees it" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Log In As</button>
           <button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,status:x.status==="disabled"?"active":"disabled"}:x))} className={`text-[11px] rounded px-2 py-1 ${u.status==="disabled"?"bg-rose-100 text-rose-600":"bg-emerald-50 text-emerald-700"}`}>{u.status==="disabled"?"disabled":"active"}</button>
           <RowMenu title={"More actions for "+(u.name||u.email)} items={[
             {label:"Company Admin",title:u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins",active:!!u.companyAdmin,onClick:()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))},
@@ -4184,6 +4201,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
             <Field label="DUNS #"><Input value={c.duns||""} onChange={e=>upClient({duns:e.target.value})} placeholder="119508595"/></Field>
             <Field label="Paydex"><Input value={c.paydex||""} onChange={e=>upClient({paydex:e.target.value})} placeholder="77"/></Field>
             <Field label="Sales rep"><Input value={c.salesRep||""} onChange={e=>upClient({salesRep:e.target.value})} placeholder="sanderson"/></Field>
+            <Field label="Brand / portal"><Select value={c.brand||""} onChange={e=>upClient({brand:e.target.value})}><option value="">Auto (where they signed up)</option><option value="shippingcloud">ShippingCloud</option><option value="freightwire">Freightwire ShippingHub</option></Select></Field>
           </div>
         </div>
         {/* Notes log */}
@@ -5876,7 +5894,7 @@ function UsersAdmin({users,setUsers,clients,setClients,currentUser,signupRequest
           {/* Every action laid out inline (no hidden dropdown) — only Delete stays behind the ⋮ so a
              destructive click can't happen by accident. Wraps on narrow screens. */}
           <div className="shrink-0 flex items-center justify-end gap-1.5 flex-wrap">
-            {u.role!=="admin"&&<button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }} title="Open the app exactly as this person sees it" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Log In As</button>}
+            {u.role!=="admin"&&<button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); try{ const _cl=(clients||[]).find(x=>x&&x.id===u.clientId); const _b=(_cl&&_cl.brand)||""; if(_b)window.localStorage.setItem("sc_impersonateBrand",_b); else window.localStorage.removeItem("sc_impersonateBrand"); }catch(e){} lsSet("session",u); window.location.reload(); }} title="Open the app exactly as this person sees it" className="text-[11px] rounded px-2 py-1 bg-stone-100 text-stone-600 hover:bg-stone-200">Log In As</button>}
             <button onClick={()=>toggle(u.id)} title={u.status==="active"?"Deactivate":"Activate"} className={`text-[11px] rounded px-2 py-1 ${u.status==="active"?"bg-emerald-50 text-emerald-700":"bg-stone-100 text-stone-500"}`}>{u.status==="active"?"Active":"Deactivated"}</button>
             {u.role==="admin"&&u.id!=="u1"&&!isBuiltInAdmin(u.email)&&u.id!==currentUser.id&&fullAdmin&&<button title="Which Admin sections this login can open" onClick={()=>setAccessOpen(accessOpen===u.id?null:u.id)} className={`text-[11px] rounded px-2 py-1 ${accessOpen===u.id?"bg-[#E6F4FF] text-[#006FBF]":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>Portal access</button>}
             {u.role!=="admin"&&<button title={u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins"} onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))} className={`text-[11px] rounded px-2 py-1 ${u.companyAdmin?"bg-[#E6F4FF] text-[#006FBF]":"bg-stone-100 text-stone-600 hover:bg-stone-200"}`}>{u.companyAdmin?"Company admin ✓":"Company admin"}</button>}
@@ -7909,7 +7927,7 @@ function AppInner(){
   const _acctAgeDays=currentUser&&currentUser.createdAt?(Date.now()-new Date(currentUser.createdAt).getTime())/86400000:Infinity;
   const isNewAccount=_acctAgeDays<=14;
   const adminReturn=lsGet("adminReturn",null);
-  const exitImpersonation=()=>{ lsSet("session",adminReturn); lsDel("adminReturn"); window.location.reload(); };
+  const exitImpersonation=()=>{ lsSet("session",adminReturn); lsDel("adminReturn"); try{ window.localStorage.removeItem("sc_impersonateBrand"); }catch(e){} window.location.reload(); };
   /* Sticky-bar offset for DraftBar & friends: the app header is sticky (h-14, +36px when the
      admin-preview/demo strip shows), so anything else sticky must pin below it, not at top-0. */
   useEffect(()=>{ try{ document.documentElement.style.setProperty("--sc-stickoff",(adminReturn||isDemo)?"92px":"56px"); }catch(e){} },[adminReturn,isDemo]);

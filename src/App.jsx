@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="intl-etd-locations-v759";
+const BUILD_TAG="signup-resilience-v760";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6269,7 +6269,22 @@ async function cloudLoadAll(){
         const isBlankRules=(v)=>v&&typeof v==="object"&&(!v.baseCosts||!Object.keys(v.baseCosts).length)&&(!v.assign||!Object.keys(v.assign).length)&&(!v.profiles||v.profiles.every(p=>p&&(!p.services||!Object.keys(p.services).length)&&(!p.surcharges||!Object.keys(p.surcharges).length)));
         const localEmpty=localVal==null||(Array.isArray(localVal)&&!localVal.length)||(typeof localVal==="object"&&!Array.isArray(localVal)&&!Object.keys(localVal).length)||(k==="rateRules"&&isBlankRules(localVal));
         if(localEmpty&&cloudRaw!==null)continue;                    // cloud has data, local is empty → trust cloud
-        cloud[k]=localVal; recovered.push(k);
+        /* NEVER DROP a server row this device simply hasn't seen yet. For keyed-array stores (users,
+           clients, salesReps, invoices…) a stale local copy that's missing a row created elsewhere —
+           a self-serve SIGNUP, or a login/customer added on another device — used to win wholesale
+           and then get re-pushed, so the new account was invisible in admin (and at risk of being
+           deleted after the 15-min server grace window). Union instead: keep every local row (so a
+           local edit that failed to flush is still recovered) and ADD any cloud row whose id is
+           absent locally. The server stays authoritative for anything this device never touched. */
+        let mergeVal=localVal;
+        const cloudVal=(k in cloud)?cloud[k]:null;
+        if(Array.isArray(localVal)&&Array.isArray(cloudVal)&&cloudVal.length){
+          const lids=new Set(localVal.map(x=>x&&x.id!=null?String(x.id):null).filter(v=>v!=null));
+          const cloudOnly=cloudVal.filter(x=>x&&x.id!=null&&!lids.has(String(x.id)));
+          if(cloudOnly.length)mergeVal=[...localVal,...cloudOnly];
+        }
+        cloud[k]=mergeVal;
+        if(JSON.stringify(mergeVal)!==cloudRaw)recovered.push(k);   // only re-queue if we actually preserved a local difference
       }
     }catch(e){}
     CLOUD.snapshot=cloud;

@@ -45,14 +45,28 @@ const secret = () => (process.env.SESSION_SECRET || "").trim() || crypto.createH
 /* ── Supabase PostgREST (service role) ── */
 async function pg(path, opts = {}) {
   const c = CFG();
-  const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 8000);
-  try {
-    const r = await fetch(c.url + "/rest/v1/" + path, { ...opts, headers: { apikey: c.key, Authorization: "Bearer " + c.key, "Content-Type": "application/json", ...(opts.headers || {}) }, signal: ctrl.signal });
-    const text = await r.text();
-    let data = null; try { data = text ? JSON.parse(text) : null; } catch {}
-    return { ok: r.ok, status: r.status, data, text };
-  } catch (e) { return { ok: false, status: 0, text: (e && e.message) || "network error" }; }
-  finally { clearTimeout(t); }
+  const method = String(opts.method || "GET").toUpperCase();
+  /* RESILIENCE: a single Supabase cold-start timeout (common in the ~30s after a deploy) used to
+     return !ok on the first try and, via the signup/login read-safety guards, hard-refuse a real
+     signup with "couldn't reach the database" — exactly the wrong moment during a live demo. READS
+     are idempotent, so retry them a couple times on a transient failure (timeout / network / 5xx)
+     with short backoff. A 4xx is a real client error, not transient — return it immediately. Writes
+     stay single-attempt (only the caller knows if they're safe to repeat). */
+  const attempts = method === "GET" ? 3 : 1;
+  let last = { ok: false, status: 0, text: "no attempt" };
+  for (let i = 0; i < attempts; i++) {
+    const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const r = await fetch(c.url + "/rest/v1/" + path, { ...opts, headers: { apikey: c.key, Authorization: "Bearer " + c.key, "Content-Type": "application/json", ...(opts.headers || {}) }, signal: ctrl.signal });
+      const text = await r.text();
+      let data = null; try { data = text ? JSON.parse(text) : null; } catch {}
+      last = { ok: r.ok, status: r.status, data, text };
+      if (r.ok || (r.status && r.status < 500)) { clearTimeout(t); return last; }   // success or a real 4xx — don't retry
+    } catch (e) { last = { ok: false, status: 0, text: (e && e.message) || "network error" }; }
+    finally { clearTimeout(t); }
+    if (i < attempts - 1) await new Promise((res) => setTimeout(res, 250 * (i + 1)));   // 250ms, 500ms
+  }
+  return last;
 }
 const getStore = async (key) => {
   const r = await pg("app_stores?tenant=eq." + encodeURIComponent(TENANT) + "&key=eq." + encodeURIComponent(key) + "&select=value");

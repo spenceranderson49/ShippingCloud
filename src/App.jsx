@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="account-isolation-v764";
+const BUILD_TAG="isolation-source-clean-v765";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7337,6 +7337,12 @@ function AppInner(){
       window.location.reload();
     }
   }catch(e){} },[]);
+  /* Kill the cross-account contamination SOURCE. The pre-namespacing legacy `sc_settings` key is
+     what usePersist migrates into a brand-new account (App.jsx ~6090); if it still carries a store
+     connection, that connection (and its token) leaks into every new account on this device. Live
+     accounts read sc_u/<uid>/settings, never the bare key, so stripping the connection fields from
+     it here is safe and removes the leak at the root. No-op once clean. */
+  useEffect(()=>{ try{ const lg=lsRaw("settings"); if(lg){ const v=JSON.parse(lg); if(v&&typeof v==="object"&&(v.shopifyConns||v.shopifyConn||v.shopifyToken||v.shopifyShop||v.conn)){ delete v.shopifyConns; delete v.shopifyConn; delete v.shopifyToken; delete v.shopifyShop; delete v.conn; lsSet("settings",v); } } }catch(e){} },[]);
   const [users,setUsers]=usePersist("users",SEED_USERS);
   const [currentUserRaw,setCurrentUser]=usePersist("session",null);
   const currentUser=useMemo(()=>(currentUserRaw&&isBuiltInAdmin(currentUserRaw.email)&&(currentUserRaw.role!=="admin"||currentUserRaw.adminPerms))?{...currentUserRaw,role:"admin",adminPerms:null}:currentUserRaw,[currentUserRaw]);

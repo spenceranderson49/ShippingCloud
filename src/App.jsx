@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="rate-audit-notes-v756";
+const BUILD_TAG="tour-and-audit-v757";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -351,7 +351,7 @@ const brandedTrackUrl=(tracking,settings,carrier)=>{
   return (TRACK_URL[c]&&tracking)?TRACK_URL[c](tracking):(tracking?TRACK_URL.FedEx(tracking):"");
 };
 const carrierOf=l=>l.startsWith("UPS")?"UPS":l.startsWith("USPS")?"USPS":l.startsWith("DHL")?"DHL":"FedEx";
-const money=n=>`$${Number(n).toFixed(2)}`;
+const money=n=>"$"+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
 const rnd=(n)=>Math.random().toString().slice(2,2+n);
 const newTracking=carrier=>carrier==="UPS"?"1Z"+Math.random().toString(36).slice(2,10).toUpperCase():carrier==="USPS"?"9400"+rnd(18):carrier==="DHL"?rnd(10):rnd(12);
 
@@ -10960,7 +10960,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const boCount=list.filter(it=>{ if(Array.isArray(it.kit)&&it.kit.length&&!it.assembled)return false; const d=committedBySku[String(it.sku).toLowerCase()]||0; return d>(+it.onHand||0); }).length;
   const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
   const openPo=(pos||[]).filter(p=>p&&p.status!=="received").length;
-  /* Grouped navigation — 16 tools organized into labeled clusters so the WMS stays approachable.
+  /* Grouped navigation — the WMS tools organized into labeled clusters so the WMS stays approachable.
      Presentation only; every tab still just calls setView. */
   const NAV_GROUPS=[
     ["Home",[["overview","Overview"],["guide","Guide"]]],
@@ -10989,6 +10989,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
       <div className="flex gap-1.5">
         <button onClick={()=>setWmsSimple(s=>!s)} className="text-sm rounded-lg border border-dashed border-stone-300 bg-white px-3 py-1.5 text-stone-500 hover:bg-stone-50 hover:text-stone-700 whitespace-nowrap" title={simple?"Reveal every WMS tool":"Show just the everyday tools"}>{simple?"＋ Show all tools":"− Simpler view"}</button>
         <button onClick={()=>setHelpFor(view)} className="text-sm rounded-lg border border-[#0086E0]/30 bg-[#E6F4FF] text-[#006FBF] px-2.5 py-1.5 font-medium hover:bg-[#d3ecff] flex items-center gap-1 whitespace-nowrap" title="Help & answers for this tab"><MessageCircle className="w-4 h-4"/>Help</button>
+        <button onClick={()=>setWelcomed(false)} className="text-sm rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-stone-600 font-medium hover:bg-stone-50 flex items-center gap-1 whitespace-nowrap" title="Replay the guided walkthrough of the whole warehouse"><Sparkles className="w-4 h-4 text-[#0086E0]"/>Take a tour</button>
       </div>
     </div>
     {helpFor&&<WmsHelp viewId={helpFor} viewLabel={(NAV_GROUPS.flatMap(g=>g[1]).find(t=>t[0]===helpFor)||[helpFor,helpFor])[1]} onClose={()=>setHelpFor(null)} goGuide={()=>setView("guide")}/>}
@@ -12153,7 +12154,7 @@ function InventoryOverview({list,pos,log,suppliers,orders,showMoney,committedByS
     {(low.length||out.length||oversold.length||openPos.length||expSoon.length)?<div className="border border-stone-200 rounded-xl bg-white p-4 space-y-2">
       <div className="text-sm font-semibold text-stone-800">Needs attention</div>
       {out.length>0&&<div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-rose-500"/><span className="text-stone-700"><b>{out.length}</b> out of stock</span><button onClick={()=>goView("stock")} className="text-[11px] text-[#0086E0] hover:underline">view →</button></div>}
-      {low.length>0&&<div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-amber-500"/><span className="text-stone-700"><b>{low.length}</b> below reorder point</span><button onClick={()=>goView("stock")} className="text-[11px] text-[#0086E0] hover:underline">reorder →</button></div>}
+      {low.length>0&&<div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-amber-500"/><span className="text-stone-700"><b>{low.length}</b> below reorder point</span><button onClick={()=>goView("replenish")} className="text-[11px] text-[#0086E0] hover:underline">reorder →</button></div>}
       {oversold.length>0&&<div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-rose-500"/><span className="text-stone-700"><b>{oversold.length}</b> promised more than you have</span></div>}
       {openPos.length>0&&<div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-sky-500"/><span className="text-stone-700"><b>{openPos.length}</b> purchase order{openPos.length!==1?"s":""} to receive</span><button onClick={()=>goView("pos")} className="text-[11px] text-[#0086E0] hover:underline">receive →</button></div>}
       {expSoon.length>0&&<div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-amber-500"/><span className="text-stone-700"><b>{expSoon.length}</b> lot{expSoon.length!==1?"s":""} expiring within 30 days</span><button onClick={()=>goView("analytics")} className="text-[11px] text-[#0086E0] hover:underline">view →</button></div>}

@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="admin-refresh-checkout-ddp-v766";
+const BUILD_TAG="fix-landed-crash-v767";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -9499,7 +9499,7 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
               {q.dutiesAndTaxes>0&&<>
                 <div className="flex justify-between text-[12px] text-stone-500"><span title={(q.dutiesEstimated?"Estimated from the destination's standard duty + import VAT/GST rates (real duty is HS-code specific). ":"FedEx estimated duties & taxes. ")+(q.taxes?("Duty "+money(q.duties||0)+" · Tax "+money(q.taxes)):"")}>Est. duties &amp; tax{q.dutiesEstimated?" *":""}</span><span>{money(q.dutiesAndTaxes)}</span></div>
                 <div className="flex justify-between text-[13px] border-t border-[#0086E0]/30 pt-1 mt-1 font-semibold text-[#006FBF]"><span>Landed cost (DDP)</span><span>{money((+sell||0)+(+q.dutiesAndTaxes||0))}</span></div>
-                {q.dutiesEstimated&&<div className="text-[10px] text-stone-400 leading-snug mt-0.5">* Estimated from {receiver.country||"the destination"}'s standard duty &amp; import VAT/GST — real duty depends on the HS code. Add HS codes in Customs for a sharper figure.</div>}
+                {q.dutiesEstimated&&<div className="text-[10px] text-stone-400 leading-snug mt-0.5">* Estimated from the destination's standard duty &amp; import VAT/GST — real duty depends on the HS code. Add HS codes in Customs for a sharper figure.</div>}
               </>}
             </div>
             :(()=>{ /* per-box view: EVERY charge line lands on a box. Freight and % charges (fuel)

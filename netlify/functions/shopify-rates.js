@@ -156,6 +156,29 @@ function fallbackQuotes(fromZip, toZip, pieces) {
     return { key: k, label: r.label, cost, days: r.days };
   });
 }
+/* ── landed-cost (DDP) estimate at checkout: fold the destination's duty + import VAT/GST into the
+      rate so an international buyer prepays and owes nothing at the door. Mirrors quote.js's table.
+      Best-effort estimate (real duty is HS-specific); merchant enables it in Settings → Checkout. ── */
+const DEST_TAX = {
+  GB:{vat:20,duty:4,dm:180}, DE:{vat:19,duty:4,dm:0}, FR:{vat:20,duty:4,dm:0}, IT:{vat:22,duty:4,dm:0}, ES:{vat:21,duty:4,dm:0},
+  NL:{vat:21,duty:4,dm:0}, BE:{vat:21,duty:4,dm:0}, IE:{vat:23,duty:4,dm:0}, AT:{vat:20,duty:4,dm:0}, SE:{vat:25,duty:4,dm:0},
+  DK:{vat:25,duty:4,dm:0}, FI:{vat:24,duty:4,dm:0}, PT:{vat:23,duty:4,dm:0}, PL:{vat:23,duty:4,dm:0}, CZ:{vat:21,duty:4,dm:0},
+  GR:{vat:24,duty:4,dm:0}, RO:{vat:19,duty:4,dm:0}, HU:{vat:27,duty:4,dm:0}, NO:{vat:25,duty:4,dm:0}, CH:{vat:8.1,duty:3,dm:70},
+  CA:{vat:5,duty:0,dm:20}, MX:{vat:16,duty:5,dm:50}, AU:{vat:10,duty:5,dm:670}, NZ:{vat:15,duty:5,dm:700}, JP:{vat:10,duty:4,dm:130},
+  CN:{vat:13,duty:8,dm:8}, HK:{vat:0,duty:0,dm:99999}, SG:{vat:9,duty:0,dm:300}, KR:{vat:10,duty:8,dm:150}, IN:{vat:18,duty:10,dm:0},
+  AE:{vat:5,duty:5,dm:270}, SA:{vat:15,duty:5,dm:70}, IL:{vat:17,duty:5,dm:75}, ZA:{vat:15,duty:8,dm:0}, BR:{vat:17,duty:12,dm:0},
+  UA:{vat:20,duty:5,dm:170}, TR:{vat:20,duty:5,dm:0}, TH:{vat:7,duty:5,dm:40}, MY:{vat:8,duty:5,dm:120}, PH:{vat:12,duty:5,dm:200},
+  VN:{vat:10,duty:8,dm:45}, ID:{vat:11,duty:7.5,dm:3},
+};
+function estDutyTax(destISO, goodsValue, shipping) {
+  const t = DEST_TAX[String(destISO || "").toUpperCase()];
+  if (!t || !(goodsValue > 0)) return null;
+  const round = (n) => Math.round(n * 100) / 100;
+  if (t.dm && goodsValue <= t.dm) return { duties: 0, taxes: 0, total: 0 };   // under de-minimis → clears free
+  const duties = round(goodsValue * (t.duty / 100));
+  const taxes = round((goodsValue + duties + (+shipping || 0)) * (t.vat / 100));
+  return { duties, taxes, total: round(duties + taxes) };
+}
 function daysFor(label, fromZip, toZip) {
   const t = String(label || "").toLowerCase();
   if (/first overnight|priority overnight|standard overnight|overnight|next ?day/.test(t)) return [1, 1];
@@ -247,25 +270,33 @@ exports.handler = async (event) => {
       } catch { return q.cost; }
     };
     const names = (ck.names && typeof ck.names === "object") ? ck.names : {};
+    /* Landed cost (DDP) at checkout: for an international destination, fold the estimated duty +
+       import VAT/GST into the rate so the buyer prepays and owes nothing on delivery. Opt-in per
+       merchant (Settings → Checkout Rates → "Show landed cost"). Goods value = cart subtotal. */
+    const subtotal = items.reduce((a, it) => a + ((+it.price || 0) * (+it.quantity || 1)), 0) / 100;
+    const destCountry = String(destN.country || "US").toUpperCase();
+    const wantDDP = !!ck.ddp && destCountry !== "US" && subtotal > 0;
     let priced = quotes
       .filter((q) => services[q.key] && !blocked.has(E.canonSvc(q.label)))
       .map((q) => {
         const sell = sellFor(q);
-        const buyer = Math.round((sell * (1 + markup / 100) + handling) * 100) / 100;
+        let buyer = Math.round((sell * (1 + markup / 100) + handling) * 100) / 100;
+        let duty = 0;
+        if (wantDDP) { const e = estDutyTax(destCountry, subtotal, buyer); if (e) { duty = e.total; buyer = Math.round((buyer + duty) * 100) / 100; } }
         const dd = q.days || daysFor(q.label, fromZip, destN.zip);
         /* merchant's custom checkout name (Settings → Checkout Rates) — buyers see it instead
            of the FedEx name; tiers presentation overwrites the label with the tier name anyway */
         const disp = String(names[q.key] || "").trim();
-        return { ...q, label: disp || q.label, sell, buyer, dmin: dd[0], dmax: dd[1] };
+        return { ...q, label: disp || q.label, sell, buyer, duty, landed: wantDDP, dmin: dd[0], dmax: dd[1] };
       })
       .sort((a, b) => a.buyer - b.buyer);
     if (!priced.length) return J(200, { rates: [] });
 
-    // free shipping: cheapest ground-family option becomes $0 above the cart threshold
-    const subtotal = items.reduce((a, it) => a + ((+it.price || 0) * (+it.quantity || 1)), 0) / 100;
+    // free shipping: cheapest ground-family option becomes $0 above the cart threshold.
+    // With DDP on, "free" waives the SHIPPING only — any prepaid duty/tax still rides the rate.
     if (freeThreshold > 0 && subtotal >= freeThreshold) {
       const g = priced.find((q) => /ground|home/i.test(q.label)) || priced[0];
-      g.buyer = 0; g.free = true;
+      g.buyer = Math.round((+g.duty || 0) * 100) / 100; g.free = true;
     }
 
     // presentation: named services, or collapsed Express/Standard/Economy tiers
@@ -280,12 +311,16 @@ exports.handler = async (event) => {
     /* No delivery estimate is sent to buyers: this endpoint prices rates but does NOT pull FedEx's
        transit-times API, so any "arrives in N days" here would be a guess. Per policy we only ever
        surface FedEx-committed dates \u2014 so checkout shows the service + price only, never a guessed ETA. */
-    const rates = out.map((q) => ({
-      service_name: q.free ? "Free Shipping \u2014 " + q.label : q.label,
-      service_code: (q.key || q.label).replace(/\W+/g, "_").toUpperCase(),
-      total_price: String(Math.round(q.buyer * 100)),
-      currency: "USD",
-    }));
+    const ddpLabel = String(ck.ddpLabel || "Duties & Tax Prepaid").trim();
+    const rates = out.map((q) => {
+      const base = q.free ? "Free Shipping \u2014 " + q.label : q.label;
+      return {
+        service_name: q.landed ? base + " \u00b7 " + ddpLabel : base,
+        service_code: (q.key || q.label).replace(/\W+/g, "_").toUpperCase(),
+        total_price: String(Math.round(q.buyer * 100)),
+        currency: "USD",
+      };
+    });
 
     console.log(`carrier-rates uid=${uid} items=${items.length} pieces=${pieces.length} source=${source} rates=${rates.length}`);
     return J(200, { rates });

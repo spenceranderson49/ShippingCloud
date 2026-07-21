@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="isolation-source-clean-v765";
+const BUILD_TAG="admin-refresh-checkout-ddp-v766";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -5750,11 +5750,35 @@ function UsersAdmin({users,setUsers,clients,setClients,currentUser,signupRequest
   };
   const toggle=(id)=>setUsers(us=>us.map(u=>u.id===id?{...u,status:u.status==="active"?"inactive":"active"}:u));
   const del=(id)=>setUsers(us=>us.filter(u=>u.id!==id));
+  /* Force-pull the authoritative login list from the server. The admin view can otherwise lag a
+     signup that landed on another site/device until the next background sync — this makes it instant,
+     and confirms whether a "missing" login is a stale cache (it appears) or a separate database (it
+     doesn't). Updates the sync baseline so the pull isn't immediately re-overwritten. */
+  const [refreshing,setRefreshing]=useState(false);
+  const [refMsg,setRefMsg]=useState("");
+  const refreshFromServer=async()=>{
+    if(refreshing)return; setRefreshing(true); setRefMsg("");
+    const before=users.length;
+    const r=await cloudCall({action:"getAll",token:CLOUD.token},45000);
+    setRefreshing(false);
+    if(r&&r.ok&&r.stores&&Array.isArray(r.stores.users)){
+      const fresh=r.stores.users;
+      try{ CLOUD.baseline=CLOUD.baseline||{}; CLOUD.baseline.users=JSON.stringify(fresh); }catch(e){}
+      setUsers(fresh);
+      const added=fresh.length-before;
+      setRefMsg("Pulled "+fresh.length+" login"+(fresh.length===1?"":"s")+" from the server"+(added>0?(" — "+added+" new"):added<0?(" — "+(-added)+" removed"):" (already up to date)")+".");
+      setTimeout(()=>setRefMsg(""),7000);
+    } else { setRefMsg("Couldn't reach the server — try again in a moment."); setTimeout(()=>setRefMsg(""),7000); }
+  };
   return (<div className="space-y-3">
+    <div className="flex items-start justify-between gap-3">
     <div className="text-sm text-stone-500 space-y-1">
       <p>Create and manage every login on the platform. <b>Customer</b> logins see only their own data and the tabs you give them; <b>admin</b> logins run this portal.</p>
       <p className="text-xs text-stone-400">Per-login: <b>Log in as</b> opens the app exactly as that person sees it (sign out to come back) · <b>Active/Deactivated</b> controls whether they can sign in · everything else (rates, company admin, tabs &amp; logo, passwords, 2FA, delete) lives under the <b>···</b> menu on each row.</p>
     </div>
+      <button onClick={refreshFromServer} disabled={refreshing} title="Pull the newest login list straight from the server — use this if a new signup isn't showing yet" className="shrink-0 text-xs bg-white border border-stone-300 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-50 disabled:opacity-50 flex items-center gap-1.5">{refreshing?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<RotateCcw className="w-3.5 h-3.5"/>}Refresh from server</button>
+    </div>
+    {refMsg&&<div className="text-[12px] text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-1.5">{refMsg}</div>}
     {(()=>{
       const clientIds=new Set(clients.map(c=>c.id));
       const orphans=users.filter(u=>u.role==="customer"&&u.clientId&&!clientIds.has(u.clientId));
@@ -14825,6 +14849,13 @@ function CheckoutRates({settings,setSettings,client,uid}){
             <Field label="Free shipping over ($)"><Input type="number" value={ck.freeThreshold} onChange={e=>setCk({freeThreshold:e.target.value})}/></Field>
           </div>
           <p className="text-[11px] text-stone-500">Buyer markup rides on top of <b>your account rate</b> — the price your rate profile sells the label at — not the raw carrier cost. Set it to 0 and buyers pay exactly your rate.</p>
+          <div className="mt-3 border-t border-stone-100 pt-3">
+            <label className="flex items-start gap-2 cursor-pointer">
+              <button type="button" onClick={()=>setCk({ddp:!ck.ddp})} className="mt-0.5 shrink-0"><span className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${ck.ddp?"bg-[#0086E0] justify-end":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></span></button>
+              <span className="text-sm text-stone-700"><b>Show landed cost on international checkout (DDP)</b><br/><span className="text-[12px] text-stone-500">For non-US destinations, fold the estimated duty + import VAT/GST into the shipping rate so the buyer <b>prepays and owes nothing at delivery</b> — how you beat DHL / Global-e. Best-effort estimate from the destination's standard rates.</span></span>
+            </label>
+            {ck.ddp&&<div className="mt-2 pl-11 max-w-xs"><Field label="Label buyers see on prepaid rates"><Input value={ck.ddpLabel||""} onChange={e=>setCk({ddpLabel:e.target.value})} placeholder="Duties & Tax Prepaid"/></Field></div>}
+          </div>
         </Panel>
         <Panel title="Services offered at checkout">
           <div className="space-y-1">{CHECKOUT_SERVICES.map(k=>(

@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="receivables-v750";
+const BUILD_TAG="cust360-v751";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3726,6 +3726,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
   const _rd=useDraft(storeRules,commitRules,DEFAULT_RATE_RULES);
   const rules=_rd.draft; const setRules=_rd.setDraft;
   const [tab,setTab]=useState("profile");
+  const [noteForm,setNoteForm]=useState({text:"",category:"General",followUp:""});
   const [lf,setLf]=useState({name:"",email:"",password:""});
   const [flash,setFlash]=useState("");
   const c=clients.find(x=>x.id===cid);
@@ -4130,10 +4131,47 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       </div>);
     })()}
 
-    {tab==="notes"&&<div className="space-y-2">
-      <Field label="Internal notes (admins only)"><textarea value={c.notes||""} onChange={e=>upClient({notes:e.target.value})} placeholder="Anything worth remembering — contacts, quirks, promises, follow-ups…" className="w-full border border-stone-300 rounded-lg p-2.5 text-sm min-h-[160px]"/></Field>
-      <div className="flex justify-end"><button onClick={async()=>{if(!await uiConfirm('Delete customer "'+c.name+'"? Logins stay but lose the link.'))return;if(CLOUD.mode==="cloud")cloudCall({action:"deleteCustomer",token:CLOUD.token,clientId:cid});setUsers(us=>us.map(x=>x.clientId===cid?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==cid));onClose&&onClose();}} className="text-[11px] text-rose-500 hover:text-rose-600">Delete Customer</button></div>
-    </div>}
+    {tab==="notes"&&(()=>{
+      const cats=["General","Credit","Collections","Sales","Service","Follow-up"];
+      const log=Array.isArray(c.noteLog)?c.noteLog:[];
+      const addNote=()=>{ if(!noteForm.text.trim())return; const entry={id:"n"+Date.now(),date:new Date().toISOString().slice(0,16).replace("T"," "),category:noteForm.category,text:noteForm.text.trim(),followUp:noteForm.followUp||"",agent:(currentUser&&currentUser.email)||"admin"}; upClient({noteLog:[entry,...log]}); setNoteForm({text:"",category:"General",followUp:""}); };
+      const delNote=(id)=>upClient({noteLog:log.filter(n=>n.id!==id)});
+      const catTone={Credit:"blue",Collections:"rose",Sales:"green",Service:"amber","Follow-up":"stone",General:"stone"};
+      return (<div className="space-y-4">
+        {/* Credit & invoicing — the ELEMS credit fields, on the customer record */}
+        <div className="rounded-xl border border-stone-200 bg-stone-50/40 p-4">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-2.5 flex items-center gap-1"><Wallet className="w-3.5 h-3.5"/>Credit &amp; invoicing</div>
+          <div className="grid sm:grid-cols-3 gap-3">
+            <Field label="Credit limit ($)"><Input value={c.creditLimit??""} onChange={e=>upClient({creditLimit:e.target.value===""?"":+String(e.target.value).replace(/[^0-9.]/g,"")})} placeholder="25000"/></Field>
+            <Field label="Terms (days)"><Input value={c.terms??""} onChange={e=>upClient({terms:e.target.value===""?"":+String(e.target.value).replace(/[^0-9]/g,"")})} placeholder="30"/></Field>
+            <Field label="Account status"><Select value={c.acctStatus||"Active"} onChange={e=>upClient({acctStatus:e.target.value})}><option>Active</option><option>Hold</option><option>COD</option><option>Frozen</option><option>Closed</option></Select></Field>
+            <Field label="DUNS #"><Input value={c.duns||""} onChange={e=>upClient({duns:e.target.value})} placeholder="119508595"/></Field>
+            <Field label="Paydex"><Input value={c.paydex||""} onChange={e=>upClient({paydex:e.target.value})} placeholder="77"/></Field>
+            <Field label="Sales rep"><Input value={c.salesRep||""} onChange={e=>upClient({salesRep:e.target.value})} placeholder="sanderson"/></Field>
+          </div>
+        </div>
+        {/* Notes log */}
+        <div className="rounded-xl border border-stone-200 p-4">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-2.5 flex items-center gap-1"><FileText className="w-3.5 h-3.5"/>Notes</div>
+          <div className="flex flex-wrap items-end gap-2 mb-3">
+            <div className="flex-1 min-w-[220px]"><textarea value={noteForm.text} onChange={e=>setNoteForm(f=>({...f,text:e.target.value}))} placeholder="Add a note — credit review, a call, a promise to pay…" className="w-full border border-stone-300 rounded-lg p-2.5 text-sm min-h-[60px]"/></div>
+            <div className="flex flex-col gap-1.5">
+              <select value={noteForm.category} onChange={e=>setNoteForm(f=>({...f,category:e.target.value}))} className="border border-stone-300 rounded-lg px-2 py-1.5 text-sm">{cats.map(x=><option key={x}>{x}</option>)}</select>
+              <input type="date" value={noteForm.followUp} onChange={e=>setNoteForm(f=>({...f,followUp:e.target.value}))} title="Follow-up date (optional)" className="border border-stone-300 rounded-lg px-2 py-1.5 text-sm"/>
+              <button onClick={addNote} className="bg-[#0086E0] text-white rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-[#006db8]">Add note</button>
+            </div>
+          </div>
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {log.length===0&&<div className="text-sm text-stone-400 py-3 text-center">No notes yet.</div>}
+            {log.map(n=>(<div key={n.id} className="border border-stone-200 rounded-lg px-3 py-2 text-sm group">
+              <div className="flex items-center gap-2 mb-0.5"><Badge tone={catTone[n.category]||"stone"}>{n.category}</Badge><span className="text-[11px] text-stone-400">{n.date} · {n.agent}</span>{n.followUp&&<span className="text-[11px] text-amber-600">· follow up {n.followUp}</span>}<span className="flex-1"/><button onClick={()=>delNote(n.id)} className="text-stone-300 hover:text-rose-500 opacity-0 group-hover:opacity-100"><Trash2 className="w-3.5 h-3.5"/></button></div>
+              <div className="text-stone-700 whitespace-pre-wrap">{n.text}</div>
+            </div>))}
+          </div>
+        </div>
+        <div className="flex justify-end"><button onClick={async()=>{if(!await uiConfirm('Delete customer "'+c.name+'"? Logins stay but lose the link.'))return;if(CLOUD.mode==="cloud")cloudCall({action:"deleteCustomer",token:CLOUD.token,clientId:cid});setUsers(us=>us.map(x=>x.clientId===cid?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==cid));onClose&&onClose();}} className="text-[11px] text-rose-500 hover:text-rose-600">Delete Customer</button></div>
+      </div>);
+    })()}
   </div>);
 }
 

@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="command-center-v755";
+const BUILD_TAG="rate-audit-notes-v756";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -3743,6 +3743,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
   const rules=_rd.draft; const setRules=_rd.setDraft;
   const [tab,setTab]=useState("profile");
   const [noteForm,setNoteForm]=useState({text:"",category:"General",followUp:""});
+  const [openNote,setOpenNote]=useState(null);   // expanded rate-change snapshot in the Notes log
   const [lf,setLf]=useState({name:"",email:"",password:""});
   const [flash,setFlash]=useState("");
   const c=clients.find(x=>x.id===cid);
@@ -3760,7 +3761,18 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
   const mkDirty=!!c&&(String(mk.markup??"")!==String(c.markup??"")||String(mk.markupMin??"")!==String(c.markupMin??""));
   const cDraft=c?{...c,markup:mk.markup,markupMin:mk.markupMin}:c;
   const ratesDirty=_rd.dirty||mkDirty;
-  const saveRates=()=>{ _rd.save(); if(mkDirty)upClient({markup:mk.markup===""?"":+mk.markup,markupMin:mk.markupMin===""?"":+mk.markupMin}); };
+  const saveRates=()=>{
+    _rd.save();
+    /* AUDIT TRAIL: log every rate save as a "Rate change" note with a full snapshot of exactly what
+       was in effect — so you can see who changed rates and to what, and recover a prior version if a
+       save ever goes wrong. Directly addresses the rate-wipe worry. */
+    const snap=(()=>{ try{ const r=rules||{}; const pid=(r.assign&&r.assign[cid])||"default"; const p=(r.profiles||[]).find(x=>x&&x.id===pid)||null; return {profileId:pid,profileName:(p&&p.name)||"Default",services:(p&&p.services)||{},surcharges:(p&&p.surcharges)||{},baseCosts:r.baseCosts||{},markup:mk.markup,markupMin:mk.markupMin,dimDivisors:r.dimDivisors||null}; }catch(e){ return {}; } })();
+    const nSvc=Object.keys(snap.services||{}).length, nSur=Object.keys(snap.surcharges||{}).length, nBase=Object.keys(snap.baseCosts||{}).length;
+    const note={id:"rc"+Date.now(),date:new Date().toISOString().slice(0,16).replace("T"," "),category:"Rate change",agent:(currentUser&&currentUser.email)||"admin",text:"Rates updated — profile “"+snap.profileName+"” · "+nSvc+" service"+(nSvc===1?"":"s")+", "+nSur+" surcharge"+(nSur===1?"":"s")+", "+nBase+" cost table"+(nBase===1?"":"s")+((snap.markup!==""&&snap.markup!=null)?" · markup "+snap.markup+"%":""),snapshot:snap};
+    const patch={noteLog:[note,...(Array.isArray(c.noteLog)?c.noteLog:[])]};
+    if(mkDirty){ patch.markup=mk.markup===""?"":+mk.markup; patch.markupMin=mk.markupMin===""?"":+mk.markupMin; }
+    upClient(patch);
+  };
   const undoRates=()=>{ _rd.undo(); setMk({markup:c&&c.markup!=null?c.markup:"",markupMin:c&&c.markupMin!=null?c.markupMin:""}); };
   /* Auto-fork: editing rates while this customer sits on the shared Default profile silently
      creates their own dedicated copy first and applies the edit there — so per-customer edits
@@ -4182,6 +4194,16 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
             {log.map(n=>(<div key={n.id} className="border border-stone-200 rounded-lg px-3 py-2 text-sm group">
               <div className="flex items-center gap-2 mb-0.5"><Badge tone={catTone[n.category]||"stone"}>{n.category}</Badge><span className="text-[11px] text-stone-400">{n.date} · {n.agent}</span>{n.followUp&&<span className="text-[11px] text-amber-600">· follow up {n.followUp}</span>}<span className="flex-1"/><button onClick={()=>delNote(n.id)} className="text-stone-300 hover:text-rose-500 opacity-0 group-hover:opacity-100"><Trash2 className="w-3.5 h-3.5"/></button></div>
               <div className="text-stone-700 whitespace-pre-wrap">{n.text}</div>
+              {n.snapshot&&(()=>{ const s=n.snapshot; const isO=openNote===n.id; const restore=async()=>{ if(!await uiConfirm("Restore this customer's rate profile “"+(s.profileName||"")+"” to exactly what it was at "+n.date+"? This overwrites the current profile services & surcharges for this customer. (Your current version stays in the note history.)"))return; upRules({profiles:(rules.profiles||[]).map(p=>p&&p.id===s.profileId?{...p,services:s.services||{},surcharges:s.surcharges||{}}:p)}); setFlash("Restored the rate snapshot from "+n.date+" — remember to Save rates to make it live."); };
+                return (<div className="mt-1.5">
+                  <button onClick={()=>setOpenNote(isO?null:n.id)} className="text-[11px] text-[#0086E0] hover:underline flex items-center gap-1"><ChevronRight className={`w-3.5 h-3.5 transition ${isO?"rotate-90":""}`}/>{isO?"Hide":"View"} exactly what was entered</button>
+                  {isO&&<div className="mt-1.5 border border-stone-200 rounded-lg bg-stone-50/60 p-2.5 text-[12px] space-y-2">
+                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-stone-600"><span>Profile: <b className="text-stone-800">{s.profileName}</b></span>{s.markup!==""&&s.markup!=null&&<span>Markup: <b className="text-stone-800">{s.markup}%</b></span>}{s.markupMin!==""&&s.markupMin!=null&&<span>Markup min: <b className="text-stone-800">${s.markupMin}</b></span>}</div>
+                    {Object.keys(s.services||{}).length>0&&<div><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-0.5">Services / discounts</div><div className="font-mono text-[11px] text-stone-600 max-h-40 overflow-auto whitespace-pre-wrap">{JSON.stringify(s.services,null,1)}</div></div>}
+                    {Object.keys(s.surcharges||{}).length>0&&<div><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-0.5">Surcharges</div><div className="font-mono text-[11px] text-stone-600 max-h-40 overflow-auto whitespace-pre-wrap">{JSON.stringify(s.surcharges,null,1)}</div></div>}
+                    <button onClick={restore} className="text-[11px] bg-white border border-[#0086E0]/40 text-[#006FBF] rounded px-2 py-1 font-medium hover:bg-[#E6F4FF] inline-flex items-center gap-1"><RotateCcw className="w-3 h-3"/>Restore this version to the editor</button>
+                  </div>}
+                </div>); })()}
             </div>))}
           </div>
         </div>

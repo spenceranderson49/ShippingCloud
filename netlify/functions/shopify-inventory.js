@@ -9,6 +9,7 @@
 const J = (o) => ({ statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify(o) });
 const S = (v) => (v == null ? "" : String(v));
 const API = "2024-07";
+const { ensureFresh } = require("./shopify-token");
 
 exports.handler = async (event) => {
   try {
@@ -16,15 +17,19 @@ exports.handler = async (event) => {
     if (event.httpMethod !== "POST") return J({ ok: false, error: "Use POST" });
     let b = {}; try { b = JSON.parse(event.body || "{}"); } catch { return J({ ok: false, error: "Bad JSON" }); }
     const shop = S(b.shop).toLowerCase();
-    const token = S(b.token);
-    if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop) || !token) return J({ ok: false, error: "Connect a Shopify store first." });
+    if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop) || (!S(b.token) && !S(b.refreshToken))) return J({ ok: false, error: "Connect a Shopify store first." });
+    /* Expiring tokens: refresh if near expiry, return the rotated token to the SPA as `newAuth`. */
+    const fresh = await ensureFresh({ shop, token: b.token, refreshToken: b.refreshToken, tokenExp: b.tokenExp });
+    const token = fresh.token;
+    const RA = (o) => J(fresh.refreshed ? { ...o, newAuth: { token: fresh.token, refreshToken: fresh.refreshToken, tokenExp: fresh.tokenExp } } : o);
+    if (!token) return RA({ ok: false, error: "Shopify session expired — reconnect the store.", needsReconnect: true });
     const updates = Array.isArray(b.updates) ? b.updates.slice(0, 500) : [];
-    if (!updates.length) return J({ ok: true, synced: 0, skipped: 0 });
+    if (!updates.length) return RA({ ok: true, synced: 0, skipped: 0 });
     const H = { "X-Shopify-Access-Token": token, "Content-Type": "application/json" };
 
     // 1) primary (or first active) location
     const lr = await fetch(`https://${shop}/admin/api/${API}/locations.json`, { headers: H });
-    if (lr.status === 403) return J({ ok: false, error: "This store needs to reconnect to grant inventory access (read_inventory / write_inventory).", needsReconnect: true });
+    if (lr.status === 403) return RA({ ok: false, error: "This store needs to reconnect to grant inventory access (read_inventory / write_inventory).", needsReconnect: true });
     const ld = await lr.json().catch(() => ({}));
     if (!lr.ok) return J({ ok: false, error: "Shopify locations HTTP " + lr.status });
     const locs = ld.locations || [];
@@ -52,6 +57,6 @@ exports.handler = async (event) => {
       const r = await fetch(`https://${shop}/admin/api/${API}/inventory_levels/set.json`, { method: "POST", headers: H, body: JSON.stringify({ location_id: loc.id, inventory_item_id: invItem, available }) });
       if (r.ok) synced++; else { skipped++; if (notes.length < 8) notes.push(sku + ": HTTP " + r.status); }
     }
-    return J({ ok: true, synced, skipped, location: loc.name || "", notes: notes.slice(0, 8) });
+    return RA({ ok: true, synced, skipped, location: loc.name || "", notes: notes.slice(0, 8) });
   } catch (e) { return J({ ok: false, error: "Function error: " + (e && e.message ? e.message : String(e)) }); }
 };

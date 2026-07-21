@@ -10,6 +10,7 @@ const J = (o) => ({ statusCode: 200, headers: { "Content-Type": "application/jso
 const S = (v) => (v == null ? "" : String(v));
 const API = "2026-01";
 const numId = (gid) => S(gid).split("/").pop();
+const { ensureFresh } = require("./shopify-token");
 
 async function gql(shop, token, query, variables) {
   let r, text, body = null;
@@ -33,11 +34,15 @@ exports.handler = async (event) => {
     let body = {}; try { body = JSON.parse(event.body || "{}"); } catch { return J({ ok: false, error: "Bad JSON body" }); }
 
     const shop = S(body.shop).toLowerCase();
-    const token = S(body.token);
     const orderId = S(body.shopifyId || body.orderId).replace(/[^0-9]/g, "");
     const tracking = S(body.tracking);
-    if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop) || !token) return J({ ok: false, error: "Missing shop/token." });
+    if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shop) || (!S(body.token) && !S(body.refreshToken))) return J({ ok: false, error: "Missing shop/token." });
     if (!orderId) return J({ ok: false, error: "Missing Shopify order id." });
+    /* Expiring tokens: refresh if near expiry and return the rotated token to the SPA as `newAuth`. */
+    const fresh = await ensureFresh({ shop, token: body.token, refreshToken: body.refreshToken, tokenExp: body.tokenExp });
+    const token = fresh.token;
+    const RA = (o) => J(fresh.refreshed ? { ...o, newAuth: { token: fresh.token, refreshToken: fresh.refreshToken, tokenExp: fresh.tokenExp } } : o);
+    if (!token) return RA({ ok: false, error: "Shopify session expired — reconnect the store.", needsReconnect: true });
 
     /* ── updateOrder: push edited order info (shipping address / email / note) BACK to Shopify ── */
     if (body.action === "updateOrder") {
@@ -66,7 +71,7 @@ exports.handler = async (event) => {
       if (ur.status === 401) return J({ ok: false, error: "Shopify rejected the token (401) — reconnect the store." });
       const upay = ((ur.data || {}).orderUpdate) || {};
       if (!ur.ok || (upay.userErrors || []).length) return J({ ok: false, error: "Order update failed: " + JSON.stringify((upay.userErrors && upay.userErrors.length ? upay.userErrors : ur.errors) || {}).slice(0, 250) });
-      return J({ ok: true, updated: true });
+      return RA({ ok: true, updated: true });
     }
 
     // 1) open fulfillment orders for this order
@@ -120,7 +125,7 @@ exports.handler = async (event) => {
         }
         done++;
       }
-      return J({ ok: true, fulfillmentId: numId(targets[targets.length - 1].id), status: "tracking_updated", updated: true });
+      return RA({ ok: true, fulfillmentId: numId(targets[targets.length - 1].id), status: "tracking_updated", updated: true });
     }
 
     // 2) create the fulfillment with tracking (all line items on each open FO)
@@ -138,6 +143,6 @@ exports.handler = async (event) => {
     if ((pay.userErrors || []).length) return J({ ok: false, error: "Fulfillment failed: " + JSON.stringify(pay.userErrors).slice(0, 250) });
 
     const f = pay.fulfillment || {};
-    return J({ ok: true, fulfillmentId: f.id ? numId(f.id) : null, status: S(f.status || "success").toLowerCase() });
+    return RA({ ok: true, fulfillmentId: f.id ? numId(f.id) : null, status: S(f.status || "success").toLowerCase() });
   } catch (e) { return J({ ok: false, error: "Function error: " + (e && e.message ? e.message : String(e)) }); }
 };

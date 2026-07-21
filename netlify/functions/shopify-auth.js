@@ -73,18 +73,29 @@ exports.handler = async (event) => {
   for (let i = 0; i <= 6; i++) { if (q.state === sign(shop + "|" + (now - i), secret)) { stateOk = true; break; } }
   // (stateOk is informational; HMAC is the gate — do not hard-fail on state)
 
-  let token;
+  let token, refreshToken = "", expiresIn = 0;
   try {
+    /* expiring=1 → Shopify issues an EXPIRING offline token (~1h) plus a 90-day refresh token.
+       Non-expiring tokens are rejected on the Admin API for public apps, so we must request these.
+       The endpoint wants form-urlencoded for the `expiring` flag. */
     const r = await fetch(`https://${shop}/admin/oauth/access_token`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ client_id: key, client_secret: secret, code: q.code }),
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+      body: new URLSearchParams({ client_id: key, client_secret: secret, code: q.code, expiring: "1" }),
     });
     const d = await r.json();
     token = d.access_token;
+    refreshToken = d.refresh_token || "";
+    expiresIn = Number(d.expires_in) || 0;
     if (!token) return html("Couldn't get an access token from Shopify: " + JSON.stringify(d).slice(0, 200));
   } catch (e) { return html("Token exchange failed: " + (e && e.message)); }
 
-  // Hand the shop + token back to the SPA via the URL fragment (not sent to any server).
-  const back = `${appUrl}/?shopify_connected=1#shop=${encodeURIComponent(shop)}&token=${encodeURIComponent(token)}`;
+  // Hand the shop + token (and, for expiring tokens, the refresh token + expiry) back to the SPA via
+  // the URL fragment (fragments are never sent to a server / not logged).
+  const exp = expiresIn ? Date.now() + expiresIn * 1000 : 0;
+  const frag = `shop=${encodeURIComponent(shop)}&token=${encodeURIComponent(token)}`
+    + (refreshToken ? `&refresh=${encodeURIComponent(refreshToken)}` : "")
+    + (exp ? `&exp=${exp}` : "");
+  const back = `${appUrl}/?shopify_connected=1#${frag}`;
   return { statusCode: 302, headers: { Location: back }, body: "" };
 };

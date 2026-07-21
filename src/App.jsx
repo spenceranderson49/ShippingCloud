@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="signup-resilience-v761";
+const BUILD_TAG="shopify-expiring-tokens-v762";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -1361,6 +1361,10 @@ async function shopifyCall(endpoint,payload,timeout=20000){
     const r=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload),signal:ctrl.signal});
     clearTimeout(t);
     let data=null;try{data=await r.json();}catch(e){data={ok:false,error:"Bad response"};}
+    /* Expiring Shopify tokens: when a function refreshed the token server-side it returns the rotated
+       {token,refreshToken,tokenExp} as newAuth. Broadcast it so the stored connection stays current —
+       a single listener in the app persists it into settings.shopifyConns (see below). */
+    try{ if(data&&data.newAuth&&payload&&payload.shop){ window.dispatchEvent(new CustomEvent("sc-shopify-auth",{detail:{shop:payload.shop,auth:data.newAuth}})); } }catch(_){ }
     return data||{ok:false,error:"Empty response"};
   }catch(e){clearTimeout(t);return {ok:false,error:(e&&e.message)||"Network error"};}
 }
@@ -1369,8 +1373,12 @@ async function shopifyCall(endpoint,payload,timeout=20000){
 const shopifyConns=(s)=>{ if(!s)return []; if(Array.isArray(s.shopifyConns))return s.shopifyConns.filter(c=>c&&c.shop&&c.token); if(s.shopifyConn&&s.shopifyConn.shop&&s.shopifyConn.token)return [s.shopifyConn]; return []; };
 const shopifyConnFor=(s,shop)=>{ const l=shopifyConns(s); return (shop&&l.find(c=>c.shop===shop))||l[0]||null; };
 const shopifyConnected=(s)=>shopifyConns(s).length>0;
-async function shopifySyncOrders(conn){ return shopifyCall(SHOPIFY_SYNC,{shop:conn.shop,token:conn.token}); }
-async function shopifyPushTracking(conn,o){ return shopifyCall(SHOPIFY_FULFILL,{shop:conn.shop,token:conn.token,shopifyId:o.shopifyId,tracking:o.tracking,trackingUrl:o.trackingUrl||(o.tracking?`https://www.fedex.com/fedextrack/?trknbr=${o.tracking}`:""),carrier:o.carrier||"FedEx",notifyCustomer:o.notifyCustomer,prevTracking:o.prevTracking}); }
+/* Every Shopify call carries the refresh token + expiry so the function can refresh an expiring
+   token server-side (the browser can't — it needs the client secret). Spread via _auth() so no
+   call site forgets it. */
+const _shopAuth=(conn)=>({shop:conn.shop,token:conn.token,refreshToken:conn.refreshToken||undefined,tokenExp:conn.tokenExp||undefined});
+async function shopifySyncOrders(conn){ return shopifyCall(SHOPIFY_SYNC,{..._shopAuth(conn)}); }
+async function shopifyPushTracking(conn,o){ return shopifyCall(SHOPIFY_FULFILL,{..._shopAuth(conn),shopifyId:o.shopifyId,tracking:o.tracking,trackingUrl:o.trackingUrl||(o.tracking?`https://www.fedex.com/fedextrack/?trknbr=${o.tracking}`:""),carrier:o.carrier||"FedEx",notifyCustomer:o.notifyCustomer,prevTracking:o.prevTracking}); }
 const fn=(name)=>"/.netlify/functions/"+name;
 async function connectorCall(endpoint,payload){ return shopifyCall(endpoint,payload); }
 // OAuth returns handed back in the URL fragment by the *-auth functions
@@ -7517,7 +7525,10 @@ function AppInner(){
       if(search.indexOf("shopify_connected")>-1||h.indexOf("shop=")>-1){
         const p=new URLSearchParams(h.replace(/^#/,""));
         const shop=p.get("shop"),token=p.get("token");
-        if(shop&&token){ setSettings(s=>{ const others=shopifyConns(s).filter(c=>c.shop!==shop); const n={...s,shopifyConns:[...others,{shop,token,connectedAt:new Date().toISOString()}]}; delete n.shopifyConn; return n; }); }
+        /* Expiring tokens: Shopify now returns an expiring access token + a refresh token. Store both
+           (plus the expiry) so the sync functions can refresh server-side before the 1-hour token dies. */
+        const refreshToken=p.get("refresh")||"",tokenExp=+p.get("exp")||0;
+        if(shop&&token){ setSettings(s=>{ const others=shopifyConns(s).filter(c=>c.shop!==shop); const n={...s,shopifyConns:[...others,{shop,token,refreshToken,tokenExp,connectedAt:new Date().toISOString()}]}; delete n.shopifyConn; return n; }); }
         const clean=window.location.origin+window.location.pathname;
         window.history.replaceState({},document.title,clean);
         return;
@@ -7535,6 +7546,17 @@ function AppInner(){
         }
       }
     }catch(e){}
+  },[]);
+  /* Persist a rotated Shopify token. When a sync function refreshes an expiring token server-side it
+     returns the new {token,refreshToken,tokenExp}; shopifyCall broadcasts it here so the stored
+     connection updates in place — the next call uses the fresh token and the 90-day refresh chain
+     continues without the merchant ever reconnecting. */
+  useEffect(()=>{
+    const onAuth=(e)=>{ const d=e&&e.detail; if(!d||!d.shop||!d.auth||!d.auth.token)return;
+      setSettings(s=>{ const conns=shopifyConns(s); if(!conns.some(c=>c.shop===d.shop))return s;
+        return {...s,shopifyConns:conns.map(c=>c.shop===d.shop?{...c,token:d.auth.token,refreshToken:d.auth.refreshToken||c.refreshToken,tokenExp:d.auth.tokenExp||c.tokenExp}:c)}; }); };
+    window.addEventListener("sc-shopify-auth",onAuth);
+    return ()=>window.removeEventListener("sc-shopify-auth",onAuth);
   },[]);
   useEffect(()=>{ const pn=(settings&&settings.printNode)||{}; const cus=(settings&&settings.custom)||{}; const dpc=pn.docPrinters||{};
     /* docPrinters routes each document type to its own PrintNode printer. packSlip keeps the
@@ -7635,7 +7657,7 @@ function AppInner(){
         const lines=Object.keys(by0).map(sku=>({sku,qty:by0[sku]}));
         if(lines.length) cloudCall({action:"invShip",token:CLOUD.token,lines,ref:rec.tracking||(ord&&(ord.name||ord.id))||""}).then(res=>{
           /* Auto-sync the decremented levels to Shopify so it can't oversell — opt-in, best-effort. */
-          try{ if(settings.autoShopifyStock&&res&&res.ok&&Array.isArray(res.items)&&res.items.length){ const conns=shopifyConns(settings); const updates=res.items.map(it=>({sku:it.sku,available:+it.onHand||0})); conns.forEach(c=>shopifyCall(SHOPIFY_INVENTORY,{shop:c.shop,token:c.token,updates})); } }catch(e){}
+          try{ if(settings.autoShopifyStock&&res&&res.ok&&Array.isArray(res.items)&&res.items.length){ const conns=shopifyConns(settings); const updates=res.items.map(it=>({sku:it.sku,available:+it.onHand||0})); conns.forEach(c=>shopifyCall(SHOPIFY_INVENTORY,{..._shopAuth(c),updates})); } }catch(e){}
           /* Low-stock alert: if this shipment pushed an item to/below its reorder point, log it so
              you find out the moment it happens (before=after+shipped qty → only alerts on the crossing). */
           try{ if(res&&res.ok&&Array.isArray(res.items)&&logEmail){ const qBy={}; lines.forEach(l=>{qBy[String(l.sku).toLowerCase()]=l.qty;}); const crossed=res.items.filter(it=>{ const ro=+it.reorder||0; if(ro<=0)return false; const after=+it.onHand||0; const before=after+(qBy[String(it.sku).toLowerCase()]||0); return before>ro&&after<=ro; }); if(crossed.length)logEmail({to:"system",subject:"Low stock — reorder: "+crossed.slice(0,10).map(it=>(it.name||it.sku)+" ("+(+it.onHand||0)+" left)").join("; "),type:"System"}); } }catch(e){}
@@ -8378,29 +8400,6 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     {key:"fedex_prio",carrier:"FedEx",label:"FedEx Priority Overnight®",cost:null},
   ];
   const localQuotes=()=>quoteRates(shipment).filter(q=>q.carrier==="FedEx");
-  /* FedEx Location Search — find drop-off points (near you) or hold-for-pickup locations (near the
-     recipient). Powered by netlify/functions/fedexlocations.js. */
-  const [locOpen,setLocOpen]=useState(false);
-  const [locMode,setLocMode]=useState("dropoff");   // "dropoff" = near sender · "hold" = near recipient (hold for pickup)
-  const [locBusy,setLocBusy]=useState(false);
-  const [locErr,setLocErr]=useState("");
-  const [locResults,setLocResults]=useState(null);
-  const runLocSearch=async(mode)=>{
-    const m=mode||locMode;
-    const near=m==="hold"?receiver:sender;
-    const zip=String((m==="hold"?receiver.zip:(sender.zip||originZip))||"").trim();
-    if(!zip&&!near.city){setLocErr("Add a "+(m==="hold"?"recipient":"sender")+" ZIP or city first.");setLocResults(null);return;}
-    setLocBusy(true);setLocErr("");setLocResults(null);
-    try{
-      const r=await fetch("/.netlify/functions/fedexlocations",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-        token:CLOUD.token||undefined,postalCode:zip,country:near.country||"US",city:near.city||"",state:near.state||"",address1:near.address1||"",radius:25,max:12,
-        ...(m==="hold"?{holdService:"FEDEX_GROUND"}:{})})});
-      const d=await r.json();
-      if(d&&d.ok){setLocResults(d.locations||[]);if(!(d.locations||[]).length)setLocErr("No FedEx locations found within 25 miles — try a nearby ZIP.");}
-      else setLocErr((d&&d.error)||"Couldn't search FedEx locations.");
-    }catch(e){setLocErr("Network error — try again.");}
-    setLocBusy(false);
-  };
   /* Quick quote pre-fill: whatever is already typed here (boxes, ZIPs, signature, insurance,
      Saturday) rides along when Quick quote opens. Published on content change only — the ts
      lets Quick quote tell "Ship was edited since my last pre-fill" from "nothing new". */
@@ -8906,46 +8905,6 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             )}
           </div>
           <div className="w-full space-y-3">
-            {/* ── FedEx location finder: drop-off points near the sender, or hold-for-pickup
-                   locations near the recipient (FedEx Location Search API). ── */}
-            <div className="border border-stone-200 shadow-sm rounded-lg bg-white">
-              <button onClick={()=>{const n=!locOpen;setLocOpen(n);if(n&&!locResults&&!locBusy)runLocSearch();}} className="w-full flex items-center gap-2 px-3 py-2.5 text-left">
-                <MapPin className="w-4 h-4 text-[#0086E0] shrink-0"/>
-                <span className="text-[13px] font-semibold text-stone-800 flex-1">Find a FedEx location</span>
-                <ChevronRight className={`w-4 h-4 text-stone-400 transition-transform ${locOpen?"rotate-90":""}`}/>
-              </button>
-              {locOpen&&<div className="px-3 pb-3 border-t border-stone-100 pt-2.5 space-y-2.5">
-                <div className="flex bg-stone-100 rounded-lg p-0.5 text-[12px]">
-                  {[["dropoff","Drop off (near me)"],["hold","Hold for pickup (near recipient)"]].map(([v,l])=>
-                    <button key={v} onClick={()=>{setLocMode(v);runLocSearch(v);}} className={`flex-1 px-2 py-1 rounded-md ${locMode===v?"bg-white shadow-sm text-stone-800 font-medium":"text-stone-500"}`}>{l}</button>)}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={()=>runLocSearch()} disabled={locBusy} className="text-[12px] bg-[#0086E0] hover:bg-[#006db8] disabled:opacity-50 text-white rounded-lg px-3 py-1.5 font-medium flex items-center gap-1.5">
-                    {locBusy?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<Search className="w-3.5 h-3.5"/>}Search near {locMode==="hold"?(receiver.city||receiver.zip||"recipient"):(sender.city||sender.zip||"me")}</button>
-                  <span className="text-[11px] text-stone-400">within 25 mi</span>
-                </div>
-                {locErr&&<div className="text-[12px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">{locErr}</div>}
-                {locResults&&locResults.length>0&&<div className="space-y-1.5 max-h-72 overflow-y-auto -mx-1 px-1">
-                  {locResults.map((L,i)=><div key={i} className="border border-stone-200 rounded-lg p-2 text-[12px]">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="font-semibold text-stone-800 truncate">{L.name}{L.type?<span className="ml-1.5 text-[10px] font-normal uppercase tracking-wide text-stone-400">{L.type}</span>:null}</div>
-                        <div className="text-stone-500 leading-tight">{[L.address1,[L.city,L.state].filter(Boolean).join(", "),L.zip].filter(Boolean).join(" · ")}</div>
-                        {L.hours&&L.hours.length>0&&<div className="text-[11px] text-stone-400 mt-0.5 truncate">{L.hours.slice(0,3).join("  ·  ")}</div>}
-                      </div>
-                      {L.distance!=null&&<div className="text-[11px] text-[#006FBF] font-medium shrink-0">{L.distance} {String(L.distanceUnits||"mi").toLowerCase()}</div>}
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-1.5">
-                      {L.phone&&<a href={"tel:"+L.phone} className="text-[11px] text-stone-500 hover:text-stone-700">{L.phone}</a>}
-                      <span className="flex-1"/>
-                      <button onClick={()=>{try{navigator.clipboard&&navigator.clipboard.writeText([L.name,L.address1,[L.city,L.state,L.zip].filter(Boolean).join(", ")].filter(Boolean).join("\n"));}catch(e){}}} className="text-[11px] text-stone-500 hover:text-[#0086E0]">Copy address</button>
-                      {locMode==="hold"&&<button onClick={()=>{setReceiver(r=>({...r,company:L.name||r.company,address1:L.address1||r.address1,address2:"",city:L.city||r.city,state:L.state||r.state,zip:L.zip||r.zip}));setLocOpen(false);}} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] rounded px-2 py-0.5 font-medium hover:bg-[#CCEAFF]">Use as ship-to</button>}
-                    </div>
-                  </div>)}
-                </div>}
-                <div className="text-[10px] text-stone-400 leading-snug">{locMode==="hold"?"Ship-to a staffed FedEx location so the recipient collects it there. (True Hold-at-Location routing can be added to booking next.)":"Where you can drop off this outbound package."}</div>
-              </div>}
-            </div>
             {/* ── Card 1: THIS SHIPMENT — read-only status, one card, one row per fact. State lives
                    in the icon color (green = good), not in three different tinted strips. ── */}
             {(()=>{
@@ -9029,24 +8988,33 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             <div className="flex items-center gap-2 text-sm font-semibold text-[#006FBF]"><FileText className="w-4 h-4"/>Customs · Commercial invoice</div>
 <datalist id="sc-prod-list">{((settings&&settings.products)||[]).map(pr=><option key={pr.id} value={pr.name}>{(pr.sku?pr.sku+" · ":"")+(pr.hs?("HS "+pr.hs):"no HS yet")}</option>)}</datalist>
             <datalist id="sc-origin-list">{COUNTRIES.map(c=><option key={c} value={c}/>)}</datalist>
+            <div className="bg-white border border-stone-200 rounded-lg p-3 space-y-2">
+            <div className="text-[11px] uppercase tracking-widest text-[#006FBF] font-bold flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#0086E0] rounded-sm"/>1 · Shipment &amp; terms</div>
             <div className="grid sm:grid-cols-3 gap-2">
               <Field label="Reason for export"><div className="flex gap-1"><Select value={EXPORT_REASONS.includes(customs.reason)?customs.reason:"__other"} onChange={e=>{const v=e.target.value;setCustoms({...customs,reason:v==="__other"?"":v});}}>{EXPORT_REASONS.map(r=><option key={r}>{r}</option>)}<option value="__other">Other…</option></Select>{!EXPORT_REASONS.includes(customs.reason)&&<input value={customs.reason} onChange={e=>setCustoms({...customs,reason:e.target.value})} placeholder="Type Reason" className="w-28 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0]"/>}</div></Field>
               <Field label="Incoterms"><Select value={customs.incoterm} onChange={e=>setCustoms({...customs,incoterm:e.target.value})}>{INCOTERMS.map(r=><option key={r}>{r}</option>)}</Select></Field>
               <Field label="Duties & taxes to"><Select value={customs.dutiesBill} onChange={e=>setCustoms({...customs,dutiesBill:e.target.value})}><option value="receiver">Receiver (DAP)</option><option value="sender">Sender (DDP)</option></Select></Field>
             </div>
-            <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">Your export details</div>
+            </div>
+            <div className="bg-white border border-stone-200 rounded-lg p-3 space-y-2">
+            <div className="text-[11px] uppercase tracking-widest text-[#006FBF] font-bold flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#0086E0] rounded-sm"/>2 · Your export details</div>
             <div className="grid sm:grid-cols-3 gap-2">
               <Field label="Sender Tax ID / EIN"><input value={customs.senderTaxId??(settings.taxId||"")} onChange={e=>setCustoms({...customs,senderTaxId:e.target.value})} placeholder="12-3456789" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></Field>
               <Field label="EIN issuer country"><Select value={customs.senderTaxCountry||"United States"} onChange={e=>setCustoms({...customs,senderTaxCountry:e.target.value})}>{COUNTRIES.map(c=><option key={c}>{c}</option>)}</Select></Field>
               <Field label="FTR / EEI"><input value={customs.ftr??"NOEEI 30.37(a)"} onChange={e=>setCustoms({...customs,ftr:e.target.value})} list="sc-ftr-list" placeholder="NOEEI 30.37(a)" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/><datalist id="sc-ftr-list"><option value="NOEEI 30.37(a)">Under $2,500 per HS class</option><option value="NOEEI 30.36">To Canada</option><option value="NOEEI 30.37(h)">Gift / humanitarian</option><option value="AES ITN: X2026________">Filed — paste ITN</option></datalist></Field>
             </div>
-            <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold mt-1">Receiver details</div>
+            </div>
+            <div className="bg-white border border-stone-200 rounded-lg p-3 space-y-2">
+            <div className="text-[11px] uppercase tracking-widest text-[#006FBF] font-bold flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#0086E0] rounded-sm"/>3 · Receiver &amp; import details</div>
             <div className="grid sm:grid-cols-4 gap-2">
               <Field label="Importer of record"><div className="flex gap-1"><Select value={customs.ior||"Receiver"} onChange={e=>setCustoms({...customs,ior:e.target.value})}><option>Receiver</option><option>Shipper</option><option>Other</option></Select>{customs.ior==="Other"&&<input value={customs.iorName||""} onChange={e=>setCustoms({...customs,iorName:e.target.value})} placeholder="IOR name" className="w-28 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>}</div></Field>
               <Field label="Receiver VAT / Tax ID"><input value={customs.receiverTaxId||""} onChange={e=>setCustoms({...customs,receiverTaxId:e.target.value})} placeholder="VAT nr" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></Field>
               <Field label="Receiver EORI"><input value={customs.receiverEori||""} onChange={e=>setCustoms({...customs,receiverEori:e.target.value})} placeholder="EU/UK EORI" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></Field>
               <Field label="Additional receiver contact"><input value={customs.altContact||""} onChange={e=>setCustoms({...customs,altContact:e.target.value})} placeholder="Broker / consignee alt — name & phone" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></Field>
             </div>
+            </div>
+            <div className="bg-white border border-stone-200 rounded-lg p-3 space-y-2">
+            <div className="text-[11px] uppercase tracking-widest text-[#006FBF] font-bold flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#0086E0] rounded-sm"/>4 · Marks &amp; notes</div>
             <div className="flex flex-wrap items-center gap-3">
               <Field label="Package marks"><input value={customs.marks||""} onChange={e=>setCustoms({...customs,marks:e.target.value})} placeholder="Carton 1 of 3" className="w-40 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></Field>
               {customs.reason==="Sample"&&<label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700 mt-4"><input type="checkbox" checked={customs.samples!==false} onChange={e=>setCustoms({...customs,samples:e.target.checked})} className="accent-[#0086E0]"/>Print big "SAMPLES — NOT FOR RESALE" banner</label>}
@@ -9054,8 +9022,10 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             {(customs.reason==="Sample"||customs.samples)&&<div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">Tip: declare at least $10 value per sample item — $0/$1 values are a top cause of customs holds.</div>}
 
             <Field label="Invoice notes"><textarea value={customs.notes||""} onChange={e=>setCustoms({...customs,notes:e.target.value})} rows={2} placeholder="Custom notes printed on the invoice — license numbers, 'samples for exhibition use only'…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></Field>
+            </div>
+            <div className="bg-white border border-stone-200 rounded-lg p-3 space-y-2">
                         <div className="space-y-1.5">
-              <div className="flex items-center justify-between mb-1"><div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">Add products</div>
+              <div className="flex items-center justify-between mb-1"><div className="text-[11px] uppercase tracking-widest text-[#006FBF] font-bold flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#0086E0] rounded-sm"/>5 · Products, value &amp; sign-off</div>
               <div className="flex flex-col items-end"><div className="flex rounded-lg border border-stone-200 overflow-hidden text-[11px] font-medium">
                 <button onClick={()=>setCustoms({...customs,units:"lb"})} className={(customs.units||"lb")==="lb"?"bg-[#0086E0] text-white px-2.5 py-1":"bg-white text-stone-500 px-2.5 py-1 hover:bg-stone-50"}>lb / oz</button>
                 <button onClick={()=>setCustoms({...customs,units:"kg"})} className={customs.units==="kg"?"bg-[#0086E0] text-white px-2.5 py-1":"bg-white text-stone-500 px-2.5 py-1 hover:bg-stone-50"}>kg</button>
@@ -9109,7 +9079,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             </div>
                           <datalist id="htscodes">{[...new Set(((settings&&settings.products)||[]).map(pr=>pr.hs).filter(Boolean))].map(c=><option key={"p"+c} value={c}/>)}{HTS_SUGGEST.map(h=><option key={h.code} value={h.code}>{h.desc}</option>)}</datalist>
             </div>
-            
+            </div>
+
           </div>
         )}
         {labelPreview&&<LabelPreviewModal data={labelPreview} settings={settings} onNewShipment={newShipment} onClose={()=>{const pend=labelPreview&&labelPreview.pendingBook;setLabelPreview(null);if(!pend&&(cz(settings).printFlowV2?cz(settings).resetAfterPrint:(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint)))newShipment();}}/>}
@@ -9482,8 +9453,9 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
               {comps.map((c,i)=><div key={i} className="flex justify-between text-[13px]"><span className="text-stone-600">{c.label}</span><span className=" text-stone-700">{money(c.amount)}</span></div>)}
               <div className="flex justify-between text-[13px] border-t border-stone-200 pt-1 mt-1 font-semibold"><span>{q.dutiesAndTaxes>0?"Shipping":"Total"}</span><span className="">{money(sell)}</span></div>
               {q.dutiesAndTaxes>0&&<>
-                <div className="flex justify-between text-[12px] text-stone-500"><span title={q.taxes?("Duty "+money(q.duties||0)+" · Tax "+money(q.taxes)):"FedEx estimated duties & taxes"}>Est. duties &amp; tax</span><span>{money(q.dutiesAndTaxes)}</span></div>
+                <div className="flex justify-between text-[12px] text-stone-500"><span title={(q.dutiesEstimated?"Estimated from the destination's standard duty + import VAT/GST rates (real duty is HS-code specific). ":"FedEx estimated duties & taxes. ")+(q.taxes?("Duty "+money(q.duties||0)+" · Tax "+money(q.taxes)):"")}>Est. duties &amp; tax{q.dutiesEstimated?" *":""}</span><span>{money(q.dutiesAndTaxes)}</span></div>
                 <div className="flex justify-between text-[13px] border-t border-[#0086E0]/30 pt-1 mt-1 font-semibold text-[#006FBF]"><span>Landed cost (DDP)</span><span>{money((+sell||0)+(+q.dutiesAndTaxes||0))}</span></div>
+                {q.dutiesEstimated&&<div className="text-[10px] text-stone-400 leading-snug mt-0.5">* Estimated from {receiver.country||"the destination"}'s standard duty &amp; import VAT/GST — real duty depends on the HS code. Add HS codes in Customs for a sharper figure.</div>}
               </>}
             </div>
             :(()=>{ /* per-box view: EVERY charge line lands on a box. Freight and % charges (fuel)
@@ -9995,7 +9967,7 @@ function ShopifyAddrPush({conn,o,rcv,setOrders}){
   const [msg,setMsg]=useState(null);
   const push=async()=>{
     setBusy(true);setMsg(null);
-    const res=await shopifyCall(SHOPIFY_FULFILL,{action:"updateOrder",shop:conn.shop,token:conn.token,shopifyId:o.shopifyId,email:rcv.email||undefined,
+    const res=await shopifyCall(SHOPIFY_FULFILL,{action:"updateOrder",..._shopAuth(conn),shopifyId:o.shopifyId,email:rcv.email||undefined,
       shippingAddress:{name:rcv.name,company:rcv.company,address1:rcv.address1,address2:rcv.address2,city:rcv.city,state:rcv.state,zip:rcv.zip,phone:rcv.phone,country:rcv.country||"US"}});
     setBusy(false);
     if(res&&res.ok){ setMsg({ok:true,t:"Shopify order updated ✓"}); setOrders&&setOrders(os=>os.map(x=>x.id===o.id?{...x,customer:rcv.name,company:rcv.company,address1:rcv.address1,city:rcv.city,state:rcv.state,zip:rcv.zip,phone:rcv.phone,email:rcv.email}:x)); }
@@ -11031,7 +11003,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     if(!updates.length){flash("No stock to sync yet.",true);return;}
     setBusy("shopify");
     let synced=0,skipped=0,reconnect=false;
-    for(const c of shopConns){ const r=await shopifyCall(SHOPIFY_INVENTORY,{shop:c.shop,token:c.token,updates}); if(r&&r.ok){synced+=r.synced||0;skipped+=r.skipped||0;} else if(r&&r.needsReconnect){reconnect=true;} }
+    for(const c of shopConns){ const r=await shopifyCall(SHOPIFY_INVENTORY,{..._shopAuth(c),updates}); if(r&&r.ok){synced+=r.synced||0;skipped+=r.skipped||0;} else if(r&&r.needsReconnect){reconnect=true;} }
     setBusy("");
     if(reconnect)flash("Reconnect your Shopify store to allow stock sync (Settings → Integrations → reconnect).",true);
     else flash("Synced "+synced+" SKU"+(synced!==1?"s":"")+" to Shopify"+(skipped?" · "+skipped+" skipped (not in Shopify or tracking off)":"")+".");
@@ -14774,7 +14746,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
     if(!shop||!token){setCs({err:"Connect your Shopify store first (Settings → Integrations)."});return;}
     setCBusy(action);
     try{
-      const r=await fetch(SHOPIFY_SYNC,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({shop,token,action,uid})});
+      const r=await fetch(SHOPIFY_SYNC,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({shop,token,refreshToken:shopConn.refreshToken||undefined,tokenExp:shopConn.tokenExp||undefined,action,uid})});
       const d=await r.json().catch(()=>null);
       if(!d||!d.ok)setCs({err:(d&&d.error)||"Shopify call failed."});
       else setCs(action==="installCarrier"?{ok:d.updated?"Carrier service updated — live rates are on at checkout.":"Installed! Your checkout now quotes through "+BRAND.product+".",installed:true}:{installed:d.installed,ok:d.installed?"Installed — your checkout is quoting through "+BRAND.product+".":"Not installed yet — hit Install below."});
@@ -15035,6 +15007,55 @@ function BrandedTracking({settings,setSettings}){
     </Panel>}
   </div>);
 }
+/* FedEx location finder (Settings → FedEx Account). Look up drop-off points and staffed /
+   hold-for-pickup locations near any ZIP. Powered by netlify/functions/fedexlocations.js. */
+function FedexLocationFinder({settings}){
+  const [zip,setZip]=useState((settings&&settings.sender&&settings.sender.zip)||"");
+  const [hold,setHold]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState("");
+  const [results,setResults]=useState(null);
+  const run=async()=>{
+    const z=String(zip||"").trim();
+    if(!z){setErr("Enter a ZIP or postal code to search near.");setResults(null);return;}
+    setBusy(true);setErr("");setResults(null);
+    try{
+      const r=await fetch("/.netlify/functions/fedexlocations",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:CLOUD.token||undefined,postalCode:z,country:"US",radius:25,max:15,...(hold?{holdService:"FEDEX_GROUND"}:{})})});
+      const d=await r.json();
+      if(d&&d.ok){setResults(d.locations||[]);if(!(d.locations||[]).length)setErr("No FedEx locations found within 25 miles — try a nearby ZIP.");}
+      else setErr((d&&d.error)||"Couldn't search FedEx locations.");
+    }catch(e){setErr("Network error — try again.");}
+    setBusy(false);
+  };
+  return (<div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
+    <div className="flex items-center gap-2"><MapPin className="w-4 h-4 text-[#0086E0]"/><h3 className="text-sm font-semibold text-stone-700">Find a FedEx location</h3></div>
+    <p className="text-[12px] text-stone-500">Look up nearby FedEx drop-off points, Office / Ship Centers, and staffed hold-for-pickup locations near any ZIP.</p>
+    <div className="flex flex-wrap items-center gap-2">
+      <input value={zip} onChange={e=>setZip(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")run();}} placeholder="ZIP / postal code" className="w-40 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#0086E0]"/>
+      <label className="flex items-center gap-1.5 text-[12px] text-stone-600 cursor-pointer"><input type="checkbox" checked={hold} onChange={e=>setHold(e.target.checked)} className="accent-[#0086E0]"/>Hold-for-pickup only</label>
+      <button onClick={run} disabled={busy} className="text-sm bg-[#0086E0] hover:bg-[#006db8] disabled:opacity-50 text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<Search className="w-4 h-4"/>}Search</button>
+      <span className="text-[11px] text-stone-400">within 25 mi</span>
+    </div>
+    {err&&<div className="text-[12px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">{err}</div>}
+    {results&&results.length>0&&<div className="space-y-1.5 max-h-96 overflow-y-auto">
+      {results.map((L,i)=><div key={i} className="border border-stone-200 rounded-lg p-2.5 text-[12px]">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="font-semibold text-stone-800">{L.name}{L.type?<span className="ml-1.5 text-[10px] font-normal uppercase tracking-wide text-stone-400">{L.type}</span>:null}</div>
+            <div className="text-stone-500 leading-tight">{[L.address1,[L.city,L.state].filter(Boolean).join(", "),L.zip].filter(Boolean).join(" · ")}</div>
+            {L.hours&&L.hours.length>0&&<div className="text-[11px] text-stone-400 mt-0.5">{L.hours.slice(0,4).join("  ·  ")}</div>}
+          </div>
+          {L.distance!=null&&<div className="text-[11px] text-[#006FBF] font-medium shrink-0">{L.distance} {String(L.distanceUnits||"mi").toLowerCase()}</div>}
+        </div>
+        <div className="flex items-center gap-2 mt-1.5">
+          {L.phone&&<a href={"tel:"+L.phone} className="text-[11px] text-stone-500 hover:text-stone-700">{L.phone}</a>}
+          <span className="flex-1"/>
+          <button onClick={()=>{try{navigator.clipboard&&navigator.clipboard.writeText([L.name,L.address1,[L.city,L.state,L.zip].filter(Boolean).join(", ")].filter(Boolean).join("\n"));}catch(e){}}} className="text-[11px] text-stone-500 hover:text-[#0086E0]">Copy address</button>
+        </div>
+      </div>)}
+    </div>}
+  </div>);
+}
 function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,clients,setClients,rules,setRules,emails,shipments,setShipments,manifests,setManifests,client,byoCarrier=false,ledger=[],addLedger,uid,isAdmin=false,showMoney=true,secPolicy={},currentUser=null,setCurrentUser=null,allowedTabs=null,fxLocOn=false,trackingOn=false}){
   /* Remember which Settings sub-section you were on, so leaving Settings and coming back returns you to
      the same panel instead of resetting to General. Persisted so it survives a full reload too. */
@@ -15088,7 +15109,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
       <div className="flex-1 min-w-0">
         {secLocked&&<div className="mb-3 flex items-center gap-2 text-[13px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"><Ban className="w-4 h-4 shrink-0"/>This page is locked by your administrator — you can look, but changes are disabled.</div>}
         <div className={secLocked?"pointer-events-none opacity-60 select-none":""} aria-disabled={secLocked||undefined}>
-        {sec==="carriers"&&<CarrierAccounts accounts={accounts} setAccounts={setAccounts} settings={settings} setSettings={setSettings} clients={clients} byoCarrier={byoCarrier} isAdmin={isAdmin} client={client}/>}
+        {sec==="carriers"&&<div className="space-y-4"><CarrierAccounts accounts={accounts} setAccounts={setAccounts} settings={settings} setSettings={setSettings} clients={clients} byoCarrier={byoCarrier} isAdmin={isAdmin} client={client}/><FedexLocationFinder settings={settings}/></div>}
         {sec==="warehouses"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Warehouses saved">{(s,ss)=><Warehouses settings={s} setSettings={ss}/>}</SettingsDraftWrap>}
         {sec==="catalog"&&<ProductCatalog settings={settings} setSettings={setSettings}/>}
         {sec==="boxes"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Package sizes saved">{(s,ss)=><BoxesSettings settings={s} setSettings={ss}/>}</SettingsDraftWrap>}
@@ -15234,12 +15255,12 @@ function ProductCatalog({settings,setSettings}){
   };
 
   const pullShopify=async()=>{
-    const conn=(settings.conn||{}).shopify||{};
+    const conn=shopifyConnFor(settings,(settings.conn||{}).shopify&&(settings.conn||{}).shopify.shop)||((settings.conn||{}).shopify||{});
     const shop=conn.shop||settings.shopifyShop, token=conn.token||settings.shopifyToken;
     if(!shop||!token){ flash({err:"Connect your Shopify store first (Settings → Integrations)."}); return; }
     setBusy(true);
     try{
-      const r=await fetch(SHOPIFY_SYNC,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({shop,token,action:"products"})});
+      const r=await fetch(SHOPIFY_SYNC,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({shop,token,refreshToken:conn.refreshToken||undefined,tokenExp:conn.tokenExp||undefined,action:"products"})});
       const d=await r.json().catch(()=>null);
       if(!d||!d.ok){ flash({err:(d&&d.error)||"Shopify pull failed."}); setBusy(false); return; }
       const incoming=d.products||[];

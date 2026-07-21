@@ -28,6 +28,34 @@ function toISO(v) {
   return ISO2[s.toLowerCase()] || s;
 }
 
+/* Landed-cost FALLBACK estimate. FedEx's Estimated Duties & Taxes (EDT) is only returned on some
+   lanes/accounts, so when it's absent we approximate duties + import VAT/GST ourselves from the
+   destination's standard rates. This is a best-effort ESTIMATE (real duty is HS-code specific) —
+   it's labelled as such in the UI, and it's what lets us show a landed cost to compete with DDP
+   carriers instead of a blank. duty = general average import duty; vat = standard import VAT/GST;
+   dm = de-minimis customs value (USD) under which the country typically waives duty (VAT still may
+   apply, but we treat small parcels as clear to avoid overstating). */
+const DEST_TAX = {
+  GB:{vat:20,duty:4,dm:180}, DE:{vat:19,duty:4,dm:0}, FR:{vat:20,duty:4,dm:0}, IT:{vat:22,duty:4,dm:0}, ES:{vat:21,duty:4,dm:0},
+  NL:{vat:21,duty:4,dm:0}, BE:{vat:21,duty:4,dm:0}, IE:{vat:23,duty:4,dm:0}, AT:{vat:20,duty:4,dm:0}, SE:{vat:25,duty:4,dm:0},
+  DK:{vat:25,duty:4,dm:0}, FI:{vat:24,duty:4,dm:0}, PT:{vat:23,duty:4,dm:0}, PL:{vat:23,duty:4,dm:0}, CZ:{vat:21,duty:4,dm:0},
+  GR:{vat:24,duty:4,dm:0}, RO:{vat:19,duty:4,dm:0}, HU:{vat:27,duty:4,dm:0}, NO:{vat:25,duty:4,dm:0}, CH:{vat:8.1,duty:3,dm:70},
+  CA:{vat:5,duty:0,dm:20}, MX:{vat:16,duty:5,dm:50}, AU:{vat:10,duty:5,dm:670}, NZ:{vat:15,duty:5,dm:700}, JP:{vat:10,duty:4,dm:130},
+  CN:{vat:13,duty:8,dm:8}, HK:{vat:0,duty:0,dm:99999}, SG:{vat:9,duty:0,dm:300}, KR:{vat:10,duty:8,dm:150}, IN:{vat:18,duty:10,dm:0},
+  AE:{vat:5,duty:5,dm:270}, SA:{vat:15,duty:5,dm:70}, IL:{vat:17,duty:5,dm:75}, ZA:{vat:15,duty:8,dm:0}, BR:{vat:17,duty:12,dm:0},
+  UA:{vat:20,duty:5,dm:170}, TR:{vat:20,duty:5,dm:0}, TH:{vat:7,duty:5,dm:40}, MY:{vat:8,duty:5,dm:120}, PH:{vat:12,duty:5,dm:200},
+  VN:{vat:10,duty:8,dm:45}, ID:{vat:11,duty:7.5,dm:3},
+};
+function estDutyTax(destISO, custValue, shipping) {
+  const t = DEST_TAX[String(destISO || "").toUpperCase()];
+  if (!t || !(custValue > 0)) return null;
+  const round = (n) => Math.round(n * 100) / 100;
+  if (t.dm && custValue <= t.dm) return { duties: 0, taxes: 0, total: 0, estimated: true };   // under de-minimis → typically clears free
+  const duties = round(custValue * (t.duty / 100));
+  const taxes = round((custValue + duties + (+shipping || 0)) * (t.vat / 100));   // import VAT is on landed value (goods + duty + freight)
+  return { duties, taxes, total: round(duties + taxes), estimated: true };
+}
+
 let _tok = null; // {token, exp}
 async function getToken() {
   if (_tok && Date.now() < _tok.exp - 60000) return _tok.token;
@@ -196,6 +224,7 @@ exports.handler = async (event) => {
      carries a customs block (commodities + customs value). Without this, an intl request
      errors out and the app showed NO services — the root cause of "no international rates".
      Declared value falls back to the insurance amount, then $100. */
+  let _custValue = 0;   // customs value for the landed-cost fallback estimate (set in the intl block below)
   if (toCountry !== fromCountry) {
     const totalWt = pieces.reduce((a, p) => a + ((p.weight && p.weight.value) || 1), 0);
     const declared = Math.max(1, +body.declaredValue || +body.insuranceAmount || 100);
@@ -220,6 +249,12 @@ exports.handler = async (event) => {
       unitPrice: { amount: declared, currency: "USD" },
       customsValue: { amount: declared, currency: "USD" }
     }];
+    /* customs value used for the fallback duty/VAT estimate — from REAL inputs only (entered
+       commodity values, or an explicit declared/insured value). If neither was given we leave it 0
+       so we DON'T invent a landed cost off the $100 default. */
+    _custValue = inCom.length
+      ? inCom.reduce((a, c) => a + Math.max(0, (+c.value || 0)) * Math.max(1, +c.quantity || 1), 0)
+      : (+body.declaredValue || +body.insuranceAmount || 0);
     req.requestedShipment.customsClearanceDetail = {
       /* Who pays duties/taxes: DDP (SENDER) prepays so the recipient owes nothing at the door;
          DDU/DAP (RECIPIENT) leaves it to the buyer. Caller's ddp flag drives it (default DDP). */
@@ -381,7 +416,13 @@ exports.handler = async (event) => {
         minDays, maxDays,
         base: cost != null ? Math.round((cost - surch.reduce((a, x) => a + x.amount, 0)) * 100) / 100 : null,
         surcharges: surch,
-        ...(() => { const e = edtOf(rd, acctD); return e ? { duties: e.duties, taxes: e.taxes, dutiesAndTaxes: e.total } : {}; })(),
+        ...(() => {
+          /* Prefer FedEx's own EDT; fall back to our destination-rate estimate so an international
+             quote still shows a landed cost. dutiesEstimated marks which one the UI is showing. */
+          const fx = edtOf(rd, acctD);
+          const e = fx || (toCountry !== fromCountry ? estDutyTax(toCountry, _custValue, cost) : null);
+          return e ? { duties: e.duties, taxes: e.taxes, dutiesAndTaxes: e.total, dutiesEstimated: !fx && !!e.estimated } : {};
+        })(),
         _rateType: acctD && acctD.rateType || null
       });
     }

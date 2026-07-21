@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="print-slips-v747";
+const BUILD_TAG="self-wms-v748";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -7513,9 +7513,9 @@ function AppInner(){
           {tab==="drafts"&&<Drafts drafts={drafts} setDrafts={setDrafts} goShip={goShip}/>}
           {tab==="returns"&&<Returns returns={returns} setReturns={setReturns} orders={orders} settings={settings} logEmail={logEmail}/>}
           {tab==="pickups"&&<Pickups pickups={pickups} setPickups={setPickups} settings={settings} client={client} isAdmin={isAdmin} showCosts={featureOn("pickupCosts",currentUser,myFlags)}/>}
-          {tab==="inventory"&&((isAdmin||isDemo||featureOn("inventory",currentUser,myFlags))
+          {tab==="inventory"&&((isAdmin||isDemo||featureOn("inventory",currentUser,myFlags)||!!(settings&&settings.wmsSelfOn))
             ? <Inventory settings={settings} setSettings={setSettings} client={client} showMoney={showMoney} currentUser={currentUser} orders={orders} setOrders={setOrders} onShipped={onShipped} goShip={goShip} initialView={pendingWmsView} seedPickIds={pendingPickIds} onWmsNavConsumed={()=>{setPendingWmsView(null);setPendingPickIds(null);}}/>
-            : <WmsPreview currentUser={currentUser}/>)}
+            : <WmsPreview currentUser={currentUser} onEnable={()=>setSettings&&setSettings(p=>({...p,wmsSelfOn:true}))}/>)}
           {tab==="invoices"&&<Invoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>}
           {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings} client={client} onShipped={onShipped}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
@@ -10247,20 +10247,13 @@ function printLabels(items,opts){
    A free explore/landing page: what it does, a no-stakes 2-minute tour (touches nothing), and a
    one-click request to turn it on. The live warehouse (real stock/POs) stays gated behind the
    inventory feature flag — this page never reads or writes their real data. */
-function WmsPreview({currentUser}){
+function WmsPreview({currentUser,onEnable}){
   const [tour,setTour]=useState(false);
-  const [sent,setSent]=useState(false);
-  const requestOn=()=>{
-    setSent(true);
-    try{
-      const host=(typeof location!=="undefined"&&location.hostname)||"";
-      const parts=host.split(".").filter(Boolean);
-      const domain=parts.length>=2?parts.slice(-2).join("."):"shippingcloud.net";
-      const to="support@"+domain;
-      const subj=encodeURIComponent("Please turn on Warehouse (WMS) for my account");
-      const body=encodeURIComponent("Hi — I'd like the Warehouse / WMS module enabled for "+((currentUser&&currentUser.email)||"my account")+". Thanks!");
-      window.open("mailto:"+to+"?subject="+subj+"&body="+body,"_self");
-    }catch(e){}
+  const [turning,setTurning]=useState(false);
+  const enable=async()=>{
+    if(!await uiConfirm("Turn on the Warehouse for your account? It's free — you'll get the full stock, pick/pack, purchasing and analytics suite. You can turn it back off anytime in Settings, and nothing you already do changes."))return;
+    setTurning(true);
+    onEnable&&onEnable();   // flips settings.wmsSelfOn — this component unmounts and the live Warehouse renders
   };
   const feats=[
     [Boxes,"Live stock counts","One honest number per product — on hand, committed, available."],
@@ -10277,12 +10270,10 @@ function WmsPreview({currentUser}){
       <h1 className="text-2xl sm:text-3xl font-bold text-stone-900 tracking-tight">Turn ShippingCloud into a full warehouse</h1>
       <p className="text-stone-600 mt-2 max-w-2xl">A smart stockroom that counts for you: add what you sell, ship orders like normal, and watch the count drop by itself — with low-stock alerts and one-click restock POs. It's built in and included; it just needs switching on for your account.</p>
       <div className="flex flex-wrap items-center gap-2.5 mt-5">
-        <button onClick={()=>setTour(true)} className="bg-[#0086E0] text-white rounded-xl px-4 py-2.5 font-semibold hover:bg-[#006db8] flex items-center gap-1.5"><Sparkles className="w-4 h-4"/>Take the 2-minute tour</button>
-        {!sent
-          ? <button onClick={requestOn} className="bg-white border border-[#0086E0]/40 text-[#006FBF] rounded-xl px-4 py-2.5 font-semibold hover:bg-[#E6F4FF] flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>Turn it on for my account</button>
-          : <span className="inline-flex items-center gap-1.5 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5 font-medium"><CheckCircle2 className="w-4 h-4"/>Request noted — we'll enable it for you shortly.</span>}
+        <button onClick={enable} disabled={turning} className="bg-[#0086E0] text-white rounded-xl px-4 py-2.5 font-semibold hover:bg-[#006db8] disabled:opacity-50 flex items-center gap-1.5">{turning?<Loader2 className="w-4 h-4 animate-spin"/>:<CheckCircle2 className="w-4 h-4"/>}Turn on the Warehouse</button>
+        <button onClick={()=>setTour(true)} className="bg-white border border-[#0086E0]/40 text-[#006FBF] rounded-xl px-4 py-2.5 font-semibold hover:bg-[#E6F4FF] flex items-center gap-1.5"><Sparkles className="w-4 h-4"/>Take the 2-minute tour first</button>
       </div>
-      <p className="text-[11px] text-stone-400 mt-3">The tour uses pretend stock — nothing here touches your real data. Your live warehouse appears here the moment it's switched on.</p>
+      <p className="text-[11px] text-stone-400 mt-3">It's free and turns on instantly — you can switch it off again in Settings. The tour uses pretend stock; nothing here touches your real data.</p>
     </div>
     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
       {feats.map(([Ic,h,d])=>(<div key={h} className="border border-stone-200 rounded-xl bg-white p-4">
@@ -10572,7 +10563,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   if(view==="overview") return (<div className="max-w-5xl space-y-4">{Switcher()}<InventoryOverview list={list} pos={pos} log={log} suppliers={suppliers} orders={orders} showMoney={showMoney} committedBySku={committedBySku} incomingBySku={incomingBySku} goView={setView} onReceive={()=>setView("stock")}/></div>);
   if(view==="analytics") return (<div className="max-w-5xl space-y-4">{Switcher()}<InventoryAnalytics list={list} log={log} showMoney={showMoney}/></div>);
   if(view==="health") return (<div className="max-w-5xl space-y-4">{Switcher()}<StockHealth list={list} committedBySku={committedBySku} goView={setView} showMoney={showMoney}/></div>);
-  if(view==="guide") return (<div className="max-w-5xl space-y-4">{Switcher()}<WmsGuide goView={setView} onReplay={()=>setWelcomed(false)}/></div>);
+  if(view==="guide") return (<div className="max-w-5xl space-y-4">{Switcher()}<WmsGuide goView={setView} onReplay={()=>setWelcomed(false)} selfOn={!!(settings&&settings.wmsSelfOn)} onDisable={()=>setSettings&&setSettings(p=>({...p,wmsSelfOn:false}))}/></div>);
   if(view==="toship") return (<div className="max-w-5xl space-y-4">{Switcher()}<ToShip orders={orders} list={list} committedBySku={committedBySku} goView={setView} shipOrder={goShip?shipOrder:null} flow={wmsFlow} setFlow={setWmsFlow} client={client} settings={settings} setOrders={setOrders} onShipped={onShipped} goShip={goShip}/></div>);
   if(view==="pick") return (<div className="max-w-5xl space-y-4">{Switcher()}<PickList orders={orders} items={list} seedIds={seedPickIds}/></div>);
   if(view==="pack") return (<div className="max-w-5xl space-y-4">{Switcher()}<PackVerify orders={orders} items={list} shipOrder={goShip?shipOrder:null} settings={settings}/></div>);
@@ -12778,9 +12769,10 @@ function ShipWelcome({onClose,goTab,brandName}){
     </div>
   </div>);
 }
-function WmsGuide({goView,onReplay}){
+function WmsGuide({goView,onReplay,selfOn=false,onDisable}){
   const [open,setOpen]=useState(-1); const [words,setWords]=useState(false);
   return (<div className="space-y-3 max-w-3xl">
+    {selfOn&&onDisable&&<div className="flex items-center justify-end -mb-1"><button onClick={async()=>{ if(await uiConfirm("Turn the Warehouse back off? The tab returns to the preview page. Your stock data is kept — turning it on again brings everything back.")) onDisable(); }} className="text-[11px] text-stone-400 hover:text-rose-600">Turn off the Warehouse</button></div>}
     <div className="flex items-start justify-between gap-3 flex-wrap"><div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><MessageCircle className="w-5 h-5 text-[#0086E0]"/>Warehouse guide</h2><p className="text-sm text-stone-500 mt-0.5">New here? Start with the big picture, then open any tool for exactly what it does and how to use it.</p></div>{onReplay&&<button onClick={onReplay} className="text-xs text-[#0086E0] hover:underline shrink-0 flex items-center gap-1"><Sparkles className="w-3.5 h-3.5"/>Replay welcome</button>}</div>
     {/* Big picture — always open */}
     <div className="rounded-2xl border border-[#0086E0]/25 bg-gradient-to-br from-[#f2f8fd] to-white p-5">

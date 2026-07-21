@@ -1,0 +1,155 @@
+<title>ShippingCloud — Platform State &amp; Competitive Position</title>
+<style>
+  :root{
+    --bg:#f4f4f2; --panel:#ffffff; --ink:#1a1917; --soft:#5c5854; --faint:#918c86;
+    --line:#e6e3df; --line2:#f0eeeb;
+    --accent:#0086e0; --accent2:#006fbf; --wash:#e8f4fd;
+    --good:#0d9668; --good-w:#e6f5ee; --warn:#c07a12; --warn-w:#faf1e0; --crit:#dc2743; --crit-w:#fdecef;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#111417; --panel:#191d21; --ink:#eef1f3; --soft:#a7afb6; --faint:#727a81;
+    --line:#262c31; --line2:#1e242a; --accent:#39a7f0; --accent2:#7cc7f5; --wash:#0f2a3e;
+    --good:#34d399; --good-w:#0f2620; --warn:#e0a33a; --warn-w:#291f10; --crit:#fb7185; --crit-w:#2a1419;
+  }}
+  :root[data-theme="light"]{--bg:#f4f4f2;--panel:#ffffff;--ink:#1a1917;--soft:#5c5854;--faint:#918c86;--line:#e6e3df;--line2:#f0eeeb;--accent:#0086e0;--accent2:#006fbf;--wash:#e8f4fd;--good:#0d9668;--good-w:#e6f5ee;--warn:#c07a12;--warn-w:#faf1e0;--crit:#dc2743;--crit-w:#fdecef;}
+  :root[data-theme="dark"]{--bg:#111417;--panel:#191d21;--ink:#eef1f3;--soft:#a7afb6;--faint:#727a81;--line:#262c31;--line2:#1e242a;--accent:#39a7f0;--accent2:#7cc7f5;--wash:#0f2a3e;--good:#34d399;--good-w:#0f2620;--warn:#e0a33a;--warn-w:#291f10;--crit:#fb7185;--crit-w:#2a1419;}
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.62;margin:0;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:880px;margin:0 auto;padding:clamp(22px,5vw,60px) clamp(16px,4vw,44px) 100px}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent2);font-weight:600}
+  h1{font-size:clamp(27px,5vw,40px);line-height:1.08;letter-spacing:-.022em;font-weight:800;text-wrap:balance;margin:.3em 0 .15em}
+  .sub{color:var(--soft);font-size:16.5px;max-width:64ch}
+  h2{font-size:13px;font-family:var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--faint);font-weight:700;margin:48px 0 14px;display:flex;align-items:center;gap:12px}
+  h2::after{content:"";flex:1;height:1px;background:var(--line)}
+  h3{font-size:18px;letter-spacing:-.01em;margin:0 0 3px;font-weight:700}
+  p{margin:0 0 12px}
+  a{color:var(--accent2)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin:12px 0}
+  .callout{border:1px solid var(--warn);background:var(--warn-w);border-radius:14px;padding:18px 22px;position:relative;overflow:hidden}
+  .callout::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--warn)}
+  .callout .k{font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--warn)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+  .have{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 16px}
+  .have .t{font-weight:680;font-size:14.5px;display:flex;align-items:center;gap:7px;margin-bottom:4px}
+  .have .d{font-size:13px;color:var(--soft);line-height:1.5}
+  .chip{display:inline-block;font-family:var(--mono);font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:20px;letter-spacing:.03em}
+  .chip.ok{background:var(--good-w);color:var(--good)} .chip.part{background:var(--warn-w);color:var(--warn)} .chip.no{background:var(--crit-w);color:var(--crit)}
+  ol.rank{list-style:none;counter-reset:g;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+  ol.rank>li{counter-increment:g;position:relative;padding:16px 18px 16px 60px;background:var(--panel);border:1px solid var(--line);border-radius:13px}
+  ol.rank>li::before{content:counter(g);position:absolute;left:16px;top:15px;width:30px;height:30px;border-radius:9px;background:var(--wash);color:var(--accent2);font-family:var(--mono);font-weight:700;font-size:15px;display:grid;place-items:center}
+  ol.rank>li.red::before{background:var(--crit-w);color:var(--crit)}
+  ol.rank h3{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  ol.rank .why{font-size:14px;color:var(--soft);margin-top:4px}
+  ol.rank .fix{font-size:13px;color:var(--ink);margin-top:7px;padding-top:7px;border-top:1px dashed var(--line)}
+  ol.rank .fix b{color:var(--accent2)}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:520px}
+  .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
+  th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:700;padding:11px 14px;background:var(--line2);border-bottom:1px solid var(--line)}
+  td{padding:11px 14px;border-bottom:1px solid var(--line2);color:var(--soft);vertical-align:top}
+  td:first-child{color:var(--ink);font-weight:640;white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  .wedge{background:linear-gradient(180deg,var(--wash),transparent);border:1px solid var(--line);border-radius:14px;padding:22px 24px}
+  ul.clean{margin:8px 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
+  ul.clean li{padding-left:22px;position:relative;color:var(--soft);font-size:14.5px}
+  ul.clean li::before{content:"";position:absolute;left:3px;top:9px;width:7px;height:7px;border-radius:2px;background:var(--accent);transform:rotate(45deg)}
+  ul.clean li b{color:var(--ink)}
+  .steps{counter-reset:s;list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:9px}
+  .steps li{counter-increment:s;padding-left:32px;position:relative;color:var(--soft);font-size:14.5px}
+  .steps li::before{content:counter(s);position:absolute;left:0;top:0;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:700;display:grid;place-items:center;font-family:var(--mono)}
+  .steps li b{color:var(--ink)}
+  footer{margin-top:44px;padding-top:16px;border-top:1px solid var(--line);font-family:var(--mono);font-size:12px;color:var(--faint);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">ShippingCloud · platform audit &amp; competitive teardown</div>
+  <h1>You're closer to competing than it looks — one gap really matters.</h1>
+  <p class="sub">A verified audit of what your platform actually does today, ranked against ShipStation, Shippo, EasyPost, ShipHero, Veeqo, Ordoro, Easyship, Deposco, ShippingEasy, ReadyCloud, SkuSavvy, Redo, EliteWorks and WebShip — and what I'd build to win.</p>
+
+  <div class="callout" style="margin-top:22px">
+    <div class="k">◆ Correction first</div>
+    <p style="margin:6px 0 0;color:var(--ink)">An earlier quick read (grepping only the UI) made me say your integrations were "mostly stubs" and that you lacked a public API and address validation. <b>That was wrong.</b> Opening <code>netlify/functions/</code> and verifying against the real files shows those are fully built. The corrected picture is below.</p>
+  </div>
+
+  <h2>Part A · What you actually have (verified)</h2>
+  <p>This is a real multi-channel, API-first shipping platform with a WMS and a 3PL back-office bolted on — a combination almost none of the competitors match. Verified against the actual function code:</p>
+
+  <div class="grid">
+    <div class="have"><div class="t">🔌 Public shipping API <span class="chip ok">real</span></div><div class="d">v1 rates, labels, batch-labels (100), tracking, address-validate, pickups, returns, and <b>HMAC-signed webhooks</b>. Hashed API keys, idempotency keys. This is EasyPost/Shippo-tier.</div></div>
+    <div class="have"><div class="t">🛒 Sales channels <span class="chip ok">real</span></div><div class="d">Shopify (orders, fulfillment, inventory, <b>live checkout rates</b>, GDPR webhooks), Amazon SP-API, Walmart, WooCommerce, eBay, Magento, BigCommerce, Square, Squarespace, Wix, ShipStation import.</div></div>
+    <div class="have"><div class="t">📒 ERP / accounting <span class="chip ok">real</span></div><div class="d">QuickBooks Online <em>and</em> Desktop (Web Connector), Salesforce, NetSuite (OAuth 1.0a TBA). Real invoice/record creation.</div></div>
+    <div class="have"><div class="t">📦 Warehouse (WMS) <span class="chip ok">real</span></div><div class="d">Stock, bins, pick/pack, scan-receive, cycle counts, kitting, purchasing, replenishment, POS, mobile Runner, analytics — now free &amp; self-serve.</div></div>
+    <div class="have"><div class="t">🏢 3PL back-office (ELEMS) <span class="chip ok">new</span></div><div class="d">Margins &amp; negative-margin reconciliation, agency summary, commissions, receivables/aging, statements, credit terms, rep-scoped logins, England connect endpoint.</div></div>
+    <div class="have"><div class="t">📮 Post-purchase <span class="chip ok">real</span></div><div class="d">Branded tracking pages, scheduled tracking sync + <code>tracking.updated</code> webhooks, self-service returns portal, email automation.</div></div>
+    <div class="have"><div class="t">🌍 International <span class="chip part">partial</span></div><div class="d">Commercial invoices + <b>AI HS-code lookup</b> + address validation are real. Prepaid duty/tax (DDP landed cost) is not.</div></div>
+    <div class="have"><div class="t">🚚 Carriers <span class="chip part">FedEx-led</span></div><div class="d">FedEx full (rate+label+track+pickup). England reseller full. UPS own-account <b>rating live</b>. USPS &amp; DHL direct: not yet. <em>This is the gap that matters →</em></div></div>
+  </div>
+
+  <h2>Part B · What's actually missing — ranked</h2>
+
+  <ol class="rank">
+    <li class="red"><h3>USPS <span class="chip no">absent</span></h3>
+      <div class="why">The single biggest real gap. For domestic ecommerce light parcels, USPS is <em>the</em> volume carrier — Ground Advantage / First-Class. Without it you can't seriously serve the largest slice of the market, and it's what every competitor leads with. England's reseller quoting references USPS, so England-connected accounts may see it — but you have no direct USPS label path.</div>
+      <div class="fix"><b>Fix:</b> add USPS via a consolidator/aggregator (EasyPost or Shippo) — one integration also finishes UPS &amp; DHL, plus discounted rates. Fastest path by far.</div></li>
+    <li class="red"><h3>Finish UPS labels + add DHL <span class="chip part">rating only</span></h3>
+      <div class="why">UPS is already wired for OAuth + live rating — but not label buying. DHL has no direct integration. You're one step from true own-account multi-carrier.</div>
+      <div class="fix"><b>Fix:</b> either complete the UPS Shipping API label call (you're ~halfway), or let the aggregator layer cover all three at once.</div></li>
+    <li><h3>Rate-shopping across carriers in the UI</h3>
+      <div class="why">Your engine and API can quote per-carrier, but the app doesn't yet "shop all carriers and auto-pick the cheapest that hits the delivery date." That's a headline selling point for ShipStation/Veeqo/Shippo. Unlocks the moment you're multi-carrier.</div>
+      <div class="fix"><b>Fix:</b> a "best rate" column + Autopilot rule "cheapest by delivery date." Small once carriers exist.</div></li>
+    <li><h3>FedEx Track API entitlement <span class="chip part">ops, not code</span></h3>
+      <div class="why">Your tracking sync + branded pages + webhooks are fully coded but <em>dormant</em> — they need the "Track API" product enabled on England's FedEx developer project. Until then, statuses don't flow.</div>
+      <div class="fix"><b>Fix:</b> England enables the Track API product on the FedEx portal. Zero code.</div></li>
+    <li><h3>Returns: exchanges + package protection</h3>
+      <div class="why">You have a branded returns portal + restock. The revenue features competitors monetize — instant exchanges, store credit, and package protection/shipping insurance upsell (Redo/Route) — aren't there yet.</div>
+      <div class="fix"><b>Fix:</b> add exchange/store-credit flows to the returns portal, and a protection line item at checkout/label.</div></li>
+    <li><h3>Third-party shipment insurance</h3>
+      <div class="why">You support declared value (carrier insurance). Cheaper third-party insurance (Shipsurance-style) is margin for you and standard in ShipStation/Shippo/EasyPost.</div>
+      <div class="fix"><b>Fix:</b> rides on the EasyPost/Shippo layer — insurance is a flag on the label call.</div></li>
+    <li><h3>International DDP / landed-cost prepay</h3>
+      <div class="why">HS codes + commercial invoices exist; prepaid duty &amp; tax (Delivered Duty Paid) does not. Easyship's whole edge. Only matters if cross-border is a target.</div>
+      <div class="fix"><b>Fix:</b> landed-cost calc at checkout; the aggregators expose DDP too.</div></li>
+    <li><h3>Customer marketing / SMS / review requests</h3>
+      <div class="why">Post-purchase email exists; SMS notifications and review-request/marketing flows (ShippingEasy, ReadyCloud) don't. Retention &amp; upsell surface.</div>
+      <div class="fix"><b>Fix:</b> add SMS to the notification engine; a review-request trigger on delivery.</div></li>
+    <li><h3>Deeper carrier-performance analytics</h3>
+      <div class="why">You have margin/shipment analytics. Carrier on-time SLA, cost-savings vs list, and delivery-performance dashboards would round it out.</div>
+      <div class="fix"><b>Fix:</b> derive from the tracking data you already collect once the Track API is live.</div></li>
+  </ol>
+
+  <h2>Part C · My honest strategy — how you actually win</h2>
+  <div class="wedge">
+    <h3 style="margin-bottom:8px">Don't out-breadth ShipStation. Own the combination nobody else nails.</h3>
+    <p style="color:var(--soft)">ShipStation, Shippo and EasyPost win on carriers and channels but are thin on warehouse and non-existent on a 3PL/reseller back-office. ShipHero and Deposco win on WMS but are weak on multichannel shipping breadth and reseller billing. <b>You are the only one building all three in one system:</b> multi-channel shipping + a real WMS + a 3PL/agency back-office (the ELEMS replacement).</p>
+    <p style="color:var(--soft);margin-bottom:0">That's a "run your entire shipping business" story aimed squarely at <b>3PLs, shipping resellers, and agencies</b> — England's exact model. Lean into that positioning; it's defensible and the incumbents can't easily copy it.</p>
+  </div>
+  <p style="margin-top:16px"><b>The build order I'd commit to:</b></p>
+  <ol class="steps">
+    <li><b>Add the EasyPost (or Shippo) carrier layer.</b> One move delivers USPS + full UPS + DHL + rate-shopping + third-party insurance + more address/DDP tooling. This is the unlock — nothing else competes without it.</li>
+    <li><b>Ship the "best rate" rate-shopping UI + Autopilot rule.</b> Turns multi-carrier into a headline feature.</li>
+    <li><b>Get England to enable the FedEx Track API product.</b> Free; lights up tracking, branded pages, and webhooks you already built.</li>
+    <li><b>Returns exchanges + package protection.</b> Revenue and retention.</li>
+    <li><b>Then</b> international DDP and SMS/marketing — once the core is unbeatable.</li>
+  </ol>
+
+  <h2>Reference · what each competitor is known for</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Platform</th><th>Known for</th><th>You vs them</th></tr></thead>
+    <tbody>
+      <tr><td>ShipStation</td><td>Multichannel shipping, 100+ carriers/channels, automation, batch</td><td>You match channels + automation; behind on carriers</td></tr>
+      <tr><td>Shippo / EasyPost</td><td>Multi-carrier label API, address validation, tracking, insurance</td><td>You have the API surface; behind on carrier breadth</td></tr>
+      <tr><td>Veeqo</td><td>Free, Amazon-backed discounted rates, inventory + shipping</td><td>You have inventory; need multi-carrier + discounts</td></tr>
+      <tr><td>ShipHero</td><td>WMS-first fulfillment, 3PL, mobile picking</td><td>You now rival the WMS; add carriers</td></tr>
+      <tr><td>Ordoro / SkuSavvy</td><td>Inventory, purchasing, kitting, barcode WMS</td><td>At or above parity</td></tr>
+      <tr><td>Easyship</td><td>International, DDP landed cost, global carriers</td><td>HS codes yes; DDP is the gap</td></tr>
+      <tr><td>Redo</td><td>Returns, exchanges, package protection (post-purchase revenue)</td><td>Portal yes; exchanges/protection are the gap</td></tr>
+      <tr><td>ShippingEasy / ReadyCloud</td><td>Shipping + customer marketing / CRM / SMS</td><td>Email yes; SMS/marketing is the gap</td></tr>
+      <tr><td>Deposco</td><td>Enterprise OMS/WMS, omnichannel fulfillment</td><td>You're SMB/mid-market; different tier</td></tr>
+      <tr><td>EliteWorks</td><td>Counter/retail ship tools, dropoffs, mailboxes, last-mile</td><td>Parity (built this session)</td></tr>
+      <tr><td>WebShip</td><td>England's current back-office you're replacing</td><td>Replacement in progress (ELEMS modules live)</td></tr>
+    </tbody>
+  </table></div>
+
+  <footer><span>ShippingCloud · verified against source + netlify/functions</span><span>build tour-and-audit-v757</span></footer>
+</div>

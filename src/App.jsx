@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="cust360-v751";
+const BUILD_TAG="elems-backoffice-v752";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -4839,13 +4839,14 @@ const AR_BUCKETS=[["cur","≤ 0 days",-1e9,0],["b1","1–30",1,30],["b2","31–4
 function ReceivablesAdmin({clients=[],currentUser}){
   const [invoices,setInvoices]=usePersist("arInvoices",SEED_AR);
   const [tab,setTab]=useState("aging");         // "aging" | "statements"
-  const [rep,setRep]=useState("all");
+  const myRep=(currentUser&&currentUser.salesRep)||"";
+  const [rep,setRep]=useState(myRep||"all");
   const [asOfStr,setAsOfStr]=useState("");        // yyyy-mm-dd; blank = today
   const [pickCust,setPickCust]=useState("");
   const [balDueOnly,setBalDueOnly]=useState(true);
   const asOf=useMemo(()=>{ const d=asOfStr?new Date(asOfStr+"T00:00:00"):new Date(); return isNaN(d.getTime())?new Date():d; },[asOfStr]);
   const repNames=useMemo(()=>Array.from(new Set(invoices.map(i=>i.salesRep).filter(Boolean))).sort(),[invoices]);
-  const custList=useMemo(()=>{ const m={}; invoices.forEach(i=>{ if(!m[i.custNo])m[i.custNo]={custNo:i.custNo,customer:i.customer}; }); return Object.values(m).sort((a,b)=>a.customer.localeCompare(b.customer)); },[invoices]);
+  const custList=useMemo(()=>{ const m={}; invoices.filter(i=>!myRep||i.salesRep===myRep).forEach(i=>{ if(!m[i.custNo])m[i.custNo]={custNo:i.custNo,customer:i.customer}; }); return Object.values(m).sort((a,b)=>a.customer.localeCompare(b.customer)); },[invoices,myRep]);
 
   // AGING — group unpaid balances by customer into buckets
   const aging=useMemo(()=>{
@@ -4858,10 +4859,12 @@ function ReceivablesAdmin({clients=[],currentUser}){
   const agingTot=aging.reduce((s,r)=>{ AR_BUCKETS.forEach(([k])=>s[k]=(s[k]||0)+r[k]); s.total+=r.total; s.overdue+=r.overdue; return s; },{total:0,overdue:0});
 
   // STATEMENTS — one customer's invoices
-  const stmtRows=useMemo(()=>invoices.filter(i=>(!pickCust||i.custNo===pickCust)&&(!balDueOnly||arBalance(i)>0)).sort((a,b)=>(Date.parse(b.invoiceDate)||0)-(Date.parse(a.invoiceDate)||0)),[invoices,pickCust,balDueOnly]);
+  const stmtRows=useMemo(()=>invoices.filter(i=>(!myRep||i.salesRep===myRep)&&(!pickCust||i.custNo===pickCust)&&(!balDueOnly||arBalance(i)>0)).sort((a,b)=>(Date.parse(b.invoiceDate)||0)-(Date.parse(a.invoiceDate)||0)),[invoices,pickCust,balDueOnly,myRep]);
   const stmtCust=custList.find(c=>c.custNo===pickCust);
   const stmtCreditLimit=stmtRows[0]&&stmtRows[0].creditLimit;
   const stmtBalance=stmtRows.reduce((s,i)=>s+arBalance(i),0);
+  const recordPay=async(inv)=>{ const raw=await uiPrompt("Payment received for "+inv.number+" (balance "+money(arBalance(inv))+"):",String(arBalance(inv)),{title:"Record payment"}); if(raw==null)return; const amt=+String(raw).replace(/[^0-9.]/g,"")||0; if(!amt)return; setInvoices(list=>list.map(i=>i.id===inv.id?{...i,paid:(+i.paid||0)+amt}:i)); };
+  const recordAdj=async(inv)=>{ const raw=await uiPrompt("Adjustment / credit for "+inv.number+" — lowers the balance (e.g. a rate correction). Enter an amount:","",{title:"Apply adjustment"}); if(raw==null)return; const amt=+String(raw).replace(/[^0-9.]/g,"")||0; if(!amt)return; setInvoices(list=>list.map(i=>i.id===inv.id?{...i,adjustments:(+i.adjustments||0)+amt}:i)); };
 
   return (<div className="space-y-4">
     <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -4876,7 +4879,7 @@ function ReceivablesAdmin({clients=[],currentUser}){
     {tab==="aging"?<>
       <div className="flex items-center gap-2 flex-wrap text-sm">
         <span className="text-stone-500">As of</span><input type="date" value={asOfStr} onChange={e=>setAsOfStr(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5"/>
-        <span className="text-stone-500 ml-2">Sales rep</span><select value={rep} onChange={e=>setRep(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5"><option value="all">All</option>{repNames.map(r=><option key={r} value={r}>{r}</option>)}</select>
+        <span className="text-stone-500 ml-2">Sales rep</span>{myRep?<span className="bg-stone-100 border border-stone-200 rounded-lg px-2.5 py-1.5 text-stone-700 font-medium">{myRep}</span>:<select value={rep} onChange={e=>setRep(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5"><option value="all">All</option>{repNames.map(r=><option key={r} value={r}>{r}</option>)}</select>}
       </div>
       <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
         <div className="overflow-x-auto"><table className="w-full text-sm">
@@ -4909,10 +4912,10 @@ function ReceivablesAdmin({clients=[],currentUser}){
       <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
         <div className="overflow-x-auto"><table className="w-full text-sm">
           <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 border-b border-stone-200">
-            <th className="text-left font-medium px-3 py-2">Invoice #</th><th className="text-left font-medium px-3 py-2">Invoice date</th><th className="text-left font-medium px-3 py-2">Due date</th><th className="text-right font-medium px-3 py-2">Amount</th><th className="text-right font-medium px-3 py-2">Late fee</th><th className="text-right font-medium px-3 py-2">Total</th><th className="text-right font-medium px-3 py-2">Paid</th><th className="text-right font-medium px-3 py-2">Remaining</th>
+            <th className="text-left font-medium px-3 py-2">Invoice #</th><th className="text-left font-medium px-3 py-2">Invoice date</th><th className="text-left font-medium px-3 py-2">Due date</th><th className="text-right font-medium px-3 py-2">Amount</th><th className="text-right font-medium px-3 py-2">Late fee</th><th className="text-right font-medium px-3 py-2">Total</th><th className="text-right font-medium px-3 py-2">Paid</th><th className="text-right font-medium px-3 py-2">Remaining</th><th className="px-3 py-2"/>
           </tr></thead>
           <tbody className="divide-y divide-stone-100">
-            {stmtRows.length===0&&<tr><td colSpan={8} className="px-3 py-12 text-center text-stone-400">{pickCust?"No invoices for this customer.":"Pick a customer to see their statement."}</td></tr>}
+            {stmtRows.length===0&&<tr><td colSpan={9} className="px-3 py-12 text-center text-stone-400">{pickCust?"No invoices for this customer.":"Pick a customer to see their statement."}</td></tr>}
             {stmtRows.map(inv=>{ const bal=arBalance(inv); const over=arDaysOverdue(inv,asOf)>0&&bal>0; return (<tr key={inv.id} className="hover:bg-stone-50">
               <td className="px-3 py-2 font-medium text-stone-800 whitespace-nowrap">{inv.number}</td>
               <td className="px-3 py-2 text-stone-600 whitespace-nowrap">{inv.invoiceDate}</td>
@@ -4922,6 +4925,7 @@ function ReceivablesAdmin({clients=[],currentUser}){
               <td className="px-3 py-2 text-right tabular-nums text-stone-800">{money((+inv.amount||0)+(+inv.lateFee||0))}</td>
               <td className="px-3 py-2 text-right tabular-nums text-stone-500">{(+inv.paid||0)?money(+inv.paid):"$0"}</td>
               <td className={`px-3 py-2 text-right tabular-nums font-semibold ${bal>0?"text-stone-900":"text-emerald-600"}`}>{money(bal)}</td>
+              <td className="px-3 py-2 whitespace-nowrap text-right">{bal>0?<div className="inline-flex items-center gap-1"><button onClick={()=>recordPay(inv)} title="Record a payment" className="text-[11px] bg-emerald-600 text-white rounded px-2 py-1 hover:bg-emerald-700">Payment</button><button onClick={()=>recordAdj(inv)} title="Apply an adjustment / credit" className="text-[11px] border border-stone-300 text-stone-600 rounded px-2 py-1 hover:bg-stone-50">Adjust</button></div>:<Badge tone="green">Paid</Badge>}</td>
             </tr>); })}
           </tbody>
         </table></div>
@@ -4953,7 +4957,8 @@ function MarginsAdmin({clients=[],currentUser}){
   const [airbills,setAirbills]=usePersist("airbills",SEED_AIRBILLS);
   const [reps]=usePersist("salesReps",[]);
   const [tab,setTab]=useState("neg");            // "neg" | "agency"
-  const [rep,setRep]=useState("all");
+  const myRep=(currentUser&&currentUser.salesRep)||"";   // a rep-scoped login only ever sees their own book
+  const [rep,setRep]=useState(myRep||"all");
   const [minMargin,setMinMargin]=useState("0");   // show airbills at/below this margin %
   const [showRec,setShowRec]=useState(false);      // include already-reconciled
   const [groupBy,setGroupBy]=useState("customer"); // agency summary grouping
@@ -4963,6 +4968,15 @@ function MarginsAdmin({clients=[],currentUser}){
   const setCharge=(id,v)=>setAirbills(list=>list.map(a=>a.id===id?{...a,custCharge:v===""?0:+v}:a));
   const setRecon=(id,on)=>setAirbills(list=>list.map(a=>a.id===id?{...a,reconciled:on}:a));
   const reconcileAll=(ids)=>setAirbills(list=>list.map(a=>ids.includes(a.id)?{...a,reconciled:true}:a));
+  const [commPct,setCommPct]=useState("30");   // default commission % when a rep has no rate set on their sales-rep record
+  const commission=useMemo(()=>{
+    const byPct={}; (reps||[]).forEach(r=>{ if(r&&r.name)byPct[String(r.name).toLowerCase()]=+r.pct||0; });
+    const def=parseFloat(commPct)||0;
+    const m={};
+    airbills.forEach(a=>{ const k=a.salesRep||"—"; if(!m[k])m[k]={rep:k,rev:0,cost:0,margin:0,n:0}; m[k].rev+=(+a.custCharge||0); m[k].cost+=(+a.agentCost||0); m[k].margin+=abMargin(a); m[k].n++; });
+    return Object.values(m).map(r=>{ const pct=(byPct[String(r.rep).toLowerCase()]||def); return {...r,pct,commission:r.margin*pct/100}; }).sort((a,b)=>b.margin-a.margin);
+  },[airbills,reps,commPct]);
+  const commTot=commission.reduce((s,r)=>({margin:s.margin+r.margin,commission:s.commission+r.commission,n:s.n+r.n}),{margin:0,commission:0,n:0});
 
   // NEGATIVE MARGINS view — airbills whose margin % is at/below the threshold
   const thresh=parseFloat(minMargin)||0;
@@ -5003,11 +5017,12 @@ function MarginsAdmin({clients=[],currentUser}){
     <div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm">
       <button onClick={()=>setTab("neg")} className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 ${tab==="neg"?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}><AlertTriangle className="w-4 h-4"/>Negative margins</button>
       <button onClick={()=>setTab("agency")} className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 ${tab==="agency"?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}><BarChart3 className="w-4 h-4"/>Agency summary</button>
+      <button onClick={()=>setTab("comm")} className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 ${tab==="comm"?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}><DollarSign className="w-4 h-4"/>Commissions</button>
     </div>
     {/* filters */}
     <div className="flex items-center gap-2 flex-wrap text-sm">
       <span className="text-stone-500">Sales rep</span>
-      <select value={rep} onChange={e=>setRep(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5"><option value="all">All</option>{repNames.map(r=><option key={r} value={r}>{r}</option>)}</select>
+      {myRep?<span className="bg-stone-100 border border-stone-200 rounded-lg px-2.5 py-1.5 text-stone-700 font-medium">{myRep}</span>:<select value={rep} onChange={e=>setRep(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5"><option value="all">All</option>{repNames.map(r=><option key={r} value={r}>{r}</option>)}</select>}
       {tab==="neg"&&<><span className="text-stone-500 ml-2">Show margin ≤</span><input value={minMargin} onChange={e=>setMinMargin(e.target.value.replace(/[^0-9.\-]/g,""))} className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1.5"/><span className="text-stone-400">%</span>
         <label className="flex items-center gap-1.5 text-stone-500 ml-2 cursor-pointer"><input type="checkbox" checked={showRec} onChange={e=>setShowRec(e.target.checked)} className="accent-[#0086E0]"/>Include reconciled</label></>}
       {tab==="agency"&&<><span className="text-stone-500 ml-2">Group by</span>
@@ -5042,7 +5057,7 @@ function MarginsAdmin({clients=[],currentUser}){
         </table></div>
       </div>
       <p className="text-[12px] text-stone-400">Raise a <b>Cust charge</b> until the margin turns black, then <b>Reconcile</b> the row. “Margin ≤ 0%” shows everything at a loss or break-even; bump it to e.g. 10% to catch thin-margin shipments too.</p>
-    </>:<>
+    </>:tab==="agency"?<>
       {/* AGENCY SUMMARY */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Shipments</div><div className="text-xl font-semibold text-stone-900">{tot.n}</div></div>
@@ -5067,6 +5082,36 @@ function MarginsAdmin({clients=[],currentUser}){
             </tr>))}
           </tbody>
           {summary.length>0&&<tfoot><tr className="bg-stone-50 font-semibold text-stone-800 border-t border-stone-200"><td className="px-3 py-2">Totals ({summary.length})</td><td className="px-3 py-2 text-right tabular-nums">{tot.n}</td><td className="px-3 py-2 text-right tabular-nums">{money(tot.rev)}</td><td className="px-3 py-2 text-right tabular-nums">{money(tot.cost)}</td><td className="px-3 py-2 text-right tabular-nums">{money(tot.margin)}</td><td className="px-3 py-2 text-right tabular-nums">{tot.rev>0?(tot.margin/tot.rev*100).toFixed(1):"0"}%</td></tr></tfoot>}
+        </table></div>
+      </div>
+    </>:<>
+      {/* COMMISSIONS — margin × rep commission % */}
+      <div className="flex items-center gap-2 flex-wrap text-sm">
+        <span className="text-stone-500">Default commission %</span>
+        <input value={commPct} onChange={e=>setCommPct(e.target.value.replace(/[^0-9.]/g,""))} className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1.5"/><span className="text-stone-400">%</span>
+        <span className="text-[11px] text-stone-400 ml-1">— used when a rep has no rate set on their Sales-rep record (Billing → Commissions).</span>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Reps</div><div className="text-xl font-semibold text-stone-900">{commission.length}</div></div>
+        <div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Total margin</div><div className="text-xl font-semibold text-stone-900 tabular-nums">{money(commTot.margin)}</div></div>
+        <div className="border border-emerald-200 rounded-xl bg-emerald-50/50 px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-emerald-600">Total commission</div><div className="text-xl font-semibold text-emerald-700 tabular-nums">{money(commTot.commission)}</div></div>
+      </div>
+      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+        <div className="overflow-x-auto"><table className="w-full text-sm">
+          <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 border-b border-stone-200">
+            <th className="text-left font-medium px-3 py-2">Sales rep</th><th className="text-right font-medium px-3 py-2">Shipments</th><th className="text-right font-medium px-3 py-2">Margin</th><th className="text-right font-medium px-3 py-2">Comm %</th><th className="text-right font-medium px-3 py-2">Commission</th>
+          </tr></thead>
+          <tbody className="divide-y divide-stone-100">
+            {commission.length===0&&<tr><td colSpan={5} className="px-3 py-12 text-center text-stone-400">No airbills yet — run the weekly import.</td></tr>}
+            {commission.map(r=>(<tr key={r.rep} className="hover:bg-stone-50">
+              <td className="px-3 py-2 text-stone-800">{r.rep}</td>
+              <td className="px-3 py-2 text-right text-stone-600 tabular-nums">{r.n}</td>
+              <td className={`px-3 py-2 text-right tabular-nums ${r.margin<0?"text-rose-600":"text-stone-800"}`}>{money(r.margin)}</td>
+              <td className="px-3 py-2 text-right text-stone-500 tabular-nums">{r.pct.toFixed(1)}%</td>
+              <td className="px-3 py-2 text-right font-semibold text-emerald-700 tabular-nums">{money(r.commission)}</td>
+            </tr>))}
+          </tbody>
+          {commission.length>0&&<tfoot><tr className="bg-stone-50 font-semibold text-stone-800 border-t border-stone-200"><td className="px-3 py-2">Totals</td><td className="px-3 py-2 text-right tabular-nums">{commTot.n}</td><td className="px-3 py-2 text-right tabular-nums">{money(commTot.margin)}</td><td className="px-3 py-2 text-right"/><td className="px-3 py-2 text-right tabular-nums">{money(commTot.commission)}</td></tr></tfoot>}
         </table></div>
       </div>
     </>}
@@ -5784,6 +5829,14 @@ function UsersAdmin({users,setUsers,clients,setClients,currentUser,signupRequest
               {ADMIN_SECTIONS.map(([aid,label])=>{const on=u.adminPerms.sections.includes(aid);return (
                 <label key={aid} className="flex items-center gap-2 text-sm cursor-pointer py-0.5"><input type="checkbox" checked={on} onChange={e=>setUsers(us=>us.map(x=>x.id===u.id?{...x,adminPerms:{sections:e.target.checked?[...x.adminPerms.sections,aid]:x.adminPerms.sections.filter(z=>z!==aid)}}:x))} className="accent-[#0086E0]"/><span className="text-stone-700">{label}</span></label>);})}
             </div>}
+            <div className="border-t border-stone-100 mt-2.5 pt-2.5">
+              <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Sales-rep scope</div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <input value={u.salesRep||""} onChange={e=>setUsers(us=>us.map(x=>x.id===u.id?{...x,salesRep:e.target.value}:x))} placeholder="e.g. sanderson — leave blank for full access" className="flex-1 min-w-[200px] border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm"/>
+                {u.salesRep&&<Badge tone="blue">scoped to {u.salesRep}</Badge>}
+              </div>
+              <p className="text-[11px] text-stone-400 mt-1.5">When set, this login only ever sees that rep's own book in Margins &amp; Receivables — their customers, airbills, aging and statements. Blank = sees everything.</p>
+            </div>
             <p className="text-[11px] text-stone-400 mt-2">Applies the next time they load the app. Levels control what the Admin portal shows — every admin login still has full data access underneath, so only make admins of people you trust.</p>
           </div>}
         </div>

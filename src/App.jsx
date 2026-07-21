@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="landed-cost-v758";
+const BUILD_TAG="intl-etd-locations-v759";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -8363,6 +8363,29 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     {key:"fedex_prio",carrier:"FedEx",label:"FedEx Priority Overnight®",cost:null},
   ];
   const localQuotes=()=>quoteRates(shipment).filter(q=>q.carrier==="FedEx");
+  /* FedEx Location Search — find drop-off points (near you) or hold-for-pickup locations (near the
+     recipient). Powered by netlify/functions/fedexlocations.js. */
+  const [locOpen,setLocOpen]=useState(false);
+  const [locMode,setLocMode]=useState("dropoff");   // "dropoff" = near sender · "hold" = near recipient (hold for pickup)
+  const [locBusy,setLocBusy]=useState(false);
+  const [locErr,setLocErr]=useState("");
+  const [locResults,setLocResults]=useState(null);
+  const runLocSearch=async(mode)=>{
+    const m=mode||locMode;
+    const near=m==="hold"?receiver:sender;
+    const zip=String((m==="hold"?receiver.zip:(sender.zip||originZip))||"").trim();
+    if(!zip&&!near.city){setLocErr("Add a "+(m==="hold"?"recipient":"sender")+" ZIP or city first.");setLocResults(null);return;}
+    setLocBusy(true);setLocErr("");setLocResults(null);
+    try{
+      const r=await fetch("/.netlify/functions/fedexlocations",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+        token:CLOUD.token||undefined,postalCode:zip,country:near.country||"US",city:near.city||"",state:near.state||"",address1:near.address1||"",radius:25,max:12,
+        ...(m==="hold"?{holdService:"FEDEX_GROUND"}:{})})});
+      const d=await r.json();
+      if(d&&d.ok){setLocResults(d.locations||[]);if(!(d.locations||[]).length)setLocErr("No FedEx locations found within 25 miles — try a nearby ZIP.");}
+      else setLocErr((d&&d.error)||"Couldn't search FedEx locations.");
+    }catch(e){setLocErr("Network error — try again.");}
+    setLocBusy(false);
+  };
   /* Quick quote pre-fill: whatever is already typed here (boxes, ZIPs, signature, insurance,
      Saturday) rides along when Quick quote opens. Published on content change only — the ts
      lets Quick quote tell "Ship was edited since my last pre-fill" from "nothing new". */
@@ -8564,7 +8587,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       fedexAccount:ruleAcct||undefined,   // Autopilot "Book on FedEx Account" rule override
       providerAccountId:eng.providerAccountId||null,
       sender:{...sender,country:sender.country||"US"},receiver:{...receiver,country:receiver.country||"US"},
-      pieces:pieces.map(p=>({weight:Math.ceil(pw(p)||1),length:p.L,width:p.W,height:p.H,declaredValue:(pieces.length>1&&dvEach)?(+p.dv||null):(+insurance||null)}))};   // book at the rounded-up billing weight the quote priced · per-box declared value applies intl too (p.value never existed — intl DV was silently dropped)
+      pieces:pieces.map(p=>({weight:Math.ceil(pw(p)||1),length:p.L,width:p.W,height:p.H,declaredValue:(pieces.length>1&&dvEach)?(+p.dv||null):(+insurance||null)})),   // book at the rounded-up billing weight the quote priced · per-box declared value applies intl too (p.value never existed — intl DV was silently dropped)
+      /* INTERNATIONAL: send the real commercial-invoice lines + DDP/DAP + (optional) ETD so the
+         label's customs declaration matches the quote and — when ETD is on — FedEx generates and
+         electronically transmits the commercial invoice (no paper pouch). */
+      ...(intl?{ddp:customs.dutiesBill!=="receiver",etd:!!customs.etd,reason:customs.reason,incoterm:customs.incoterm,contentDescription:(customs.lines.map(l=>l.desc).filter(Boolean).join(", ")||"Merchandise"),commodities:customs.lines.filter(l=>(+l.value>0||String(l.desc||"").trim())).map(l=>({description:String(l.desc||"Merchandise").slice(0,70),hsCode:String(l.hts||"").trim(),countryOfOrigin:l.origin||"United States",quantity:Math.max(1,+l.qty||1),unitPrice:+l.value||0,value:+l.value||0,weight:(customs.units==="kg"?(+l.wkg||0)*2.20462:((+l.wlb||0)+(+l.woz||0)/16))||undefined}))}:{})};
     const res=await shipCall({action:"ship",account:acctOf(eng),order});
     if(!res||!res.ok){setShipStatus({state:"error",key:q.key,msg:(res&&res.error)||"Booking failed"});setBought(null);return;}
     const done=(st)=>{ justBookedRef.current=selectedOrder||"manual"; const _rec=buildRec(q,carrier,st); onShipped(_rec,selectedOrder); if(st.labelPdfBase64){try{window.dispatchEvent(new CustomEvent("sc-label",{detail:{id:_rec.id,pdf:st.labelPdfBase64}}));}catch(e){} openLabelOrDirectPrint({pdf:st.labelPdfBase64,pdfAll:(st.labels&&st.labels.length>1)?st.labels:undefined,tracking:st.tracking,service:q.label,carrier,rec:_rec,forcePrint:!!q._confirmed},settings,setLabelPreview); if(cz(settings).autoPackSlip){ const so=selectedOrder&&orders.find(x=>x.id===selectedOrder); setTimeout(()=>{ try{ printPackingSlipAuto([{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:st.tracking||"",service:q.label}],settings,!!q._confirmed); }catch(e){} },(!q._confirmed&&(cz(settings).previewBeforePrint!=null?cz(settings).previewBeforePrint:!(cz(settings).skipBookedSummary||cz(settings).directNoPreview)))?0:2500); }   /* label pipeline gets a head start — its dialog must always beat the slip fallback */ if(cz(settings).printFlowV2?cz(settings).resetAfterPrint:(cz(settings).skipBookedSummary||cz(settings).resetAfterPrint)){ setTimeout(()=>{ try{newShipment();}catch(e){} },900); };} else if(st.labelError){setShipStatus({state:"label_err",key:q.key,msg:st.labelError});} setShipStatus({state:"booked",key:q.key,tracking:st.tracking}); setLastTracking(st.tracking||""); fireConfetti(); if(customs.autoPrint&&receiver.country&&!_isUSCountry(receiver.country))setTimeout(printShipCI,900); setTimeout(()=>{setBought(null);setShipStatus(null);},2600); };
@@ -8864,6 +8891,46 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             )}
           </div>
           <div className="w-full space-y-3">
+            {/* ── FedEx location finder: drop-off points near the sender, or hold-for-pickup
+                   locations near the recipient (FedEx Location Search API). ── */}
+            <div className="border border-stone-200 shadow-sm rounded-lg bg-white">
+              <button onClick={()=>{const n=!locOpen;setLocOpen(n);if(n&&!locResults&&!locBusy)runLocSearch();}} className="w-full flex items-center gap-2 px-3 py-2.5 text-left">
+                <MapPin className="w-4 h-4 text-[#0086E0] shrink-0"/>
+                <span className="text-[13px] font-semibold text-stone-800 flex-1">Find a FedEx location</span>
+                <ChevronRight className={`w-4 h-4 text-stone-400 transition-transform ${locOpen?"rotate-90":""}`}/>
+              </button>
+              {locOpen&&<div className="px-3 pb-3 border-t border-stone-100 pt-2.5 space-y-2.5">
+                <div className="flex bg-stone-100 rounded-lg p-0.5 text-[12px]">
+                  {[["dropoff","Drop off (near me)"],["hold","Hold for pickup (near recipient)"]].map(([v,l])=>
+                    <button key={v} onClick={()=>{setLocMode(v);runLocSearch(v);}} className={`flex-1 px-2 py-1 rounded-md ${locMode===v?"bg-white shadow-sm text-stone-800 font-medium":"text-stone-500"}`}>{l}</button>)}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={()=>runLocSearch()} disabled={locBusy} className="text-[12px] bg-[#0086E0] hover:bg-[#006db8] disabled:opacity-50 text-white rounded-lg px-3 py-1.5 font-medium flex items-center gap-1.5">
+                    {locBusy?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<Search className="w-3.5 h-3.5"/>}Search near {locMode==="hold"?(receiver.city||receiver.zip||"recipient"):(sender.city||sender.zip||"me")}</button>
+                  <span className="text-[11px] text-stone-400">within 25 mi</span>
+                </div>
+                {locErr&&<div className="text-[12px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">{locErr}</div>}
+                {locResults&&locResults.length>0&&<div className="space-y-1.5 max-h-72 overflow-y-auto -mx-1 px-1">
+                  {locResults.map((L,i)=><div key={i} className="border border-stone-200 rounded-lg p-2 text-[12px]">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-semibold text-stone-800 truncate">{L.name}{L.type?<span className="ml-1.5 text-[10px] font-normal uppercase tracking-wide text-stone-400">{L.type}</span>:null}</div>
+                        <div className="text-stone-500 leading-tight">{[L.address1,[L.city,L.state].filter(Boolean).join(", "),L.zip].filter(Boolean).join(" · ")}</div>
+                        {L.hours&&L.hours.length>0&&<div className="text-[11px] text-stone-400 mt-0.5 truncate">{L.hours.slice(0,3).join("  ·  ")}</div>}
+                      </div>
+                      {L.distance!=null&&<div className="text-[11px] text-[#006FBF] font-medium shrink-0">{L.distance} {String(L.distanceUnits||"mi").toLowerCase()}</div>}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      {L.phone&&<a href={"tel:"+L.phone} className="text-[11px] text-stone-500 hover:text-stone-700">{L.phone}</a>}
+                      <span className="flex-1"/>
+                      <button onClick={()=>{try{navigator.clipboard&&navigator.clipboard.writeText([L.name,L.address1,[L.city,L.state,L.zip].filter(Boolean).join(", ")].filter(Boolean).join("\n"));}catch(e){}}} className="text-[11px] text-stone-500 hover:text-[#0086E0]">Copy address</button>
+                      {locMode==="hold"&&<button onClick={()=>{setReceiver(r=>({...r,company:L.name||r.company,address1:L.address1||r.address1,address2:"",city:L.city||r.city,state:L.state||r.state,zip:L.zip||r.zip}));setLocOpen(false);}} className="text-[11px] bg-[#E6F4FF] text-[#006FBF] rounded px-2 py-0.5 font-medium hover:bg-[#CCEAFF]">Use as ship-to</button>}
+                    </div>
+                  </div>)}
+                </div>}
+                <div className="text-[10px] text-stone-400 leading-snug">{locMode==="hold"?"Ship-to a staffed FedEx location so the recipient collects it there. (True Hold-at-Location routing can be added to booking next.)":"Where you can drop off this outbound package."}</div>
+              </div>}
+            </div>
             {/* ── Card 1: THIS SHIPMENT — read-only status, one card, one row per fact. State lives
                    in the icon color (green = good), not in three different tinted strips. ── */}
             {(()=>{
@@ -9019,6 +9086,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <span className="flex-1"/>
               <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700"><input type="checkbox" checked={!!customs.proforma} onChange={e=>setCustoms({...customs,proforma:e.target.checked})} className="accent-[#0086E0]"/>PROFORMA</label>
               <label className="flex items-center gap-1.5 cursor-pointer text-sm text-stone-700"><input type="checkbox" checked={!!customs.autoPrint} onChange={e=>setCustoms({...customs,autoPrint:e.target.checked})} className="accent-[#0086E0]"/>Auto-print after label</label>
+              <label title="Electronic Trade Documents — FedEx generates the commercial invoice from these products and transmits it to customs electronically, so you don't print or attach paper copies. Requires ETD enabled on your FedEx account." className="flex items-center gap-1.5 cursor-pointer text-sm font-medium text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-2 py-1"><input type="checkbox" checked={!!customs.etd} onChange={e=>setCustoms({...customs,etd:e.target.checked})} className="accent-[#0086E0]"/>Send invoice electronically (ETD)</label>
               <div className="flex gap-2">
               <button onClick={()=>printShipCI(true)} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3.5 py-2 font-medium hover:bg-stone-200 flex items-center gap-1.5"><FileText className="w-4 h-4"/>View Invoice</button>
               <button onClick={()=>printShipCI()} className="text-sm bg-[#0086E0] hover:bg-[#006db8] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5"><Receipt className="w-4 h-4"/>Print Commercial Invoice</button></div>

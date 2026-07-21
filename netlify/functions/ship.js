@@ -192,7 +192,11 @@ exports.handler = async (event) => {
   const pieces = (Array.isArray(o.pieces) && o.pieces.length ? o.pieces : [{ weight: 1, length: 12, width: 9, height: 4 }]);
   const totalWeight = pieces.reduce((a, p) => a + (+p.weight || 0), 0) || 1;
   const money$ = (v) => +String(v == null ? "" : v).replace(/[^0-9.]/g, "") || 0;   // "$1,000" → 1000, junk → 0
-  const declaredTotal = pieces.reduce((a, p) => a + money$(p.declaredValue), 0) || money$(o.insuranceAmount);
+  /* Customs value for intl: prefer per-box declared value / insurance, but fall back to the sum of
+     the commercial-invoice line values so a shipment priced with product values (not insurance)
+     still books — FedEx rejects a $0 customs declaration. */
+  const _comTotal = Array.isArray(o.commodities) ? o.commodities.reduce((a, c) => a + Math.max(0, (+c.unitPrice || +c.value || 0)) * Math.max(1, Math.round(+c.quantity || 1)), 0) : 0;
+  const declaredTotal = pieces.reduce((a, p) => a + money$(p.declaredValue), 0) || money$(o.insuranceAmount) || _comTotal;
 
   const refs = [];
   if (o.reference) refs.push({ customerReferenceType: "CUSTOMER_REFERENCE", value: String(o.reference).slice(0, 40) });
@@ -292,6 +296,24 @@ exports.handler = async (event) => {
             weight: { units: "LB", value: totalWeight }
           }])
     };
+    /* ELECTRONIC TRADE DOCUMENTS (ETD): let FedEx generate the commercial invoice from the customs
+       data above and transmit it electronically — no paper CI printed or stuffed in a pouch. Gated
+       by o.etd so anyone who still wants paper (or whose account lacks ETD) is unaffected. FedEx
+       needs a shipment purpose + terms of sale on the CI, and a document spec telling it to make one. */
+    if (o.etd) {
+      const PURPOSE = { sale: "SOLD", "sale of goods": "SOLD", sample: "SAMPLE", gift: "GIFT", repair: "REPAIR_AND_RETURN", "repair and return": "REPAIR_AND_RETURN", return: "REPAIR_AND_RETURN", personal: "PERSONAL_EFFECTS", "personal effects": "PERSONAL_EFFECTS", "not sold": "NOT_SOLD" };
+      const shipmentPurpose = PURPOSE[String(o.reason || "sale").trim().toLowerCase()] || "SOLD";
+      const inc = String(o.incoterm || "").toUpperCase();
+      const termsOfSale = /DDP/.test(inc) ? "DDP" : /(DAP|DDU|DAT)/.test(inc) ? "DAP" : /EXW/.test(inc) ? "EXW" : /FCA/.test(inc) ? "FCA" : /FOB/.test(inc) ? "FOB" : /CIF/.test(inc) ? "CIF" : /CFR/.test(inc) ? "CFR" : /CPT/.test(inc) ? "CPT" : /CIP/.test(inc) ? "CIP" : (o.ddp === false ? "DAP" : "DDP");
+      requestedShipment.customsClearanceDetail.commercialInvoice = { shipmentPurpose, termsOfSale };
+      const sss = requestedShipment.shipmentSpecialServices || (requestedShipment.shipmentSpecialServices = { specialServiceTypes: [] });
+      if (!sss.specialServiceTypes.includes("ELECTRONIC_TRADE_DOCUMENTS")) sss.specialServiceTypes.push("ELECTRONIC_TRADE_DOCUMENTS");
+      sss.etdDetail = { requestedDocumentTypes: ["COMMERCIAL_INVOICE"] };
+      requestedShipment.shippingDocumentSpecification = {
+        shippingDocumentTypes: ["COMMERCIAL_INVOICE"],
+        commercialInvoiceDetail: { documentFormat: { docType: "PDF", stockType: "PAPER_LETTER" } }
+      };
+    }
   }
 
   try {

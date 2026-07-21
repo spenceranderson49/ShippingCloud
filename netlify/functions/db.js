@@ -1876,6 +1876,49 @@ exports.handler = async (event) => {
       return J(w.ok ? { ok: true } : { ok: false, error: "Save failed." });
     }
 
+    /* ── ELEMS CONNECT (England's weekly feed lands here) ─────────────────────────────
+       One machine-to-machine endpoint England posts their weekly export to, instead of REMS.
+       Auth: an admin session token OR an admin-mode ShippingCloud API key (Admin → API).
+       Body: { airbills:[...], invoices:[...] }. UPSERTS — airbills by airbill #, invoices by
+       number — so re-sending the same week is idempotent and never duplicates or wipes.
+       Additive only; the existing wipe-guards still protect everything else. */
+    if (action === "elemsImport") {
+      let authed = auth.role === "admin";
+      if (!authed && body.apiKey) {
+        const kr = await getStore("apiKeys");
+        const keys = (kr.ok && Array.isArray(kr.value)) ? kr.value : [];
+        const h = crypto.createHash("sha256").update(String(body.apiKey)).digest("hex");
+        const match = keys.find((k) => k && !k.revoked && k.hash === h && k.mode === "admin");
+        if (match) { authed = true; try { await putStores({ apiKeys: keys.map((k) => k.id === match.id ? { ...k, lastUsed: new Date().toISOString() } : k) }); } catch (e) {} }
+      }
+      if (!authed) return J({ ok: false, error: "Unauthorized — send an admin session token or an admin-mode API key (Admin → API)." });
+      const inAir = Array.isArray(body.airbills) ? body.airbills : [];
+      const inInv = Array.isArray(body.invoices) ? body.invoices : [];
+      if (!inAir.length && !inInv.length) return J({ ok: false, error: "Nothing to import — include airbills and/or invoices arrays." });
+      const out = { ok: true };
+      if (inAir.length) {
+        const cur = await getStore("airbills");
+        if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read current airbills — retry." });
+        const byKey = new Map((Array.isArray(cur.value) ? cur.value : []).map((a) => [String((a && (a.airbill || a.id)) || ""), a]));
+        inAir.forEach((a, i) => { const rec = { id: (a && a.id) || ("ab_imp_" + Date.now() + "_" + i), reconciled: false, ...a }; byKey.set(String(rec.airbill || rec.id), rec); });
+        const merged = Array.from(byKey.values());
+        const w = await putStores({ airbills: merged });
+        if (!w.ok) return J({ ok: false, error: "Save failed (airbills)." });
+        out.airbillsReceived = inAir.length; out.airbillsTotal = merged.length;
+      }
+      if (inInv.length) {
+        const cur = await getStore("arInvoices");
+        if (!cur.ok) return J({ ok: false, retry: true, error: "Couldn't read current invoices — retry." });
+        const byNum = new Map((Array.isArray(cur.value) ? cur.value : []).map((v) => [String((v && (v.number || v.id)) || ""), v]));
+        inInv.forEach((v, i) => { const rec = { id: (v && v.id) || ("ar_imp_" + Date.now() + "_" + i), paid: 0, adjustments: 0, ...v }; byNum.set(String(rec.number || rec.id), rec); });
+        const merged = Array.from(byNum.values());
+        const w = await putStores({ arInvoices: merged });
+        if (!w.ok) return J({ ok: false, error: "Save failed (invoices)." });
+        out.invoicesReceived = inInv.length; out.invoicesTotal = merged.length;
+      }
+      return J(out);
+    }
+
     /* ── snapshot management (F17): bak:<key>:<ts> rows are written by the wipe-guards above.
        listBackups shows what exists; restoreBackup puts one back — after snapshotting the
        CURRENT value first, so a restore is itself reversible. Admin only. ── */

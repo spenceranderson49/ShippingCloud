@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="ar-import-v753";
+const BUILD_TAG="england-connect-v754";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -4988,6 +4988,7 @@ function MarginsAdmin({clients=[],currentUser}){
   const [groupBy,setGroupBy]=useState("customer"); // agency summary grouping
   const [importOpen,setImportOpen]=useState(false);
   const [importText,setImportText]=useState("");
+  const [connectOpen,setConnectOpen]=useState(false);
   const repNames=useMemo(()=>Array.from(new Set(airbills.map(a=>a.salesRep).filter(Boolean))).sort(),[airbills]);
   const setCharge=(id,v)=>setAirbills(list=>list.map(a=>a.id===id?{...a,custCharge:v===""?0:+v}:a));
   const setRecon=(id,on)=>setAirbills(list=>list.map(a=>a.id===id?{...a,reconciled:on}:a));
@@ -5034,10 +5035,25 @@ function MarginsAdmin({clients=[],currentUser}){
     <div className="flex items-start justify-between gap-3 flex-wrap">
       <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><TrendingUp className="w-5 h-5 text-[#0086E0]"/>Margins</h2><p className="text-sm text-stone-500 mt-0.5">Every airbill's economics — what you charged vs. what the carrier charged you. Find and fix the ones losing money, and see margin by customer or rep.</p></div>
       <div className="flex items-center gap-2 shrink-0">
-        <button onClick={()=>setImportOpen(true)} className="text-sm bg-[#E6F4FF] border border-[#0086E0]/30 text-[#006FBF] rounded-lg px-3 py-1.5 font-medium hover:bg-[#d3ecff] flex items-center gap-1.5"><Upload className="w-4 h-4"/>Weekly import</button>
+        {!myRep&&<button onClick={()=>setConnectOpen(true)} className="text-sm bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-1.5 font-medium hover:bg-emerald-100 flex items-center gap-1.5"><Plug className="w-4 h-4"/>Connect England</button>}
+        {!myRep&&<button onClick={()=>setImportOpen(true)} className="text-sm bg-[#E6F4FF] border border-[#0086E0]/30 text-[#006FBF] rounded-lg px-3 py-1.5 font-medium hover:bg-[#d3ecff] flex items-center gap-1.5"><Upload className="w-4 h-4"/>Weekly import</button>}
         <button onClick={()=>downloadCSV("airbill-margins.csv",[["Date","Invoice","Airbill","Customer","Cust #","Sales Rep","Type","Zone","Snd","Rcv","Cust Charge","Agent Cost","Margin","Reconciled"],...airbills.map(a=>[a.date,a.invoice,a.airbill,a.customer,a.custNo,a.salesRep,a.type,a.zone,a.sndCo,a.rcvCo,a.custCharge,a.agentCost,abMargin(a).toFixed(2),a.reconciled?"yes":"no"])])} className="text-sm text-stone-500 hover:text-stone-700 flex items-center gap-1.5 px-2 py-1.5"><Download className="w-4 h-4"/>Export</button>
       </div>
     </div>
+    {connectOpen&&(()=>{ const origin=(typeof location!=="undefined"&&location.origin)||"https://your-domain"; const endpoint=origin+"/.netlify/functions/db"; const sample=JSON.stringify({action:"elemsImport",apiKey:"sck_admin_…",airbills:[{airbill:"874385",invoice:"206020",date:"2026-07-28",customer:"Glymed Plus",custNo:"20602029",salesRep:"sanderson",type:"One Rate",zone:"10",sndCo:"US",rcvCo:"US",custCharge:0,agentCost:22.20}],invoices:[{number:"20602352AAG28",custNo:"20602352",customer:"Environmental Seeds West",salesRep:"sanderson",terms:30,creditLimit:25000,invoiceDate:"2026-07-28",dueDate:"2026-08-27",amount:734.53,lateFee:73.45,paid:0}]},null,2);
+      return (<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setConnectOpen(false)}>
+      <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-5 max-h-[90vh] overflow-y-auto" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1"><div className="font-semibold text-stone-900 flex items-center gap-2"><Plug className="w-4 h-4 text-emerald-600"/>Connect England's weekly feed</div><button onClick={()=>setConnectOpen(false)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+        <p className="text-sm text-stone-500 mb-3">Instead of REMS, England posts their weekly airbill + invoice export straight into this system. Give their team these three things:</p>
+        <ol className="space-y-3 text-sm">
+          <li><div className="font-medium text-stone-800">1 · A key</div><div className="text-stone-600">Create an <b>admin</b>-mode API key in <b>Admin → API</b> and send it to England. It authenticates their feed and can be revoked anytime.</div></li>
+          <li><div className="font-medium text-stone-800">2 · The endpoint</div><div className="mt-1 font-mono text-[12px] bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-2 text-stone-700 break-all">POST {endpoint}</div></li>
+          <li><div className="font-medium text-stone-800">3 · The payload</div><div className="text-stone-600 mb-1">JSON body — <code className="text-[11px]">airbills</code> and/or <code className="text-[11px]">invoices</code> arrays. Upserted by airbill # / invoice number, so re-sending a week is safe.</div>
+            <pre className="font-mono text-[11px] bg-stone-900 text-stone-100 rounded-lg p-3 overflow-x-auto">{sample}</pre></li>
+        </ol>
+        <div className="mt-3 text-[12px] text-stone-500 bg-emerald-50/60 border border-emerald-100 rounded-lg px-3 py-2">Response returns counts: <code className="text-[11px]">airbillsReceived</code>, <code className="text-[11px]">invoicesReceived</code>, and the new totals. Once this is wired, Margins &amp; Receivables populate themselves every week — no manual import.</div>
+      </div>
+    </div>); })()}
     <div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm">
       <button onClick={()=>setTab("neg")} className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 ${tab==="neg"?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}><AlertTriangle className="w-4 h-4"/>Negative margins</button>
       <button onClick={()=>setTab("agency")} className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 ${tab==="agency"?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}><BarChart3 className="w-4 h-4"/>Agency summary</button>

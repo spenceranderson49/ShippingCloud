@@ -103,8 +103,8 @@ const FEATURE_CATALOG=[
   {id:"fedexLocations",label:"FedEx Location Finder",desc:"Find nearest FedEx drop-off / pickup locations by ZIP or current location",default:true},
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own NON-FedEx carrier accounts (the FedEx Account settings page always shows for every customer; admins always have this)",default:false},
 ];
-const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All Logins"],["rates","Rates & Dim Divisors"],["othercarriers","Other Carriers"],["labelcert","FedEx Labels"],["customizations","Features & Access"],["branding","Branding"],["apiadmin","API"],["billing","Billing & Invoices"],["domains","Domains"],["backups","Backups & Restore"]];
-const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,othercarriers:Truck,labelcert:Printer,customizations:Sliders,branding:Sparkles,apiadmin:Plug,billing:Receipt,domains:ExternalLink,backups:RotateCcw};
+const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All Logins"],["rates","Rates & Dim Divisors"],["margins","Margins"],["othercarriers","Other Carriers"],["labelcert","FedEx Labels"],["customizations","Features & Access"],["branding","Branding"],["apiadmin","API"],["billing","Billing & Invoices"],["domains","Domains"],["backups","Backups & Restore"]];
+const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,margins:TrendingUp,othercarriers:Truck,labelcert:Printer,customizations:Sliders,branding:Sparkles,apiadmin:Plug,billing:Receipt,domains:ExternalLink,backups:RotateCcw};
 /* A restricted admin ALWAYS keeps access to "users" — without it there is no self-service way
    to ever fix a permission set that’s missing something, for yourself or anyone else. A wrong
    restriction otherwise becomes a permanent lockout with no way back in. */
@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="self-wms-v748";
+const BUILD_TAG="margins-v749";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -4780,6 +4780,159 @@ function RatesAdmin({clients=[],brand}){
 /* ════════ Admin → Billing & invoices: generate invoices from recorded shipments,
    track paid/unpaid, record payments. Admin-only; a customer sees nothing until the
    'invoicePortal' flag is turned on for their login. ════════ */
+/* ── AIRBILL MARGINS (ELEMS parity) ───────────────────────────────────────────
+   Each airbill = one shipment's economics: what we charged the customer (custCharge)
+   vs. what the carrier (FedEx/England) charged us (agentCost). Margin = charge − cost;
+   a NEGATIVE margin means we lost money on that shipment. The team's weekly job is to
+   find those and raise the customer charge (or reconcile) so nothing ships at a loss.
+   Fed by the weekly FedEx import (CSV paste for now; automatable later). Admin-only. */
+const SEED_AIRBILLS=[
+  {id:"ab1",date:"2026-07-28",invoice:"206020",airbill:"874385",customer:"Glymed Plus",custNo:"20602029",salesRep:"sanderson",type:"One Rate",zone:"10",sndCo:"US",rcvCo:"US",custCharge:0,agentCost:22.20,reconciled:false},
+  {id:"ab2",date:"2026-07-28",invoice:"206022",airbill:"873522",customer:"Bad Cat Inc",custNo:"20602100",salesRep:"sanderson",type:"FedEx Intl",zone:"51",sndCo:"US",rcvCo:"CA",custCharge:162.08,agentCost:163.37,reconciled:false},
+  {id:"ab3",date:"2026-07-28",invoice:"206023",airbill:"382585",customer:"Magrath Co",custNo:"20602146",salesRep:"sanderson",type:"One Rate",zone:"10",sndCo:"US",rcvCo:"US",custCharge:0,agentCost:22.20,reconciled:false},
+  {id:"ab4",date:"2026-07-28",invoice:"206023",airbill:"382589",customer:"Magrath Co",custNo:"20602146",salesRep:"sanderson",type:"One Rate",zone:"11",sndCo:"US",rcvCo:"US",custCharge:0,agentCost:11.36,reconciled:false},
+  {id:"ab5",date:"2026-07-27",invoice:"206019",airbill:"900001",customer:"Wholistic Botanicals","custNo":"20601421",salesRep:"sanderson",type:"FedEx Ground",zone:"5",sndCo:"US",rcvCo:"US",custCharge:36.38,agentCost:20.87,reconciled:true},
+  {id:"ab6",date:"2026-07-27",invoice:"206019",airbill:"900002",customer:"Wholistic Botanicals",custNo:"20601421",salesRep:"sanderson",type:"FedEx Ground",zone:"6",sndCo:"US",rcvCo:"US",custCharge:41.20,agentCost:24.10,reconciled:true},
+  {id:"ab7",date:"2026-07-26",invoice:"206018",airbill:"900010",customer:"Los Angeles Collective",custNo:"20601709",salesRep:"sanderson",type:"FedEx Home",zone:"8",sndCo:"US",rcvCo:"US",custCharge:14.02,agentCost:14.55,reconciled:false},
+  {id:"ab8",date:"2026-07-26",invoice:"206018",airbill:"900011",customer:"Los Angeles Collective",custNo:"20601709",salesRep:"sanderson",type:"FedEx Ground",zone:"4",sndCo:"US",rcvCo:"US",custCharge:22.75,agentCost:12.90,reconciled:true},
+  {id:"ab9",date:"2026-07-25",invoice:"206017",airbill:"900020",customer:"Buck Mason Inc",custNo:"20602019",salesRep:"lee",type:"FedEx Ground",zone:"7",sndCo:"US",rcvCo:"US",custCharge:31.44,agentCost:18.02,reconciled:true},
+  {id:"ab10",date:"2026-07-25",invoice:"206017",airbill:"900021",customer:"Buck Mason Inc",custNo:"20602019",salesRep:"lee",type:"One Rate",zone:"2",sndCo:"US",rcvCo:"US",custCharge:0,agentCost:9.55,reconciled:false},
+];
+const abMargin=(a)=>(+a.custCharge||0)-(+a.agentCost||0);
+const abPct=(a)=>{ const c=+a.custCharge||0; return c>0?abMargin(a)/c*100:(abMargin(a)<0?-100:0); };
+function MarginsAdmin({clients=[],currentUser}){
+  const [airbills,setAirbills]=usePersist("airbills",SEED_AIRBILLS);
+  const [reps]=usePersist("salesReps",[]);
+  const [tab,setTab]=useState("neg");            // "neg" | "agency"
+  const [rep,setRep]=useState("all");
+  const [minMargin,setMinMargin]=useState("0");   // show airbills at/below this margin %
+  const [showRec,setShowRec]=useState(false);      // include already-reconciled
+  const [groupBy,setGroupBy]=useState("customer"); // agency summary grouping
+  const [importOpen,setImportOpen]=useState(false);
+  const [importText,setImportText]=useState("");
+  const repNames=useMemo(()=>Array.from(new Set(airbills.map(a=>a.salesRep).filter(Boolean))).sort(),[airbills]);
+  const setCharge=(id,v)=>setAirbills(list=>list.map(a=>a.id===id?{...a,custCharge:v===""?0:+v}:a));
+  const setRecon=(id,on)=>setAirbills(list=>list.map(a=>a.id===id?{...a,reconciled:on}:a));
+  const reconcileAll=(ids)=>setAirbills(list=>list.map(a=>ids.includes(a.id)?{...a,reconciled:true}:a));
+
+  // NEGATIVE MARGINS view — airbills whose margin % is at/below the threshold
+  const thresh=parseFloat(minMargin)||0;
+  const negRows=airbills.filter(a=>(rep==="all"||a.salesRep===rep)&&(showRec||!a.reconciled)&&abPct(a)<=thresh)
+    .sort((a,b)=>abMargin(a)-abMargin(b));
+  const negTotal=negRows.reduce((s,a)=>s+abMargin(a),0);
+  const atRiskTotal=negRows.filter(a=>abMargin(a)<0).reduce((s,a)=>s+abMargin(a),0);
+
+  // AGENCY SUMMARY view — group all airbills by customer or sales rep
+  const summary=useMemo(()=>{
+    const rows=airbills.filter(a=>rep==="all"||a.salesRep===rep);
+    const m={};
+    rows.forEach(a=>{ const key=groupBy==="rep"?(a.salesRep||"—"):(a.customer||"—"); if(!m[key])m[key]={key,custNo:a.custNo,salesRep:a.salesRep,rev:0,cost:0,n:0}; m[key].rev+=(+a.custCharge||0); m[key].cost+=(+a.agentCost||0); m[key].n++; });
+    return Object.values(m).map(r=>({...r,margin:r.rev-r.cost,pct:r.rev>0?(r.rev-r.cost)/r.rev*100:0})).sort((a,b)=>b.rev-a.rev);
+  },[airbills,rep,groupBy]);
+  const tot=summary.reduce((s,r)=>({rev:s.rev+r.rev,cost:s.cost+r.cost,margin:s.margin+r.margin,n:s.n+r.n}),{rev:0,cost:0,margin:0,n:0});
+
+  const doImport=()=>{
+    const lines=String(importText||"").split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+    if(!lines.length){setImportOpen(false);return;}
+    // header optional: date,invoice,airbill,customer,custNo,salesRep,type,zone,sndCo,rcvCo,custCharge,agentCost
+    const start=/date/i.test(lines[0])&&/cust/i.test(lines[0])?1:0;
+    const added=[];
+    for(let i=start;i<lines.length;i++){ const c=lines[i].split(/[,\t]/).map(x=>x.trim()); if(c.length<6)continue;
+      added.push({id:"ab"+Date.now()+"_"+i,date:c[0]||"",invoice:c[1]||"",airbill:c[2]||"",customer:c[3]||"",custNo:c[4]||"",salesRep:c[5]||"",type:c[6]||"",zone:c[7]||"",sndCo:c[8]||"US",rcvCo:c[9]||"US",custCharge:+c[10]||0,agentCost:+c[11]||0,reconciled:false}); }
+    if(added.length)setAirbills(list=>[...added,...list]);
+    setImportText(""); setImportOpen(false);
+  };
+
+  return (<div className="space-y-4">
+    <div className="flex items-start justify-between gap-3 flex-wrap">
+      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><TrendingUp className="w-5 h-5 text-[#0086E0]"/>Margins</h2><p className="text-sm text-stone-500 mt-0.5">Every airbill's economics — what you charged vs. what the carrier charged you. Find and fix the ones losing money, and see margin by customer or rep.</p></div>
+      <div className="flex items-center gap-2 shrink-0">
+        <button onClick={()=>setImportOpen(true)} className="text-sm bg-[#E6F4FF] border border-[#0086E0]/30 text-[#006FBF] rounded-lg px-3 py-1.5 font-medium hover:bg-[#d3ecff] flex items-center gap-1.5"><Upload className="w-4 h-4"/>Weekly import</button>
+        <button onClick={()=>downloadCSV("airbill-margins.csv",[["Date","Invoice","Airbill","Customer","Cust #","Sales Rep","Type","Zone","Snd","Rcv","Cust Charge","Agent Cost","Margin","Reconciled"],...airbills.map(a=>[a.date,a.invoice,a.airbill,a.customer,a.custNo,a.salesRep,a.type,a.zone,a.sndCo,a.rcvCo,a.custCharge,a.agentCost,abMargin(a).toFixed(2),a.reconciled?"yes":"no"])])} className="text-sm text-stone-500 hover:text-stone-700 flex items-center gap-1.5 px-2 py-1.5"><Download className="w-4 h-4"/>Export</button>
+      </div>
+    </div>
+    <div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm">
+      <button onClick={()=>setTab("neg")} className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 ${tab==="neg"?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}><AlertTriangle className="w-4 h-4"/>Negative margins</button>
+      <button onClick={()=>setTab("agency")} className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 ${tab==="agency"?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}><BarChart3 className="w-4 h-4"/>Agency summary</button>
+    </div>
+    {/* filters */}
+    <div className="flex items-center gap-2 flex-wrap text-sm">
+      <span className="text-stone-500">Sales rep</span>
+      <select value={rep} onChange={e=>setRep(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5"><option value="all">All</option>{repNames.map(r=><option key={r} value={r}>{r}</option>)}</select>
+      {tab==="neg"&&<><span className="text-stone-500 ml-2">Show margin ≤</span><input value={minMargin} onChange={e=>setMinMargin(e.target.value.replace(/[^0-9.\-]/g,""))} className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1.5"/><span className="text-stone-400">%</span>
+        <label className="flex items-center gap-1.5 text-stone-500 ml-2 cursor-pointer"><input type="checkbox" checked={showRec} onChange={e=>setShowRec(e.target.checked)} className="accent-[#0086E0]"/>Include reconciled</label></>}
+      {tab==="agency"&&<><span className="text-stone-500 ml-2">Group by</span>
+        <select value={groupBy} onChange={e=>setGroupBy(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5"><option value="customer">Customer</option><option value="rep">Sales rep</option></select></>}
+    </div>
+
+    {tab==="neg"?<>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Airbills flagged</div><div className="text-xl font-semibold text-stone-900">{negRows.length}</div></div>
+        <div className="border border-rose-200 rounded-xl bg-rose-50/50 px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-rose-500">Money at risk (losses)</div><div className="text-xl font-semibold text-rose-700">{money(atRiskTotal)}</div></div>
+        <div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Combined margin</div><div className={`text-xl font-semibold ${negTotal<0?"text-rose-700":"text-stone-900"}`}>{money(negTotal)}</div></div>
+      </div>
+      {negRows.length>0&&<div className="flex justify-end"><button onClick={async()=>{ if(await uiConfirm("Mark all "+negRows.length+" flagged airbills as reconciled? Do this once you've corrected their customer charges.")) reconcileAll(negRows.map(a=>a.id)); }} className="text-sm bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-emerald-700 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>Reconcile all shown</button></div>}
+      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+        <div className="overflow-x-auto"><table className="w-full text-sm">
+          <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 border-b border-stone-200">
+            <th className="text-left font-medium px-3 py-2">Airbill</th><th className="text-left font-medium px-3 py-2">Customer</th><th className="text-left font-medium px-3 py-2">Rep</th><th className="text-left font-medium px-3 py-2">Type</th><th className="text-right font-medium px-3 py-2">Agent cost</th><th className="text-right font-medium px-3 py-2">Cust charge</th><th className="text-right font-medium px-3 py-2">Margin</th><th className="px-3 py-2"/>
+          </tr></thead>
+          <tbody className="divide-y divide-stone-100">
+            {negRows.length===0&&<tr><td colSpan={8} className="px-3 py-12 text-center text-stone-400"><CheckCircle2 className="w-8 h-8 text-emerald-300 mx-auto mb-2"/>Nothing losing money right now — every shipment in this view is above your margin floor. 🎉</td></tr>}
+            {negRows.map(a=>{ const m=abMargin(a); return (<tr key={a.id} className={a.reconciled?"bg-emerald-50/40":m<0?"bg-rose-50/30":""}>
+              <td className="px-3 py-2 whitespace-nowrap"><div className="font-medium text-stone-800">{a.airbill}</div><div className="text-[11px] text-stone-400">{a.date} · {a.zone?"zone "+a.zone:""}</div></td>
+              <td className="px-3 py-2"><div className="text-stone-800 truncate max-w-[160px]">{a.customer}</div><div className="text-[11px] text-stone-400">{a.custNo}</div></td>
+              <td className="px-3 py-2 text-stone-600">{a.salesRep||"—"}</td>
+              <td className="px-3 py-2 text-stone-600 whitespace-nowrap">{a.type||"—"}</td>
+              <td className="px-3 py-2 text-right text-stone-600 tabular-nums">{money(+a.agentCost||0)}</td>
+              <td className="px-3 py-2 text-right"><div className="inline-flex items-center gap-1 justify-end"><span className="text-stone-400">$</span><input value={a.custCharge} onChange={e=>setCharge(a.id,e.target.value.replace(/[^0-9.]/g,""))} className="w-20 text-right border border-stone-300 rounded px-1.5 py-1 tabular-nums focus:border-[#0086E0] outline-none"/></div></td>
+              <td className={`px-3 py-2 text-right font-semibold tabular-nums ${m<0?"text-rose-600":"text-emerald-700"}`}>{money(m)}</td>
+              <td className="px-3 py-2 text-right whitespace-nowrap">{a.reconciled?<button onClick={()=>setRecon(a.id,false)} className="text-[11px] text-emerald-700 bg-emerald-100 rounded px-2 py-1 hover:bg-emerald-200">✓ Reconciled</button>:<button onClick={()=>setRecon(a.id,true)} className="text-[11px] text-stone-600 border border-stone-300 rounded px-2 py-1 hover:bg-stone-50">Reconcile</button>}</td>
+            </tr>); })}
+          </tbody>
+        </table></div>
+      </div>
+      <p className="text-[12px] text-stone-400">Raise a <b>Cust charge</b> until the margin turns black, then <b>Reconcile</b> the row. “Margin ≤ 0%” shows everything at a loss or break-even; bump it to e.g. 10% to catch thin-margin shipments too.</p>
+    </>:<>
+      {/* AGENCY SUMMARY */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Shipments</div><div className="text-xl font-semibold text-stone-900">{tot.n}</div></div>
+        <div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Cust revenue</div><div className="text-xl font-semibold text-stone-900 tabular-nums">{money(tot.rev)}</div></div>
+        <div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Agency cost</div><div className="text-xl font-semibold text-stone-900 tabular-nums">{money(tot.cost)}</div></div>
+        <div className="border border-emerald-200 rounded-xl bg-emerald-50/50 px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-emerald-600">Agency margin</div><div className="text-xl font-semibold text-emerald-700 tabular-nums">{money(tot.margin)} <span className="text-sm text-emerald-600">· {tot.rev>0?(tot.margin/tot.rev*100).toFixed(1):"0"}%</span></div></div>
+      </div>
+      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+        <div className="overflow-x-auto"><table className="w-full text-sm">
+          <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 border-b border-stone-200">
+            <th className="text-left font-medium px-3 py-2">{groupBy==="rep"?"Sales rep":"Customer"}</th><th className="text-right font-medium px-3 py-2">Shipments</th><th className="text-right font-medium px-3 py-2">Cust revenue</th><th className="text-right font-medium px-3 py-2">Agency cost</th><th className="text-right font-medium px-3 py-2">Agency margin</th><th className="text-right font-medium px-3 py-2">Mgn %</th>
+          </tr></thead>
+          <tbody className="divide-y divide-stone-100">
+            {summary.length===0&&<tr><td colSpan={6} className="px-3 py-12 text-center text-stone-400">No airbills yet — run the weekly import to load a week of shipments.</td></tr>}
+            {summary.map(r=>(<tr key={r.key} className="hover:bg-stone-50">
+              <td className="px-3 py-2"><div className="text-stone-800">{r.key}</div>{groupBy==="customer"&&r.custNo&&<div className="text-[11px] text-stone-400">{r.custNo}{r.salesRep?" · "+r.salesRep:""}</div>}</td>
+              <td className="px-3 py-2 text-right text-stone-600 tabular-nums">{r.n}</td>
+              <td className="px-3 py-2 text-right text-stone-700 tabular-nums">{money(r.rev)}</td>
+              <td className="px-3 py-2 text-right text-stone-600 tabular-nums">{money(r.cost)}</td>
+              <td className={`px-3 py-2 text-right font-medium tabular-nums ${r.margin<0?"text-rose-600":"text-stone-800"}`}>{money(r.margin)}</td>
+              <td className={`px-3 py-2 text-right tabular-nums ${r.pct<0?"text-rose-600":r.pct<10?"text-amber-600":"text-emerald-700"}`}>{r.pct.toFixed(1)}%</td>
+            </tr>))}
+          </tbody>
+          {summary.length>0&&<tfoot><tr className="bg-stone-50 font-semibold text-stone-800 border-t border-stone-200"><td className="px-3 py-2">Totals ({summary.length})</td><td className="px-3 py-2 text-right tabular-nums">{tot.n}</td><td className="px-3 py-2 text-right tabular-nums">{money(tot.rev)}</td><td className="px-3 py-2 text-right tabular-nums">{money(tot.cost)}</td><td className="px-3 py-2 text-right tabular-nums">{money(tot.margin)}</td><td className="px-3 py-2 text-right tabular-nums">{tot.rev>0?(tot.margin/tot.rev*100).toFixed(1):"0"}%</td></tr></tfoot>}
+        </table></div>
+      </div>
+    </>}
+
+    {importOpen&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setImportOpen(false)}>
+      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-5" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1"><div className="font-semibold text-stone-900 flex items-center gap-2"><Upload className="w-4 h-4 text-[#0086E0]"/>Weekly FedEx import</div><button onClick={()=>setImportOpen(false)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+        <p className="text-xs text-stone-500 mb-3">Paste the weekly airbill export (CSV or tab-separated). One row per shipment, columns in this order — a header row is fine:</p>
+        <div className="text-[11px] font-mono bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-2 mb-2 text-stone-500 overflow-x-auto whitespace-nowrap">date, invoice, airbill, customer, custNo, salesRep, type, zone, snd, rcv, custCharge, agentCost</div>
+        <textarea value={importText} onChange={e=>setImportText(e.target.value)} rows={7} placeholder={"2026-07-28,206020,874385,Glymed Plus,20602029,sanderson,One Rate,10,US,US,0,22.20"} className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm font-mono"/>
+        <div className="flex items-center gap-2 mt-3"><button onClick={doImport} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8]">Import airbills</button><button onClick={()=>setImportOpen(false)} className="text-sm text-stone-500 px-2">Cancel</button></div>
+      </div>
+    </div>}
+  </div>);
+}
 function BillingAdmin({clients=[],platform={},openCustomer}){
   const [invoices,setInvoices]=usePersist("invoicesIssued",[]);
   const [bSettings,setBSettings]=usePersist("billingSettings",{terms:"Net 15",note:"",payUrl:""});
@@ -5156,6 +5309,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
       {k==="overview"&&<AdminDashboard platform={platform} loginStats={loginStats} uEmail={uEmail} openCustomer={openCustomer} openSection={openSection} clients={clients}/>}
       {k==="apiadmin"&&<ApiAdmin clients={clients} platform={platform} openCustomer={openCustomer}/>}
       {k==="billing"&&<BillingAdmin clients={clients} platform={platform} openCustomer={openCustomer}/>}
+      {k==="margins"&&<MarginsAdmin clients={clients} currentUser={currentUser}/>}
       {k==="backups"&&<BackupsAdmin clients={clients} setClients={setClients} users={users} setUsers={setUsers}/>}
   </>);
   return (
@@ -5498,7 +5652,7 @@ const lsDel=(k)=>{ if(!LS_OK)return; try{window.localStorage.removeItem("sc_"+k)
 // Which login is active. Every non-global key is stored under this account so each login keeps its OWN settings/data.
 const activeUid=()=>{ try{const s=lsGet("session",null); const id=s&&(s.id||s.email); return id?String(id):"guest"; }catch(e){return "guest";} };
 // Shared across all logins (never namespaced): the accounts list + who is signed in.
-const GLOBAL_KEYS={session:1,salesReps:1,invoicesIssued:1,billingSettings:1,proposalReports:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1,customFeatures:1,fedexRequests:1,publicBrand:1,myAccess:1,companyUsers:1,companyFlags:1,companyAdminRequests:1,rateRules:1,clients:1};
+const GLOBAL_KEYS={session:1,salesReps:1,invoicesIssued:1,billingSettings:1,proposalReports:1,users:1,signupRequests:1,featureFlags:1,myFeatures:1,customFeatures:1,fedexRequests:1,publicBrand:1,myAccess:1,companyUsers:1,companyFlags:1,companyAdminRequests:1,rateRules:1,clients:1,airbills:1};
 // Scratch = the in-progress shipment. Per-login, but starts blank on each login (never migrated/inherited).
 const isScratch=(key)=>String(key).indexOf("ship.")===0;
 // Scratch keys wiped on login so the receiver + package dims are always blank for a fresh session.

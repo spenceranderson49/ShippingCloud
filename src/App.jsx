@@ -8338,7 +8338,13 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     });
     return notes;
   },[JSON.stringify(pieces),dvEach,insurance]);
-  const shipment={fromZip:originZip,toZip:receiver.zip,toCountry:receiver.country||"United States",pieces:pieces.map(p=>({...p,weight:pw(p),declaredValue:(pieces.length>1&&dvEach)?(+p.dv||0):(+insurance||0)})),residential,signature,signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:(intl?(+insurance||0):((pieces.length>1&&dvEach)?pieces.reduce((a,p)=>a+(+p.dv||0),0):(+insurance||0)*Math.max(1,pieces.length)))||null,intl,packageTypeCode:orBox?orBox.code:""};   // per-box declaredValue rides the QUOTE too — FedEx prices coverage + signature for real
+  /* INTERNATIONAL landed cost: FedEx only estimates duties & taxes (EDT) when the RATE request
+     carries a customs value + commodities. So feed the Customs section (product lines, HS codes,
+     declared value, DDP/DAP choice) into the quote — otherwise the "Est. duties & tax / Landed
+     cost" line never appears no matter what you type below. Only meaningful lines are sent. */
+  const _custCommodities=intl?customs.lines.filter(l=>(+l.value>0||String(l.desc||"").trim())).map(l=>({description:String(l.desc||"Merchandise").slice(0,70),hsCode:String(l.hts||"").trim(),origin:l.origin||"United States",quantity:Math.max(1,+l.qty||1),value:+l.value||0,weight:(customs.units==="kg"?(+l.wkg||0)*2.20462:((+l.wlb||0)+(+l.woz||0)/16))||undefined})):[];
+  const shipment={fromZip:originZip,toZip:receiver.zip,toCountry:receiver.country||"United States",pieces:pieces.map(p=>({...p,weight:pw(p),declaredValue:(pieces.length>1&&dvEach)?(+p.dv||0):(+insurance||0)})),residential,signature,signatureOption:sigOption,saturdayDelivery:saturday,insuranceAmount:(intl?(+insurance||0):((pieces.length>1&&dvEach)?pieces.reduce((a,p)=>a+(+p.dv||0),0):(+insurance||0)*Math.max(1,pieces.length)))||null,intl,packageTypeCode:orBox?orBox.code:"",
+    ...(intl?{ddp:customs.dutiesBill!=="receiver",declaredValue:customsTotal||undefined,contentsDesc:(customs.lines.map(l=>l.desc).filter(Boolean).join(", ")||undefined),commodities:_custCommodities.length?_custCommodities:undefined}:{})};   // per-box declaredValue rides the QUOTE too — FedEx prices coverage + signature for real
   // Front screen shows FedEx only. Blank-price skeleton before rates load — intl destinations get
   // the INTERNATIONAL skeleton so a domestic list never flashes on an international shipment.
   const FEDEX_SKELETON=intl?[
@@ -8392,7 +8398,10 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       else setRateSrc({rates:[],live:false,loading:false,error:"Connect your FedEx account to see rates — add your account number under Settings → FedEx Account.",diag});
     }
     return ()=>{cancel=true;};
-  },[JSON.stringify(pieces),receiver.zip,receiver.country,sender.zip,residential,signature,sigOption,saturday,insurance,dvEach,intl,settings.england,client&&client.england]);
+  },[JSON.stringify(pieces),receiver.zip,receiver.country,sender.zip,residential,signature,sigOption,saturday,insurance,dvEach,intl,settings.england,client&&client.england,
+     /* re-quote when the international customs block changes so Estimated Duties & Taxes (landed
+        cost) refreshes as products, values, HS codes or the DDP/DAP choice are entered */
+     intl?JSON.stringify(customs.lines.map(l=>[l.desc,l.hts,l.origin,l.qty,l.value,l.wlb,l.woz,l.wkg]))+"|"+customs.dutiesBill+"|"+(customs.units||"lb"):""]);
   // address classified yet? only then do we hide the non-matching ground product
   const addrClassified=!!(resTouched||(verify&&verify.type));
   const quotes=useMemo(()=>{
@@ -8842,6 +8851,17 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_480px] gap-4 items-start">
           <div className="min-w-0">
             <ServiceList hideTitle={true} quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
+            {/* Landed-cost coaching: on DDP intl shipments the "Est. duties & tax / Landed cost"
+                line only appears once FedEx returns an EDT estimate — which needs a real customs
+                value + HS code. Explain the blank instead of leaving it a mystery. */}
+            {intl&&customs.dutiesBill!=="receiver"&&rateSrc.live&&(quotes||[]).length>0&&!(quotes||[]).some(q=>+q.dutiesAndTaxes>0)&&(
+              <div className="mt-2 text-[12px] text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2 flex items-start gap-2">
+                <FileText className="w-4 h-4 mt-0.5 shrink-0"/>
+                <span>{customsTotal>0
+                  ? <>FedEx didn’t return a duties &amp; tax estimate for this lane, so landed cost can’t be shown here — it’s still prepaid as <b>DDP</b> at delivery. (Adding an <b>HS code</b> to each product gives FedEx the best shot at an estimate.)</>
+                  : <>Want the <b>estimated duties &amp; taxes (landed cost)</b>? Add each product’s <b>value</b> and <b>HS code</b> in the Customs section below — with a $0 declared value FedEx has nothing to estimate duty on.</>}</span>
+              </div>
+            )}
           </div>
           <div className="w-full space-y-3">
             {/* ── Card 1: THIS SHIPMENT — read-only status, one card, one row per fact. State lives

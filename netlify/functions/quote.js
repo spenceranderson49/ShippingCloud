@@ -204,7 +204,7 @@ exports.handler = async (event) => {
     const inCom = Array.isArray(body.commodities) ? body.commodities.filter(c => c && (+c.value > 0 || c.description)) : [];
     const commodities = inCom.length ? inCom.map(c => ({
       description: String(c.description || "Merchandise").slice(0, 70),
-      countryOfManufacture: String(c.origin || fromCountry || "US"),
+      countryOfManufacture: toISO(c.origin || fromCountry || "US"),   // UI stores full names ("United States"); FedEx rejects the customs block unless this is ISO-2
       ...(c.hsCode ? { harmonizedCode: String(c.hsCode).replace(/[^0-9.]/g, "").slice(0, 14) } : {}),
       quantity: Math.max(1, +c.quantity || 1),
       quantityUnits: "PCS",

@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="signup-resilience-v760";
+const BUILD_TAG="signup-resilience-v761";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6381,8 +6381,8 @@ function CloudAuth({onDone,initialMode,intake}){
   const signin=async()=>{
     if(busy)return; setBusy(true);setErr("");
     const loginBody={action:"login",email:f.email,password:f.pw,code:code.trim(),device:trustTokenFor(f.email),trustDays:code.trim()?(+trustDays||0):0};
-    let res=await cloudCall(loginBody);
-    if(res&&res.network) res=await cloudCall(loginBody);   // retry a network blip before blaming the password
+    let res=await cloudCall(loginBody,30000);   // generous timeout so a cold-start (slow first DB read) isn't aborted client-side
+    if(res&&res.network) res=await cloudCall(loginBody,30000);   // retry a network blip before blaming the password
     if(res&&res.needsEmailCode){ setBusy(false); setNeed2fa("email"); if(res.sentTo)setSentTo(res.sentTo); setErr(code?String(res.error||"That code isn't right."):""); return; }
     if(res&&res.needsTotp){ setBusy(false); setNeed2fa("totp"); setErr(code?String(res.error||"That code isn't right."):""); return; }
     if(!res||!res.ok){setBusy(false);setErr(res&&res.network?"Couldn't reach the sign-in server — your password was never checked. Wait a moment and try again.":((res&&res.error)||"Could not reach the server."));return;}
@@ -6399,7 +6399,7 @@ function CloudAuth({onDone,initialMode,intake}){
   const request=async()=>{
     if(busy)return; setBusy(true);setErr("");
     const it=intake||{};
-    const res=await cloudCall({action:"requestAccess",name:f.name,company:f.company,email:f.email,password:f.pw,volume:it.volume||f.volume,carrier:it.carrier||f.carrier,invoice:it.invoice||undefined});
+    const res=await cloudCall({action:"requestAccess",name:f.name,company:f.company,email:f.email,password:f.pw,volume:it.volume||f.volume,carrier:it.carrier||f.carrier,invoice:it.invoice||undefined},30000);   // generous timeout: signup does 4 DB reads + a write; a cold start must not be aborted client-side
     setBusy(false);
     if(!res||!res.ok){setErr((res&&res.error)||"Could not reach the server.");return;}
     CLOUD.token=res.token; lsSet("cloud.token",res.token);

@@ -52,10 +52,14 @@ async function pg(path, opts = {}) {
      are idempotent, so retry them a couple times on a transient failure (timeout / network / 5xx)
      with short backoff. A 4xx is a real client error, not transient — return it immediately. Writes
      stay single-attempt (only the caller knows if they're safe to repeat). */
-  const attempts = method === "GET" ? 3 : 1;
+  /* Keep worst-case time UNDER the client's 15s cloudCall budget: 2 GET attempts at 6s = 12s max
+     (parallel reads run concurrently, so the signup's 4 reads still finish inside that window).
+     A 3×8s stack blew past 15s and made the browser abort the signup ("signal is aborted"). */
+  const attempts = method === "GET" ? 2 : 1;
+  const perTry = method === "GET" ? 6000 : 8000;
   let last = { ok: false, status: 0, text: "no attempt" };
   for (let i = 0; i < attempts; i++) {
-    const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 8000);
+    const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), perTry);
     try {
       const r = await fetch(c.url + "/rest/v1/" + path, { ...opts, headers: { apikey: c.key, Authorization: "Bearer " + c.key, "Content-Type": "application/json", ...(opts.headers || {}) }, signal: ctrl.signal });
       const text = await r.text();

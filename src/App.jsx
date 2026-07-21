@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="landed-cost-per-service-v763";
+const BUILD_TAG="account-isolation-v764";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -6088,7 +6088,14 @@ function usePersist(key,initial){
     // one-time migration: carry any pre-login global value into this account (never for scratch keys)
     if(!GLOBAL_KEYS[key]&&!isScratch(key)){
       const legacy=lsRaw(key);
-      if(legacy!=null){ try{ const v=JSON.parse(legacy); lsSet(nsKey,v); return v; }catch(e){} }
+      if(legacy!=null){ try{ const v=JSON.parse(legacy);
+        /* SECURITY / ISOLATION: a store CONNECTION and its access tokens are strictly per-account and
+           must NEVER be inherited by a different account. A legacy pre-namespacing `settings` value
+           carried an old Shopify connection into every brand-new account on the same browser — so a
+           fresh signup (and the Shopify reviewer's clean install) saw a store already connected, with
+           someone else's token. Strip all connection fields from the migrated value. */
+        if(v&&typeof v==="object"&&key==="settings"){ delete v.shopifyConns; delete v.shopifyConn; delete v.shopifyShop; delete v.shopifyToken; delete v.conn; }
+        lsSet(nsKey,v); return v; }catch(e){} }
     }
     return initial;
   });

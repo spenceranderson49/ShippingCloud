@@ -269,7 +269,9 @@ exports.handler = async (event) => {
     if (!(declaredTotal > 0)) return respond(200, { ok: false, error: "International shipments need a customs value — enter the shipment's declared value (Insure $ / per-box values) so the customs declaration is truthful. FedEx rejects (and customs holds) $0 declarations." });
     const customsVal = Math.max(1, Math.round((declaredTotal || 1) * 100) / 100);
     requestedShipment.customsClearanceDetail = {
-      dutiesPayment: { paymentType: "SENDER" },
+      /* DDP (SENDER) prepays duties/taxes so the recipient owes nothing at delivery; DDU/DAP
+         (RECIPIENT) bills the buyer at the door. o.ddp === false selects DDU; default is DDP. */
+      dutiesPayment: { paymentType: o.ddp === false ? "RECIPIENT" : "SENDER" },
       isDocumentOnly: false,
       commodities: (Array.isArray(o.commodities) && o.commodities.length
         ? o.commodities.map((ci) => { const qty = Math.max(1, Math.round(+ci.quantity || 1)); const unit = Math.max(0, +ci.unitPrice || +ci.value || 0); return {

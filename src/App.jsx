@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="tour-and-audit-v757";
+const BUILD_TAG="landed-cost-v758";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -362,7 +362,7 @@ const newTracking=carrier=>carrier==="UPS"?"1Z"+Math.random().toString(36).slice
 const RATES_ENDPOINT="/.netlify/functions/quote";
 async function getLiveRates(s,england){
   if(!england||!england.enabled) return null;
-  const body={token:CLOUD.token||undefined,carriers:s.carriers||"fedex",fromZip:s.fromZip,toZip:s.toZip,fromCountry:s.fromCountry||"US",toCountry:s.toCountry||"US",residential:!!s.residential,signature:!!s.signature,signatureOption:s.signatureOption||(s.signature?"direct":"none"),saturdayDelivery:!!s.saturdayDelivery,insuranceAmount:s.insuranceAmount||null,packageTypeCode:s.packageTypeCode||"",fedexAccount:(england.fedexAccount||null),pieces:(s.pieces||[]).map(p=>({weight:Math.ceil(+p.weight||1),length:+p.L||12,width:+p.W||9,height:+p.H||4,declaredValue:(+p.declaredValue||0)||undefined})),account:{base:england.base,apiKey:england.apiKey,customerId:england.customerId}};   /* FedEx bills every fractional pound as the next full pound (3 lb 3 oz rates as 4 lb) — round up here so the quote is the invoice price */
+  const body={token:CLOUD.token||undefined,carriers:s.carriers||"fedex",fromZip:s.fromZip,toZip:s.toZip,fromCountry:s.fromCountry||"US",toCountry:s.toCountry||"US",residential:!!s.residential,signature:!!s.signature,signatureOption:s.signatureOption||(s.signature?"direct":"none"),saturdayDelivery:!!s.saturdayDelivery,insuranceAmount:s.insuranceAmount||null,packageTypeCode:s.packageTypeCode||"",fedexAccount:(england.fedexAccount||null),ddp:s.ddp!==false,commodities:(Array.isArray(s.commodities)&&s.commodities.length?s.commodities:undefined),contentsDesc:s.contentsDesc||undefined,declaredValue:s.declaredValue||undefined,pieces:(s.pieces||[]).map(p=>({weight:Math.ceil(+p.weight||1),length:+p.L||12,width:+p.W||9,height:+p.H||4,declaredValue:(+p.declaredValue||0)||undefined})),account:{base:england.base,apiKey:england.apiKey,customerId:england.customerId}};   /* FedEx bills every fractional pound as the next full pound (3 lb 3 oz rates as 4 lb) — round up here so the quote is the invoice price */
   const attempt=async(ms)=>{
     const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),ms);
     try{
@@ -9377,7 +9377,11 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
           {(!perBox||perBox.length<2||breakView==="all")
             ?<div className="space-y-1">
               {comps.map((c,i)=><div key={i} className="flex justify-between text-[13px]"><span className="text-stone-600">{c.label}</span><span className=" text-stone-700">{money(c.amount)}</span></div>)}
-              <div className="flex justify-between text-[13px] border-t border-stone-200 pt-1 mt-1 font-semibold"><span>Total</span><span className="">{money(sell)}</span></div>
+              <div className="flex justify-between text-[13px] border-t border-stone-200 pt-1 mt-1 font-semibold"><span>{q.dutiesAndTaxes>0?"Shipping":"Total"}</span><span className="">{money(sell)}</span></div>
+              {q.dutiesAndTaxes>0&&<>
+                <div className="flex justify-between text-[12px] text-stone-500"><span title={q.taxes?("Duty "+money(q.duties||0)+" · Tax "+money(q.taxes)):"FedEx estimated duties & taxes"}>Est. duties &amp; tax</span><span>{money(q.dutiesAndTaxes)}</span></div>
+                <div className="flex justify-between text-[13px] border-t border-[#0086E0]/30 pt-1 mt-1 font-semibold text-[#006FBF]"><span>Landed cost (DDP)</span><span>{money((+sell||0)+(+q.dutiesAndTaxes||0))}</span></div>
+              </>}
             </div>
             :(()=>{ /* per-box view: EVERY charge line lands on a box. Freight and % charges (fuel)
                        follow each box's freight/weight share; per-package surcharges (DAS,

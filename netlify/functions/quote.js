@@ -199,18 +199,35 @@ exports.handler = async (event) => {
   if (toCountry !== fromCountry) {
     const totalWt = pieces.reduce((a, p) => a + ((p.weight && p.weight.value) || 1), 0);
     const declared = Math.max(1, +body.declaredValue || +body.insuranceAmount || 100);
+    /* Per-line commodities when the caller sends them (each with HS code + value) → sharper
+       duty/tax estimates. Falls back to one lumped commodity at the declared value. */
+    const inCom = Array.isArray(body.commodities) ? body.commodities.filter(c => c && (+c.value > 0 || c.description)) : [];
+    const commodities = inCom.length ? inCom.map(c => ({
+      description: String(c.description || "Merchandise").slice(0, 70),
+      countryOfManufacture: String(c.origin || fromCountry || "US"),
+      ...(c.hsCode ? { harmonizedCode: String(c.hsCode).replace(/[^0-9.]/g, "").slice(0, 14) } : {}),
+      quantity: Math.max(1, +c.quantity || 1),
+      quantityUnits: "PCS",
+      weight: { units: "LB", value: Math.max(0.1, +c.weight || (totalWt / inCom.length) || 0.1) },
+      unitPrice: { amount: Math.max(0.01, +c.value || 1), currency: "USD" },
+      customsValue: { amount: Math.max(0.01, (+c.value || 1) * Math.max(1, +c.quantity || 1)), currency: "USD" }
+    })) : [{
+      description: String(body.contentsDesc || "Merchandise").slice(0, 70),
+      countryOfManufacture: fromCountry || "US",
+      quantity: 1,
+      quantityUnits: "PCS",
+      weight: { units: "LB", value: Math.max(0.1, totalWt) },
+      unitPrice: { amount: declared, currency: "USD" },
+      customsValue: { amount: declared, currency: "USD" }
+    }];
     req.requestedShipment.customsClearanceDetail = {
-      dutiesPayment: { paymentType: "SENDER" },
-      commodities: [{
-        description: String(body.contentsDesc || "Merchandise").slice(0, 70),
-        countryOfManufacture: fromCountry || "US",
-        quantity: 1,
-        quantityUnits: "PCS",
-        weight: { units: "LB", value: Math.max(0.1, totalWt) },
-        unitPrice: { amount: declared, currency: "USD" },
-        customsValue: { amount: declared, currency: "USD" }
-      }]
+      /* Who pays duties/taxes: DDP (SENDER) prepays so the recipient owes nothing at the door;
+         DDU/DAP (RECIPIENT) leaves it to the buyer. Caller's ddp flag drives it (default DDP). */
+      dutiesPayment: { paymentType: body.ddp === false ? "RECIPIENT" : "SENDER" },
+      commodities
     };
+    /* Ask FedEx to return Estimated Duties & Taxes with the rate so we can show landed cost. */
+    req.requestedShipment.edtRequestType = "ALL";
     delete req.requestedShipment.recipient.address.residential;   // classification is US-only; intl requests reject it on some lanes
   }
   /* Ground Economy (SmartPost) is only returned when the request carries your hub —
@@ -271,6 +288,25 @@ exports.handler = async (event) => {
     }
     const batches = [{ replies: (j.output && j.output.rateReplyDetails) || [], oneRate: false }];
     if (oneRateOk) batches.push({ replies: (orRes.j.output && orRes.j.output.rateReplyDetails) || [], oneRate: true });
+    /* ESTIMATED DUTIES & TAXES (landed cost). FedEx returns EDT in a few shapes depending on lane —
+       an itemized dutiesAndTaxes/ancillaryFeesAndTaxes array, or a total field. Parse defensively;
+       if nothing is present (domestic, or FedEx returned none) the rate simply carries no duties. */
+    const numAmt = (m) => { if (m == null) return 0; if (typeof m === "number") return m; if (typeof m === "object") return +m.amount || 0; return +m || 0; };
+    const edtOf = (rd, det) => {
+      const srd = (det && det.shipmentRateDetail) || {};
+      const arrs = [srd.dutiesAndTaxes, det && det.dutiesAndTaxes, rd && rd.dutiesAndTaxes, srd.ancillaryFeesAndTaxes, det && det.ancillaryFeesAndTaxes].filter(Array.isArray);
+      let duties = 0, taxes = 0, seen = false;
+      for (const a of arrs) for (const x of a) {
+        const amt = numAmt(x && x.amount != null ? x.amount : x);
+        if (!amt) continue; seen = true;
+        const t = String((x && (x.type || x.description)) || "").toLowerCase();
+        if (/tax|vat|gst|hst/.test(t)) taxes += amt; else duties += amt;
+      }
+      const total = numAmt(srd.totalDutiesAndTaxes) || numAmt(srd.totalDutiesTaxesAndFees) || 0;
+      if (!seen && total > 0) { duties = total; seen = true; }
+      if (!seen) return null;
+      return { duties: Math.round(duties * 100) / 100, taxes: Math.round(taxes * 100) / 100, total: Math.round((duties + taxes) * 100) / 100 };
+    };
     for (const batch of batches) for (const rd of batch.replies) {
       const svc = SVC[rd.serviceType] || { key: String(rd.serviceType || "").toLowerCase(), label: String(rd.serviceName || rd.serviceType || "FedEx").replace(/[®™]/g, "").trim() };
       const acctD = pickDetail(rd.ratedShipmentDetails, false);
@@ -345,6 +381,7 @@ exports.handler = async (event) => {
         minDays, maxDays,
         base: cost != null ? Math.round((cost - surch.reduce((a, x) => a + x.amount, 0)) * 100) / 100 : null,
         surcharges: surch,
+        ...(() => { const e = edtOf(rd, acctD); return e ? { duties: e.duties, taxes: e.taxes, dutiesAndTaxes: e.total } : {}; })(),
         _rateType: acctD && acctD.rateType || null
       });
     }

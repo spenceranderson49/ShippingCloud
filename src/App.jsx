@@ -137,7 +137,7 @@ const featureOn=(id,user,flagsForUser)=>{
   const c=FEATURE_CATALOG.find(f=>f.id===id);
   return c?!!c.default:false;                                            // unknown/custom flags default OFF
 };
-const BUILD_TAG="elems-backoffice-v752";
+const BUILD_TAG="ar-import-v753";
 try{ if(typeof window!=="undefined") window.__SC_BUILD__=BUILD_TAG; }catch(e){}
 
 /* Scoped error boundary: wrap a single tab so a crash there shows an inline recovery card with the
@@ -4844,6 +4844,18 @@ function ReceivablesAdmin({clients=[],currentUser}){
   const [asOfStr,setAsOfStr]=useState("");        // yyyy-mm-dd; blank = today
   const [pickCust,setPickCust]=useState("");
   const [balDueOnly,setBalDueOnly]=useState(true);
+  const [importOpen,setImportOpen]=useState(false);
+  const [importText,setImportText]=useState("");
+  const doImport=()=>{
+    const lines=String(importText||"").split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+    if(!lines.length){setImportOpen(false);return;}
+    const start=/number/i.test(lines[0])&&/cust/i.test(lines[0])?1:0;   // optional header
+    const added=[];
+    for(let i=start;i<lines.length;i++){ const c=lines[i].split(/[,\t]/).map(x=>x.trim()); if(c.length<8)continue;
+      added.push({id:"ar"+Date.now()+"_"+i,number:c[0]||"",custNo:c[1]||"",customer:c[2]||"",salesRep:c[3]||"",terms:+c[4]||30,creditLimit:c[5]===""?"":+c[5]||0,invoiceDate:c[6]||"",dueDate:c[7]||"",amount:+c[8]||0,lateFee:+c[9]||0,paid:+c[10]||0,adjustments:0,type:c[11]||"FedEx"}); }
+    if(added.length)setInvoices(list=>[...added,...list]);
+    setImportText(""); setImportOpen(false);
+  };
   const asOf=useMemo(()=>{ const d=asOfStr?new Date(asOfStr+"T00:00:00"):new Date(); return isNaN(d.getTime())?new Date():d; },[asOfStr]);
   const repNames=useMemo(()=>Array.from(new Set(invoices.map(i=>i.salesRep).filter(Boolean))).sort(),[invoices]);
   const custList=useMemo(()=>{ const m={}; invoices.filter(i=>!myRep||i.salesRep===myRep).forEach(i=>{ if(!m[i.custNo])m[i.custNo]={custNo:i.custNo,customer:i.customer}; }); return Object.values(m).sort((a,b)=>a.customer.localeCompare(b.customer)); },[invoices,myRep]);
@@ -4869,8 +4881,20 @@ function ReceivablesAdmin({clients=[],currentUser}){
   return (<div className="space-y-4">
     <div className="flex items-start justify-between gap-3 flex-wrap">
       <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Wallet className="w-5 h-5 text-[#0086E0]"/>Receivables</h2><p className="text-sm text-stone-500 mt-0.5">Who owes what, and how overdue — customer aging and per-customer statements, straight from your invoices.</p></div>
-      <button onClick={()=>downloadCSV("aging.csv",[["Customer","Cust #","Rep","Total Due","Overdue",...AR_BUCKETS.map(b=>b[1])],...aging.map(r=>[r.customer,r.custNo,r.salesRep,r.total.toFixed(2),r.overdue.toFixed(2),...AR_BUCKETS.map(b=>r[b[0]].toFixed(2))])])} className="text-sm text-stone-500 hover:text-stone-700 flex items-center gap-1.5 px-2 py-1.5 shrink-0"><Download className="w-4 h-4"/>Export aging</button>
+      <div className="flex items-center gap-2 shrink-0">
+        {!myRep&&<button onClick={()=>setImportOpen(true)} className="text-sm bg-[#E6F4FF] border border-[#0086E0]/30 text-[#006FBF] rounded-lg px-3 py-1.5 font-medium hover:bg-[#d3ecff] flex items-center gap-1.5"><Upload className="w-4 h-4"/>Weekly import</button>}
+        <button onClick={()=>downloadCSV("aging.csv",[["Customer","Cust #","Rep","Total Due","Overdue",...AR_BUCKETS.map(b=>b[1])],...aging.map(r=>[r.customer,r.custNo,r.salesRep,r.total.toFixed(2),r.overdue.toFixed(2),...AR_BUCKETS.map(b=>r[b[0]].toFixed(2))])])} className="text-sm text-stone-500 hover:text-stone-700 flex items-center gap-1.5 px-2 py-1.5"><Download className="w-4 h-4"/>Export aging</button>
+      </div>
     </div>
+    {importOpen&&<div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={()=>setImportOpen(false)}>
+      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-5" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1"><div className="font-semibold text-stone-900 flex items-center gap-2"><Upload className="w-4 h-4 text-[#0086E0]"/>Weekly invoice import</div><button onClick={()=>setImportOpen(false)} className="text-stone-400 hover:text-stone-700"><X className="w-5 h-5"/></button></div>
+        <p className="text-xs text-stone-500 mb-3">Paste the weekly invoice export (CSV or tab-separated). One row per invoice, a header row is fine:</p>
+        <div className="text-[11px] font-mono bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-2 mb-2 text-stone-500 overflow-x-auto whitespace-nowrap">number, custNo, customer, salesRep, terms, creditLimit, invoiceDate, dueDate, amount, lateFee, paid, type</div>
+        <textarea value={importText} onChange={e=>setImportText(e.target.value)} rows={7} placeholder={"20602352AAG28,20602352,Environmental Seeds West,sanderson,30,25000,2026-07-28,2026-08-27,734.53,73.45,0,FedEx"} className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm font-mono"/>
+        <div className="flex items-center gap-2 mt-3"><button onClick={doImport} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8]">Import invoices</button><button onClick={()=>setImportOpen(false)} className="text-sm text-stone-500 px-2">Cancel</button></div>
+      </div>
+    </div>}
     <div className="inline-flex rounded-lg border border-stone-200 bg-white p-0.5 text-sm">
       <button onClick={()=>setTab("aging")} className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 ${tab==="aging"?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}><BarChart3 className="w-4 h-4"/>Customer aging</button>
       <button onClick={()=>setTab("statements")} className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 ${tab==="statements"?"bg-[#0086E0] text-white font-medium":"text-stone-600 hover:bg-stone-100"}`}><FileText className="w-4 h-4"/>Statements</button>

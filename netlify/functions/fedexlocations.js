@@ -130,8 +130,9 @@ exports.handler = async (event) => {
     clearTimeout(t);
     const j = await rr.json().catch(() => ({}));
     if (!rr.ok) {
-      const msg = (j.errors && j.errors[0] && j.errors[0].message) || (j.output && j.output.alerts && j.output.alerts[0] && j.output.alerts[0].message) || ("FedEx location search failed (" + rr.status + ")");
-      return respond(200, { ok: false, error: msg });
+      const e0 = (j.errors && j.errors[0]) || {};
+      const msg = e0.message || (j.output && j.output.alerts && j.output.alerts[0] && j.output.alerts[0].message) || ("FedEx location search failed (" + rr.status + ")");
+      return respond(200, { ok: false, error: msg, fxCode: e0.code || "", fxStatus: rr.status });
     }
     const out = j.output || {};
     const list = out.locationDetailList || out.locations || out.matchedLocations || [];

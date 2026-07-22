@@ -8853,7 +8853,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {billTo==="third"&&thirdAcct&&<div className="flex flex-wrap items-center gap-2 text-xs -mt-1">
           <span className="flex items-center gap-1.5 text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-1.5"><CreditCard className="w-3.5 h-3.5"/>Auto-billing to third-party account <b className="">{thirdAcct}</b><button onClick={()=>{setBillTo("sender");setThirdAcct("");}} className="ml-1 text-[#0086E0] hover:text-[#006FBF] underline">Bill Sender Instead</button></span>
         </div>}
-        {intl&&<div className="flex items-center gap-2 text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2"><MapPin className="w-4 h-4"/>International shipment to <b>{receiver.country}</b> — FedEx &amp; DHL rates shown, customs info required below.</div>}
+        {intl&&<div className="flex items-center gap-2 text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2"><MapPin className="w-4 h-4"/>International shipment to <b>{receiver.country}</b> — FedEx rates shown, customs info required below.</div>}
 
         {!custom.hideShipSteps&&<StepHead n="2" label="Package details"/>}
         <div className="bg-white border border-stone-200 shadow-sm rounded-lg p-3 space-y-2">

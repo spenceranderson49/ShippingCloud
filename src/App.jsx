@@ -3775,6 +3775,18 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
   const profiles=(rules.profiles&&rules.profiles.length)?rules.profiles:DEFAULT_RATE_RULES.profiles;
   const assign=rules.assign||{};
   const prof=profiles.find(p=>p.id===(assign[cid]||"default"))||profiles[0];
+  /* ── Customer 360: read the shared ELEMS stores (same ones Receivables & Margins use) so this
+     customer's Invoicing, Collections, Commissions and History all run off the imported invoices
+     & airbills. Matched to the customer by name or customer number. ── */
+  const [arInvoices,setArInvoices]=usePersist("arInvoices",SEED_AR);
+  const [airbills360]=usePersist("airbills",SEED_AIRBILLS);
+  const [salesReps360]=usePersist("salesReps",[]);
+  const [commPeriod,setCommPeriod]=useState("ytd");
+  const [histKind,setHistKind]=useState("all");
+  const _cnorm=(s)=>String(s||"").trim().toLowerCase();
+  const custMatch=(rec)=>{ if(!c||!rec)return false; const rc=_cnorm(rec.customer); if(rc&&rc===_cnorm(c.name))return true; const cn=String(rec.custNo||""); if(cn&&(cn===String(c.acctNo||"")||cn===String(c.custNo||"")))return true; return false; };
+  const myInvoices=useMemo(()=>(arInvoices||[]).filter(custMatch),[arInvoices,cid,c&&c.name,c&&c.acctNo,c&&c.custNo]);
+  const myAirbills=useMemo(()=>(airbills360||[]).filter(custMatch),[airbills360,cid,c&&c.name,c&&c.acctNo,c&&c.custNo]);
   const upClient=(patch)=>setClients(cs=>cs.map(x=>x.id===cid?{...x,...patch}:x));
   const upAddr=(patch)=>setClients(cs=>cs.map(x=>x.id===cid?{...x,address:{...(x.address||{}),...patch}}:x));
   const upPrefs=(patch)=>setClients(cs=>cs.map(x=>x.id===cid?{...x,prefs:{...(x.prefs||{}),...patch}}:x));
@@ -3850,7 +3862,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
   const secPolicyState=(sid)=>{ if(!lg.length)return secPolicyDefault(sid); const vals=lg.map(u=>String(((featureFlags[u.id]||{})._secPolicy||{})[sid]||secPolicyDefault(sid))); return vals.every(v=>v===vals[0])?vals[0]:"mixed"; };
   const setCompanySecPolicy=(sid,val)=>{ setFeatureFlags&&setFeatureFlags(ff=>{ const next={...ff}; lg.forEach(u=>{ const cur=next[u.id]||{}; next[u.id]={...cur,_secPolicy:{...(cur._secPolicy||{}),[sid]:val}}; }); return next; }); say("Settings pages updated for all logins."); };
   const supplies=pf.supplies||{};
-  const TABS=[["profile","Profile"],["logins","Logins ("+lg.length+")"],["rates","Rates"],["carriers","Carriers"],["services","Services"],["fedex","FedEx Account"],["shipments","Shipments"],["features","Features"],["notes","Notes"]];   /* write-only tabs (Address/Label prefs/Supplies/Credentials) removed — nothing read them (audit-admin-portal §2) */
+  const TABS=[["profile","Profile"],["logins","Logins ("+lg.length+")"],["rates","Rates"],["carriers","Carriers"],["services","Services"],["fedex","FedEx Account"],["shipments","Shipments"],["invoicing","Invoicing"],["collections","Collections"],["commissions","Commissions"],["history","History"],["features","Features"],["notes","Notes"]];   /* write-only tabs (Address/Label prefs/Supplies/Credentials) removed — nothing read them (audit-admin-portal §2) */
   const svcQuick=RATE_SERVICES.fedex.filter(s=>!s.or);
   return (<div className="space-y-4">
     <div className="flex flex-wrap items-center gap-3">
@@ -4234,6 +4246,185 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
           </div>
         </div>
         <div className="flex justify-end"><button onClick={async()=>{if(!await uiConfirm('Delete customer "'+c.name+'"? Logins stay but lose the link.'))return;if(CLOUD.mode==="cloud")cloudCall({action:"deleteCustomer",token:CLOUD.token,clientId:cid});setUsers(us=>us.map(x=>x.clientId===cid?{...x,clientId:null}:x));setClients(cs=>cs.filter(x=>x.id!==cid));onClose&&onClose();}} className="text-[11px] text-rose-500 hover:text-rose-600">Delete Customer</button></div>
+      </div>);
+    })()}
+
+    {tab==="invoicing"&&(()=>{
+      const inv=c.invoicing||{};
+      const upInv=(patch)=>upClient({invoicing:{...inv,...patch}});
+      const Chk=(k,label,hint)=>(<label className="flex items-start gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!!inv[k]} onChange={e=>upInv({[k]:e.target.checked})} className="accent-[#0086E0] mt-0.5"/><span>{label}{hint&&<span className="block text-[11px] text-stone-400">{hint}</span>}</span></label>);
+      return (<div className="space-y-4">
+        <div className="rounded-xl border border-stone-200 p-4">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-3 flex items-center gap-1"><Receipt className="w-3.5 h-3.5"/>How this customer is invoiced</div>
+          <div className="grid sm:grid-cols-3 gap-3">
+            <Field label="Deliver invoices by"><Select value={inv.method||"email"} onChange={e=>upInv({method:e.target.value})}><option value="email">Email (PDF)</option><option value="mail">Postal mail</option><option value="portal">Customer portal</option><option value="edi">EDI</option></Select></Field>
+            <Field label="Billing frequency"><Select value={inv.frequency||"per-shipment"} onChange={e=>upInv({frequency:e.target.value})}><option value="per-shipment">Per shipment</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="biweekly">Every 2 weeks</option><option value="monthly">Monthly</option></Select></Field>
+            <Field label="Invoice detail"><Select value={inv.format||"detail"} onChange={e=>upInv({format:e.target.value})}><option value="summary">Summary (totals)</option><option value="detail">Itemized (per airbill)</option></Select></Field>
+            <Field label="Send invoices to (email)"><Input value={inv.invoiceEmail||""} onChange={e=>upInv({invoiceEmail:e.target.value})} placeholder="ap@customer.com"/></Field>
+            <Field label="CC (comma-separated)"><Input value={inv.ccEmails||""} onChange={e=>upInv({ccEmails:e.target.value})} placeholder="owner@customer.com"/></Field>
+            <Field label="Accounts-payable contact"><Input value={inv.apContact||""} onChange={e=>upInv({apContact:e.target.value})} placeholder="Name · phone"/></Field>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-2.5 mt-3 border-t border-stone-100 pt-3">
+            {Chk("consolidate","Consolidate multiple shipments onto one invoice","Otherwise each shipment invoices separately.")}
+            {Chk("poRequired","Require a PO number on every shipment","Shipments without a PO are flagged for this customer.")}
+            {Chk("autoSend","Auto-send invoices on the schedule above","Off = invoices wait for someone to release them.")}
+            {Chk("emailStatements","Email a monthly open-balance statement","Sent on the 1st to the billing email above.")}
+          </div>
+          <div className="mt-3"><Field label="Special billing instructions"><textarea value={inv.notes||""} onChange={e=>upInv({notes:e.target.value})} placeholder="Anything AP needs — cost-center codes, reference formats, remit-to address…" className="w-full border border-stone-300 rounded-lg p-2.5 text-sm min-h-[60px]"/></Field></div>
+        </div>
+        <div className="rounded-xl border border-stone-200 bg-stone-50/40 p-4">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-3 flex items-center gap-1"><Wallet className="w-3.5 h-3.5"/>Terms &amp; credit</div>
+          <div className="grid sm:grid-cols-4 gap-3">
+            <Field label="Terms (days)"><Input value={c.terms??""} onChange={e=>upClient({terms:e.target.value===""?"":+String(e.target.value).replace(/[^0-9]/g,"")})} placeholder="30"/></Field>
+            <Field label="Credit limit ($)"><Input value={c.creditLimit??""} onChange={e=>upClient({creditLimit:e.target.value===""?"":+String(e.target.value).replace(/[^0-9.]/g,"")})} placeholder="25000"/></Field>
+            <Field label="Late fee (%)"><Input value={inv.lateFeePct??""} onChange={e=>upInv({lateFeePct:e.target.value===""?"":+String(e.target.value).replace(/[^0-9.]/g,"")})} placeholder="10"/></Field>
+            <Field label="Account status"><Select value={c.acctStatus||"Active"} onChange={e=>upClient({acctStatus:e.target.value})}><option>Active</option><option>Hold</option><option>COD</option><option>Frozen</option><option>Closed</option></Select></Field>
+          </div>
+          <p className="text-[11px] text-stone-400 mt-2">These feed Collections and the Receivables aging. The same terms &amp; limit also show on the Notes tab.</p>
+        </div>
+      </div>);
+    })()}
+
+    {tab==="collections"&&(()=>{
+      const coll=c.collections||{};
+      const upColl=(patch)=>upClient({collections:{...coll,...patch}});
+      const asOf=new Date();
+      const open=myInvoices.filter(i=>arBalance(i)>0).sort((a,b)=>(Date.parse(a.dueDate)||0)-(Date.parse(b.dueDate)||0));
+      const balance=myInvoices.reduce((s,i)=>s+arBalance(i),0);
+      const overdue=myInvoices.reduce((s,i)=>s+(arDaysOverdue(i,asOf)>0?arBalance(i):0),0);
+      const oldest=open.reduce((m,i)=>Math.max(m,arDaysOverdue(i,asOf)),0);
+      const limit=(c.creditLimit!==""&&c.creditLimit!=null)?+c.creditLimit:((open[0]&&+open[0].creditLimit)||0);
+      const buckets={}; AR_BUCKETS.forEach(([k])=>buckets[k]=0);
+      myInvoices.forEach(i=>{ const bal=arBalance(i); if(bal<=0)return; const d=arDaysOverdue(i,asOf); const bk=AR_BUCKETS.find(([k,l,lo,hi])=>d>=lo&&d<=hi); if(bk)buckets[bk[0]]+=bal; });
+      const logCall=async()=>{ const t=await uiPrompt("Log a collection call / contact for "+c.name+":","",{title:"Collections note"}); if(t==null||!String(t).trim())return; const entry={id:"n"+Date.now(),date:new Date().toISOString().slice(0,16).replace("T"," "),category:"Collections",text:String(t).trim(),followUp:"",agent:(currentUser&&currentUser.email)||"admin"}; upClient({noteLog:[entry,...(Array.isArray(c.noteLog)?c.noteLog:[])],collections:{...coll,lastContact:new Date().toISOString().slice(0,10)}}); say("Logged to Notes."); };
+      const KPI=(label,val,tone)=>(<div className="rounded-xl border border-stone-200 bg-white px-3 py-2.5"><div className="text-[10px] uppercase tracking-widest text-stone-400">{label}</div><div className={"text-lg font-semibold tabular-nums "+(tone||"text-stone-800")}>{val}</div></div>);
+      return (<div className="space-y-4">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+          {KPI("Balance due",money(balance))}
+          {KPI("Overdue",money(overdue),overdue>0?"text-rose-600":"text-stone-400")}
+          {KPI("Credit limit",limit?money(limit):"—")}
+          {KPI("Credit left",limit?money(Math.max(0,limit-balance)):"—",limit&&balance>limit?"text-rose-600":"text-emerald-700")}
+          {KPI("Oldest",oldest>0?oldest+"d":"—",oldest>60?"text-rose-600":oldest>30?"text-amber-600":"text-stone-400")}
+        </div>
+        {limit>0&&balance>limit&&<div className="text-[12px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 flex items-center gap-2"><AlertTriangle className="w-4 h-4 shrink-0"/>Over credit limit by {money(balance-limit)} — consider putting the account on hold.</div>}
+        <div className="rounded-xl border border-stone-200 p-4">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-3 flex items-center gap-1"><ClipboardList className="w-3.5 h-3.5"/>Collections workflow</div>
+          <div className="grid sm:grid-cols-4 gap-3">
+            <Field label="Status"><Select value={coll.status||"Current"} onChange={e=>upColl({status:e.target.value})}><option>Current</option><option>Watch</option><option>Dunning 1</option><option>Dunning 2</option><option>Final notice</option><option>Legal</option></Select></Field>
+            <Field label="Promise-to-pay date"><Input type="date" value={coll.promiseDate||""} onChange={e=>upColl({promiseDate:e.target.value})}/></Field>
+            <Field label="Promise amount ($)"><Input value={coll.promiseAmount??""} onChange={e=>upColl({promiseAmount:e.target.value===""?"":+String(e.target.value).replace(/[^0-9.]/g,"")})} placeholder="0.00"/></Field>
+            <Field label="Last contact"><Input type="date" value={coll.lastContact||""} onChange={e=>upColl({lastContact:e.target.value})}/></Field>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+            <button onClick={logCall} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Phone className="w-4 h-4"/>Log a call</button>
+            <button onClick={()=>{upClient({acctStatus:"Hold"});say("Account put on hold.");}} className="text-sm border border-amber-300 text-amber-700 bg-amber-50 rounded-lg px-3 py-1.5 font-medium hover:bg-amber-100">Put on hold</button>
+            <a href={"mailto:"+encodeURIComponent((c.invoicing&&c.invoicing.invoiceEmail)||c.email||"")+"?subject="+encodeURIComponent("Statement — "+c.name+" — balance "+money(balance))} className="text-sm border border-stone-300 text-stone-600 rounded-lg px-3 py-1.5 font-medium hover:bg-stone-50 flex items-center gap-1.5"><Send className="w-4 h-4"/>Email statement</a>
+          </div>
+        </div>
+        <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
+          <div className="px-4 py-2.5 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 flex items-center gap-1"><BarChart3 className="w-3.5 h-3.5"/>Aging</div>
+          <div className="flex flex-wrap gap-x-6 gap-y-1 px-4 py-3 text-sm">
+            {AR_BUCKETS.map(b=><div key={b[0]} className="min-w-[70px]"><div className="text-[10px] uppercase tracking-wide text-stone-400">{b[1]}</div><div className={"tabular-nums "+(buckets[b[0]]>0?((b[0]==="b5"||b[0]==="b6")?"text-rose-600":b[0]==="cur"?"text-stone-700":"text-amber-600"):"text-stone-300")}>{buckets[b[0]]>0?money(buckets[b[0]]):"—"}</div></div>)}
+          </div>
+        </div>
+        <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
+          <div className="overflow-x-auto"><table className="w-full text-sm">
+            <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 border-b border-stone-200"><th className="text-left font-medium px-3 py-2">Invoice</th><th className="text-left font-medium px-3 py-2">Due</th><th className="text-right font-medium px-3 py-2">Remaining</th><th className="text-right font-medium px-3 py-2">Overdue</th><th className="px-3 py-2"/></tr></thead>
+            <tbody className="divide-y divide-stone-100">
+              {open.length===0&&<tr><td colSpan={5} className="px-3 py-8 text-center text-stone-400">No open balances{myInvoices.length?"":" — no invoices imported for this customer yet"}.</td></tr>}
+              {open.map(i=>{ const d=arDaysOverdue(i,asOf); const recordPay=async()=>{ const raw=await uiPrompt("Payment received for "+i.number+" (balance "+money(arBalance(i))+"):",String(arBalance(i)),{title:"Record payment"}); if(raw==null)return; const amt=+String(raw).replace(/[^0-9.]/g,"")||0; if(!amt)return; setArInvoices(list=>list.map(x=>x.id===i.id?{...x,paid:(+x.paid||0)+amt}:x)); }; return (<tr key={i.id} className="hover:bg-stone-50">
+                <td className="px-3 py-2 font-medium text-stone-800 whitespace-nowrap">{i.number}</td>
+                <td className="px-3 py-2 text-stone-600 whitespace-nowrap">{i.dueDate}</td>
+                <td className="px-3 py-2 text-right tabular-nums font-semibold text-stone-800">{money(arBalance(i))}</td>
+                <td className={"px-3 py-2 text-right tabular-nums "+(d>0?"text-rose-600":"text-stone-300")}>{d>0?d+"d":"—"}</td>
+                <td className="px-3 py-2 text-right"><button onClick={recordPay} className="text-[11px] text-[#0086E0] hover:underline">Record payment</button></td>
+              </tr>); })}
+            </tbody>
+          </table></div>
+        </div>
+      </div>);
+    })()}
+
+    {tab==="commissions"&&(()=>{
+      const comm=c.commission||{};
+      const upComm=(patch)=>upClient({commission:{...comm,...patch}});
+      const rep=comm.rep||c.salesRep||"";
+      const repRec=(salesReps360||[]).find(r=>r&&_cnorm(r.name)===_cnorm(rep));
+      const pct=(comm.pct!==""&&comm.pct!=null)?+comm.pct:((repRec&&+repRec.pct)||30);
+      const basis=comm.basis||"margin";
+      const now=new Date(); const y=now.getFullYear(), mo=now.getMonth();
+      const inPeriod=(d)=>{ const t=Date.parse(d); if(isNaN(t))return false; const dt=new Date(t); if(commPeriod==="all")return true; if(commPeriod==="ytd")return dt.getFullYear()===y; if(commPeriod==="month")return dt.getFullYear()===y&&dt.getMonth()===mo; if(commPeriod==="last"){ const lm=mo===0?11:mo-1; const ly=mo===0?y-1:y; return dt.getFullYear()===ly&&dt.getMonth()===lm; } return true; };
+      const rows=myAirbills.filter(a=>inPeriod(a.date));
+      const rev=rows.reduce((s,a)=>s+(+a.custCharge||0),0);
+      const cost=rows.reduce((s,a)=>s+(+a.agentCost||0),0);
+      const margin=rev-cost;
+      const base=basis==="revenue"?rev:margin;
+      const payout=base*pct/100;
+      const KPI=(label,val,tone)=>(<div className="rounded-xl border border-stone-200 bg-white px-3 py-2.5"><div className="text-[10px] uppercase tracking-widest text-stone-400">{label}</div><div className={"text-lg font-semibold tabular-nums "+(tone||"text-stone-800")}>{val}</div></div>);
+      return (<div className="space-y-4">
+        <div className="rounded-xl border border-stone-200 p-4">
+          <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-3 flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5"/>Commission setup</div>
+          <div className="grid sm:grid-cols-3 gap-3">
+            <Field label="Sales rep"><Input value={comm.rep??(c.salesRep||"")} onChange={e=>upComm({rep:e.target.value})} placeholder="sanderson"/></Field>
+            <Field label="Commission %"><Input value={comm.pct??""} onChange={e=>upComm({pct:e.target.value===""?"":+String(e.target.value).replace(/[^0-9.]/g,"")})} placeholder={String(pct)}/></Field>
+            <Field label="Paid on"><Select value={basis} onChange={e=>upComm({basis:e.target.value})}><option value="margin">Margin (charge − cost)</option><option value="revenue">Revenue (customer charge)</option></Select></Field>
+          </div>
+          {(comm.pct===""||comm.pct==null)&&repRec&&<p className="text-[11px] text-stone-400 mt-2">Using {rep}'s default rate of {pct}% from Sales Reps.</p>}
+        </div>
+        <div className="flex items-center gap-2 text-sm"><span className="text-stone-500">Period</span>
+          <select value={commPeriod} onChange={e=>setCommPeriod(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5"><option value="month">This month</option><option value="last">Last month</option><option value="ytd">Year to date</option><option value="all">All time</option></select>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+          {KPI("Shipments",String(rows.length))}
+          {KPI("Revenue",money(rev))}
+          {KPI("Carrier cost",money(cost))}
+          {KPI("Margin",money(margin),margin<0?"text-rose-600":"text-stone-800")}
+          {KPI("Commission",money(payout),"text-[#0086E0]")}
+        </div>
+        <p className="text-[11px] text-stone-400">Commission = {pct}% of {basis==="revenue"?"revenue":"margin"} across {rows.length} airbill{rows.length===1?"":"s"} for this customer. Airbills come from the weekly Margins import.</p>
+        <div className="rounded-xl border border-stone-200 bg-white overflow-hidden">
+          <div className="overflow-x-auto"><table className="w-full text-sm">
+            <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 border-b border-stone-200"><th className="text-left font-medium px-3 py-2">Date</th><th className="text-left font-medium px-3 py-2">Airbill</th><th className="text-left font-medium px-3 py-2">Service</th><th className="text-right font-medium px-3 py-2">Charge</th><th className="text-right font-medium px-3 py-2">Cost</th><th className="text-right font-medium px-3 py-2">Margin</th></tr></thead>
+            <tbody className="divide-y divide-stone-100">
+              {rows.length===0&&<tr><td colSpan={6} className="px-3 py-8 text-center text-stone-400">No airbills for this customer in this period.</td></tr>}
+              {rows.slice(0,50).map(a=><tr key={a.id} className="hover:bg-stone-50"><td className="px-3 py-2 text-stone-600 whitespace-nowrap">{a.date}</td><td className="px-3 py-2 text-stone-700">{a.airbill}</td><td className="px-3 py-2 text-stone-500">{a.type}</td><td className="px-3 py-2 text-right tabular-nums">{money(+a.custCharge||0)}</td><td className="px-3 py-2 text-right tabular-nums text-stone-500">{money(+a.agentCost||0)}</td><td className={"px-3 py-2 text-right tabular-nums "+(abMargin(a)<0?"text-rose-600":"text-stone-700")}>{money(abMargin(a))}</td></tr>)}
+            </tbody>
+          </table></div>
+        </div>
+      </div>);
+    })()}
+
+    {tab==="history"&&(()=>{
+      const ev=[];
+      const push=(date,kind,text,tone)=>{ if(!date)return; ev.push({date:String(date).slice(0,10),kind,text,tone}); };
+      if(c.createdAt||c.since)push((c.createdAt||c.since||""),"Account","Account created","stone");
+      (Array.isArray(c.noteLog)?c.noteLog:[]).forEach(n=>push((n.date||""),n.category==="Rate change"?"Rate":(n.category||"Note"),n.text,n.category==="Collections"?"rose":n.category==="Rate change"?"blue":"stone"));
+      lg.forEach(u=>{ if(u.createdAt)push(u.createdAt,"Login","Login created — "+(u.email||u.name||""),"green"); });
+      myInvoices.forEach(i=>{ push(i.invoiceDate,"Invoice","Invoice "+i.number+" — "+money((+i.amount||0)+(+i.lateFee||0)),"stone"); if((+i.paid||0)>0)push(i.invoiceDate,"Payment","Payment recorded on "+i.number+" — "+money(+i.paid||0),"green"); });
+      myAirbills.forEach(a=>push(a.date,"Shipment",(a.airbill?a.airbill+" · ":"")+(a.type||"Shipment")+" — "+money(+a.custCharge||0),"stone"));
+      const coll=c.collections||{};
+      if(coll.promiseDate)push(coll.promiseDate,"Promise","Promise to pay"+(coll.promiseAmount?" "+money(+coll.promiseAmount):""),"amber");
+      const kinds=Array.from(new Set(ev.map(e=>e.kind)));
+      const shown=ev.filter(e=>histKind==="all"||e.kind===histKind).sort((a,b)=>(Date.parse(b.date)||0)-(Date.parse(a.date)||0));
+      const toneCls={green:"bg-emerald-400",blue:"bg-[#0086E0]",rose:"bg-rose-400",amber:"bg-amber-400",stone:"bg-stone-300"};
+      return (<div className="space-y-3">
+        <div className="flex items-center gap-2 flex-wrap text-sm">
+          <span className="text-stone-500 flex items-center gap-1"><Clock className="w-4 h-4"/>Everything that has happened on this account</span>
+          <span className="flex-1"/>
+          <select value={histKind} onChange={e=>setHistKind(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5"><option value="all">All events</option>{kinds.map(k=><option key={k} value={k}>{k}</option>)}</select>
+        </div>
+        <div className="rounded-xl border border-stone-200 bg-white p-4">
+          {shown.length===0?<div className="text-sm text-stone-400 py-8 text-center">No history yet.</div>:
+          <div className="relative pl-4">
+            <div className="absolute left-[5px] top-1 bottom-1 w-px bg-stone-200"/>
+            <div className="space-y-3">
+              {shown.slice(0,200).map((e,i)=><div key={i} className="relative">
+                <div className={"absolute -left-4 top-1.5 w-2.5 h-2.5 rounded-full ring-2 ring-white "+(toneCls[e.tone]||"bg-stone-300")}/>
+                <div className="flex items-baseline gap-2 flex-wrap"><span className="text-[11px] text-stone-400 tabular-nums w-20 shrink-0">{e.date}</span><Badge tone={e.tone||"stone"}>{e.kind}</Badge><span className="text-sm text-stone-700">{e.text}</span></div>
+              </div>)}
+            </div>
+          </div>}
+        </div>
       </div>);
     })()}
   </div>);

@@ -119,20 +119,34 @@ exports.handler = async (event) => {
 
   try {
     const token = await getToken();
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 20000);
-    const rr = await fetch(BASE + "/location/v1/locations/search", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token, "x-locale": "en_US" },
-      body: JSON.stringify(req),
-      signal: ctrl.signal
-    });
-    clearTimeout(t);
-    const j = await rr.json().catch(() => ({}));
+    /* FedEx has shipped this API under a couple of paths across versions; try the documented one
+       first, fall back to alternates on a hard 404 so a path rename doesn't dead-end the finder. */
+    const PATHS = ["/location/v1/locations/search", "/location/v1/locations", "/locations/v1/locations/search"];
+    let rr = null, j = {}, lastCode = "", lastStatus = 0, usedPath = "";
+    for (const p of PATHS) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 20000);
+      rr = await fetch(BASE + p, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token, "x-locale": "en_US" },
+        body: JSON.stringify(req),
+        signal: ctrl.signal
+      });
+      clearTimeout(t);
+      j = await rr.json().catch(() => ({}));
+      usedPath = p;
+      if (rr.ok) break;
+      lastStatus = rr.status; lastCode = (j.errors && j.errors[0] && j.errors[0].code) || "";
+      if (rr.status !== 404) break;   // a non-404 error is a real answer from the right endpoint — stop probing
+    }
     if (!rr.ok) {
       const e0 = (j.errors && j.errors[0]) || {};
-      const msg = e0.message || (j.output && j.output.alerts && j.output.alerts[0] && j.output.alerts[0].message) || ("FedEx location search failed (" + rr.status + ")");
-      return respond(200, { ok: false, error: msg, fxCode: e0.code || "", fxStatus: rr.status });
+      let msg = e0.message || (j.output && j.output.alerts && j.output.alerts[0] && j.output.alerts[0].message) || ("FedEx location search failed (" + rr.status + ")");
+      /* A 404 across every path means the Location Search API product isn't enabled on this FedEx
+         developer project — the credentials rate & ship fine, this is just a separate product to add.
+         Say so plainly instead of echoing FedEx's opaque "resource no longer available". */
+      if (rr.status === 404) msg = "FedEx Location Search isn't enabled on your FedEx account yet. It's a separate FedEx API product — add \"Location Search API\" to your FedEx Developer project (the same one holding your API key), then try again. Rating and shipping are unaffected.";
+      return respond(200, { ok: false, error: msg, fxCode: e0.code || lastCode, fxStatus: rr.status, fxPath: usedPath });
     }
     const out = j.output || {};
     const list = out.locationDetailList || out.locations || out.matchedLocations || [];

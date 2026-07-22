@@ -103,8 +103,8 @@ const FEATURE_CATALOG=[
   {id:"fedexLocations",label:"FedEx Location Finder",desc:"Find nearest FedEx drop-off / pickup locations by ZIP or current location",default:true},
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own NON-FedEx carrier accounts (the FedEx Account settings page always shows for every customer; admins always have this)",default:false},
 ];
-const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All Logins"],["rates","Rates & Dim Divisors"],["margins","Margins"],["receivables","Receivables"],["othercarriers","Other Carriers"],["labelcert","FedEx Labels"],["customizations","Features & Access"],["branding","Branding"],["apiadmin","API"],["billing","Billing & Invoices"],["domains","Domains"],["backups","Backups & Restore"]];
-const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,margins:TrendingUp,receivables:Wallet,othercarriers:Truck,labelcert:Printer,customizations:Sliders,branding:Sparkles,apiadmin:Plug,billing:Receipt,domains:ExternalLink,backups:RotateCcw};
+const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All Logins"],["rates","Rates & Dim Divisors"],["margins","Margins"],["receivables","Receivables"],["fullcircle","Full Circle Export"],["othercarriers","Other Carriers"],["labelcert","FedEx Labels"],["customizations","Features & Access"],["branding","Branding"],["apiadmin","API"],["billing","Billing & Invoices"],["domains","Domains"],["backups","Backups & Restore"]];
+const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,margins:TrendingUp,receivables:Wallet,fullcircle:ArrowLeftRight,othercarriers:Truck,labelcert:Printer,customizations:Sliders,branding:Sparkles,apiadmin:Plug,billing:Receipt,domains:ExternalLink,backups:RotateCcw};
 /* A restricted admin ALWAYS keeps access to "users" — without it there is no self-service way
    to ever fix a permission set that’s missing something, for yourself or anyone else. A wrong
    restriction otherwise becomes a permanent lockout with no way back in. */
@@ -5422,6 +5422,96 @@ function MarginsAdmin({clients=[],currentUser}){
     </div>}
   </div>);
 }
+
+/* ════════ FULL CIRCLE EXPORT (Aptean ship-confirm feed) ══════════════════════
+   L'AGENCE's ERP (Aptean Full Circle) already ingests a UPS/FedEx "UCC" CSV to mark
+   domestic orders shipped. This emits that exact file from ShippingCloud shipments so
+   FC can consume it unchanged — dropped in the folder FC watches (same one, or a new
+   one keyed by source). One quoted row per shipment/carton:
+     date, tracking, serviceCode, weight, charge, packages, orderNo, SSCC/UCC, value, code, ,
+   The SSCC field is configurable (real GS1 SSCC-18, the FedEx tracking, or an existing
+   carton serial) until Aptean confirms which they want at final scope. Admin-only. */
+function ssccCheck(d){ let sum=0; for(let i=0;i<d.length;i++){ const n=+d[d.length-1-i]||0; sum+=(i%2===0)?n*3:n; } return String((10-(sum%10))%10); }
+function makeSSCC(prefix,serial,ext){ const e=(String(ext==null?0:ext).replace(/\D/g,"").slice(0,1))||"0"; const p=String(prefix||"").replace(/\D/g,""); const s=String(serial||"").replace(/\D/g,""); let base=e+p+s; base=base.length>17?base.slice(0,17):base.padEnd(17,"0"); return base+ssccCheck(base); }
+function FullCircleExport({ships=[],clients=[]}){
+  const [cfg,setCfg]=usePersist("fcExport",{ssccMode:"tracking",gs1Prefix:"",warehouseCode:"10",includeCharge:false,serviceMap:{}});
+  const up=(patch)=>setCfg(c=>({...c,...patch}));
+  const upMap=(svc,code)=>setCfg(c=>({...c,serviceMap:{...(c.serviceMap||{}),[svc]:code}}));
+  const [from,setFrom]=useState("");
+  const [to,setTo]=useState("");
+  const [q,setQ]=useState("");
+  const services=useMemo(()=>Array.from(new Set(ships.map(s=>s&&s.service).filter(Boolean))).sort(),[ships]);
+  const inRange=(d)=>{ const t=Date.parse(d); if(isNaN(t))return true; if(from&&t<Date.parse(from))return false; if(to&&t>Date.parse(to)+864e5-1)return false; return true; };
+  const rows=useMemo(()=>ships.filter(s=>s&&s.tracking&&inRange(s.date)&&(!q||[s.reference,s.tracking,s.recipient&&s.recipient.name].some(x=>String(x||"").toLowerCase().includes(q.toLowerCase())))).sort((a,b)=>(Date.parse(a.date)||0)-(Date.parse(b.date)||0)),[ships,from,to,q]);
+  const svcCode=(s)=>{ const m=cfg.serviceMap||{}; const v=m[s.service]; return v!=null&&v!==""?v:""; };
+  const ssccFor=(s,i)=>{ if(cfg.ssccMode==="tracking")return String(s.tracking||""); if(cfg.ssccMode==="carton")return String(s.sscc||s.carton||s.tracking||""); const seed=(s.id!=null?String(s.id):String(i)).replace(/\D/g,"")||String(i+1); return makeSSCC(cfg.gs1Prefix||"",seed); };
+  const rowArr=(s,i)=>[ s.date||"", s.tracking||"", svcCode(s), (+s.weight||0).toFixed(1), cfg.includeCharge?(+s.cost||0).toFixed(2):"", String((s.pieces&&s.pieces.length)||1), s.reference||s.orderNo||"", ssccFor(s,i), (+s.declaredValue||0).toFixed(2), cfg.warehouseCode||"10", "", "" ];
+  const qf=(v)=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"';
+  const csv=rows.map((s,i)=>rowArr(s,i).map(qf).join(",")).join("\r\n")+(rows.length?"\r\n":"");
+  const download=()=>{ const now=new Date(),p=n=>String(n).padStart(2,"0"); const stamp=now.getFullYear()+p(now.getMonth()+1)+p(now.getDate())+"."+p(now.getHours())+p(now.getMinutes())+p(now.getSeconds()); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/plain"})); a.download="fcucc."+stamp+".txt"; document.body.appendChild(a); a.click(); setTimeout(()=>{a.remove();URL.revokeObjectURL(a.href);},2000); };
+  const COLS=[["Date","the shipment date"],["Tracking #","carrier tracking"],["Service","your service → FC code (set below)"],["Weight","total lb, 1 decimal"],["Charge","blank unless you enable it"],["Packages","carton count"],["Order #","the order/reference from Full Circle"],["SSCC / UCC","per the mode below"],["Value","declared value"],["Code","constant (warehouse/source)"],["—","reserved / blank"],["—","reserved / blank"]];
+  return (<div className="space-y-4">
+    <div className="flex items-start justify-between gap-3 flex-wrap">
+      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ArrowLeftRight className="w-5 h-5 text-[#0086E0]"/>Full Circle export</h2><p className="text-sm text-stone-500 mt-0.5">Emit the same UCC ship-confirm file Aptean Full Circle already consumes — one row per shipment, ready to drop in the watched folder.</p></div>
+      <button onClick={download} disabled={!rows.length} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium hover:bg-[#006db8] disabled:opacity-50 flex items-center gap-1.5"><Download className="w-4 h-4"/>Download file ({rows.length})</button>
+    </div>
+
+    <div className="rounded-xl border border-stone-200 p-4">
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-3">Output settings</div>
+      <div className="grid sm:grid-cols-4 gap-3">
+        <Field label="Carton serial (SSCC/UCC)"><Select value={cfg.ssccMode} onChange={e=>up({ssccMode:e.target.value})}><option value="tracking">Use the tracking #</option><option value="generate">Generate a real SSCC-18</option><option value="carton">Use our carton serial</option></Select></Field>
+        {cfg.ssccMode==="generate"&&<Field label="GS1 company prefix"><Input value={cfg.gs1Prefix||""} onChange={e=>up({gs1Prefix:e.target.value})} placeholder="e.g. 0614141"/></Field>}
+        <Field label="Code column (constant)"><Input value={cfg.warehouseCode||""} onChange={e=>up({warehouseCode:e.target.value})} placeholder="10"/></Field>
+        <Field label="Charge column"><Select value={cfg.includeCharge?"1":"0"} onChange={e=>up({includeCharge:e.target.value==="1"})}><option value="0">Leave blank (like the sample)</option><option value="1">Include our cost</option></Select></Field>
+      </div>
+      {cfg.ssccMode==="generate"&&!cfg.gs1Prefix&&<p className="text-[11px] text-amber-600 mt-2">Add your GS1 company prefix for a valid SSCC — without it the serial is a placeholder.</p>}
+    </div>
+
+    {services.length>0&&<div className="rounded-xl border border-stone-200 p-4">
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">Service → Full Circle code</div>
+      <p className="text-[11px] text-stone-400 mb-3">Map each of your services to the numeric code Full Circle expects (get the list from Aptean). Blank = sent empty.</p>
+      <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
+        {services.map(sv=><div key={sv} className="flex items-center gap-2 text-sm"><span className="flex-1 truncate text-stone-600">{sv}</span><input value={(cfg.serviceMap||{})[sv]||""} onChange={e=>upMap(sv,e.target.value)} placeholder="code" className="w-24 bg-white border border-stone-200 rounded px-2 py-1 text-sm outline-none focus:border-[#0086E0]"/></div>)}
+      </div>
+    </div>}
+
+    <div className="flex items-center gap-2 flex-wrap text-sm">
+      <span className="text-stone-500">From</span><input type="date" value={from} onChange={e=>setFrom(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5"/>
+      <span className="text-stone-500">to</span><input type="date" value={to} onChange={e=>setTo(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5"/>
+      <Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Filter by order, tracking, name…" className="w-56"/>
+    </div>
+
+    <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="overflow-x-auto"><table className="w-full text-sm">
+        <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 border-b border-stone-200"><th className="text-left font-medium px-3 py-2">Date</th><th className="text-left font-medium px-3 py-2">Order #</th><th className="text-left font-medium px-3 py-2">Tracking</th><th className="text-left font-medium px-3 py-2">Svc</th><th className="text-right font-medium px-3 py-2">Wt</th><th className="text-right font-medium px-3 py-2">Pkgs</th><th className="text-left font-medium px-3 py-2">SSCC / UCC</th><th className="text-right font-medium px-3 py-2">Value</th></tr></thead>
+        <tbody className="divide-y divide-stone-100">
+          {rows.length===0&&<tr><td colSpan={8} className="px-3 py-10 text-center text-stone-400">No shipments match — widen the date range, or ship a few orders first.</td></tr>}
+          {rows.slice(0,200).map((s,i)=><tr key={s.id||i} className="hover:bg-stone-50">
+            <td className="px-3 py-2 text-stone-600 whitespace-nowrap">{s.date}</td>
+            <td className="px-3 py-2 text-stone-800">{s.reference||s.orderNo||"—"}</td>
+            <td className="px-3 py-2 text-stone-600 font-mono text-[12px]">{s.tracking}</td>
+            <td className="px-3 py-2 text-stone-500">{svcCode(s)||<span className="text-amber-500">unset</span>}</td>
+            <td className="px-3 py-2 text-right tabular-nums">{(+s.weight||0).toFixed(1)}</td>
+            <td className="px-3 py-2 text-right tabular-nums">{(s.pieces&&s.pieces.length)||1}</td>
+            <td className="px-3 py-2 text-stone-500 font-mono text-[11px]">{ssccFor(s,i)}</td>
+            <td className="px-3 py-2 text-right tabular-nums">{money(+s.declaredValue||0)}</td>
+          </tr>)}
+        </tbody>
+      </table></div>
+      {rows.length>200&&<div className="px-3 py-2 text-[11px] text-stone-400 border-t border-stone-100">Showing 200 of {rows.length}; the download includes all {rows.length}.</div>}
+    </div>
+
+    <div className="rounded-xl border border-stone-200 p-4">
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-2">File preview</div>
+      <pre className="text-[11px] font-mono text-stone-600 bg-stone-50 border border-stone-200 rounded-lg p-2.5 max-h-48 overflow-auto whitespace-pre">{csv?csv.split("\r\n").slice(0,12).join("\n")+(rows.length>12?"\n…":""):"(empty)"}</pre>
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mt-4 mb-2">Column map (for Aptean)</div>
+      <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-[12px] text-stone-600">
+        {COLS.map((cc,i)=><div key={i} className="flex gap-2"><span className="w-5 text-stone-400 tabular-nums shrink-0">{i+1}</span><b className="w-24 shrink-0 text-stone-700">{cc[0]}</b><span className="text-stone-500">{cc[1]}</span></div>)}
+      </div>
+    </div>
+  </div>);
+}
+
 function BillingAdmin({clients=[],platform={},openCustomer}){
   const [invoices,setInvoices]=usePersist("invoicesIssued",[]);
   const [bSettings,setBSettings]=usePersist("billingSettings",{terms:"Net 15",note:"",payUrl:""});
@@ -5760,6 +5850,9 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
   ];
   const SECTION_META={};NAV_GROUPS.forEach(g=>g.items.forEach(([v,l,Icon])=>{SECTION_META[v]={label:l,Icon};}));
   SECTION_META.rates={label:"Advanced rates — tables & sheets",Icon:DollarSign};   // off the sidebar (customers each have a Rates tab now); reachable from a customer record for shared imports, zones, weight breaks, and printable rate sheets
+  SECTION_META.margins=SECTION_META.margins||{label:"Margins",Icon:TrendingUp};
+  SECTION_META.receivables=SECTION_META.receivables||{label:"Receivables",Icon:Wallet};
+  SECTION_META.fullcircle={label:"Full Circle Export",Icon:ArrowLeftRight};
   const allowedKeys=new Set(ALLOWED.map(x=>x[0]));
   const groups=NAV_GROUPS.map(g=>({...g,items:g.items.filter(it=>allowedKeys.has(it[0])&&it[0]!=="rates")})).filter(g=>g.items.length);   /* rates rail entry hidden (owner request) — deep link via Customers → Rates → Advanced still opens it */
   /* Every admin capability lives in this one workspace — Customers, Rate database, everything — regardless
@@ -5800,6 +5893,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
       {k==="billing"&&<BillingAdmin clients={clients} platform={platform} openCustomer={openCustomer}/>}
       {k==="margins"&&<MarginsAdmin clients={clients} currentUser={currentUser}/>}
       {k==="receivables"&&<ReceivablesAdmin clients={clients} currentUser={currentUser}/>}
+      {k==="fullcircle"&&<FullCircleExport ships={platform.ships||[]} clients={clients}/>}
       {k==="backups"&&<BackupsAdmin clients={clients} setClients={setClients} users={users} setUsers={setUsers}/>}
   </>);
   return (

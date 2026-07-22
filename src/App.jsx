@@ -15165,15 +15165,19 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
       <aside className="md:w-56 shrink-0 space-y-4">
         <div className="relative">
           <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-2.5 pointer-events-none"/>
-          <input value={secSearch} onChange={e=>setSecSearch(e.target.value)} placeholder="Search settings…" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-400"/>
+          {/* type=search + a non-semantic name + autofill/pw-manager opt-outs, so browsers don't dump the
+             account email into this box and filter every section away (which made the tabs look broken). */}
+          <input value={secSearch} onChange={e=>setSecSearch(e.target.value)} placeholder="Search settings…" type="search" name="sc-settings-filter" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} data-lpignore="true" data-1p-ignore="" className="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-400"/>
         </div>
-        {(()=>{ const q=secSearch.trim().toLowerCase(); let any=false;
+        {/* Belt-and-suspenders: if something still drops an email-looking value in here, treat it as no filter
+           instead of hiding every section. */}
+        {(()=>{ const raw=secSearch.trim().toLowerCase(); const q=raw.includes("@")?"":raw; let any=false;
         const groups=SEC_GROUPS.map(([gl,gsecs])=>{const vis=gsecs.filter(([id,l])=>polFor(id)!=="off"&&(!q||String(l).toLowerCase().includes(q)||gl.toLowerCase().includes(q))); if(!vis.length)return null; any=true; return (
         <div key={gl} className="space-y-1">
           <div className="px-3 text-[10px] font-semibold uppercase tracking-[.14em] text-stone-400">{gl}</div>
-          {vis.map(([id,l,Icon])=><button key={id} onClick={()=>setSec(id)} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}{polFor(id)==="locked"&&<Ban className="w-3 h-3 text-stone-300 ml-auto"/>}</button>)}
+          {vis.map(([id,l,Icon])=><button key={id} onClick={()=>{setSec(id);if(secSearch)setSecSearch("");}} className={`w-full flex items-center gap-2 text-sm rounded-lg px-3 py-2 text-left ${sec===id?"bg-white border border-stone-200 text-stone-900 font-medium":"text-stone-500 hover:bg-stone-100"}`}><Icon className="w-4 h-4"/>{l}{polFor(id)==="locked"&&<Ban className="w-3 h-3 text-stone-300 ml-auto"/>}</button>)}
         </div>);});
-        return <>{groups}{!any&&<div className="px-3 text-[12px] text-stone-400">No settings match “{secSearch}”.</div>}</>; })()}
+        return <>{groups}{!any&&<div className="px-3 text-[12px] text-stone-400">No settings match “{secSearch}”. <button onClick={()=>setSecSearch("")} className="text-[#0086E0] hover:underline">Show all</button></div>}</>; })()}
       </aside>
       <div className="flex-1 min-w-0">
         {secLocked&&<div className="mb-3 flex items-center gap-2 text-[13px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"><Ban className="w-4 h-4 shrink-0"/>This page is locked by your administrator — you can look, but changes are disabled.</div>}

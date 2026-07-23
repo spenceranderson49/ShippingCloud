@@ -15453,6 +15453,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
 /* ════════ SETTINGS ════════ */
 function FedexLocations({settings}){
   const [zip,setZip]=React.useState((settings.sender&&settings.sender.zip)||"");
+  const [addr,setAddr]=React.useState("");
   const [radius,setRadius]=React.useState(25);
   const [busy,setBusy]=React.useState(false);
   const [err,setErr]=React.useState("");
@@ -15469,6 +15470,15 @@ function FedexLocations({settings}){
     setBusy(false);
   };
   const byZip=()=>{ const z=String(zip||"").trim(); if(!/^\d{5}/.test(z))return setErr("Enter a 5-digit ZIP."); run({postalCode:z,country:"US"}); };
+  /* Paste a whole customer address — pull the ZIP, city, state and street from it and search. */
+  const byAddress=()=>{
+    const a=String(addr||"").trim(); if(!a)return setErr("Paste an address to search near.");
+    const zipM=a.match(/\b(\d{5})(?:-\d{4})?\b/);
+    const csM=a.match(/([A-Za-z .'\-]+?),\s*([A-Za-z]{2})\b/);
+    const street=(a.split(/[\n,]/)[0]||"").trim();
+    if(!zipM&&!csM)return setErr("Couldn't read a ZIP or City, ST from that — include one (e.g. “…, Austin, TX 78701”).");
+    run({country:"US",...(zipM?{postalCode:zipM[1]}:{}),...(csM?{city:csM[1].trim(),state:csM[2].toUpperCase()}:{}),...(street&&street.length<70?{street}:{})});
+  };
   const byGeo=()=>{
     if(!navigator.geolocation)return setErr("This device can't share its location — search by ZIP instead.");
     setGeoBusy(true);setErr("");
@@ -15489,6 +15499,11 @@ function FedexLocations({settings}){
         <Field label="Within"><Select value={radius} onChange={e=>setRadius(+e.target.value)} className="w-24">{[10,25,50,100].map(m=><option key={m} value={m}>{m} mi</option>)}</Select></Field>
         <button onClick={byZip} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy&&!geoBusy?<Loader2 className="w-4 h-4 animate-spin"/>:<Search className="w-4 h-4"/>}Search</button>
         <button onClick={byGeo} disabled={busy||geoBusy} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3 py-2 font-medium hover:bg-stone-200 disabled:opacity-40 flex items-center gap-1.5">{geoBusy?<Loader2 className="w-4 h-4 animate-spin"/>:<MapPin className="w-4 h-4"/>}Use my location</button>
+      </div>
+      <div className="flex items-center gap-2 text-[11px] text-stone-400"><span className="h-px flex-1 bg-stone-100"/>or search by a customer's address<span className="h-px flex-1 bg-stone-100"/></div>
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label="Customer address"><Input value={addr} onChange={e=>setAddr(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")byAddress();}} placeholder="Paste a full address, e.g. 127 Market St, Austin, TX 78701" className="w-full min-w-[280px]"/></Field>
+        <button onClick={byAddress} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5"><Search className="w-4 h-4"/>Find near address</button>
       </div>
       {err&&<div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded px-3 py-2">{err}</div>}
     </div>

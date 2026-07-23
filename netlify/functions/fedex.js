@@ -421,11 +421,19 @@ exports.handler = async (event) => {
       /* FedEx Locations Search — nearest drop-off / pickup locations by ZIP or lat/long.
          No account needed; runs on the main FEDEX_API_KEY project (Locations Search API). */
       const loc = {};
-      if (body.lat != null && body.lng != null) loc.geographicCoordinates = String(body.lat) + "," + String(body.lng);
-      else loc.address = { postalCode: S(body.postalCode), countryCode: CC(body.country), stateOrProvinceCode: body.state ? ST(body.state) : undefined, city: body.city || undefined };
+      const byCoords = body.lat != null && body.lng != null;
+      if (byCoords) {
+        /* FedEx wants a bare "lat,long" string AND locationSearchCriterion=GEOGRAPHIC_COORDINATES —
+           without the criterion flag it validates the request as an address search and fails. */
+        const rnd = (n) => Math.round((+n) * 1e6) / 1e6;
+        loc.geographicCoordinates = rnd(body.lat) + "," + rnd(body.lng);
+      } else {
+        loc.address = { streetLines: body.street ? [String(body.street).slice(0, 70)] : undefined, postalCode: S(body.postalCode) || undefined, countryCode: CC(body.country), stateOrProvinceCode: body.state ? ST(body.state) : undefined, city: body.city || undefined };
+      }
       const radius = Math.min(100, Math.max(1, +body.distance || 25));
       const payload = {
         locationsSummaryRequestControlParameters: { distance: { units: "MI", value: radius }, maxResults: Math.min(25, +body.limit || 15) },
+        locationSearchCriterion: byCoords ? "GEOGRAPHIC_COORDINATES" : "ADDRESS",
         location: loc,
       };
       let r, t, d = null;

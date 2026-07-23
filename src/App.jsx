@@ -5450,22 +5450,39 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
   const [sendMsg,setSendMsg]=useState(null);   // {ok,text}
   const deliv=cfg.deliv||{};
   const upDeliv=(patch)=>setCfg(c=>({...c,deliv:{...(c.deliv||{}),...patch}}));
-  const services=useMemo(()=>Array.from(new Set(ships.map(s=>s&&s.service).filter(Boolean))).sort(),[ships]);
+  /* FedEx only — Full Circle ships FedEx, so drop any DHL/UPS/USPS history from the map list. */
+  const isFedEx=(s)=>/fedex/i.test(String((s&&s.service)||""))||/fedex/i.test(String((s&&s.carrier)||""));
+  const services=useMemo(()=>Array.from(new Set(ships.filter(isFedEx).map(s=>s&&s.service).filter(Boolean))).sort(),[ships]);
   const inRange=(d)=>{ const t=Date.parse(d); if(isNaN(t))return true; if(from&&t<Date.parse(from))return false; if(to&&t>Date.parse(to)+864e5-1)return false; return true; };
   const rows=useMemo(()=>ships.filter(s=>s&&s.tracking&&inRange(s.date)&&(!q||[s.reference,s.tracking,s.recipient&&s.recipient.name].some(x=>String(x||"").toLowerCase().includes(q.toLowerCase())))).sort((a,b)=>(Date.parse(a.date)||0)-(Date.parse(b.date)||0)),[ships,from,to,q]);
   /* Exact fedxucc.csv layout from L'AGENCE's FedEx Ship Manager profile (FCimprtexport.xml):
      header row + 12 comma-delimited columns. Full Circle reads it back to close the ship loop. */
   const FC_HEADER=["shipdate","track","service","weight","freight","shipprrecvier","pickticket","ucc128","codamount","compnay","blank","void"];
-  /* Service codes straight from the profile's <servicetypes> conversion; user can override per row. */
-  const FC_SVC_DEFAULT={"fedex priority overnight":"FE1","fedex 2day":"FE2","fedex 2day am":"FE2","fedex standard overnight":"FE3","fedex express saver":"3DAY","fedex economy":"3DAY","fedex ground economy":"3DAY","fedex home delivery":"FDEX","fedex ground":"FDEX","fedex international ground":"FEG"};
-  const svcCode=(s)=>{ const m=cfg.serviceMap||{}; const v=m[s.service]; if(v!=null&&v!=="")return v; return FC_SVC_DEFAULT[String(s.service||"").toLowerCase().replace(/®/g,"").trim()]||""; };
+  /* Service codes from the profile's <servicetypes> conversion. Keyword match so One Rate / ® /
+     box-name variants (e.g. "FedEx 2Day OneRate - Medium Box") resolve to the same code as the base
+     service. Ground defaults to FDEX pending Full Circle's confirmation of a separate Ground code. */
+  const fcCodeFor=(label)=>{ const t=String(label||"").toLowerCase();
+    if(/priority\s*overnight/.test(t))return "FE1";
+    if(/standard\s*overnight/.test(t))return "FE3";
+    if(/2\s*day/.test(t))return "FE2";
+    if(/express\s*saver/.test(t))return "3DAY";
+    if(/home\s*delivery/.test(t))return "FDEX";
+    if(/international\s*ground/.test(t))return "FEG";
+    if(/ground\s*economy|economy/.test(t))return "3DAY";
+    if(/ground/.test(t))return "FDEX";
+    return ""; };
+  const svcDefault=(sv)=>fcCodeFor(sv);
+  const svcCode=(s)=>{ const m=cfg.serviceMap||{}; const v=m[s.service]; if(v!=null&&v!=="")return v; return fcCodeFor(s.service); };
   const money2=(n)=>(Math.round((+n||0)*100)/100).toFixed(2);
+  /* freight column: blank / actual shipping charge / FedEx list rate */
+  const freightMode=cfg.freightCol||(cfg.includeCharge?"charges":"blank");
+  const freightVal=(s)=>{ if(freightMode==="charges")return money2(s.cost!=null?s.cost:s.sell); if(freightMode==="list")return money2(s.list!=null?s.list:(s.cost!=null?s.cost:s.sell)); return ""; };
   const rowArr=(s,i)=>[
     s.date||"",                                                   // shipdate
     s.tracking||"",                                               // track
     svcCode(s),                                                   // service (FC code)
     (+s.weight||0).toFixed(1),                                    // weight (billed lb)
-    cfg.includeCharge?money2(s.cost):"",                          // freight
+    freightVal(s),                                                // freight
     s.billTo==="receiver"||s.billingParty==="receiver"?"R":"S",   // shipprrecvier (bill to: shipper/receiver)
     s.poNo||s.pickTicket||s.orderNo||s.reference||"",             // pickticket (PO / pick ticket)
     s.invoiceNo||s.reference||"",                                 // ucc128 (invoice number)
@@ -5589,7 +5606,7 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
     <div className="rounded-xl border border-stone-200 p-4">
       <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-3">Output settings</div>
       <div className="grid sm:grid-cols-2 gap-3">
-        <Field label="Freight column"><Select value={cfg.includeCharge?"1":"0"} onChange={e=>up({includeCharge:e.target.value==="1"})}><option value="0">Leave blank (matches current file)</option><option value="1">Include our cost</option></Select></Field>
+        <Field label="Freight column"><Select value={freightMode} onChange={e=>up({freightCol:e.target.value,includeCharge:e.target.value!=="blank"})}><option value="blank">Leave blank (matches current file)</option><option value="charges">Shipping charges (actual FedEx charge)</option><option value="list">FedEx list rate (published)</option></Select></Field>
       </div>
       <p className="text-[11px] text-stone-400 mt-2">Layout is locked to your Ship Manager profile — <b>shipdate, track, service, weight, freight, shipprrecvier, pickticket, ucc128, compnay…</b> — so Full Circle reads it with no changes. Map service codes below.</p>
     </div>
@@ -5630,7 +5647,7 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
       <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">Service → Full Circle code</div>
       <p className="text-[11px] text-stone-400 mb-3">Map each of your services to the numeric code Full Circle expects (get the list from Aptean). Blank = sent empty.</p>
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
-        {services.map(sv=><div key={sv} className="flex items-center gap-2 text-sm"><span className="flex-1 truncate text-stone-600">{sv}</span><input value={(cfg.serviceMap||{})[sv]||""} onChange={e=>upMap(sv,e.target.value)} placeholder="code" className="w-24 bg-white border border-stone-200 rounded px-2 py-1 text-sm outline-none focus:border-[#0086E0]"/></div>)}
+        {services.map(sv=><div key={sv} className="flex items-center gap-2 text-sm"><span className="flex-1 truncate text-stone-600">{sv}</span><input value={(cfg.serviceMap||{})[sv]!=null?(cfg.serviceMap||{})[sv]:svcDefault(sv)} onChange={e=>upMap(sv,e.target.value)} placeholder="code" className="w-24 bg-white border border-stone-200 rounded px-2 py-1 text-sm outline-none focus:border-[#0086E0]"/></div>)}
       </div>
     </div>}
 
@@ -9064,7 +9081,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     const _bc=(extra&&extra.cost!=null&&!isNaN(+extra.cost))?+extra.cost:null;
     const _cost=q.cost!=null?q.cost:_bc;
     const _sell=q.sell!=null?q.sell:(_cost!=null?rateSellFor(_cost,q.label,{rules:rateRules,client,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}):null);
-    return {id:Date.now(),date:new Date().toLocaleDateString(),tracking:(extra&&extra.tracking)||newTracking(carrier),carrier,service:q.label,recipient:{...receiver},sender:{...sender},fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,pieces:pieces.map(p=>({...p})),dims:pieces[0],insurance,cost:_cost,sell:_sell,rateBase:q.base,rateSurcharges:q.surcharges||[],rateAccessorials:q.accessorials||[],oneRate:!!q._oneRate,billTo,thirdAcct,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference,invoiceNo,poNo,department:_orFRec(),residential,intl,bookNumber:extra&&extra.bookNumber,customs:intl?{...customs,total:customsTotal,ci:"CI-"+rnd(5)}:null};
+    return {id:Date.now(),date:new Date().toLocaleDateString(),tracking:(extra&&extra.tracking)||newTracking(carrier),carrier,service:q.label,recipient:{...receiver},sender:{...sender},fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,pieces:pieces.map(p=>({...p})),dims:pieces[0],insurance,cost:_cost,sell:_sell,list:(q.list!=null&&q.list!==""&&!isNaN(+q.list))?+q.list:undefined,rateBase:q.base,rateSurcharges:q.surcharges||[],rateAccessorials:q.accessorials||[],oneRate:!!q._oneRate,billTo,thirdAcct,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference,invoiceNo,poNo,department:_orFRec(),residential,intl,bookNumber:extra&&extra.bookNumber,customs:intl?{...customs,total:customsTotal,ci:"CI-"+rnd(5)}:null};
   };
   const print=async(q,force)=>{
     /* Re-label guard: an order that already has a label must be explicitly confirmed before a new

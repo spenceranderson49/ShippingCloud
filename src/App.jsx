@@ -5430,10 +5430,19 @@ function MarginsAdmin({clients=[],currentUser}){
    carton serial) until Aptean confirms which they want at final scope. Admin-only. */
 function ssccCheck(d){ let sum=0; for(let i=0;i<d.length;i++){ const n=+d[d.length-1-i]||0; sum+=(i%2===0)?n*3:n; } return String((10-(sum%10))%10); }
 function makeSSCC(prefix,serial,ext){ const e=(String(ext==null?0:ext).replace(/\D/g,"").slice(0,1))||"0"; const p=String(prefix||"").replace(/\D/g,""); const s=String(serial||"").replace(/\D/g,""); let base=e+p+s; base=base.length>17?base.slice(0,17):base.padEnd(17,"0"); return base+ssccCheck(base); }
-function FullCircleExport({ships=[],clients=[]}){
+function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=false}){
   const [cfg,setCfg]=usePersist("fcExport",{ssccMode:"tracking",gs1Prefix:"",warehouseCode:"10",includeCharge:false,serviceMap:{}});
   const up=(patch)=>setCfg(c=>({...c,...patch}));
   const upMap=(svc,code)=>setCfg(c=>({...c,serviceMap:{...(c.serviceMap||{}),[svc]:code}}));
+  /* Inbound service automation — lives in account settings.fcMap so the Ship engine reads it.
+     Each rule: incoming Full Circle service/code (+ optional zone) → the FedEx service we ship. */
+  const fcMap=(settings&&settings.fcMap)||{};
+  const fcRules=Array.isArray(fcMap.rules)?fcMap.rules:[];
+  const setFcMap=(patch)=>setSettings&&setSettings(p=>({...p,fcMap:{...((p&&p.fcMap)||{}),...patch}}));
+  const setFcRule=(i,patch)=>setFcMap({rules:fcRules.map((r,j)=>j===i?{...r,...patch}:r)});
+  const addFcRule=()=>setFcMap({rules:[...fcRules,{id:"fc"+String(fcRules.length)+"_"+(ships.length||0),code:"",service:"FedEx Ground",zone:""}]});
+  const delFcRule=(i)=>setFcMap({rules:fcRules.filter((_,j)=>j!==i)});
+  const FC_TARGET=["FedEx Ground","FedEx Home Delivery","FedEx Ground Economy","FedEx Express Saver","FedEx 2Day","FedEx 2Day AM","FedEx Standard Overnight","FedEx Priority Overnight","FedEx First Overnight","FedEx One Rate 2Day","FedEx One Rate Standard Overnight"];
   const [from,setFrom]=useState("");
   const [to,setTo]=useState("");
   const [q,setQ]=useState("");
@@ -5550,6 +5559,27 @@ function FullCircleExport({ships=[],clients=[]}){
       </div>
       <p className="text-[11px] text-stone-400 mt-2">Connected on go-live with the ProvideX ODBC driver from Aptean (DSN + credentials). Until then, orders can come from Shopify or a CSV drop.</p>
     </div>
+
+    {/* ── Full Circle → service automation (admin) ── */}
+    {isAdmin&&setSettings&&<div className="rounded-xl border border-violet-200 bg-violet-50/40 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><Zap className="w-4 h-4 text-violet-600"/>Full Circle → service automation <span className="text-[10px] uppercase tracking-wide bg-violet-100 text-violet-700 rounded px-1.5 py-0.5">admin</span></div>
+        <label className="flex items-center gap-1.5 text-[12px] text-stone-600 cursor-pointer"><input type="checkbox" checked={!!fcMap.on} onChange={e=>setFcMap({on:e.target.checked})} className="accent-violet-600"/>On for this account</label>
+      </div>
+      <p className="text-[12px] text-stone-500 mt-1">When an order imports from Full Circle with a requested service, ship it as the FedEx service you choose — optionally by zone. e.g. <b>Free Shipping → FedEx Ground</b>, or <b>Free Shipping · zones 6-8 → FedEx 2Day</b>. Overrides what Full Circle asked for.</p>
+      {fcMap.on&&<div className="mt-3 space-y-2">
+        <div className="hidden sm:flex items-center gap-2 text-[10px] uppercase tracking-wide text-stone-400"><span className="flex-1">Incoming service / code</span><span className="w-20">Zone</span><span className="flex-1">Ship as</span><span className="w-6"/></div>
+        {fcRules.length===0&&<div className="text-[12px] text-stone-400">No rules yet — add one below.</div>}
+        {fcRules.map((r,i)=><div key={r.id||i} className="flex flex-wrap items-center gap-2">
+          <input value={r.code||""} onChange={e=>setFcRule(i,{code:e.target.value})} placeholder="e.g. Free Shipping" className="flex-1 min-w-[140px] bg-white border border-stone-200 rounded px-2 py-1 text-sm outline-none focus:border-violet-400"/>
+          <input value={r.zone||""} onChange={e=>setFcRule(i,{zone:e.target.value})} placeholder="any" title="Zone: blank/any, a number (5), or a range (6-8)" className="w-20 bg-white border border-stone-200 rounded px-2 py-1 text-sm outline-none focus:border-violet-400"/>
+          <select value={r.service||"FedEx Ground"} onChange={e=>setFcRule(i,{service:e.target.value})} className="flex-1 min-w-[160px] bg-white border border-stone-200 rounded px-2 py-1 text-sm outline-none focus:border-violet-400">{FC_TARGET.map(s=><option key={s}>{s}</option>)}</select>
+          <button onClick={()=>delFcRule(i)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>
+        </div>)}
+        <button onClick={addFcRule} className="text-[12px] text-violet-700 hover:underline">+ add a rule</button>
+        <p className="text-[11px] text-stone-400">Zone is worked out from your ship-from ZIP to the destination. Blank = any zone. These pre-select the service on the Ship screen; you can still change it before printing.</p>
+      </div>}
+    </div>}
 
     <div className="flex items-start justify-between gap-3 flex-wrap">
       <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ArrowLeftRight className="w-5 h-5 text-[#0086E0]"/>② Ship confirmations — out to Full Circle</h2><p className="text-sm text-stone-500 mt-0.5">Emits the exact <b>fedxucc.csv</b> your FedEx Ship Manager profile writes today — header row + 12 columns Full Circle already reads back. One row per shipment.</p></div>
@@ -6023,7 +6053,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
       {k==="billing"&&<BillingAdmin clients={clients} platform={platform} openCustomer={openCustomer}/>}
       {k==="margins"&&<MarginsAdmin clients={clients} currentUser={currentUser}/>}
       {k==="receivables"&&<ReceivablesAdmin clients={clients} currentUser={currentUser}/>}
-      {k==="fullcircle"&&<FullCircleExport ships={platform.ships||[]} clients={clients}/>}
+      {k==="fullcircle"&&<FullCircleExport ships={platform.ships||[]} clients={clients} settings={settings} setSettings={setSettings} isAdmin={true}/>}
       {k==="backups"&&<BackupsAdmin clients={clients} setClients={setClients} users={users} setUsers={setUsers}/>}
   </>);
   return (
@@ -8984,6 +9014,19 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     const pricedReady=quotes.some(q=>(q.sell??q.cost)!=null);
     if(rateSrc.loading||!pricedReady)return null;
     const resKnown=addrClassified?residential:null;   // ground↔home swap only once FedEx (or the override) has classified the address
+    /* Full Circle service automation (Settings → Integrations → Full Circle, admin): the order's
+       requested service (+ optional zone) picks the FedEx service to ship. Highest priority when on. */
+    const _fcm=(settings&&settings.fcMap)||{};
+    if(_fcm.on&&Array.isArray(_fcm.rules)&&_fcm.rules.length){
+      const _so=selectedOrder?orders.find(x=>x.id===selectedOrder):null;
+      const inSvc=String((_so&&(_so.shippingService||_so.service))||"").trim().toLowerCase();
+      if(inSvc){
+        let zn=null; try{ zn=zoneEst(originZip,(_so&&_so.zip)||receiver.zip); }catch(e){}
+        const zoneOk=(z)=>{ z=String(z||"").trim(); if(!z||/^any$/i.test(z))return true; const m=z.match(/^(\d)\s*-\s*(\d)$/); if(m)return zn!=null&&zn>=+m[1]&&zn<=+m[2]; return zn!=null&&String(zn)===z.replace(/\D/g,""); };
+        const rule=_fcm.rules.find(r=>r&&r.code&&String(r.code).trim().toLowerCase()===inSvc&&r.service&&zoneOk(r.zone));
+        if(rule){ const rc=canonSvc(groundFamilySwap(rule.service,resKnown)); const hit=quotes.find(q=>canonSvc(q.label)===rc&&(q.sell??q.cost)!=null); if(hit)return {key:hit.key,src:"autopilot"}; }
+      }
+    }
     if(liveRuleMatch){ const rc=canonSvc(groundFamilySwap(liveRuleMatch,resKnown)); const hit=quotes.find(q=>canonSvc(q.label)===rc&&(q.sell??q.cost)!=null); if(hit)return {key:hit.key,src:"autopilot"}; }
     /* Rule fired but pointed at Ground Economy on a shipment OVER its limits (70 lb / 130") — the
        service is hidden, so treat it like no-match and let the fallback pick something bookable. */
@@ -9002,7 +9045,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     }
     const so=selectedOrder?orders.find(x=>x.id===selectedOrder):null;
     return matchServiceForOrder(quotes,so,resKnown);
-  },[quotes,selectedOrder,orders,liveRuleMatch,liveRuleStatus,residential,addrClassified,rateSrc.loading,rateSrc.live,settings,JSON.stringify(pieces)]);
+  },[quotes,selectedOrder,orders,liveRuleMatch,liveRuleStatus,residential,addrClassified,rateSrc.loading,rateSrc.live,settings,originZip,JSON.stringify(pieces)]);
 
   /* If Autopilot's matched service is a FedEx One Rate box, auto-fill the One Rate box name into the
      configured field (invoice # by default) WITHOUT waiting for the user to click the rate row — so the
@@ -15885,7 +15928,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="shipscreen"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="ship" allowedTabs={allowedTabs}/>}
         {sec==="orderspage"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="orders" allowedTabs={allowedTabs}/>}
         {sec==="billing"&&<Billing settings={settings} setSettings={setSettings}/>}
-        {sec==="integrations"&&<Integrations settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} shipments={shipments} clients={clients}/>}
+        {sec==="integrations"&&<Integrations settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} shipments={shipments} clients={clients} isAdmin={isAdmin}/>}
         {sec==="tracking"&&<BrandedTracking settings={settings} setSettings={setSettings}/>}
         {sec==="subscription"&&<Subscription settings={settings} setSettings={setSettings}/>}
         </div>
@@ -17892,7 +17935,7 @@ function ConnectorModal({c,settings,setSettings,orders,setOrders,onClose}){
     </div>
   );
 }
-function Integrations({settings,setSettings,orders,setOrders,shipments=[],clients=[]}){
+function Integrations({settings,setSettings,orders,setOrders,shipments=[],clients=[],isAdmin=false}){
   const conns=shopifyConns(settings);
   const connected=conns.length>0;
   const [fcOpen,setFcOpen]=useState(false);
@@ -17997,7 +18040,7 @@ function Integrations({settings,setSettings,orders,setOrders,shipments=[],client
         <div className="flex-1 min-w-0"><div className="font-medium text-stone-700 text-sm">Aptean Full Circle <span className="text-[10px] uppercase tracking-wide bg-stone-100 text-stone-500 rounded px-1.5 py-0.5 ml-1">ERP</span></div><div className="text-[10px] text-stone-400">Ship-confirmation file for Full Circle's watched folder — build, map services, deliver via SFTP or email</div></div>
         <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${fcOpen?"rotate-180":""}`}/>
       </button>
-      {fcOpen&&<div className="border-t border-stone-100 p-4"><FullCircleExport ships={shipments} clients={clients}/></div>}
+      {fcOpen&&<div className="border-t border-stone-100 p-4"><FullCircleExport ships={shipments} clients={clients} settings={settings} setSettings={setSettings} isAdmin={isAdmin}/></div>}
     </div>
     {activeC&&<ConnectorModal c={activeC} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} onClose={()=>setActive(null)}/>}
   </div>);

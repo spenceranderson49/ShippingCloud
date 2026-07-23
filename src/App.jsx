@@ -15461,7 +15461,7 @@ function FedexLocations({settings}){
   const run=async(body)=>{
     setBusy(true);setErr("");setLocs(null);
     try{
-      const r=await fetch("/.netlify/functions/fedex",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"locations",distance:radius,...body})});
+      const r=await fetch("/.netlify/functions/fedex",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:CLOUD.token||undefined,action:"locations",distance:radius,...body})});
       const d=await r.json();
       if(d&&d.ok){ setLocs(d.locations||[]); }
       else setErr((d&&d.error)||"Couldn't search right now.");

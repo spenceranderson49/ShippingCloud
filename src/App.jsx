@@ -1701,10 +1701,10 @@ function packOrder(order,catalog,boxes,bl){
 
 /* ── packing slips ─────────────────────────────────────────────── */
 function parseItemsList(order){
-  if(Array.isArray(order&&order.lineItems)&&order.lineItems.length)return order.lineItems.map(li=>({name:li.name||li.sku||"Item",qty:+li.qty||1}));
+  if(Array.isArray(order&&order.lineItems)&&order.lineItems.length)return order.lineItems.map(li=>({name:li.name||li.sku||"Item",qty:+li.qty||1,sku:String(li.sku||li.barcode||li.upc||"").trim(),price:+li.price||+li.unitPrice||+li.value||0}));
   return String((order&&(order.items||order.product))||"").split(/,|;/).map(x=>x.trim()).filter(Boolean).map(chunk=>{
     const m=chunk.match(/(.*?)(?:\s*[x×]\s*(\d+))?$/i);
-    return {name:((m&&m[1])||chunk).trim(),qty:(m&&+m[2])||1};
+    return {name:((m&&m[1])||chunk).trim(),qty:(m&&+m[2])||1,sku:"",price:0};
   }).filter(r=>r.name);
 }
 function slipFromOrder(o,sender){
@@ -1764,7 +1764,10 @@ function packingSlipBody(slips){
     "{{ORDER_META}}":`${sl.orderName?"Order "+esc(sl.orderName)+" · ":""}${esc(sl.date)}`,
     "{{SHIP_TO}}":`<div><b>${esc(sl.to.name)}</b></div>${sl.to.company?`<div>${esc(sl.to.company)}</div>`:""}<div>${esc(sl.to.address1)}</div><div>${esc(sl.to.city)}, ${esc(sl.to.state)} ${esc(sl.to.zip)}</div>`,
     "{{FACTS}}":`${sl.orderName?`Order <b>${esc(sl.orderName)}</b><br/>`:""}${sl.service?`${esc(sl.service)}<br/>`:""}${sl.tracking?`Tracking <b>${esc(sl.tracking)}</b>`:""}`,
-    "{{ITEMS}}":sl.items.length?`<table><thead><tr><th>Item</th><th class="q">Qty</th></tr></thead><tbody>${sl.items.map(it=>`<tr><td>${esc(it.name)}</td><td class="q">${it.qty}</td></tr>`).join("")}</tbody></table>`:"",
+    "{{ITEMS}}":sl.items.length?(()=>{const sku=!!SLIP_OPTS.showSku,price=!!SLIP_OPTS.showPrice,mny=(n)=>"$"+(Math.round((+n||0)*100)/100).toFixed(2);
+      const head=`<tr><th>Item</th>${sku?`<th>SKU</th>`:""}<th class="q">Qty</th>${price?`<th class="q">Price</th>`:""}</tr>`;
+      const rows=sl.items.map(it=>`<tr><td>${esc(it.name)}</td>${sku?`<td>${esc(it.sku||"")}</td>`:""}<td class="q">${it.qty}</td>${price?`<td class="q">${(+it.price||0)?mny(it.price):"—"}</td>`:""}</tr>`).join("");
+      return `<table><thead>${head}</thead><tbody>${rows}</tbody></table>`;})():"",
     "{{NOTE}}":sl.note?`<div class="note"><div class="lbl">Note</div>${esc(sl.note)}</div>`:"",
     "{{FOOTER}}":SLIP_OPTS.footer?esc(SLIP_OPTS.footer):"",
     "{{THANKS}}":SLIP_OPTS.thanks?esc(SLIP_OPTS.thanks):"Thank you for your order!",
@@ -1773,8 +1776,9 @@ function packingSlipBody(slips){
   const one=(sl)=>{const m=parts(sl);let out=tpl;for(const k of Object.keys(m))out=out.split(k).join(m[k]);return out;};
   return slips.map(one).join("");
 }
+function slipAccentCss(){ const a=SLIP_OPTS.accent; return (a&&/^#?[0-9a-fA-F]{3,8}$/.test(a))?`.slip .hd{border-bottom-color:${a[0]==="#"?a:"#"+a}}.slip .title{color:${a[0]==="#"?a:"#"+a}}.slip th{border-bottom-color:${a[0]==="#"?a:"#"+a}}`:""; }
 function slipDocWrap(body,autoPrint){
-  return `<!doctype html><html><head><title>Packing slips</title><style>body{margin:0;}${SLIP_CSS}</style></head><body>${body}${autoPrint?"<script>window.onload=()=>window.print();</"+"script>":""}</body></html>`;
+  return `<!doctype html><html><head><title>Packing slips</title><style>body{margin:0;}${SLIP_CSS}${slipAccentCss()}</style></head><body>${body}${autoPrint?"<script>window.onload=()=>window.print();</"+"script>":""}</body></html>`;
 }
 function packingSlipHTML(slips){ return slipDocWrap(packingSlipBody(slips),true); }
 function printPackingSlipsDialog(slips){
@@ -3010,7 +3014,7 @@ const CUSTOM_DEFAULTS={
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
 const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["inventory","Warehouse",Boxes],["packaging","Packaging",ShoppingCart],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
-const SLIP_OPTS={thanks:"",footer:"",logo:"",company:"",template:"",pickTitle:"",pickNote:"",title:""};   // synced from settings by AppInner; read by packingSlipHTML/printPickList
+const SLIP_OPTS={thanks:"",footer:"",logo:"",company:"",template:"",pickTitle:"",pickNote:"",title:"",accent:"",showSku:false,showPrice:false};   // synced from settings by AppInner; read by packingSlipHTML/printPickList
 const CI_OPTS={taxId:"",logo:""};                 // Tax ID / EIN printed on commercial invoices, from Settings → General
 const fireConfetti=()=>{try{window.dispatchEvent(new CustomEvent("sc-confetti"));}catch(e){}};
 const seasonalEmoji=()=>{const d=new Date(),m=d.getMonth(),dd=d.getDate();if(m===11&&dd<=27)return "🎅";if(m===9&&dd>=24)return "🎃";if(m===1&&dd>=10&&dd<=15)return "❤️";if(m===6&&dd<=5)return "🎆";if(m===2&&dd>=15&&dd<=18)return "🍀";if(m===10&&dd>=23&&dd<=29)return "🦃";return "";};
@@ -7840,7 +7844,7 @@ function AppInner(){
   useEffect(()=>{ const h=(e)=>{ const d=e&&e.detail; setLookPreview(d&&typeof d==="object"?d:null); }; window.addEventListener("sc-look-preview",h); return ()=>window.removeEventListener("sc-look-preview",h); },[]);
   const srf=lookPreview||custom;
   useEffect(()=>{ try{document.documentElement.style.fontSize=(custom.fontScale&&custom.fontScale!==100)?(custom.fontScale/100*16)+"px":"";}catch(e){} },[custom.fontScale]);
-  useEffect(()=>{ SLIP_OPTS.thanks=(settings.slipThanks!=null?settings.slipThanks:custom.slipThanks)||""; SLIP_OPTS.footer=(settings.slipFooter!=null?settings.slipFooter:custom.slipFooter)||""; SLIP_OPTS.title=settings.slipTitle||""; SLIP_OPTS.logo=settings.companyLogo||""; SLIP_OPTS.company=(settings.sender&&(settings.sender.company||settings.sender.name))||settings.company||""; SLIP_OPTS.template=settings.slipTemplate||""; SLIP_OPTS.pickTitle=settings.pickListTitle||""; SLIP_OPTS.pickNote=settings.pickListNote||""; CI_OPTS.taxId=settings.taxId||""; },[custom.slipThanks,custom.slipFooter,settings.slipThanks,settings.slipFooter,settings.slipTitle,settings.companyLogo,settings.sender,settings.company,settings.slipTemplate,settings.pickListTitle,settings.pickListNote,settings.taxId]);
+  useEffect(()=>{ SLIP_OPTS.thanks=(settings.slipThanks!=null?settings.slipThanks:custom.slipThanks)||""; SLIP_OPTS.footer=(settings.slipFooter!=null?settings.slipFooter:custom.slipFooter)||""; SLIP_OPTS.title=settings.slipTitle||""; SLIP_OPTS.logo=settings.companyLogo||""; SLIP_OPTS.company=(settings.sender&&(settings.sender.company||settings.sender.name))||settings.company||""; SLIP_OPTS.template=settings.slipTemplate||""; SLIP_OPTS.pickTitle=settings.pickListTitle||""; SLIP_OPTS.pickNote=settings.pickListNote||""; SLIP_OPTS.accent=settings.slipAccent||""; SLIP_OPTS.showSku=!!settings.slipShowSku; SLIP_OPTS.showPrice=!!settings.slipShowPrice; CI_OPTS.taxId=settings.taxId||""; },[custom.slipThanks,custom.slipFooter,settings.slipThanks,settings.slipFooter,settings.slipTitle,settings.companyLogo,settings.sender,settings.company,settings.slipTemplate,settings.pickListTitle,settings.pickListNote,settings.slipAccent,settings.slipShowSku,settings.slipShowPrice,settings.taxId]);
   useEffect(()=>{ try{ const el=document.documentElement;
     el.classList.remove("dark","grey");   // themes retired — clears any saved dark/grey choice
     if(custom.accent){ el.setAttribute("data-accent","1"); el.style.setProperty("--acc",custom.accent); el.style.setProperty("--accD",shadeHex(custom.accent,-0.14)); el.style.setProperty("--accL",shadeHex(custom.accent,0.18)); }
@@ -8347,7 +8351,7 @@ function AppInner(){
           <TabBoundary key={tab} name={tab}>
           {tab==="dashboard"&&<Dashboard shipments={shipments} orders={orders} returns={returns} goTab={setTab} showMoney={showMoney}/>}
           {tab==="ship"&&<Ship client={client} priceAs={adminPriceAs} setPriceAs={setAdminPriceAs} accounts={accounts} orders={orders} shipments={shipments} settings={settings} setSettings={setSettings} rules={ruleset} drafts={drafts} setDrafts={setDrafts} prefill={prefill} clearPrefill={()=>setPrefill(null)} onShipped={onShipped} onPending={onPending} logEmail={logEmail} onQuickQuote={()=>setQQ(true)} onRefresh={syncOrders} syncing={syncingOrders} currentUser={currentUser} setUsers={setUsers} setCurrentUser={setCurrentUser} clients={clients} labels={labelStore}/>}
-          {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab}/>}
+          {tab==="scan"&&<Scan orders={orders} goShip={goShip} goTab={setTab} settings={settings} setSettings={setSettings} isAdmin={isAdmin}/>}
           {tab==="orders"&&<Orders showMoney={showMoney} orders={orders} setOrders={setOrders} goShip={goShip} client={client} settings={settings} setSettings={setSettings} onShipped={onShipped} openOrderId={pendingOpenOrderId} onOpenedOrder={()=>setPendingOpenOrderId(null)} wmsOn={isAdmin||featureOn("inventory",currentUser,myFlags)}/>}
           {tab==="batch"&&<Batch showMoney={showMoney} orders={orders} setOrders={setOrders} shipments={shipments} client={client} ruleset={ruleset} setRuleset={setRuleset} settings={settings} setSettings={setSettings} onShipped={onShipped} batchCmd={batchCmd} onBatchCmdDone={()=>setBatchCmd(null)}/>}
           {tab==="shipments"&&<Shipments showMoney={showMoney} openShipTracking={pendingOpenShipTracking} onOpenedShip={()=>setPendingOpenShipTracking(null)} isAdmin={isAdmin} labels={labelStore} shipments={shipments} setShipments={setShipments} goShip={goShip} pendingShips={pendingShips} onCheckLabels={checkPendingLabels} settings={settings} client={client} clients={clients}/>}
@@ -14179,11 +14183,12 @@ function QuickQuote({onClose,client,clients=[],isAdmin=false,priceAsShared="",se
 }
 
 /* ════════ SCAN ════════ */
-function Scan({orders,goShip,goTab}){
+function Scan({orders,goShip,goTab,settings,setSettings,isAdmin}){
+  const requireVerify=!!(settings&&settings.requireVerify);
   const [val,setVal]=useState("");
   const [log,setLog]=useState([]);
   const [err,setErr]=useState("");
-  const [mode,setMode]=useState("ship");          // "ship" | "verify"
+  const [mode,setMode]=useState(requireVerify?"verify":"ship");          // "ship" | "verify"
   const [job,setJob]=useState(null);              // verify job: {order, items:[{name,sku,qty,scanned}]}
   const [flash,setFlash]=useState(null);          // {ok, text} transient feedback
   const inputRef=React.useRef(null);
@@ -14243,12 +14248,16 @@ function Scan({orders,goShip,goTab}){
   return (
     <div className="max-w-2xl space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2"><ScanLine className="w-5 h-5 text-[#0086E0]"/><h1 className="text-base font-semibold text-stone-800">{mode==="verify"?"Scan to verify":"Scan to ship"}</h1></div>
-        <div className="flex bg-stone-100 rounded-lg p-0.5 text-xs font-medium">
+        <div className="flex items-center gap-2"><ScanLine className="w-5 h-5 text-[#0086E0]"/><h1 className="text-base font-semibold text-stone-800">{mode==="verify"?"Scan to verify":"Scan to ship"}</h1>{requireVerify&&<span className="text-[10px] uppercase tracking-wide bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 font-semibold flex items-center gap-1"><ShieldCheck className="w-3 h-3"/>Required</span>}</div>
+        {!requireVerify&&<div className="flex bg-stone-100 rounded-lg p-0.5 text-xs font-medium">
           <button onClick={()=>{setMode("ship");setJob(null);setErr("");}} className={`px-3 py-1.5 rounded-md ${mode==="ship"?"bg-white shadow-sm text-stone-800":"text-stone-500"}`}>Scan to ship</button>
           <button onClick={()=>{setMode("verify");setErr("");}} className={`px-3 py-1.5 rounded-md flex items-center gap-1 ${mode==="verify"?"bg-white shadow-sm text-stone-800":"text-stone-500"}`}><ShieldCheck className="w-3.5 h-3.5"/>Verify</button>
-        </div>
+        </div>}
       </div>
+      {isAdmin&&setSettings&&<label className="flex items-center gap-2 text-xs text-stone-600 cursor-pointer bg-stone-50 border border-stone-200 rounded-lg px-3 py-2">
+        <input type="checkbox" checked={requireVerify} onChange={e=>{const on=e.target.checked;setSettings(p=>({...p,requireVerify:on}));setMode(on?"verify":"ship");}} className="accent-emerald-600"/>
+        <span><b>Require scan-verify before shipping</b> — packers must scan every item against the order before it can ship. <span className="text-stone-400">(Admin setting · applies to this login)</span></span>
+      </label>}
       <p className="text-sm text-stone-500">{mode==="verify"
         ? "Scan the order, then scan every item's barcode as you pack it. The order can't ship until each item is verified — this stops wrong-item and short shipments before the label prints."
         : "Scan an order barcode, SKU, or tracking number (or type it and press Enter). The matching order loads straight into the Ship tab, ready to print."}</p>
@@ -18072,16 +18081,19 @@ const DOC_TEMPLATES=[
 ];
 function SlipSettings({settings,setSettings}){
   const set=(k,v)=>setSettings(p=>({...p,[k]:v}));
-  const sampleSlip={company:(settings.sender&&(settings.sender.company||settings.sender.name))||"Your Company",orderName:"SO-1042",date:new Date().toLocaleDateString(),to:{name:"Jordan Lee",company:"Summit Goods Co.",address1:"215 S State St",city:"Salt Lake City",state:"UT",zip:"84101"},items:[{name:"Widget — Large",qty:2},{name:"Gadget Pro",qty:1}],note:"",tracking:"771234567890",service:"FedEx Ground"};
+  const sampleSlip={company:(settings.sender&&(settings.sender.company||settings.sender.name))||"Your Company",orderName:"SO-1042",date:new Date().toLocaleDateString(),to:{name:"Jordan Lee",company:"Summit Goods Co.",address1:"215 S State St",city:"Salt Lake City",state:"UT",zip:"84101"},items:[{name:"Widget — Large",qty:2,sku:"WID-LG-01",price:24},{name:"Gadget Pro",qty:1,sku:"GAD-PRO",price:59}],note:"",tracking:"771234567890",service:"FedEx Ground"};
+  const accentHex=(settings.slipAccent&&/^#?[0-9a-fA-F]{3,8}$/.test(settings.slipAccent))?(settings.slipAccent[0]==="#"?settings.slipAccent:"#"+settings.slipAccent):"";
+  const accentCss=accentHex?`.slip .hd{border-bottom-color:${accentHex}}.slip .title{color:${accentHex}}.slip th{border-bottom-color:${accentHex}}`:"";
   /* preview renders the REAL slip from the simple fields (no template/token editing) */
   const preview=React.useMemo(()=>{
-    const saved={t:SLIP_OPTS.title,th:SLIP_OPTS.thanks,f:SLIP_OPTS.footer,l:SLIP_OPTS.logo,tpl:SLIP_OPTS.template};
-    SLIP_OPTS.title=settings.slipTitle||""; SLIP_OPTS.thanks=settings.slipThanks!=null?settings.slipThanks:(saved.th||""); SLIP_OPTS.footer=settings.slipFooter!=null?settings.slipFooter:(saved.f||""); SLIP_OPTS.logo=settings.companyLogo||""; SLIP_OPTS.template="";
+    const saved={t:SLIP_OPTS.title,th:SLIP_OPTS.thanks,f:SLIP_OPTS.footer,l:SLIP_OPTS.logo,tpl:SLIP_OPTS.template,sk:SLIP_OPTS.showSku,pr:SLIP_OPTS.showPrice};
+    SLIP_OPTS.title=settings.slipTitle||""; SLIP_OPTS.thanks=settings.slipThanks!=null?settings.slipThanks:(saved.th||""); SLIP_OPTS.footer=settings.slipFooter!=null?settings.slipFooter:(saved.f||""); SLIP_OPTS.logo=settings.companyLogo||""; SLIP_OPTS.template=""; SLIP_OPTS.showSku=!!settings.slipShowSku; SLIP_OPTS.showPrice=!!settings.slipShowPrice;
     const html=packingSlipBody([sampleSlip]);
-    Object.assign(SLIP_OPTS,{title:saved.t,thanks:saved.th,footer:saved.f,logo:saved.l,template:saved.tpl});
+    Object.assign(SLIP_OPTS,{title:saved.t,thanks:saved.th,footer:saved.f,logo:saved.l,template:saved.tpl,showSku:saved.sk,showPrice:saved.pr});
     return html;
-  },[settings.slipTitle,settings.slipThanks,settings.slipFooter,settings.companyLogo]);
+  },[settings.slipTitle,settings.slipThanks,settings.slipFooter,settings.companyLogo,settings.slipShowSku,settings.slipShowPrice]);
   const noLogo=!settings.companyLogo;
+  const PRESETS=[["#1c1917","Classic"],["#0086E0","Sky"],["#0f766e","Teal"],["#7c3aed","Violet"],["#e11d48","Rose"],["#d97706","Amber"]];
   return (<div className="max-w-3xl space-y-4">
     <div>
       <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><ClipboardList className="w-4 h-4"/>Packing Slips &amp; Pick Lists</h2>
@@ -18090,15 +18102,32 @@ function SlipSettings({settings,setSettings}){
 
     {/* ── Packing slip: simple fields + live preview ── */}
     <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
-      <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><FileText className="w-4 h-4"/>Packing Slip</div>
+      <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><FileText className="w-4 h-4"/>Packing slip designer</div>
       <div className="grid sm:grid-cols-2 gap-3">
         <Field label="Title"><Input value={settings.slipTitle||""} placeholder="PACKING SLIP" onChange={e=>set("slipTitle",e.target.value)}/></Field>
         <Field label="Thank-you message"><Input value={settings.slipThanks!=null?settings.slipThanks:""} placeholder="Thank you for your order!" onChange={e=>set("slipThanks",e.target.value)}/></Field>
         <div className="sm:col-span-2"><Field label="Footer note (optional)"><Input value={settings.slipFooter!=null?settings.slipFooter:""} placeholder="e.g. Questions? support@yourstore.com · Easy returns within 30 days" onChange={e=>set("slipFooter",e.target.value)}/></Field></div>
       </div>
+      <div className="grid sm:grid-cols-2 gap-3 pt-1">
+        <div>
+          <div className="text-xs text-stone-600 mb-1.5">Accent color</div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <input type="color" value={accentHex||"#1c1917"} onChange={e=>set("slipAccent",e.target.value)} className="w-9 h-9 rounded border border-stone-200 p-0.5 shrink-0"/>
+            {PRESETS.map(([hex,name])=><button key={hex} type="button" title={name} onClick={()=>set("slipAccent",hex)} className={`w-6 h-6 rounded-full border-2 ${accentHex.toLowerCase()===hex.toLowerCase()?"border-stone-800":"border-white shadow"}`} style={{background:hex}}/>)}
+            {accentHex&&<button type="button" onClick={()=>set("slipAccent","")} className="text-[11px] text-stone-400 hover:underline">reset</button>}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-stone-600 mb-1.5">Item columns</div>
+          <div className="flex flex-col gap-1.5">
+            <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!!settings.slipShowSku} onChange={e=>set("slipShowSku",e.target.checked)} className="accent-[#0086E0]"/>Show SKU column</label>
+            <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!!settings.slipShowPrice} onChange={e=>set("slipShowPrice",e.target.checked)} className="accent-[#0086E0]"/>Show price column</label>
+          </div>
+        </div>
+      </div>
       <div className="bg-stone-50 border border-stone-200 rounded-lg p-4">
         <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Live preview</div>
-        <style dangerouslySetInnerHTML={{__html:SLIP_CSS}}/>
+        <style dangerouslySetInnerHTML={{__html:SLIP_CSS+accentCss}}/>
         <div className="bg-white rounded-lg border border-stone-200 overflow-auto" dangerouslySetInnerHTML={{__html:preview}}/>
       </div>
     </div>

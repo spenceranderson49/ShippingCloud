@@ -8881,6 +8881,13 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     return pieces.map((p,i)=>{const dv=(pieces.length>1&&dvEach)?(+p.dv||0):(+insurance||0);return {n:i+1,weight:pw(p),L:p.L,W:p.W,H:p.H,dv,ins:insuranceFee(dv,_f.insUnit,_f.insMin)};});
   },[JSON.stringify(pieces),dvEach,insurance,rateRules,client]);
   const matched=useMemo(()=>{
+    /* Don't provisionally highlight a service on the blank price-skeleton or mid-fetch: picking on
+       the skeleton and then re-picking when the live price lands (or when the address classifies
+       Ground↔Home Delivery) is the visible "selects Ground, flashes, changes price" jitter. Wait
+       until real prices are in AND — for anything that could be residential — the address is
+       classified, so Autopilot lands on ONE final choice instead of flickering through provisional ones. */
+    const pricedReady=quotes.some(q=>(q.sell??q.cost)!=null);
+    if(rateSrc.loading||!pricedReady)return null;
     const resKnown=addrClassified?residential:null;   // ground↔home swap only once FedEx (or the override) has classified the address
     if(liveRuleMatch){ const rc=canonSvc(groundFamilySwap(liveRuleMatch,resKnown)); const hit=quotes.find(q=>canonSvc(q.label)===rc&&(q.sell??q.cost)!=null); if(hit)return {key:hit.key,src:"autopilot"}; }
     /* Rule fired but pointed at Ground Economy on a shipment OVER its limits (70 lb / 130") — the
@@ -8900,7 +8907,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     }
     const so=selectedOrder?orders.find(x=>x.id===selectedOrder):null;
     return matchServiceForOrder(quotes,so,resKnown);
-  },[quotes,selectedOrder,orders,liveRuleMatch,liveRuleStatus,residential,addrClassified,settings,JSON.stringify(pieces)]);
+  },[quotes,selectedOrder,orders,liveRuleMatch,liveRuleStatus,residential,addrClassified,rateSrc.loading,rateSrc.live,settings,JSON.stringify(pieces)]);
 
   /* If Autopilot's matched service is a FedEx One Rate box, auto-fill the One Rate box name into the
      configured field (invoice # by default) WITHOUT waiting for the user to click the rate row — so the
@@ -10527,10 +10534,15 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
     }catch(e){}
     return null;
   },[apRules,o,settings,fromZip]);
-  const matched=useMemo(()=>{ const res=addrClassified?residential:null;
+  const matched=useMemo(()=>{
+    /* Same anti-flicker guard as the Ship tab: don't preselect on the blank skeleton or mid-fetch,
+       so Autopilot lands on one final choice instead of picking then re-picking as the price/class lands. */
+    const pricedReady=quotes.some(q=>(q.sell??q.cost)!=null);
+    if(rateSrc.loading||!pricedReady)return null;
+    const res=addrClassified?residential:null;
     if(apLive){ const rc=canonSvc(groundFamilySwap(apLive,res)); const hit=quotes.find(q=>canonSvc(q.label)===rc&&(q.sell??q.cost)!=null); if(hit)return {key:hit.key,src:"autopilot"}; }
     return matchServiceForOrder(quotes,o,res);
-  },[quotes,apLive,o&&o.shippingService,o&&o.ruleService,residential,addrClassified]);
+  },[quotes,apLive,o&&o.shippingService,o&&o.ruleService,residential,addrClassified,rateSrc.loading,rateSrc.live]);
   const applyORBox=(code)=>{const b=FEDEX_ONERATE.find(x=>x.code===code);if(!b)return;if(totalWeight>(b.maxLbs||50)){setStatus({state:"error",msg:b.name.replace(/®/g,"")+" maxes out at "+(b.maxLbs||50)+" lb — this shipment is "+totalWeight+" lb. Pick a regular service instead."});return;}if(b.dims){setDims({L:b.dims.L,W:b.dims.W,H:b.dims.H});}setBoxIdx(-1);setOrPkg(code);const val="FedEx "+b.name.replace(/FedEx\s*One Rate®?\s*/i,"");const f=settings?.orBoxField||"invoice";const fill=(set)=>set(prev=>prev&&prev.trim()?prev:val);if(f==="invoice")fill(setInvoiceNo);else if(f==="po")fill(setPoNo);else if(f==="reference")fill(setReference);};
   const upd=(patch)=>setOrders(os=>os.map(x=>x.id===o.id?{...x,...patch}:x));
   const saveOrderInfo=()=>{ upd({name:reference||o.name,customer:rcv.name,company:rcv.company,address1:rcv.address1,address2:rcv.address2,city:rcv.city,state:rcv.state,zip:rcv.zip,country:rcv.country,phone:rcv.phone,email:rcv.email,note:oNote,tags:oTags.split(",").map(s=>s.trim()).filter(Boolean)}); setSavedInfo(true); setTimeout(()=>setSavedInfo(false),2500); };

@@ -5515,6 +5515,29 @@ function FullCircleExport({ships=[],clients=[]}){
       </ol>
     </div>
 
+    {/* ── What we need from Full Circle + the setup order ── */}
+    <div className="grid md:grid-cols-2 gap-3">
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <div className="text-sm font-semibold text-amber-900 flex items-center gap-2"><AlertTriangle className="w-4 h-4"/>What we need FROM Full Circle today</div>
+        <ol className="text-[12.5px] text-amber-900/90 mt-2 space-y-1.5 list-decimal ml-4">
+          <li><b>ODBC connection details</b> to read orders — DSN name, server/host, database, username &amp; password for the <span className="font-mono text-[11px]">asups_UPS_Interface</span> table (the ProvideX driver you sent).</li>
+          <li><b>The full service-code list.</b> Your profile has only 6 codes — confirm the code for <b>FedEx Ground (commercial)</b> and any other service you ship.</li>
+          <li><b>Confirm the drop path</b> — the profile writes <span className="font-mono text-[11px]">I:\ups\fedxucc.csv</span>; we have <span className="font-mono text-[11px]">Z:\ups\</span>. Which is it?</li>
+          <li><b>How an order is flagged "ready to ship"</b> (which column/status), so we pull only those.</li>
+        </ol>
+      </div>
+      <div className="rounded-xl border border-stone-200 p-4">
+        <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><ClipboardList className="w-4 h-4 text-[#0086E0]"/>Setup — do in this order</div>
+        <ol className="text-[12.5px] mt-2 space-y-1.5 list-decimal ml-4">
+          <li className="text-emerald-700"><b>Confirmation file built ✓</b> — <span className="font-mono text-[11px]">fedxucc.csv</span> matches your Ship Manager profile exactly.</li>
+          <li className="text-stone-700"><b>Map service codes</b> (in section ② below) — confirm each with Full Circle.</li>
+          <li className="text-stone-700"><b>Point the drop</b> — set delivery to your <span className="font-mono text-[11px]">ups</span> folder (SFTP), or Download &amp; drop it in.</li>
+          <li className="text-stone-700"><b>Wire ODBC in</b> — add the DSN so orders flow into the Orders screen.</li>
+          <li className="text-stone-700"><b>Test one order</b> end-to-end: pulled in → shipped → confirmed back → tracking to Shopify.</li>
+        </ol>
+      </div>
+    </div>
+
     {/* ── ① Orders IN (mapping, read-only) ── */}
     <div className="rounded-xl border border-stone-200 p-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -8643,7 +8666,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const _perish=(settings&&settings.perishable)||{};
   const perishOn=!!_perish.on;
   const perishRules=_perish.rules||null;
-  const perishOnServices=perishOn&&_perish.onServices!==false;
+  /* Master "show weather" switch — turns off every weather element (This Shipment box, banner,
+     per-service line). Stored top-level so the toggle in Perishable settings and the one in Ship
+     settings are the SAME switch and stay in sync. */
+  const weatherOff=!!(settings&&settings.weatherOff);
+  const perishOnServices=perishOn&&_perish.onServices!==false&&!weatherOff;
   const perishPlace=_perish.place||"banner";
   const perishPopup=perishOn&&!!_perish.popup;
   const perishPopupOver=_perish.popupOver;
@@ -9261,7 +9288,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <span className="flex items-center gap-1.5 text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-1.5"><CreditCard className="w-3.5 h-3.5"/>Auto-billing to third-party account <b className="">{thirdAcct}</b><button onClick={()=>{setBillTo("sender");setThirdAcct("");}} className="ml-1 text-[#0086E0] hover:text-[#006FBF] underline">Bill Sender Instead</button></span>
         </div>}
         {intl&&<div className="flex items-center gap-2 text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2"><MapPin className="w-4 h-4"/>International shipment to <b>{receiver.country}</b> — FedEx rates shown, customs info required below.</div>}
-        {!intl&&perishOn&&perishPlace==="banner"&&<WeatherAdvisor perishable rules={perishRules} zip={receiver.zip} country={receiver.country} date={shipDate}/>}
+        {!intl&&!weatherOff&&perishOn&&perishPlace==="banner"&&<WeatherAdvisor perishable rules={perishRules} zip={receiver.zip} country={receiver.country} date={shipDate}/>}
         {perishPopup&&<PerishableAlert zip={receiver.zip} country={receiver.country} date={shipDate} rules={perishRules} over={perishPopupOver}/>}
 
         {!custom.hideShipSteps&&<StepHead n="2" label="Package details"/>}
@@ -9399,8 +9426,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                   :rateSrc.live?<><Wifi className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-600"/><span>Live rates from your FedEx account</span></>
                   :<><Calculator className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""}{currentUser&&currentUser.role==="admin"?" — turn on live rates in Settings → Carrier accounts":" — live pricing isn't connected right now"}</span></>}
                 </div>}
-                {!intl&&!perishOn&&<WeatherAdvisor zip={receiver.zip} country={receiver.country} date={shipDate}/>}
-                {!intl&&perishOn&&perishPlace==="compact"&&<WeatherAdvisor perishable bare rules={perishRules} zip={receiver.zip} country={receiver.country} date={shipDate}/>}
+                {!intl&&!weatherOff&&!perishOn&&<WeatherAdvisor zip={receiver.zip} country={receiver.country} date={shipDate}/>}
+                {!intl&&!weatherOff&&perishOn&&perishPlace==="compact"&&<WeatherAdvisor perishable bare rules={perishRules} zip={receiver.zip} country={receiver.country} date={shipDate}/>}
                 {/* Hands-free caution: when auto-book/print is armed, say so loudly right where they
                     work — a scan on this screen books and prints without another click. */}
                 {handsFree&&<div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
@@ -15539,6 +15566,29 @@ function FedexLocations({settings}){
   const [err,setErr]=React.useState("");
   const [locs,setLocs]=React.useState(null);
   const [geoBusy,setGeoBusy]=React.useState(false);
+  const [sugg,setSugg]=React.useState([]);
+  const [sugOpen,setSugOpen]=React.useState(false);
+  const sugTimer=React.useRef();
+  /* Address autocomplete — type-ahead dropdown. Uses Photon (free, OpenStreetMap, no API key or
+     billing), so it works today; a Google Places key isn't required. Debounced, US-biased. */
+  const suggLabel=(f)=>{const p=(f&&f.properties)||{};return [[p.housenumber,p.street].filter(Boolean).join(" "),p.city||p.district||p.county,p.state,p.postcode].filter(Boolean).join(", ");};
+  const onAddr=(v)=>{
+    setAddr(v); clearTimeout(sugTimer.current);
+    if(String(v||"").trim().length<4){setSugg([]);setSugOpen(false);return;}
+    sugTimer.current=setTimeout(async()=>{
+      try{
+        const r=await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(v)}&limit=6&lang=en`);
+        const j=await r.json();
+        const feats=((j&&j.features)||[]).filter(f=>{const c=((f.properties||{}).countrycode||"").toUpperCase();return !c||c==="US";}).filter(f=>suggLabel(f));
+        setSugg(feats); setSugOpen(feats.length>0);
+      }catch(e){ setSugg([]); setSugOpen(false); }
+    },300);
+  };
+  const pickSugg=(f)=>{
+    const p=f.properties||{}; setAddr(suggLabel(f)); setSugg([]); setSugOpen(false);
+    const zip=p.postcode?String(p.postcode).match(/\d{5}/):null;
+    run({country:"US",...(zip?{postalCode:zip[0]}:{}),...((!zip&&p.city&&p.state)?{city:p.city,state:p.state}:{})});
+  };
   const run=async(body)=>{
     setBusy(true);setErr("");setLocs(null);
     try{
@@ -15593,7 +15643,14 @@ function FedexLocations({settings}){
       </div>
       <div className="flex items-center gap-2 text-[11px] text-stone-400"><span className="h-px flex-1 bg-stone-100"/>or search by a customer's address<span className="h-px flex-1 bg-stone-100"/></div>
       <div className="flex flex-wrap items-end gap-2">
-        <Field label="Customer address"><Input value={addr} onChange={e=>setAddr(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")byAddress();}} placeholder="Paste a full address, e.g. 127 Market St, Austin, TX 78701" className="w-full min-w-[280px]"/></Field>
+        <Field label="Customer address">
+          <div className="relative min-w-[280px]">
+            <Input value={addr} onChange={e=>onAddr(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){setSugOpen(false);byAddress();}if(e.key==="Escape")setSugOpen(false);}} onBlur={()=>setTimeout(()=>setSugOpen(false),150)} onFocus={()=>{if(sugg.length)setSugOpen(true);}} placeholder="Start typing an address…" className="w-full" autoComplete="off"/>
+            {sugOpen&&sugg.length>0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-64 overflow-auto">
+              {sugg.map((f,i)=>(<button key={i} onMouseDown={e=>{e.preventDefault();pickSugg(f);}} className="w-full text-left px-3 py-2 text-[13px] text-stone-700 hover:bg-[#E6F4FF] border-b border-stone-50 last:border-0 flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0"/><span className="truncate">{suggLabel(f)}</span></button>))}
+            </div>}
+          </div>
+        </Field>
         <button onClick={byAddress} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5"><Search className="w-4 h-4"/>Find near address</button>
       </div>
       {err&&<div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded px-3 py-2">{err}</div>}
@@ -17522,6 +17579,8 @@ function PerishableSettings({settings,setSettings}){
   return (<div className="space-y-4 max-w-2xl">
     <div><h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Thermometer className="w-4 h-4"/>Perishable / cold-chain mode</h2>
       <p className="text-[13px] text-stone-500 mt-0.5">For temperature-sensitive shipments. Shows destination weather (now + estimated delivery day) on the Ship screen and beside each service, and warns you to add ice when it'll be hot.</p></div>
+    {/* Master weather switch — same top-level setting as the Ship-tab toggle, so they stay in sync. */}
+    <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer bg-stone-50 border border-stone-200 rounded-lg px-3 py-2"><input type="checkbox" checked={!(settings&&settings.weatherOff)} onChange={e=>setSettings(s=>({...s,weatherOff:!e.target.checked}))} className="accent-[#0086E0]"/><span><b>Show destination weather</b> on the Ship screen <span className="text-[11px] text-stone-400">— uncheck to hide it everywhere: banner, This Shipment box, and the per-service line</span></span></label>
     <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!!p.on} onChange={e=>up({on:e.target.checked})} className="accent-[#0086E0]"/>Turn on perishable mode</label>
     <div className="flex flex-wrap items-center gap-2 text-sm"><span className="text-stone-600">Show the weather as</span>
       <Select value={p.place||"banner"} onChange={e=>up({place:e.target.value})}><option value="banner">A banner under the address</option><option value="compact">A line in the This Shipment box</option></Select>
@@ -18874,6 +18933,11 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
         {Tog({k:"hideShipSteps",label:"Hide the numbered 1-2-3 step headers",hint:"Removes the ‘1 Ship from & to · 2 Package details · 3 Service & rate’ headers from the Ship screen. Hidden by default — uncheck to show them."})}
         {Tog({k:"hideAssistant",label:"Hide the AI assistant button",hint:"Removes the floating assistant button in the bottom-right corner everywhere in the app."})}
         {Tog({k:"hideRateSrcBar",label:"Hide the rate-source line",hint:"Removes the ‘Live rates from your FedEx account / Estimated rates’ line from the This Shipment card beside the rate list."})}
+        {/* Weather master switch — writes the SAME top-level setting as Settings → Perishable mode, so both toggles stay in sync. Saves immediately (not part of the draft). */}
+        <label className="flex items-start gap-2 text-sm text-stone-700 cursor-pointer">
+          <input type="checkbox" checked={!!(settings&&settings.weatherOff)} onChange={e=>setSettings(p=>({...p,weatherOff:e.target.checked}))} className="accent-[#0086E0] mt-0.5"/>
+          <span>Turn off destination weather<span className="block text-[11px] text-stone-400">Hides weather everywhere — the This Shipment box, the banner, and the per-service line. Same switch as Settings → Perishable mode; saves immediately.</span></span>
+        </label>
         {Tog({k:"hideAutopilotBox",label:"Hide the Autopilot match line",hint:"Removes the ‘Autopilot rule matched…’ line from the This Shipment card. Rules still run and still pre-highlight the service."})}
         {Tog({k:"hideFromOrderBox",label:"Hide the From Order line",hint:"Removes the ‘Order #### — buyer requested…’ line from the This Shipment card beside the rate list."})}
         {Tog({k:"hideBillingBox",label:"Hide the Billing & Third-Party box",hint:"Removes the Bill-to card beside the rate list. Shipments bill to your Settings → General default."})}

@@ -14183,40 +14183,113 @@ function Scan({orders,goShip,goTab}){
   const [val,setVal]=useState("");
   const [log,setLog]=useState([]);
   const [err,setErr]=useState("");
+  const [mode,setMode]=useState("ship");          // "ship" | "verify"
+  const [job,setJob]=useState(null);              // verify job: {order, items:[{name,sku,qty,scanned}]}
+  const [flash,setFlash]=useState(null);          // {ok, text} transient feedback
   const inputRef=React.useRef(null);
-  useEffect(()=>{const t=setTimeout(()=>{try{inputRef.current&&inputRef.current.focus();}catch(e){}},100);return ()=>clearTimeout(t);},[]);
+  useEffect(()=>{const t=setTimeout(()=>{try{inputRef.current&&inputRef.current.focus();}catch(e){}},100);return ()=>clearTimeout(t);},[mode,job]);
   const findOrder=(code)=>{
     const c=String(code).trim().toLowerCase();
     if(!c)return null;
     return orders.find(o=>[o.name,o.id,o.sku,o.tracking,o.customer,o.zip,o.barcode].filter(Boolean).some(v=>String(v).toLowerCase()===c))
       ||orders.find(o=>[o.name,o.sku,o.tracking,o.customer].filter(Boolean).some(v=>String(v).toLowerCase().includes(c)));
   };
-  const submit=(code)=>{
-    const o=findOrder(code);
-    setVal("");
-    if(!o){setErr(`No order found for “${code}”.`);setLog(l=>[{code,when:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"}),ok:false},...l].slice(0,12));setTimeout(()=>setErr(""),2500);return;}
-    setErr("");
-    setLog(l=>[{code,when:new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"}),ok:true,order:o.name},...l].slice(0,12));
-    goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email,country:o.country||"United States"},weight:o.weight,reference:o.name,fromOrderId:o.id});
+  const stamp=()=>new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+  /* rich item list for verify — pull sku/barcode/upc off line items when present */
+  const orderItems=(o)=>{
+    if(Array.isArray(o.lineItems)&&o.lineItems.length) return o.lineItems.map((li,i)=>({key:i,name:li.name||li.sku||"Item",sku:String(li.sku||li.barcode||li.upc||"").trim().toLowerCase(),qty:Math.max(1,+li.qty||1),scanned:0}));
+    return parseItemsList(o).map((li,i)=>({key:i,name:li.name,sku:String(li.name||"").trim().toLowerCase(),qty:Math.max(1,+li.qty||1),scanned:0}));
   };
+  const shipOrder=(o)=>goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email,country:o.country||"United States"},weight:o.weight,reference:o.name,fromOrderId:o.id});
+  // ── SHIP mode: scan → open in Ship (original behavior) ──────────────────
+  const submitShip=(code)=>{
+    const o=findOrder(code); setVal("");
+    if(!o){setErr(`No order found for “${code}”.`);setLog(l=>[{code,when:stamp(),ok:false},...l].slice(0,12));setTimeout(()=>setErr(""),2500);return;}
+    setErr(""); setLog(l=>[{code,when:stamp(),ok:true,order:o.name},...l].slice(0,12)); shipOrder(o);
+  };
+  // ── VERIFY mode: scan the order, then scan every item before it can ship ──
+  const showFlash=(ok,text)=>{setFlash({ok,text});setTimeout(()=>setFlash(null),1600);};
+  const submitVerify=(code)=>{
+    const raw=String(code).trim(); if(!raw)return; setVal("");
+    if(!job){   // first scan loads the order to pack
+      const o=findOrder(raw);
+      if(!o){setErr(`No order found for “${raw}”.`);showFlash(false,"Order not found");setTimeout(()=>setErr(""),2500);return;}
+      const items=orderItems(o);
+      setErr(""); setJob({order:o,items});
+      showFlash(true,`${o.name} loaded — scan each item`);
+      return;
+    }
+    // scanning items against the loaded order
+    const c=raw.toLowerCase();
+    const items=job.items;
+    let idx=items.findIndex(it=>it.sku&&it.sku===c&&it.scanned<it.qty);
+    if(idx<0) idx=items.findIndex(it=>it.scanned<it.qty&&((it.sku&&(it.sku.includes(c)||c.includes(it.sku)))||it.name.toLowerCase().includes(c)));
+    if(idx<0){
+      const done=items.find(it=>(it.sku&&it.sku===c)||it.name.toLowerCase().includes(c));
+      showFlash(false,done?`${done.name} already fully scanned`:`“${raw}” isn't on this order — don't pack it`);
+      setLog(l=>[{code:raw,when:stamp(),ok:false,order:job.order.name},...l].slice(0,12));
+      return;
+    }
+    const next=items.map((it,i)=>i===idx?{...it,scanned:it.scanned+1}:it);
+    setJob(j=>({...j,items:next}));
+    const it=next[idx];
+    showFlash(true,`${it.name} ✓ ${it.scanned}/${it.qty}`);
+    setLog(l=>[{code:raw,when:stamp(),ok:true,order:job.order.name},...l].slice(0,12));
+  };
+  const verified=job&&job.items.every(it=>it.scanned>=it.qty);
+  const totalQty=job?job.items.reduce((a,it)=>a+it.qty,0):0;
+  const scannedQty=job?job.items.reduce((a,it)=>a+Math.min(it.scanned,it.qty),0):0;
+  const submit=(code)=>mode==="verify"?submitVerify(code):submitShip(code);
   return (
     <div className="max-w-2xl space-y-4">
-      <div className="flex items-center gap-2"><ScanLine className="w-5 h-5 text-[#0086E0]"/><h1 className="text-base font-semibold text-stone-800">Scan to ship</h1></div>
-      <p className="text-sm text-stone-500">Scan an order barcode, SKU, or tracking number with your handheld scanner (or type it and press Enter). The matching order loads straight into the Ship tab, ready to print.</p>
-      <div className="border-2 border-dashed border-[#99D6FF] rounded-xl bg-[#E6F4FF]/40 p-6 flex flex-col items-center gap-3">
-        <ScanLine className="w-10 h-10 text-[#33ABFF]"/>
-        <input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();submit(val);}}} placeholder="Scan or type a code, then Enter" className="w-full max-w-md text-center bg-white border border-stone-300 rounded-lg px-4 py-3 text-lg outline-none focus:border-[#0086E0]"/>
-        <button onClick={()=>submit(val)} className="text-sm bg-[#0086E0] text-white rounded-lg px-5 py-2 font-medium hover:bg-[#006db8]">Look Up</button>
-        {err&&<div className="text-sm text-rose-600 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4"/>{err}</div>}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2"><ScanLine className="w-5 h-5 text-[#0086E0]"/><h1 className="text-base font-semibold text-stone-800">{mode==="verify"?"Scan to verify":"Scan to ship"}</h1></div>
+        <div className="flex bg-stone-100 rounded-lg p-0.5 text-xs font-medium">
+          <button onClick={()=>{setMode("ship");setJob(null);setErr("");}} className={`px-3 py-1.5 rounded-md ${mode==="ship"?"bg-white shadow-sm text-stone-800":"text-stone-500"}`}>Scan to ship</button>
+          <button onClick={()=>{setMode("verify");setErr("");}} className={`px-3 py-1.5 rounded-md flex items-center gap-1 ${mode==="verify"?"bg-white shadow-sm text-stone-800":"text-stone-500"}`}><ShieldCheck className="w-3.5 h-3.5"/>Verify</button>
+        </div>
       </div>
-      <div className="text-[11px] text-stone-400">Keep this box focused and scan.</div>
+      <p className="text-sm text-stone-500">{mode==="verify"
+        ? "Scan the order, then scan every item's barcode as you pack it. The order can't ship until each item is verified — this stops wrong-item and short shipments before the label prints."
+        : "Scan an order barcode, SKU, or tracking number (or type it and press Enter). The matching order loads straight into the Ship tab, ready to print."}</p>
+
+      <div className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center gap-3 transition-colors ${flash?(flash.ok?"border-emerald-300 bg-emerald-50/60":"border-rose-300 bg-rose-50/60"):"border-[#99D6FF] bg-[#E6F4FF]/40"}`}>
+        <ScanLine className={`w-10 h-10 ${flash?(flash.ok?"text-emerald-500":"text-rose-400"):"text-[#33ABFF]"}`}/>
+        <input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();submit(val);}}} placeholder={mode==="verify"?(job?"Scan an item barcode…":"Scan the order barcode to start"):"Scan or type a code, then Enter"} className="w-full max-w-md text-center bg-white border border-stone-300 rounded-lg px-4 py-3 text-lg outline-none focus:border-[#0086E0]"/>
+        <button onClick={()=>submit(val)} className="text-sm bg-[#0086E0] text-white rounded-lg px-5 py-2 font-medium hover:bg-[#006db8]">{mode==="verify"&&!job?"Load order":"Look Up"}</button>
+        {flash&&<div className={`text-sm font-medium flex items-center gap-1.5 ${flash.ok?"text-emerald-600":"text-rose-600"}`}>{flash.ok?<CheckCircle2 className="w-4 h-4"/>:<AlertTriangle className="w-4 h-4"/>}{flash.text}</div>}
+        {err&&!flash&&<div className="text-sm text-rose-600 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4"/>{err}</div>}
+      </div>
+
+      {/* VERIFY checklist */}
+      {mode==="verify"&&job&&<div className={`border rounded-xl bg-white overflow-hidden ${verified?"border-emerald-300":"border-stone-200"}`}>
+        <div className="flex items-center justify-between px-4 py-2.5 bg-stone-50 border-b border-stone-100">
+          <div className="text-sm font-semibold text-stone-700">{job.order.name} · {job.order.customer||"—"}</div>
+          <div className="text-xs text-stone-500">{scannedQty}/{totalQty} items</div>
+        </div>
+        <div className="divide-y divide-stone-100">
+          {job.items.map(it=>{const full=it.scanned>=it.qty;const over=it.scanned>it.qty;return(
+            <div key={it.key} className={`flex items-center gap-3 px-4 py-2.5 ${full?"bg-emerald-50/50":""}`}>
+              {full?<CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0"/>:<div className="w-5 h-5 rounded-full border-2 border-stone-300 shrink-0"/>}
+              <div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{it.name}</div>{it.sku&&<div className="text-[11px] text-stone-400 truncate">{it.sku.toUpperCase()}</div>}</div>
+              <div className={`text-sm font-semibold tabular-nums ${over?"text-rose-600":full?"text-emerald-600":"text-stone-500"}`}>{it.scanned}/{it.qty}</div>
+            </div>
+          );})}
+        </div>
+        <div className="p-3 flex items-center gap-2 border-t border-stone-100">
+          <button disabled={!verified} onClick={()=>{const o=job.order;setJob(null);showFlash(true,"Verified — opening Ship");shipOrder(o);}} className={`flex-1 text-sm rounded-lg px-4 py-2.5 font-medium flex items-center justify-center gap-1.5 ${verified?"bg-emerald-600 text-white hover:bg-emerald-700":"bg-stone-100 text-stone-400 cursor-not-allowed"}`}>{verified?<><ShieldCheck className="w-4 h-4"/>Verified — Ship it</>:`Scan all items to ship (${scannedQty}/${totalQty})`}</button>
+          <button onClick={()=>{setJob(null);setErr("");}} className="text-sm text-stone-500 rounded-lg px-3 py-2.5 hover:bg-stone-100">Cancel</button>
+        </div>
+      </div>}
+
+      <div className="text-[11px] text-stone-400">Keep this box focused and scan.{mode==="verify"?" Don't have a barcode scanner? You can type each item's SKU and press Enter.":""}</div>
       {log.length>0&&<div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
         <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400">Recent scans</div>
         <div className="divide-y divide-stone-100">{log.map((e,i)=>(
           <div key={i} className="flex items-center gap-3 px-4 py-2 text-sm">
             {e.ok?<CheckCircle2 className="w-4 h-4 text-emerald-500"/>:<X className="w-4 h-4 text-rose-400"/>}
             <span className=" text-stone-700">{e.code}</span>
-            <span className="flex-1 text-stone-400 text-xs">{e.ok?`→ ${e.order} opened in Ship`:"not found"}</span>
+            <span className="flex-1 text-stone-400 text-xs">{e.ok?(mode==="verify"?`✓ ${e.order}`:`→ ${e.order} opened in Ship`):(mode==="verify"?"not on order":"not found")}</span>
             <span className="text-[11px] text-stone-400">{e.when}</span>
           </div>
         ))}</div>

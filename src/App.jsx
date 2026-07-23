@@ -5652,6 +5652,15 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
       </div>
     </div>}
 
+    <div className="rounded-xl border border-stone-200 p-4">
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-2">File preview · {fpath()}</div>
+      <pre className="text-[11px] font-mono text-stone-600 bg-stone-50 border border-stone-200 rounded-lg p-2.5 max-h-48 overflow-auto whitespace-pre">{csv?csv.split("\r\n").slice(0,12).join("\n")+(rows.length>12?"\n…":""):"(empty)"}</pre>
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mt-4 mb-2">Column map (for Aptean)</div>
+      <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-[12px] text-stone-600">
+        {COLS.map((cc,i)=><div key={i} className="flex gap-2"><span className="w-5 text-stone-400 tabular-nums shrink-0">{i+1}</span><b className="w-24 shrink-0 text-stone-700">{cc[0]}</b><span className="text-stone-500">{cc[1]}</span></div>)}
+      </div>
+    </div>
+
     <div className="flex items-center gap-2 flex-wrap text-sm">
       <span className="text-stone-500">From</span><input type="date" value={from} onChange={e=>setFrom(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5"/>
       <span className="text-stone-500">to</span><input type="date" value={to} onChange={e=>setTo(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5"/>
@@ -5683,15 +5692,6 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
       </table></div>
       {rows.length>200&&<div className="px-3 py-2 text-[11px] text-stone-400 border-t border-stone-100">Showing 200 of {rows.length}; the download includes all {rows.length}.</div>}
       </>}
-    </div>
-
-    <div className="rounded-xl border border-stone-200 p-4">
-      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-2">File preview · {fpath()}</div>
-      <pre className="text-[11px] font-mono text-stone-600 bg-stone-50 border border-stone-200 rounded-lg p-2.5 max-h-48 overflow-auto whitespace-pre">{csv?csv.split("\r\n").slice(0,12).join("\n")+(rows.length>12?"\n…":""):"(empty)"}</pre>
-      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mt-4 mb-2">Column map (for Aptean)</div>
-      <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-[12px] text-stone-600">
-        {COLS.map((cc,i)=><div key={i} className="flex gap-2"><span className="w-5 text-stone-400 tabular-nums shrink-0">{i+1}</span><b className="w-24 shrink-0 text-stone-700">{cc[0]}</b><span className="text-stone-500">{cc[1]}</span></div>)}
-      </div>
     </div>
       </div>}
     </div>

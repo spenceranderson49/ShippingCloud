@@ -5469,6 +5469,9 @@ function FullCircleExport({ships=[],clients=[]}){
   const qf=(v)=>{ const t=String(v==null?"":v); return /[",\r\n]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t; };
   const body=rows.map((s,i)=>rowArr(s,i).map(qf).join(",")).join("\r\n");
   const csv=FC_HEADER.join(",")+"\r\n"+body+(rows.length?"\r\n":"");
+  /* live preview — real rows if any, else one representative sample so a demo always shows the shape */
+  const _sampleRow=["2026-07-23","771234567890","FDEX","2.0","","S","PT-10432","INV-88213","0","ACME-CO","",""];
+  const previewText=[FC_HEADER.join(","),...(rows.length?rows.slice(0,3).map((s,i)=>rowArr(s,i).map(qf).join(",")):[_sampleRow.join(",")])].join("\n")+(rows.length>3?"\n… +"+(rows.length-3)+" more rows":"");
   /* Full Circle watches a fixed path (e.g. Z:\ups\fedxucc.csv) and re-reads it each cycle, so the
      file keeps the SAME name every run and overwrites. Editable in case theirs differs. */
   const fname=()=>String(cfg.filename||"fedxucc.csv").replace(/[\/\\]/g,"").trim()||"fedxucc.csv";
@@ -5536,6 +5539,15 @@ function FullCircleExport({ships=[],clients=[]}){
         <Field label="Freight column"><Select value={cfg.includeCharge?"1":"0"} onChange={e=>up({includeCharge:e.target.value==="1"})}><option value="0">Leave blank (matches current file)</option><option value="1">Include our cost</option></Select></Field>
       </div>
       <p className="text-[11px] text-stone-400 mt-2">Layout is locked to your Ship Manager profile — <b>shipdate, track, service, weight, freight, shipprrecvier, pickticket, ucc128, compnay…</b> — so Full Circle reads it with no changes. Map service codes below.</p>
+    </div>
+
+    {/* live file preview — shows the real fedxucc.csv bytes */}
+    <div className="rounded-xl border border-stone-200 p-4">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold">File preview · {fname()}</div>
+        <span className="text-[11px] text-stone-400">{rows.length} shipment{rows.length===1?"":"s"} in range{rows.length?"":" — showing sample row"}</span>
+      </div>
+      <pre className="text-[11px] font-mono bg-stone-900 text-stone-100 rounded-lg p-3 overflow-x-auto whitespace-pre leading-relaxed">{previewText}</pre>
     </div>
 
     <div className="rounded-xl border border-stone-200 p-4">

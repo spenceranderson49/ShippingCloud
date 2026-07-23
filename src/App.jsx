@@ -5490,9 +5490,43 @@ function FullCircleExport({ships=[],clients=[]}){
   };
   /* Column names + meaning taken verbatim from the Ship Manager profile (fedxucc.csv, header row). */
   const COLS=[["shipdate","ship date"],["track","FedEx tracking #"],["service","service → FC code"],["weight","billed lb (1 dec)"],["freight","charge (if enabled)"],["shipprrecvier","bill-to: S=shipper / R=receiver"],["pickticket","PO / pick-ticket #"],["ucc128","invoice number"],["codamount","COD amount (0 if none)"],["compnay","customer reference"],["blank","notes (blank)"],["void","Y when a label is voided"]];
+  const ORDERS_IN=[["ASU_SHPNAME","Company / contact name"],["ASU_SHPAD1 · AD2","Address line 1 / 2"],["ASU_SHPCTY · STATE · ZIP","City / State / ZIP"],["ASU_SHPCNTY","Country"],["ASU_PHONE","Phone"],["ASU_SHPVIA","Service (FE1·FE2·FE3·3DAY·FEG·FDEX)"],["ASU_WGHT","Weight"],["ASU_PICK","PO / pick-ticket #"],["ASU_UCC","Invoice # (required)"],["ASU_CO","Customer reference"]];
   return (<div className="space-y-4">
+    {/* ── Two-way flow + what this is ── */}
+    <div className="rounded-xl border border-[#99D6FF] bg-[#E6F4FF]/40 p-4">
+      <div className="flex items-center gap-2 text-sm font-semibold text-stone-800"><ArrowLeftRight className="w-4 h-4 text-[#0086E0]"/>Aptean Full Circle — two-way integration</div>
+      <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] font-medium">
+        {["Shopify","Full Circle","ShippingHub","Full Circle","Shopify"].map((n,i)=>(<React.Fragment key={i}>{i>0&&<span className="text-stone-400">→</span>}<span className={`rounded-full px-2.5 py-1 ${n==="ShippingHub"?"bg-[#0086E0] text-white":"bg-white border border-stone-200 text-stone-600"}`}>{n}</span></React.Fragment>))}
+      </div>
+      <p className="text-[12px] text-stone-600 mt-3">ShippingHub takes FedEx Ship Manager's place: it reads orders out of Full Circle, prints the FedEx label with live rates, and writes the ship confirmation back into <b>fedxucc.csv</b> — the exact file your Ship Manager profile uses today. No changes on Full Circle's side.</p>
+    </div>
+
+    {/* ── How it works ── */}
+    <div className="rounded-xl border border-stone-200 p-4">
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-2">How it works</div>
+      <ol className="text-[13px] text-stone-700 space-y-1.5 list-decimal ml-4">
+        <li><b>Orders in.</b> Full Circle stages orders in its <span className="font-mono text-[12px]">asups_UPS_Interface</span> table; ShippingHub reads them (same ODBC link Ship Manager uses) into the Orders screen.</li>
+        <li><b>Ship.</b> Print the FedEx label right here — live FedEx rates, Autopilot service selection, no Ship Manager.</li>
+        <li><b>Confirmation out.</b> ShippingHub writes <span className="font-mono text-[12px]">fedxucc.csv</span> to the watched folder (<span className="font-mono text-[12px]">Z:\ups\</span>); Full Circle reads it, marks the order shipped, and pushes tracking to Shopify.</li>
+        <li><b>Voids.</b> Void a label and the row goes out with <span className="font-mono">void</span>=Y so Full Circle backs it out too.</li>
+      </ol>
+    </div>
+
+    {/* ── ① Orders IN (mapping, read-only) ── */}
+    <div className="rounded-xl border border-stone-200 p-4">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="text-sm font-semibold text-stone-800">① Orders in — from Full Circle</div>
+        <span className="text-[11px] bg-stone-100 text-stone-500 rounded-full px-2 py-0.5 font-mono">ODBC · asups_UPS_Interface</span>
+      </div>
+      <p className="text-[12px] text-stone-500 mt-1">Full Circle columns that map into each ShippingHub order:</p>
+      <div className="mt-2 grid sm:grid-cols-2 gap-x-6 gap-y-1 text-[12px]">
+        {ORDERS_IN.map(([a,b])=>(<div key={a} className="flex items-center gap-2"><span className="font-mono text-[11px] text-stone-500 w-44 shrink-0 truncate">{a}</span><span className="text-stone-300">→</span><span className="text-stone-700">{b}</span></div>))}
+      </div>
+      <p className="text-[11px] text-stone-400 mt-2">Connected on go-live with the ProvideX ODBC driver from Aptean (DSN + credentials). Until then, orders can come from Shopify or a CSV drop.</p>
+    </div>
+
     <div className="flex items-start justify-between gap-3 flex-wrap">
-      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ArrowLeftRight className="w-5 h-5 text-[#0086E0]"/>Full Circle export</h2><p className="text-sm text-stone-500 mt-0.5">Emits the exact <b>fedxucc.csv</b> your FedEx Ship Manager profile writes today — header row + 12 columns Full Circle already reads back. One row per shipment.</p></div>
+      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ArrowLeftRight className="w-5 h-5 text-[#0086E0]"/>② Ship confirmations — out to Full Circle</h2><p className="text-sm text-stone-500 mt-0.5">Emits the exact <b>fedxucc.csv</b> your FedEx Ship Manager profile writes today — header row + 12 columns Full Circle already reads back. One row per shipment.</p></div>
       <button onClick={download} disabled={!rows.length} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium hover:bg-[#006db8] disabled:opacity-50 flex items-center gap-1.5"><Download className="w-4 h-4"/>Download file ({rows.length})</button>
     </div>
 

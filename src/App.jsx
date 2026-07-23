@@ -5434,6 +5434,12 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
   const [cfg,setCfg]=usePersist("fcExport",{ssccMode:"tracking",gs1Prefix:"",warehouseCode:"10",includeCharge:false,serviceMap:{}});
   const up=(patch)=>setCfg(c=>({...c,...patch}));
   const upMap=(svc,code)=>setCfg(c=>({...c,serviceMap:{...(c.serviceMap||{}),[svc]:code}}));
+  /* E-comm isolation (per the Full Circle call): tag ShippingHub's e-comm orders with a customer
+     code (e.g. LA20/ECOM) so Full Circle only processes ours and never touches wholesale/routing-guide
+     orders in the shared FedEx drop. Aptean picks how they key on it — a trailing column or a filename
+     prefix — so we support both. */
+  const custCode=String(cfg.custCode||"").trim();
+  const codeMode=cfg.custCodeMode||"off";   // "off" | "column" | "prefix"
   /* Inbound service automation — lives in account settings.fcMap so the Ship engine reads it.
      Each rule: incoming Full Circle service/code (+ optional zone) → the FedEx service we ship. */
   const fcMap=(settings&&settings.fcMap)||{};
@@ -5492,11 +5498,12 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
     s.reference||s.customer||"",                                  // compnay (customer reference)
     "",                                                           // blank (notes)
     (s.status==="Voided"||s.voided)?"Y":""                        // void (delete indicator)
-  ];
+  ].concat(codeMode==="column"&&custCode?[custCode]:[]);          // optional e-comm customer code (trailing)
   /* quote only when needed (comma/quote/newline) — matches Ship Manager's plain output */
   const qf=(v)=>{ const t=String(v==null?"":v); return /[",\r\n]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t; };
+  const HEADER=(codeMode==="column"&&custCode)?[...FC_HEADER,"custcode"]:FC_HEADER;
   const body=rows.map((s,i)=>rowArr(s,i).map(qf).join(",")).join("\r\n");
-  const csv=FC_HEADER.join(",")+"\r\n"+body+(rows.length?"\r\n":"");
+  const csv=HEADER.join(",")+"\r\n"+body+(rows.length?"\r\n":"");
   /* live preview — real rows if any, else one representative sample so a demo always shows the shape */
   const _sampleRow=["2026-07-23","771234567890","FDEX","2.0","","S","PT-10432","INV-88213","0","ACME-CO","",""];
   const previewText=[FC_HEADER.join(","),...(rows.length?rows.slice(0,3).map((s,i)=>rowArr(s,i).map(qf).join(",")):[_sampleRow.join(",")])].join("\n")+(rows.length>3?"\n… +"+(rows.length-3)+" more rows":"");
@@ -5504,7 +5511,9 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
      file keeps the SAME name every run and overwrites. We show the full path you enter (folder + file,
      e.g. ups/fedxucc.csv) but write the actual file under just its base name (the folder is the drop
      location / SFTP dir), so it never gets shortened to a fragment like "ups". */
-  const fpath=()=>String(cfg.filename||"ups/fedxucc.csv").trim()||"ups/fedxucc.csv";
+  const fpath=()=>{ let p=String(cfg.filename||"ups/fedxucc.csv").trim()||"ups/fedxucc.csv";
+    if(codeMode==="prefix"&&custCode){ const i=Math.max(p.lastIndexOf("/"),p.lastIndexOf("\\")); const dir=i>=0?p.slice(0,i+1):""; const file=i>=0?p.slice(i+1):p; p=dir+custCode+"_"+file; }
+    return p; };
   const fname=()=>{ const b=fpath().split(/[\/\\]/).pop(); return (b&&b.trim())||"fedxucc.csv"; };
   const download=()=>{ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/plain"})); a.download=fname(); document.body.appendChild(a); a.click(); setTimeout(()=>{a.remove();URL.revokeObjectURL(a.href);},2000); };
   const doSend=async()=>{
@@ -5625,6 +5634,16 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
       <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-3">Output settings</div>
       <div className="grid sm:grid-cols-2 gap-3">
         <Field label="Freight column"><Select value={freightMode} onChange={e=>up({freightCol:e.target.value,includeCharge:e.target.value!=="blank"})}><option value="blank">Leave blank (matches current file)</option><option value="charges">Shipping charges (actual FedEx charge)</option><option value="list">FedEx list rate (published)</option></Select></Field>
+      </div>
+      {/* E-comm isolation — customer code so Full Circle only picks up ShippingHub's e-comm orders */}
+      <div className="mt-3 rounded-lg bg-[#E6F4FF]/40 border border-[#99D6FF] p-3">
+        <div className="text-[12px] font-semibold text-stone-700">E-commerce isolation</div>
+        <p className="text-[11px] text-stone-500 mt-0.5 mb-2">So Full Circle processes <b>only</b> these e-comm orders and never touches wholesale/routing-guide shipments in the shared drop. Aptean confirms which they key on.</p>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Field label="Customer code"><Input value={cfg.custCode||""} onChange={e=>up({custCode:e.target.value})} placeholder="e.g. LA20 or ECOM"/></Field>
+          <Field label="Add it as"><Select value={codeMode} onChange={e=>up({custCodeMode:e.target.value})}><option value="off">Off</option><option value="column">Trailing column (custcode)</option><option value="prefix">Filename prefix</option></Select></Field>
+        </div>
+        {codeMode!=="off"&&custCode&&<div className="text-[11px] text-stone-500 mt-2">{codeMode==="prefix"?<>File will drop as <b className="font-mono">{fname()}</b>.</>:<>Every row gets a trailing <b className="font-mono">custcode</b> = <b>{custCode}</b>.</>}</div>}
       </div>
       <p className="text-[11px] text-stone-400 mt-2">Layout is locked to your Ship Manager profile — <b>shipdate, track, service, weight, freight, shipprrecvier, pickticket, ucc128, compnay…</b> — so Full Circle reads it with no changes. Map service codes below.</p>
     </div>

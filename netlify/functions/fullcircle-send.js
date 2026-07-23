@@ -34,7 +34,10 @@ const safeName = (n) => String(n || "shipconfirm.txt").replace(/[^\w.\-]+/g, "_"
    install degrades to a clear message instead of taking the whole function down. */
 async function sendSftp(cfg, filename, content) {
   let Client;
-  try { Client = require("ssh2-sftp-client"); }
+  /* Load the SFTP library through a runtime-resolved require so Netlify's function bundler doesn't
+     try (and fail) to statically include an optional dependency that isn't installed. When we're
+     ready to enable SFTP, add ssh2-sftp-client to package.json and this resolves at runtime. */
+  try { const _req = (0, eval)("require"); Client = _req("ssh2-sftp-client"); }
   catch (e) { return { ok: false, error: "SFTP isn't available on this server yet (the ssh2-sftp-client library isn't installed). Use Email delivery, or ask us to enable SFTP." }; }
   const host = String(cfg.host || "").trim();
   if (!host) return { ok: false, error: "Enter the SFTP host." };

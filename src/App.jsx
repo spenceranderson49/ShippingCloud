@@ -5524,7 +5524,7 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
   };
   /* Column names + meaning taken verbatim from the Ship Manager profile (fedxucc.csv, header row). */
   const COLS=[["shipdate","ship date"],["track","FedEx tracking #"],["service","service → FC code"],["weight","billed lb (1 dec)"],["freight","charge (if enabled)"],["shipprrecvier","bill-to: S=shipper / R=receiver"],["pickticket","PO / pick-ticket #"],["ucc128","invoice number"],["codamount","COD amount (0 if none)"],["compnay","customer reference"],["blank","notes (blank)"],["void","Y when a label is voided"]];
-  const ORDERS_IN=[["ASU_SHPNAME","Company / contact name"],["ASU_SHPAD1 · AD2","Address line 1 / 2"],["ASU_SHPCTY · STATE · ZIP","City / State / ZIP"],["ASU_SHPCNTY","Country"],["ASU_PHONE","Phone"],["ASU_SHPVIA","Service (FE1·FE2·FE3·3DAY·FEG·FDEX)"],["ASU_WGHT","Weight"],["ASU_PICK","PO / pick-ticket #"],["ASU_UCC","Invoice # (required)"],["ASU_CO","Customer reference"]];
+  const ORDERS_IN=[["ASU_SHPNAME","Company / contact name"],["ASU_SHPAD1 · AD2","Address line 1 / 2"],["ASU_SHPCTY · STATE · ZIP","City / State / ZIP"],["ASU_SHPCNTY","Country"],["ASU_PHONE","Phone"],["ASU_SHPVIA","Service","FE1 · FE2 · FE3 · 3DAY · FEG · FDEX"],["ASU_WGHT","Weight"],["ASU_PICK","PO / pick-ticket #"],["ASU_UCC","Invoice #","required"],["ASU_CO","Customer reference"]];
   return (<div className="space-y-4">
     {/* ── Two-way flow + what this is ── */}
     <div className="rounded-xl border border-[#99D6FF] bg-[#E6F4FF]/40 p-4">
@@ -5576,8 +5576,17 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
         <span className="text-[11px] bg-stone-100 text-stone-500 rounded-full px-2 py-0.5 font-mono">ODBC · asups_UPS_Interface</span>
       </div>
       <p className="text-[12px] text-stone-500 mt-1">Full Circle columns that map into each ShippingHub order:</p>
-      <div className="mt-2 grid sm:grid-cols-2 gap-x-6 gap-y-1 text-[12px]">
-        {ORDERS_IN.map(([a,b])=>(<div key={a} className="flex items-center gap-2"><span className="font-mono text-[11px] text-stone-500 w-44 shrink-0 truncate">{a}</span><span className="text-stone-300">→</span><span className="text-stone-700">{b}</span></div>))}
+      <div className="mt-3 grid sm:grid-cols-2 gap-2">
+        {ORDERS_IN.map(([a,b,note])=>(
+          <div key={a} className="flex items-center gap-2.5 bg-stone-50 border border-stone-100 rounded-lg px-2.5 py-1.5">
+            <code className="text-[10.5px] font-mono text-[#006FBF] bg-white border border-stone-200 rounded px-1.5 py-1 shrink-0 w-[132px] text-center truncate">{a}</code>
+            <ArrowRight className="w-3.5 h-3.5 text-stone-300 shrink-0"/>
+            <div className="min-w-0 leading-tight">
+              <div className="text-stone-700 text-[12.5px] truncate">{b}{a==="ASU_UCC"&&<span className="text-[10px] text-amber-600 ml-1">({note})</span>}</div>
+              {note&&a!=="ASU_UCC"&&<div className="text-[10px] text-stone-400 font-mono truncate">{note}</div>}
+            </div>
+          </div>
+        ))}
       </div>
       <p className="text-[11px] text-stone-400 mt-2">Connected on go-live with the ProvideX ODBC driver from Aptean (DSN + credentials). Until then, orders can come from Shopify or a CSV drop.</p>
     </div>

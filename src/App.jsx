@@ -3890,6 +3890,8 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       <Field label="Plan"><Input value={c.plan||""} onChange={e=>upClient({plan:e.target.value})}/></Field>
       <Field label="Account number (yours)"><Input value={c.acctNo||""} onChange={e=>upClient({acctNo:e.target.value})} placeholder="Internal Ref"/></Field>
       <Field label="Website"><Input value={c.website||""} onChange={e=>upClient({website:e.target.value})} placeholder="acme.com"/></Field>
+      <Field label="Sales rep"><Input value={c.salesRep||""} onChange={e=>upClient({salesRep:e.target.value})} placeholder="sanderson"/></Field>
+      <Field label="Brand / portal"><Select value={c.brand||""} onChange={e=>upClient({brand:e.target.value})}><option value="">Auto (where they signed up)</option><option value="shippingcloud">ShippingCloud</option><option value="freightwire">Freightwire ShippingHub</option></Select></Field>
       <Field label="Customer since"><Input value={c.since||""} onChange={e=>upClient({since:e.target.value})} placeholder="2025-06"/></Field>
       <Field label="Monthly volume (est.)"><Input value={c.volume||""} onChange={e=>upClient({volume:e.target.value})} placeholder="e.g. 400 pkgs"/></Field>
     </div>}
@@ -4203,20 +4205,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       const delNote=(id)=>upClient({noteLog:log.filter(n=>n.id!==id)});
       const catTone={Credit:"blue",Collections:"rose",Sales:"green",Service:"amber","Follow-up":"stone",General:"stone"};
       return (<div className="space-y-4">
-        {/* Credit & invoicing — the ELEMS credit fields, on the customer record */}
-        <div className="rounded-xl border border-stone-200 bg-stone-50/40 p-4">
-          <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-2.5 flex items-center gap-1"><Wallet className="w-3.5 h-3.5"/>Credit &amp; invoicing</div>
-          <div className="grid sm:grid-cols-3 gap-3">
-            <Field label="Credit limit ($)"><Input value={c.creditLimit??""} onChange={e=>upClient({creditLimit:e.target.value===""?"":+String(e.target.value).replace(/[^0-9.]/g,"")})} placeholder="25000"/></Field>
-            <Field label="Terms (days)"><Input value={c.terms??""} onChange={e=>upClient({terms:e.target.value===""?"":+String(e.target.value).replace(/[^0-9]/g,"")})} placeholder="30"/></Field>
-            <Field label="Account status"><Select value={c.acctStatus||"Active"} onChange={e=>upClient({acctStatus:e.target.value})}><option>Active</option><option>Hold</option><option>COD</option><option>Frozen</option><option>Closed</option></Select></Field>
-            <Field label="DUNS #"><Input value={c.duns||""} onChange={e=>upClient({duns:e.target.value})} placeholder="119508595"/></Field>
-            <Field label="Paydex"><Input value={c.paydex||""} onChange={e=>upClient({paydex:e.target.value})} placeholder="77"/></Field>
-            <Field label="Sales rep"><Input value={c.salesRep||""} onChange={e=>upClient({salesRep:e.target.value})} placeholder="sanderson"/></Field>
-            <Field label="Brand / portal"><Select value={c.brand||""} onChange={e=>upClient({brand:e.target.value})}><option value="">Auto (where they signed up)</option><option value="shippingcloud">ShippingCloud</option><option value="freightwire">Freightwire ShippingHub</option></Select></Field>
-          </div>
-        </div>
-        {/* Notes log */}
+        {/* Credit, terms & billing now live on the Invoicing tab (one home, no duplication). */}
         <div className="rounded-xl border border-stone-200 p-4">
           <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-2.5 flex items-center gap-1"><FileText className="w-3.5 h-3.5"/>Notes</div>
           <div className="flex flex-wrap items-end gap-2 mb-3">
@@ -4279,8 +4268,10 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
             <Field label="Credit limit ($)"><Input value={c.creditLimit??""} onChange={e=>upClient({creditLimit:e.target.value===""?"":+String(e.target.value).replace(/[^0-9.]/g,"")})} placeholder="25000"/></Field>
             <Field label="Late fee (%)"><Input value={inv.lateFeePct??""} onChange={e=>upInv({lateFeePct:e.target.value===""?"":+String(e.target.value).replace(/[^0-9.]/g,"")})} placeholder="10"/></Field>
             <Field label="Account status"><Select value={c.acctStatus||"Active"} onChange={e=>upClient({acctStatus:e.target.value})}><option>Active</option><option>Hold</option><option>COD</option><option>Frozen</option><option>Closed</option></Select></Field>
+            <Field label="DUNS #"><Input value={c.duns||""} onChange={e=>upClient({duns:e.target.value})} placeholder="119508595"/></Field>
+            <Field label="Paydex"><Input value={c.paydex||""} onChange={e=>upClient({paydex:e.target.value})} placeholder="77"/></Field>
           </div>
-          <p className="text-[11px] text-stone-400 mt-2">These feed Collections and the Receivables aging. The same terms &amp; limit also show on the Notes tab.</p>
+          <p className="text-[11px] text-stone-400 mt-2">These feed Collections and the Receivables aging — the one place credit &amp; terms are set.</p>
         </div>
       </div>);
     })()}
@@ -5440,6 +5431,10 @@ function FullCircleExport({ships=[],clients=[]}){
   const [from,setFrom]=useState("");
   const [to,setTo]=useState("");
   const [q,setQ]=useState("");
+  const [sending,setSending]=useState(false);
+  const [sendMsg,setSendMsg]=useState(null);   // {ok,text}
+  const deliv=cfg.deliv||{};
+  const upDeliv=(patch)=>setCfg(c=>({...c,deliv:{...(c.deliv||{}),...patch}}));
   const services=useMemo(()=>Array.from(new Set(ships.map(s=>s&&s.service).filter(Boolean))).sort(),[ships]);
   const inRange=(d)=>{ const t=Date.parse(d); if(isNaN(t))return true; if(from&&t<Date.parse(from))return false; if(to&&t>Date.parse(to)+864e5-1)return false; return true; };
   const rows=useMemo(()=>ships.filter(s=>s&&s.tracking&&inRange(s.date)&&(!q||[s.reference,s.tracking,s.recipient&&s.recipient.name].some(x=>String(x||"").toLowerCase().includes(q.toLowerCase())))).sort((a,b)=>(Date.parse(a.date)||0)-(Date.parse(b.date)||0)),[ships,from,to,q]);
@@ -5448,7 +5443,23 @@ function FullCircleExport({ships=[],clients=[]}){
   const rowArr=(s,i)=>[ s.date||"", s.tracking||"", svcCode(s), (+s.weight||0).toFixed(1), cfg.includeCharge?(+s.cost||0).toFixed(2):"", String((s.pieces&&s.pieces.length)||1), s.reference||s.orderNo||"", ssccFor(s,i), (+s.declaredValue||0).toFixed(2), cfg.warehouseCode||"10", "", "" ];
   const qf=(v)=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"';
   const csv=rows.map((s,i)=>rowArr(s,i).map(qf).join(",")).join("\r\n")+(rows.length?"\r\n":"");
-  const download=()=>{ const now=new Date(),p=n=>String(n).padStart(2,"0"); const stamp=now.getFullYear()+p(now.getMonth()+1)+p(now.getDate())+"."+p(now.getHours())+p(now.getMinutes())+p(now.getSeconds()); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/plain"})); a.download="fcucc."+stamp+".txt"; document.body.appendChild(a); a.click(); setTimeout(()=>{a.remove();URL.revokeObjectURL(a.href);},2000); };
+  const fname=()=>{ const now=new Date(),p=n=>String(n).padStart(2,"0"); return "fcucc."+now.getFullYear()+p(now.getMonth()+1)+p(now.getDate())+"."+p(now.getHours())+p(now.getMinutes())+p(now.getSeconds())+".txt"; };
+  const download=()=>{ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/plain"})); a.download=fname(); document.body.appendChild(a); a.click(); setTimeout(()=>{a.remove();URL.revokeObjectURL(a.href);},2000); };
+  const doSend=async()=>{
+    if(!rows.length){ setSendMsg({ok:false,text:"Nothing to send — no shipments in range."}); return; }
+    const mode=deliv.mode||"download";
+    if(mode==="download"){ download(); setSendMsg({ok:true,text:"Downloaded."}); return; }
+    setSending(true); setSendMsg(null);
+    try{
+      const payload={token:CLOUD.token,mode,filename:fname(),content:csv,
+        email:{to:deliv.emailTo||""},
+        sftp:{host:deliv.host||"",port:deliv.port||22,username:deliv.username||"",password:deliv.password||"",privateKey:deliv.privateKey||"",dir:deliv.dir||""}};
+      const r=await fetch("/.netlify/functions/fullcircle-send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+      const d=await r.json();
+      setSendMsg(d&&d.ok?{ok:true,text:(d.detail||"Sent.")}:{ok:false,text:(d&&d.error)||"Send failed."});
+    }catch(e){ setSendMsg({ok:false,text:"Network error — try again."}); }
+    setSending(false);
+  };
   const COLS=[["Date","the shipment date"],["Tracking #","carrier tracking"],["Service","your service → FC code (set below)"],["Weight","total lb, 1 decimal"],["Charge","blank unless you enable it"],["Packages","carton count"],["Order #","the order/reference from Full Circle"],["SSCC / UCC","per the mode below"],["Value","declared value"],["Code","constant (warehouse/source)"],["—","reserved / blank"],["—","reserved / blank"]];
   return (<div className="space-y-4">
     <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -5465,6 +5476,27 @@ function FullCircleExport({ships=[],clients=[]}){
         <Field label="Charge column"><Select value={cfg.includeCharge?"1":"0"} onChange={e=>up({includeCharge:e.target.value==="1"})}><option value="0">Leave blank (like the sample)</option><option value="1">Include our cost</option></Select></Field>
       </div>
       {cfg.ssccMode==="generate"&&!cfg.gs1Prefix&&<p className="text-[11px] text-amber-600 mt-2">Add your GS1 company prefix for a valid SSCC — without it the serial is a placeholder.</p>}
+    </div>
+
+    <div className="rounded-xl border border-stone-200 p-4">
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">Delivery</div>
+      <p className="text-[11px] text-stone-400 mb-3">How the file reaches Full Circle. Fill this in once Aptean gives you the destination — until then, Download works today.</p>
+      <div className="grid sm:grid-cols-4 gap-3">
+        <Field label="Send by"><Select value={deliv.mode||"download"} onChange={e=>upDeliv({mode:e.target.value})}><option value="download">Download only</option><option value="email">Email the file</option><option value="sftp">SFTP drop</option></Select></Field>
+        {deliv.mode==="email"&&<Field label="Send to (email)"><Input value={deliv.emailTo||""} onChange={e=>upDeliv({emailTo:e.target.value})} placeholder="fullcircle-in@aptean.com"/></Field>}
+      </div>
+      {deliv.mode==="sftp"&&<div className="grid sm:grid-cols-4 gap-3 mt-3">
+        <Field label="Host"><Input value={deliv.host||""} onChange={e=>upDeliv({host:e.target.value})} placeholder="sftp.aptean.com"/></Field>
+        <Field label="Port"><Input value={deliv.port??22} onChange={e=>upDeliv({port:e.target.value===""?"":+String(e.target.value).replace(/[^0-9]/g,"")})} placeholder="22"/></Field>
+        <Field label="Username"><Input value={deliv.username||""} onChange={e=>upDeliv({username:e.target.value})} placeholder="lagence"/></Field>
+        <Field label="Folder"><Input value={deliv.dir||""} onChange={e=>upDeliv({dir:e.target.value})} placeholder="/inbound/shipconfirm"/></Field>
+        <Field label="Password"><Input type="password" value={deliv.password||""} onChange={e=>upDeliv({password:e.target.value})} placeholder="(or use a key)"/></Field>
+        <div className="sm:col-span-3"><Field label="Private key (optional — paste if they use key auth)"><textarea value={deliv.privateKey||""} onChange={e=>upDeliv({privateKey:e.target.value})} placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" className="w-full border border-stone-300 rounded-lg p-2 text-[11px] font-mono min-h-[54px]"/></Field></div>
+      </div>}
+      <div className="flex flex-wrap items-center gap-3 mt-3">
+        <button onClick={doSend} disabled={sending||!rows.length} className="text-sm bg-emerald-600 text-white rounded-lg px-3.5 py-2 font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1.5">{sending?<Loader2 className="w-4 h-4 animate-spin"/>:<Send className="w-4 h-4"/>}{(deliv.mode==="download"||!deliv.mode)?"Download now":"Send test file now"}</button>
+        {sendMsg&&<span className={"text-[12px] "+(sendMsg.ok?"text-emerald-600":"text-rose-600")}>{sendMsg.text}</span>}
+      </div>
     </div>
 
     {services.length>0&&<div className="rounded-xl border border-stone-200 p-4">

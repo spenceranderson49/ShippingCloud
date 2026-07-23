@@ -8568,9 +8568,13 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const [showCI,setShowCI]=useState(false);
 
   const intl=!!receiver.country&&!_isUSCountry(receiver.country);   /* "US"/"USA"/"U.S." are domestic — the strict string compare flagged Shopify's "US" as international (intl-only services, no rates) */
-  const perishOn=!!(settings&&settings.perishable&&settings.perishable.on);
-  const perishRules=(settings&&settings.perishable&&settings.perishable.rules)||null;
-  const perishOnServices=perishOn&&(!(settings&&settings.perishable)||settings.perishable.onServices!==false);
+  const _perish=(settings&&settings.perishable)||{};
+  const perishOn=!!_perish.on;
+  const perishRules=_perish.rules||null;
+  const perishOnServices=perishOn&&_perish.onServices!==false;
+  const perishPlace=_perish.place||"banner";
+  const perishPopup=perishOn&&!!_perish.popup;
+  const perishPopupOver=_perish.popupOver;
   const setPiece=(i,patch)=>setPieces(ps=>ps.map((p,j)=>j===i?{...p,...patch}:p));
   const addPiece=()=>setPieces(ps=>[...ps,{...(ps[ps.length-1]||{weight:"",L:"",W:"",H:""})}]);
   const delPiece=(i)=>{
@@ -9178,7 +9182,8 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <span className="flex items-center gap-1.5 text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-1.5"><CreditCard className="w-3.5 h-3.5"/>Auto-billing to third-party account <b className="">{thirdAcct}</b><button onClick={()=>{setBillTo("sender");setThirdAcct("");}} className="ml-1 text-[#0086E0] hover:text-[#006FBF] underline">Bill Sender Instead</button></span>
         </div>}
         {intl&&<div className="flex items-center gap-2 text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2"><MapPin className="w-4 h-4"/>International shipment to <b>{receiver.country}</b> — FedEx rates shown, customs info required below.</div>}
-        {!intl&&perishOn&&<WeatherAdvisor perishable rules={perishRules} zip={receiver.zip} country={receiver.country} date={shipDate}/>}
+        {!intl&&perishOn&&perishPlace==="banner"&&<WeatherAdvisor perishable rules={perishRules} zip={receiver.zip} country={receiver.country} date={shipDate}/>}
+        {perishPopup&&<PerishableAlert zip={receiver.zip} country={receiver.country} date={shipDate} rules={perishRules} over={perishPopupOver}/>}
 
         {!custom.hideShipSteps&&<StepHead n="2" label="Package details"/>}
         <div className="bg-white border border-stone-200 shadow-sm rounded-lg p-3 space-y-2">
@@ -9316,6 +9321,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                   :<><Calculator className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""}{currentUser&&currentUser.role==="admin"?" — turn on live rates in Settings → Carrier accounts":" — live pricing isn't connected right now"}</span></>}
                 </div>}
                 {!intl&&!perishOn&&<WeatherAdvisor zip={receiver.zip} country={receiver.country} date={shipDate}/>}
+                {!intl&&perishOn&&perishPlace==="compact"&&<WeatherAdvisor perishable bare rules={perishRules} zip={receiver.zip} country={receiver.country} date={shipDate}/>}
                 {/* Hands-free caution: when auto-book/print is armed, say so loudly right where they
                     work — a scan on this screen books and prints without another click. */}
                 {handsFree&&<div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
@@ -17146,7 +17152,7 @@ function matchPerish(rules,temp){ if(temp==null)return null; const rs=(Array.isA
 
 /* Compact one-liner (This Shipment box) OR a fuller perishable card (now + delivery-day +
    a recommended-ice line from the account's temperature rules). US destinations only. */
-function WeatherAdvisor({zip,country,date,perishable=false,rules=null}){
+function WeatherAdvisor({zip,country,date,perishable=false,rules=null,bare=false}){
   const wx=useWeather(zip,country);
   if(!wx)return null;
   const unit=wx.tempUnit||"F"; const isF=/F/i.test(unit);
@@ -17161,6 +17167,12 @@ function WeatherAdvisor({zip,country,date,perishable=false,rules=null}){
   const dDay=(date&&Array.isArray(wx.days))?wx.days.find(d=>d.date===date):null;
   const focusHigh=(dDay&&dDay.high!=null)?dDay.high:wx.tempHigh;
   const rule=matchPerish(rules,focusHigh);
+  if(bare){
+    return (<div className="text-xs text-stone-600 space-y-0.5">
+      <div className="flex items-start gap-2"><Thermometer className={"w-3.5 h-3.5 shrink-0 mt-0.5 "+(rule?"text-amber-600":"text-[#0086E0]")}/><span>{wx.city}, {wx.state} · {cur?<>now <b>{cur.temp}°</b>, </>:null}{dDay?dDay.name:"del."} <b>{focusHigh}°{unit}</b>{wx.delayRisk&&<span className="text-amber-600"> · delay risk</span>}</span></div>
+      {rule&&<div className="flex items-start gap-2 text-amber-700"><Snowflake className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span>Add <b>{rule.add}</b></span></div>}
+    </div>);
+  }
   const tone=rule?"bg-amber-50 border-amber-200":"bg-[#E6F4FF] border-[#99D6FF]";
   return (<div className={"rounded-lg border px-3 py-2 "+tone}>
     <div className="flex items-center gap-2 text-sm font-medium text-stone-800"><Thermometer className={"w-4 h-4 "+(rule?"text-amber-600":"text-[#0086E0]")}/>Perishable · {wx.city}, {wx.state}</div>
@@ -17182,6 +17194,32 @@ function ServiceWeather({days,date}){
   return <span title={d.name+": "+d.condition} className={"inline-flex items-center gap-0.5 text-[11px] "+(hot?"text-orange-600":cold?"text-sky-600":"text-stone-400")}>{cold?<Snowflake className="w-3 h-3"/>:<Thermometer className="w-3 h-3"/>}{d.high}°</span>;
 }
 
+/* Optional on-screen pop-up when the destination will be too hot on the delivery day. Fires once per
+   destination ZIP (re-arms when the ZIP changes), dismissable, doesn't block the page behind it. */
+function PerishableAlert({zip,country,date,rules,over}){
+  const wx=useWeather(zip,country);
+  const [dismissed,setDismissed]=useState("");
+  const z=String(zip||"").trim().slice(0,5);
+  if(!wx)return null;
+  const dDay=(date&&Array.isArray(wx.days))?wx.days.find(d=>d.date===date):null;
+  const high=(dDay&&dDay.high!=null)?dDay.high:wx.tempHigh;
+  const thr=(over!=null&&over!=="")?+over:90;
+  if(high==null||high<thr||dismissed===z)return null;
+  const rule=matchPerish(rules,high);
+  return (<div className="fixed inset-0 z-[70] flex items-start justify-center pt-24 px-4 pointer-events-none">
+    <div className="pointer-events-auto bg-white border-2 border-amber-300 rounded-2xl shadow-2xl max-w-sm w-full p-4 animate-[fadeIn_.15s_ease-out]">
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0"><Thermometer className="w-5 h-5"/></div>
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-stone-900">Hot delivery ahead</div>
+          <div className="text-sm text-stone-600 mt-0.5">{wx.city}, {wx.state} will be <b>{high}°{wx.tempUnit||"F"}</b>{dDay?" on "+dDay.name:""}.{rule?<> Add <b>{rule.add}</b>.</>:""}</div>
+        </div>
+      </div>
+      <div className="flex justify-end mt-3"><button onClick={()=>setDismissed(z)} className="text-sm bg-amber-500 text-white rounded-lg px-3.5 py-1.5 font-medium hover:bg-amber-600">Got it</button></div>
+    </div>
+  </div>);
+}
+
 /* Settings → Perishable: enable the mode, set temperature warnings and what ice/dry-ice to add. */
 function PerishableSettings({settings,setSettings}){
   const p=(settings&&settings.perishable)||{};
@@ -17194,7 +17232,12 @@ function PerishableSettings({settings,setSettings}){
     <div><h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Thermometer className="w-4 h-4"/>Perishable / cold-chain mode</h2>
       <p className="text-[13px] text-stone-500 mt-0.5">For temperature-sensitive shipments. Shows destination weather (now + estimated delivery day) on the Ship screen and beside each service, and warns you to add ice when it'll be hot.</p></div>
     <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!!p.on} onChange={e=>up({on:e.target.checked})} className="accent-[#0086E0]"/>Turn on perishable mode</label>
+    <div className="flex flex-wrap items-center gap-2 text-sm"><span className="text-stone-600">Show the weather as</span>
+      <Select value={p.place||"banner"} onChange={e=>up({place:e.target.value})}><option value="banner">A banner under the address</option><option value="compact">A line in the This Shipment box</option></Select>
+    </div>
     <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={p.onServices!==false} onChange={e=>up({onServices:e.target.checked})} className="accent-[#0086E0]"/>Show the delivery-day temperature next to each service</label>
+    <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!!p.popup} onChange={e=>up({popup:e.target.checked})} className="accent-[#0086E0]"/>Pop up a warning on screen when it'll be hot at delivery</label>
+    {p.popup&&<div className="flex flex-wrap items-center gap-2 text-sm pl-6 -mt-1"><span className="text-stone-500">Pop up when the delivery-day high is over</span><input value={p.popupOver??90} onChange={e=>up({popupOver:+String(e.target.value).replace(/[^0-9]/g,"")||0})} className="w-16 border border-stone-300 rounded px-2 py-1"/><span className="text-stone-500">°F</span></div>}
     <div className="rounded-xl border border-stone-200 p-4">
       <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-2">Temperature warnings</div>
       <p className="text-[12px] text-stone-500 mb-3">When the delivery-day high is over a temperature, recommend what to pack.</p>

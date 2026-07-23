@@ -10075,6 +10075,19 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
     setSel({});
   };
   const unmerge=(o)=>{ if(!o||!Array.isArray(o.mergedFrom)||!o.mergedFrom.length)return; setOrders(os=>[...o.mergedFrom.map(m=>m.data).filter(Boolean),...os.filter(x=>x.id!==o.id)]); setOpen(null); };
+  /* ── AUTO-MERGE — find open orders that should ship together (same address + method, etc.) and offer a
+     one-click combine. Criteria are configurable; can also run automatically right after an order sync. ── */
+  const _n=(x)=>String(x||"").trim().toLowerCase();
+  const amCfg=(settings&&settings.autoMerge)||{};
+  const setAm=(patch)=>setSettings&&setSettings(p=>({...p,autoMerge:{...((p&&p.autoMerge)||{}),...patch}}));
+  const [amOpen,setAmOpen]=useState(false);
+  const mergeKeyOf=(o)=>{ const p=[]; if(amCfg.matchAddress!==false){ if(!o.address1||!o.zip)return ""; p.push(_n(o.address1),String(o.zip||"").slice(0,5),_n(o.city)); } if(amCfg.matchName){ p.push(_n(o.customer)); } if(amCfg.matchEmail!==false){ if(!o.email)return ""; p.push(_n(o.email)); } if(amCfg.matchMethod!==false){ p.push(_n(o.shippingService||o.service||"")); } return p.join("|"); };
+  const mergeOneGroup=(chosen)=>{ if(!chosen||chosen.length<2)return null; const base=chosen[0]; const lineItems=chosen.flatMap(o=>Array.isArray(o.lineItems)?o.lineItems:[]); const weight=chosen.reduce((s,o)=>s+(+o.weight||0),0); const total=chosen.reduce((s,o)=>s+(parseFloat(o.total)||0),0); const itemCount=chosen.reduce((s,o)=>s+(+o.itemCount||0),0); const itemsStr=Array.from(new Set(chosen.map(o=>o.items).filter(Boolean))).join(", "); return {...base,id:"m"+Date.now()+"_"+Math.floor(Math.random()*1e4),name:base.name+" +"+(chosen.length-1),lineItems,weight:weight||base.weight,total:total?total.toFixed(2):base.total,itemCount:itemCount||base.itemCount,items:itemsStr||base.items,status:"unfulfilled",merged:true,autoMerged:true,mergedFrom:chosen.map(o=>({id:o.id,name:o.name,data:o})),note:[base.note,"Auto-merged from "+chosen.map(o=>o.name).join(", ")].filter(Boolean).join(" · ")}; };
+  /* Pure: given a list of orders, return the merge groups + the resulting merged records to prepend and
+     the ids to remove. Used by the banner and by auto-on-sync so both behave identically. */
+  const buildMerges=(list)=>{ const open=(list||[]).filter(o=>o&&o.status!=="fulfilled"&&!o.merged); const m={}; open.forEach(o=>{ const k=mergeKeyOf(o); if(!k)return; (m[k]=m[k]||[]).push(o); }); const groups=Object.values(m).filter(g=>g.length>1); const merges=[]; const rm=new Set(); groups.forEach(g=>{ const mm=mergeOneGroup(g); if(mm){ merges.push(mm); g.forEach(o=>rm.add(o.id)); } }); return {groups,merges,rm}; };
+  const mergeGroups=useMemo(()=>buildMerges(orders).groups,[orders,settings&&settings.autoMerge]);
+  const mergeAllGroups=async()=>{ const {merges,rm}=buildMerges(orders); const nOrders=[...rm].length, nGroups=merges.length; if(!nGroups)return; if(!await uiConfirm("Combine "+nOrders+" orders into "+nGroups+" merged shipment"+(nGroups>1?"s":"")+"? Items are combined, the originals are folded in, and each can be un-merged.")) return; setOrders(os=>[...merges,...os.filter(o=>!rm.has(o.id))]); };
   const [syncing,setSyncing]=useState(false);
   const [syncMsg,setSyncMsg]=useState(null);
   // Every connected platform that can supply orders (Shopify + token/OAuth connectors flagged orders:true)
@@ -10101,7 +10114,7 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
         }
       } else errs.push(`${src.name}: ${(res&&res.error)||"failed"}`);
     }
-    if(collected.length)setOrders(p=>[...collected,...p]);
+    if(collected.length)setOrders(p=>{ const next=[...collected,...p]; if(amCfg.on&&amCfg.autoOnSync){ const {merges,rm}=buildMerges(next); if(merges.length)return [...merges,...next.filter(o=>!rm.has(o.id))]; } return next; });
     setSyncing(false);
     if(errs.length)setSyncMsg({err:errs.join(" · ")});
     else setSyncMsg({ok:`${collected.length} new order${collected.length===1?"":"s"} pulled${orderSources.length>1?` across ${orderSources.length} platforms`:""}`});
@@ -10154,6 +10167,18 @@ function Orders({orders,setOrders,goShip,client,settings,setSettings,onShipped,o
             <button onClick={()=>printPickList(sorted.filter(o=>o.status!=="fulfilled"))} disabled={!sorted.some(o=>o.status!=="fulfilled")} title="One sheet: every item across the open orders in this view, with checkboxes" className="inline-flex items-center gap-1.5 bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 disabled:opacity-40"><ClipboardList className="w-3.5 h-3.5"/>Pick List</button>
             {wmsOn&&<button onClick={()=>{const ids=sorted.filter(o=>o.status!=="fulfilled").map(o=>o.id);try{window.dispatchEvent(new CustomEvent("sc-nav",{detail:{tab:"inventory",wmsView:"pick",pickIds:ids}}));}catch(e){}}} disabled={!sorted.some(o=>o.status!=="fulfilled")} title="Open a tracked scan-to-pick session in the Warehouse with these orders pre-selected — one pipeline instead of two" className="inline-flex items-center gap-1.5 bg-[#E6F4FF] border border-[#0086E0]/30 text-[#006FBF] rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#d3ecff] disabled:opacity-40"><ScanLine className="w-3.5 h-3.5"/>Pick in Warehouse</button>}
           </div>
+          {mergeGroups.length>0&&<div className="mb-2 rounded-lg border border-[#99D6FF] bg-[#E6F4FF] px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
+            <ArrowLeftRight className="w-4 h-4 text-[#0086E0] shrink-0"/>
+            <span className="text-[#006FBF]"><b>{mergeGroups.reduce((s,g)=>s+g.length,0)} orders</b> can be combined into <b>{mergeGroups.length}</b> shipment{mergeGroups.length>1?"s":""} — same {[amCfg.matchAddress!==false&&"address",amCfg.matchMethod!==false&&"service",amCfg.matchEmail!==false&&"email",amCfg.matchName&&"name"].filter(Boolean).join(" + ")}.</span>
+            <span className="flex-1"/>
+            <button onClick={()=>setAmOpen(o=>!o)} className="text-[11px] text-[#006FBF] hover:underline">Criteria</button>
+            <button onClick={mergeAllGroups} className="inline-flex items-center gap-1.5 bg-[#0086E0] text-white rounded-lg px-2.5 py-1 font-medium hover:bg-[#006db8]"><ArrowLeftRight className="w-3.5 h-3.5"/>Merge all</button>
+            {amOpen&&<div className="w-full mt-1 border-t border-[#99D6FF]/60 pt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-[#0b4f86]">
+              {[["matchAddress","Shipping address",false],["matchMethod","Delivery method",false],["matchEmail","Customer email",false],["matchName","Customer name",true]].map(([k,label,def])=>
+                <label key={k} className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" checked={amCfg[k]!==undefined?!!amCfg[k]:!def} onChange={e=>setAm({[k]:e.target.checked,on:true})} className="accent-[#0086E0]"/>{label}</label>)}
+              <label className="flex items-center gap-1.5 cursor-pointer ml-auto"><input type="checkbox" checked={!!amCfg.autoOnSync} onChange={e=>setAm({autoOnSync:e.target.checked,on:true})} className="accent-[#0086E0]"/>Auto-merge on every sync</label>
+            </div>}
+          </div>}
           <div className="border border-stone-200 rounded-lg overflow-hidden bg-white">
             <div className="overflow-x-auto">
               <table className="w-full text-sm border-collapse">

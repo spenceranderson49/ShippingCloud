@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import qrcodegen from "qrcode-generator";
-import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, ArrowRight, Search, Calendar, Settings as Cog, Calculator, Pause, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, EyeOff, MessageCircle, Sparkles, ClipboardList, Ban, Tag, Copy, Sliders, Save,Image as ImageIcon} from "lucide-react";
+import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, ArrowRight, Search, Calendar, Settings as Cog, Calculator, Pause, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, EyeOff, MessageCircle, Sparkles, ClipboardList, Ban, Tag, Copy, Sliders, Save, ShoppingCart, CloudSun, Snowflake, Thermometer, ExternalLink as ExtLink, Image as ImageIcon} from "lucide-react";
 const FW_BLUE="#0099FF";
 const FW_DARK="#111418";
 function BrandCloud({className,color,style}){return (
@@ -3007,7 +3007,7 @@ const CUSTOM_DEFAULTS={
   confetti:"page",seasonal:false,hideShipSteps:false,hideLabeledOrders:true,
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
-const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["inventory","Warehouse",Boxes],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
+const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["inventory","Warehouse",Boxes],["packaging","Packaging",ShoppingCart],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
 const SLIP_OPTS={thanks:"",footer:"",logo:"",company:"",template:"",pickTitle:"",pickNote:"",title:""};   // synced from settings by AppInner; read by packingSlipHTML/printPickList
 const CI_OPTS={taxId:"",logo:""};                 // Tax ID / EIN printed on commercial invoices, from Settings → General
 const fireConfetti=()=>{try{window.dispatchEvent(new CustomEvent("sc-confetti"));}catch(e){}};
@@ -8363,6 +8363,7 @@ function AppInner(){
           {tab==="invoices"&&<Invoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>}
           {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings} client={client} onShipped={onShipped}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
+          {tab==="packaging"&&<Packaging settings={settings} setSettings={setSettings} isAdmin={isAdmin}/>}
           {tab==="companyadmin"&&isCompanyAdmin&&<CompanyAdmin currentUser={currentUser} companyUsers={companyUsers} setCompanyUsers={setCompanyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} settings={settings} client={client} allowedTabs={featTabKeys} markupEntitled={featureOn("companyMarkup",currentUser,myFlags)}/>}
           {(tab==="admin"||tab.startsWith("admin:"))&&isAdmin&&<AdminPortal activeSection={tab.startsWith("admin:")?tab.slice(6):null} clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} publicBrand={publicBrand} setPublicBrand={setPublicBrand} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
           {tab==="settings"&&<Settings showMoney={showMoney} secPolicy={(myFlags&&myFlags._secPolicy)||{}} isAdmin={isAdmin} uid={currentUser&&currentUser.id} currentUser={currentUser} setCurrentUser={setCurrentUser} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)} allowedTabs={featTabKeys} fxLocOn={featureOn("fedexLocations",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)} trackingOn={featureOn("brandedTracking",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
@@ -9171,6 +9172,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <span className="flex items-center gap-1.5 text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-1.5"><CreditCard className="w-3.5 h-3.5"/>Auto-billing to third-party account <b className="">{thirdAcct}</b><button onClick={()=>{setBillTo("sender");setThirdAcct("");}} className="ml-1 text-[#0086E0] hover:text-[#006FBF] underline">Bill Sender Instead</button></span>
         </div>}
         {intl&&<div className="flex items-center gap-2 text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2"><MapPin className="w-4 h-4"/>International shipment to <b>{receiver.country}</b> — FedEx rates shown, customs info required below.</div>}
+        {!intl&&<WeatherAdvisor zip={receiver.zip} country={receiver.country} date={shipDate}/>}
 
         {!custom.hideShipSteps&&<StepHead n="2" label="Package details"/>}
         <div className="bg-white border border-stone-200 shadow-sm rounded-lg p-3 space-y-2">
@@ -17110,6 +17112,100 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
     {editing&&<RuleEditorModal rule={editing} onSave={saveRule} onClose={()=>setEditing(null)} onDelete={delRule} warehouses={warehouses}/>}
   </div>);
 }
+/* Destination weather advisor — shows the delivery-day forecast, a weather-delay flag, and a
+   packaging tip (add ice when it's hot, protect liquids when it's freezing). Free NWS data via
+   netlify/functions/weather.js. US destinations only; renders nothing otherwise. */
+function WeatherAdvisor({zip,country,date}){
+  const [wx,setWx]=useState(null);
+  const usZip=/^\d{5}$/.test(String(zip||"").trim().slice(0,5));
+  const domestic=!country||_isUSCountry(country);
+  useEffect(()=>{
+    let dead=false;
+    if(!usZip||!domestic){setWx(null);return;}
+    const z=String(zip).trim().slice(0,5);
+    const t=setTimeout(async()=>{
+      try{
+        const r=await fetch("/.netlify/functions/weather",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:CLOUD.token||undefined,zip:z,date:date||undefined})});
+        const d=await r.json();
+        if(!dead)setWx(d&&d.ok?d:null);
+      }catch(e){ if(!dead)setWx(null); }
+    },600);
+    return ()=>{dead=true;clearTimeout(t);};
+  },[zip,country,date]);
+  if(!usZip||!domestic||!wx)return null;
+  const freezing=/freezing/i.test((wx.advice||[]).join(" "));
+  const bg=wx.delayRisk?"bg-amber-50 border-amber-200 text-amber-800":(wx.advice&&wx.advice.length?"bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF]":"bg-stone-50 border-stone-200 text-stone-600");
+  return (<div className={"rounded-lg border px-3 py-2 text-sm "+bg}>
+    <div className="flex items-center gap-2 font-medium">{freezing?<Snowflake className="w-4 h-4"/>:<CloudSun className="w-4 h-4"/>}Destination weather · {wx.city}, {wx.state}<span className="font-normal opacity-80">— {wx.day}: {wx.tempHigh}°{wx.tempUnit}, {wx.condition}</span></div>
+    {(wx.advice||[]).map((a,i)=><div key={i} className="text-[12px] mt-1 flex items-start gap-1.5"><Thermometer className="w-3.5 h-3.5 mt-0.5 shrink-0"/><span>{a}</span></div>)}
+    {!(wx.advice||[]).length&&<div className="text-[12px] mt-0.5 opacity-80">Clear conditions — no packaging or delay concerns.</div>}
+  </div>);
+}
+
+/* Packaging tab — free FedEx supplies + partner stores (Sticker Mule, noissue) that pay commission
+   through their referral programs. Admins paste their referral links once; customers order through them. */
+function Packaging({settings,setSettings,isAdmin=false}){
+  const aff=(settings&&settings.affiliates)||{};
+  const setAff=(k,v)=>setSettings&&setSettings(p=>({...p,affiliates:{...((p&&p.affiliates)||{}),[k]:v}}));
+  const open=(url)=>{ try{ window.open(url,"_blank","noopener,noreferrer"); }catch(e){} };
+  const FEDEX_URL="https://www.fedex.com/en-us/shipping/supplies.html";
+  const fedexItems=[
+    ["FedEx® Envelope","Letter-size docs, up to ~8 oz"],
+    ["FedEx® Pak","Small & large padded/paper paks"],
+    ["FedEx® Small Box","10⅞ × 1½ × 12⅜ in"],
+    ["FedEx® Medium Box","11¼ × 2⅝ × 13¼ in"],
+    ["FedEx® Large Box","12⅜ × 3 × 17½ in"],
+    ["FedEx® Tube","Rolled prints, posters, plans"],
+    ["FedEx® 10kg / 25kg Box","International Priority"],
+  ];
+  const smUrl=aff.stickermule||"https://www.stickermule.com";
+  const noUrl=aff.noissue||"https://noissue.co";
+  const Card=({title,sub,cta,onClick,tone})=>(<div className="border border-stone-200 rounded-xl bg-white p-3.5 flex flex-col">
+    <div className="font-medium text-stone-800 text-sm">{title}</div>
+    {sub&&<div className="text-[12px] text-stone-500 mt-0.5 flex-1">{sub}</div>}
+    <button onClick={onClick} className={"mt-3 text-sm rounded-lg px-3 py-1.5 font-medium flex items-center justify-center gap-1.5 "+(tone==="fedex"?"bg-[#4D148C] text-white hover:bg-[#3d1070]":tone==="sm"?"bg-[#111] text-white hover:bg-black":"bg-emerald-600 text-white hover:bg-emerald-700")}>{cta}<ExtLink className="w-3.5 h-3.5"/></button>
+  </div>);
+  return (<div className="space-y-6 max-w-5xl">
+    <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ShoppingCart className="w-5 h-5 text-[#0086E0]"/>Packaging &amp; supplies</h2>
+      <p className="text-sm text-stone-500 mt-0.5">Order free FedEx packaging, and custom boxes, mailers &amp; labels from our partners.</p></div>
+
+    {/* Free FedEx supplies */}
+    <div>
+      <div className="flex items-center gap-2 mb-2"><div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold">Free FedEx packaging</div><Badge tone="violet">Free</Badge></div>
+      <p className="text-[12px] text-stone-500 mb-3">Free to order with a FedEx account for FedEx Express &amp; One Rate shipments — FedEx ships them to you at no charge.</p>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {fedexItems.map(([n,d])=><Card key={n} title={n} sub={d} cta="Order on FedEx" tone="fedex" onClick={()=>open(FEDEX_URL)}/>)}
+      </div>
+    </div>
+
+    {/* Partner stores */}
+    <div>
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-3">Custom packaging &amp; branding</div>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <div className="border border-stone-200 rounded-xl bg-white p-4">
+          <div className="font-semibold text-stone-800">Sticker Mule</div>
+          <div className="text-[12px] text-stone-500 mt-0.5 mb-3">Custom stickers, labels, printed tape &amp; mailers. Fast turnaround.</div>
+          <button onClick={()=>open(smUrl)} className="text-sm bg-[#111] text-white rounded-lg px-3.5 py-2 font-medium hover:bg-black flex items-center gap-1.5">Shop Sticker Mule<ExtLink className="w-3.5 h-3.5"/></button>
+        </div>
+        <div className="border border-stone-200 rounded-xl bg-white p-4">
+          <div className="font-semibold text-stone-800">noissue</div>
+          <div className="text-[12px] text-stone-500 mt-0.5 mb-3">Custom eco mailers, tissue, boxes, stickers &amp; tape. Sustainable.</div>
+          <button onClick={()=>open(noUrl)} className="text-sm bg-emerald-600 text-white rounded-lg px-3.5 py-2 font-medium hover:bg-emerald-700 flex items-center gap-1.5">Shop noissue<ExtLink className="w-3.5 h-3.5"/></button>
+        </div>
+      </div>
+    </div>
+
+    {isAdmin&&<div className="rounded-xl border border-stone-200 bg-stone-50/50 p-4">
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">Your referral links (admin)</div>
+      <p className="text-[12px] text-stone-500 mb-3">Paste your Sticker Mule and noissue referral links here — customer orders through them earn you commission. Sign up: stickermule.com/commissions and noissue.co partner program.</p>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <Field label="Sticker Mule referral URL"><Input value={aff.stickermule||""} onChange={e=>setAff("stickermule",e.target.value)} placeholder="https://www.stickermule.com/…"/></Field>
+        <Field label="noissue referral URL"><Input value={aff.noissue||""} onChange={e=>setAff("noissue",e.target.value)} placeholder="https://noissue.co/…"/></Field>
+      </div>
+    </div>}
+  </div>);
+}
+
 function AddressBook({settings,setSettings}){
   const [f,setF]=useState({name:"",company:"",address1:"",city:"",state:"",zip:"",phone:"",acctCarrier:"",acctNum:""});
   const [editId,setEditId]=useState(null);

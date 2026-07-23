@@ -5449,7 +5449,9 @@ function FullCircleExport({ships=[],clients=[]}){
   const rowArr=(s,i)=>[ s.date||"", s.tracking||"", svcCode(s), (+s.weight||0).toFixed(1), cfg.includeCharge?(+s.cost||0).toFixed(2):"", String((s.pieces&&s.pieces.length)||1), s.reference||s.orderNo||"", ssccFor(s,i), (+s.declaredValue||0).toFixed(2), cfg.warehouseCode||"10", "", "" ];
   const qf=(v)=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"';
   const csv=rows.map((s,i)=>rowArr(s,i).map(qf).join(",")).join("\r\n")+(rows.length?"\r\n":"");
-  const fname=()=>{ const now=new Date(),p=n=>String(n).padStart(2,"0"); return "fcucc."+now.getFullYear()+p(now.getMonth()+1)+p(now.getDate())+"."+p(now.getHours())+p(now.getMinutes())+p(now.getSeconds())+".txt"; };
+  /* Full Circle watches a fixed path (e.g. Z:\ups\fedxucc.csv) and re-reads it each cycle, so the
+     file keeps the SAME name every run and overwrites. Editable in case theirs differs. */
+  const fname=()=>String(cfg.filename||"fedxucc.csv").replace(/[\/\\]/g,"").trim()||"fedxucc.csv";
   const download=()=>{ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/plain"})); a.download=fname(); document.body.appendChild(a); a.click(); setTimeout(()=>{a.remove();URL.revokeObjectURL(a.href);},2000); };
   const doSend=async()=>{
     if(!rows.length){ setSendMsg({ok:false,text:"Nothing to send — no shipments in range."}); return; }
@@ -5489,8 +5491,10 @@ function FullCircleExport({ships=[],clients=[]}){
       <p className="text-[11px] text-stone-400 mb-3">How the file reaches Full Circle. Fill this in once Aptean gives you the destination — until then, Download works today.</p>
       <div className="grid sm:grid-cols-4 gap-3">
         <Field label="Send by"><Select value={deliv.mode||"download"} onChange={e=>upDeliv({mode:e.target.value})}><option value="download">Download only</option><option value="email">Email the file</option><option value="sftp">SFTP drop</option></Select></Field>
+        <Field label="File name"><Input value={cfg.filename||""} onChange={e=>up({filename:e.target.value})} placeholder="fedxucc.csv"/></Field>
         {deliv.mode==="email"&&<Field label="Send to (email)"><Input value={deliv.emailTo||""} onChange={e=>upDeliv({emailTo:e.target.value})} placeholder="fullcircle-in@aptean.com"/></Field>}
       </div>
+      <p className="text-[11px] text-stone-500 mt-2 bg-amber-50 border border-amber-200 rounded px-2.5 py-2">Full Circle reads a fixed path like <b>Z:\ups\fedxucc.csv</b>. A <b>Z:</b> drive is a mapped Windows folder on your network — a cloud app can't write to a drive letter directly. Two ways to land it there: <b>(1)</b> click <b>Download</b> and drop the file into <b>Z:\ups</b> (works today), or <b>(2)</b> if that folder is also reachable over SFTP, point the SFTP drop at it and we'll write <b>{cfg.filename||"fedxucc.csv"}</b> for you automatically.</p>
       {deliv.mode==="sftp"&&<div className="grid sm:grid-cols-4 gap-3 mt-3">
         <Field label="Host"><Input value={deliv.host||""} onChange={e=>upDeliv({host:e.target.value})} placeholder="sftp.aptean.com"/></Field>
         <Field label="Port"><Input value={deliv.port??22} onChange={e=>upDeliv({port:e.target.value===""?"":+String(e.target.value).replace(/[^0-9]/g,"")})} placeholder="22"/></Field>

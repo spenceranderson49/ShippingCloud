@@ -488,6 +488,13 @@ async function shipCall(payload){
     return data||{ok:false,error:"Empty response"};
   }catch(e){clearTimeout(t);return {ok:false,error:(e&&e.message)||"Network error"};}
 }
+/* Talk to the on-prem Full Circle connector via ShippingHub's /connector endpoint (session-gated). */
+async function connCall(action,extra){
+  try{
+    const r=await fetch("/.netlify/functions/connector",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,token:CLOUD.token||undefined,...(extra||{})})});
+    return await r.json();
+  }catch(e){ return {ok:false,error:(e&&e.message)||"network"}; }
+}
 /* ── label printing that ALWAYS pops the print preview ──────────────────────
    Chrome's built-in PDF viewer routinely ignores print() from hidden/embedded
    frames, so we stop asking it: the label PDF is rasterized to images with
@@ -5440,6 +5447,12 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
      prefix — so we support both. */
   const custCode=String(cfg.custCode||"").trim();
   const codeMode=cfg.custCodeMode||"off";   // "off" | "column" | "prefix"
+  /* On-prem connector health (polls the /connector endpoint) + the "pull on scan" toggle. */
+  const [connSt,setConnSt]=useState(null);
+  const connOn=!!(settings&&settings.connector&&settings.connector.on);
+  const setConn=(patch)=>setSettings&&setSettings(p=>({...p,connector:{...((p&&p.connector)||{}),...patch}}));
+  const connAgo=(ms)=>{ if(!ms)return ""; const s=Math.floor((Date.now()-ms)/1000); return s<60?s+"s ago":s<3600?Math.floor(s/60)+"m ago":Math.floor(s/3600)+"h ago"; };
+  useEffect(()=>{ if(!isAdmin||!CLOUD.token)return; let dead=false; const load=async()=>{ const r=await connCall("connStatus",{}); if(!dead&&r&&r.ok)setConnSt(r); }; load(); const iv=setInterval(load,15000); return ()=>{dead=true;clearInterval(iv);}; },[isAdmin]);
   /* Inbound service automation — lives in account settings.fcMap so the Ship engine reads it.
      Each rule: incoming Full Circle service/code (+ optional zone) → the FedEx service we ship. */
   const fcMap=(settings&&settings.fcMap)||{};
@@ -5599,6 +5612,20 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
       </div>
       <p className="text-[11px] text-stone-400 mt-2">Connected on go-live with the ProvideX ODBC driver from Aptean (DSN + credentials). Until then, orders can come from Shopify or a CSV drop.</p>
     </div>
+
+    {/* On-prem connector health + pull-on-scan toggle (admin) */}
+    {isAdmin&&<div className="rounded-xl border border-stone-200 p-4">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className={`w-2.5 h-2.5 rounded-full ${connSt&&connSt.online?"bg-emerald-500":"bg-stone-300"}`}/>
+          <span className="text-sm font-semibold text-stone-800">On-prem connector</span>
+          <span className={`text-[11px] font-medium ${connSt&&connSt.online?"text-emerald-600":"text-stone-400"}`}>{connSt?(connSt.online?"online":"offline"):"checking…"}</span>
+        </div>
+        <label className="flex items-center gap-1.5 text-[12px] text-stone-600 cursor-pointer"><input type="checkbox" checked={connOn} onChange={e=>setConn({on:e.target.checked})} className="accent-[#0086E0]"/>Pull orders from Full Circle on scan</label>
+      </div>
+      {connSt&&connSt.status&&<div className="text-[11px] text-stone-400 mt-1.5">{connSt.status.lastSeen?"Last seen "+connAgo(connSt.status.lastSeen):""}{connSt.status.table?" · table "+connSt.status.table:""}{connSt.status.drop?" · drop "+connSt.status.drop:""}</div>}
+      <p className="text-[11px] text-stone-400 mt-1.5">The connector (Lagence-Rust-Connector) runs on the on-prem Windows box and reports its health here — no login into that machine. Turn it on by setting <b className="font-mono">FW_CONNECTOR_KEY</b> on the server and in the connector's <span className="font-mono">config.toml</span>, then start the agent.</p>
+    </div>}
 
     {/* ── Full Circle → service automation (admin) ── */}
     {isAdmin&&setSettings&&<div className="rounded-xl border border-violet-200 bg-violet-50/40 p-4">
@@ -14396,6 +14423,7 @@ function Scan({orders,goShip,goTab,settings,setSettings,isAdmin}){
   const [mode,setMode]=useState(requireVerify?"verify":"ship");          // "ship" | "verify"
   const [job,setJob]=useState(null);              // verify job: {order, items:[{name,sku,qty,scanned}]}
   const [flash,setFlash]=useState(null);          // {ok, text} transient feedback
+  const [pulling,setPulling]=useState("");        // code being pulled from Full Circle via the connector
   const inputRef=React.useRef(null);
   useEffect(()=>{const t=setTimeout(()=>{try{inputRef.current&&inputRef.current.focus();}catch(e){}},100);return ()=>clearTimeout(t);},[mode,job]);
   const findOrder=(code)=>{
@@ -14411,10 +14439,32 @@ function Scan({orders,goShip,goTab,settings,setSettings,isAdmin}){
     return parseItemsList(o).map((li,i)=>({key:i,name:li.name,sku:String(li.name||"").trim().toLowerCase(),qty:Math.max(1,+li.qty||1),scanned:0}));
   };
   const shipOrder=(o)=>goShip({receiver:{name:o.customer,company:o.company,zip:o.zip,state:o.state,city:o.city,address1:o.address1,phone:o.phone,email:o.email,country:o.country||"United States"},weight:o.weight,reference:o.name,fromOrderId:o.id});
-  // ── SHIP mode: scan → open in Ship (original behavior) ──────────────────
+  // ── Pull an order from Full Circle via the on-prem connector (scan → ODBC → back) ──
+  const connOn=!!(settings&&settings.connector&&settings.connector.on);
+  const pullFromConnector=async(code)=>{
+    setPulling(code); setErr("");
+    await connCall("enqueuePull",{key:code});
+    let order=null;
+    for(let i=0;i<8&&!order;i++){ await new Promise(r=>setTimeout(r,1000)); const r=await connCall("getOrder",{key:code}); if(r&&r.ok&&r.order)order=r.order; }
+    setPulling("");
+    if(order){
+      const ref=order.name||order.pickTicket||code;
+      setLog(l=>[{code,when:stamp(),ok:true,order:ref},...l].slice(0,12));
+      goShip({receiver:{name:order.customer,company:order.company,zip:order.zip,state:order.state,city:order.city,address1:order.address1,address2:order.address2,phone:order.phone,email:order.email,country:order.country||"United States"},weight:order.weight,reference:ref});
+    }else{
+      setErr(`No order found for “${code}” — not in ShippingHub or Full Circle.`);
+      setLog(l=>[{code,when:stamp(),ok:false},...l].slice(0,12));
+      setTimeout(()=>setErr(""),3000);
+    }
+  };
+  // ── SHIP mode: scan → open in Ship (local first, then Full Circle if the connector's on) ──
   const submitShip=(code)=>{
     const o=findOrder(code); setVal("");
-    if(!o){setErr(`No order found for “${code}”.`);setLog(l=>[{code,when:stamp(),ok:false},...l].slice(0,12));setTimeout(()=>setErr(""),2500);return;}
+    if(!o){
+      const c=String(code||"").trim();
+      if(connOn&&c){ pullFromConnector(c); return; }
+      setErr(`No order found for “${code}”.`);setLog(l=>[{code,when:stamp(),ok:false},...l].slice(0,12));setTimeout(()=>setErr(""),2500);return;
+    }
     setErr(""); setLog(l=>[{code,when:stamp(),ok:true,order:o.name},...l].slice(0,12)); shipOrder(o);
   };
   // ── VERIFY mode: scan the order, then scan every item before it can ship ──
@@ -14471,8 +14521,9 @@ function Scan({orders,goShip,goTab,settings,setSettings,isAdmin}){
         <ScanLine className={`w-10 h-10 ${flash?(flash.ok?"text-emerald-500":"text-rose-400"):"text-[#33ABFF]"}`}/>
         <input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();submit(val);}}} placeholder={mode==="verify"?(job?"Scan an item barcode…":"Scan the order barcode to start"):"Scan or type a code, then Enter"} className="w-full max-w-md text-center bg-white border border-stone-300 rounded-lg px-4 py-3 text-lg outline-none focus:border-[#0086E0]"/>
         <button onClick={()=>submit(val)} className="text-sm bg-[#0086E0] text-white rounded-lg px-5 py-2 font-medium hover:bg-[#006db8]">{mode==="verify"&&!job?"Load order":"Look Up"}</button>
-        {flash&&<div className={`text-sm font-medium flex items-center gap-1.5 ${flash.ok?"text-emerald-600":"text-rose-600"}`}>{flash.ok?<CheckCircle2 className="w-4 h-4"/>:<AlertTriangle className="w-4 h-4"/>}{flash.text}</div>}
-        {err&&!flash&&<div className="text-sm text-rose-600 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4"/>{err}</div>}
+        {pulling&&<div className="text-sm text-[#0086E0] font-medium flex items-center gap-1.5"><Loader2 className="w-4 h-4 animate-spin"/>Pulling {pulling} from Full Circle…</div>}
+        {flash&&!pulling&&<div className={`text-sm font-medium flex items-center gap-1.5 ${flash.ok?"text-emerald-600":"text-rose-600"}`}>{flash.ok?<CheckCircle2 className="w-4 h-4"/>:<AlertTriangle className="w-4 h-4"/>}{flash.text}</div>}
+        {err&&!flash&&!pulling&&<div className="text-sm text-rose-600 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4"/>{err}</div>}
       </div>
 
       {/* VERIFY checklist */}

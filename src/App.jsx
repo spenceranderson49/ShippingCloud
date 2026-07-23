@@ -8364,7 +8364,7 @@ function AppInner(){
           {tab==="invoices"&&<Invoices invoices={invoices} setInvoices={setInvoices} shipments={shipments} client={client}/>}
           {tab==="rules"&&<RulesTab rules={ruleset} setRules={setRuleset} orders={orders} setOrders={setOrders} settings={settings} setSettings={setSettings} client={client} onShipped={onShipped}/>}
           {tab==="addresses"&&<AddressBook settings={settings} setSettings={setSettings}/>}
-          {tab==="packaging"&&<Packaging settings={settings} setSettings={setSettings} isAdmin={isAdmin}/>}
+          {tab==="packaging"&&<Packaging settings={settings} setSettings={setSettings} isAdmin={isAdmin} currentUser={currentUser}/>}
           {tab==="companyadmin"&&isCompanyAdmin&&<CompanyAdmin currentUser={currentUser} companyUsers={companyUsers} setCompanyUsers={setCompanyUsers} companyFlags={companyFlags} setCompanyFlags={setCompanyFlags} settings={settings} client={client} allowedTabs={featTabKeys} markupEntitled={featureOn("companyMarkup",currentUser,myFlags)}/>}
           {(tab==="admin"||tab.startsWith("admin:"))&&isAdmin&&<AdminPortal activeSection={tab.startsWith("admin:")?tab.slice(6):null} clients={clients} setClients={setClients} users={users} setUsers={setUsers} shipments={shipments} orders={orders} ledger={ledger} currentUser={currentUser} settings={settings} setSettings={setSettings} brand={brand} signupRequests={signupRequests} setSignupRequests={setSignupRequests} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} setCustomFeatures={setCustomFeatures} fedexRequests={fedexRequests} setFedexRequests={setFedexRequests} publicBrand={publicBrand} setPublicBrand={setPublicBrand} companyAdminRequests={companyAdminRequests} setCompanyAdminRequests={setCompanyAdminRequests}/>}
           {tab==="settings"&&<Settings showMoney={showMoney} secPolicy={(myFlags&&myFlags._secPolicy)||{}} isAdmin={isAdmin} uid={currentUser&&currentUser.id} currentUser={currentUser} setCurrentUser={setCurrentUser} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} accounts={accounts} setAccounts={setAccounts} clients={clients} setClients={setClients} rules={rules} setRules={setRules} emails={emails} shipments={shipments} setShipments={setShipments} manifests={manifests} setManifests={setManifests} client={client} ledger={ledger} addLedger={addLedger} byoCarrier={featureOn("byoCarrier",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)} allowedTabs={featTabKeys} fxLocOn={featureOn("fedexLocations",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)} trackingOn={featureOn("brandedTracking",currentUser,isAdmin?(featureFlags[currentUser&&currentUser.id]||{}):myFlags)}/>}
@@ -9173,7 +9173,6 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <span className="flex items-center gap-1.5 text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-1.5"><CreditCard className="w-3.5 h-3.5"/>Auto-billing to third-party account <b className="">{thirdAcct}</b><button onClick={()=>{setBillTo("sender");setThirdAcct("");}} className="ml-1 text-[#0086E0] hover:text-[#006FBF] underline">Bill Sender Instead</button></span>
         </div>}
         {intl&&<div className="flex items-center gap-2 text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2"><MapPin className="w-4 h-4"/>International shipment to <b>{receiver.country}</b> — FedEx rates shown, customs info required below.</div>}
-        {!intl&&<WeatherAdvisor zip={receiver.zip} country={receiver.country} date={shipDate}/>}
 
         {!custom.hideShipSteps&&<StepHead n="2" label="Package details"/>}
         <div className="bg-white border border-stone-200 shadow-sm rounded-lg p-3 space-y-2">
@@ -9310,6 +9309,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                   :rateSrc.live?<><Wifi className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-600"/><span>Live rates from your FedEx account</span></>
                   :<><Calculator className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""}{currentUser&&currentUser.role==="admin"?" — turn on live rates in Settings → Carrier accounts":" — live pricing isn't connected right now"}</span></>}
                 </div>}
+                {!intl&&<WeatherAdvisor zip={receiver.zip} country={receiver.country} date={shipDate}/>}
                 {/* Hands-free caution: when auto-book/print is armed, say so loudly right where they
                     work — a scan on this screen books and prints without another click. */}
                 {handsFree&&<div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
@@ -17134,75 +17134,148 @@ function WeatherAdvisor({zip,country,date}){
     return ()=>{dead=true;clearTimeout(t);};
   },[zip,country,date]);
   if(!usZip||!domestic||!wx)return null;
-  const freezing=/freezing/i.test((wx.advice||[]).join(" "));
-  const bg=wx.delayRisk?"bg-amber-50 border-amber-200 text-amber-800":(wx.advice&&wx.advice.length?"bg-[#E6F4FF] border-[#99D6FF] text-[#006FBF]":"bg-stone-50 border-stone-200 text-stone-600");
-  return (<div className={"rounded-lg border px-3 py-2 text-sm "+bg}>
-    <div className="flex items-center gap-2 font-medium">{freezing?<Snowflake className="w-4 h-4"/>:<CloudSun className="w-4 h-4"/>}Destination weather · {wx.city}, {wx.state}<span className="font-normal opacity-80">— {wx.day}: {wx.tempHigh}°{wx.tempUnit}, {wx.condition}</span></div>
-    {(wx.advice||[]).map((a,i)=><div key={i} className="text-[12px] mt-1 flex items-start gap-1.5"><Thermometer className="w-3.5 h-3.5 mt-0.5 shrink-0"/><span>{a}</span></div>)}
-    {!(wx.advice||[]).length&&<div className="text-[12px] mt-0.5 opacity-80">Clear conditions — no packaging or delay concerns.</div>}
+  const isF=/F/i.test(wx.tempUnit);
+  const cold=isF?wx.tempHigh<=32:wx.tempHigh<=0;
+  const hot=isF?wx.tempHigh>=85:wx.tempHigh>=29;
+  return (<div className="flex items-start gap-2 text-xs text-stone-600">
+    {cold?<Snowflake className="w-3.5 h-3.5 shrink-0 mt-0.5 text-sky-500"/>:hot?<Thermometer className="w-3.5 h-3.5 shrink-0 mt-0.5 text-orange-500"/>:<CloudSun className="w-3.5 h-3.5 shrink-0 mt-0.5 text-stone-400"/>}
+    <span>{wx.city}, {wx.state} · <b>{wx.tempHigh}°{wx.tempUnit}</b> {wx.condition}{wx.delayRisk&&<span className="text-amber-600"> · possible weather delay</span>}</span>
   </div>);
 }
 
-/* Packaging tab — free FedEx supplies + partner stores (Sticker Mule, noissue) that pay commission
-   through their referral programs. Admins paste their referral links once; customers order through them. */
-function Packaging({settings,setSettings,isAdmin=false}){
-  const aff=(settings&&settings.affiliates)||{};
-  const setAff=(k,v)=>setSettings&&setSettings(p=>({...p,affiliates:{...((p&&p.affiliates)||{}),[k]:v}}));
-  const open=(url)=>{ try{ window.open(url,"_blank","noopener,noreferrer"); }catch(e){} };
-  const FEDEX_URL="https://www.fedex.com/en-us/shipping/supplies.html";
-  const fedexItems=[
-    ["FedEx® Envelope","Letter-size docs, up to ~8 oz"],
-    ["FedEx® Pak","Small & large padded/paper paks"],
-    ["FedEx® Small Box","10⅞ × 1½ × 12⅜ in"],
-    ["FedEx® Medium Box","11¼ × 2⅝ × 13¼ in"],
-    ["FedEx® Large Box","12⅜ × 3 × 17½ in"],
-    ["FedEx® Tube","Rolled prints, posters, plans"],
-    ["FedEx® 10kg / 25kg Box","International Priority"],
-  ];
-  const smUrl=aff.stickermule||"https://www.stickermule.com";
-  const noUrl=aff.noissue||"https://noissue.co";
-  const Card=({title,sub,cta,onClick,tone})=>(<div className="border border-stone-200 rounded-xl bg-white p-3.5 flex flex-col">
-    <div className="font-medium text-stone-800 text-sm">{title}</div>
-    {sub&&<div className="text-[12px] text-stone-500 mt-0.5 flex-1">{sub}</div>}
-    <button onClick={onClick} className={"mt-3 text-sm rounded-lg px-3 py-1.5 font-medium flex items-center justify-center gap-1.5 "+(tone==="fedex"?"bg-[#4D148C] text-white hover:bg-[#3d1070]":tone==="sm"?"bg-[#111] text-white hover:bg-black":"bg-emerald-600 text-white hover:bg-emerald-700")}>{cta}<ExtLink className="w-3.5 h-3.5"/></button>
+/* Packaging tab — an internal supplies store. Customers set quantities and place an order; it
+   emails the account's supplies inbox (netlify/functions/supplies-order.js) so the team fulfills it.
+   Two catalogs: free FedEx packaging, and general shipping supplies (Uline-style). Admin-editable. */
+const SUP_FEDEX_SEED=[
+  {id:"fx-env",name:"FedEx® Envelope",size:'9¼ × 13 in · docs to ~8 oz',cat:"fedex"},
+  {id:"fx-pak-s",name:"FedEx® Small Pak",size:'10¼ × 12¾ in',cat:"fedex"},
+  {id:"fx-pak-l",name:"FedEx® Large Pak",size:'12 × 15½ in',cat:"fedex"},
+  {id:"fx-box-s",name:"FedEx® Small Box",size:'12⅜ × 10⅞ × 1½ in',cat:"fedex"},
+  {id:"fx-box-m",name:"FedEx® Medium Box",size:'13¼ × 11¼ × 2⅜ in',cat:"fedex"},
+  {id:"fx-box-l",name:"FedEx® Large Box",size:'17½ × 12⅜ × 3 in',cat:"fedex"},
+  {id:"fx-box-xl",name:"FedEx® Extra Large Box",size:'11⅞ × 11 × 10¾ in',cat:"fedex"},
+  {id:"fx-tube",name:"FedEx® Tube",size:'6 × 6 × 38 in',cat:"fedex"},
+  {id:"fx-or-s",name:"FedEx One Rate® Small Box",size:'flat-rate',cat:"fedex"},
+  {id:"fx-or-m",name:"FedEx One Rate® Medium Box",size:'flat-rate',cat:"fedex"},
+  {id:"fx-10kg",name:"FedEx® 10kg Box",size:'International Priority',cat:"fedex"},
+  {id:"fx-25kg",name:"FedEx® 25kg Box",size:'International Priority',cat:"fedex"},
+];
+const SUP_SUPPLY_SEED=[
+  {id:"s-box-8",name:"Corrugated Box — 8×6×4″",size:'Single wall',price:0.79,cat:"supply"},
+  {id:"s-box-10",name:"Corrugated Box — 10×8×6″",size:'Single wall',price:0.95,cat:"supply"},
+  {id:"s-box-12",name:"Corrugated Box — 12×12×12″",size:'Single wall',price:1.35,cat:"supply"},
+  {id:"s-box-16",name:"Corrugated Box — 16×12×12″",size:'Double wall',price:1.89,cat:"supply"},
+  {id:"s-mailer",name:"Poly Mailers — 10×13″ (100 ct)",size:'Self-seal',price:9.99,cat:"supply"},
+  {id:"s-bubmailer",name:"Bubble Mailers — #2, 8.5×12″ (100 ct)",size:'Padded',price:19.99,cat:"supply"},
+  {id:"s-labels",name:"Thermal Labels 4×6″ (250 roll)",size:'Direct thermal',price:12.99,cat:"supply"},
+  {id:"s-tape",name:"Packing Tape — 2″×110yd (6 pk)",size:'Clear',price:14.99,cat:"supply"},
+  {id:"s-foam",name:"Foam Insulation Sheets 12×12″ (25 ct)",size:'¼″',price:16.99,cat:"supply"},
+  {id:"s-bubble",name:"Bubble Cushioning Roll — 12″×175 ft",size:'⅜″',price:22.99,cat:"supply"},
+  {id:"s-paper",name:"Packing Paper — 24×36″ (160 sheets)",size:'Newsprint',price:18.99,cat:"supply"},
+  {id:"s-peanuts",name:"Packing Peanuts — 3.5 cu ft",size:'Anti-static',price:15.99,cat:"supply"},
+  {id:"s-ice",name:"Gel Ice Packs — 16 oz (24 ct)",size:'Reusable',price:24.99,cat:"supply"},
+  {id:"s-liner",name:"Insulated Box Liner — 12×12×12″",size:'Thermal',price:4.49,cat:"supply"},
+];
+function Packaging({settings,setSettings,isAdmin=false,currentUser=null}){
+  const seed=[...SUP_FEDEX_SEED,...SUP_SUPPLY_SEED];
+  const catalog=(settings&&Array.isArray(settings.suppliesCatalog)&&settings.suppliesCatalog.length)?settings.suppliesCatalog:seed;
+  const inbox=(settings&&settings.suppliesEmail)||"";
+  const [cart,setCart]=useState({});
+  const [note,setNote]=useState("");
+  const [sending,setSending]=useState(false);
+  const [msg,setMsg]=useState(null);
+  const [editing,setEditing]=useState(false);
+  const setQty=(id,q)=>setCart(c=>({...c,[id]:Math.max(0,Math.min(9999,q|0))}));
+  const bump=(id,d)=>setQty(id,(cart[id]||0)+d);
+  const lines=catalog.filter(p=>cart[p.id]>0);
+  const count=lines.reduce((s,p)=>s+cart[p.id],0);
+  const total=lines.reduce((s,p)=>s+(+p.price||0)*cart[p.id],0);
+  const saveCat=(next)=>setSettings&&setSettings(p=>({...p,suppliesCatalog:next}));
+  const addItem=(cat)=>saveCat([...catalog,{id:"c"+Date.now(),name:"New item",size:"",price:0,cat}]);
+  const upItem=(id,patch)=>saveCat(catalog.map(p=>p.id===id?{...p,...patch}:p));
+  const delItem=(id)=>saveCat(catalog.filter(p=>p.id!==id));
+  const submit=async()=>{
+    if(!lines.length){setMsg({ok:false,t:"Add a quantity to at least one item."});return;}
+    if(!inbox){setMsg({ok:false,t:"No supplies inbox is set yet — an admin can add one below."});return;}
+    setSending(true);setMsg(null);
+    try{
+      const r=await fetch("/.netlify/functions/supplies-order",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:CLOUD.token,to:inbox,orderer:(currentUser&&(currentUser.email||currentUser.name))||"",company:(settings&&settings.sender&&(settings.sender.company||settings.sender.name))||"",items:lines.map(p=>({name:p.name,qty:cart[p.id],price:+p.price||0,cat:p.cat,size:p.size})),note})});
+      const d=await r.json();
+      if(d&&d.ok){setMsg({ok:true,t:"Order sent — your team will get it going."});setCart({});setNote("");}
+      else setMsg({ok:false,t:(d&&d.error)||"Couldn't send the order."});
+    }catch(e){setMsg({ok:false,t:"Network error — try again."});}
+    setSending(false);
+  };
+  const Thumb=({p})=>(<div className="h-24 bg-stone-50 border-b border-stone-100 flex items-center justify-center">
+    {p.img?<img src={p.img} alt="" className="max-h-full max-w-full object-contain"/>:(p.cat==="fedex"?<Package className="w-9 h-9 text-[#4D148C]/40"/>:<Boxes className="w-9 h-9 text-stone-300"/>)}
   </div>);
-  return (<div className="space-y-6 max-w-5xl">
-    <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ShoppingCart className="w-5 h-5 text-[#0086E0]"/>Packaging &amp; supplies</h2>
-      <p className="text-sm text-stone-500 mt-0.5">Order free FedEx packaging, and custom boxes, mailers &amp; labels from our partners.</p></div>
-
-    {/* Free FedEx supplies */}
-    <div>
-      <div className="flex items-center gap-2 mb-2"><div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold">Free FedEx packaging</div><Badge tone="violet">Free</Badge></div>
-      <p className="text-[12px] text-stone-500 mb-3">Free to order with a FedEx account for FedEx Express &amp; One Rate shipments — FedEx ships them to you at no charge.</p>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {fedexItems.map(([n,d])=><Card key={n} title={n} sub={d} cta="Order on FedEx" tone="fedex" onClick={()=>open(FEDEX_URL)}/>)}
+  const Prod=({p})=>(<div className="border border-stone-200 rounded-xl bg-white overflow-hidden flex flex-col">
+    <Thumb p={p}/>
+    <div className="p-2.5 flex-1 flex flex-col">
+      <div className="text-[13px] font-medium text-stone-800 leading-tight">{p.name}</div>
+      <div className="text-[11px] text-stone-500 mt-0.5 flex-1">{p.size}{p.cat==="fedex"?<span className="text-[#4D148C]"> · Free with FedEx</span>:(+p.price?<span> · {money(+p.price)}</span>:null)}</div>
+      <div className="flex items-center gap-1.5 mt-2">
+        <button onClick={()=>bump(p.id,-1)} className="w-7 h-7 rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 text-base leading-none">−</button>
+        <input value={cart[p.id]||0} onChange={e=>setQty(p.id,+String(e.target.value).replace(/[^0-9]/g,""))} className="w-12 text-center border border-stone-200 rounded-lg py-1 text-sm"/>
+        <button onClick={()=>bump(p.id,1)} className="w-7 h-7 rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 text-base leading-none">+</button>
       </div>
     </div>
+  </div>);
+  const grid=(cat)=>(<div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+    {catalog.filter(p=>p.cat===cat).map(p=><Prod key={p.id} p={p}/>)}
+  </div>);
+  return (<div className="space-y-6 max-w-5xl pb-4">
+    <div className="flex items-start justify-between gap-3 flex-wrap">
+      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ShoppingCart className="w-5 h-5 text-[#0086E0]"/>Packaging &amp; supplies</h2>
+        <p className="text-sm text-stone-500 mt-0.5">Set quantities and place an order — it goes straight to the team to fulfill.</p></div>
+      {isAdmin&&<button onClick={()=>setEditing(e=>!e)} className="text-sm border border-stone-300 text-stone-600 rounded-lg px-3 py-1.5 hover:bg-stone-50">{editing?"Done editing":"Edit catalog"}</button>}
+    </div>
 
-    {/* Partner stores */}
     <div>
-      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-3">Custom packaging &amp; branding</div>
-      <div className="grid sm:grid-cols-2 gap-3">
-        <div className="border border-stone-200 rounded-xl bg-white p-4">
-          <div className="font-semibold text-stone-800">Sticker Mule</div>
-          <div className="text-[12px] text-stone-500 mt-0.5 mb-3">Custom stickers, labels, printed tape &amp; mailers. Fast turnaround.</div>
-          <button onClick={()=>open(smUrl)} className="text-sm bg-[#111] text-white rounded-lg px-3.5 py-2 font-medium hover:bg-black flex items-center gap-1.5">Shop Sticker Mule<ExtLink className="w-3.5 h-3.5"/></button>
-        </div>
-        <div className="border border-stone-200 rounded-xl bg-white p-4">
-          <div className="font-semibold text-stone-800">noissue</div>
-          <div className="text-[12px] text-stone-500 mt-0.5 mb-3">Custom eco mailers, tissue, boxes, stickers &amp; tape. Sustainable.</div>
-          <button onClick={()=>open(noUrl)} className="text-sm bg-emerald-600 text-white rounded-lg px-3.5 py-2 font-medium hover:bg-emerald-700 flex items-center gap-1.5">Shop noissue<ExtLink className="w-3.5 h-3.5"/></button>
-        </div>
+      <div className="flex items-center gap-2 mb-2"><div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold">Free FedEx packaging</div><Badge tone="violet">Free with FedEx</Badge></div>
+      {grid("fedex")}
+      {editing&&<button onClick={()=>addItem("fedex")} className="mt-2 text-[12px] text-[#0086E0] hover:underline">+ add FedEx item</button>}
+    </div>
+
+    <div>
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-2">Shipping supplies</div>
+      {grid("supply")}
+      {editing&&<button onClick={()=>addItem("supply")} className="mt-2 text-[12px] text-[#0086E0] hover:underline">+ add supply item</button>}
+    </div>
+
+    {/* Order summary */}
+    <div className="rounded-xl border border-stone-200 bg-white p-4">
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-2">Your order</div>
+      {lines.length===0?<div className="text-sm text-stone-400 py-2">No items yet — set a quantity on anything above.</div>:
+      <div className="space-y-1 mb-3">
+        {lines.map(p=><div key={p.id} className="flex items-center justify-between text-sm"><span className="text-stone-700">{p.name} <span className="text-stone-400">× {cart[p.id]}</span></span><span className="text-stone-500 tabular-nums">{+p.price?money(+p.price*cart[p.id]):"—"}</span></div>)}
+        <div className="flex items-center justify-between text-sm font-semibold border-t border-stone-100 pt-1.5 mt-1.5"><span>{count} item{count===1?"":"s"}{total>0?" · est. total":""}</span><span className="tabular-nums">{total>0?money(total):""}</span></div>
+      </div>}
+      <textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Note for the team (optional) — ship-to, urgency, account #…" className="w-full border border-stone-300 rounded-lg p-2.5 text-sm min-h-[48px] mb-2"/>
+      <div className="flex flex-wrap items-center gap-3">
+        <button onClick={submit} disabled={sending||!lines.length} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-50 flex items-center gap-1.5">{sending?<Loader2 className="w-4 h-4 animate-spin"/>:<Send className="w-4 h-4"/>}Place order</button>
+        {msg&&<span className={"text-[12px] "+(msg.ok?"text-emerald-600":"text-rose-600")}>{msg.t}</span>}
+        {!inbox&&<span className="text-[11px] text-amber-600">Set a supplies inbox below to receive orders.</span>}
       </div>
     </div>
 
     {isAdmin&&<div className="rounded-xl border border-stone-200 bg-stone-50/50 p-4">
-      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">Your referral links (admin)</div>
-      <p className="text-[12px] text-stone-500 mb-3">Paste your Sticker Mule and noissue referral links here — customer orders through them earn you commission. Sign up: stickermule.com/commissions and noissue.co partner program.</p>
-      <div className="grid sm:grid-cols-2 gap-3">
-        <Field label="Sticker Mule referral URL"><Input value={aff.stickermule||""} onChange={e=>setAff("stickermule",e.target.value)} placeholder="https://www.stickermule.com/…"/></Field>
-        <Field label="noissue referral URL"><Input value={aff.noissue||""} onChange={e=>setAff("noissue",e.target.value)} placeholder="https://noissue.co/…"/></Field>
-      </div>
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">Supplies inbox (admin)</div>
+      <p className="text-[12px] text-stone-500 mb-3">Orders placed above are emailed here so your team can fulfill or order them.</p>
+      <Field label="Send orders to (email)"><Input value={inbox} onChange={e=>setSettings&&setSettings(p=>({...p,suppliesEmail:e.target.value}))} placeholder="supplies@yourcompany.com"/></Field>
+      {editing&&<div className="mt-4 border-t border-stone-200 pt-3">
+        <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-2">Edit products</div>
+        <div className="space-y-1.5 max-h-80 overflow-y-auto">
+          {catalog.map(p=><div key={p.id} className="flex flex-wrap items-center gap-1.5 text-[12px]">
+            <select value={p.cat} onChange={e=>upItem(p.id,{cat:e.target.value})} className="border border-stone-200 rounded px-1.5 py-1"><option value="fedex">FedEx</option><option value="supply">Supply</option></select>
+            <input value={p.name} onChange={e=>upItem(p.id,{name:e.target.value})} className="flex-1 min-w-[160px] border border-stone-200 rounded px-2 py-1" placeholder="Name"/>
+            <input value={p.size||""} onChange={e=>upItem(p.id,{size:e.target.value})} className="w-40 border border-stone-200 rounded px-2 py-1" placeholder="Size / detail"/>
+            <input value={p.price??""} onChange={e=>upItem(p.id,{price:e.target.value===""?"":+String(e.target.value).replace(/[^0-9.]/g,"")})} className="w-20 border border-stone-200 rounded px-2 py-1" placeholder="$"/>
+            <input value={p.img||""} onChange={e=>upItem(p.id,{img:e.target.value})} className="w-40 border border-stone-200 rounded px-2 py-1" placeholder="Image URL"/>
+            <button onClick={()=>delItem(p.id)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5"/></button>
+          </div>)}
+        </div>
+      </div>}
     </div>}
   </div>);
 }

@@ -5449,6 +5449,7 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
   const [sending,setSending]=useState(false);
   const [sendMsg,setSendMsg]=useState(null);   // {ok,text}
   const [outOpen,setOutOpen]=useState(false);   // collapse the big "confirmations out" builder
+  const [listOpen,setListOpen]=useState(false); // collapse the long shipments list
   const deliv=cfg.deliv||{};
   const upDeliv=(patch)=>setCfg(c=>({...c,deliv:{...(c.deliv||{}),...patch}}));
   /* FedEx only — Full Circle ships FedEx, so drop any DHL/UPS/USPS history from the map list. */
@@ -5658,7 +5659,14 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
     </div>
 
     <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
-      <div className="overflow-x-auto"><table className="w-full text-sm">
+      <div onClick={()=>setListOpen(v=>!v)} className="flex items-center gap-2 px-4 py-3 hover:bg-stone-50 cursor-pointer select-none">
+        <span className="text-sm font-semibold text-stone-700">Shipments in this file</span>
+        <span className="text-[11px] bg-stone-100 text-stone-500 rounded-full px-2 py-0.5">{rows.length}</span>
+        <span className="flex-1"/>
+        <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${listOpen?"rotate-180":""}`}/>
+      </div>
+      {listOpen&&<>
+      <div className="overflow-x-auto border-t border-stone-100"><table className="w-full text-sm">
         <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 border-b border-stone-200"><th className="text-left font-medium px-3 py-2">shipdate</th><th className="text-left font-medium px-3 py-2">pickticket</th><th className="text-left font-medium px-3 py-2">track</th><th className="text-left font-medium px-3 py-2">service</th><th className="text-right font-medium px-3 py-2">weight</th><th className="text-left font-medium px-3 py-2">ucc128</th><th className="text-left font-medium px-3 py-2">compnay</th></tr></thead>
         <tbody className="divide-y divide-stone-100">
           {rows.length===0&&<tr><td colSpan={7} className="px-3 py-10 text-center text-stone-400">No shipments match — widen the date range, or ship a few orders first.</td></tr>}
@@ -5674,6 +5682,7 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
         </tbody>
       </table></div>
       {rows.length>200&&<div className="px-3 py-2 text-[11px] text-stone-400 border-t border-stone-100">Showing 200 of {rows.length}; the download includes all {rows.length}.</div>}
+      </>}
     </div>
 
     <div className="rounded-xl border border-stone-200 p-4">

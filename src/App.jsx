@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import qrcodegen from "qrcode-generator";
-import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, ArrowRight, Search, Calendar, Settings as Cog, Calculator, Pause, ExternalLink, Edit3, RotateCcw, MapPin, Printer, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, EyeOff, MessageCircle, Sparkles, ClipboardList, Ban, Tag, Copy, Sliders, Save, ShoppingCart, CloudSun, Snowflake, Thermometer, ExternalLink as ExtLink, Image as ImageIcon} from "lucide-react";
+import { Package, Truck, Users, Plug, Plus, Check, X, ChevronRight, ChevronDown, Wifi, WifiOff, Loader2, Trash2, ShoppingBag, ArrowLeftRight, ArrowRight, Search, Calendar, Settings as Cog, Calculator, Pause, ExternalLink, Edit3, RotateCcw, MapPin, Printer, QrCode, Building2, CreditCard, BarChart3, Layers, FileText, Undo2, Zap, Download, Boxes, CheckCircle2, AlertTriangle, TrendingUp, ShieldCheck, Mail, Cloud, Receipt, Wallet, Upload, Star, Send, Home, BookUser, DollarSign, ScanLine, Clock, Warehouse, RefreshCw, Phone, Eye, EyeOff, MessageCircle, Sparkles, ClipboardList, Ban, Tag, Copy, Sliders, Save, ShoppingCart, CloudSun, Snowflake, Thermometer, ExternalLink as ExtLink, Image as ImageIcon} from "lucide-react";
 const FW_BLUE="#0099FF";
 const FW_DARK="#111418";
 function BrandCloud({className,color,style}){return (
@@ -8358,7 +8358,7 @@ function AppInner(){
             <div className="text-stone-400"><span className=" bg-stone-700 rounded px-1">?</span> toggles this · click to close</div>
           </div>}
           {tab==="drafts"&&<Drafts drafts={drafts} setDrafts={setDrafts} goShip={goShip}/>}
-          {tab==="returns"&&<Returns returns={returns} setReturns={setReturns} orders={orders} settings={settings} logEmail={logEmail}/>}
+          {tab==="returns"&&<Returns returns={returns} setReturns={setReturns} orders={orders} settings={settings} setSettings={setSettings} logEmail={logEmail}/>}
           {tab==="pickups"&&<Pickups pickups={pickups} setPickups={setPickups} settings={settings} client={client} isAdmin={isAdmin} showCosts={featureOn("pickupCosts",currentUser,myFlags)}/>}
           {tab==="inventory"&&((isAdmin||isDemo||featureOn("inventory",currentUser,myFlags)||!!(settings&&settings.wmsSelfOn))
             ? <Inventory settings={settings} setSettings={setSettings} client={client} showMoney={showMoney} currentUser={currentUser} orders={orders} setOrders={setOrders} onShipped={onShipped} goShip={goShip} initialView={pendingWmsView} seedPickIds={pendingPickIds} onWmsNavConsumed={()=>{setPendingWmsView(null);setPendingPickIds(null);}}/>
@@ -14977,12 +14977,47 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
 }
 
 /* ════════ RETURNS / RMA ════════ */
-function Returns({returns,setReturns,orders,settings,logEmail}){
+function Returns({returns,setReturns,orders,settings,setSettings,logEmail}){
   const [creating,setCreating]=useState(false);
   const [f,setF]=useState({customer:"",email:"",order:"",reason:"Wrong Size",carrier:"FedEx"});
   const [reqs,setReqs]=useState(null);
   const [restock,setRestock]=useState(null);   // {rq, lines:[{sku,qty}]}
   const [rsBusy,setRsBusy]=useState(false);
+  const [lblBusy,setLblBusy]=useState("");      // "<id><method>" while booking
+  const [lblMsg,setLblMsg]=useState(null);      // {id, ok, text}
+  const [retOpen,setRetOpen]=useState(false);   // return-settings drawer
+  const retCfg=(settings&&settings.returns)||{};
+  const setRet=(patch)=>setSettings&&setSettings(p=>({...p,returns:{...((p&&p.returns)||{}),...patch}}));
+  const setRetAddr=(patch)=>setSettings&&setSettings(p=>({...p,returns:{...((p&&p.returns)||{}),address:{...(((p&&p.returns)||{}).address||{}),...patch}}}));
+  /* Merchant return address = what's set here, falling back to the account's ship-from sender. */
+  const merchAddr=(()=>{ const r=retCfg.address||{}; const s=(settings&&settings.sender)||{}; const pick=(k)=>String(r[k]!=null&&r[k]!==""?r[k]:(s[k]||"")); return {name:pick("name")||pick("company")||"Returns Dept",company:pick("company"),address1:pick("address1"),address2:pick("address2"),city:pick("city"),state:pick("state"),zip:pick("zip"),phone:pick("phone")||"8015550100",country:"US"}; })();
+  /* Customer (from-)address for a return: prefer the linked order, then any address on the record. */
+  const custAddrFor=(rec)=>{ const ord=(orders||[]).find(o=>o&&(o.name===rec.order||o.id===rec.order)); const src=ord||rec||{}; const a={name:rec.customer||src.customer||src.name||"",company:src.company||"",address1:src.address1||"",address2:src.address2||"",city:src.city||"",state:src.state||"",zip:src.zip||src.toZip||"",phone:src.phone||"",email:(rec.email||src.email||"").trim(),country:src.country||"US"}; return (a.address1&&a.zip)?a:null; };
+  const printReturnPdf=(b64)=>{ try{ const bin=atob(b64); const arr=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i); const url=URL.createObjectURL(new Blob([arr],{type:"application/pdf"})); const w=window.open(url,"_blank"); if(w){try{w.onload=()=>{try{w.print();}catch(e){}};}catch(e){}} setTimeout(()=>{try{URL.revokeObjectURL(url);}catch(e){}},60000); }catch(e){} };
+  const bookReturn=async(rec,method)=>{
+    if(!merchAddr.address1||!merchAddr.zip){ setLblMsg({id:rec.id,ok:false,text:"Set your return address in Return settings (below) first — the label needs a ship-to."}); setRetOpen(true); return; }
+    const cust=custAddrFor(rec);
+    if(!cust){ setLblMsg({id:rec.id,ok:false,text:"Pick the customer's original order (with a shipping address) so the return has a from-address."}); return; }
+    if(method!=="print"&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cust.email)){ setLblMsg({id:rec.id,ok:false,text:"A QR/email return needs the customer's email address."}); return; }
+    setLblBusy(rec.id+method); setLblMsg(null);
+    const order={ returnShipment:true, returnMethod:method, rma:rec.rma||rec.order||"", returnReason:rec.reason||"Customer return", customerEmail:cust.email,
+      reference:rec.order||rec.rma||"", serviceCode:"FEDEX_GROUND", carrierCode:"fedex", shippingService:"FedEx Ground", residential:true, contentDescription:"Return",
+      sender:cust, receiver:merchAddr, pieces:[{weight:1,length:12,width:9,height:4}] };
+    const res=await shipCall({action:"ship",order});
+    setLblBusy("");
+    if(!res||!res.ok){ setLblMsg({id:rec.id,ok:false,text:(res&&res.error)||"FedEx couldn't create the return label."}); return; }
+    const tracking=res.tracking||"";
+    setReturns(list=>list.map(x=>x.id===rec.id?{...x,tracking:tracking||x.tracking,carrier:"FedEx",status:res.emailedReturn?"QR sent":"Label created",returnMethod:method}:x));
+    if(res.emailedReturn){
+      setLblMsg({id:rec.id,ok:true,text:"QR return emailed to "+cust.email+" — they show the code at any FedEx/retail counter. No printer or box needed."});
+      if(logEmail&&cust.email)logEmail({to:cust.email,subject:"Your return label — "+(rec.order||"your order"),type:"Return"});
+    }else if(res.labelPdfBase64){
+      printReturnPdf(res.labelPdfBase64);
+      setLblMsg({id:rec.id,ok:true,text:"Return label created"+(tracking?" ("+tracking+")":"")+" — printing now. Hand it to the customer or email the PDF."});
+    }else{
+      setLblMsg({id:rec.id,ok:true,text:"Return created"+(tracking?" ("+tracking+")":"")+"."+(res.labelError?" "+res.labelError:"")});
+    }
+  };
   useEffect(()=>{ if(!CLOUD.token)return; let dead=false; (async()=>{ const r=await cloudCall({action:"returnList",token:CLOUD.token}); if(!dead&&r&&r.ok)setReqs(r.requests||[]); })(); return ()=>{dead=true;}; },[]);
   const setReqStatus=async(id,status)=>{ const r=await cloudCall({action:"returnSetStatus",token:CLOUD.token,id,status}); if(r&&r.ok)setReqs(r.requests||[]); };
   const doRestock=async()=>{
@@ -14995,7 +15030,10 @@ function Returns({returns,setReturns,orders,settings,logEmail}){
   };
   const fromRequest=(rq)=>{ setF({customer:rq.name||"",email:rq.email||"",order:rq.order||"",reason:rq.reason||"Wrong Size",carrier:"FedEx"}); setCreating(true); setReqStatus(rq.id,"approved"); try{window.scrollTo({top:0,behavior:"smooth"});}catch(e){} };
   const fulfilled=orders.filter(o=>o.status==="fulfilled");
-  const create=()=>{if(!f.customer)return;setReturns(r=>[{id:Date.now(),rma:"RMA-"+rnd(4),customer:f.customer,email:(f.email||"").trim(),order:f.order,reason:f.reason,carrier:f.carrier,tracking:"",status:"Requested",date:new Date().toLocaleDateString()},...r]);if(settings?.notify?.returnLabel&&logEmail&&(f.email||"").trim())logEmail({to:(f.email||"").trim(),subject:`We received your return request for ${f.order||"your order"}`,type:"Return"});setCreating(false);setF({customer:"",email:"",order:"",reason:"Wrong Size",carrier:"FedEx"});};
+  const buildRec=()=>({id:Date.now(),rma:"RMA-"+rnd(4),customer:f.customer,email:(f.email||"").trim(),order:f.order,reason:f.reason,carrier:f.carrier,tracking:"",status:"Requested",date:new Date().toLocaleDateString()});
+  const resetForm=()=>{setCreating(false);setF({customer:"",email:"",order:"",reason:"Wrong Size",carrier:"FedEx"});};
+  const create=()=>{if(!f.customer)return;const rec=buildRec();setReturns(r=>[rec,...r]);if(settings?.notify?.returnLabel&&logEmail&&(f.email||"").trim())logEmail({to:(f.email||"").trim(),subject:`We received your return request for ${f.order||"your order"}`,type:"Return"});resetForm();};
+  const createAndBook=async(method)=>{if(!f.customer)return;const rec=buildRec();setReturns(r=>[rec,...r]);resetForm();await bookReturn(rec,method);};
   const tone=s=>s==="Delivered"?"green":s==="In transit"?"amber":s==="Requested"?"stone":"blue";
   return (
     <div className="space-y-3">
@@ -15048,20 +15086,60 @@ function Returns({returns,setReturns,orders,settings,logEmail}){
           <Field label="Reason"><Select value={f.reason} onChange={e=>setF({...f,reason:e.target.value})}><option>Wrong Size</option><option>Defective</option><option>Not As Described</option><option>No Longer Wanted</option></Select></Field>
           <Field label="Return carrier"><Select value={f.carrier} onChange={e=>setF({...f,carrier:e.target.value})}><option>FedEx</option><option>USPS</option></Select></Field>
         </div>
-        <button onClick={create} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium">Log Return Request</button>
-        <p className="text-[11px] text-stone-400">Logs the RMA and (if return emails are on) confirms receipt to the customer. Book the physical return label on the <b>Ship</b> tab — ship from the customer, Bill to → your account — then paste its tracking here.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={()=>createAndBook("print")} disabled={!f.customer||!!lblBusy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{lblBusy?<Loader2 className="w-4 h-4 animate-spin"/>:<Printer className="w-4 h-4"/>}Create &amp; print return label</button>
+          {retCfg.qrEnabled&&<button onClick={()=>createAndBook("qr")} disabled={!f.customer||!!lblBusy} className="text-sm bg-violet-600 text-white rounded-lg px-4 py-2 font-medium hover:bg-violet-700 disabled:opacity-40 flex items-center gap-1.5"><QrCode className="w-4 h-4"/>Create &amp; email QR to customer</button>}
+          <button onClick={create} className="text-sm bg-stone-100 text-stone-600 rounded-lg px-4 py-2 font-medium hover:bg-stone-200">Just log it (no label)</button>
+        </div>
+        <p className="text-[11px] text-stone-400">Books a FedEx return label billed to <b>your</b> account — ship-from is the customer's address (from the selected order), ship-to is your return address (set in Return settings below). <b>Print</b> gives you the PDF to hand over or email; <b>QR</b> emails the customer a code they scan at any FedEx/retail counter — no printer or box.</p>
       </Panel>}
       <div className="border border-stone-200 rounded-lg overflow-hidden bg-white divide-y divide-stone-100">
         {returns.length===0&&<div className="p-8 text-center text-sm text-stone-400">No returns yet.</div>}
         {returns.map(r=>(
-          <div key={r.id} className="flex items-center gap-3 px-4 py-3 hover:bg-stone-50">
-            <div className="w-24 text-sm font-semibold text-[#0086E0]">{r.rma}</div>
-            <div className="flex-1 min-w-0"><div className="text-sm truncate">{r.customer}</div><div className="text-[11px] text-stone-400">{r.order?`${r.order} · `:""}{r.reason}</div></div>
-            <div className={`text-xs font-bold hidden sm:block ${CARRIER_TINT[r.carrier]}`}>{r.carrier}</div>
-            {r.tracking?<a href={TRACK_URL[r.carrier](r.tracking)} target="_blank" rel="noopener" className="text-[#0086E0] underline text-xs flex items-center gap-1 w-36 truncate">{r.tracking}<ExternalLink className="w-3 h-3 shrink-0"/></a>:<span className="text-[11px] text-stone-400 italic w-36">label pending</span>}
-            <Badge tone={tone(r.status)}>{r.status}</Badge>
+          <div key={r.id} className="px-4 py-3 hover:bg-stone-50">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="w-24 text-sm font-semibold text-[#0086E0]">{r.rma}</div>
+              <div className="flex-1 min-w-0"><div className="text-sm truncate">{r.customer}</div><div className="text-[11px] text-stone-400">{r.order?`${r.order} · `:""}{r.reason}</div></div>
+              <div className={`text-xs font-bold hidden sm:block ${CARRIER_TINT[r.carrier]}`}>{r.carrier}</div>
+              {r.tracking?<a href={TRACK_URL[r.carrier](r.tracking)} target="_blank" rel="noopener" className="text-[#0086E0] underline text-xs flex items-center gap-1 w-36 truncate">{r.tracking}<ExternalLink className="w-3 h-3 shrink-0"/></a>
+                :r.carrier==="FedEx"?<div className="flex items-center gap-1.5">
+                  <button onClick={()=>bookReturn(r,"print")} disabled={lblBusy===r.id+"print"} className="text-xs bg-[#0086E0] text-white rounded-lg px-2.5 py-1.5 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1">{lblBusy===r.id+"print"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<Printer className="w-3.5 h-3.5"/>}Print label</button>
+                  {retCfg.qrEnabled&&<button onClick={()=>bookReturn(r,"qr")} disabled={lblBusy===r.id+"qr"} title="Email the customer a QR code — no printer or box" className="text-xs bg-violet-100 text-violet-700 rounded-lg px-2.5 py-1.5 font-medium hover:bg-violet-200 disabled:opacity-40 flex items-center gap-1">{lblBusy===r.id+"qr"?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<QrCode className="w-3.5 h-3.5"/>}QR</button>}
+                </div>
+                :<span className="text-[11px] text-stone-400 italic w-36">label pending</span>}
+              <Badge tone={tone(r.status)}>{r.status}</Badge>
+            </div>
+            {lblMsg&&lblMsg.id===r.id&&<div className={`mt-2 text-xs rounded-lg px-2.5 py-1.5 border ${lblMsg.ok?"bg-emerald-50 text-emerald-700 border-emerald-200":"bg-rose-50 text-rose-600 border-rose-200"}`}>{lblMsg.text}</div>}
           </div>
         ))}
+      </div>
+
+      {/* Return-label settings: your return address + optional QR/email returns */}
+      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+        <button onClick={()=>setRetOpen(v=>!v)} className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-stone-50">
+          <span className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Cog className="w-4 h-4"/>Return label settings</span>
+          <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${retOpen?"rotate-180":""}`}/>
+        </button>
+        {retOpen&&<div className="px-4 pb-4 space-y-4 border-t border-stone-100 pt-4">
+          <div>
+            <div className="text-[11px] uppercase tracking-widest text-stone-400 mb-2">Your return address (ship-to on return labels)</div>
+            <p className="text-[11px] text-stone-500 mb-2">Where returns come back to. Leave blank to use your account's ship-from address ({(settings&&settings.sender&&(settings.sender.company||settings.sender.name))||"not set"}).</p>
+            <div className="grid sm:grid-cols-2 gap-2">
+              <Input value={(retCfg.address||{}).name||""} onChange={e=>setRetAddr({name:e.target.value})} placeholder="Contact name"/>
+              <Input value={(retCfg.address||{}).company||""} onChange={e=>setRetAddr({company:e.target.value})} placeholder="Company"/>
+              <Input value={(retCfg.address||{}).address1||""} onChange={e=>setRetAddr({address1:e.target.value})} placeholder="Street address"/>
+              <Input value={(retCfg.address||{}).phone||""} onChange={e=>setRetAddr({phone:e.target.value})} placeholder="Phone"/>
+              <Input value={(retCfg.address||{}).city||""} onChange={e=>setRetAddr({city:e.target.value})} placeholder="City"/>
+              <div className="grid grid-cols-2 gap-2"><Input value={(retCfg.address||{}).state||""} onChange={e=>setRetAddr({state:e.target.value})} placeholder="State"/><Input value={(retCfg.address||{}).zip||""} onChange={e=>setRetAddr({zip:e.target.value})} placeholder="ZIP"/></div>
+            </div>
+          </div>
+          <div className="border-t border-stone-100 pt-3">
+            <label className="flex items-start gap-2 cursor-pointer">
+              <button type="button" onClick={()=>setRet({qrEnabled:!retCfg.qrEnabled})} className="mt-0.5 shrink-0"><span className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${retCfg.qrEnabled?"bg-violet-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></span></button>
+              <span className="text-sm text-stone-700"><b>Offer QR / box-free returns</b><br/><span className="text-[12px] text-stone-500">Emails the customer a QR code they scan at any FedEx or participating retail location — no printer, no box. <b>Requires FedEx to enable Email/QR return labels on your account</b> (ask your FedEx account exec, then confirm it's on your API project). Print labels work without it.</span></span>
+            </label>
+          </div>
+        </div>}
       </div>
     </div>
   );

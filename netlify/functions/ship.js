@@ -256,6 +256,36 @@ exports.handler = async (event) => {
   };
   requestedShipment.recipients[0].address.residential = !!o.residential;
   if (shipmentSpecial.length) requestedShipment.shipmentSpecialServices = { specialServiceTypes: shipmentSpecial };
+  /* ── RETURN SHIPMENTS ──────────────────────────────────────────────────────
+     A return flips the parties (shipper = the customer sending it back, recipient =
+     the merchant's return address) but the FedEx account holder (root accountNumber)
+     is still billed — that's what the RETURN_SHIPMENT special service guarantees, so
+     payment stays SENDER and the merchant eats the freight regardless of who ships it.
+       o.returnMethod "print" → PRINT_RETURN_LABEL: a printable PDF comes back now.
+       o.returnMethod "qr"/"email" → PENDING + emailLabelDetail: FedEx emails the
+         customer a link + QR code they scan at any FedEx/retail counter — no printer,
+         no box needed. Requires the "email/QR return label" feature on the account. */
+  if (o.returnShipment) {
+    const sss = requestedShipment.shipmentSpecialServices || (requestedShipment.shipmentSpecialServices = { specialServiceTypes: [] });
+    if (!sss.specialServiceTypes.includes("RETURN_SHIPMENT")) sss.specialServiceTypes.push("RETURN_SHIPMENT");
+    const rmaNo = String(o.rma || o.reference || "").slice(0, 20);
+    const reason = String(o.returnReason || "Customer return").slice(0, 60);
+    const isEmail = /^(qr|email|pending)$/i.test(String(o.returnMethod || "print"));
+    sss.returnShipmentDetail = { returnType: isEmail ? "PENDING" : "PRINT_RETURN_LABEL", rma: { number: rmaNo || undefined, reason } };
+    if (isEmail) {
+      const cust = String((receiver && receiver.__customerEmail) || o.customerEmail || sender.email || "").trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cust)) return respond(200, { ok: false, error: "A QR/email return needs the customer's email address." });
+      const exp = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);   // link valid 30 days
+      requestedShipment.pendingShipmentDetail = {
+        pendingShipmentType: "EMAIL",
+        expirationTimeStamp: exp,
+        emailLabelDetail: {
+          recipients: [{ emailAddress: cust, role: "SHIPMENT_COMPLETOR" }],
+          message: String(o.returnMessage || "Your return label is ready. Open this email on your phone and show the QR code at any FedEx or participating retail location — no printer or box required.").slice(0, 500)
+        }
+      };
+    }
+  }
   /* Ground Economy (SmartPost) needs the account's hub on the SHIP call too — quote.js gates the
      rates on it, but booking without it is a guaranteed FedEx rejection. Single-package only. */
   if (serviceType === "SMART_POST") {
@@ -355,14 +385,18 @@ exports.handler = async (event) => {
           + (pr0 && pr0.packageDocuments && pr0.packageDocuments[0] ? " | packageDocuments[0] keys: " + Object.keys(pr0.packageDocuments[0]).join(",") : "");
       } catch (e) {}
     }
+    /* A QR/email return is a PENDING shipment: FedEx emailed the customer the QR label,
+       so there is (correctly) no PDF to print here — report the email, not a missing-label error. */
+    const _emailReturn = !!(o.returnShipment && /^(qr|email|pending)$/i.test(String(o.returnMethod || "print")));
     return respond(200, {
       ok: true, booked: true,
       orderId: tracking || String(Date.now()),
       bookNumber: tracking,
       tracking,
+      emailedReturn: _emailReturn || undefined,
       labelPdfBase64: labels[0] || null,
       labels: labels.length > 1 ? labels : undefined,
-      labelError: labels.length ? null : ("Booked, but no label was found in the FedEx response." + (docShape ? " [" + docShape + "]" : "")),
+      labelError: (labels.length || _emailReturn) ? null : ("Booked, but no label was found in the FedEx response." + (docShape ? " [" + docShape + "]" : "")),
       serviceName: ts.serviceName || serviceType,
       env: ENV
     });

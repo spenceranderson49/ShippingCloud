@@ -15760,7 +15760,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="shipscreen"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="ship" allowedTabs={allowedTabs}/>}
         {sec==="orderspage"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="orders" allowedTabs={allowedTabs}/>}
         {sec==="billing"&&<Billing settings={settings} setSettings={setSettings}/>}
-        {sec==="integrations"&&<Integrations settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders}/>}
+        {sec==="integrations"&&<Integrations settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} shipments={shipments} clients={clients}/>}
         {sec==="tracking"&&<BrandedTracking settings={settings} setSettings={setSettings}/>}
         {sec==="subscription"&&<Subscription settings={settings} setSettings={setSettings}/>}
         </div>
@@ -17765,9 +17765,10 @@ function ConnectorModal({c,settings,setSettings,orders,setOrders,onClose}){
     </div>
   );
 }
-function Integrations({settings,setSettings,orders,setOrders}){
+function Integrations({settings,setSettings,orders,setOrders,shipments=[],clients=[]}){
   const conns=shopifyConns(settings);
   const connected=conns.length>0;
+  const [fcOpen,setFcOpen]=useState(false);
   const [shop,setShop]=useState("");
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState(null);
@@ -17861,6 +17862,15 @@ function Integrations({settings,setSettings,orders,setOrders}){
           {isOn?<Badge tone="green">on</Badge>:<span className="text-[11px] text-[#0086E0] font-medium flex items-center gap-1">Connect<ChevronRight className="w-3.5 h-3.5"/></span>}
         </button>
       );})}
+    </div>
+    {/* ── ERP / back-office: Aptean Full Circle ── */}
+    <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+      <button onClick={()=>setFcOpen(v=>!v)} className="w-full flex items-center gap-3 p-4 text-left hover:bg-stone-50">
+        <div className="w-9 h-9 rounded bg-[#0086E0]/12 flex items-center justify-center"><ArrowLeftRight className="w-4 h-4 text-[#0086E0]"/></div>
+        <div className="flex-1 min-w-0"><div className="font-medium text-stone-700 text-sm">Aptean Full Circle <span className="text-[10px] uppercase tracking-wide bg-stone-100 text-stone-500 rounded px-1.5 py-0.5 ml-1">ERP</span></div><div className="text-[10px] text-stone-400">Ship-confirmation file for Full Circle's watched folder — build, map services, deliver via SFTP or email</div></div>
+        <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${fcOpen?"rotate-180":""}`}/>
+      </button>
+      {fcOpen&&<div className="border-t border-stone-100 p-4"><FullCircleExport ships={shipments} clients={clients}/></div>}
     </div>
     {activeC&&<ConnectorModal c={activeC} settings={settings} setSettings={setSettings} orders={orders} setOrders={setOrders} onClose={()=>setActive(null)}/>}
   </div>);

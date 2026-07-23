@@ -4267,7 +4267,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
             <Field label="Terms (days)"><Input value={c.terms??""} onChange={e=>upClient({terms:e.target.value===""?"":+String(e.target.value).replace(/[^0-9]/g,"")})} placeholder="30"/></Field>
             <Field label="Credit limit ($)"><Input value={c.creditLimit??""} onChange={e=>upClient({creditLimit:e.target.value===""?"":+String(e.target.value).replace(/[^0-9.]/g,"")})} placeholder="25000"/></Field>
             <Field label="Late fee (%)"><Input value={inv.lateFeePct??""} onChange={e=>upInv({lateFeePct:e.target.value===""?"":+String(e.target.value).replace(/[^0-9.]/g,"")})} placeholder="10"/></Field>
-            <Field label="Account status"><Select value={c.acctStatus||"Active"} onChange={e=>upClient({acctStatus:e.target.value})}><option>Active</option><option>Hold</option><option>COD</option><option>Frozen</option><option>Closed</option></Select></Field>
+            <Field label="Credit status"><Select value={c.acctStatus||"Active"} onChange={e=>upClient({acctStatus:e.target.value})}><option>Active</option><option>Hold</option><option>COD</option><option>Frozen</option><option>Closed</option></Select></Field>
             <Field label="DUNS #"><Input value={c.duns||""} onChange={e=>upClient({duns:e.target.value})} placeholder="119508595"/></Field>
             <Field label="Paydex"><Input value={c.paydex||""} onChange={e=>upClient({paydex:e.target.value})} placeholder="77"/></Field>
           </div>
@@ -4339,7 +4339,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
     {tab==="commissions"&&(()=>{
       const comm=c.commission||{};
       const upComm=(patch)=>upClient({commission:{...comm,...patch}});
-      const rep=comm.rep||c.salesRep||"";
+      const rep=c.salesRep||comm.rep||"";
       const repRec=(salesReps360||[]).find(r=>r&&_cnorm(r.name)===_cnorm(rep));
       const pct=(comm.pct!==""&&comm.pct!=null)?+comm.pct:((repRec&&+repRec.pct)||30);
       const basis=comm.basis||"margin";
@@ -4356,11 +4356,11 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         <div className="rounded-xl border border-stone-200 p-4">
           <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-3 flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5"/>Commission setup</div>
           <div className="grid sm:grid-cols-3 gap-3">
-            <Field label="Sales rep"><Input value={comm.rep??(c.salesRep||"")} onChange={e=>upComm({rep:e.target.value})} placeholder="sanderson"/></Field>
+            <Field label="Sales rep"><Input value={c.salesRep||""} onChange={e=>upClient({salesRep:e.target.value})} placeholder="sanderson"/><span className="text-[10px] text-stone-400">Same rep as the Profile tab.</span></Field>
             <Field label="Commission %"><Input value={comm.pct??""} onChange={e=>upComm({pct:e.target.value===""?"":+String(e.target.value).replace(/[^0-9.]/g,"")})} placeholder={String(pct)}/></Field>
             <Field label="Paid on"><Select value={basis} onChange={e=>upComm({basis:e.target.value})}><option value="margin">Margin (charge − cost)</option><option value="revenue">Revenue (customer charge)</option></Select></Field>
           </div>
-          {(comm.pct===""||comm.pct==null)&&repRec&&<p className="text-[11px] text-stone-400 mt-2">Using {rep}'s default rate of {pct}% from Sales Reps.</p>}
+          {(comm.pct===""||comm.pct==null)&&repRec&&<p className="text-[11px] text-stone-400 mt-2">Using {rep}'s default rate of {pct}% from the rep list (Admin → API → Sales reps).</p>}
         </div>
         <div className="flex items-center gap-2 text-sm"><span className="text-stone-500">Period</span>
           <select value={commPeriod} onChange={e=>setCommPeriod(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5"><option value="month">This month</option><option value="last">Last month</option><option value="ytd">Year to date</option><option value="all">All time</option></select>
@@ -5193,7 +5193,7 @@ function ReceivablesAdmin({clients=[],currentUser}){
               <td className="px-3 py-2 text-right tabular-nums text-stone-700">{money(+inv.amount||0)}</td>
               <td className="px-3 py-2 text-right tabular-nums text-stone-500">{(+inv.lateFee||0)?money(+inv.lateFee):"—"}</td>
               <td className="px-3 py-2 text-right tabular-nums text-stone-800">{money((+inv.amount||0)+(+inv.lateFee||0))}</td>
-              <td className="px-3 py-2 text-right tabular-nums text-stone-500">{(+inv.paid||0)?money(+inv.paid):"$0"}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-stone-500">{money(+inv.paid||0)}</td>
               <td className={`px-3 py-2 text-right tabular-nums font-semibold ${bal>0?"text-stone-900":"text-emerald-600"}`}>{money(bal)}</td>
               <td className="px-3 py-2 whitespace-nowrap text-right">{bal>0?<div className="inline-flex items-center gap-1"><button onClick={()=>recordPay(inv)} title="Record a payment" className="text-[11px] bg-emerald-600 text-white rounded px-2 py-1 hover:bg-emerald-700">Payment</button><button onClick={()=>recordAdj(inv)} title="Apply an adjustment / credit" className="text-[11px] border border-stone-300 text-stone-600 rounded px-2 py-1 hover:bg-stone-50">Adjust</button></div>:<Badge tone="green">Paid</Badge>}</td>
             </tr>); })}
@@ -5375,7 +5375,7 @@ function MarginsAdmin({clients=[],currentUser}){
       <div className="flex items-center gap-2 flex-wrap text-sm">
         <span className="text-stone-500">Default commission %</span>
         <input value={commPct} onChange={e=>setCommPct(e.target.value.replace(/[^0-9.]/g,""))} className="w-16 bg-white border border-stone-200 rounded-lg px-2 py-1.5"/><span className="text-stone-400">%</span>
-        <span className="text-[11px] text-stone-400 ml-1">— used when a rep has no rate set on their Sales-rep record (Billing → Commissions).</span>
+        <span className="text-[11px] text-stone-400 ml-1">— used when a rep has no rate set on their rep record (Admin → API → Sales reps).</span>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Reps</div><div className="text-xl font-semibold text-stone-900">{commission.length}</div></div>
@@ -5876,6 +5876,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
   const NAV_GROUPS=[
     {label:"Overview",items:[["overview","Dashboard",BarChart3]]},
     {label:"Accounts",items:[["customers","Customers",Building2],["users","All Logins",Users]]},
+    {label:"Back office",items:[["margins","Margins",TrendingUp],["receivables","Receivables",Wallet],["fullcircle","Full Circle Export",ArrowLeftRight]]},
     {label:"Pricing",items:[["rates","Rates & dim divisors",DollarSign],["othercarriers","Other carriers",Truck],["labelcert","FedEx labels",Printer]]},
     {label:"Experience",items:[["customizations","Features & access",Sliders],["branding","Branding",Sparkles],["apiadmin","API",Plug],["billing","Billing & invoices",Receipt],["domains","Domains",ExternalLink]]},
     {label:"Data",items:[["backups","Backups & Restore",RotateCcw]]},

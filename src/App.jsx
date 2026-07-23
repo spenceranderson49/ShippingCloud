@@ -15470,20 +15470,31 @@ function FedexLocations({settings}){
     setBusy(false);
   };
   const byZip=()=>{ const z=String(zip||"").trim(); if(!/^\d{5}/.test(z))return setErr("Enter a 5-digit ZIP."); run({postalCode:z,country:"US"}); };
-  /* Paste a whole customer address — pull the ZIP, city, state and street from it and search. */
+  /* Paste a whole customer address — pull the ZIP (and City, ST if present) and search by it.
+     ZIP alone reliably finds the nearest FedEx; we don't send the raw street (FedEx's validator
+     rejects a messy free-text street line). */
   const byAddress=()=>{
     const a=String(addr||"").trim(); if(!a)return setErr("Paste an address to search near.");
     const zipM=a.match(/\b(\d{5})(?:-\d{4})?\b/);
     const csM=a.match(/([A-Za-z .'\-]+?),\s*([A-Za-z]{2})\b/);
-    const street=(a.split(/[\n,]/)[0]||"").trim();
     if(!zipM&&!csM)return setErr("Couldn't read a ZIP or City, ST from that — include one (e.g. “…, Austin, TX 78701”).");
-    run({country:"US",...(zipM?{postalCode:zipM[1]}:{}),...(csM?{city:csM[1].trim(),state:csM[2].toUpperCase()}:{}),...(street&&street.length<70?{street}:{})});
+    run({country:"US",...(zipM?{postalCode:zipM[1]}:{}),...(csM&&!zipM?{city:csM[1].trim(),state:csM[2].toUpperCase()}:{})});
   };
   const byGeo=()=>{
     if(!navigator.geolocation)return setErr("This device can't share its location — search by ZIP instead.");
     setGeoBusy(true);setErr("");
     navigator.geolocation.getCurrentPosition(
-      (pos)=>{ setGeoBusy(false); run({lat:pos.coords.latitude,lng:pos.coords.longitude}); },
+      async (pos)=>{
+        /* FedEx won't take raw lat/long — reverse-geocode to a ZIP (free, no key), then search by it. */
+        try{
+          const rr=await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${pos.coords.latitude}&longitude=${pos.coords.longitude}&localityLanguage=en`);
+          const jj=await rr.json();
+          const z=String((jj&&jj.postcode)||"").match(/\d{5}/);
+          setGeoBusy(false);
+          if(z) run({postalCode:z[0],country:"US"});
+          else setErr("Couldn't get a ZIP from your location — search by ZIP or paste an address instead.");
+        }catch(e){ setGeoBusy(false); setErr("Couldn't read your location — search by ZIP instead."); }
+      },
       ()=>{ setGeoBusy(false); setErr("Couldn't get your location — allow location access or search by ZIP."); },
       {enableHighAccuracy:false,timeout:8000}
     );

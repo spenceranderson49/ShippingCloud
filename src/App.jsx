@@ -5444,11 +5444,31 @@ function FullCircleExport({ships=[],clients=[]}){
   const services=useMemo(()=>Array.from(new Set(ships.map(s=>s&&s.service).filter(Boolean))).sort(),[ships]);
   const inRange=(d)=>{ const t=Date.parse(d); if(isNaN(t))return true; if(from&&t<Date.parse(from))return false; if(to&&t>Date.parse(to)+864e5-1)return false; return true; };
   const rows=useMemo(()=>ships.filter(s=>s&&s.tracking&&inRange(s.date)&&(!q||[s.reference,s.tracking,s.recipient&&s.recipient.name].some(x=>String(x||"").toLowerCase().includes(q.toLowerCase())))).sort((a,b)=>(Date.parse(a.date)||0)-(Date.parse(b.date)||0)),[ships,from,to,q]);
-  const svcCode=(s)=>{ const m=cfg.serviceMap||{}; const v=m[s.service]; return v!=null&&v!==""?v:""; };
-  const ssccFor=(s,i)=>{ if(cfg.ssccMode==="tracking")return String(s.tracking||""); if(cfg.ssccMode==="carton")return String(s.sscc||s.carton||s.tracking||""); const seed=(s.id!=null?String(s.id):String(i)).replace(/\D/g,"")||String(i+1); return makeSSCC(cfg.gs1Prefix||"",seed); };
-  const rowArr=(s,i)=>[ s.date||"", s.tracking||"", svcCode(s), (+s.weight||0).toFixed(1), cfg.includeCharge?(+s.cost||0).toFixed(2):"", String((s.pieces&&s.pieces.length)||1), s.reference||s.orderNo||"", ssccFor(s,i), (+s.declaredValue||0).toFixed(2), cfg.warehouseCode||"10", "", "" ];
-  const qf=(v)=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"';
-  const csv=rows.map((s,i)=>rowArr(s,i).map(qf).join(",")).join("\r\n")+(rows.length?"\r\n":"");
+  /* Exact fedxucc.csv layout from L'AGENCE's FedEx Ship Manager profile (FCimprtexport.xml):
+     header row + 12 comma-delimited columns. Full Circle reads it back to close the ship loop. */
+  const FC_HEADER=["shipdate","track","service","weight","freight","shipprrecvier","pickticket","ucc128","codamount","compnay","blank","void"];
+  /* Service codes straight from the profile's <servicetypes> conversion; user can override per row. */
+  const FC_SVC_DEFAULT={"fedex priority overnight":"FE1","fedex 2day":"FE2","fedex 2day am":"FE2","fedex standard overnight":"FE3","fedex express saver":"3DAY","fedex economy":"3DAY","fedex ground economy":"3DAY","fedex home delivery":"FDEX","fedex ground":"FDEX","fedex international ground":"FEG"};
+  const svcCode=(s)=>{ const m=cfg.serviceMap||{}; const v=m[s.service]; if(v!=null&&v!=="")return v; return FC_SVC_DEFAULT[String(s.service||"").toLowerCase().replace(/®/g,"").trim()]||""; };
+  const money2=(n)=>(Math.round((+n||0)*100)/100).toFixed(2);
+  const rowArr=(s,i)=>[
+    s.date||"",                                                   // shipdate
+    s.tracking||"",                                               // track
+    svcCode(s),                                                   // service (FC code)
+    (+s.weight||0).toFixed(1),                                    // weight (billed lb)
+    cfg.includeCharge?money2(s.cost):"",                          // freight
+    s.billTo==="receiver"||s.billingParty==="receiver"?"R":"S",   // shipprrecvier (bill to: shipper/receiver)
+    s.poNo||s.pickTicket||s.orderNo||s.reference||"",             // pickticket (PO / pick ticket)
+    s.invoiceNo||s.reference||"",                                 // ucc128 (invoice number)
+    (+s.codAmount>0)?money2(s.codAmount):"0",                     // codamount
+    s.reference||s.customer||"",                                  // compnay (customer reference)
+    "",                                                           // blank (notes)
+    (s.status==="Voided"||s.voided)?"Y":""                        // void (delete indicator)
+  ];
+  /* quote only when needed (comma/quote/newline) — matches Ship Manager's plain output */
+  const qf=(v)=>{ const t=String(v==null?"":v); return /[",\r\n]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t; };
+  const body=rows.map((s,i)=>rowArr(s,i).map(qf).join(",")).join("\r\n");
+  const csv=FC_HEADER.join(",")+"\r\n"+body+(rows.length?"\r\n":"");
   /* Full Circle watches a fixed path (e.g. Z:\ups\fedxucc.csv) and re-reads it each cycle, so the
      file keeps the SAME name every run and overwrites. Editable in case theirs differs. */
   const fname=()=>String(cfg.filename||"fedxucc.csv").replace(/[\/\\]/g,"").trim()||"fedxucc.csv";
@@ -5468,22 +5488,20 @@ function FullCircleExport({ships=[],clients=[]}){
     }catch(e){ setSendMsg({ok:false,text:"Network error — try again."}); }
     setSending(false);
   };
-  const COLS=[["Date","the shipment date"],["Tracking #","carrier tracking"],["Service","your service → FC code (set below)"],["Weight","total lb, 1 decimal"],["Charge","blank unless you enable it"],["Packages","carton count"],["Order #","the order/reference from Full Circle"],["SSCC / UCC","per the mode below"],["Value","declared value"],["Code","constant (warehouse/source)"],["—","reserved / blank"],["—","reserved / blank"]];
+  /* Column names + meaning taken verbatim from the Ship Manager profile (fedxucc.csv, header row). */
+  const COLS=[["shipdate","ship date"],["track","FedEx tracking #"],["service","service → FC code"],["weight","billed lb (1 dec)"],["freight","charge (if enabled)"],["shipprrecvier","bill-to: S=shipper / R=receiver"],["pickticket","PO / pick-ticket #"],["ucc128","invoice number"],["codamount","COD amount (0 if none)"],["compnay","customer reference"],["blank","notes (blank)"],["void","Y when a label is voided"]];
   return (<div className="space-y-4">
     <div className="flex items-start justify-between gap-3 flex-wrap">
-      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ArrowLeftRight className="w-5 h-5 text-[#0086E0]"/>Full Circle export</h2><p className="text-sm text-stone-500 mt-0.5">Emit the same UCC ship-confirm file Aptean Full Circle already consumes — one row per shipment, ready to drop in the watched folder.</p></div>
+      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ArrowLeftRight className="w-5 h-5 text-[#0086E0]"/>Full Circle export</h2><p className="text-sm text-stone-500 mt-0.5">Emits the exact <b>fedxucc.csv</b> your FedEx Ship Manager profile writes today — header row + 12 columns Full Circle already reads back. One row per shipment.</p></div>
       <button onClick={download} disabled={!rows.length} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium hover:bg-[#006db8] disabled:opacity-50 flex items-center gap-1.5"><Download className="w-4 h-4"/>Download file ({rows.length})</button>
     </div>
 
     <div className="rounded-xl border border-stone-200 p-4">
       <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-3">Output settings</div>
-      <div className="grid sm:grid-cols-4 gap-3">
-        <Field label="Carton serial (SSCC/UCC)"><Select value={cfg.ssccMode} onChange={e=>up({ssccMode:e.target.value})}><option value="tracking">Use the tracking #</option><option value="generate">Generate a real SSCC-18</option><option value="carton">Use our carton serial</option></Select></Field>
-        {cfg.ssccMode==="generate"&&<Field label="GS1 company prefix"><Input value={cfg.gs1Prefix||""} onChange={e=>up({gs1Prefix:e.target.value})} placeholder="e.g. 0614141"/></Field>}
-        <Field label="Code column (constant)"><Input value={cfg.warehouseCode||""} onChange={e=>up({warehouseCode:e.target.value})} placeholder="10"/></Field>
-        <Field label="Charge column"><Select value={cfg.includeCharge?"1":"0"} onChange={e=>up({includeCharge:e.target.value==="1"})}><option value="0">Leave blank (like the sample)</option><option value="1">Include our cost</option></Select></Field>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <Field label="Freight column"><Select value={cfg.includeCharge?"1":"0"} onChange={e=>up({includeCharge:e.target.value==="1"})}><option value="0">Leave blank (matches current file)</option><option value="1">Include our cost</option></Select></Field>
       </div>
-      {cfg.ssccMode==="generate"&&!cfg.gs1Prefix&&<p className="text-[11px] text-amber-600 mt-2">Add your GS1 company prefix for a valid SSCC — without it the serial is a placeholder.</p>}
+      <p className="text-[11px] text-stone-400 mt-2">Layout is locked to your Ship Manager profile — <b>shipdate, track, service, weight, freight, shipprrecvier, pickticket, ucc128, compnay…</b> — so Full Circle reads it with no changes. Map service codes below.</p>
     </div>
 
     <div className="rounded-xl border border-stone-200 p-4">

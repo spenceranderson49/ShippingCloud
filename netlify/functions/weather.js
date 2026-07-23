@@ -71,6 +71,18 @@ exports.handler = async (event) => {
   const periods = (fc && fc.properties && fc.properties.periods) || [];
   if (!periods.length) return respond(200, { ok: false, error: "No forecast returned." });
 
+  // multi-day forecast (daytime highs) so the UI can show current + any delivery date from one call
+  const days = periods.filter(p => p.isDaytime).map(p => ({
+    date: String(p.startTime || "").slice(0, 10),
+    name: p.name || "",
+    high: p.temperature,
+    unit: p.temperatureUnit || "F",
+    condition: p.shortForecast || "",
+    delayRisk: DELAY_RE.test(p.shortForecast || ""),
+  }));
+  const first = periods[0];
+  const current = first ? { temp: first.temperature, unit: first.temperatureUnit || "F", condition: first.shortForecast || "", name: first.name || "", isDaytime: !!first.isDaytime } : null;
+
   // pick the daytime period matching the delivery date, else the next daytime period
   let pick = null;
   if (date) pick = periods.find(p => p.isDaytime && String(p.startTime || "").slice(0, 10) === date);
@@ -98,7 +110,7 @@ exports.handler = async (event) => {
   if (freeze) advice.push(`Freezing at the destination (${tempHigh}°${tempUnit} ${day.toLowerCase()}). Protect liquids and anything that can freeze/crack.`);
   if (delayRisk) advice.push(`${delayReason} near the destination — build in a buffer or warn the customer of a possible weather delay.`);
 
-  const data = { ok: true, city, state, day, tempHigh, tempUnit, condition, delayRisk, delayReason, alerts, advice };
+  const data = { ok: true, city, state, day, tempHigh, tempUnit, condition, delayRisk, delayReason, alerts, advice, current, days };
   cache[ckey] = { at: Date.now(), data };
   if (Object.keys(cache).length > 2000) { for (const k in cache) { if (Date.now() - cache[k].at > 30 * 60 * 1000) delete cache[k]; } }
   return respond(200, data);

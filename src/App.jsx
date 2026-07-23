@@ -102,6 +102,8 @@ const FEATURE_CATALOG=[
   {id:"seeCosts",label:"See costs & spend",desc:"Rates, order totals, batch totals, Dashboard spend and Reports dollars. Turn OFF to hide all money from this customer's logins",default:true},
   {id:"fedexLocations",label:"FedEx Location Finder",desc:"Find nearest FedEx drop-off / pickup locations by ZIP or current location",default:true},
   {id:"byoCarrier",label:"Bring your own carrier accounts",desc:"Connect their own NON-FedEx carrier accounts (the FedEx Account settings page always shows for every customer; admins always have this)",default:false},
+  {id:"packaging",label:"Packaging store",desc:"A Packaging tab to order free FedEx supplies and shipping supplies (boxes, labels, foam, ice packs); orders email your supplies inbox. OFF by default — turn on per customer.",default:false},
+  {id:"perishable",label:"Perishable / cold-chain mode",desc:"Weather-aware packing for perishable shippers: shows destination weather (current + estimated delivery day) on the Ship screen and per service, with custom temperature warnings and recommended ice/dry-ice. OFF by default — turn on per customer.",default:false},
 ];
 const ADMIN_SECTIONS=[["overview","Dashboard"],["customers","Customers"],["users","All Logins"],["rates","Rates & Dim Divisors"],["margins","Margins"],["receivables","Receivables"],["fullcircle","Full Circle Export"],["othercarriers","Other Carriers"],["labelcert","FedEx Labels"],["customizations","Features & Access"],["branding","Branding"],["apiadmin","API"],["billing","Billing & Invoices"],["domains","Domains"],["backups","Backups & Restore"]];
 const ADMIN_SECTION_ICONS={overview:BarChart3,customers:Building2,users:Users,rates:DollarSign,margins:TrendingUp,receivables:Wallet,fullcircle:ArrowLeftRight,othercarriers:Truck,labelcert:Printer,customizations:Sliders,branding:Sparkles,apiadmin:Plug,billing:Receipt,domains:ExternalLink,backups:RotateCcw};
@@ -8566,6 +8568,9 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const [showCI,setShowCI]=useState(false);
 
   const intl=!!receiver.country&&!_isUSCountry(receiver.country);   /* "US"/"USA"/"U.S." are domestic — the strict string compare flagged Shopify's "US" as international (intl-only services, no rates) */
+  const perishOn=!!(settings&&settings.perishable&&settings.perishable.on);
+  const perishRules=(settings&&settings.perishable&&settings.perishable.rules)||null;
+  const perishOnServices=perishOn&&(!(settings&&settings.perishable)||settings.perishable.onServices!==false);
   const setPiece=(i,patch)=>setPieces(ps=>ps.map((p,j)=>j===i?{...p,...patch}:p));
   const addPiece=()=>setPieces(ps=>[...ps,{...(ps[ps.length-1]||{weight:"",L:"",W:"",H:""})}]);
   const delPiece=(i)=>{
@@ -9173,6 +9178,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           <span className="flex items-center gap-1.5 text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-1.5"><CreditCard className="w-3.5 h-3.5"/>Auto-billing to third-party account <b className="">{thirdAcct}</b><button onClick={()=>{setBillTo("sender");setThirdAcct("");}} className="ml-1 text-[#0086E0] hover:text-[#006FBF] underline">Bill Sender Instead</button></span>
         </div>}
         {intl&&<div className="flex items-center gap-2 text-sm text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] rounded-lg px-3 py-2"><MapPin className="w-4 h-4"/>International shipment to <b>{receiver.country}</b> — FedEx rates shown, customs info required below.</div>}
+        {!intl&&perishOn&&<WeatherAdvisor perishable rules={perishRules} zip={receiver.zip} country={receiver.country} date={shipDate}/>}
 
         {!custom.hideShipSteps&&<StepHead n="2" label="Package details"/>}
         <div className="bg-white border border-stone-200 shadow-sm rounded-lg p-3 space-y-2">
@@ -9265,7 +9271,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             fills the space to its right. Wraps to a normal stack on narrow screens. */}
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_480px] gap-4 items-start">
           <div className="min-w-0">
-            <ServiceList hideTitle={true} quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
+            <ServiceList hideTitle={true} quotes={quotes} bought={bought} action={ready?print:null} label="Print label" doneLabel="Printed" ready={ready} matched={matched&&matched.key} matchedSrc={matched&&matched.src} collapsible={true} onOneRate={applyOneRateBox} custom={custom} live={rateSrc.live} loading={rateSrc.loading} addrClassified={addrClassified} perBox={perBox} perishable={perishOnServices&&!intl} destZip={receiver.zip} resetKey={`${selectedOrder||""}|${receiver.zip}|${receiver.country||"US"}|${pieces.length}|${((client&&client.blockedServices)||[]).join(",")}|${(custom.hiddenServices||[]).join(",")}`} billing={weighInfo(pieces.map(p=>({weight:pw(p),L:p.L,W:p.W,H:p.H})))} oneRateWarning={orBox&&rateSrc.oneRateError?("FedEx didn’t return a live One Rate price for the "+orBox.name+": "+rateSrc.oneRateError):null}/>
             {/* Landed-cost coaching: on DDP intl shipments the "Est. duties & tax / Landed cost"
                 line only appears once FedEx returns an EDT estimate — which needs a real customs
                 value + HS code. Explain the blank instead of leaving it a mystery. */}
@@ -9309,7 +9315,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                   :rateSrc.live?<><Wifi className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-600"/><span>Live rates from your FedEx account</span></>
                   :<><Calculator className="w-3.5 h-3.5 shrink-0 mt-0.5"/><span>Estimated rates{rateSrc.error?` · ${rateSrc.error}`:""}{currentUser&&currentUser.role==="admin"?" — turn on live rates in Settings → Carrier accounts":" — live pricing isn't connected right now"}</span></>}
                 </div>}
-                {!intl&&<WeatherAdvisor zip={receiver.zip} country={receiver.country} date={shipDate}/>}
+                {!intl&&!perishOn&&<WeatherAdvisor zip={receiver.zip} country={receiver.country} date={shipDate}/>}
                 {/* Hands-free caution: when auto-book/print is armed, say so loudly right where they
                     work — a scan on this screen books and prints without another click. */}
                 {handsFree&&<div className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
@@ -9675,7 +9681,9 @@ function matchRequestedService(quotes,requested,res=null){
   const hit=quotes.find(q=>canonSvc(q.label)===c&&(q.sell??q.cost)!=null);
   return hit?hit.key:null;
 }
-function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,custom=CUSTOM_DEFAULTS,matched=null,matchedSrc=null,collapsible=false,oneRateWarning=null,billing=null,live=false,loading=false,addrClassified=true,perBox=null,resetKey="",hideTitle=false}){
+function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,custom=CUSTOM_DEFAULTS,matched=null,matchedSrc=null,collapsible=false,oneRateWarning=null,billing=null,live=false,loading=false,addrClassified=true,perBox=null,resetKey="",hideTitle=false,perishable=false,destZip=""}){
+  const _wxSvc=useWeather(perishable?destZip:"","US");
+  const wxDays=_wxSvc&&_wxSvc.days;
   const [showAll,setShowAll]=useState(false);
   /* "Hide other services" mode shows ONE service box. It must stay a single box at all times —
      switching orders and the Ground<->Home Delivery swap (FedEx address classification, which also
@@ -9803,7 +9811,7 @@ function ServiceList({quotes,bought,action,label,doneLabel,ready=true,onOneRate,
               <span className="truncate text-[15px] font-semibold text-stone-900">{(custom.aliases&&custom.aliases[canonSvc(q.label)])||q.label}</span>
               {matchBadge}
             </div>
-            <span className="text-[13px] text-stone-500 flex items-center gap-1.5 min-w-0 mt-[3px]"><Calendar className="w-3.5 h-3.5 shrink-0"/><span className="truncate">{transitEl}</span></span>
+            <span className="text-[13px] text-stone-500 flex items-center gap-1.5 min-w-0 mt-[3px]"><Calendar className="w-3.5 h-3.5 shrink-0"/><span className="truncate">{transitEl}</span>{perishable&&wxDays&&q.fxDate&&<ServiceWeather days={wxDays} date={q.fxDate}/>}</span>
           </div>
           <div className="text-right">{!!(custom.priceWarn>0&&ready&&hasPrice&&sell>custom.priceWarn)&&<div className="text-[10px] text-amber-600 flex items-center justify-end gap-0.5" title={"Above your $"+custom.priceWarn+" price alert"}><AlertTriangle className="w-3 h-3"/>over limit</div>}<div className="text-base font-semibold text-stone-900">{!ready?<span className="text-stone-300">—</span>:(live||fxLive)?(hasPrice?money(sell):<span className="text-stone-300">—</span>):loading?<span className="text-[11px] font-normal text-stone-400">pricing…</span>:(hasPrice?money(sell):<span className="text-stone-300">—</span>)}</div>
             {hasPrice&&q.duties!==undefined&&(+q.dutiesAndTaxes>0
@@ -15456,7 +15464,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
      policy/fallback logic unchanged. */
   const SEC_GROUPS=[
     ["Workspace",[["general","General",Cog],["customize","Customizations",Sliders]]],
-    ["Shipping",[["shipscreen","Ship Screen",Truck],["orderspage","Orders",ShoppingBag],["carriers","FedEx Account",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package Sizes",Package],["boxlogic","Box Logic",Layers],["catalog","Product Catalog",Boxes],["reference","Reference Fields",Receipt],["fedexlocations","Find FedEx Locations",MapPin]]],
+    ["Shipping",[["shipscreen","Ship Screen",Truck],["orderspage","Orders",ShoppingBag],["carriers","FedEx Account",Plug],["warehouses","Warehouses",Warehouse],["boxes","Package Sizes",Package],["boxlogic","Box Logic",Layers],["catalog","Product Catalog",Boxes],["reference","Reference Fields",Receipt],["perishable","Perishable Mode",Thermometer],["fedexlocations","Find FedEx Locations",MapPin]]],
     ["Documents & Printing",[["printer","Print Settings",Printer],["cieditor","Commercial Invoice",Receipt],["otherdocs","Other Documents",FileText],["slips","Packing Slips",ClipboardList],["manifests","Manifests",FileText]]],
     ["Automation & Integrations",[["integrations","Integrations",Layers],["notifications","Email Automation",Mail],["tracking","Branded Tracking",MapPin],["checkout","Checkout Rates",ShoppingBag]]],
     ["Account",[["reports","Reports",TrendingUp],["billing","Billing",CreditCard],["subscription","Subscription",Star]]],
@@ -15518,6 +15526,7 @@ function Settings({settings,setSettings,orders,setOrders,accounts,setAccounts,cl
         {sec==="otherdocs"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Documents saved">{(s,ss)=><OtherDocs settings={s} setSettings={ss}/>}</SettingsDraftWrap>}
         {sec==="slips"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Saved">{(s,ss)=><SlipSettings settings={s} setSettings={ss}/>}</SettingsDraftWrap>}
         {sec==="fedexlocations"&&<FedexLocations settings={settings}/>}
+        {sec==="perishable"&&<SettingsDraftWrap settings={settings} setSettings={setSettings} note="Perishable settings saved">{(s,ss)=><PerishableSettings settings={s} setSettings={ss}/>}</SettingsDraftWrap>}
         {sec==="customize"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} allowedTabs={allowedTabs}/>}
         {sec==="shipscreen"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="ship" allowedTabs={allowedTabs}/>}
         {sec==="orderspage"&&<Customize isAdmin={isAdmin} settings={settings} setSettings={setSettings} blockedKeys={new Set((client&&client.blockedServices)||[])} only="orders" allowedTabs={allowedTabs}/>}
@@ -17113,33 +17122,93 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
     {editing&&<RuleEditorModal rule={editing} onSave={saveRule} onClose={()=>setEditing(null)} onDelete={delRule} warehouses={warehouses}/>}
   </div>);
 }
-/* Destination weather advisor — shows the delivery-day forecast, a weather-delay flag, and a
-   packaging tip (add ice when it's hot, protect liquids when it's freezing). Free NWS data via
-   netlify/functions/weather.js. US destinations only; renders nothing otherwise. */
-function WeatherAdvisor({zip,country,date}){
+/* ── Weather (shared) — one cached fetch per ZIP feeds the Ship-screen advisor, the perishable
+   card, and per-service delivery-day chips. Free NWS data via netlify/functions/weather.js. ── */
+const _wxCache={};   // zip -> {at, data} | {at, promise}
+async function fetchWeatherCached(zip){
+  const z=String(zip||"").trim().slice(0,5);
+  if(!/^\d{5}$/.test(z))return null;
+  const c=_wxCache[z];
+  if(c&&Date.now()-c.at<20*60*1000)return ("data" in c)?c.data:c.promise;
+  const p=(async()=>{ try{ const r=await fetch("/.netlify/functions/weather",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:CLOUD.token||undefined,zip:z})}); const d=await r.json(); const data=(d&&d.ok)?d:null; _wxCache[z]={at:Date.now(),data}; return data; }catch(e){ _wxCache[z]={at:Date.now(),data:null}; return null; } })();
+  _wxCache[z]={at:Date.now(),promise:p};
+  return p;
+}
+function useWeather(zip,country){
   const [wx,setWx]=useState(null);
   const usZip=/^\d{5}$/.test(String(zip||"").trim().slice(0,5));
   const domestic=!country||_isUSCountry(country);
-  useEffect(()=>{
-    let dead=false;
-    if(!usZip||!domestic){setWx(null);return;}
-    const z=String(zip).trim().slice(0,5);
-    const t=setTimeout(async()=>{
-      try{
-        const r=await fetch("/.netlify/functions/weather",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:CLOUD.token||undefined,zip:z,date:date||undefined})});
-        const d=await r.json();
-        if(!dead)setWx(d&&d.ok?d:null);
-      }catch(e){ if(!dead)setWx(null); }
-    },600);
-    return ()=>{dead=true;clearTimeout(t);};
-  },[zip,country,date]);
-  if(!usZip||!domestic||!wx)return null;
-  const isF=/F/i.test(wx.tempUnit);
-  const cold=isF?wx.tempHigh<=32:wx.tempHigh<=0;
-  const hot=isF?wx.tempHigh>=85:wx.tempHigh>=29;
-  return (<div className="flex items-start gap-2 text-xs text-stone-600">
-    {cold?<Snowflake className="w-3.5 h-3.5 shrink-0 mt-0.5 text-sky-500"/>:hot?<Thermometer className="w-3.5 h-3.5 shrink-0 mt-0.5 text-orange-500"/>:<CloudSun className="w-3.5 h-3.5 shrink-0 mt-0.5 text-stone-400"/>}
-    <span>{wx.city}, {wx.state} · <b>{wx.tempHigh}°{wx.tempUnit}</b> {wx.condition}{wx.delayRisk&&<span className="text-amber-600"> · possible weather delay</span>}</span>
+  useEffect(()=>{ let dead=false; if(!usZip||!domestic){setWx(null);return;} const t=setTimeout(()=>{ Promise.resolve(fetchWeatherCached(zip)).then(d=>{ if(!dead)setWx(d||null); }); },500); return ()=>{dead=true;clearTimeout(t);}; },[zip,country]);
+  return (usZip&&domestic)?wx:null;
+}
+const PERISH_DEFAULT=[{over:80,add:"2 gel ice packs"},{over:90,add:"4 gel ice packs or 2 lb dry ice + insulated liner"}];
+function matchPerish(rules,temp){ if(temp==null)return null; const rs=(Array.isArray(rules)&&rules.length?rules:PERISH_DEFAULT).filter(r=>r&&+r.over<=temp).sort((a,b)=>b.over-a.over); return rs[0]||null; }
+
+/* Compact one-liner (This Shipment box) OR a fuller perishable card (now + delivery-day +
+   a recommended-ice line from the account's temperature rules). US destinations only. */
+function WeatherAdvisor({zip,country,date,perishable=false,rules=null}){
+  const wx=useWeather(zip,country);
+  if(!wx)return null;
+  const unit=wx.tempUnit||"F"; const isF=/F/i.test(unit);
+  if(!perishable){
+    const cold=isF?wx.tempHigh<=32:wx.tempHigh<=0; const hot=isF?wx.tempHigh>=85:wx.tempHigh>=29;
+    return (<div className="flex items-start gap-2 text-xs text-stone-600">
+      {cold?<Snowflake className="w-3.5 h-3.5 shrink-0 mt-0.5 text-sky-500"/>:hot?<Thermometer className="w-3.5 h-3.5 shrink-0 mt-0.5 text-orange-500"/>:<CloudSun className="w-3.5 h-3.5 shrink-0 mt-0.5 text-stone-400"/>}
+      <span>{wx.city}, {wx.state} · <b>{wx.tempHigh}°{unit}</b> {wx.condition}{wx.delayRisk&&<span className="text-amber-600"> · possible weather delay</span>}</span>
+    </div>);
+  }
+  const cur=wx.current;
+  const dDay=(date&&Array.isArray(wx.days))?wx.days.find(d=>d.date===date):null;
+  const focusHigh=(dDay&&dDay.high!=null)?dDay.high:wx.tempHigh;
+  const rule=matchPerish(rules,focusHigh);
+  const tone=rule?"bg-amber-50 border-amber-200":"bg-[#E6F4FF] border-[#99D6FF]";
+  return (<div className={"rounded-lg border px-3 py-2 "+tone}>
+    <div className="flex items-center gap-2 text-sm font-medium text-stone-800"><Thermometer className={"w-4 h-4 "+(rule?"text-amber-600":"text-[#0086E0]")}/>Perishable · {wx.city}, {wx.state}</div>
+    <div className="text-[12px] text-stone-600 mt-1 flex flex-wrap gap-x-4 gap-y-0.5">
+      {cur&&<span>Now: <b>{cur.temp}°{cur.unit||unit}</b> {cur.condition}</span>}
+      <span>{dDay?dDay.name:"Delivery day"}: <b>{focusHigh}°{unit}</b>{dDay?` ${dDay.condition}`:` ${wx.condition}`}</span>
+      {wx.delayRisk&&<span className="text-amber-700">possible weather delay</span>}
+    </div>
+    {rule&&<div className="text-[12px] text-amber-800 mt-1 flex items-start gap-1.5"><Snowflake className="w-3.5 h-3.5 mt-0.5 shrink-0"/><span>Over {rule.over}°{unit} at delivery — add <b>{rule.add}</b>.</span></div>}
+  </div>);
+}
+
+/* Per-service delivery-day chip for perishable mode — the temp on that service's delivery date. */
+function ServiceWeather({days,date}){
+  if(!Array.isArray(days)||!date)return null;
+  const d=days.find(x=>x.date===date);
+  if(!d)return null;
+  const hot=d.high>=80, cold=d.high<=32;
+  return <span title={d.name+": "+d.condition} className={"inline-flex items-center gap-0.5 text-[11px] "+(hot?"text-orange-600":cold?"text-sky-600":"text-stone-400")}>{cold?<Snowflake className="w-3 h-3"/>:<Thermometer className="w-3 h-3"/>}{d.high}°</span>;
+}
+
+/* Settings → Perishable: enable the mode, set temperature warnings and what ice/dry-ice to add. */
+function PerishableSettings({settings,setSettings}){
+  const p=(settings&&settings.perishable)||{};
+  const rules=Array.isArray(p.rules)&&p.rules.length?p.rules:PERISH_DEFAULT;
+  const up=(patch)=>setSettings&&setSettings(s=>({...s,perishable:{...((s&&s.perishable)||{}),...patch}}));
+  const setRule=(i,patch)=>up({rules:rules.map((r,j)=>j===i?{...r,...patch}:r)});
+  const addRule=()=>up({rules:[...rules,{over:75,add:""}]});
+  const delRule=(i)=>up({rules:rules.filter((_,j)=>j!==i)});
+  return (<div className="space-y-4 max-w-2xl">
+    <div><h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Thermometer className="w-4 h-4"/>Perishable / cold-chain mode</h2>
+      <p className="text-[13px] text-stone-500 mt-0.5">For temperature-sensitive shipments. Shows destination weather (now + estimated delivery day) on the Ship screen and beside each service, and warns you to add ice when it'll be hot.</p></div>
+    <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!!p.on} onChange={e=>up({on:e.target.checked})} className="accent-[#0086E0]"/>Turn on perishable mode</label>
+    <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={p.onServices!==false} onChange={e=>up({onServices:e.target.checked})} className="accent-[#0086E0]"/>Show the delivery-day temperature next to each service</label>
+    <div className="rounded-xl border border-stone-200 p-4">
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-2">Temperature warnings</div>
+      <p className="text-[12px] text-stone-500 mb-3">When the delivery-day high is over a temperature, recommend what to pack.</p>
+      <div className="space-y-2">
+        {rules.map((r,i)=><div key={i} className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-stone-500">Over</span>
+          <input value={r.over} onChange={e=>setRule(i,{over:+String(e.target.value).replace(/[^0-9]/g,"")||0})} className="w-16 border border-stone-300 rounded px-2 py-1"/>
+          <span className="text-stone-500">°F → add</span>
+          <input value={r.add} onChange={e=>setRule(i,{add:e.target.value})} placeholder="e.g. 2 gel ice packs" className="flex-1 min-w-[200px] border border-stone-300 rounded px-2 py-1"/>
+          <button onClick={()=>delRule(i)} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button>
+        </div>)}
+      </div>
+      <button onClick={addRule} className="mt-2 text-[12px] text-[#0086E0] hover:underline">+ add a warning</button>
+    </div>
   </div>);
 }
 

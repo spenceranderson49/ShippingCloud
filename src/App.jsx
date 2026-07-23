@@ -5642,18 +5642,17 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
 
     <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
       <div className="overflow-x-auto"><table className="w-full text-sm">
-        <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 border-b border-stone-200"><th className="text-left font-medium px-3 py-2">Date</th><th className="text-left font-medium px-3 py-2">Order #</th><th className="text-left font-medium px-3 py-2">Tracking</th><th className="text-left font-medium px-3 py-2">Svc</th><th className="text-right font-medium px-3 py-2">Wt</th><th className="text-right font-medium px-3 py-2">Pkgs</th><th className="text-left font-medium px-3 py-2">SSCC / UCC</th><th className="text-right font-medium px-3 py-2">Value</th></tr></thead>
+        <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 border-b border-stone-200"><th className="text-left font-medium px-3 py-2">shipdate</th><th className="text-left font-medium px-3 py-2">pickticket</th><th className="text-left font-medium px-3 py-2">track</th><th className="text-left font-medium px-3 py-2">service</th><th className="text-right font-medium px-3 py-2">weight</th><th className="text-left font-medium px-3 py-2">ucc128</th><th className="text-left font-medium px-3 py-2">compnay</th></tr></thead>
         <tbody className="divide-y divide-stone-100">
-          {rows.length===0&&<tr><td colSpan={8} className="px-3 py-10 text-center text-stone-400">No shipments match — widen the date range, or ship a few orders first.</td></tr>}
+          {rows.length===0&&<tr><td colSpan={7} className="px-3 py-10 text-center text-stone-400">No shipments match — widen the date range, or ship a few orders first.</td></tr>}
           {rows.slice(0,200).map((s,i)=><tr key={s.id||i} className="hover:bg-stone-50">
             <td className="px-3 py-2 text-stone-600 whitespace-nowrap">{s.date}</td>
-            <td className="px-3 py-2 text-stone-800">{s.reference||s.orderNo||"—"}</td>
+            <td className="px-3 py-2 text-stone-800">{s.poNo||s.pickTicket||s.orderNo||s.reference||"—"}</td>
             <td className="px-3 py-2 text-stone-600 font-mono text-[12px]">{s.tracking}</td>
             <td className="px-3 py-2 text-stone-500">{svcCode(s)||<span className="text-amber-500">unset</span>}</td>
             <td className="px-3 py-2 text-right tabular-nums">{(+s.weight||0).toFixed(1)}</td>
-            <td className="px-3 py-2 text-right tabular-nums">{(s.pieces&&s.pieces.length)||1}</td>
-            <td className="px-3 py-2 text-stone-500 font-mono text-[11px]">{ssccFor(s,i)}</td>
-            <td className="px-3 py-2 text-right tabular-nums">{money(+s.declaredValue||0)}</td>
+            <td className="px-3 py-2 text-stone-500 font-mono text-[11px]">{s.invoiceNo||s.reference||"—"}</td>
+            <td className="px-3 py-2 text-stone-600">{s.reference||s.customer||"—"}</td>
           </tr>)}
         </tbody>
       </table></div>

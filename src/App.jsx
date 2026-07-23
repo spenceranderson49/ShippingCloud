@@ -5448,6 +5448,7 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
   const [q,setQ]=useState("");
   const [sending,setSending]=useState(false);
   const [sendMsg,setSendMsg]=useState(null);   // {ok,text}
+  const [outOpen,setOutOpen]=useState(false);   // collapse the big "confirmations out" builder
   const deliv=cfg.deliv||{};
   const upDeliv=(patch)=>setCfg(c=>({...c,deliv:{...(c.deliv||{}),...patch}}));
   /* FedEx only — Full Circle ships FedEx, so drop any DHL/UPS/USPS history from the map list. */
@@ -5499,8 +5500,11 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
   const _sampleRow=["2026-07-23","771234567890","FDEX","2.0","","S","PT-10432","INV-88213","0","ACME-CO","",""];
   const previewText=[FC_HEADER.join(","),...(rows.length?rows.slice(0,3).map((s,i)=>rowArr(s,i).map(qf).join(",")):[_sampleRow.join(",")])].join("\n")+(rows.length>3?"\n… +"+(rows.length-3)+" more rows":"");
   /* Full Circle watches a fixed path (e.g. Z:\ups\fedxucc.csv) and re-reads it each cycle, so the
-     file keeps the SAME name every run and overwrites. Editable in case theirs differs. */
-  const fname=()=>String(cfg.filename||"fedxucc.csv").replace(/[\/\\]/g,"").trim()||"fedxucc.csv";
+     file keeps the SAME name every run and overwrites. We show the full path you enter (folder + file,
+     e.g. ups/fedxucc.csv) but write the actual file under just its base name (the folder is the drop
+     location / SFTP dir), so it never gets shortened to a fragment like "ups". */
+  const fpath=()=>String(cfg.filename||"ups/fedxucc.csv").trim()||"ups/fedxucc.csv";
+  const fname=()=>{ const b=fpath().split(/[\/\\]/).pop(); return (b&&b.trim())||"fedxucc.csv"; };
   const download=()=>{ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/plain"})); a.download=fname(); document.body.appendChild(a); a.click(); setTimeout(()=>{a.remove();URL.revokeObjectURL(a.href);},2000); };
   const doSend=async()=>{
     if(!rows.length){ setSendMsg({ok:false,text:"Nothing to send — no shipments in range."}); return; }
@@ -5567,7 +5571,7 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
     {/* ── ① Orders IN (mapping, read-only) ── */}
     <div className="rounded-xl border border-stone-200 p-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="text-sm font-semibold text-stone-800">① Orders in — from Full Circle</div>
+        <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#0086E0] text-white text-[11px] font-bold shrink-0">1</span>Orders in — from Full Circle</div>
         <span className="text-[11px] bg-stone-100 text-stone-500 rounded-full px-2 py-0.5 font-mono">ODBC · asups_UPS_Interface</span>
       </div>
       <p className="text-[12px] text-stone-500 mt-1">Full Circle columns that map into each ShippingHub order:</p>
@@ -5598,10 +5602,14 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
       </div>}
     </div>}
 
-    <div className="flex items-start justify-between gap-3 flex-wrap">
-      <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ArrowLeftRight className="w-5 h-5 text-[#0086E0]"/>② Ship confirmations — out to Full Circle</h2><p className="text-sm text-stone-500 mt-0.5">Emits the exact <b>fedxucc.csv</b> your FedEx Ship Manager profile writes today — header row + 12 columns Full Circle already reads back. One row per shipment.</p></div>
-      <button onClick={download} disabled={!rows.length} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium hover:bg-[#006db8] disabled:opacity-50 flex items-center gap-1.5"><Download className="w-4 h-4"/>Download file ({rows.length})</button>
-    </div>
+    <div className="rounded-xl border border-stone-200 overflow-hidden">
+      <div onClick={()=>setOutOpen(v=>!v)} className="flex items-center gap-3 p-4 hover:bg-stone-50 cursor-pointer select-none">
+        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#0086E0] text-white text-[12px] font-bold shrink-0">2</span>
+        <div className="flex-1 min-w-0"><div className="text-sm font-semibold text-stone-900">Ship confirmations — out to Full Circle</div><div className="text-[12px] text-stone-500 truncate">The exact <b>fedxucc.csv</b> from your Ship Manager profile · {rows.length} shipment{rows.length===1?"":"s"} in range · tap to {outOpen?"hide":"set up"}</div></div>
+        <button onClick={e=>{e.stopPropagation();download();}} disabled={!rows.length} className="text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8] disabled:opacity-50 flex items-center gap-1.5 shrink-0"><Download className="w-4 h-4"/>Download</button>
+        <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform shrink-0 ${outOpen?"rotate-180":""}`}/>
+      </div>
+      {outOpen&&<div className="border-t border-stone-100 p-4 space-y-4">
 
     <div className="rounded-xl border border-stone-200 p-4">
       <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-3">Output settings</div>
@@ -5611,21 +5619,13 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
       <p className="text-[11px] text-stone-400 mt-2">Layout is locked to your Ship Manager profile — <b>shipdate, track, service, weight, freight, shipprrecvier, pickticket, ucc128, compnay…</b> — so Full Circle reads it with no changes. Map service codes below.</p>
     </div>
 
-    {/* live file preview — shows the real fedxucc.csv bytes */}
-    <div className="rounded-xl border border-stone-200 p-4">
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold">File preview · {fname()}</div>
-        <span className="text-[11px] text-stone-400">{rows.length} shipment{rows.length===1?"":"s"} in range{rows.length?"":" — showing sample row"}</span>
-      </div>
-      <pre className="text-[11px] font-mono bg-stone-900 text-stone-100 rounded-lg p-3 overflow-x-auto whitespace-pre leading-relaxed">{previewText}</pre>
-    </div>
 
     <div className="rounded-xl border border-stone-200 p-4">
       <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-1">Delivery</div>
       <p className="text-[11px] text-stone-400 mb-3">How the file reaches Full Circle. Fill this in once Aptean gives you the destination — until then, Download works today.</p>
       <div className="grid sm:grid-cols-4 gap-3">
         <Field label="Send by"><Select value={deliv.mode||"download"} onChange={e=>upDeliv({mode:e.target.value})}><option value="download">Download only</option><option value="email">Email the file</option><option value="sftp">SFTP drop</option></Select></Field>
-        <Field label="File name"><Input value={cfg.filename||""} onChange={e=>up({filename:e.target.value})} placeholder="fedxucc.csv"/></Field>
+        <Field label="File name / path"><Input value={cfg.filename||""} onChange={e=>up({filename:e.target.value})} placeholder="ups/fedxucc.csv"/></Field>
         {deliv.mode==="email"&&<Field label="Send to (email)"><Input value={deliv.emailTo||""} onChange={e=>upDeliv({emailTo:e.target.value})} placeholder="fullcircle-in@aptean.com"/></Field>}
       </div>
       <p className="text-[11px] text-stone-500 mt-2 bg-amber-50 border border-amber-200 rounded px-2.5 py-2">Full Circle reads a fixed path like <b>Z:\ups\fedxucc.csv</b>. A <b>Z:</b> drive is a mapped Windows folder on your network — a cloud app can't write to a drive letter directly. Two ways to land it there: <b>(1)</b> click <b>Download</b> and drop the file into <b>Z:\ups</b> (works today), or <b>(2)</b> if that folder is also reachable over SFTP, point the SFTP drop at it and we'll write <b>{cfg.filename||"fedxucc.csv"}</b> for you automatically.</p>
@@ -5677,12 +5677,14 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
     </div>
 
     <div className="rounded-xl border border-stone-200 p-4">
-      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-2">File preview</div>
+      <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-2">File preview · {fpath()}</div>
       <pre className="text-[11px] font-mono text-stone-600 bg-stone-50 border border-stone-200 rounded-lg p-2.5 max-h-48 overflow-auto whitespace-pre">{csv?csv.split("\r\n").slice(0,12).join("\n")+(rows.length>12?"\n…":""):"(empty)"}</pre>
       <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mt-4 mb-2">Column map (for Aptean)</div>
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-[12px] text-stone-600">
         {COLS.map((cc,i)=><div key={i} className="flex gap-2"><span className="w-5 text-stone-400 tabular-nums shrink-0">{i+1}</span><b className="w-24 shrink-0 text-stone-700">{cc[0]}</b><span className="text-stone-500">{cc[1]}</span></div>)}
       </div>
+    </div>
+      </div>}
     </div>
   </div>);
 }

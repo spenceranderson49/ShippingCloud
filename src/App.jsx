@@ -7036,26 +7036,56 @@ const WHATS_NEW=[
   {date:"Jul 2026",title:"Packing-slip designer",body:"Build your own branded packing slip — your logo, accent color, and columns.",tab:"settings"},
   {date:"Jul 2026",title:"Find FedEx locations",body:"Search drop-off and hold-at-location points by your customer's address, with type-ahead.",tab:"ship"},
 ];
-/* FAQ shown in Help & Support, grouped into tabs. Plain answers, no jargon. */
+/* FAQ shown in Support & FAQ, grouped into tabs. Plain answers, no jargon. */
 const FAQ_DATA=[
   {cat:"Getting Started",items:[
-    {q:"How do I create a shipping label?",a:"Open the Ship tab, pick an order from the left (or type an address), confirm the box and weight, choose a service under Service & Rate, and click Print label."},
-    {q:"How do I connect my Shopify store?",a:"Settings → Integrations → Shopify. Paste your store URL and connect. Orders then flow into the Orders and Ship tabs automatically."},
-    {q:"Can I try it without a real account?",a:"Yes — on the sign-in screen choose “Take a peek.” Everything is sample data; no labels are actually created."},
+    {q:"How do I create a shipping label?",a:"Open the Ship tab, pick an order from the list on the left (or type an address), confirm the box and weight under Package Details, choose a service under Service & Rate, and click Print label."},
+    {q:"How do I connect my Shopify store?",a:"Settings → Integrations → Shopify. Paste your store URL and connect. Orders then flow into the Orders and Ship tabs automatically, and marking one shipped writes tracking back to Shopify."},
+    {q:"Can I try it without a real account?",a:"Yes — on the sign-in screen choose “Take a peek.” Everything is sample data and no real labels are created. When you're ready, click “Create your real account.”"},
+    {q:"How do I set my return/sender address?",a:"Settings → Company sets your default sender. On the Ship screen you can also save addresses to the Address Book and pick them from the Sender/Receiver search."},
+    {q:"How do I add my logo?",a:"Settings → Company → company logo. It shows in your portal header and prints on packing slips and letterhead. Admins can also push a logo to a specific login from the admin portal."},
+    {q:"What are the numbered steps on the Ship screen?",a:"1 Ship from & to, 2 Package details, 3 Service & rate — the natural order to build a shipment. You can hide them in Settings → Customizations if you prefer a compact view."},
   ]},
-  {cat:"Shipping & FedEx",items:[
-    {q:"What is FedEx One Rate?",a:"Flat-rate pricing when you ship in FedEx packaging (envelope, pak, box, or tube) on a FedEx Express service. Envelopes must be ≤10 lb; paks, boxes, and tubes ≤50 lb. We show the One Rate box your shipment fits so you can compare it to your account rate."},
-    {q:"How does Autopilot pick a service?",a:"Autopilot runs your rules (Autopilot tab). A rule with a “Set Service” action that matches an order sets that service; orders that match no rule use your Fallback service. The order card badge shows what it will use."},
-    {q:"How do returns work?",a:"Returns tab → create a return. You can print a return label or send the customer a box-free QR/email return that they scan at a FedEx counter."},
-    {q:"What does the address check do?",a:"It verifies the recipient with FedEx (residential vs commercial, deliverable, and a standardized version) so you avoid address-correction fees."},
+  {cat:"Shipping & Labels",items:[
+    {q:"How do I ship several orders at once?",a:"Use the Batch tab. Select the orders, apply your Autopilot rules or pick a service, and print all the labels (and packing slips) in one go."},
+    {q:"Can I print packing slips?",a:"Yes. Use the Packing Slip button on the Ship screen, or design your own in Settings → Packing Slips (logo, accent color, SKU/price columns, and packing instructions)."},
+    {q:"What are packing instructions?",a:"A note that prints on the packing slip (e.g. “double-box, keep upright”). On the Ship screen you can also click “Add weather advice” to pull the destination forecast and cold/hot-pack guidance in automatically."},
+    {q:"How does scan-to-verify work?",a:"In the Scan tab, switch to Verify mode. Scan each item's barcode before you ship so the wrong item can't go out. Admins can require verify-before-ship."},
+    {q:"Can I add insurance or a signature?",a:"Yes — on the Ship screen set the declared value (Insure) and choose a signature option (None / Indirect / Direct / Adult). You can set defaults in Settings."},
+    {q:"How do I find a FedEx drop-off or hold location?",a:"On the Ship screen use Find FedEx Locations — search by your customer's address or “use my location,” with type-ahead."},
+  ]},
+  {cat:"FedEx Services & One Rate",items:[
+    {q:"What is FedEx One Rate?",a:"Flat-rate pricing when you ship in FedEx packaging (envelope, pak, box, or tube) on a FedEx Express service. Envelopes must weigh ≤10 lb; paks, boxes, and tubes ≤50 lb. We show the One Rate box your shipment fits so you can compare it to your account rate."},
+    {q:"Which FedEx services can I use?",a:"Ground, Home Delivery, Ground Economy, Express Saver, 2Day, 2Day A.M., Standard/Priority/First Overnight, and the international services — plus their One Rate versions where eligible."},
+    {q:"What's the difference between Ground and Home Delivery?",a:"Home Delivery goes to residential addresses (including weekends); Ground goes to businesses. The address check picks the right one automatically, and Autopilot swaps between them based on the classification."},
+    {q:"How does Autopilot pick a service?",a:"Autopilot runs your rules (Autopilot tab). A rule with a “Set Service” action that matches an order sets that service; orders that match no rule fall back to your Fallback service. Each order card shows the service it will use."},
+    {q:"Why is a service greyed out or unavailable?",a:"FedEx isn't offering it for that shipment — usually the size, weight, or destination rules it out (e.g. Saturday delivery on a non-Express service, or a service that doesn't reach that ZIP)."},
+    {q:"Do you support electronic customs (ETD)?",a:"Yes — for international shipments you can attach the commercial invoice electronically (Electronic Trade Documents) instead of printing three copies."},
   ]},
   {cat:"Rates & Billing",items:[
-    {q:"Where do my rates come from?",a:"Live rates come from your connected FedEx account; if that isn't connected you'll see estimates. Admins set discounts/markups in Admin → Rates."},
-    {q:"How is billable weight figured?",a:"FedEx bills the greater of the actual weight (rounded up) and the dimensional weight (L×W×H ÷ the divisor). The rate breakdown shows which one applied."},
+    {q:"Where do my rates come from?",a:"Live rates come from your connected FedEx account. If that isn't connected you'll see estimates. Admins set the discounts/markups customers see in Admin → Rates."},
+    {q:"How is billable weight figured?",a:"FedEx bills the greater of the actual weight (rounded up to the next pound) and the dimensional weight (L×W×H ÷ the dim divisor). The rate breakdown on the Ship screen shows which one applied."},
+    {q:"Why is my package rated heavier than it weighs?",a:"Dimensional weight — a big, light box is billed on its size. Use a smaller box or check your negotiated dim divisor in Admin → Rates."},
+    {q:"Can I mark shipping up for my own customers?",a:"Yes. Company admins can add a margin on top of the rates their team sees (Company Admin → Rate Markup), and platform admins set per-customer discounts and markups."},
+    {q:"Where do I see invoices and margins?",a:"The Invoices tab (and, for admins, Margins and Receivables) show billed charges, your cost, and the margin per shipment."},
   ]},
-  {cat:"Integrations",items:[
-    {q:"What is the Full Circle connector?",a:"A small app on your Aptean/Full Circle box that reads orders over ODBC and drops ship-confirmations back on the Z: drive — so scanning a pick ticket pulls the order and booking a label writes the confirmation automatically."},
-    {q:"Is there an API?",a:"Yes — the ShippingCloud API (Admin → API). Live rates on your pricing, label booking, tracking, pickups, and billing endpoints."},
+  {cat:"Returns",items:[
+    {q:"How do I create a return?",a:"Returns tab → New return. Pick the order, choose refund/credit/exchange, and either print a return label or send the customer a box-free QR/email return."},
+    {q:"What is a box-free / QR return?",a:"Instead of a printed label, the customer gets a QR code by email. They take the item (no box or label needed) to a FedEx location, staff scan the code, and it ships back."},
+    {q:"Do returns update my inventory?",a:"Yes — when a return is received it can auto-restock the item into the Warehouse (WMS) so your counts stay accurate."},
+  ]},
+  {cat:"Warehouse & Orders",items:[
+    {q:"What's the Warehouse tab for?",a:"It's the WMS — inventory counts, locations/bins, receiving, pick lists, and packing. Orders on the Ship screen tie back to it so picking and shipping stay in sync."},
+    {q:"How do pick lists work?",a:"Generate a pick list from selected orders; pickers pull the items, then those orders are ready to pack and ship. Box logic can pre-assign the right carton."},
+    {q:"What is box logic / cartonization?",a:"It picks the smallest box your items fit and estimates the billable weight, so you're not guessing the carton or overpaying on dim weight."},
+    {q:"Where do my orders come from?",a:"Connected stores (Shopify and others), manual entry, or — for Full Circle customers — pulled from your ERP over the connector when you scan a pick ticket."},
+  ]},
+  {cat:"Integrations & Account",items:[
+    {q:"What is the Full Circle connector?",a:"A small app on your Aptean/Full Circle Windows box that reads orders over ODBC and drops ship-confirmations back on the Z: drive — so scanning a pick ticket pulls the order, and booking a label writes the confirmation file automatically. Its status shows in the sidebar."},
+    {q:"Is there an API?",a:"Yes — the ShippingCloud API (Admin → API). Live rates on your pricing, label booking, tracking links, pickups, and billing endpoints, keyed to each customer's rate card."},
+    {q:"How do I add or manage logins?",a:"Admins manage logins in the admin portal (invite, set roles, reset passwords, 2FA). Company admins can manage their own company's users from the Company Admin tab."},
+    {q:"I forgot my password — what do I do?",a:"Use “Forgot password?” on the sign-in screen for a reset email, or ask your admin to send you a reset link from the admin portal."},
+    {q:"Is my data separate from other companies?",a:"Yes — every account's data (orders, rates, settings, logins) is isolated per tenant, and store connections/tokens are never shared between accounts."},
   ]},
 ];
 
@@ -7080,12 +7110,9 @@ function NavFooter({isAdmin,go}){
       <span className={`w-2 h-2 rounded-full shrink-0 ${conn.online?"bg-emerald-500":"bg-stone-300"}`}/>
       <span className={`truncate ${conn.online?"text-emerald-700 font-medium":"text-stone-400"}`}>Full Circle {conn.online?"connected":"offline"}</span>
     </div>}
-    <button onClick={e=>{e.currentTarget.blur();setNews(true);}} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] text-stone-500 hover:bg-[#E6F4FF]/60 hover:text-[#006FBF] transition-colors"><Sparkles className="w-3.5 h-3.5 shrink-0"/>What's New</button>
-    <button onClick={e=>{e.currentTarget.blur();setHelpTab("faq");setHelp(true);}} className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13px] font-medium text-stone-600 hover:bg-[#E6F4FF] hover:text-[#006FBF] transition-colors"><MessageCircle className="w-4 h-4 shrink-0"/>Help &amp; Support</button>
-    <div className="flex items-center justify-center gap-1.5 pt-2">
-      <ShipCloudLogo size={14} accent="#0086E0"/>
-      {BRAND.fw&&<span className="text-[10px] text-stone-400 font-medium tracking-tight">· by Freightwire</span>}
-    </div>
+    <button onClick={e=>{e.currentTarget.blur();setNews(true);}} className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13px] font-medium text-stone-600 hover:bg-[#E6F4FF] hover:text-[#006FBF] transition-colors"><Sparkles className="w-4 h-4 shrink-0"/>What's New</button>
+    <button onClick={e=>{e.currentTarget.blur();setHelpTab("faq");setHelp(true);}} className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13px] font-medium text-stone-600 hover:bg-[#E6F4FF] hover:text-[#006FBF] transition-colors"><MessageCircle className="w-4 h-4 shrink-0"/>Support &amp; FAQ</button>
+    <button onClick={()=>go&&go("ship")} title="Back to Ship" className="w-full flex items-center justify-center pt-2.5"><BrandCloud color="#0086E0" className="h-5 w-auto opacity-75 hover:opacity-100 transition-opacity"/></button>
     {news&&createPortal(<div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={()=>setNews(false)}>
       <div className="absolute inset-0 bg-stone-900/40"/>
       <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] overflow-auto" onClick={e=>e.stopPropagation()}>
@@ -7095,8 +7122,8 @@ function NavFooter({isAdmin,go}){
     </div>,document.body)}
     {help&&createPortal(<div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={()=>setHelp(false)}>
       <div className="absolute inset-0 bg-stone-900/40"/>
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col" onClick={e=>e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200"><div className="font-semibold text-stone-900 flex items-center gap-2"><MessageCircle className="w-4 h-4 text-[#0086E0]"/>Help &amp; Support</div><button onClick={()=>setHelp(false)} className="p-1 rounded hover:bg-stone-100"><X className="w-4 h-4 text-stone-500"/></button></div>
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg h-[600px] max-h-[88vh] flex flex-col" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 shrink-0"><div className="font-semibold text-stone-900 flex items-center gap-2"><MessageCircle className="w-4 h-4 text-[#0086E0]"/>Support &amp; FAQ</div><button onClick={()=>setHelp(false)} className="p-1 rounded hover:bg-stone-100"><X className="w-4 h-4 text-stone-500"/></button></div>
         <div className="flex gap-1 px-4 pt-3">
           {[["faq","FAQ"],["contact","Contact us"]].map(([k,l])=><button key={k} onClick={()=>setHelpTab(k)} className={`px-3 py-1.5 text-sm font-medium rounded-lg ${helpTab===k?"bg-[#E6F4FF] text-[#006FBF]":"text-stone-500 hover:bg-stone-100"}`}>{l}</button>)}
         </div>
@@ -7241,6 +7268,7 @@ function Landing({onAuth}){
         <button onClick={()=>onAuth("request")} className="bg-[#0086E0] hover:bg-[#006db8] text-white font-semibold rounded-xl px-8 py-4 text-[15px] shadow-lg shadow-[#0086E0]/20 transition-colors">Create Your Account</button>
         <button onClick={()=>onAuth("fedex")} className="border border-stone-300 bg-white hover:border-[#0086E0]/50 hover:text-[#0086E0] text-stone-700 font-semibold rounded-xl px-8 py-4 text-[15px] flex items-center gap-2 transition-colors"><Truck className="w-4 h-4"/>Get your own FedEx account</button>
       </div>
+      <div className="mt-5"><button onClick={enterDemo} className="text-[14px] text-stone-500 hover:text-[#0086E0] underline underline-offset-4 decoration-stone-300 transition-colors">Just looking? Take a peek →</button></div>
     </div>
     {/* features */}
     <div id="features" className="max-w-6xl mx-auto px-5 pb-16 scroll-mt-6">

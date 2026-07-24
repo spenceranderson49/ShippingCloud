@@ -197,6 +197,10 @@ try{
     let _bk=window.localStorage.getItem("sc_impersonateBrand")||"";
     if(_bk==="shiphub")_bk="freightwire";
     if(_imp&&BRAND_SKINS[_bk])Object.assign(BRAND,BRAND_SKINS[_bk]);
+    /* Per-login co-brand: a login flagged "coBrand" in the admin shows the "ShippingCloud by
+       Freightwire" skin even on the plain shippingcloud.net build. Stamped into sc_userBrand at
+       login (see the sync effect) and applied here. Admin builds never co-brand. */
+    else if(!BRAND.admin){ const _ub=window.localStorage.getItem("sc_userBrand")||""; if(BRAND_SKINS[_ub])Object.assign(BRAND,BRAND_SKINS[_ub]); }
   }
 }catch(e){}
 /* The site's own origin — integration redirect-URI instructions must show THIS site's domain,
@@ -3911,10 +3915,11 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         <div key={u.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
           <div className="flex-1 min-w-[180px] grid grid-cols-2 gap-2"><Input value={u.name||""} onChange={e=>setUsers(us=>us.map(x=>x.id===u.id?{...x,name:e.target.value}:x))}/><Input value={u.email||""} onChange={e=>setUsers(us=>us.map(x=>x.id===u.id?{...x,email:e.target.value}:x))}/></div>
           <span className="text-[11px] text-stone-400 w-20">{u.lastLogin||"—"}</span>
-          <button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); try{ const _b=(c&&c.brand)||""; if(_b)window.localStorage.setItem("sc_impersonateBrand",_b); else window.localStorage.removeItem("sc_impersonateBrand"); }catch(e){} lsSet("session",u); window.location.reload(); }} title="Open the app exactly as this person sees it" className="text-[11px] rounded-md px-2.5 py-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200">Log In As</button>
+          <button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); try{ const _b=u.coBrand?"freightwire":((c&&c.brand)||""); if(_b)window.localStorage.setItem("sc_impersonateBrand",_b); else window.localStorage.removeItem("sc_impersonateBrand"); }catch(e){} lsSet("session",u); window.location.reload(); }} title="Open the app exactly as this person sees it" className="text-[11px] rounded-md px-2.5 py-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200">Log In As</button>
           <button onClick={()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,status:x.status==="disabled"?"active":"disabled"}:x))} className={`text-[11px] rounded-md px-2.5 py-1.5 ${u.status==="disabled"?"bg-rose-100 text-rose-600":"bg-emerald-50 text-emerald-700"}`}>{u.status==="disabled"?"disabled":"active"}</button>
           <RowMenu title={"More actions for "+(u.name||u.email)} items={[
             {label:"Company Admin",title:u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins",active:!!u.companyAdmin,onClick:()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))},
+            {label:u.coBrand?"“by Freightwire” ✓":"Show “by Freightwire”",title:"Co-brand this login as “ShippingCloud by Freightwire” (applies next time they load the app)",active:!!u.coBrand,onClick:()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,coBrand:!x.coBrand}:x))},
             {label:"Set password…",title:"Reset password",onClick:()=>setPw(u)},
             CLOUD.mode==="cloud"&&{label:"Send reset email",title:"Email them a choose-a-new-password link (valid 1 hour)",onClick:()=>sendReset(u)},
             u.id!==currentUser.id&&{label:"Delete login…",danger:true,onClick:async()=>{if(await uiConfirm("Delete "+u.email+"'s login? They won't be able to sign in anymore. The customer account and its data are not touched."))setUsers(us=>us.filter(x=>x.id!==u.id));}},
@@ -6419,12 +6424,13 @@ function UsersAdmin({users,setUsers,clients,setClients,currentUser,signupRequest
           {/* Primary actions inline (Log In As + Active); everything else lives in the ⋮ menu so the
              row stays clean. Panel toggles (portal access / tabs & logo) open their editor below. */}
           <div className="shrink-0 flex items-center justify-end gap-1.5 flex-wrap">
-            {u.role!=="admin"&&<button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); try{ const _cl=(clients||[]).find(x=>x&&x.id===u.clientId); const _b=(_cl&&_cl.brand)||""; if(_b)window.localStorage.setItem("sc_impersonateBrand",_b); else window.localStorage.removeItem("sc_impersonateBrand"); }catch(e){} lsSet("session",u); window.location.reload(); }} title="Open the app exactly as this person sees it" className="text-[11px] rounded-md px-2.5 py-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200">Log In As</button>}
+            {u.role!=="admin"&&<button onClick={()=>{ lsSet("adminReturn",currentUser); const uid=String(u.id||u.email); clearScratchFor(uid); try{ const _cl=(clients||[]).find(x=>x&&x.id===u.clientId); const _b=u.coBrand?"freightwire":((_cl&&_cl.brand)||""); if(_b)window.localStorage.setItem("sc_impersonateBrand",_b); else window.localStorage.removeItem("sc_impersonateBrand"); }catch(e){} lsSet("session",u); window.location.reload(); }} title="Open the app exactly as this person sees it" className="text-[11px] rounded-md px-2.5 py-1.5 bg-stone-100 text-stone-600 hover:bg-stone-200">Log In As</button>}
             <button onClick={()=>toggle(u.id)} title={u.status==="active"?"Deactivate":"Activate"} className={`text-[11px] rounded-md px-2.5 py-1.5 ${u.status==="active"?"bg-emerald-50 text-emerald-700":"bg-stone-100 text-stone-500"}`}>{u.status==="active"?"Active":"Deactivated"}</button>
             <RowMenu title={"More actions for "+(u.name||u.email)} items={[
               (u.role==="admin"&&u.id!=="u1"&&!isBuiltInAdmin(u.email)&&u.id!==currentUser.id&&fullAdmin)&&{label:"Portal access",title:"Which Admin sections this login can open",active:accessOpen===u.id,onClick:()=>setAccessOpen(accessOpen===u.id?null:u.id)},
               (u.role!=="admin")&&{label:"Tabs & logo",title:"Features & header logo for this login",active:featOpen===u.id,onClick:()=>setFeatOpen(featOpen===u.id?null:u.id)},
               (u.role!=="admin")&&{label:u.companyAdmin?"Company admin ✓":"Company admin",title:u.companyAdmin?"Revoke company admin":"Make company admin — they get a tab to manage their own company’s logins",active:!!u.companyAdmin,onClick:()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,companyAdmin:!x.companyAdmin}:x))},
+              (u.role!=="admin")&&{label:u.coBrand?"“by Freightwire” ✓":"Show “by Freightwire”",title:"Co-brand this login as “ShippingCloud by Freightwire” (takes effect next time they load the app)",active:!!u.coBrand,onClick:()=>setUsers(us=>us.map(x=>x.id===u.id?{...x,coBrand:!x.coBrand}:x))},
               (CLOUD.mode==="cloud"&&(u.role!=="admin"||fullAdmin))&&{label:"Set password…",title:"Set a new password for this login",onClick:async()=>{const np=await uiPrompt("New password for "+u.email+" (min 4 characters):","",{title:"Reset password"});if(!np)return;const r=await cloudCall({action:"setPassword",token:CLOUD.token,email:u.email,newPassword:np});uiAlert(r&&r.ok?"Password updated.":((r&&r.error)||"Could not update password."));}},
               (CLOUD.mode==="cloud"&&u.role!=="admin")&&{label:"Send reset email",title:"Email them a choose-a-new-password link (valid 1 hour)",onClick:async()=>{const r=await cloudCall({action:"requestReset",email:u.email,token:CLOUD.token});uiAlert(r&&r.configured===false?"Email sending isn't set up on this site yet (RESEND_API_KEY).":(r&&r.found===false)?"That login isn't in the cloud yet (or is disabled) — no email was sent.":"Password reset link sent to "+u.email+" (valid 1 hour).");}},
               (CLOUD.mode==="cloud"&&u.totp&&u.totp.enabled)&&{label:"Reset 2FA",title:"Lost-phone recovery: turn off this user's 2FA",onClick:async()=>{if(!await uiConfirm("Turn OFF two-factor for "+u.email+"? Use this only if they lost their authenticator — they'll sign in with just their password afterward."))return;const r=await cloudCall({action:"clearTotp",token:CLOUD.token,email:u.email});uiAlert(r&&r.ok?"2FA turned off for "+u.email+".":((r&&r.error)||"Could not reset 2FA."));}},
@@ -7913,6 +7919,18 @@ function AppInner(){
   const [users,setUsers]=usePersist("users",SEED_USERS);
   const [currentUserRaw,setCurrentUser]=usePersist("session",null);
   const currentUser=useMemo(()=>(currentUserRaw&&isBuiltInAdmin(currentUserRaw.email)&&(currentUserRaw.role!=="admin"||currentUserRaw.adminPerms))?{...currentUserRaw,role:"admin",adminPerms:null}:currentUserRaw,[currentUserRaw]);
+  /* Per-login "by Freightwire" co-brand: if this login is flagged coBrand, stamp sc_userBrand and
+     reload once so the skin (applied at module load) takes effect. Impersonation owns the skin, so
+     stand down while it's active; admin builds never co-brand. */
+  useEffect(()=>{
+    if(typeof window==="undefined"||BRAND.admin)return;
+    try{
+      if(window.localStorage.getItem("sc_adminReturn"))return;
+      const want=(currentUser&&currentUser.coBrand)?"freightwire":"";
+      const have=window.localStorage.getItem("sc_userBrand")||"";
+      if(want!==have){ if(want)window.localStorage.setItem("sc_userBrand",want); else window.localStorage.removeItem("sc_userBrand"); window.location.reload(); }
+    }catch(e){}
+  },[currentUser&&currentUser.id,currentUser&&currentUser.coBrand]);
   const [clients,setClients]=usePersist("clients",SEED_CLIENTS);
   /* clients moved from per-login storage to the shared store (so account markups,
      FedEx accounts, and accessorial tables reach every login). If the shared store

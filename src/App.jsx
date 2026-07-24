@@ -9404,7 +9404,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {perishPopup&&<PerishableAlert zip={receiver.zip} country={receiver.country} date={shipDate} rules={perishRules} over={perishPopupOver}/>}
 
         {!custom.hideShipSteps&&<StepHead n="2" label="Package details"/>}
-        <div className="bg-white border border-stone-200 shadow-sm rounded-lg p-3 space-y-2">
+        <div className="bg-white border border-stone-300 shadow-sm rounded-xl p-3 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <datalist id="sc-ref-list">{[...((settings.fieldLists||{}).department||[]),...((settings.fieldLists||{}).reference||[])].map(v=><option key={v} value={v}/>)}</datalist>
             <datalist id="sc-inv-list">{(((settings.fieldLists||{}).invoice)||[]).map(v=><option key={v} value={v}/>)}</datalist>
@@ -9517,7 +9517,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               const showRates=!custom.hideRateSrcBar;
               if(!showOrder&&!showAp&&!showRates&&!handsFree)return null;
               const apFired=liveRuleStatus&&liveRuleStatus.state==="fired";
-              return <div className="border border-stone-200 shadow-sm rounded-lg bg-white p-3 space-y-2">
+              return <div className="border border-stone-300 shadow-sm rounded-xl bg-white p-3 space-y-2">
                 <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">This Shipment</div>
                 {showOrder&&<div className="flex items-start gap-2 text-xs text-stone-600">
                   <Truck className="w-3.5 h-3.5 shrink-0 mt-0.5 text-stone-400"/>
@@ -9553,7 +9553,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 </div>}
               </div>;
             })()}
-            {!custom.hideBillingBox&&<div className="border border-stone-200 shadow-sm rounded-lg bg-white p-3 space-y-2">
+            {!custom.hideBillingBox&&<div className="border border-stone-300 shadow-sm rounded-xl bg-white p-3 space-y-2">
               <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5"/>Billing &amp; Third-Party</div>
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-stone-500">Bill to</span>
@@ -9561,7 +9561,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               </div>
               {(billTo==="third"||billTo==="receiver")&&<input value={thirdAcct} onChange={e=>setThirdAcct(e.target.value)} placeholder={billTo==="receiver"?"Receiver's FedEx account #":"3rd-party account #"} className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>}
             </div>}
-            {!custom.hideNotifyBox&&<div className="border border-stone-200 shadow-sm rounded-lg bg-white p-3 space-y-2">
+            {!custom.hideNotifyBox&&<div className="border border-stone-300 shadow-sm rounded-xl bg-white p-3 space-y-2">
               <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><Send className="w-3.5 h-3.5"/>Send Label &amp; Notify</div>
               <div>
                 <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Send to email</div>
@@ -9593,7 +9593,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             <div className="flex items-center gap-2 text-sm font-semibold text-[#006FBF]"><FileText className="w-4 h-4"/>Customs · Commercial invoice</div>
 <datalist id="sc-prod-list">{((settings&&settings.products)||[]).map(pr=><option key={pr.id} value={pr.name}>{(pr.sku?pr.sku+" · ":"")+(pr.hs?("HS "+pr.hs):"no HS yet")}</option>)}</datalist>
             <datalist id="sc-origin-list">{COUNTRIES.map(c=><option key={c} value={c}/>)}</datalist>
-            <div className="bg-white border border-stone-200 rounded-lg p-3 space-y-2">
+            <div className="bg-white border border-stone-300 shadow-sm rounded-xl p-3 space-y-2">
             <div className="text-[11px] uppercase tracking-widest text-[#006FBF] font-bold flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#0086E0] rounded-sm"/>1 · Shipment &amp; terms</div>
             <div className="grid sm:grid-cols-3 gap-2">
               <Field label="Reason for export"><div className="flex gap-1"><Select value={EXPORT_REASONS.includes(customs.reason)?customs.reason:"__other"} onChange={e=>{const v=e.target.value;setCustoms({...customs,reason:v==="__other"?"":v});}}>{EXPORT_REASONS.map(r=><option key={r}>{r}</option>)}<option value="__other">Other…</option></Select>{!EXPORT_REASONS.includes(customs.reason)&&<input value={customs.reason} onChange={e=>setCustoms({...customs,reason:e.target.value})} placeholder="Type Reason" className="w-28 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0]"/>}</div></Field>
@@ -9601,7 +9601,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <Field label="Duties & taxes to"><Select value={customs.dutiesBill} onChange={e=>setCustoms({...customs,dutiesBill:e.target.value})}><option value="receiver">Receiver (DAP)</option><option value="sender">Sender (DDP)</option></Select></Field>
             </div>
             </div>
-            <div className="bg-white border border-stone-200 rounded-lg p-3 space-y-2">
+            <div className="bg-white border border-stone-300 shadow-sm rounded-xl p-3 space-y-2">
             <div className="text-[11px] uppercase tracking-widest text-[#006FBF] font-bold flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#0086E0] rounded-sm"/>2 · Your export details</div>
             <div className="grid sm:grid-cols-3 gap-2">
               <Field label="Sender Tax ID / EIN"><input value={customs.senderTaxId??(settings.taxId||"")} onChange={e=>setCustoms({...customs,senderTaxId:e.target.value})} placeholder="12-3456789" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></Field>
@@ -9609,7 +9609,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <Field label="FTR / EEI"><input value={customs.ftr??"NOEEI 30.37(a)"} onChange={e=>setCustoms({...customs,ftr:e.target.value})} list="sc-ftr-list" placeholder="NOEEI 30.37(a)" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/><datalist id="sc-ftr-list"><option value="NOEEI 30.37(a)">Under $2,500 per HS class</option><option value="NOEEI 30.36">To Canada</option><option value="NOEEI 30.37(h)">Gift / humanitarian</option><option value="AES ITN: X2026________">Filed — paste ITN</option></datalist></Field>
             </div>
             </div>
-            <div className="bg-white border border-stone-200 rounded-lg p-3 space-y-2">
+            <div className="bg-white border border-stone-300 shadow-sm rounded-xl p-3 space-y-2">
             <div className="text-[11px] uppercase tracking-widest text-[#006FBF] font-bold flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#0086E0] rounded-sm"/>3 · Receiver &amp; import details</div>
             <div className="grid sm:grid-cols-4 gap-2">
               <Field label="Importer of record"><div className="flex gap-1"><Select value={customs.ior||"Receiver"} onChange={e=>setCustoms({...customs,ior:e.target.value})}><option>Receiver</option><option>Shipper</option><option>Other</option></Select>{customs.ior==="Other"&&<input value={customs.iorName||""} onChange={e=>setCustoms({...customs,iorName:e.target.value})} placeholder="IOR name" className="w-28 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>}</div></Field>
@@ -9618,7 +9618,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <Field label="Additional receiver contact"><input value={customs.altContact||""} onChange={e=>setCustoms({...customs,altContact:e.target.value})} placeholder="Broker / consignee alt — name & phone" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></Field>
             </div>
             </div>
-            <div className="bg-white border border-stone-200 rounded-lg p-3 space-y-2">
+            <div className="bg-white border border-stone-300 shadow-sm rounded-xl p-3 space-y-2">
             <div className="text-[11px] uppercase tracking-widest text-[#006FBF] font-bold flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#0086E0] rounded-sm"/>4 · Marks &amp; notes</div>
             <div className="flex flex-wrap items-center gap-3">
               <Field label="Package marks"><input value={customs.marks||""} onChange={e=>setCustoms({...customs,marks:e.target.value})} placeholder="Carton 1 of 3" className="w-40 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></Field>
@@ -9628,7 +9628,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
 
             <Field label="Invoice notes"><textarea value={customs.notes||""} onChange={e=>setCustoms({...customs,notes:e.target.value})} rows={2} placeholder="Custom notes printed on the invoice — license numbers, 'samples for exhibition use only'…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></Field>
             </div>
-            <div className="bg-white border border-stone-200 rounded-lg p-3 space-y-2">
+            <div className="bg-white border border-stone-300 shadow-sm rounded-xl p-3 space-y-2">
                         <div className="space-y-1.5">
               <div className="flex items-center justify-between mb-1"><div className="text-[11px] uppercase tracking-widest text-[#006FBF] font-bold flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#0086E0] rounded-sm"/>5 · Products, value &amp; sign-off</div>
               <div className="flex flex-col items-end"><div className="flex rounded-lg border border-stone-200 overflow-hidden text-[11px] font-medium">
@@ -19900,10 +19900,10 @@ function AddressCard({title,data,set,required,residential,setResidential,address
     {/* side (Address Check) is its OWN bordered box with a 12px gap — flex default stretch keeps
         both boxes' tops AND bottoms flush with the fields grid */}
     <div className={side?"flex flex-col lg:flex-row gap-4":""}>
-    <div className={side?"flex-1 min-w-0 grid grid-cols-6 gap-px bg-stone-200 border border-stone-200 shadow-sm rounded-lg":"grid grid-cols-6 gap-px bg-stone-200 border border-stone-200 shadow-sm rounded-lg"}>
+    <div className={side?"flex-1 min-w-0 grid grid-cols-6 gap-px bg-stone-200 border border-stone-300 shadow-sm rounded-xl":"grid grid-cols-6 gap-px bg-stone-200 border border-stone-300 shadow-sm rounded-xl"}>
       {cell("Country","country","col-span-6")}{cell("Name","name","col-span-6 sm:col-span-3",required)}{cell("Company","company","col-span-6 sm:col-span-3",reqOverrides.company===true)}{cell("Address 1","address1","col-span-6",required)}{cell(_fmt.zip,"zip","col-span-3 sm:col-span-2",required&&!_fmt.zipOpt)}{cell(_fmt.state,"state","col-span-3 sm:col-span-2",required&&!_fmt.stateOpt)}{cell("City","city","col-span-6 sm:col-span-2",required)}{!hideAddr23&&<>{cell("Address 2","address2","col-span-6 sm:col-span-3")}{cell("Address 3","address3","col-span-6 sm:col-span-3")}</>}{cell("Phone","phone","col-span-6 sm:col-span-3",required&&reqOverrides.phone!==false)}{cell("Email","email","col-span-6 sm:col-span-3",required&&reqOverrides.email!==false)}
     </div>
-    {side&&<div className="lg:w-[280px] xl:w-[330px] shrink-0 bg-stone-50 border border-stone-200 shadow-sm rounded-lg p-3">{side}</div>}
+    {side&&<div className="lg:w-[280px] xl:w-[330px] shrink-0 bg-stone-50 border border-stone-300 shadow-sm rounded-xl p-3">{side}</div>}
     </div>
   </div>);
 }

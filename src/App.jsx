@@ -1818,6 +1818,7 @@ function resolveDocField(field,ctx,custom){
   const c=ctx||{};
   switch(field){
     case "custom": return custom||"";
+    case "packing": return c.packing||"";
     case "reference": return c.reference||c.shipmentReference||"";
     case "invoiceNo": return c.invoiceNo||"";
     case "orderNo": return c.orderNo||c.orderName||"";
@@ -1883,6 +1884,7 @@ function recToDocCtx(rec){
     reference:r.reference||r.shipmentReference||"",
     invoiceNo:r.invoiceNo||"",
     department:r.department||"",
+    packing:r.packing||"",
     orderNo:r.orderNo||r.orderName||r.orderNumber||r.invoiceNo||"",
     shipDate:r.date||r.shipDate||new Date().toLocaleDateString(),
     service:r.service||"",
@@ -9290,7 +9292,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     const _bc=(extra&&extra.cost!=null&&!isNaN(+extra.cost))?+extra.cost:null;
     const _cost=q.cost!=null?q.cost:_bc;
     const _sell=q.sell!=null?q.sell:(_cost!=null?rateSellFor(_cost,q.label,{rules:rateRules,client,fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight}):null);
-    return {id:Date.now(),date:new Date().toLocaleDateString(),tracking:(extra&&extra.tracking)||newTracking(carrier),carrier,service:q.label,recipient:{...receiver},sender:{...sender},fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,pieces:pieces.map(p=>({...p})),dims:pieces[0],insurance,cost:_cost,sell:_sell,list:(q.list!=null&&q.list!==""&&!isNaN(+q.list))?+q.list:undefined,rateBase:q.base,rateSurcharges:q.surcharges||[],rateAccessorials:q.accessorials||[],oneRate:!!q._oneRate,billTo,thirdAcct,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference,invoiceNo,poNo,department:_orFRec(),residential,intl,bookNumber:extra&&extra.bookNumber,customs:intl?{...customs,total:customsTotal,ci:"CI-"+rnd(5)}:null};
+    return {id:Date.now(),date:new Date().toLocaleDateString(),tracking:(extra&&extra.tracking)||newTracking(carrier),carrier,service:q.label,recipient:{...receiver},sender:{...sender},fromZip:sender.zip,toZip:receiver.zip,weight:totalWeight,pieces:pieces.map(p=>({...p})),dims:pieces[0],insurance,cost:_cost,sell:_sell,list:(q.list!=null&&q.list!==""&&!isNaN(+q.list))?+q.list:undefined,rateBase:q.base,rateSurcharges:q.surcharges||[],rateAccessorials:q.accessorials||[],oneRate:!!q._oneRate,billTo,thirdAcct,status:"Label created",lastScan:"Label created",eta:"—",onTime:true,reference,invoiceNo,poNo,department:_orFRec(),packing:packInstr,residential,intl,bookNumber:extra&&extra.bookNumber,customs:intl?{...customs,total:customsTotal,ci:"CI-"+rnd(5)}:null};
   };
   const print=async(q,force)=>{
     /* Re-label guard: an order that already has a label must be explicitly confirmed before a new
@@ -9494,7 +9496,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
          The collapsed tab (below) stays line-free. */
       /* equal-gap geometry: nav line →16px(-ml-2 offsets the page's 24px pad)→ cards →16px(pr-4)→
          rail line →16px(row gap-4)→ Sender. Line centered between sections, cards centered between lines. */
-      <aside className="relative isolate w-60 shrink-0 flex flex-col gap-2 pr-3 sm:pr-4 sm:-ml-2 self-stretch">
+      <aside className="relative isolate w-60 shrink-0 flex flex-col gap-2 pr-3 sm:pr-4 sm:-ml-2 sticky top-16 h-[calc(100vh-5rem)]">
         <div className="flex items-center gap-1.5">
           <button onClick={()=>setOrdersOpen(false)} className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-stone-500 hover:text-stone-700"><ChevronDown className="w-4 h-4 shrink-0"/><ShoppingBag className="w-4 h-4 shrink-0"/><span className="whitespace-nowrap">Orders{ordersToShow.length?<span className="text-stone-400 normal-case font-normal"> · {ordersToShow.length}</span>:""}</span></button>
           {onRefresh&&shopifyConnected(settings)&&<button onClick={onRefresh} disabled={syncing} title="Refresh orders" className="text-stone-400 hover:text-[#0086E0] disabled:opacity-40 p-1 shrink-0">{syncing?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<RotateCcw className="w-3.5 h-3.5"/>}</button>}
@@ -9534,7 +9536,6 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       {/* steps hidden = no numbered headers breaking up the page, so give the sections a touch
           more breathing room (16px vs 12px); with steps on, the headers carry the rhythm */}
       <div className={"relative flex-1 min-w-0 "+(custom.hideShipSteps?"space-y-4":"space-y-3")}>
-        <ServiceAlerts zip={receiver.zip} date={shipDate} isAdmin={!!(currentUser&&currentUser.role==="admin")}/>
         {/* Steps ON: actions share the step-1 header row. Steps OFF: that row disappears and the
             actions float beside the Sender/Receiver headings so the cards start at the very top. */}
         {!custom.hideShipSteps&&<div className="flex flex-wrap items-center justify-between gap-2">
@@ -9687,6 +9688,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               const apFired=liveRuleStatus&&liveRuleStatus.state==="fired";
               return <div className="border border-stone-300 shadow-sm rounded-xl bg-white p-3 space-y-2">
                 <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">This Shipment</div>
+                {!custom.hideServiceAlerts&&<ServiceAlerts zip={receiver.zip} date={shipDate} isAdmin={!!(currentUser&&currentUser.role==="admin")}/>}
                 {showOrder&&<div className="flex items-start gap-2 text-xs text-stone-600">
                   <Truck className="w-3.5 h-3.5 shrink-0 mt-0.5 text-stone-400"/>
                   <span>{so?<>Order <b>{so.name}</b>{so.source?` (${so.source})`:""} — buyer requested <b>{so.shippingService||"Standard"}</b>.</>:<span className="text-stone-400">No order loaded — scan an order (or pick one) and it fills in here.</span>}</span>
@@ -9757,7 +9759,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <div className="flex items-center justify-between gap-2">
                 <p className="text-[11px] text-stone-400">Prints on the packing slip.</p>
                 <div className="flex items-center gap-2 shrink-0">
-                  {packInstr.trim()&&<button onClick={()=>{setReference(r=>{const base=(r||"").split(" · PACK:")[0];return base+" · PACK: "+packInstr.trim().replace(/\s+/g," ").slice(0,60);});}} title="Append a short version to the Reference field (rides the label / invoice / PO feed)" className="text-[11px] font-medium text-stone-500 hover:text-[#006FBF]">→ Reference</button>}
+                  {packInstr.trim()&&<select value="" onChange={e=>{const v=e.target.value;const txt=packInstr.trim().replace(/\s+/g," ").slice(0,60);if(v==="reference")setReference(txt);else if(v==="invoice")setInvoiceNo(txt);else if(v==="po")setPoNo(txt);else if(v==="dept")setDepartment(txt);e.target.value="";}} title="Copy a short version into a reference field so it rides the label / invoice / PO feed" className="text-[11px] font-medium text-stone-500 bg-white border border-stone-200 rounded px-1.5 py-0.5 outline-none hover:border-[#99D6FF]"><option value="">Send to field…</option><option value="reference">Reference</option><option value="invoice">Invoice #</option><option value="po">PO #</option><option value="dept">Department</option></select>}
                   <button onClick={()=>{setSettings&&setSettings(s=>({...s,slipInstructions:packInstr}));}} className="text-[11px] font-medium text-[#0086E0] hover:text-[#006FBF]">Save as default</button>
                 </div>
               </div>
@@ -16522,7 +16524,7 @@ function BoxLogic({settings,setSettings}){
   </div>);
 }
 // Fields that can be bound onto a doc tab zone or receipt line, resolved from shipment data at print time
-const DOCTAB_FIELDS=[["reference","Reference / PO"],["invoiceNo","Invoice #"],["department","Department"],["orderNo","Order #"],["shipDate","Ship date"],["service","Service"],["weight","Weight"],["pieces","Piece count"],["declaredValue","Declared value"],["recipientName","Recipient name"],["recipientCompany","Recipient company"],["recipientZip","Recipient ZIP"],["senderName","Sender name"],["senderCompany","Sender company"],["cost","Total charged"],["tracking","Tracking number"],["custom","Custom text…"]];
+const DOCTAB_FIELDS=[["reference","Reference / PO"],["invoiceNo","Invoice #"],["department","Department"],["orderNo","Order #"],["shipDate","Ship date"],["service","Service"],["weight","Weight"],["pieces","Piece count"],["declaredValue","Declared value"],["packing","Packing instructions"],["recipientName","Recipient name"],["recipientCompany","Recipient company"],["recipientZip","Recipient ZIP"],["senderName","Sender name"],["senderCompany","Sender company"],["cost","Total charged"],["tracking","Tracking number"],["custom","Custom text…"]];
 const DOCTAB_LABEL={};DOCTAB_FIELDS.forEach(([k,l])=>{DOCTAB_LABEL[k]=l;});
 const DEFAULT_DOCTABS=[{id:"dt1",zone:"01",field:"reference",label:"REF",custom:"",size:9},{id:"dt2",zone:"02",field:"shipDate",label:"SHIP DATE",custom:"",size:9},{id:"dt3",zone:"03",field:"weight",label:"WEIGHT",custom:"",size:9}];
 const DEFAULT_RECEIPT_LINES=[{id:"rl1",field:"recipientName",label:"To",custom:""},{id:"rl2",field:"reference",label:"Ref",custom:""},{id:"rl3",field:"service",label:"Service",custom:""},{id:"rl4",field:"weight",label:"Weight",custom:""},{id:"rl5",field:"cost",label:"Cost",custom:""}];
@@ -19288,6 +19290,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
         {Tog({k:"hideShipSteps",label:"Hide the numbered 1-2-3 step headers",hint:"Removes the ‘1 Ship from & to · 2 Package details · 3 Service & rate’ headers from the Ship screen. Hidden by default — uncheck to show them."})}
         {Tog({k:"hideAssistant",label:"Hide the AI assistant button",hint:"Removes the floating assistant button in the bottom-right corner everywhere in the app."})}
         {Tog({k:"hideRateSrcBar",label:"Hide the rate-source line",hint:"Removes the ‘Live rates from your FedEx account / Estimated rates’ line from the This Shipment card beside the rate list."})}
+        {Tog({k:"hideServiceAlerts",label:"Hide service alerts",hint:"Turns off the amber Service Alerts strip (destination + Memphis-hub weather, FedEx holidays, and posted alerts) in the This Shipment card."})}
         {/* Weather master switch — writes the SAME top-level setting as Settings → Perishable mode, so both toggles stay in sync. Saves immediately (not part of the draft). */}
         <label className="flex items-start gap-2 text-sm text-stone-700 cursor-pointer">
           <input type="checkbox" checked={!!(settings&&settings.weatherOff)} onChange={e=>setSettings(p=>({...p,weatherOff:e.target.checked}))} className="accent-[#0086E0] mt-0.5"/>

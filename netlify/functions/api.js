@@ -1,5 +1,5 @@
 /* ════════════════════════════════════════════════════════════════════════
-   ShippingCloud API v1  (branded "ShipHub API" on FreightWire sites)
+   ShippingCloud API v1
    The platform's own public REST API: partners and customers integrate their
    systems directly — quotes priced through THEIR rate card, label booking,
    shipments, void, tracking links, pickups, billing summaries and invoices.

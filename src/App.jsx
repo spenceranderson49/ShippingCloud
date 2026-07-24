@@ -52,7 +52,7 @@ function tintLogoDataUrl(src,accent,cb){
 /* Freightwire clients get the co-brand: the REAL ShippingCloud logo (blue cloud + the ShippingCloud
    wordmark in its own font) followed by "by Freightwire". Same logo + font as everywhere else — the
    only difference from the plain ShippingCloud brand is the "by Freightwire" tag. */
-function FreightwireShipHub({logoH=44,sub=true,subText="by Freightwire",accent="",name1="Shipping",name2="Cloud"}){
+function FreightwireCoBrand({logoH=44,sub=true,subText="by Freightwire",accent="",name1="Shipping",name2="Cloud"}){
   const size=Math.round(logoH*0.6);
   return (<span className="inline-flex items-center" style={{gap:Math.round(logoH*0.24)}}>
     <ShipCloudLogo size={size} accent="#0086E0"/>
@@ -64,7 +64,7 @@ function FreightwireShipHub({logoH=44,sub=true,subText="by Freightwire",accent="
 const AdminPortalLockup=({logoH=44,...props})=>{
   const portalSize=Math.round(logoH*0.48);
   return (<span className="inline-flex items-center" style={{gap:Math.round(logoH*0.28)}}>
-    <FreightwireShipHub logoH={logoH} {...props} sub={false}/>
+    <FreightwireCoBrand logoH={logoH} {...props} sub={false}/>
     <span style={{width:1,height:Math.round(logoH*0.72),background:"#d6d3ce"}} className="shrink-0"/>
     <span style={{fontFamily:"Inter,system-ui,sans-serif",fontWeight:700,fontSize:portalSize,letterSpacing:"0.03em",lineHeight:1,color:"#57534e",whiteSpace:"nowrap"}}>Admin Portal</span>
   </span>);
@@ -3098,7 +3098,7 @@ function Login({users,onLogin,brand}){
   const [sentTo,setSentTo]=useState("");
   const [trustDays,setTrustDays]=useState("0");
   /* Forgot-password flow — same server actions CloudAuth uses (db.js requestReset /
-     resetPassword), so it works identically on ShippingCloud, ShipHub, and the admin HQ. */
+     resetPassword), so it works identically on ShippingCloud and the admin HQ. */
   const [fp,setFp]=useState(null);          // null | "ask" | "sent" | {reset:token} | "done"
   const [fpEmail,setFpEmail]=useState("");
   const [fpPw,setFpPw]=useState("");
@@ -3149,7 +3149,7 @@ function Login({users,onLogin,brand}){
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center gap-2 mb-6">
           <div className="flex items-center gap-2">
-            {BRAND.fw?(BRAND.admin?<AdminPortalLockup logoH={46}/>:<FreightwireShipHub logoH={46}/>):(!B.name1||B.name1==="Shipping")&&(!B.name2||B.name2==="Cloud")?<ShipCloudLogo size={28}/>:<><BrandCloud className="h-10 w-auto" color={B.primary}/><span className="font-extrabold tracking-tight text-3xl" style={{color:B.dark}}>{B.name1}<span style={{color:B.primary}}>{B.name2}</span></span></>}
+            {BRAND.fw?(BRAND.admin?<AdminPortalLockup logoH={46}/>:<FreightwireCoBrand logoH={46}/>):(!B.name1||B.name1==="Shipping")&&(!B.name2||B.name2==="Cloud")?<ShipCloudLogo size={28}/>:<><BrandCloud className="h-10 w-auto" color={B.primary}/><span className="font-extrabold tracking-tight text-3xl" style={{color:B.dark}}>{B.name1}<span style={{color:B.primary}}>{B.name2}</span></span></>}
           </div>
           {B.showLogo&&B.logo&&B.logo!==FW_LOGO&&<div className="flex items-center gap-1.5 text-stone-400 text-xs">{B.partnerLabel}<img src={B.logo} alt="partner" className="h-3.5 w-auto object-contain"/></div>}
         </div>
@@ -5809,7 +5809,7 @@ function BillingAdmin({clients=[],platform={},openCustomer}){
     </Panel>
   </div>);
 }
-/* ════════ Admin → API: the platform's own public API (ShippingCloud API / ShipHub API) ════════ */
+/* ════════ Admin → API: the platform's own public API (ShippingCloud API) ════════ */
 function ApiReports(){
   const [reps]=usePersist("proposalReports",[]);
   const list=(reps||[]).slice(0,20);
@@ -6492,7 +6492,7 @@ const isScratch=(key)=>String(key).indexOf("ship.")===0;
 const SCRATCH_KEYS=["ship.receiver","ship.pieces","ship.reference","ship.invoiceNo","ship.poNo","ship.insurance","ship.residential"];
 const clearScratchFor=(uid)=>SCRATCH_KEYS.forEach(k=>lsDel("u/"+uid+"/"+k));
 
-/* Copilot: does an order match a ShipHub AI-staged batch filter? Pure, testable. */
+/* Copilot: does an order match a ShippingCloud AI-staged batch filter? Pure, testable. */
 function batchCmdMatch(o,f,zone){
   const has=(arr)=>Array.isArray(arr)&&arr.length;
   if(f.productContains&&!String(o.items||o.product||"").toLowerCase().includes(String(f.productContains).toLowerCase()))return false;
@@ -7097,7 +7097,7 @@ function Landing({onAuth}){
     <div className="absolute inset-0 pointer-events-none" style={{background:"repeating-linear-gradient(-35deg,transparent 0 70px,rgba(30,155,240,.05) 70px 72px)"}}/>
     <div className="absolute pointer-events-none" style={{width:640,height:640,borderRadius:"50%",top:-180,left:"50%",background:"radial-gradient(circle,rgba(30,155,240,.14),transparent 65%)",animation:"fwDrift 12s ease-in-out infinite"}}/>
     <div className="relative flex flex-col items-center mb-7" style={{animation:"fwRise .6s ease both"}}>
-      <FreightwireShipHub logoH={52} sub={false}/>
+      <FreightwireCoBrand logoH={52} sub={false}/>
     </div>
     <div className="relative w-full flex justify-center py-4" style={{animation:"fwRise .6s .14s ease both",transform:"scale(1.2)",transformOrigin:"top center"}}>
       <CloudAuth onDone={()=>window.location.reload()} initialMode="signin"/>
@@ -7174,7 +7174,7 @@ function Landing({onAuth}){
         ))}
       </div>
     </div>
-    {/* built-in ShipHub AI */}
+    {/* built-in ShippingCloud AI */}
     <div className="max-w-6xl mx-auto px-5 pb-4">
       <div className="rounded-2xl p-8 sm:p-12 border border-[#0086E0]/25 bg-gradient-to-br from-[#0086E0]/10 via-white/40 to-transparent">
         <div className="flex items-center gap-2 text-[#0086E0] font-semibold text-sm"><Sparkles className="w-4 h-4"/>Built-in assistant · {AI_NAME}</div>
@@ -8486,7 +8486,7 @@ function AppInner(){
 
           {BRAND.fw?(<>
             <button onClick={()=>setTab("ship")} title="Back to Ship" className="flex items-center gap-2.5 cursor-pointer select-none shrink-0">
-              {BRAND.admin?<AdminPortalLockup logoH={Math.round(30*((custom.logoScale||100)/100))} accent={srf.accent||""}/>:<FreightwireShipHub logoH={Math.round(30*((custom.logoScale||100)/100))} sub={false} accent={srf.accent||""}/>}
+              {BRAND.admin?<AdminPortalLockup logoH={Math.round(30*((custom.logoScale||100)/100))} accent={srf.accent||""}/>:<FreightwireCoBrand logoH={Math.round(30*((custom.logoScale||100)/100))} sub={false} accent={srf.accent||""}/>}
             </button>
           </>):(
           <button onClick={()=>setTab("ship")} title="Back to Ship" className="cursor-pointer flex items-center shrink-0">{(!brand.name1||brand.name1==="Shipping")&&(!brand.name2||brand.name2==="Cloud")?<ShipCloudLogo size={Math.round(22*((custom.logoScale||100)/100))} accent={srf.accent||custom.accent||"#0086E0"}/>:<span className="font-extrabold tracking-tight text-[20px] sm:text-[26px]" style={{color:brand.dark}}>{brand.name1}<span style={{color:custom.accent||brand.primary}}>{brand.name2}</span></span>}</button>)}
@@ -19000,7 +19000,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
   const set=(k,v)=>_cd.setDraft(prev=>({...(prev||{}),[k]:v}));   // edits go to the draft; Save commits
   /* ── LIVE PREVIEW ── theme, accent and text size apply from the DRAFT the moment you touch them,
      so you SEE the change before saving. Leaving Customizations (or Cancel) re-applies the committed
-     values, so nothing sticks unless you hit Save. The FW/ShipHub wordmark reads var(--acc), so the
+     values, so nothing sticks unless you hit Save. The Freightwire co-brand wordmark reads var(--acc), so the
      accent recolors the logo live too. */
   const _commitRef=React.useRef(committedCustom); _commitRef.current=committedCustom;
   const _applyLook=(cc)=>{ try{ const el=document.documentElement;
@@ -19182,7 +19182,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
       <div className="mt-3 rounded-xl border border-stone-200 bg-white p-3">
         <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Live preview — updates as you click & drag; hit Save to keep it</div>
         <div className="flex items-center gap-3 flex-wrap border border-stone-100 rounded-lg px-3 py-2 bg-stone-50">
-          {BRAND.fw?<FreightwireShipHub logoH={Math.round(30*((c.logoScale||100)/100))} sub={false} accent={c.accent||""}/>:<ShipCloudLogo size={Math.round(22*((c.logoScale||100)/100))} accent={c.accent||"#0086E0"}/>}
+          {BRAND.fw?<FreightwireCoBrand logoH={Math.round(30*((c.logoScale||100)/100))} sub={false} accent={c.accent||""}/>:<ShipCloudLogo size={Math.round(22*((c.logoScale||100)/100))} accent={c.accent||"#0086E0"}/>}
           {settings.companyLogo&&<img src={settings.companyLogo} alt="Company logo preview" style={{height:Math.round(28*((c.companyLogoScale||100)/100))+"px"}} className="w-auto max-w-[160px] object-contain"/>}
           <span className="flex-1"/>
           <button type="button" className="text-xs text-white rounded-lg px-3 py-1.5 font-semibold pointer-events-none" style={{background:c.accent||"#0086E0"}}>Accent Button</button>

@@ -156,9 +156,9 @@ exports.handler = async (event) => {
     .filter(m => m.content.trim());
   if (!msgs.length || msgs[msgs.length - 1].role !== "user") return J(400, { ok: false, error: "Send a user message." });
 
-  /* brand comes from the client build (BRAND.product): "ShipHub" on freightwireship.com and
-     the admin HQ, "ShippingCloud" on the retail site. Whitelisted — never trust free text. */
-  const product = body.brand === "ShipHub" ? "ShipHub" : "ShippingCloud";
+  /* The product is ShippingCloud on every build (Freightwire clients get the "by Freightwire"
+     co-brand, but the assistant always calls the product ShippingCloud). */
+  const product = "ShippingCloud";
   const site = "shippingcloud.net";
 
   const who = body.context === "admin" ? "the platform administrator"

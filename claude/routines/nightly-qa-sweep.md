@@ -10,7 +10,7 @@
 
 ## Prompt (paste verbatim)
 
-You are the nightly QA sweep for the ShippingHub / Freightwire shipping platform (single-file React app: src/App.jsx ~13k lines; Netlify functions in netlify/functions/). Your job: find every dead button, broken route, throwing handler, dead-end flow, and user-facing typo — and report them so they can be fixed. This is a READ + REPORT run; you do NOT change code.
+You are the nightly QA sweep for the ShippingCloud shipping platform (single-file React app: src/App.jsx ~13k lines; Netlify functions in netlify/functions/). Your job: find every dead button, broken route, throwing handler, dead-end flow, and user-facing typo — and report them so they can be fixed. This is a READ + REPORT run; you do NOT change code.
 
 METHOD
 - Fan out sub-agents across the surfaces: (1) customer shipping (Ship, Quick quote, Batch, Orders, label/print/commercial-invoice flows), (2) Settings + all its sub-sections + landing/auth, (3) Admin portal (dashboard, customers, customer detail tabs, users, rates, carriers, API, billing, backups, branding, domains).

@@ -206,40 +206,11 @@ try{
 /* The site's own origin — integration redirect-URI instructions must show THIS site's domain,
    not a hardcoded one, so the white-label builds never leak another brand's URL. */
 const APP_ORIGIN=(()=>{ try{ return (typeof window!=="undefined"&&window.location&&window.location.origin)||"https://shippingcloud.net"; }catch(e){ return "https://shippingcloud.net"; } })();
-/* v137: on the Freightwire build, the browser tab shows the FW "F" mark (auto-cropped out of FW_LOGO
-   by scanning for the transparent gap before the wordmark) instead of the ShippingCloud cloud, plus
-   the FreightwireShip tab title. Crop bounds verified against the shipped asset: mark = 78x78 at x5,y2. */
+/* The browser tab always shows the ShippingCloud cloud — on every build, Freightwire co-brand
+   included. (The blue-cloud favicon is set in index.html and repainted to the accent color at
+   runtime below.) Only the tab title changes per build. */
 if(typeof window!=="undefined"&&BRAND.fw){
-  try{ document.title=BRAND.admin?"Admin Portal":"ShippingCloud — Freightwire"; }catch(e){}
-  try{
-    const setIcon=(href)=>{ try{
-      document.querySelectorAll('link[rel*="icon"]').forEach(l=>l.parentNode&&l.parentNode.removeChild(l));
-      const l=document.createElement("link"); l.rel="icon"; l.type="image/png"; l.href=href; document.head.appendChild(l);
-    }catch(e){} };
-    const img=new window.Image();
-    img.onload=function(){ try{
-      const W=img.width,H=img.height;
-      const c=document.createElement("canvas"); c.width=W; c.height=H;
-      const x=c.getContext("2d"); x.drawImage(img,0,0);
-      const d=x.getImageData(0,0,W,H).data;
-      const colHas=[];
-      for(let px=0;px<W;px++){ let has=false; for(let py=0;py<H;py++){ if(d[(py*W+px)*4+3]>16){has=true;break;} } colHas.push(has); }
-      let start=colHas.indexOf(true); if(start<0){ setIcon(FW_LOGO); return; }
-      const gap=Math.max(4,Math.round(W*0.02));
-      let end=W,run=0;
-      for(let i2=start;i2<W;i2++){ if(!colHas[i2]){ run++; if(run>=gap){ end=i2-run+1; break; } } else run=0; }
-      let top=-1,bot=-1;
-      for(let py=0;py<H;py++){ let has=false; for(let px=start;px<end;px++){ if(d[(py*W+px)*4+3]>16){has=true;break;} } if(has){ if(top<0)top=py; bot=py; } }
-      if(top<0){ setIcon(FW_LOGO); return; }
-      const w=end-start,h=bot-top+1;
-      const out=document.createElement("canvas"); out.width=64; out.height=64;
-      const ox=out.getContext("2d");
-      const pad=3,box=64-pad*2,sc=Math.min(box/w,box/h);
-      ox.drawImage(c,start,top,w,h,(64-w*sc)/2,(64-h*sc)/2,w*sc,h*sc);
-      setIcon(out.toDataURL("image/png"));
-    }catch(e){ setIcon(FW_LOGO); } };
-    img.src=FW_LOGO;
-  }catch(e){}
+  try{ document.title=BRAND.admin?"Admin Portal":"ShippingCloud"; }catch(e){}
 }
 
 /* ════════ RATE ENGINE (demo) ════════ */
@@ -8069,9 +8040,9 @@ function AppInner(){
     if(custom.accent){ el.setAttribute("data-accent","1"); el.style.setProperty("--acc",custom.accent); el.style.setProperty("--accD",shadeHex(custom.accent,-0.14)); el.style.setProperty("--accL",shadeHex(custom.accent,0.18)); }
     else { el.removeAttribute("data-accent"); el.style.removeProperty("--acc"); }
   }catch(e){} },[custom.accent]);
-  /* Browser-tab icon = the same cloud as the header logo, repainted to the accent (ShippingCloud
-     brands only — Freightwire keeps its own mark). Falls back to the brand blue when no accent. */
-  useEffect(()=>{ try{ if(BRAND.fw)return; const link=document.querySelector('link[rel="icon"]'); if(!link)return;
+  /* Browser-tab icon = the same cloud as the header logo, repainted to the accent — on every build,
+     Freightwire co-brand included (the cloud is the mark everywhere now). Falls back to brand blue. */
+  useEffect(()=>{ try{ const link=document.querySelector('link[rel="icon"]'); if(!link)return;
     const col=(srf.accent||custom.accent||"#0086E0").replace("#","%23");
     link.href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='3.75 0.4 42.8 31.1'%3E%3Cpath d='M15 31h22a9 9 0 0 0 2.7-17.6A12.5 12.5 0 0 0 15.5 9 9.8 9.8 0 0 0 15 31Z' fill='"+col+"'/%3E%3C/svg%3E";
   }catch(e){} },[custom.accent,srf.accent]);

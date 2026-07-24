@@ -295,7 +295,7 @@ async function sendOtpCode(event, to, code) {
   const key = (process.env.RESEND_API_KEY || "").trim();
   if (!key) return { ok: false, configured: false };
   const reqOrigin = String((event.headers && (event.headers.origin || event.headers.Origin)) || "").replace(/\/+$/, "");
-  const BRANDS = { "https://shippingcloud.net": "ShippingCloud", "https://www.shippingcloud.net": "ShippingCloud", "https://freightwireship.com": "Freightwire", "https://www.freightwireship.com": "Freightwire", "https://admin.freightwireship.com": "Freightwire Admin" };
+  const BRANDS = { "https://shippingcloud.net": "ShippingCloud", "https://www.shippingcloud.net": "ShippingCloud", "https://admin.shippingcloud.net": "ShippingCloud", "https://freightwireship.com": "Freightwire", "https://www.freightwireship.com": "Freightwire", "https://admin.freightwireship.com": "Freightwire Admin" };
   const product = BRANDS[reqOrigin] || "ShippingCloud";
   const appUrl = BRANDS[reqOrigin] ? reqOrigin : (process.env.APP_URL || "").replace(/\/+$/, "");
   const isFw = product !== "ShippingCloud";
@@ -594,7 +594,7 @@ exports.handler = async (event) => {
          Origin is whitelisted — never trusted raw — so a reset email can't be pointed
          at an attacker's domain. Unknown origins fall back to APP_URL (retail). */
       const ORIGIN_BRANDS = {
-        "https://shippingcloud.net": "ShippingCloud", "https://www.shippingcloud.net": "ShippingCloud",
+        "https://shippingcloud.net": "ShippingCloud", "https://www.shippingcloud.net": "ShippingCloud", "https://admin.shippingcloud.net": "ShippingCloud",
         "https://freightwireship.com": "Freightwire", "https://www.freightwireship.com": "Freightwire",
         "https://admin.freightwireship.com": "Freightwire Admin"
       };

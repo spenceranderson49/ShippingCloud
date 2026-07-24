@@ -159,7 +159,7 @@ exports.handler = async (event) => {
   /* brand comes from the client build (BRAND.product): "ShipHub" on freightwireship.com and
      the admin HQ, "ShippingCloud" on the retail site. Whitelisted — never trust free text. */
   const product = body.brand === "ShipHub" ? "ShipHub" : "ShippingCloud";
-  const site = product === "ShipHub" ? "freightwireship.com" : "shippingcloud.net";
+  const site = "shippingcloud.net";
 
   const who = body.context === "admin" ? "the platform administrator"
     : body.context === "demo" ? "a visitor exploring the public demo (everything they see is sample data)"

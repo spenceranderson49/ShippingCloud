@@ -6545,7 +6545,7 @@ function batchCmdMatch(o,f,zone){
    the same deployed bundle as real logins, every platform update shows up in
    the demo automatically. */
 const DEMO_SEED_V="2026-07-06b";
-const DEMO_USER={id:"demo",name:"Demo Explorer",email:"demo@"+(BRAND.fw?"freightwireship.com":"shippingcloud.net"),role:"customer",clientId:null,status:"active",lastLogin:"Now",demo:true};
+const DEMO_USER={id:"demo",name:"Demo Explorer",email:"demo@shippingcloud.net",role:"customer",clientId:null,status:"active",lastLogin:"Now",demo:true};
 const demoDaysAgo=(n)=>new Date(Date.now()-n*86400000).toLocaleDateString();
 function makeDemoData(){
   const SVC=[["FedEx","FedEx Ground"],["FedEx","FedEx Ground"],["FedEx","FedEx Home Delivery"],["FedEx","FedEx Ground"],["FedEx","FedEx 2Day"],["FedEx","FedEx Home Delivery"],["FedEx","FedEx Ground"],["FedEx","FedEx Express Saver"],["FedEx","FedEx Priority Overnight"],["FedEx","FedEx Ground"],["DHL","DHL Express Worldwide"],["FedEx","FedEx 2Day"],["FedEx","FedEx Standard Overnight"],["FedEx","FedEx Home Delivery"]];
@@ -7035,7 +7035,7 @@ const AI_NAME=BRAND.fw?"Freightwire AI":(BRAND.product+" AI");   // Freightwire/
 const CONTACT_PHONE="(657) 622-0699";   // real support number (shows on the public landing page)
 const CONTACT_PHONE_TEL="+16576220699"; // same number, digits only with +1, used for tap-to-call
 const PHONE_REAL=!/555-?01/.test(CONTACT_PHONE);   /* placeholder guard: phone CTAs stay hidden until a real number replaces the 555 placeholder above */
-const CONTACT_EMAIL=BRAND.fw?"support@freightwireship.com":"support@shippingcloud.net"; // brand-matched support email (shows on the Contact page)
+const CONTACT_EMAIL="support@shippingcloud.net"; // brand-matched support email (shows on the Contact page)
 
 /* Terms & Privacy — quiet footer links opening a self-contained reader. Not legal advice; standard SaaS coverage. */
 function LegalLinks(){
@@ -7245,10 +7245,10 @@ function Landing({onAuth}){
       <h1 style={{fontFamily:"Inter,system-ui,sans-serif",letterSpacing:"-0.025em"}} className="text-3xl sm:text-4xl font-bold text-stone-900">Talk to a real person</h1>
       <p className="mt-4 text-stone-500 leading-relaxed text-lg">No chatbots, no ticket black holes. Call or write — a human who can actually fix it answers.</p>
       <div className="mt-8 grid sm:grid-cols-2 gap-4">
-        <a href={PHONE_REAL?("tel:"+CONTACT_PHONE_TEL):("mailto:support@"+(BRAND.fw?"freightwireship.com":"shippingcloud.net"))} className="bg-white border border-stone-200/80 hover:bg-stone-50 rounded-2xl p-6 block">
+        <a href={PHONE_REAL?("tel:"+CONTACT_PHONE_TEL):("mailto:support@shippingcloud.net")} className="bg-white border border-stone-200/80 hover:bg-stone-50 rounded-2xl p-6 block">
           <Phone className="w-6 h-6 text-[#0086E0]"/>
           <div className="mt-3 font-semibold text-stone-900">{PHONE_REAL?"Call us":"Email us"}</div>
-          <div className="text-[#0086E0] text-lg font-semibold mt-1">{PHONE_REAL?CONTACT_PHONE:("support@"+(BRAND.fw?"freightwireship.com":"shippingcloud.net"))}</div>
+          <div className="text-[#0086E0] text-lg font-semibold mt-1">{PHONE_REAL?CONTACT_PHONE:("support@shippingcloud.net")}</div>
           <div className="text-[13px] text-stone-500 mt-1">Monday–Friday, business hours (MT)</div>
         </a>
         <a href={"mailto:"+CONTACT_EMAIL} className="bg-white border border-stone-200/80 hover:bg-stone-50 rounded-2xl p-6 block">
@@ -8458,7 +8458,7 @@ function AppInner(){
   useEffect(()=>{ try{ document.documentElement.style.setProperty("--sc-stickoff",(adminReturn||isDemo)?"92px":"56px"); }catch(e){} },[adminReturn,isDemo]);
 
   if(!currentUser) return <Login users={users} brand={{...DEFAULT_BRAND,...(settings.brand||{})}} onLogin={(u)=>{ const uid=String(u.id||u.email); clearScratchFor(uid); lsSet("session",u); window.location.reload(); }}/>;
-  if(BRAND.admin&&currentUser.role!=="admin"&&!lsGet("adminReturn",null)) return (<div className="min-h-screen bg-stone-100 flex items-center justify-center p-4"><div className="bg-white border border-stone-200 rounded-xl p-8 text-center max-w-sm"><ShieldCheck className="w-8 h-8 text-stone-300 mx-auto mb-3"/><div className="font-semibold text-stone-800">Administrators only</div><p className="text-sm text-stone-500 mt-1">This portal is the admin HQ. Your account works on shippingcloud.net and freightwireship.com.</p><button onClick={()=>{lsDel("session");window.location.reload();}} className="mt-4 text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium">Sign Out</button></div></div>);
+  if(BRAND.admin&&currentUser.role!=="admin"&&!lsGet("adminReturn",null)) return (<div className="min-h-screen bg-stone-100 flex items-center justify-center p-4"><div className="bg-white border border-stone-200 rounded-xl p-8 text-center max-w-sm"><ShieldCheck className="w-8 h-8 text-stone-300 mx-auto mb-3"/><div className="font-semibold text-stone-800">Administrators only</div><p className="text-sm text-stone-500 mt-1">This portal is the admin HQ. Your account works on shippingcloud.net and admin.shippingcloud.net.</p><button onClick={()=>{lsDel("session");window.location.reload();}} className="mt-4 text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium">Sign Out</button></div></div>);
   /* shell */
   return (
     /* Background: "Ice, fainter" (B2) — a soft blue-leaning tint of the brand accent. */

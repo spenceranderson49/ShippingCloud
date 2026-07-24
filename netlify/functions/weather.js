@@ -27,7 +27,7 @@ const hits = {};
 function allow(k, max) { const w = Math.floor(Date.now() / 60000), kk = k + ":" + w; hits[kk] = (hits[kk] || 0) + 1; if (Object.keys(hits).length > 4000) { for (const x in hits) { if (!x.endsWith(":" + w)) delete hits[x]; } } return hits[kk] <= max; }
 
 const cache = {};   // zip|date -> { at, data }
-const UA = { "User-Agent": "FreightWireShippingCloud/1.0 (support@freightwireship.com)", Accept: "application/geo+json" };
+const UA = { "User-Agent": "ShippingCloud/1.0 (support@shippingcloud.net)", Accept: "application/geo+json" };
 
 /* Events that realistically slow a courier down. */
 const DELAY_RE = /(winter storm|blizzard|ice storm|freezing rain|snow|hurricane|tropical storm|tornado|flood|high wind|wind advisory|dense fog|storm warning)/i;

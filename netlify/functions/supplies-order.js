@@ -69,7 +69,7 @@ exports.handler = async (event) => {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
-      body: JSON.stringify({ from: "ShippingCloud <noreply@freightwireship.com>", to: [to], reply_to: auth.email || undefined, subject: "Packaging order — " + orderer + (company ? " (" + company + ")" : ""), html }),
+      body: JSON.stringify({ from: (process.env.EMAIL_FROM || "ShippingCloud <notify@shippingcloud.net>").trim(), to: [to], reply_to: auth.email || undefined, subject: "Packaging order — " + orderer + (company ? " (" + company + ")" : ""), html }),
     });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) return respond(200, { ok: false, error: "Couldn't send the order: " + ((d && d.message) || ("HTTP " + r.status)) });

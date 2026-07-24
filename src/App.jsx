@@ -15886,28 +15886,33 @@ function FedexLocations({settings}){
   const [err,setErr]=React.useState("");
   const [locs,setLocs]=React.useState(null);
   const [geoBusy,setGeoBusy]=React.useState(false);
-  const [sugg,setSugg]=React.useState([]);
+  const [sugg,setSugg]=React.useState([]);        // Google Places predictions [{placeId,description}]
   const [sugOpen,setSugOpen]=React.useState(false);
   const sugTimer=React.useRef();
-  /* Address autocomplete — type-ahead dropdown. Uses Photon (free, OpenStreetMap, no API key or
-     billing), so it works today; a Google Places key isn't required. Debounced, US-biased. */
-  const suggLabel=(f)=>{const p=(f&&f.properties)||{};return [[p.housenumber,p.street].filter(Boolean).join(" "),p.city||p.district||p.county,p.state,p.postcode].filter(Boolean).join(", ");};
+  const acSession=React.useRef(Math.random().toString(36).slice(2));
+  /* Address autocomplete — the SAME Google Places type-ahead the Ship tab's address boxes use
+     (placesCall → /.netlify/functions/places), so suggestions behave identically here. */
   const onAddr=(v)=>{
     setAddr(v); clearTimeout(sugTimer.current);
-    if(String(v||"").trim().length<4){setSugg([]);setSugOpen(false);return;}
+    if(String(v||"").trim().length<3){setSugg([]);setSugOpen(false);return;}
     sugTimer.current=setTimeout(async()=>{
       try{
-        const r=await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(v)}&limit=6&lang=en`);
-        const j=await r.json();
-        const feats=((j&&j.features)||[]).filter(f=>{const c=((f.properties||{}).countrycode||"").toUpperCase();return !c||c==="US";}).filter(f=>suggLabel(f));
-        setSugg(feats); setSugOpen(feats.length>0);
+        const r=await placesCall({action:"autocomplete",input:v,session:acSession.current,country:"us"});
+        if(r&&r.ok&&Array.isArray(r.predictions)&&r.predictions.length){setSugg(r.predictions);setSugOpen(true);}
+        else {setSugg([]);setSugOpen(false);}
       }catch(e){ setSugg([]); setSugOpen(false); }
     },300);
   };
-  const pickSugg=(f)=>{
-    const p=f.properties||{}; setAddr(suggLabel(f)); setSugg([]); setSugOpen(false);
-    const zip=p.postcode?String(p.postcode).match(/\d{5}/):null;
-    run({country:"US",...(zip?{postalCode:zip[0]}:{}),...((!zip&&p.city&&p.state)?{city:p.city,state:p.state}:{})});
+  const pickSugg=async(p)=>{
+    setAddr(p.description||""); setSugg([]); setSugOpen(false);
+    try{
+      const r=await placesCall({action:"details",placeId:p.placeId,session:acSession.current});
+      acSession.current=Math.random().toString(36).slice(2);
+      const a=(r&&r.ok&&r.address)||null;
+      if(a){ const z=String(a.zip||"").match(/\d{5}/); run({country:"US",...(z?{postalCode:z[0]}:{}),...((!z&&a.city&&a.state)?{city:a.city,state:a.state}:{})}); return; }
+    }catch(e){}
+    const zipM=(p.description||"").match(/\b(\d{5})\b/);   // fallback: pull a ZIP from the label text
+    if(zipM)run({postalCode:zipM[1],country:"US"});
   };
   const run=async(body)=>{
     setBusy(true);setErr("");setLocs(null);
@@ -15967,7 +15972,8 @@ function FedexLocations({settings}){
           <div className="relative min-w-[280px]">
             <Input value={addr} onChange={e=>onAddr(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){setSugOpen(false);byAddress();}if(e.key==="Escape")setSugOpen(false);}} onBlur={()=>setTimeout(()=>setSugOpen(false),150)} onFocus={()=>{if(sugg.length)setSugOpen(true);}} placeholder="Start typing an address…" className="w-full" autoComplete="off"/>
             {sugOpen&&sugg.length>0&&<div className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-stone-200 rounded-lg shadow-lg max-h-64 overflow-auto">
-              {sugg.map((f,i)=>(<button key={i} onMouseDown={e=>{e.preventDefault();pickSugg(f);}} className="w-full text-left px-3 py-2 text-[13px] text-stone-700 hover:bg-[#E6F4FF] border-b border-stone-50 last:border-0 flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0"/><span className="truncate">{suggLabel(f)}</span></button>))}
+              <div className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-stone-400 bg-stone-50 border-b border-stone-100 flex items-center gap-1"><MapPin className="w-3 h-3"/>Google Maps suggestions</div>
+              {sugg.map((p,i)=>(<button key={p.placeId||i} onMouseDown={e=>{e.preventDefault();pickSugg(p);}} className="w-full text-left px-3 py-2 text-[13px] text-stone-700 hover:bg-[#E6F4FF] border-b border-stone-50 last:border-0 flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0"/><span className="truncate">{p.description}</span></button>))}
             </div>}
           </div>
         </Field>

@@ -49,17 +49,14 @@ function tintLogoDataUrl(src,accent,cb){
     img.src=src;
   }catch(e){cb(src);}
 }
-function FreightwireShipHub({logoH=44,sub=true,subText="Customer Portal",accent="",name1="Shipping",name2="Cloud"}){
-  const nameSize=Math.round(logoH*0.5);
-  const [logoSrc,setLogoSrc]=useState(FW_LOGO);
-  useEffect(()=>{ let dead=false; tintLogoDataUrl(FW_LOGO,String(accent||"").trim(),u=>{ if(!dead)setLogoSrc(u); }); return ()=>{dead=true;}; },[accent]);
-  return (<span className="inline-flex items-center" style={{gap:Math.round(logoH*0.32)}}>
-    <img src={logoSrc} alt="Freightwire" style={{height:logoH}} className="w-auto shrink-0" draggable={false}/>
-    <span style={{width:1,height:Math.round(logoH*0.82),background:"#d6d3ce"}} className="shrink-0"/>
-    <span className="inline-flex flex-col" style={{gap:1}}>
-      <span style={{fontFamily:"Inter,system-ui,sans-serif",fontWeight:800,fontSize:nameSize,letterSpacing:"0.1em",lineHeight:1,color:"#1F1B18",textTransform:"uppercase"}}>{name1}<span style={{color:"var(--acc,#0198FF)"}}>{name2}</span></span>
-      {sub&&<span style={{fontFamily:"Inter,system-ui,sans-serif",fontSize:Math.max(9,Math.round(logoH*0.2)),letterSpacing:"0.12em",color:"#78716c",fontWeight:500,textTransform:"uppercase",lineHeight:1}}>{subText}</span>}
-    </span>
+/* Freightwire clients get the co-brand: the REAL ShippingCloud logo (blue cloud + the ShippingCloud
+   wordmark in its own font) followed by "by Freightwire". Same logo + font as everywhere else — the
+   only difference from the plain ShippingCloud brand is the "by Freightwire" tag. */
+function FreightwireShipHub({logoH=44,sub=true,subText="by Freightwire",accent="",name1="Shipping",name2="Cloud"}){
+  const size=Math.round(logoH*0.6);
+  return (<span className="inline-flex items-center" style={{gap:Math.round(logoH*0.24)}}>
+    <ShipCloudLogo size={size} accent="#0086E0"/>
+    {sub&&<span style={{fontFamily:"Inter,system-ui,sans-serif",fontSize:Math.max(10,Math.round(logoH*0.24)),letterSpacing:"0.01em",color:"#78716c",fontWeight:600,whiteSpace:"nowrap",lineHeight:1}}>{subText}</span>}
   </span>);
 }
 /* Admin-HQ lockup: the ShippingCloud wordmark, then "Admin Portal" set to the RIGHT and larger —
@@ -3177,7 +3174,7 @@ function Login({users,onLogin,brand}){
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center gap-2 mb-6">
           <div className="flex items-center gap-2">
-            {BRAND.fw?(BRAND.admin?<AdminPortalLockup logoH={46}/>:<FreightwireShipHub logoH={46} subText="Customer Portal"/>):(!B.name1||B.name1==="Shipping")&&(!B.name2||B.name2==="Cloud")?<ShipCloudLogo size={28}/>:<><BrandCloud className="h-10 w-auto" color={B.primary}/><span className="font-extrabold tracking-tight text-3xl" style={{color:B.dark}}>{B.name1}<span style={{color:B.primary}}>{B.name2}</span></span></>}
+            {BRAND.fw?(BRAND.admin?<AdminPortalLockup logoH={46}/>:<FreightwireShipHub logoH={46}/>):(!B.name1||B.name1==="Shipping")&&(!B.name2||B.name2==="Cloud")?<ShipCloudLogo size={28}/>:<><BrandCloud className="h-10 w-auto" color={B.primary}/><span className="font-extrabold tracking-tight text-3xl" style={{color:B.dark}}>{B.name1}<span style={{color:B.primary}}>{B.name2}</span></span></>}
           </div>
           {B.showLogo&&B.logo&&B.logo!==FW_LOGO&&<div className="flex items-center gap-1.5 text-stone-400 text-xs">{B.partnerLabel}<img src={B.logo} alt="partner" className="h-3.5 w-auto object-contain"/></div>}
         </div>
@@ -7659,7 +7656,7 @@ function TrackingPage({num,brandId}){
     <div style={{background:accent}} className="text-white">
       <div className="max-w-2xl mx-auto px-5 py-5 flex items-center gap-3">
         {brand&&brand.logo?<img src={brand.logo} alt={brand.name||""} className="h-9 w-auto max-w-[180px] object-contain bg-white/95 rounded px-1.5 py-1"/>:
-          (BRAND.fw?<img src={FW_LOGO} alt="" className="h-8"/>:<span className="text-xl font-extrabold tracking-tight">Shipping<span className="opacity-80">Cloud</span></span>)}
+          <ShipCloudLogo size={22} accent="#ffffff" dark="#ffffff"/>}
         {brand&&brand.name?<span className="text-lg font-semibold">{brand.name}</span>:null}
       </div>
     </div>
@@ -7837,7 +7834,7 @@ export default function App(){
     <div className="relative flex flex-col items-center gap-5">
       <div className="relative">
         <span className="absolute inset-0 rounded-full bg-[#0086E0]/15 blur-xl animate-pulse"/>
-        {BRAND.fw?<img src={FW_LOGO} alt="" className="h-14 relative animate-[float_2.4s_ease-in-out_infinite]"/>:<div className="relative animate-[float_2.4s_ease-in-out_infinite]"><ShipCloudLogo size={52}/></div>}
+        <div className="relative animate-[float_2.4s_ease-in-out_infinite]"><ShipCloudLogo size={52}/></div>
       </div>
       <div className="flex items-center gap-2 text-[#006FBF]"><Loader2 className="w-4 h-4 animate-spin"/><span className="text-sm font-medium tracking-tight">Loading your workspace…</span></div>
     </div>
@@ -8520,7 +8517,7 @@ function AppInner(){
       {navOpen&&<div className="md:hidden fixed inset-0 z-40 flex" role="dialog">
         <div className="absolute inset-0 bg-stone-900/40" onClick={()=>setNavOpen(false)}/>
         <aside className="relative w-64 bg-white h-full shadow-xl overflow-y-auto">
-          <div className="flex items-center justify-between px-4 h-14 border-b border-stone-200"><button onClick={()=>{setTab("ship");setNavOpen(false);}} title="Back to Ship" className="font-extrabold tracking-tight flex items-center gap-2" style={{color:brand.dark}}>{BRAND.fw?<><img src={FW_LOGO} alt="Freightwire" className="h-6 w-7 object-cover object-left" draggable={false}/><span className="w-px h-5 bg-stone-300"/><span className="text-[15px] leading-none text-stone-900"><span className="font-light">Freightwire</span><span className="font-extrabold" style={{color:"#1E9BF0"}}>Ship</span></span></>:<span>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></span>}</button><button onClick={()=>setNavOpen(false)} className="p-1.5 rounded hover:bg-stone-100"><X className="w-5 h-5 text-stone-500"/></button></div>
+          <div className="flex items-center justify-between px-4 h-14 border-b border-stone-200"><button onClick={()=>{setTab("ship");setNavOpen(false);}} title="Back to Ship" className="font-extrabold tracking-tight flex items-center gap-2" style={{color:brand.dark}}>{BRAND.fw?<><ShipCloudLogo size={20} accent="#0086E0"/><span className="ml-1.5 text-[11px] text-stone-400 font-medium">by Freightwire</span></>:<span>{brand.name1}<span style={{color:brand.primary}}>{brand.name2}</span></span>}</button><button onClick={()=>setNavOpen(false)} className="p-1.5 rounded hover:bg-stone-100"><X className="w-5 h-5 text-stone-500"/></button></div>
           <nav className="p-2 space-y-0.5">
             {TABS.map(([id,l,Icon])=>(
               <React.Fragment key={id}>

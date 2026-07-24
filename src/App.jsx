@@ -8880,7 +8880,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
      Autopilot uses — client-side, instantly, no batch step — and if a rule fires a "Set Service"
      action, that service gets the same AUTOPILOT-badged highlight a completed Autopilot run gives it. */
   const liveRuleStatus=useMemo(()=>{
-    if(!custom.autoRulesOnShip)return null;                              // toggle off — say nothing
+    if(custom.autoRulesOnShip===false)return null;                      // toggle explicitly off — say nothing (unset/true = on)
     if(!selectedOrder)return {state:"no-order"};                        // on, but nothing loaded to check
     const so=orders.find(x=>x.id===selectedOrder); if(!so)return {state:"no-order"};
     const enabled=(rules||[]).filter(r=>r&&r.enabled);
@@ -9276,7 +9276,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
      visible list so each order card shows the service Autopilot will choose before you click it.
      Only active when "apply rules on the Ship screen" is on; map is orderId → service label. */
   const apPreview=useMemo(()=>{ const m={};
-    if(!custom.autoRulesOnShip)return m;
+    if(custom.autoRulesOnShip===false)return m;
     const enabled=(rules||[]).filter(r=>r&&r.enabled); if(!enabled.length)return m;
     try{ const run=runRuleEngine(enabled,ordersFiltered,originZip);
       (run.results||[]).forEach(r0=>{ if(r0&&r0.fires&&r0.fires.length&&r0.view&&r0.view.selectedService&&r0.order)m[r0.order.id]=r0.view.selectedService; });
@@ -10734,7 +10734,7 @@ function OrderShipModal({o,orderList,onNav,setOrders,client,settings,onShipped,g
      run the LIVE rule engine on this order and select that service; otherwise fall back to the
      stored o.ruleService / the store's requested service via matchServiceForOrder. */
   const [apRules]=usePersist("ruleset",SEED_RULESET);
-  const apLive=useMemo(()=>{ if(!cz(settings).autoRulesOnShip)return null;
+  const apLive=useMemo(()=>{ if(cz(settings).autoRulesOnShip===false)return null;
     const enabled=(apRules||[]).filter(r=>r&&r.enabled); if(!enabled.length)return null;
     try{ const run=runRuleEngine(enabled,[o],fromZip); const r0=run.results&&run.results[0];
       if(r0&&r0.fires&&r0.fires.length&&r0.view&&r0.view.selectedService)return r0.view.selectedService;

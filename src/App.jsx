@@ -8917,18 +8917,35 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const [packInstr,setPackInstr]=useState(settings.slipInstructions||"");
   const _wxShip=useWeather(receiver.zip,receiver.country);
   const _wxHigh=_wxShip?_wxShip.tempHigh:null;
+  const _wxUnit=(_wxShip&&_wxShip.tempUnit)||"F";
   const _perishRule=(perishOn&&!weatherOff)?matchPerish(perishRules,_wxHigh):null;
-  /* One-line weather + cold/hot-pack advice for the current destination, ready to drop into the
-     packing instructions or a reference field. Empty when weather is off or unavailable. */
+  /* SHORT destination-temp + pack advice — no full weather blurb. e.g. "92°F — 2 gel packs". */
   const weatherPackLine=(()=>{ if(weatherOff||!_wxShip||_wxHigh==null)return "";
-    const where=`${_wxShip.city||""}${_wxShip.state?", "+_wxShip.state:""}`.trim();
-    let s=`Delivery${where?" "+where:""}: ~${_wxHigh}°${_wxShip.tempUnit||"F"}${_wxShip.condition?" "+_wxShip.condition:""}`;
-    if(_perishRule&&_perishRule.add)s+=` — add ${_perishRule.add}`;
-    else if(_wxHigh>=85)s+=" — hot delivery, consider a cold pack";
-    else if(_wxHigh<=32)s+=" — freezing delivery, protect against cold";
-    return s;
+    const t=`${_wxHigh}°${_wxUnit}`;
+    if(_perishRule&&_perishRule.add)return `${t} — ${_perishRule.add}`;
+    if(_wxHigh>=85)return `${t} — add a cold pack`;
+    if(_wxHigh<=32)return `${t} — protect from freezing`;
+    return t;
   })();
+  /* Even tighter for a reference field (few characters): just the add, e.g. "2 gel packs". */
+  const perishRefText=(_perishRule&&_perishRule.add)?String(_perishRule.add):(weatherPackLine||"");
   const addWeatherToInstr=()=>{ if(!weatherPackLine)return; setPackInstr(p=>{const t=(p||"").trim();return t&&t.includes(weatherPackLine)?p:(t?t+"\n":"")+weatherPackLine;}); };
+  /* Perishable auto-fill: when a rule fires, drop the short line into Packing Instructions (default on)
+     and optionally the Reference field — only touching fields that still hold a previous auto value or
+     the account default, so a manual edit or a real order reference is never clobbered. */
+  const _autoInstr=React.useRef("");
+  const _autoRef=React.useRef("");
+  useEffect(()=>{
+    const on=_perish.autoInstr!==false;   // default on when perishable mode is enabled
+    const want=(on&&_perishRule&&weatherPackLine)?weatherPackLine:"";
+    const dflt=settings.slipInstructions||"";
+    setPackInstr(cur=>{ if(cur===_autoInstr.current||cur===dflt||cur===""){ _autoInstr.current=want; return want||dflt; } return cur; });
+  },[weatherPackLine,_perish.autoInstr,settings.slipInstructions]);
+  useEffect(()=>{
+    if(!_perish.autoRef)return;
+    const want=(_perishRule&&perishRefText)?perishRefText:"";
+    setReference(cur=>{ if(cur===_autoRef.current||cur===""){ _autoRef.current=want; return want; } return cur; });
+  },[perishRefText,_perish.autoRef]);
   const perishPopup=perishOn&&!!_perish.popup;
   const perishPopupOver=_perish.popupOver;
   const setPiece=(i,patch)=>setPieces(ps=>ps.map((p,j)=>j===i?{...p,...patch}:p));
@@ -17951,6 +17968,11 @@ function PerishableSettings({settings,setSettings}){
     <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={p.onServices!==false} onChange={e=>up({onServices:e.target.checked})} className="accent-[#0086E0]"/>Show the delivery-day temperature next to each service</label>
     <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!!p.popup} onChange={e=>up({popup:e.target.checked})} className="accent-[#0086E0]"/>Pop up a warning on screen when it'll be hot at delivery</label>
     {p.popup&&<div className="flex flex-wrap items-center gap-2 text-sm pl-6 -mt-1"><span className="text-stone-500">Pop up when the delivery-day high is over</span><input value={p.popupOver??90} onChange={e=>up({popupOver:+String(e.target.value).replace(/[^0-9]/g,"")||0})} className="w-16 border border-stone-300 rounded px-2 py-1"/><span className="text-stone-500">°F</span></div>}
+    <div className="rounded-xl border border-[#99D6FF] bg-[#E6F4FF]/40 p-4 space-y-2">
+      <div className="text-[10px] uppercase tracking-widest text-[#006FBF] font-semibold">Auto-fill when a rule fires</div>
+      <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={p.autoInstr!==false} onChange={e=>up({autoInstr:e.target.checked})} className="accent-[#0086E0]"/><span>Put it in <b>Packing Instructions</b> <span className="text-[11px] text-stone-400">— short form, e.g. “92°F — 2 gel packs” (prints on the packing slip; add the “Packing instructions” field to your Doc tab in Print Settings to print it on the label)</span></span></label>
+      <label className="flex items-center gap-2 text-sm text-stone-700 cursor-pointer"><input type="checkbox" checked={!!p.autoRef} onChange={e=>up({autoRef:e.target.checked})} className="accent-[#0086E0]"/><span>Also put it in the <b>Reference field</b> <span className="text-[11px] text-stone-400">— tightest form, just the add (e.g. “2 gel packs”); only fills an empty/auto reference, never overwrites a real one</span></span></label>
+    </div>
     <div className="rounded-xl border border-stone-200 p-4">
       <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-2">Temperature warnings</div>
       <p className="text-[12px] text-stone-500 mb-3">When the delivery-day high is over a temperature, recommend what to pack.</p>

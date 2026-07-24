@@ -1752,7 +1752,14 @@ function packingSlipBody(slips){
     "{{THANKS}}":SLIP_OPTS.thanks?esc(SLIP_OPTS.thanks):"Thank you for your order!",
   });
   const tpl=(SLIP_OPTS.template&&SLIP_OPTS.template.trim())||DEFAULT_SLIP_TEMPLATE;
-  const one=(sl)=>{const m=parts(sl);let out=tpl;for(const k of Object.keys(m))out=out.split(k).join(m[k]);return out;};
+  const one=(sl)=>{const m=parts(sl);let out=tpl;for(const k of Object.keys(m))out=out.split(k).join(m[k]);
+    /* Packing instructions (per-shipment sl.packing, else the account default) print as a highlighted
+       block — appended after the template so it shows even on custom templates. */
+    const pk=(sl.packing!=null?sl.packing:SLIP_OPTS.instructions)||"";
+    if(String(pk).trim())out+=`<div style="margin:10px 0 0;padding:8px 11px;border:1px solid #f2c94c;background:#fffaeb;border-radius:7px;">`+
+      `<div style="font-weight:700;font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;color:#a97a00;margin-bottom:3px;">Packing instructions</div>`+
+      `<div style="font-size:12.5px;color:#7a5b00;line-height:1.45;">${esc(pk).replace(/\n/g,"<br/>")}</div></div>`;
+    return out;};
   return slips.map(one).join("");
 }
 function slipAccentCss(){ const a=SLIP_OPTS.accent; return (a&&/^#?[0-9a-fA-F]{3,8}$/.test(a))?`.slip .hd{border-bottom-color:${a[0]==="#"?a:"#"+a}}.slip .title{color:${a[0]==="#"?a:"#"+a}}.slip th{border-bottom-color:${a[0]==="#"?a:"#"+a}}`:""; }
@@ -8134,7 +8141,7 @@ function AppInner(){
   useEffect(()=>{ const h=(e)=>{ const d=e&&e.detail; setLookPreview(d&&typeof d==="object"?d:null); }; window.addEventListener("sc-look-preview",h); return ()=>window.removeEventListener("sc-look-preview",h); },[]);
   const srf=lookPreview||custom;
   useEffect(()=>{ try{document.documentElement.style.fontSize=(custom.fontScale&&custom.fontScale!==100)?(custom.fontScale/100*16)+"px":"";}catch(e){} },[custom.fontScale]);
-  useEffect(()=>{ SLIP_OPTS.thanks=(settings.slipThanks!=null?settings.slipThanks:custom.slipThanks)||""; SLIP_OPTS.footer=(settings.slipFooter!=null?settings.slipFooter:custom.slipFooter)||""; SLIP_OPTS.title=settings.slipTitle||""; SLIP_OPTS.logo=settings.companyLogo||""; SLIP_OPTS.company=(settings.sender&&(settings.sender.company||settings.sender.name))||settings.company||""; SLIP_OPTS.template=settings.slipTemplate||""; SLIP_OPTS.pickTitle=settings.pickListTitle||""; SLIP_OPTS.pickNote=settings.pickListNote||""; SLIP_OPTS.accent=settings.slipAccent||""; SLIP_OPTS.showSku=!!settings.slipShowSku; SLIP_OPTS.showPrice=!!settings.slipShowPrice; CI_OPTS.taxId=settings.taxId||""; },[custom.slipThanks,custom.slipFooter,settings.slipThanks,settings.slipFooter,settings.slipTitle,settings.companyLogo,settings.sender,settings.company,settings.slipTemplate,settings.pickListTitle,settings.pickListNote,settings.slipAccent,settings.slipShowSku,settings.slipShowPrice,settings.taxId]);
+  useEffect(()=>{ SLIP_OPTS.thanks=(settings.slipThanks!=null?settings.slipThanks:custom.slipThanks)||""; SLIP_OPTS.footer=(settings.slipFooter!=null?settings.slipFooter:custom.slipFooter)||""; SLIP_OPTS.title=settings.slipTitle||""; SLIP_OPTS.logo=settings.companyLogo||""; SLIP_OPTS.company=(settings.sender&&(settings.sender.company||settings.sender.name))||settings.company||""; SLIP_OPTS.template=settings.slipTemplate||""; SLIP_OPTS.pickTitle=settings.pickListTitle||""; SLIP_OPTS.pickNote=settings.pickListNote||""; SLIP_OPTS.accent=settings.slipAccent||""; SLIP_OPTS.showSku=!!settings.slipShowSku; SLIP_OPTS.showPrice=!!settings.slipShowPrice; SLIP_OPTS.instructions=settings.slipInstructions||""; CI_OPTS.taxId=settings.taxId||""; },[custom.slipThanks,custom.slipFooter,settings.slipThanks,settings.slipFooter,settings.slipTitle,settings.companyLogo,settings.sender,settings.company,settings.slipTemplate,settings.pickListTitle,settings.pickListNote,settings.slipAccent,settings.slipShowSku,settings.slipShowPrice,settings.slipInstructions,settings.taxId]);
   useEffect(()=>{ try{ const el=document.documentElement;
     el.classList.remove("dark","grey");   // themes retired — clears any saved dark/grey choice
     if(custom.accent){ el.setAttribute("data-accent","1"); el.style.setProperty("--acc",custom.accent); el.style.setProperty("--accD",shadeHex(custom.accent,-0.14)); el.style.setProperty("--accL",shadeHex(custom.accent,0.18)); }
@@ -8872,6 +8879,23 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const weatherOff=!!(settings&&settings.weatherOff);
   const perishOnServices=perishOn&&_perish.onServices!==false&&!weatherOff;
   const perishPlace=_perish.place||"banner";
+  /* Packing instructions that print on the packing slip (and can be pushed to a reference field).
+     Starts from the account default (Settings → Packing Slips) and is editable per shipment. */
+  const [packInstr,setPackInstr]=useState(settings.slipInstructions||"");
+  const _wxShip=useWeather(receiver.zip,receiver.country);
+  const _wxHigh=_wxShip?_wxShip.tempHigh:null;
+  const _perishRule=(perishOn&&!weatherOff)?matchPerish(perishRules,_wxHigh):null;
+  /* One-line weather + cold/hot-pack advice for the current destination, ready to drop into the
+     packing instructions or a reference field. Empty when weather is off or unavailable. */
+  const weatherPackLine=(()=>{ if(weatherOff||!_wxShip||_wxHigh==null)return "";
+    const where=`${_wxShip.city||""}${_wxShip.state?", "+_wxShip.state:""}`.trim();
+    let s=`Delivery${where?" "+where:""}: ~${_wxHigh}°${_wxShip.tempUnit||"F"}${_wxShip.condition?" "+_wxShip.condition:""}`;
+    if(_perishRule&&_perishRule.add)s+=` — add ${_perishRule.add}`;
+    else if(_wxHigh>=85)s+=" — hot delivery, consider a cold pack";
+    else if(_wxHigh<=32)s+=" — freezing delivery, protect against cold";
+    return s;
+  })();
+  const addWeatherToInstr=()=>{ if(!weatherPackLine)return; setPackInstr(p=>{const t=(p||"").trim();return t&&t.includes(weatherPackLine)?p:(t?t+"\n":"")+weatherPackLine;}); };
   const perishPopup=perishOn&&!!_perish.popup;
   const perishPopupOver=_perish.popupOver;
   const setPiece=(i,patch)=>setPieces(ps=>ps.map((p,j)=>j===i?{...p,...patch}:p));
@@ -9401,7 +9425,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const saveDraft=()=>{setDraftName(reference||receiver.name||receiver.city||"");setNaming(true);};
   /* box-logic explanation banner shown while a packed order is loaded */
   const PackNote=()=>packNote?(<div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800 flex items-center gap-2"><Boxes className="w-3.5 h-3.5 shrink-0"/><span className="flex-1">Box logic packed this order: <b>{packNote.boxNames}</b> · {packNote.totalWt} lb billable{packNote.unresolved.length?` · ${packNote.unresolved.length} item${packNote.unresolved.length===1?"":"s"} not in your catalog (weight may be low)`:""} — dims are editable below.</span><button onClick={()=>setPackNote(null)} className="text-emerald-500 hover:text-emerald-700"><X className="w-3.5 h-3.5"/></button></div>):null;
-  const newShipment=()=>{justBookedRef.current=null;setSwapMuted(false);try{lsDel("shipWip");}catch(e){}setHfArmed(null);setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setDepartment("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setDvEach(false);setRes(true);setResTouched(false);setSig(custom.defaultSignature&&custom.defaultSignature!=="none");setSigOption(custom.defaultSignature||"none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");setLastTracking("");setSent("");setShipDate(shipDateDefault(settings));};
+  const newShipment=()=>{justBookedRef.current=null;setSwapMuted(false);try{lsDel("shipWip");}catch(e){}setHfArmed(null);setPackNote(null);setReceiver({...empty,zip:""});setReference("");setInvoiceNo("");setPoNo("");setDepartment("");setPieces([{weight:"",L:"",W:"",H:""}]);setInsurance("");setDvEach(false);setRes(true);setResTouched(false);setSig(custom.defaultSignature&&custom.defaultSignature!=="none");setSigOption(custom.defaultSignature||"none");setSat(false);setBillTo(settings.defaultBillTo||"sender");setThirdAcct("");setSelectedOrder(null);setVerify(null);setBought(null);setEmailTo("");setLastTracking("");setSent("");setPackInstr(settings.slipInstructions||"");setShipDate(shipDateDefault(settings));};
   const addressCheck=(
     <div className="text-xs space-y-2">
       <div className="text-[10px] uppercase tracking-widest text-stone-500 font-semibold flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5"/>Address check</div>
@@ -9692,9 +9716,23 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               </div>
               <p className="text-[11px] text-stone-400">Emailed to the buyer once the label is booked.</p>
             </div>}
+            {!custom.hidePackInstr&&<div className="border border-stone-300 shadow-sm rounded-xl bg-white p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5 text-[#0086E0]"/>Packing Instructions</div>
+                {weatherPackLine&&<button onClick={addWeatherToInstr} title={weatherPackLine} className="text-[11px] font-medium text-[#006FBF] hover:text-[#0086E0] inline-flex items-center gap-1"><Snowflake className="w-3 h-3"/>Add weather advice</button>}
+              </div>
+              <textarea value={packInstr} onChange={e=>setPackInstr(e.target.value)} rows={2} placeholder="e.g. Fragile — double-box. Keep upright. Add 2 gel packs if hot." className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300 resize-y"/>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] text-stone-400">Prints on the packing slip.</p>
+                <div className="flex items-center gap-2 shrink-0">
+                  {packInstr.trim()&&<button onClick={()=>{setReference(r=>{const base=(r||"").split(" · PACK:")[0];return base+" · PACK: "+packInstr.trim().replace(/\s+/g," ").slice(0,60);});}} title="Append a short version to the Reference field (rides the label / invoice / PO feed)" className="text-[11px] font-medium text-stone-500 hover:text-[#006FBF]">→ Reference</button>}
+                  <button onClick={()=>{setSettings&&setSettings(s=>({...s,slipInstructions:packInstr}));}} className="text-[11px] font-medium text-[#0086E0] hover:text-[#006FBF]">Save as default</button>
+                </div>
+              </div>
+            </div>}
             {/* form actions: an even 3-across grid so the column bottom lines up flush with the cards */}
             <div className="grid grid-cols-3 gap-2">
-              <button onClick={()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);window.dispatchEvent(new CustomEvent("sc-slip-compose",{detail:{slips:[{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:(shipStatus&&shipStatus.tracking)||"",service:""}]}}));}} className="w-full flex items-center justify-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2 py-2 font-medium hover:bg-stone-200 whitespace-nowrap"><FileText className="w-4 h-4"/>Packing Slip</button>
+              <button onClick={()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);window.dispatchEvent(new CustomEvent("sc-slip-compose",{detail:{slips:[{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:(shipStatus&&shipStatus.tracking)||"",service:"",packing:packInstr}]}}));}} className="w-full flex items-center justify-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2 py-2 font-medium hover:bg-stone-200 whitespace-nowrap"><FileText className="w-4 h-4"/>Packing Slip</button>
               <button onClick={newShipment} className="w-full flex items-center justify-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2 py-2 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New Shipment</button>
               <button onClick={saveDraft} className={`w-full flex items-center justify-center gap-1.5 text-sm rounded px-2 py-2 font-medium whitespace-nowrap ${saved?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{saved?<><Check className="w-4 h-4"/>Saved</>:<><FileText className="w-4 h-4"/>Save Draft</>}</button>
             </div>

@@ -7014,6 +7014,59 @@ const CONTACT_PHONE_TEL="+16576220699"; // same number, digits only with +1, use
 const PHONE_REAL=!/555-?01/.test(CONTACT_PHONE);   /* placeholder guard: phone CTAs stay hidden until a real number replaces the 555 placeholder above */
 const CONTACT_EMAIL="support@shippingcloud.net"; // brand-matched support email (shows on the Contact page)
 
+/* Recent changes shown in the sidebar "What's New" popover. Newest first — keep it short. */
+const WHATS_NEW=[
+  {date:"Jul 2026",title:"Autopilot on the Ship screen",body:"Order cards show the service Autopilot will pick, and the matched service is highlighted the moment rates load."},
+  {date:"Jul 2026",title:"FedEx returns in the Returns tab",body:"Print a return label, or send a box-free QR / email return — right from Returns."},
+  {date:"Jul 2026",title:"Scan-to-verify",body:"Scan each item before you ship to catch wrong-item mistakes before they leave."},
+  {date:"Jul 2026",title:"Packing-slip designer",body:"Build your own branded packing slip — your logo, accent color, and columns."},
+  {date:"Jul 2026",title:"Find FedEx locations",body:"Search drop-off and hold-at-location points by your customer's address, with type-ahead."},
+];
+
+/* Bottom-of-sidebar footer: connector status (admins), What's New, Help & Support, and a small
+   ShippingCloud sign-off (co-brand aware). Self-contained — manages its own popovers. */
+function NavFooter({isAdmin}){
+  const [help,setHelp]=useState(false);
+  const [news,setNews]=useState(false);
+  const [conn,setConn]=useState(null);
+  useEffect(()=>{ if(!isAdmin||!CLOUD.token)return; let dead=false;
+    const load=async()=>{ try{ const r=await connCall("connStatus",{}); if(!dead&&r&&r.ok)setConn(r); }catch(e){} };
+    load(); const iv=setInterval(load,30000); return ()=>{dead=true;clearInterval(iv);};
+  },[isAdmin]);
+  const connSeen=conn&&conn.status;   // only show the pill once the connector has ever checked in
+  return (<div className="mt-auto px-2 pt-3 pb-3 space-y-1.5 border-t border-stone-200/70">
+    {isAdmin&&connSeen&&<div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-stone-200 text-[11px]" title={conn.online?"The Full Circle connector is online":"The Full Circle connector hasn't checked in recently"}>
+      <span className={`w-2 h-2 rounded-full shrink-0 ${conn.online?"bg-emerald-500":"bg-stone-300"}`}/>
+      <span className={`truncate ${conn.online?"text-emerald-700 font-medium":"text-stone-400"}`}>Full Circle {conn.online?"connected":"offline"}</span>
+    </div>}
+    <button onClick={()=>setNews(true)} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] text-stone-500 hover:bg-white hover:text-[#006FBF]"><Sparkles className="w-3.5 h-3.5 shrink-0"/>What's New</button>
+    <button onClick={()=>setHelp(true)} className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13px] font-medium text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] hover:bg-[#d3ecff]"><MessageCircle className="w-4 h-4 shrink-0"/>Help &amp; Support</button>
+    <div className="flex items-center justify-center gap-1.5 pt-2">
+      <ShipCloudLogo size={13} accent="#0086E0"/>
+      <span className="text-[10px] text-stone-400 font-medium tracking-tight">ShippingCloud{BRAND.fw?" · by Freightwire":""}</span>
+    </div>
+    {news&&<div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={()=>setNews(false)}>
+      <div className="absolute inset-0 bg-stone-900/40"/>
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] overflow-auto" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 sticky top-0 bg-white"><div className="font-semibold text-stone-900 flex items-center gap-2"><Sparkles className="w-4 h-4 text-[#0086E0]"/>What's New</div><button onClick={()=>setNews(false)} className="p-1 rounded hover:bg-stone-100"><X className="w-4 h-4 text-stone-500"/></button></div>
+        <div className="p-5 space-y-4">{WHATS_NEW.map((w,i)=><div key={i} className="flex gap-3"><div className="w-1.5 h-1.5 rounded-full bg-[#0086E0] mt-2 shrink-0"/><div><div className="text-sm font-medium text-stone-800">{w.title} <span className="text-[11px] text-stone-400 font-normal">· {w.date}</span></div><div className="text-[13px] text-stone-500 leading-relaxed">{w.body}</div></div></div>)}</div>
+      </div>
+    </div>}
+    {help&&<div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={()=>setHelp(false)}>
+      <div className="absolute inset-0 bg-stone-900/40"/>
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200"><div className="font-semibold text-stone-900 flex items-center gap-2"><MessageCircle className="w-4 h-4 text-[#0086E0]"/>Help &amp; Support</div><button onClick={()=>setHelp(false)} className="p-1 rounded hover:bg-stone-100"><X className="w-4 h-4 text-stone-500"/></button></div>
+        <div className="p-5 space-y-3 text-sm">
+          <p className="text-stone-500">We're here to help — reach us any time:</p>
+          <a href={"mailto:"+CONTACT_EMAIL} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-stone-200 hover:border-[#99D6FF] hover:bg-[#E6F4FF] text-stone-700"><Mail className="w-4 h-4 text-[#0086E0] shrink-0"/><span className="truncate">{CONTACT_EMAIL}</span></a>
+          {PHONE_REAL&&<a href={"tel:"+CONTACT_PHONE_TEL} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-stone-200 hover:border-[#99D6FF] hover:bg-[#E6F4FF] text-stone-700"><Phone className="w-4 h-4 text-[#0086E0] shrink-0"/><span>{CONTACT_PHONE}</span></a>}
+          <p className="text-[12px] text-stone-400">Tip: the in-app assistant (blue bubble, bottom-right) answers most questions instantly.</p>
+        </div>
+      </div>
+    </div>}
+  </div>);
+}
+
 /* Terms & Privacy — quiet footer links opening a self-contained reader. Not legal advice; standard SaaS coverage. */
 function LegalLinks(){
   const [open,setOpen]=useState(null); // "terms" | "privacy"
@@ -8523,9 +8576,9 @@ function AppInner(){
       <div className="flex flex-1">
         {/* nav blends into the Ice background instead of sitting as a bright white slab (Spencer:
             "the banner on the left pops too much") — active item keeps its highlight */}
-        <aside className="hidden md:block w-48 shrink-0 border-r border-stone-200 bg-white min-h-screen">
+        <aside className="hidden md:flex md:flex-col w-48 shrink-0 border-r border-stone-200 bg-white sticky top-14 h-[calc(100vh-3.5rem)]">
           {/* pt nudges the first tab down so "Ship" sits level with the Sender/ORDERS line in the content */}
-          <nav className="px-2 pb-2 pt-[30px] space-y-0.5 sticky top-14">
+          <nav className="px-2 pb-2 pt-[30px] space-y-0.5 flex-1 overflow-y-auto">
             {TABS.map(([id,l,Icon])=>(
               <React.Fragment key={id}>
               {(id==="admin"||id==="companyadmin")&&<div className="mt-3 mb-2 border-t border-stone-200"/>}
@@ -8536,6 +8589,7 @@ function AppInner(){
             ))}
             {!isAdmin&&!isDemo&&!isCompanyAdmin&&CLOUD.mode==="cloud"&&<CompanyAdminRequestButton currentUser={currentUser}/>}
           </nav>
+          <NavFooter isAdmin={isAdmin}/>
         </aside>
         <main className="flex-1 min-w-0 overflow-x-clip px-3 sm:px-6 py-4 sm:py-6">
           <TabBoundary key={tab} name={tab}>

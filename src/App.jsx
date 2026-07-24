@@ -2092,8 +2092,8 @@ const SEED_PRODUCTS=[
 ];
 /* FedEx One Rate packaging (flat-rate by box size; volume in cubic inches, weight in lb) */
 const FEDEX_ONERATE=[
-  {code:"fedex_envelope",fedexCode:"FEDEX_ENVELOPE",name:"FedEx One Rate® Envelope",maxVol:300,maxLbs:10,kind:"flat"},
-  {code:"fedex_pak",fedexCode:"FEDEX_PAK",name:"FedEx One Rate® Pak",maxVol:650,maxLbs:50,kind:"flat"},
+  {code:"fedex_envelope",fedexCode:"FEDEX_ENVELOPE",name:"FedEx One Rate® Envelope",maxVol:300,maxLbs:10,kind:"flat",maxThick:3},   // >3" on the shortest side → rated as a box (Service Guide p.46)
+  {code:"fedex_pak",fedexCode:"FEDEX_PAK",name:"FedEx One Rate® Pak",maxVol:650,maxLbs:50,kind:"flat",maxThick:5},                 // >5" on the shortest side → rated as a box
   {code:"fedex_extra_small_box",fedexCode:"FEDEX_SMALL_BOX",name:"FedEx One Rate® Extra Small Box",maxVol:168,maxLbs:50,kind:"box",dims:{L:11,W:9,H:2}},
   {code:"fedex_small_box",fedexCode:"FEDEX_SMALL_BOX",name:"FedEx One Rate® Small Box",maxVol:420,maxLbs:50,kind:"box",dims:{L:13,W:11,H:2}},
   {code:"fedex_medium_box",fedexCode:"FEDEX_MEDIUM_BOX",name:"FedEx One Rate® Medium Box",maxVol:650,maxLbs:50,kind:"box",dims:{L:13,W:11,H:3}},
@@ -2102,24 +2102,18 @@ const FEDEX_ONERATE=[
   {code:"fedex_tube",fedexCode:"FEDEX_TUBE",name:"FedEx One Rate® Tube",maxVol:2200,maxLbs:50,kind:"tube"},
 ];
 const ONERATE_BOXES=FEDEX_ONERATE.filter(b=>b.kind==="box").sort((a,b)=>a.maxVol-b.maxVol);
-/* Pick the smallest One Rate box the item qualifies for; null if it doesn't fit One Rate at all.
-   Per the 2026 FedEx Service Guide (p.46): FedEx One Rate requires FedEx packaging and a U.S. Express
-   service; paks/boxes/tubes must weigh 50 lb or less. Crucially, the item must PHYSICALLY FIT the box —
-   a package whose longest (or any) side exceeds the box can't use it, so volume alone isn't enough
-   (a 40x3x3 item has small volume but fits no One Rate box). We compare sorted dimensions with a small
-   packing tolerance; if nothing fits, the shipment isn't One Rate-eligible. */
-const OR_TOL=0.5;   // inches of give for compression/packing
+/* Pick the smallest One Rate box the item's CUBIC volume + weight qualify for; null if it exceeds
+   One Rate limits. Selection is by cubic volume (item volume ≤ the box's usable volume), same as
+   before. Per the 2026 FedEx Service Guide (p.46) we also enforce the One Rate weight cap: paks,
+   boxes, and tubes must weigh 50 lb or less (envelopes 10 lb — handled with the envelope entry).
+   The pak/envelope shortest-side limits (pak ≤ 5", envelope ≤ 3", else rated as a box) live on the
+   FEDEX_ONERATE entries as `maxThick`. */
 function oneRateBoxFor(L,W,H,lbs){
-  const id=[+L||0,+W||0,+H||0].sort((a,b)=>a-b);   // [shortest, mid, longest]
-  const w=+lbs||0;
-  if(!id[0]||!id[1]||!id[2]) return null;          // need all three dimensions
-  if(w>50) return null;                            // One Rate box/pak/tube weight cap
-  for(const b of ONERATE_BOXES){
-    if(w>b.maxLbs) continue;
-    const bd=[b.dims.L,b.dims.W,b.dims.H].sort((a,b)=>a-b);
-    if(id[0]<=bd[0]+OR_TOL && id[1]<=bd[1]+OR_TOL && id[2]<=bd[2]+OR_TOL) return b;   // physically fits
-  }
-  return null;   // too big for every One Rate box (e.g. longest side too long) → not eligible
+  const vol=(+L||0)*(+W||0)*(+H||0); const w=+lbs||0;
+  if(!vol) return null;
+  if(w>50) return null;   // One Rate box/pak/tube weight cap (Service Guide p.46)
+  for(const b of ONERATE_BOXES){ if(vol<=b.maxVol && w<=b.maxLbs) return b; }
+  return null;
 }
 /* Show the One Rate box the shipment qualifies for, but with NO price. England's rate call doesn't return
    One Rate pricing, so the price stays blank unless England itself returns a One Rate service for this shipment.
@@ -7026,33 +7020,61 @@ const CONTACT_PHONE_TEL="+16576220699"; // same number, digits only with +1, use
 const PHONE_REAL=!/555-?01/.test(CONTACT_PHONE);   /* placeholder guard: phone CTAs stay hidden until a real number replaces the 555 placeholder above */
 const CONTACT_EMAIL="support@shippingcloud.net"; // brand-matched support email (shows on the Contact page)
 
-/* Recent changes shown in the sidebar "What's New" popover. Newest first — keep it short. */
+/* Recent changes shown in the sidebar "What's New" popover. Newest first — keep it short.
+   `tab` (optional) makes a "Take me there →" link that jumps to that feature. */
 const WHATS_NEW=[
-  {date:"Jul 2026",title:"Autopilot on the Ship screen",body:"Order cards show the service Autopilot will pick, and the matched service is highlighted the moment rates load."},
-  {date:"Jul 2026",title:"FedEx returns in the Returns tab",body:"Print a return label, or send a box-free QR / email return — right from Returns."},
-  {date:"Jul 2026",title:"Scan-to-verify",body:"Scan each item before you ship to catch wrong-item mistakes before they leave."},
-  {date:"Jul 2026",title:"Packing-slip designer",body:"Build your own branded packing slip — your logo, accent color, and columns."},
-  {date:"Jul 2026",title:"Find FedEx locations",body:"Search drop-off and hold-at-location points by your customer's address, with type-ahead."},
+  {date:"Jul 2026",title:"Autopilot on the Ship screen",body:"Order cards show the service Autopilot will pick, and the matched service is highlighted the moment rates load.",tab:"ship"},
+  {date:"Jul 2026",title:"FedEx returns in the Returns tab",body:"Print a return label, or send a box-free QR / email return — right from Returns.",tab:"returns"},
+  {date:"Jul 2026",title:"Scan-to-verify",body:"Scan each item before you ship to catch wrong-item mistakes before they leave.",tab:"scan"},
+  {date:"Jul 2026",title:"Packing-slip designer",body:"Build your own branded packing slip — your logo, accent color, and columns.",tab:"settings"},
+  {date:"Jul 2026",title:"Find FedEx locations",body:"Search drop-off and hold-at-location points by your customer's address, with type-ahead.",tab:"ship"},
+];
+/* FAQ shown in Help & Support, grouped into tabs. Plain answers, no jargon. */
+const FAQ_DATA=[
+  {cat:"Getting Started",items:[
+    {q:"How do I create a shipping label?",a:"Open the Ship tab, pick an order from the left (or type an address), confirm the box and weight, choose a service under Service & Rate, and click Print label."},
+    {q:"How do I connect my Shopify store?",a:"Settings → Integrations → Shopify. Paste your store URL and connect. Orders then flow into the Orders and Ship tabs automatically."},
+    {q:"Can I try it without a real account?",a:"Yes — on the sign-in screen choose “Take a peek.” Everything is sample data; no labels are actually created."},
+  ]},
+  {cat:"Shipping & FedEx",items:[
+    {q:"What is FedEx One Rate?",a:"Flat-rate pricing when you ship in FedEx packaging (envelope, pak, box, or tube) on a FedEx Express service. Envelopes must be ≤10 lb; paks, boxes, and tubes ≤50 lb. We show the One Rate box your shipment fits so you can compare it to your account rate."},
+    {q:"How does Autopilot pick a service?",a:"Autopilot runs your rules (Autopilot tab). A rule with a “Set Service” action that matches an order sets that service; orders that match no rule use your Fallback service. The order card badge shows what it will use."},
+    {q:"How do returns work?",a:"Returns tab → create a return. You can print a return label or send the customer a box-free QR/email return that they scan at a FedEx counter."},
+    {q:"What does the address check do?",a:"It verifies the recipient with FedEx (residential vs commercial, deliverable, and a standardized version) so you avoid address-correction fees."},
+  ]},
+  {cat:"Rates & Billing",items:[
+    {q:"Where do my rates come from?",a:"Live rates come from your connected FedEx account; if that isn't connected you'll see estimates. Admins set discounts/markups in Admin → Rates."},
+    {q:"How is billable weight figured?",a:"FedEx bills the greater of the actual weight (rounded up) and the dimensional weight (L×W×H ÷ the divisor). The rate breakdown shows which one applied."},
+  ]},
+  {cat:"Integrations",items:[
+    {q:"What is the Full Circle connector?",a:"A small app on your Aptean/Full Circle box that reads orders over ODBC and drops ship-confirmations back on the Z: drive — so scanning a pick ticket pulls the order and booking a label writes the confirmation automatically."},
+    {q:"Is there an API?",a:"Yes — the ShippingCloud API (Admin → API). Live rates on your pricing, label booking, tracking, pickups, and billing endpoints."},
+  ]},
 ];
 
 /* Bottom-of-sidebar footer: connector status (admins), What's New, Help & Support, and a small
    ShippingCloud sign-off (co-brand aware). Self-contained — manages its own popovers. */
-function NavFooter({isAdmin}){
+function NavFooter({isAdmin,go}){
   const [help,setHelp]=useState(false);
   const [news,setNews]=useState(false);
   const [conn,setConn]=useState(null);
+  const [helpTab,setHelpTab]=useState("faq");      // "faq" | "contact"
+  const [faqCat,setFaqCat]=useState(0);
+  const [openQ,setOpenQ]=useState(-1);
   useEffect(()=>{ if(!isAdmin||!CLOUD.token)return; let dead=false;
     const load=async()=>{ try{ const r=await connCall("connStatus",{}); if(!dead&&r&&r.ok)setConn(r); }catch(e){} };
     load(); const iv=setInterval(load,30000); return ()=>{dead=true;clearInterval(iv);};
   },[isAdmin]);
   const connSeen=conn&&conn.status;   // only show the pill once the connector has ever checked in
+  const jump=(tab)=>{ if(tab&&go)go(tab); setNews(false); };
+  const cat=FAQ_DATA[faqCat]||FAQ_DATA[0];
   return (<div className="mt-auto px-2 pt-3 pb-3 space-y-1.5 border-t border-stone-200/70">
     {isAdmin&&connSeen&&<div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-stone-200 text-[11px]" title={conn.online?"The Full Circle connector is online":"The Full Circle connector hasn't checked in recently"}>
       <span className={`w-2 h-2 rounded-full shrink-0 ${conn.online?"bg-emerald-500":"bg-stone-300"}`}/>
       <span className={`truncate ${conn.online?"text-emerald-700 font-medium":"text-stone-400"}`}>Full Circle {conn.online?"connected":"offline"}</span>
     </div>}
     <button onClick={e=>{e.currentTarget.blur();setNews(true);}} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] text-stone-500 hover:bg-[#E6F4FF]/60 hover:text-[#006FBF] transition-colors"><Sparkles className="w-3.5 h-3.5 shrink-0"/>What's New</button>
-    <button onClick={e=>{e.currentTarget.blur();setHelp(true);}} className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13px] font-medium text-[#006FBF] bg-white border border-stone-200 hover:bg-[#E6F4FF] hover:border-[#99D6FF] transition-colors"><MessageCircle className="w-4 h-4 shrink-0"/>Help &amp; Support</button>
+    <button onClick={e=>{e.currentTarget.blur();setHelpTab("faq");setHelp(true);}} className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13px] font-medium text-stone-600 hover:bg-[#E6F4FF] hover:text-[#006FBF] transition-colors"><MessageCircle className="w-4 h-4 shrink-0"/>Help &amp; Support</button>
     <div className="flex items-center justify-center gap-1.5 pt-2">
       <ShipCloudLogo size={14} accent="#0086E0"/>
       {BRAND.fw&&<span className="text-[10px] text-stone-400 font-medium tracking-tight">· by Freightwire</span>}
@@ -7061,19 +7083,32 @@ function NavFooter({isAdmin}){
       <div className="absolute inset-0 bg-stone-900/40"/>
       <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] overflow-auto" onClick={e=>e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 sticky top-0 bg-white"><div className="font-semibold text-stone-900 flex items-center gap-2"><Sparkles className="w-4 h-4 text-[#0086E0]"/>What's New</div><button onClick={()=>setNews(false)} className="p-1 rounded hover:bg-stone-100"><X className="w-4 h-4 text-stone-500"/></button></div>
-        <div className="p-5 space-y-4">{WHATS_NEW.map((w,i)=><div key={i} className="flex gap-3"><div className="w-1.5 h-1.5 rounded-full bg-[#0086E0] mt-2 shrink-0"/><div><div className="text-sm font-medium text-stone-800">{w.title} <span className="text-[11px] text-stone-400 font-normal">· {w.date}</span></div><div className="text-[13px] text-stone-500 leading-relaxed">{w.body}</div></div></div>)}</div>
+        <div className="p-5 space-y-4">{WHATS_NEW.map((w,i)=><div key={i} className="flex gap-3"><div className="w-1.5 h-1.5 rounded-full bg-[#0086E0] mt-2 shrink-0"/><div className="min-w-0"><div className="text-sm font-medium text-stone-800">{w.title} <span className="text-[11px] text-stone-400 font-normal">· {w.date}</span></div><div className="text-[13px] text-stone-500 leading-relaxed">{w.body}</div>{w.tab&&<button onClick={()=>jump(w.tab)} className="mt-1 text-[12px] font-medium text-[#0086E0] hover:text-[#006FBF] inline-flex items-center gap-1">Take me there <ArrowRight className="w-3 h-3"/></button>}</div></div>)}</div>
       </div>
     </div>,document.body)}
     {help&&createPortal(<div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={()=>setHelp(false)}>
       <div className="absolute inset-0 bg-stone-900/40"/>
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm" onClick={e=>e.stopPropagation()}>
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col" onClick={e=>e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200"><div className="font-semibold text-stone-900 flex items-center gap-2"><MessageCircle className="w-4 h-4 text-[#0086E0]"/>Help &amp; Support</div><button onClick={()=>setHelp(false)} className="p-1 rounded hover:bg-stone-100"><X className="w-4 h-4 text-stone-500"/></button></div>
-        <div className="p-5 space-y-3 text-sm">
-          <p className="text-stone-500">We're here to help — reach us any time:</p>
+        <div className="flex gap-1 px-4 pt-3">
+          {[["faq","FAQ"],["contact","Contact us"]].map(([k,l])=><button key={k} onClick={()=>setHelpTab(k)} className={`px-3 py-1.5 text-sm font-medium rounded-lg ${helpTab===k?"bg-[#E6F4FF] text-[#006FBF]":"text-stone-500 hover:bg-stone-100"}`}>{l}</button>)}
+        </div>
+        {helpTab==="faq"?<div className="flex-1 min-h-0 flex flex-col">
+          <div className="flex flex-wrap gap-1.5 px-4 py-3 border-b border-stone-100">
+            {FAQ_DATA.map((c,i)=><button key={c.cat} onClick={()=>{setFaqCat(i);setOpenQ(-1);}} className={`px-2.5 py-1 text-[12px] rounded-full border ${faqCat===i?"bg-[#0086E0] text-white border-[#0086E0]":"bg-white text-stone-600 border-stone-200 hover:border-[#99D6FF]"}`}>{c.cat}</button>)}
+          </div>
+          <div className="flex-1 min-h-0 overflow-auto p-4 space-y-2">
+            {cat.items.map((it,i)=><div key={i} className="border border-stone-200 rounded-lg overflow-hidden">
+              <button onClick={()=>setOpenQ(openQ===i?-1:i)} className="w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-medium text-stone-800 hover:bg-stone-50"><span>{it.q}</span><ChevronDown className={`w-4 h-4 shrink-0 text-stone-400 transition-transform ${openQ===i?"rotate-180":""}`}/></button>
+              {openQ===i&&<div className="px-3 pb-3 text-[13px] text-stone-600 leading-relaxed">{it.a}</div>}
+            </div>)}
+          </div>
+        </div>:<div className="p-5 space-y-3 text-sm">
+          <p className="text-stone-500">Can't find it in the FAQ? Reach us any time:</p>
           <a href={"mailto:"+CONTACT_EMAIL} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-stone-200 hover:border-[#99D6FF] hover:bg-[#E6F4FF] text-stone-700"><Mail className="w-4 h-4 text-[#0086E0] shrink-0"/><span className="truncate">{CONTACT_EMAIL}</span></a>
           {PHONE_REAL&&<a href={"tel:"+CONTACT_PHONE_TEL} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-stone-200 hover:border-[#99D6FF] hover:bg-[#E6F4FF] text-stone-700"><Phone className="w-4 h-4 text-[#0086E0] shrink-0"/><span>{CONTACT_PHONE}</span></a>}
           <p className="text-[12px] text-stone-400">Tip: the in-app assistant (blue bubble, bottom-right) answers most questions instantly.</p>
-        </div>
+        </div>}
       </div>
     </div>,document.body)}
   </div>);
@@ -8601,7 +8636,7 @@ function AppInner(){
             ))}
             {!isAdmin&&!isDemo&&!isCompanyAdmin&&CLOUD.mode==="cloud"&&<CompanyAdminRequestButton currentUser={currentUser}/>}
           </nav>
-          <NavFooter isAdmin={isAdmin}/>
+          <NavFooter isAdmin={isAdmin} go={setTab}/>
         </aside>
         <main className="flex-1 min-w-0 overflow-x-clip px-3 sm:px-6 py-4 sm:py-6">
           <TabBoundary key={tab} name={tab}>
@@ -9404,7 +9439,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
          The collapsed tab (below) stays line-free. */
       /* equal-gap geometry: nav line →16px(-ml-2 offsets the page's 24px pad)→ cards →16px(pr-4)→
          rail line →16px(row gap-4)→ Sender. Line centered between sections, cards centered between lines. */
-      <aside className="relative isolate w-60 shrink-0 space-y-2 pr-3 sm:pr-4 sm:-ml-2 self-stretch">
+      <aside className="relative isolate w-60 shrink-0 flex flex-col gap-2 pr-3 sm:pr-4 sm:-ml-2 self-stretch">
         <div className="flex items-center gap-1.5">
           <button onClick={()=>setOrdersOpen(false)} className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-stone-500 hover:text-stone-700"><ChevronDown className="w-4 h-4 shrink-0"/><ShoppingBag className="w-4 h-4 shrink-0"/><span className="whitespace-nowrap">Orders{ordersToShow.length?<span className="text-stone-400 normal-case font-normal"> · {ordersToShow.length}</span>:""}</span></button>
           {onRefresh&&shopifyConnected(settings)&&<button onClick={onRefresh} disabled={syncing} title="Refresh orders" className="text-stone-400 hover:text-[#0086E0] disabled:opacity-40 p-1 shrink-0">{syncing?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<RotateCcw className="w-3.5 h-3.5"/>}</button>}
@@ -9422,7 +9457,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
           </div>
         </div>
         {(dateFrom||dateTo||storeFilter!=="all")&&<button onClick={()=>{setDateFrom("");setDateTo("");setStoreFilter("all");}} className="text-[11px] text-stone-400 hover:text-stone-700 flex items-center gap-1"><X className="w-3 h-3"/>Clear Filters</button>}
-        <div className="space-y-2 max-h-[calc(100vh-220px)] overflow-auto pr-0.5">
+        <div className="space-y-2 flex-1 min-h-0 overflow-auto pr-0.5 pb-2">
         {ordersFiltered.length===0?<div className="border border-dashed border-stone-300 rounded-lg p-4 text-center text-xs text-stone-400">{ordersToShow.length===0?"No unfulfilled orders.":"No orders match."}</div>:ordersFiltered.map(o=>(
           <button key={o.id} onClick={()=>applyOrder(o)} className={`w-full text-left border rounded-lg p-3 transition-colors ${selectedOrder===o.id?"border-[#33ABFF] bg-[#E6F4FF]":"border-stone-200 bg-white hover:border-stone-300"}`}>
             <div className="flex items-center justify-between"><span className="font-semibold text-sm text-stone-800 flex items-center gap-1.5">{o.name}{o.source&&<span className="text-[10px] uppercase tracking-wide text-stone-400 border border-stone-200 rounded px-1">{o.source}</span>}</span><span className=" text-xs text-stone-400">${o.total}</span></div>

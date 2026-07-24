@@ -9329,14 +9329,19 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   /* Autopilot service PREVIEW for every order in the picker: run the rule engine once over the
      visible list so each order card shows the service Autopilot will choose before you click it.
      Only active when "apply rules on the Ship screen" is on; map is orderId → service label. */
+  /* Fallback service label for orders that match NO rule (mirrors the loaded-order fallback):
+     a specific service shows verbatim; a strategy ("cheapest"/"ground"/"fastest") shows friendly. */
+  const fbLabel=(()=>{ const fb=(custom.fallbackService||"").trim(); if(!fb)return ""; return ({cheapest:"Cheapest",ground:"Cheapest Ground",fastest:"Fastest"})[fb]||fb; })();
   const apPreview=useMemo(()=>{ const m={};
     if(custom.autoRulesOnShip===false)return m;
-    const enabled=(rules||[]).filter(r=>r&&r.enabled); if(!enabled.length)return m;
-    try{ const run=runRuleEngine(enabled,ordersFiltered,originZip);
-      (run.results||[]).forEach(r0=>{ if(r0&&r0.fires&&r0.fires.length&&r0.view&&r0.view.selectedService&&r0.order)m[r0.order.id]=r0.view.selectedService; });
-    }catch(e){}
+    const enabled=(rules||[]).filter(r=>r&&r.enabled);
+    const fired={};
+    if(enabled.length){ try{ const run=runRuleEngine(enabled,ordersFiltered,originZip);
+      (run.results||[]).forEach(r0=>{ if(r0&&r0.fires&&r0.fires.length&&r0.view&&r0.view.selectedService&&r0.order)fired[r0.order.id]={service:r0.view.selectedService,src:"rule"}; });
+    }catch(e){} }
+    (ordersFiltered||[]).forEach(o=>{ if(fired[o.id])m[o.id]=fired[o.id]; else if(fbLabel)m[o.id]={service:fbLabel,src:"fallback"}; });   // non-matching orders → the fallback service
     return m;
-  },[custom.autoRulesOnShip,ordersFiltered,rules,originZip]);
+  },[custom.autoRulesOnShip,ordersFiltered,rules,originZip,fbLabel]);
   const [naming,setNaming]=useState(false);
   const [draftName,setDraftName]=useState("");
   const commitDraft=(title)=>{const d={id:Date.now(),label:title||reference||receiver.name||receiver.city||"Untitled",when:new Date().toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}),to:`${receiver.city||""}${receiver.state?", "+receiver.state:""}`,snap:{sender,receiver,reference,invoiceNo,poNo,department,pieces,residential,signature,sigOption,billTo,thirdAcct,insurance,selectedOrder,customs}};setDrafts(p=>[d,...p]);setNaming(false);setDraftName("");setSaved(true);setTimeout(()=>setSaved(false),1600);};
@@ -9406,7 +9411,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             <div className="text-xs text-stone-600 mt-0.5">{o.customer}</div>
             <div className="text-[11px] text-stone-400 mt-0.5">{o.city}, {o.state} {o.zip}</div>
             <div className="text-[11px] text-stone-400 truncate">{o.items}</div>
-            {apPreview[o.id]&&<div className="flex items-center gap-1 text-[10px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 rounded px-1.5 py-0.5 mt-1 w-fit max-w-full"><Zap className="w-3 h-3 shrink-0"/><span className="truncate">{apPreview[o.id]}</span></div>}
+            {apPreview[o.id]&&(()=>{const ap=apPreview[o.id];const isRule=ap.src==="rule";return <div title={isRule?"Autopilot rule match":"Fallback service — no rule matched this order"} className={`flex items-center gap-1 text-[10px] font-semibold rounded px-1.5 py-0.5 mt-1 w-fit max-w-full border ${isRule?"text-violet-700 bg-violet-50 border-violet-200":"text-stone-500 bg-stone-100 border-stone-200"}`}><Zap className="w-3 h-3 shrink-0"/><span className="truncate">{ap.service}</span>{!isRule&&<span className="text-stone-400 font-normal">· fallback</span>}</div>;})()}
             {o.date&&<div className="flex items-center gap-1 text-[10px] text-stone-400 mt-1 pt-1 border-t border-stone-100"><Calendar className="w-3 h-3"/>{o.date}</div>}
           </button>
         ))}

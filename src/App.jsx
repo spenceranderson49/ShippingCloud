@@ -7039,10 +7039,10 @@ function NavFooter({isAdmin}){
       <span className={`w-2 h-2 rounded-full shrink-0 ${conn.online?"bg-emerald-500":"bg-stone-300"}`}/>
       <span className={`truncate ${conn.online?"text-emerald-700 font-medium":"text-stone-400"}`}>Full Circle {conn.online?"connected":"offline"}</span>
     </div>}
-    <button onClick={()=>setNews(true)} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] text-stone-500 hover:bg-white hover:text-[#006FBF]"><Sparkles className="w-3.5 h-3.5 shrink-0"/>What's New</button>
-    <button onClick={()=>setHelp(true)} className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13px] font-medium text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] hover:bg-[#d3ecff]"><MessageCircle className="w-4 h-4 shrink-0"/>Help &amp; Support</button>
+    <button onClick={e=>{e.currentTarget.blur();setNews(true);}} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] text-stone-500 hover:bg-[#E6F4FF]/60 hover:text-[#006FBF] transition-colors"><Sparkles className="w-3.5 h-3.5 shrink-0"/>What's New</button>
+    <button onClick={e=>{e.currentTarget.blur();setHelp(true);}} className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13px] font-medium text-[#006FBF] bg-white border border-stone-200 hover:bg-[#E6F4FF] hover:border-[#99D6FF] transition-colors"><MessageCircle className="w-4 h-4 shrink-0"/>Help &amp; Support</button>
     <div className="flex items-center justify-center gap-1.5 pt-2">
-      <ShipCloudLogo size={17} accent="#0086E0"/>
+      <BrandCloud color="#0086E0" className="h-4 w-auto" style={{opacity:0.85}}/>
       {BRAND.fw&&<span className="text-[10px] text-stone-400 font-medium tracking-tight">by Freightwire</span>}
     </div>
     {news&&createPortal(<div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={()=>setNews(false)}>
@@ -9339,7 +9339,11 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
     if(enabled.length){ try{ const run=runRuleEngine(enabled,ordersFiltered,originZip);
       (run.results||[]).forEach(r0=>{ if(r0&&r0.fires&&r0.fires.length&&r0.view&&r0.view.selectedService&&r0.order)fired[r0.order.id]={service:r0.view.selectedService,src:"rule"}; });
     }catch(e){} }
-    (ordersFiltered||[]).forEach(o=>{ if(fired[o.id])m[o.id]=fired[o.id]; else if(fbLabel)m[o.id]={service:fbLabel,src:"fallback"}; });   // non-matching orders → the fallback service
+    (ordersFiltered||[]).forEach(o=>{
+      if(fired[o.id])m[o.id]=fired[o.id];                                   // a rule set the service
+      else if(fbLabel)m[o.id]={service:fbLabel,src:"fallback"};             // else the configured fallback
+      else if(o.shippingService)m[o.id]={service:o.shippingService,src:"requested"};   // else what the buyer asked for
+    });
     return m;
   },[custom.autoRulesOnShip,ordersFiltered,rules,originZip,fbLabel]);
   const [naming,setNaming]=useState(false);
@@ -9411,7 +9415,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             <div className="text-xs text-stone-600 mt-0.5">{o.customer}</div>
             <div className="text-[11px] text-stone-400 mt-0.5">{o.city}, {o.state} {o.zip}</div>
             <div className="text-[11px] text-stone-400 truncate">{o.items}</div>
-            {apPreview[o.id]&&(()=>{const ap=apPreview[o.id];const isRule=ap.src==="rule";return <div title={isRule?"Autopilot rule match":"Fallback service — no rule matched this order"} className={`flex items-center gap-1 text-[10px] font-semibold rounded px-1.5 py-0.5 mt-1 w-fit max-w-full border ${isRule?"text-violet-700 bg-violet-50 border-violet-200":"text-stone-500 bg-stone-100 border-stone-200"}`}><Zap className="w-3 h-3 shrink-0"/><span className="truncate">{ap.service}</span>{!isRule&&<span className="text-stone-400 font-normal">· fallback</span>}</div>;})()}
+            {apPreview[o.id]&&(()=>{const ap=apPreview[o.id];const isRule=ap.src==="rule";const tag=ap.src==="fallback"?"fallback":ap.src==="requested"?"requested":"";const title=isRule?"Autopilot rule match":ap.src==="fallback"?"Fallback service — no rule matched this order":"Buyer-requested service — no rule matched this order";return <div title={title} className={`flex items-center gap-1 text-[10px] font-semibold rounded px-1.5 py-0.5 mt-1 w-fit max-w-full border ${isRule?"text-violet-700 bg-violet-50 border-violet-200":"text-stone-500 bg-stone-100 border-stone-200"}`}>{isRule?<Zap className="w-3 h-3 shrink-0"/>:<Truck className="w-3 h-3 shrink-0"/>}<span className="truncate">{ap.service}</span>{tag&&<span className="text-stone-400 font-normal shrink-0">· {tag}</span>}</div>;})()}
             {o.date&&<div className="flex items-center gap-1 text-[10px] text-stone-400 mt-1 pt-1 border-t border-stone-100"><Calendar className="w-3 h-3"/>{o.date}</div>}
           </button>
         ))}

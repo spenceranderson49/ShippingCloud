@@ -7030,6 +7030,8 @@ const CONTACT_EMAIL="support@shippingcloud.net"; // brand-matched support email 
 /* Recent changes shown in the sidebar "What's New" popover. Newest first — keep it short.
    `tab` (optional) makes a "Take me there →" link that jumps to that feature. */
 const WHATS_NEW=[
+  {date:"Jul 2026",title:"Service alerts",body:"Possible-delay warnings on the Ship screen: severe weather at the destination and the Memphis FedEx hub, FedEx holidays, and alerts your team posts.",tab:"ship"},
+  {date:"Jul 2026",title:"Packing instructions",body:"Add packing notes (with one-click weather / cold-pack advice) that print on the packing slip and can ride the reference field.",tab:"ship"},
   {date:"Jul 2026",title:"Autopilot on the Ship screen",body:"Order cards show the service Autopilot will pick, and the matched service is highlighted the moment rates load.",tab:"ship"},
   {date:"Jul 2026",title:"FedEx returns in the Returns tab",body:"Print a return label, or send a box-free QR / email return — right from Returns.",tab:"returns"},
   {date:"Jul 2026",title:"Scan-to-verify",body:"Scan each item before you ship to catch wrong-item mistakes before they leave.",tab:"scan"},
@@ -7053,6 +7055,7 @@ const FAQ_DATA=[
     {q:"How does scan-to-verify work?",a:"In the Scan tab, switch to Verify mode. Scan each item's barcode before you ship so the wrong item can't go out. Admins can require verify-before-ship."},
     {q:"Can I add insurance or a signature?",a:"Yes — on the Ship screen set the declared value (Insure) and choose a signature option (None / Indirect / Direct / Adult). You can set defaults in Settings."},
     {q:"How do I find a FedEx drop-off or hold location?",a:"On the Ship screen use Find FedEx Locations — search by your customer's address or “use my location,” with type-ahead."},
+    {q:"How do the service alerts work?",a:"The amber Service Alerts strip warns of possible delays: severe weather at the destination or the Memphis FedEx hub (most air freight routes through Memphis), FedEx holidays near your ship date, and any alerts an admin posts (power outage, road closure, or a FedEx Service Alert). Admins can post and remove alerts right from the strip."},
   ]},
   {cat:"FedEx Services & One Rate",items:[
     {q:"What is FedEx One Rate?",a:"Flat-rate pricing when you ship in FedEx packaging (envelope, pak, box, or tube) on a FedEx Express service. Envelopes must weigh ≤10 lb; paks, boxes, and tubes ≤50 lb. We show the One Rate box your shipment fits so you can compare it to your account rate."},

@@ -3210,7 +3210,7 @@ function Domains({settings,setSettings,clients}){
       {sub&&<div className="text-[11px] text-stone-400 mt-1">Will create <span className=" text-[#0086E0]">{clean(sub)||"…"}.{base}</span></div>}
     </Panel>
 
-    <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
+    <div className="border border-stone-400 rounded-lg bg-white divide-y divide-stone-100">
       <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400">{list.length} white-label domain{list.length===1?"":"s"}</div>
       {list.length===0&&<div className="p-6 text-center text-sm text-stone-400">No white-label domains yet.</div>}
       {list.map(d=>(<div key={d.id} className="flex items-center gap-3 px-4 py-3">
@@ -3250,7 +3250,7 @@ function Branding({settings,setSettings,brand,publicBrand,setPublicBrand}){
     <p className="text-sm text-stone-500">White-label the platform for another shipping company — set the product name, colors, and partner logo. Changes apply across the whole app and sync to your account.</p>
 
     {/* Live preview */}
-    <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+    <div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
       <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400">Live preview</div>
       <div className="p-5 flex items-center gap-3">
         {(!b.name1||b.name1==="Shipping")&&(!b.name2||b.name2==="Cloud")?<ShipCloudLogo size={24}/>:<><BrandCloud className="h-10 w-auto" color={b.primary}/><span className="font-extrabold tracking-tight text-[26px]" style={{color:b.dark}}>{b.name1}<span style={{color:b.primary}}>{b.name2}</span></span></>}
@@ -3352,7 +3352,7 @@ function FedexCertLab({settings}){
   };
   const envPill=st.env==="production"?<Badge tone="rose">PRODUCTION</Badge>:<Badge tone="amber">sandbox</Badge>;
   return (<div className="space-y-4">
-    <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-2">
+    <div className="border border-stone-400 rounded-lg bg-white p-4 space-y-2">
       <div className="flex items-center gap-2 flex-wrap">
         <div className="font-semibold text-stone-800">Direct FedEx Ship API</div>{!st.loading&&envPill}
         {st.loading?<Badge tone="stone">checking…</Badge>
@@ -3369,7 +3369,7 @@ function FedexCertLab({settings}){
       <p className="text-[11px] text-stone-500">This is FedEx's own API — separate from England. Labels here are certification samples on the sandbox account: generate one per service below, download the PDFs, and submit them through the Developer Portal certification form. When FedEx approves, swap in the production key/secret/account and set FEDEX_ENV=production — same screen, real labels.</p>
     </div>
 
-    <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
+    <div className="border border-stone-400 rounded-lg bg-white p-4 space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Ship from</div>
           <div className="grid grid-cols-2 gap-2">
@@ -3411,7 +3411,7 @@ function FedexCertLab({settings}){
       </div>}
     </div>
 
-    <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+    <div className="border border-stone-400 rounded-lg bg-white overflow-hidden">
       <div className="px-4 py-2.5 text-sm font-semibold text-stone-700 border-b border-stone-100 flex items-center justify-between"><span>Generated labels (last 12 kept)</span>{log.length>0&&<button onClick={async()=>{if(await uiConfirm("Clear the label log?"))setLog([]);}} className="text-[11px] text-stone-400 hover:text-rose-500">Clear</button>}</div>
       {log.length===0?<div className="px-4 py-8 text-sm text-stone-400 text-center">No labels yet — generate the certification set above, download each PDF, and submit them to FedEx.</div>
       :<div className="divide-y divide-stone-100">{log.map(e2=>(
@@ -3495,9 +3495,9 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection,cli
   const PERIODS=[["today","Today"],["7d","Week"],["30d","Month"],["all","All"]];
   return (<div className="space-y-4">
     {(abAll.length>0||arAll.length>0)&&<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-      <button onClick={()=>openSection&&openSection("margins")} className="text-left border border-stone-200 rounded-xl bg-white px-4 py-3 hover:border-[#0086E0]/40 transition"><div className="text-[11px] uppercase tracking-wide text-stone-400">Agency margin loaded</div><div className="text-xl font-semibold text-stone-900 tabular-nums">{money(boMargin)}</div></button>
+      <button onClick={()=>openSection&&openSection("margins")} className="text-left border border-stone-400 rounded-xl bg-white px-4 py-3 hover:border-[#0086E0]/40 transition"><div className="text-[11px] uppercase tracking-wide text-stone-400">Agency margin loaded</div><div className="text-xl font-semibold text-stone-900 tabular-nums">{money(boMargin)}</div></button>
       <button onClick={()=>openSection&&openSection("margins")} className="text-left border border-rose-200 rounded-xl bg-rose-50/50 px-4 py-3 hover:border-rose-300 transition"><div className="text-[11px] uppercase tracking-wide text-rose-500">Negative margins</div><div className="text-xl font-semibold text-rose-700 tabular-nums">{boNeg.length} · {money(boNegAmt)}</div></button>
-      <button onClick={()=>openSection&&openSection("receivables")} className="text-left border border-stone-200 rounded-xl bg-white px-4 py-3 hover:border-[#0086E0]/40 transition"><div className="text-[11px] uppercase tracking-wide text-stone-400">AR outstanding</div><div className="text-xl font-semibold text-stone-900 tabular-nums">{money(arBalTot)}</div></button>
+      <button onClick={()=>openSection&&openSection("receivables")} className="text-left border border-stone-400 rounded-xl bg-white px-4 py-3 hover:border-[#0086E0]/40 transition"><div className="text-[11px] uppercase tracking-wide text-stone-400">AR outstanding</div><div className="text-xl font-semibold text-stone-900 tabular-nums">{money(arBalTot)}</div></button>
       <button onClick={()=>openSection&&openSection("receivables")} className="text-left border border-amber-200 rounded-xl bg-amber-50/40 px-4 py-3 hover:border-amber-300 transition"><div className="text-[11px] uppercase tracking-wide text-amber-600">Overdue</div><div className="text-xl font-semibold text-amber-700 tabular-nums">{money(arOverdue)}</div></button>
     </div>}
     <div className="flex flex-wrap items-center gap-2">
@@ -3553,12 +3553,12 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection,cli
       </div>);
     })()}
     <div className="grid lg:grid-cols-[340px,1fr] gap-3 items-start">
-      <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+      <div className="border border-stone-400 rounded-xl bg-white divide-y divide-stone-100">
         <Combo title="Today — hourly" data={buckets.hourly}/>
         <Combo title="Last 14 days" data={buckets.daily}/>
         <Combo title="Last 12 weeks" data={buckets.weekly}/>
       </div>
-      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
         <div className="px-4 py-2.5 border-b border-stone-100 flex items-center justify-between"><span className="text-sm font-semibold text-stone-700">Shipments — {PERIODS.find(p=>p[0]===period)[1].toLowerCase()}, all customers</span><span className="text-[11px] text-stone-400">{inP.length>400?"newest 400 shown":""}</span></div>
         <div className="overflow-x-auto max-h-[560px] overflow-y-auto">
           <table className="w-full text-[13px] min-w-[760px]">
@@ -3586,7 +3586,7 @@ function AdminDashboard({platform,loginStats,uEmail,openCustomer,openSection,cli
         </div>
       </div>
     </div>
-    <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+    <div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
       <div className="px-4 py-2.5 border-b border-stone-100 text-sm font-semibold text-stone-700">By customer — {PERIODS.find(p=>p[0]===period)[1].toLowerCase()}</div>
       <div className="overflow-x-auto"><table className="w-full text-[13px] min-w-[680px]">
         <thead className="bg-stone-50"><tr className="text-[10px] uppercase tracking-widest text-stone-400"><th className="text-left font-normal px-3 py-2">Customer</th><th className="text-right font-normal px-3 py-2">Shipments</th><th className="text-right font-normal px-3 py-2">Voided</th><th className="text-right font-normal px-3 py-2">Quoted</th><th className="text-right font-normal px-3 py-2">Est. margin</th><th className="text-right font-normal px-3 py-2">Margin / label</th><th className="text-right font-normal px-3 py-2">Margin %</th></tr></thead>
@@ -3882,7 +3882,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
     </div>}
 
     {tab==="logins"&&<div className="space-y-2">
-      <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">{lg.length?lg.map(u=>(
+      <div className="border border-stone-400 rounded-lg bg-white divide-y divide-stone-100">{lg.length?lg.map(u=>(
         <div key={u.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
           <div className="flex-1 min-w-[180px] grid grid-cols-2 gap-2"><Input value={u.name||""} onChange={e=>setUsers(us=>us.map(x=>x.id===u.id?{...x,name:e.target.value}:x))}/><Input value={u.email||""} onChange={e=>setUsers(us=>us.map(x=>x.id===u.id?{...x,email:e.target.value}:x))}/></div>
           <span className="text-[11px] text-stone-400 w-20">{u.lastLogin||"—"}</span>
@@ -3897,7 +3897,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
           ]}/>
         </div>)):<div className="px-3 py-4 text-sm text-stone-400">No logins yet — new logins inherit this customer's rates, credentials, and features automatically.</div>}
       </div>
-      <div className="border border-stone-200 rounded-lg bg-white p-3 flex flex-wrap items-end gap-2">
+      <div className="border border-stone-400 rounded-lg bg-white p-3 flex flex-wrap items-end gap-2">
         <Field label="Name"><Input value={lf.name} onChange={e=>setLf({...lf,name:e.target.value})}/></Field>
         <Field label="Email"><Input value={lf.email} onChange={e=>setLf({...lf,email:e.target.value})}/></Field>
         <Field label="Temp password"><Input value={lf.password} onChange={e=>setLf({...lf,password:e.target.value})}/></Field>
@@ -3909,7 +3909,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       <DraftBar dirty={ratesDirty} onSave={saveRates} onUndo={undoRates} savedNote={"Rates saved — live for "+c.name} saveLabel="Save rates"/>
       {lg.length===0&&<div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">This account has <b>0 logins</b> — nobody can generate a real quote as {c.name} yet, so changes here won’t show up in any quote until a user is added under the <b>Logins</b> tab (or you view them via admin impersonation). The Live check strip below still reflects the math correctly.</div>}
       {/* Account-wide markup — THIS customer's blanket number, over the England/FedEx cost, beats the platform default */}
-      <div className="border border-stone-200 rounded-lg bg-white p-3 flex flex-wrap items-end gap-3">
+      <div className="border border-stone-400 rounded-lg bg-white p-3 flex flex-wrap items-end gap-3">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-stone-800 flex items-center gap-2">Account-wide markup — {c.name} only {(mk.markup!=null&&mk.markup!==""&&+mk.markup!==0)||(mk.markupMin!=null&&mk.markupMin!==""&&+mk.markupMin>0)?<Badge tone="green">on</Badge>:<Badge>off</Badge>}</div>
           <div className="text-[11px] text-stone-500 mt-0.5 max-w-md">This marks up all rates and accessorials {(mk.markup!=null&&mk.markup!==""&&+mk.markup!==0)?(+mk.markup+"%"):"X%"} over the England cost.</div>
@@ -3924,7 +3924,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         {["FedEx Ground","FedEx Home Delivery","FedEx 2Day","FedEx Priority Overnight"].map((l,i)=><span key={l}>{i>0&&" · "}{l.replace("FedEx ","")} <b className="">{money(rateSellFor(10,l,{rules,client:cDraft}))}</b></span>)}
         &nbsp;— same engine that prices every quote for {c.name}; type a markup above or below and watch these move instantly.
       </div>
-      <div className="border border-stone-200 rounded-lg bg-white p-3">
+      <div className="border border-stone-400 rounded-lg bg-white p-3">
         <div className="flex flex-wrap items-center gap-4">
           <div className="text-sm font-semibold text-stone-800">Dim divisors <span className="font-normal text-[11px] text-stone-400">(platform-wide — every customer)</span></div>
           {[["express","Express"],["ground","Ground & Home Delivery"],["ground_economy","Ground Economy"]].map(([k,l])=>(
@@ -3946,7 +3946,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         return (<>
         <div className="flex items-center gap-2"><Search className="w-3.5 h-3.5 text-stone-400"/><input value={svcFilter} onChange={e=>setSvcFilter(e.target.value)} placeholder="Find a service… (e.g. 2day extra large)" className="flex-1 max-w-xs bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-[#0086E0]"/>{svcFilter&&<button onClick={()=>setSvcFilter("")} className="text-xs text-stone-400 hover:text-stone-600">clear</button>}{svcFilter&&<span className="text-[11px] text-stone-400">search includes hidden rows — hidden ones show dimmed</span>}</div>
         {hiddenN>0&&<div className="flex justify-end"><button onClick={()=>setShowHiddenSvc(v=>!v)} className="text-xs text-stone-500 hover:text-stone-700 flex items-center gap-1">{showHiddenSvc?<EyeOff className="w-3.5 h-3.5"/>:<Eye className="w-3.5 h-3.5"/>}{showHiddenSvc?"Done — collapse hidden rows":hiddenN+" hidden row"+(hiddenN>1?"s":"")+" — show"}</button></div>}
-        <div className="border border-stone-200 rounded-lg bg-white overflow-x-auto"><table className="w-full text-sm min-w-[640px]"><tbody>
+        <div className="border border-stone-400 rounded-lg bg-white overflow-x-auto"><table className="w-full text-sm min-w-[640px]"><tbody>
         {gs.map(g=>{
           const f=svcFilter.trim().toLowerCase();
           const items=g.items.filter(sv=>f?f.split(/\s+/).every(w=>sv.l.toLowerCase().includes(w)):(showHiddenSvc||!svcHiddenMap[sv.k]));
@@ -4014,7 +4014,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         </div>
         <div className="mb-2"><SurCatChips val={surTab} set={setSurTab}/></div>
         <p className="text-[11px] text-stone-500 mb-2">Every FedEx surcharge — rules here reprice the matching fee line on LIVE quotes for this profile. <b>% off LIST</b> = FedEx list rate −X% · <b>% over cost</b> = England/FedEx fee ±X% (negative = discount) · <b>$ over cost</b> = fee + $X · <b>Flat $</b> = exactly $X. Blank amount = the fee stays inside the service-level markup. Search by the exact name you see on a quote (“Residential Surcharge”, “Fuel Surcharge”…) — it finds the row.</p>
-        <div className="border border-stone-200 rounded-lg bg-white overflow-x-auto h-[420px] overflow-y-auto"><table className="w-full text-sm min-w-[560px]"><tbody>
+        <div className="border border-stone-400 rounded-lg bg-white overflow-x-auto h-[420px] overflow-y-auto"><table className="w-full text-sm min-w-[560px]"><tbody>
           {(()=>{
             const q=(surQ||"").trim().toLowerCase();
             const listS=FEDEX_SURCHARGES.filter(su=>(!q||surMatches(su,q))&&(surTab==="all"||surCat(su)===surTab));
@@ -4067,7 +4067,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         const on=(c&&c.enabledCarriers)||[];
         const en=on.includes(cc.id);
         const cardLoaded=cc.services.some(([k])=>((rules.baseCosts||{})["cc:"+k]));
-        return (<div key={cc.id} className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+        return (<div key={cc.id} className="border border-stone-400 rounded-lg bg-white overflow-hidden">
           <div className="flex flex-wrap items-center gap-2.5 px-4 py-3">
             <div className="font-semibold text-stone-800">{cc.name}</div>
             {cardLoaded?<Badge tone="green">cost card loaded</Badge>:<Badge tone="amber">no cost card yet</Badge>}
@@ -4102,7 +4102,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         <button onClick={()=>upClient({blockedServices:[...DEFAULT_BLOCKED_SERVICES]})} className="text-[11px] text-[#0086E0] hover:underline">Reset To Standard Set</button>
         <button onClick={()=>upClient({blockedServices:[]})} className="text-[11px] text-stone-400 hover:underline">Enable Everything</button>
       </div>
-      <div className="border border-stone-200 rounded-lg bg-white p-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+      <div className="border border-stone-400 rounded-lg bg-white p-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
         {svcQuick.concat(ONE_RATE_LOCK_SVCS).map(sv=>{const blocked=(c.blockedServices||[]).includes(sv.k);return (<label key={sv.k} className="flex items-center gap-1.5 text-sm text-stone-700 cursor-pointer">
           <input type="checkbox" checked={!blocked} onChange={e=>{const cur=new Set(c.blockedServices||[]);e.target.checked?cur.delete(sv.k):cur.add(sv.k);upClient({blockedServices:[...cur]});}} className="accent-[#0086E0]"/>
           <span className={blocked?"line-through text-stone-400":""}>{sv.l}</span>
@@ -4136,7 +4136,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
     {tab==="features"&&<div className="space-y-3">
       {lg.length===0?<div className="text-sm text-stone-400">Add a login first — features apply to a company's logins.</div>
       :<><p className="text-[11px] text-stone-500">Turn features on/off for <b>every login</b> under {c.name} at once. Amber = mixed; click to make them match.</p>
-        <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">{CATALOG.map(f=>{const state=companyFeatureState(f.id);return (
+        <div className="border border-stone-400 rounded-lg bg-white divide-y divide-stone-100">{CATALOG.map(f=>{const state=companyFeatureState(f.id);return (
           <div key={f.id} className="flex items-center gap-3 px-3 py-2 text-sm">
             <div className="flex-1 min-w-0"><div className="font-medium text-stone-700">{f.label}{f.custom?<Badge tone="blue">custom</Badge>:null}</div><div className="text-[11px] text-stone-400 truncate">{f.desc}</div></div>
             {state==="mixed"&&<span className="text-[10px] text-amber-600">mixed</span>}
@@ -4146,7 +4146,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
         <div className="pt-2">
           <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Settings pages — what their Settings tab shows</div>
           <p className="text-[11px] text-stone-500 mb-2">Per page: <b>On</b> = normal · <b>View only</b> = they can open it but everything is greyed out and un-editable · <b>Hidden</b> = gone from their Settings sidebar. Applies to every login under {c.name}. Subscription starts Hidden for everyone — switch it On here when a customer should see it.</p>
-          <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">{SETTINGS_SEC_LIST.map(([sid,sl])=>{const st=secPolicyState(sid);return (
+          <div className="border border-stone-400 rounded-lg bg-white divide-y divide-stone-100">{SETTINGS_SEC_LIST.map(([sid,sl])=>{const st=secPolicyState(sid);return (
             <div key={sid} className="flex items-center gap-3 px-3 py-1.5 text-sm">
               <div className="flex-1 font-medium text-stone-700">{sl}{st==="mixed"&&<span className="text-[10px] text-amber-600 ml-2">mixed</span>}</div>
               <div className="flex rounded-lg border border-stone-200 overflow-hidden text-[11px]">
@@ -4442,7 +4442,7 @@ function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureF
       <span className="flex-1"/>
       <button onClick={()=>setAdding(a=>!a)} className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8]"><Plus className="w-4 h-4"/>New Customer</button>
     </div>
-    {adding&&<div className="border border-stone-200 rounded-lg bg-white p-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
+    {adding&&<div className="border border-stone-400 rounded-lg bg-white p-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
       <Field label="Company"><Input value={nf.name} onChange={e=>setNf({...nf,name:e.target.value})}/></Field>
       <Field label="Contact"><Input value={nf.contact} onChange={e=>setNf({...nf,contact:e.target.value})}/></Field>
       <Field label="Email"><Input value={nf.email} onChange={e=>setNf({...nf,email:e.target.value})}/></Field>
@@ -4451,7 +4451,7 @@ function CustomersMaster({clients,setClients,users,setUsers,currentUser,featureF
       <Field label="Markup %"><Input type="number" value={nf.markup} onChange={e=>setNf({...nf,markup:e.target.value})}/></Field>
       <div className="col-span-2 sm:col-span-3"><button onClick={createCustomer} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium">Create &amp; open</button></div>
     </div>}
-    <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+    <div className="border border-stone-400 rounded-lg bg-white overflow-hidden">
       <div className="flex items-center gap-4 px-4 py-2.5 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="w-9 shrink-0"/><div className="flex-1">Customer</div><div className="w-20 text-center shrink-0">Logins</div><div className="w-24 text-center shrink-0">Status</div><div className="w-5 shrink-0"/></div>
       <div className="divide-y divide-stone-100">
         {list.length===0&&<div className="px-4 py-8 text-sm text-stone-400 text-center">No customers match "{q}".</div>}
@@ -4788,7 +4788,7 @@ function RatesAdmin({clients=[],brand}){
   return (<div className="space-y-4">
     <DraftBar dirty={_d.dirty} onSave={_d.save} onUndo={_d.undo} onReset={async()=>{ if(await uiConfirm("Reset ALL rate rules to the blank default? This clears every profile, markup, and imported cost. You'll still need to click Save to make it permanent.")) _d.reset(); }} resetLabel="Reset all rates to default" savedNote="Rates saved" saveLabel="Save rates"/>
     <RateSafetyBanner rules={storeRules}/>
-    <div className="border border-stone-200 rounded-lg bg-white p-3 flex flex-wrap items-center gap-3">
+    <div className="border border-stone-400 rounded-lg bg-white p-3 flex flex-wrap items-center gap-3">
       <div className="text-sm font-semibold text-stone-800">England tier</div>
       <Select value={rules.englandTier||""} onChange={e=>upRules({englandTier:e.target.value})} className="w-56">
         <option value="">— not set —</option>
@@ -4802,7 +4802,7 @@ function RatesAdmin({clients=[],brand}){
       Markup is edited on each customer’s <b>Rates</b> tab — every account’s number lives there. There's no platform-wide default: an account with nothing set of its own sells at raw carrier cost. This screen holds the shared pieces: rate profiles, per-service rules below, base-cost tables, and zone data.
     </div>
     {/* top controls */}
-    <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
+    <div className="border border-stone-400 rounded-lg bg-white p-4 space-y-3">
       <div className="flex flex-wrap items-end gap-3">
         <Field label="Markup profile"><div className="flex items-center gap-1.5">
           <Select value={prof.id} onChange={e=>{setProfId(e.target.value);setCustView("");}}>{profiles.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</Select>
@@ -4831,7 +4831,7 @@ function RatesAdmin({clients=[],brand}){
     </div>
 
     {/* carrier + inner tabs */}
-    <div className="border border-stone-200 rounded-lg bg-white p-4">
+    <div className="border border-stone-400 rounded-lg bg-white p-4">
       <div className="flex flex-wrap items-center gap-1 border-b border-stone-200 pb-2 mb-3">
         {[["fedex","FedEx"],["dhl","DHL"]].map(([v,l])=><button key={v} onClick={()=>setCarrier(v)} className={`text-sm px-3 py-1.5 rounded-lg ${carrier===v?"bg-stone-900 text-white font-medium":"text-[#0086E0] hover:bg-stone-100"}`}>{l}</button>)}
         <span className="flex-1"/>
@@ -4882,7 +4882,7 @@ function RatesAdmin({clients=[],brand}){
       </table></div>}
 
       {tab==="dims"&&<div className="space-y-3">
-        <div className="border border-stone-200 rounded-xl bg-white p-4 space-y-2">
+        <div className="border border-stone-400 rounded-xl bg-white p-4 space-y-2">
           <div className="text-sm font-semibold text-stone-800">Dimensional-weight divisors</div>
           <p className="text-[12px] text-stone-500 max-w-2xl">Your negotiated dim divisor per service family — the FedEx list book uses <b>139</b>; negotiated contracts can run up to <b>225</b>. Dim weight = L × W × H ÷ divisor, and FedEx bills the higher of dim weight and actual weight. These drive the app's estimates, box logic, and the "Billed at X lb dim weight" note on quotes.</p>
           <div className="flex flex-wrap gap-6">
@@ -5013,7 +5013,7 @@ function RatesAdmin({clients=[],brand}){
       </div>
     </div>}
     {/* ── Print rate sheets & accessorials sheet ── */}
-    <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
+    <div className="border border-stone-400 rounded-lg bg-white p-4 space-y-3">
       <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><Printer className="w-4 h-4 text-[#0086E0]"/>Print rate sheets</div>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[11px] text-stone-500">Pick the services to include:</span>
@@ -5137,7 +5137,7 @@ function ReceivablesAdmin({clients=[],currentUser}){
         <span className="text-stone-500">As of</span><input type="date" value={asOfStr} onChange={e=>setAsOfStr(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5"/>
         <span className="text-stone-500 ml-2">Sales rep</span>{myRep?<span className="bg-stone-100 border border-stone-200 rounded-lg px-2.5 py-1.5 text-stone-700 font-medium">{myRep}</span>:<select value={rep} onChange={e=>setRep(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5"><option value="all">All</option>{repNames.map(r=><option key={r} value={r}>{r}</option>)}</select>}
       </div>
-      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
         <div className="overflow-x-auto"><table className="w-full text-sm">
           <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 border-b border-stone-200">
             <th className="text-left font-medium px-3 py-2">Customer</th><th className="text-right font-medium px-3 py-2">Total due</th><th className="text-right font-medium px-3 py-2">Overdue</th>{AR_BUCKETS.map(b=><th key={b[0]} className="text-right font-medium px-3 py-2 whitespace-nowrap">{b[1]}</th>)}
@@ -5165,7 +5165,7 @@ function ReceivablesAdmin({clients=[],currentUser}){
         <div><div className="text-[11px] uppercase tracking-wide text-stone-400">Balance due</div><div className="font-semibold text-stone-900 tabular-nums">{money(stmtBalance)}</div></div>
         {stmtCreditLimit!=null&&<div><div className="text-[11px] uppercase tracking-wide text-stone-400">Credit remaining</div><div className="font-semibold text-emerald-700 tabular-nums">{money(Math.max(0,(+stmtCreditLimit||0)-stmtBalance))}</div></div>}
       </div>}
-      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
         <div className="overflow-x-auto"><table className="w-full text-sm">
           <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 border-b border-stone-200">
             <th className="text-left font-medium px-3 py-2">Invoice #</th><th className="text-left font-medium px-3 py-2">Invoice date</th><th className="text-left font-medium px-3 py-2">Due date</th><th className="text-right font-medium px-3 py-2">Amount</th><th className="text-right font-medium px-3 py-2">Late fee</th><th className="text-right font-medium px-3 py-2">Total</th><th className="text-right font-medium px-3 py-2">Paid</th><th className="text-right font-medium px-3 py-2">Remaining</th><th className="px-3 py-2"/>
@@ -5303,12 +5303,12 @@ function MarginsAdmin({clients=[],currentUser}){
 
     {tab==="neg"?<>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Airbills flagged</div><div className="text-xl font-semibold text-stone-900">{negRows.length}</div></div>
+        <div className="border border-stone-400 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Airbills flagged</div><div className="text-xl font-semibold text-stone-900">{negRows.length}</div></div>
         <div className="border border-rose-200 rounded-xl bg-rose-50/50 px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-rose-500">Money at risk (losses)</div><div className="text-xl font-semibold text-rose-700">{money(atRiskTotal)}</div></div>
-        <div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Combined margin</div><div className={`text-xl font-semibold ${negTotal<0?"text-rose-700":"text-stone-900"}`}>{money(negTotal)}</div></div>
+        <div className="border border-stone-400 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Combined margin</div><div className={`text-xl font-semibold ${negTotal<0?"text-rose-700":"text-stone-900"}`}>{money(negTotal)}</div></div>
       </div>
       {negRows.length>0&&<div className="flex justify-end"><button onClick={async()=>{ if(await uiConfirm("Mark all "+negRows.length+" flagged airbills as reconciled? Do this once you've corrected their customer charges.")) reconcileAll(negRows.map(a=>a.id)); }} className="text-sm bg-emerald-600 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-emerald-700 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>Reconcile all shown</button></div>}
-      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
         <div className="overflow-x-auto"><table className="w-full text-sm">
           <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 border-b border-stone-200">
             <th className="text-left font-medium px-3 py-2">Airbill</th><th className="text-left font-medium px-3 py-2">Customer</th><th className="text-left font-medium px-3 py-2">Rep</th><th className="text-left font-medium px-3 py-2">Type</th><th className="text-right font-medium px-3 py-2">Agent cost</th><th className="text-right font-medium px-3 py-2">Cust charge</th><th className="text-right font-medium px-3 py-2">Margin</th><th className="px-3 py-2"/>
@@ -5332,12 +5332,12 @@ function MarginsAdmin({clients=[],currentUser}){
     </>:tab==="agency"?<>
       {/* AGENCY SUMMARY */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Shipments</div><div className="text-xl font-semibold text-stone-900">{tot.n}</div></div>
-        <div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Cust revenue</div><div className="text-xl font-semibold text-stone-900 tabular-nums">{money(tot.rev)}</div></div>
-        <div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Agency cost</div><div className="text-xl font-semibold text-stone-900 tabular-nums">{money(tot.cost)}</div></div>
+        <div className="border border-stone-400 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Shipments</div><div className="text-xl font-semibold text-stone-900">{tot.n}</div></div>
+        <div className="border border-stone-400 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Cust revenue</div><div className="text-xl font-semibold text-stone-900 tabular-nums">{money(tot.rev)}</div></div>
+        <div className="border border-stone-400 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Agency cost</div><div className="text-xl font-semibold text-stone-900 tabular-nums">{money(tot.cost)}</div></div>
         <div className="border border-emerald-200 rounded-xl bg-emerald-50/50 px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-emerald-600">Agency margin</div><div className="text-xl font-semibold text-emerald-700 tabular-nums">{money(tot.margin)} <span className="text-sm text-emerald-600">· {tot.rev>0?(tot.margin/tot.rev*100).toFixed(1):"0"}%</span></div></div>
       </div>
-      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
         <div className="overflow-x-auto"><table className="w-full text-sm">
           <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 border-b border-stone-200">
             <th className="text-left font-medium px-3 py-2">{groupBy==="rep"?"Sales rep":"Customer"}</th><th className="text-right font-medium px-3 py-2">Shipments</th><th className="text-right font-medium px-3 py-2">Cust revenue</th><th className="text-right font-medium px-3 py-2">Agency cost</th><th className="text-right font-medium px-3 py-2">Agency margin</th><th className="text-right font-medium px-3 py-2">Mgn %</th>
@@ -5364,11 +5364,11 @@ function MarginsAdmin({clients=[],currentUser}){
         <span className="text-[11px] text-stone-400 ml-1">— used when a rep has no rate set on their rep record (Admin → API → Sales reps).</span>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Reps</div><div className="text-xl font-semibold text-stone-900">{commission.length}</div></div>
-        <div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Total margin</div><div className="text-xl font-semibold text-stone-900 tabular-nums">{money(commTot.margin)}</div></div>
+        <div className="border border-stone-400 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Reps</div><div className="text-xl font-semibold text-stone-900">{commission.length}</div></div>
+        <div className="border border-stone-400 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">Total margin</div><div className="text-xl font-semibold text-stone-900 tabular-nums">{money(commTot.margin)}</div></div>
         <div className="border border-emerald-200 rounded-xl bg-emerald-50/50 px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-emerald-600">Total commission</div><div className="text-xl font-semibold text-emerald-700 tabular-nums">{money(commTot.commission)}</div></div>
       </div>
-      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
         <div className="overflow-x-auto"><table className="w-full text-sm">
           <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 border-b border-stone-200">
             <th className="text-left font-medium px-3 py-2">Sales rep</th><th className="text-right font-medium px-3 py-2">Shipments</th><th className="text-right font-medium px-3 py-2">Margin</th><th className="text-right font-medium px-3 py-2">Comm %</th><th className="text-right font-medium px-3 py-2">Commission</th>
@@ -5695,7 +5695,7 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
       <Input value={q} onChange={e=>setQ(e.target.value)} placeholder="Filter by order, tracking, name…" className="w-56"/>
     </div>
 
-    <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+    <div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
       <div onClick={()=>setListOpen(v=>!v)} className="flex items-center gap-2 px-4 py-3 hover:bg-stone-50 cursor-pointer select-none">
         <span className="text-sm font-semibold text-stone-700">Shipments in this file</span>
         <span className="text-[11px] bg-stone-100 text-stone-500 rounded-full px-2 py-0.5">{rows.length}</span>
@@ -5787,7 +5787,7 @@ function BillingAdmin({clients=[],platform={},openCustomer}){
     <Panel title="Invoices">
       <div className="flex gap-1 mb-2 text-sm">{[["open","Open"],["paid","Paid"],["void","Void"],["all","All"]].map(([v,l])=><button key={v} onClick={()=>setTab(v)} className={`px-3 py-1 rounded-lg ${tab===v?"bg-stone-100 font-medium text-stone-900":"text-stone-500 hover:bg-stone-50"}`}>{l}</button>)}</div>
       {!list.length?<div className="text-sm text-stone-400">No {tab==="all"?"":tab+" "}invoices.</div>
-       :<div className="space-y-1.5">{list.map(inv=>(<div key={inv.id} className="flex flex-wrap items-center gap-3 border border-stone-200 rounded-lg bg-white px-3 py-2 text-sm">
+       :<div className="space-y-1.5">{list.map(inv=>(<div key={inv.id} className="flex flex-wrap items-center gap-3 border border-stone-400 rounded-lg bg-white px-3 py-2 text-sm">
           <span className=" text-[12px] text-stone-600">{inv.number}</span>
           <button onClick={()=>openCustomer&&openCustomer(inv.clientId)} className="font-medium text-[#0086E0] hover:underline">{cById(inv.clientId).name}</button>
           <span className="text-stone-400 text-xs">{inv.month}</span>
@@ -5942,7 +5942,7 @@ function ApiAdmin({clients=[],platform={},openCustomer}){
         <button onClick={()=>{if(!nr.name||!(+nr.pct>0))return;setReps(p=>[...(p||[]),{id:"r"+Date.now(),name:nr.name,pct:+nr.pct,clientIds:[]}]);setNr({name:"",pct:"",clientIds:[]});}} className="text-sm bg-[#0086E0] text-white rounded-lg px-3.5 py-2 font-medium flex items-center gap-1.5"><Plus className="w-4 h-4"/>Add Rep</button>
       </div>
       {!repRows.length?<div className="text-sm text-stone-400">No reps yet.</div>
-       :<div className="space-y-2">{repRows.map(rp=>(<div key={rp.id} className="border border-stone-200 rounded-lg bg-white p-3 space-y-2">
+       :<div className="space-y-2">{repRows.map(rp=>(<div key={rp.id} className="border border-stone-400 rounded-lg bg-white p-3 space-y-2">
           <div className="flex items-center gap-3"><span className="font-medium">{rp.name}</span><Badge tone="blue">{rp.pct}% of margin</Badge><span className="flex-1"/>
             <span className="text-[12px] text-stone-500">{rp.shipN} shipments · margin {money(rp.margin)} · <b className="text-emerald-700">commission {money(rp.commission)}</b> this month</span>
             <button onClick={async()=>{if(await uiConfirm("Remove "+rp.name+"?"))setReps(p=>(p||[]).filter(x=>x.id!==rp.id));}} className="text-stone-300 hover:text-rose-500"><Trash2 className="w-4 h-4"/></button></div>
@@ -5994,7 +5994,7 @@ function OtherCarriersAdmin({clients=[]}){
     {CUSTOM_CARRIERS.map(cc=>{
       const enabledFor=clients.filter(c=>c&&Array.isArray(c.enabledCarriers)&&c.enabledCarriers.includes(cc.id));
       const enNames=enabledFor.map(c=>c.name);
-      return (<div key={cc.id} className="border border-stone-200 rounded-xl bg-white p-4 space-y-2">
+      return (<div key={cc.id} className="border border-stone-400 rounded-xl bg-white p-4 space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <div className="font-semibold text-stone-800">{cc.name}</div>
           {enabledFor.length?<Badge tone="blue">live for {enNames.slice(0,3).join(", ")}{enNames.length>3?" +"+(enNames.length-3)+" more":""}</Badge>:<Badge tone="stone">not enabled for any customer yet</Badge>}
@@ -6134,7 +6134,7 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
       </div>}
       <div className="min-w-0">
         {cur.kind==="section"
-          ? <div className="border border-stone-200 rounded-2xl bg-white shadow-sm p-4 sm:p-6">{sectionBody(cur.key)}</div>
+          ? <div className="border border-stone-400 rounded-2xl bg-white shadow-sm p-4 sm:p-6">{sectionBody(cur.key)}</div>
           : <CustomerDetail cid={cur.id} ships={platform.ships||[]} clients={clients} setClients={setClients} users={users} setUsers={setUsers} currentUser={currentUser} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} settings={settings} onClose={()=>closeTab(active)} openSection={openSection}/>}
       </div>
       </div>
@@ -6148,7 +6148,7 @@ function PlatformAccountsAdmin({settings,setSettings}){
   return (<div className="max-w-2xl space-y-3">
     <h2 className="text-sm font-semibold text-stone-700">Platform (reseller) carrier accounts</h2>
     <p className="text-sm text-stone-500">Carrier accounts you resell to customers — no carrier contract needed on their end. Toggle the ones you want live; your markup still applies. When you get your own reseller accounts, they'll plug in here.</p>
-    <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
+    <div className="border border-stone-400 rounded-lg bg-white divide-y divide-stone-100">
       {PLATFORM_CARRIERS.map(c=>(
         <div key={c.id} className="flex items-center gap-3 px-4 py-3">
           <div className={`w-12 text-xs font-bold ${c.tint}`}>{c.name}</div>
@@ -6175,7 +6175,7 @@ function CustomizationsAdmin({users,clients,featureFlags={},setFeatureFlags,cust
   const removeCustom=async(id)=>{ if(!await uiConfirm("Remove this customization from the registry? (Any code behind it stays; user toggles for it are simply ignored.)"))return; setCustomFeatures(cf=>cf.filter(c=>c.id!==id)); };
   /* called as {FeatureRow({...})} — an inline component type remounts its chips per click */
   const FeatureRow=({f,custom})=>(
-    <div className="border border-stone-200 rounded-lg bg-white p-4">
+    <div className="border border-stone-400 rounded-lg bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="font-medium text-stone-800 flex items-center gap-2">{f.label}{custom&&<Badge tone="blue">custom</Badge>}{f.clientNote&&<span className="text-[11px] text-stone-400 font-normal">built for {f.clientNote}</span>}</div>
@@ -6354,7 +6354,7 @@ function UsersAdmin({users,setUsers,clients,setClients,currentUser,signupRequest
       </div>))}
       <p className="text-[11px] text-stone-400">Approving creates their login instantly with the password they chose at signup. Assign a customer account to give them that customer’s pricing, or leave unassigned and set it later.</p>
     </div>}
-    <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
+    <div className="border border-stone-400 rounded-lg bg-white p-4 space-y-3">
       <div className="text-sm font-semibold text-stone-700">New login</div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         <Field label="Name"><Input value={f.name} onChange={e=>setF({...f,name:e.target.value})}/></Field>
@@ -6383,7 +6383,7 @@ function UsersAdmin({users,setUsers,clients,setClients,currentUser,signupRequest
       </div>}
       <button onClick={create} className={`text-sm rounded-lg px-4 py-2 font-medium flex items-center gap-1.5 ${added?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{added?<><Check className="w-4 h-4"/>Created</>:<><Plus className="w-4 h-4"/>Create login</>}</button>
     </div>
-    <div className="border border-stone-200 rounded-lg bg-white overflow-hidden divide-y divide-stone-100">
+    <div className="border border-stone-400 rounded-lg bg-white overflow-hidden divide-y divide-stone-100">
       <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="flex-1 min-w-0">Login</div><div className="w-20 shrink-0">Role</div><div className="w-36 shrink-0 hidden sm:block">Company</div><div className="w-24 shrink-0 hidden md:block">Last login</div><div className="w-48 shrink-0 text-right">Actions</div></div>
       {users.map(u=>(
         <div key={u.id} className="px-4 py-3 text-sm">
@@ -7372,7 +7372,7 @@ function CompanyAdmin({currentUser,companyUsers,setCompanyUsers,companyFlags,set
       </div>
       <button onClick={create} disabled={busy||!f.name||!f.email||!f.password} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy?<Loader2 className="w-4 h-4 animate-spin"/>:<Plus className="w-4 h-4"/>}Create login</button>
     </Panel>
-    <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
+    <div className="border border-stone-400 rounded-lg bg-white divide-y divide-stone-100">
       <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500">{users.length} login{users.length===1?"":"s"} in your company</div>
       {users.length===0&&<div className="p-6 text-center text-sm text-stone-500">No logins yet — create the first one above.</div>}
       {users.map(u=>{
@@ -7432,7 +7432,7 @@ function CompanyAddressDeploy({companyUsers,companyFlags,setCompanyFlags,adminSe
     setBusy(false);
     setMsg(fail?{err:`${ok} updated, ${fail} failed — try again.`}:{ok:clear?`Removed the shared book from ${ok} login${ok!==1?"s":""}.`:`Shared ${book.length} address${book.length!==1?"es":""} to ${ok} login${ok!==1?"s":""} — they'll see them on their next page load.`});
   };
-  return (<div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
+  return (<div className="border border-stone-400 rounded-xl bg-white p-4 space-y-3">
     <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><BookUser className="w-4 h-4 text-[#0086E0]"/>Shared address book</div>
     <div className="text-xs text-stone-500">Push your own address book (<b>{book.length}</b> address{book.length!==1?"es":""}) out to your team. Shared entries appear in each login's Address Book next to their own — you never overwrite or remove anyone's personal addresses.</div>
     <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -9404,7 +9404,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
         {perishPopup&&<PerishableAlert zip={receiver.zip} country={receiver.country} date={shipDate} rules={perishRules} over={perishPopupOver}/>}
 
         {!custom.hideShipSteps&&<StepHead n="2" label="Package details"/>}
-        <div className="bg-white border border-stone-300 shadow-sm rounded-xl p-3 space-y-2">
+        <div className="bg-white border border-stone-400 shadow-sm rounded-xl p-3 space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <datalist id="sc-ref-list">{[...((settings.fieldLists||{}).department||[]),...((settings.fieldLists||{}).reference||[])].map(v=><option key={v} value={v}/>)}</datalist>
             <datalist id="sc-inv-list">{(((settings.fieldLists||{}).invoice)||[]).map(v=><option key={v} value={v}/>)}</datalist>
@@ -9517,7 +9517,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               const showRates=!custom.hideRateSrcBar;
               if(!showOrder&&!showAp&&!showRates&&!handsFree)return null;
               const apFired=liveRuleStatus&&liveRuleStatus.state==="fired";
-              return <div className="border border-stone-300 shadow-sm rounded-xl bg-white p-3 space-y-2">
+              return <div className="border border-stone-400 shadow-sm rounded-xl bg-white p-3 space-y-2">
                 <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">This Shipment</div>
                 {showOrder&&<div className="flex items-start gap-2 text-xs text-stone-600">
                   <Truck className="w-3.5 h-3.5 shrink-0 mt-0.5 text-stone-400"/>
@@ -9553,7 +9553,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 </div>}
               </div>;
             })()}
-            {!custom.hideBillingBox&&<div className="border border-stone-300 shadow-sm rounded-xl bg-white p-3 space-y-2">
+            {!custom.hideBillingBox&&<div className="border border-stone-400 shadow-sm rounded-xl bg-white p-3 space-y-2">
               <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5"/>Billing &amp; Third-Party</div>
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-stone-500">Bill to</span>
@@ -9561,7 +9561,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               </div>
               {(billTo==="third"||billTo==="receiver")&&<input value={thirdAcct} onChange={e=>setThirdAcct(e.target.value)} placeholder={billTo==="receiver"?"Receiver's FedEx account #":"3rd-party account #"} className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>}
             </div>}
-            {!custom.hideNotifyBox&&<div className="border border-stone-300 shadow-sm rounded-xl bg-white p-3 space-y-2">
+            {!custom.hideNotifyBox&&<div className="border border-stone-400 shadow-sm rounded-xl bg-white p-3 space-y-2">
               <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><Send className="w-3.5 h-3.5"/>Send Label &amp; Notify</div>
               <div>
                 <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Send to email</div>
@@ -9593,7 +9593,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             <div className="flex items-center gap-2 text-sm font-semibold text-[#006FBF]"><FileText className="w-4 h-4"/>Customs · Commercial invoice</div>
 <datalist id="sc-prod-list">{((settings&&settings.products)||[]).map(pr=><option key={pr.id} value={pr.name}>{(pr.sku?pr.sku+" · ":"")+(pr.hs?("HS "+pr.hs):"no HS yet")}</option>)}</datalist>
             <datalist id="sc-origin-list">{COUNTRIES.map(c=><option key={c} value={c}/>)}</datalist>
-            <div className="bg-white border border-stone-300 shadow-sm rounded-xl p-3 space-y-2">
+            <div className="bg-white border border-stone-400 shadow-sm rounded-xl p-3 space-y-2">
             <div className="text-[11px] uppercase tracking-widest text-[#006FBF] font-bold flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#0086E0] rounded-sm"/>1 · Shipment &amp; terms</div>
             <div className="grid sm:grid-cols-3 gap-2">
               <Field label="Reason for export"><div className="flex gap-1"><Select value={EXPORT_REASONS.includes(customs.reason)?customs.reason:"__other"} onChange={e=>{const v=e.target.value;setCustoms({...customs,reason:v==="__other"?"":v});}}>{EXPORT_REASONS.map(r=><option key={r}>{r}</option>)}<option value="__other">Other…</option></Select>{!EXPORT_REASONS.includes(customs.reason)&&<input value={customs.reason} onChange={e=>setCustoms({...customs,reason:e.target.value})} placeholder="Type Reason" className="w-28 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0]"/>}</div></Field>
@@ -9601,7 +9601,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <Field label="Duties & taxes to"><Select value={customs.dutiesBill} onChange={e=>setCustoms({...customs,dutiesBill:e.target.value})}><option value="receiver">Receiver (DAP)</option><option value="sender">Sender (DDP)</option></Select></Field>
             </div>
             </div>
-            <div className="bg-white border border-stone-300 shadow-sm rounded-xl p-3 space-y-2">
+            <div className="bg-white border border-stone-400 shadow-sm rounded-xl p-3 space-y-2">
             <div className="text-[11px] uppercase tracking-widest text-[#006FBF] font-bold flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#0086E0] rounded-sm"/>2 · Your export details</div>
             <div className="grid sm:grid-cols-3 gap-2">
               <Field label="Sender Tax ID / EIN"><input value={customs.senderTaxId??(settings.taxId||"")} onChange={e=>setCustoms({...customs,senderTaxId:e.target.value})} placeholder="12-3456789" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></Field>
@@ -9609,7 +9609,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <Field label="FTR / EEI"><input value={customs.ftr??"NOEEI 30.37(a)"} onChange={e=>setCustoms({...customs,ftr:e.target.value})} list="sc-ftr-list" placeholder="NOEEI 30.37(a)" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/><datalist id="sc-ftr-list"><option value="NOEEI 30.37(a)">Under $2,500 per HS class</option><option value="NOEEI 30.36">To Canada</option><option value="NOEEI 30.37(h)">Gift / humanitarian</option><option value="AES ITN: X2026________">Filed — paste ITN</option></datalist></Field>
             </div>
             </div>
-            <div className="bg-white border border-stone-300 shadow-sm rounded-xl p-3 space-y-2">
+            <div className="bg-white border border-stone-400 shadow-sm rounded-xl p-3 space-y-2">
             <div className="text-[11px] uppercase tracking-widest text-[#006FBF] font-bold flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#0086E0] rounded-sm"/>3 · Receiver &amp; import details</div>
             <div className="grid sm:grid-cols-4 gap-2">
               <Field label="Importer of record"><div className="flex gap-1"><Select value={customs.ior||"Receiver"} onChange={e=>setCustoms({...customs,ior:e.target.value})}><option>Receiver</option><option>Shipper</option><option>Other</option></Select>{customs.ior==="Other"&&<input value={customs.iorName||""} onChange={e=>setCustoms({...customs,iorName:e.target.value})} placeholder="IOR name" className="w-28 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>}</div></Field>
@@ -9618,7 +9618,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               <Field label="Additional receiver contact"><input value={customs.altContact||""} onChange={e=>setCustoms({...customs,altContact:e.target.value})} placeholder="Broker / consignee alt — name & phone" className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></Field>
             </div>
             </div>
-            <div className="bg-white border border-stone-300 shadow-sm rounded-xl p-3 space-y-2">
+            <div className="bg-white border border-stone-400 shadow-sm rounded-xl p-3 space-y-2">
             <div className="text-[11px] uppercase tracking-widest text-[#006FBF] font-bold flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#0086E0] rounded-sm"/>4 · Marks &amp; notes</div>
             <div className="flex flex-wrap items-center gap-3">
               <Field label="Package marks"><input value={customs.marks||""} onChange={e=>setCustoms({...customs,marks:e.target.value})} placeholder="Carton 1 of 3" className="w-40 bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></Field>
@@ -9628,7 +9628,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
 
             <Field label="Invoice notes"><textarea value={customs.notes||""} onChange={e=>setCustoms({...customs,notes:e.target.value})} rows={2} placeholder="Custom notes printed on the invoice — license numbers, 'samples for exhibition use only'…" className="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/></Field>
             </div>
-            <div className="bg-white border border-stone-300 shadow-sm rounded-xl p-3 space-y-2">
+            <div className="bg-white border border-stone-400 shadow-sm rounded-xl p-3 space-y-2">
                         <div className="space-y-1.5">
               <div className="flex items-center justify-between mb-1"><div className="text-[11px] uppercase tracking-widest text-[#006FBF] font-bold flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#0086E0] rounded-sm"/>5 · Products, value &amp; sign-off</div>
               <div className="flex flex-col items-end"><div className="flex rounded-lg border border-stone-200 overflow-hidden text-[11px] font-medium">
@@ -10467,7 +10467,7 @@ function NewOrderForm({onClose,onCreate}){
     onCreate({id:Date.now(),name:"#"+n,...f,weight:+f.weight||1,total:f.total||"0.00",status:"unfulfilled",date:new Date().toLocaleDateString(undefined,{month:"numeric",day:"numeric"})});
   };
   return (
-    <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
+    <div className="border border-stone-400 rounded-lg bg-white p-4 space-y-3">
       <div className="flex items-center justify-between"><div className="text-sm font-semibold text-stone-700">New order</div><button onClick={onClose} className="text-stone-400 hover:text-stone-700"><X className="w-4 h-4"/></button></div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <Field label="Customer"><Input value={f.customer} onChange={e=>set("customer",e.target.value)}/></Field>
@@ -10563,7 +10563,7 @@ function OrderDetail({o,setOrders,client,settings,onShipped,goShip}){
       {o.status==="fulfilled"?(
         <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2"><CheckCircle2 className="w-4 h-4"/>Shipped{o.tracking?<> · tracking <a className="underline" href={TRACK_URL[carrierOf("FedEx")](o.tracking)} target="_blank" rel="noopener">{o.tracking}</a></>:""}</div>
       ):(<>
-        <div className="flex flex-wrap items-end gap-3 border border-stone-200 rounded-lg bg-white p-3">
+        <div className="flex flex-wrap items-end gap-3 border border-stone-400 rounded-lg bg-white p-3">
           <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Weight (lb)</div><input type="number" value={weight} onChange={e=>{setWeight(+e.target.value);upd({weight:+e.target.value});}} className="w-20 bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"/></div>
           <div><div className="text-[10px] uppercase tracking-widest text-stone-400">Box</div><select value={boxIdx} onChange={e=>{const j=+e.target.value;setBoxIdx(j);if(j>=0)setDimsOverride(null);}} className="bg-white border border-stone-300 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"><option value="-1">Custom Size</option>{boxes.map((b,j)=><option key={b.id} value={j}>{b.name}</option>)}</select></div>
           <div className="flex items-end gap-1.5"><PkgInput label="L" value={box.L} onChange={e=>{setBoxIdx(-1);setDimsOverride(v=>({L:e.target.value,W:(v||box).W,H:(v||box).H}));}}/>
@@ -11434,13 +11434,13 @@ function WmsPreview({currentUser,onEnable}){
       <p className="text-[11px] text-stone-400 mt-3">It's free and turns on instantly — you can switch it off again in Settings. The tour uses pretend stock; nothing here touches your real data.</p>
     </div>
     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-      {feats.map(([Ic,h,d])=>(<div key={h} className="border border-stone-200 rounded-xl bg-white p-4">
+      {feats.map(([Ic,h,d])=>(<div key={h} className="border border-stone-400 rounded-xl bg-white p-4">
         <div className="w-9 h-9 rounded-lg bg-[#E6F4FF] text-[#0086E0] flex items-center justify-center mb-2.5"><Ic className="w-5 h-5"/></div>
         <div className="text-sm font-semibold text-stone-900">{h}</div>
         <div className="text-[12.5px] text-stone-500 mt-0.5 leading-snug">{d}</div>
       </div>))}
     </div>
-    <div className="border border-stone-200 rounded-2xl bg-white p-5">
+    <div className="border border-stone-400 rounded-2xl bg-white p-5">
       <div className="text-sm font-semibold text-stone-900 mb-3 flex items-center gap-2"><RefreshCw className="w-4 h-4 text-[#0086E0]"/>How it works — one simple loop</div>
       <div className="space-y-2.5">{WMS_LOOP.map(([t,d],i)=>(<div key={i} className="flex gap-3 items-start"><div className="w-6 h-6 rounded-full bg-[#0086E0] text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{i+1}</div><div><span className="text-[13px] font-semibold text-stone-800">{t}.</span> <span className="text-[13px] text-stone-600">{d}</span></div></div>))}</div>
     </div>
@@ -11670,7 +11670,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
     setBusy("");
     if(r&&r.ok){ patch(r.item); setAdj(null); flash("Adjusted "+adj.sku+" by "+(d>0?"+"+d:d)+" ("+adj.reason+")."); load(); } else flash((r&&r.error)||"Adjust failed.",true);
   };
-  if(!CLOUD.token) return (<div className="max-w-2xl"><div className="border border-stone-200 rounded-xl bg-white p-6 text-sm text-stone-600">Inventory lives in the cloud — sign in to your account to track stock.</div></div>);
+  if(!CLOUD.token) return (<div className="max-w-2xl"><div className="border border-stone-400 rounded-xl bg-white p-6 text-sm text-stone-600">Inventory lives in the cloud — sign in to your account to track stock.</div></div>);
   if(items===null) return (<div className="flex items-center gap-2 text-stone-500 text-sm p-4"><Loader2 className="w-4 h-4 animate-spin"/>Loading warehouse…</div>);
   const list=(items||[]).slice().sort((a,b)=>String(a.name||a.sku).localeCompare(String(b.name||b.sku)));
   const isLow=(it)=>(+it.reorder||0)>0&&(+it.onHand||0)<=(+it.reorder||0)&&!(Array.isArray(it.kit)&&it.kit.length);
@@ -11681,7 +11681,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
   const lowCount=list.filter(isLow).length;
   // Backorder count: distinct stocked SKUs whose committed demand exceeds on-hand.
   const boCount=list.filter(it=>{ if(Array.isArray(it.kit)&&it.kit.length&&!it.assembled)return false; const d=committedBySku[String(it.sku).toLowerCase()]||0; return d>(+it.onHand||0); }).length;
-  const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
+  const Tile=({label,value,tone})=>(<div className="border border-stone-400 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
   const openPo=(pos||[]).filter(p=>p&&p.status!=="received").length;
   /* Grouped navigation — the WMS tools organized into labeled clusters so the WMS stays approachable.
      Presentation only; every tab still just calls setView. */
@@ -11855,7 +11855,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
       {filtered.some(it=>!(Array.isArray(it.kit)&&it.kit.length))&&<button onClick={()=>printLabels(filtered.filter(it=>!(Array.isArray(it.kit)&&it.kit.length)),{showPrice:showMoney})} className="text-xs rounded-lg px-2.5 py-2 border border-stone-200 bg-white text-stone-600 font-medium hover:bg-stone-50 flex items-center gap-1" title="Print scannable Code 128 barcode labels for the items shown"><Printer className="w-3.5 h-3.5"/>Print labels</button>}
       <button onClick={()=>setShowLog(s=>!s)} className="text-xs text-stone-500 hover:text-stone-700 flex items-center gap-1 ml-auto">{showLog?"Hide":"Show"} movement log ({log.length})</button>
     </div>
-    <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+    <div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
       <div className="overflow-x-auto"><table className="w-full text-sm">
         <thead><tr className="bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 text-left"><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right"><span className="inline-flex items-center gap-1 justify-end">On hand <InfoDot>How many units you physically have right now.</InfoDot></span></th><th className="px-3 py-2 text-right"><span className="inline-flex items-center gap-1 justify-end">Committed <InfoDot>Units promised to open orders that haven't shipped yet.</InfoDot></span></th><th className="px-3 py-2 text-right"><span className="inline-flex items-center gap-1 justify-end">Available <InfoDot>What you can still sell — on hand minus committed.</InfoDot></span></th><th className="px-3 py-2 text-right"><span className="inline-flex items-center gap-1 justify-end">Incoming <InfoDot>On the way in from purchase orders you haven't received yet.</InfoDot></span></th><th className="px-3 py-2 text-right"><span className="inline-flex items-center gap-1 justify-end">Reorder <InfoDot>When on-hand hits this number, it's time to buy more.</InfoDot></span></th>{showMoney&&<th className="px-3 py-2 text-right">Unit cost</th>}{showMoney&&<th className="px-3 py-2 text-right">Value</th>}<th className="px-3 py-2">Location</th><th className="px-3 py-2"></th></tr></thead>
         <tbody className="divide-y divide-stone-100">
@@ -11883,7 +11883,7 @@ function Inventory({settings,setSettings,client,showMoney=true,currentUser,order
         </tbody>
       </table></div>
     </div>
-    {showLog&&<div className="border border-stone-200 rounded-xl bg-white p-3">
+    {showLog&&<div className="border border-stone-400 rounded-xl bg-white p-3">
       <div className="text-xs font-semibold text-stone-600 mb-2">Recent movements</div>
       {log.length===0?<div className="text-xs text-stone-400 py-2">No movements yet.</div>:
         <div className="space-y-1 max-h-72 overflow-y-auto">{log.map(mv=>(<div key={mv.id} className="flex items-center gap-2 text-xs py-1 border-b border-stone-50 last:border-0">
@@ -11992,7 +11992,7 @@ function Backorders({list,orders,committedBySku,incomingBySku,goReplenish}){
   const rows=stock.map(it=>{ const k=String(it.sku).toLowerCase(); const demand=committedBySku[k]||0; const onHand=+it.onHand||0; if(demand<=onHand)return null; const inc=incomingBySku[k]||0; const short=demand-onHand; const netShort=Math.max(0,short-inc); return {sku:it.sku,name:it.name||"",demand,onHand,inc,short,netShort}; }).filter(Boolean).sort((a,b)=>b.netShort-a.netShort||b.short-a.short);
   const affectedOrders=new Set(); rows.forEach(r=>ordersForSku(r.sku).forEach(o=>affectedOrders.add(o.id)));
   const totalShort=rows.reduce((s,r)=>s+r.short,0);
-  const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
+  const Tile=({label,value,tone})=>(<div className="border border-stone-400 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
   return (<div className="space-y-4">
     <div className="flex items-center justify-between flex-wrap gap-2">
       <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-amber-500"/>Backorders</h2><p className="text-sm text-stone-500 mt-0.5">Items your open orders need more of than you have in stock. If inbound POs already cover the gap, it shows as on the way; otherwise it still needs reordering.</p></div>
@@ -12004,9 +12004,9 @@ function Backorders({list,orders,committedBySku,incomingBySku,goReplenish}){
       <Tile label="Units backordered" value={totalShort}/>
     </div>
     {rows.length===0?(
-      <div className="border border-stone-200 rounded-xl bg-white p-8 text-center text-sm text-stone-400">No backorders — every open order is fully covered by stock. 🎉</div>
+      <div className="border border-stone-400 rounded-xl bg-white p-8 text-center text-sm text-stone-400">No backorders — every open order is fully covered by stock. 🎉</div>
     ):(
-      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-stone-50 text-stone-500 text-xs"><tr>
             <th className="px-3 py-2 text-left">Item</th><th className="px-3 py-2 text-right">Ordered</th>
@@ -12073,9 +12073,9 @@ function CycleCount({list,showMoney,onApplied}){
       {counted.length>0&&<button onClick={()=>setCounts({})} className="text-xs text-stone-500 hover:underline">Clear counts</button>}
     </div>
     {rows.length===0?(
-      <div className="border border-stone-200 rounded-xl bg-white p-8 text-center text-sm text-stone-400">No countable items in this scope. (Serial &amp; lot-tracked items are counted by scanning.)</div>
+      <div className="border border-stone-400 rounded-xl bg-white p-8 text-center text-sm text-stone-400">No countable items in this scope. (Serial &amp; lot-tracked items are counted by scanning.)</div>
     ):(<>
-      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-stone-50 text-stone-500 text-xs"><tr>
             <th className="px-3 py-2 text-left">Item</th><th className="px-3 py-2 text-left">Location</th>
@@ -12092,7 +12092,7 @@ function CycleCount({list,showMoney,onApplied}){
           </tbody>
         </table>
       </div>
-      <div className="border border-stone-200 rounded-xl bg-white p-4 flex items-center justify-between flex-wrap gap-2">
+      <div className="border border-stone-400 rounded-xl bg-white p-4 flex items-center justify-between flex-wrap gap-2">
         <div className="text-sm text-stone-600">{counted.length} counted · <b className="text-stone-800">{changed.length}</b> variance{changed.length===1?"":"s"} · net {netUnits>0?"+"+netUnits:netUnits} units{showMoney?" · "+(netValue>=0?"+$":"-$")+Math.abs(netValue).toFixed(2)+" value":""}</div>
         <button onClick={apply} disabled={busy||!changed.length} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{busy&&<Loader2 className="w-4 h-4 animate-spin"/>}Apply {changed.length||""} adjustment{changed.length===1?"":"s"}</button>
       </div>
@@ -12244,9 +12244,9 @@ function Replenishment({list,suppliers,log,incomingBySku,committedBySku,showMone
     {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
     {advisor&&<ReorderAdvisor stock={stock} velBySku={velBySku} supLead={supLead} onReload={onReload} onClose={()=>setAdvisor(false)}/>}
     {rows.length===0?(
-      <div className="border border-stone-200 rounded-xl bg-white p-8 text-center text-sm text-stone-400">Nothing needs reordering right now. Set a <b className="text-stone-500">Reorder at (min)</b> on your items and this planner watches them for you.</div>
+      <div className="border border-stone-400 rounded-xl bg-white p-8 text-center text-sm text-stone-400">Nothing needs reordering right now. Set a <b className="text-stone-500">Reorder at (min)</b> on your items and this planner watches them for you.</div>
     ):(<>
-      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-stone-50 text-stone-500 text-xs"><tr>
             <th className="px-3 py-2 text-left w-8"></th><th className="px-3 py-2 text-left">Item</th>
@@ -12270,7 +12270,7 @@ function Replenishment({list,suppliers,log,incomingBySku,committedBySku,showMone
           </tbody>
         </table>
       </div>
-      <div className="border border-stone-200 rounded-xl bg-white p-4">
+      <div className="border border-stone-400 rounded-xl bg-white p-4">
         <div className="text-xs font-semibold text-stone-600 mb-2">This will create {groupKeys.length} draft {groupKeys.length===1?"PO":"POs"} · {totalUnits} units total</div>
         <div className="space-y-1">
           {groupKeys.map(k=>(<div key={k||"none"} className="text-sm text-stone-600 flex items-center gap-2"><ClipboardList className="w-3.5 h-3.5 text-stone-400"/><b className="text-stone-800">{supName(k)||"No supplier"}</b><span className="text-stone-400">— {groups[k].length} {groups[k].length===1?"item":"items"}, {groups[k].reduce((s,r)=>s+(+r.qty||0),0)} units{showMoney?" · $"+groups[k].reduce((s,r)=>s+(+r.qty||0)*(r.cost||0),0).toFixed(2):""}</span></div>))}
@@ -12352,7 +12352,7 @@ function PurchaseOrders({pos,setPos,suppliers,items,showMoney,onReload,seed,onSe
       <button onClick={newPo} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>New PO</button>
     </div>
     {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
-    <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+    <div className="border border-stone-400 rounded-xl bg-white divide-y divide-stone-100">
       {sorted.length===0&&<div className="p-8 text-center text-sm text-stone-400">No purchase orders yet.</div>}
       {sorted.map(po=>{ const ord=(po.lines||[]).reduce((s,l)=>s+(+l.qtyOrdered||0),0); const rec=(po.lines||[]).reduce((s,l)=>s+(+l.qtyReceived||0),0); return (
         <div key={po.id} className="p-3 flex items-center gap-3 flex-wrap">
@@ -12421,7 +12421,7 @@ function SuppliersView({suppliers,setSuppliers}){
       <button onClick={()=>setEf({name:"",contact:"",email:"",phone:"",leadDays:"",notes:""})} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>New supplier</button>
     </div>
     {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
-    <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+    <div className="border border-stone-400 rounded-xl bg-white divide-y divide-stone-100">
       {(suppliers||[]).length===0&&<div className="p-8 text-center text-sm text-stone-400">No suppliers yet.</div>}
       {(suppliers||[]).map(s=>(<div key={s.id} className="p-3 flex items-center gap-3">
         <div className="flex-1 min-w-0"><div className="font-medium text-stone-900">{s.name}</div><div className="text-[11px] text-stone-400">{[s.contact,s.email,s.phone,s.leadDays?s.leadDays+"-day lead":""].filter(Boolean).join(" · ")||"—"}</div></div>
@@ -12476,8 +12476,8 @@ function PackVerify({orders,items,shipOrder,settings}){
   const allDone=order&&lines.length>0&&lines.every(l=>l.have>=l.need);
   return (<div className="space-y-4">
     <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ScanLine className="w-5 h-5 text-[#0086E0]"/>Pack verify</h2><p className="text-sm text-stone-500 mt-0.5">Scan each item into the box before shipping — the order isn't verified until every line matches.</p></div>
-    {!order?(open.length===0?<div className="border border-stone-200 rounded-xl bg-white p-6 text-sm text-stone-500">No open orders with SKUs to pack.</div>:
-      <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100 max-h-96 overflow-y-auto">
+    {!order?(open.length===0?<div className="border border-stone-400 rounded-xl bg-white p-6 text-sm text-stone-500">No open orders with SKUs to pack.</div>:
+      <div className="border border-stone-400 rounded-xl bg-white divide-y divide-stone-100 max-h-96 overflow-y-auto">
         {open.map(o=>(<button key={o.id} onClick={()=>start(o)} className="w-full text-left px-4 py-3 hover:bg-stone-50 flex items-center gap-3"><div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{o.name||o.id} · {o.customer||""}</div><div className="text-[11px] text-stone-400 truncate">{(o.lineItems||[]).filter(li=>li.sku).reduce((s,li)=>s+(+li.qty||+li.quantity||1),0)} items</div></div><ChevronRight className="w-4 h-4 text-stone-300"/></button>))}
       </div>):(
       <>
@@ -12527,7 +12527,7 @@ function ScanReceive({items,onReceived,reload}){
   const totalScans=feed.filter(x=>x.ok).reduce((s,x)=>s+x.qty,0);
   return (<div className="space-y-4">
     <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ScanLine className="w-5 h-5 text-[#0086E0]"/>Scan to receive</h2><p className="text-sm text-stone-500 mt-0.5">Scan a barcode (or type a SKU) and press Enter — each scan adds to stock and shows the item's put-away location. Great for putting away a delivery.</p></div>
-    <div className="border border-stone-200 rounded-xl bg-white p-4">
+    <div className="border border-stone-400 rounded-xl bg-white p-4">
       <div className="flex items-end gap-3 flex-wrap">
         <label className="text-xs text-stone-600 flex-1 min-w-[220px]">Scan / SKU<input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();submit(val);}}} placeholder="Scan barcode or type SKU…" className="mt-1 w-full border border-stone-300 rounded-lg px-4 py-3 text-base outline-none focus:border-[#0086E0]" autoFocus/></label>
         <label className="text-xs text-stone-600">Qty per scan<input type="number" min="1" value={qtyPer} onChange={e=>setQtyPer(e.target.value)} className="mt-1 w-20 border border-stone-300 rounded-lg px-2 py-2.5 text-sm"/></label>
@@ -12535,7 +12535,7 @@ function ScanReceive({items,onReceived,reload}){
       </div>
       {feed.length>0&&<div className="text-[11px] text-stone-400 mt-2">Session: {totalScans} unit{totalScans!==1?"s":""} received across {feed.filter(x=>x.ok).length} scan{feed.filter(x=>x.ok).length!==1?"s":""}.</div>}
     </div>
-    <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100 max-h-96 overflow-y-auto">
+    <div className="border border-stone-400 rounded-xl bg-white divide-y divide-stone-100 max-h-96 overflow-y-auto">
       {feed.length===0&&<div className="p-6 text-center text-sm text-stone-400">Scans will appear here.</div>}
       {feed.map((x,i)=>(<div key={i} className={`px-4 py-2 flex items-center gap-3 ${x.ok?"":"bg-rose-50/50"}`}>
         {x.ok?<CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0"/>:<AlertTriangle className="w-4 h-4 text-rose-500 shrink-0"/>}
@@ -12710,7 +12710,7 @@ function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFl
     .sort((a,b)=>(a.ready===b.ready?0:a.ready?-1:1)||a.t-b.t);
   const readyN=rows.filter(r=>r.ready).length; const shortN=rows.filter(r=>!r.ready&&!r.unknown).length;
   const age=(t)=>{ if(!t)return ""; const m=Math.floor((Date.now()-t)/60000); if(m<60)return m+"m"; const h=Math.floor(m/60); if(h<24)return h+"h"; return Math.floor(h/24)+"d"; };
-  const Tile=({label,value,tone})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
+  const Tile=({label,value,tone})=>(<div className="border border-stone-400 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></div>);
   return (<div className="space-y-4">
     <div className="flex items-start justify-between gap-3 flex-wrap">
       <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Truck className="w-5 h-5 text-[#0086E0]"/>To ship</h2><p className="text-sm text-stone-500 mt-0.5">Your orders waiting to go out, readiest first. Green means every item's in stock — click <b>Fulfill</b> to grab and ship.</p></div>
@@ -12732,7 +12732,7 @@ function ToShip({orders,list,committedBySku,goView,shipOrder,flow="simple",setFl
       <Tile label="Waiting on stock" value={shortN} tone={shortN?"text-amber-600":"text-stone-900"}/>
     </div>
     {rows.length>0&&<div className="flex gap-2"><button onClick={()=>goView("pick")} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><ClipboardList className="w-4 h-4"/>Build a pick list</button><button onClick={()=>goView("pack")} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-4 py-2 font-medium hover:bg-stone-200 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>Pack &amp; verify</button></div>}
-    <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+    <div className="border border-stone-400 rounded-xl bg-white divide-y divide-stone-100">
       {rows.length===0&&<div className="p-8 text-center text-sm text-stone-400">Nothing waiting to ship — you're all caught up. 🎉</div>}
       {rows.map(({o,ready,unknown,short,units,skus,t})=>(<div key={o.id} className="p-3 flex items-center gap-3 flex-wrap">
         <div className="shrink-0">{ready?<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-emerald-100 text-emerald-700">Ready</span>:unknown?<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-stone-100 text-stone-500">No stock link</span>:<span className="text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 bg-amber-100 text-amber-700">Short</span>}</div>
@@ -12799,8 +12799,8 @@ function PickList({orders,items,seedIds=null}){
   const printSheet=()=>{ try{ const w=window.open("","_blank"); if(!w)return; const rows=built.rows.map(r=>`<tr><td style="padding:6px 10px;border-bottom:1px solid #eee">${r.loc||"—"}</td><td style="padding:6px 10px;border-bottom:1px solid #eee">${r.name||""}<div style="color:#999;font-size:11px">${r.sku}</div></td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${r.qty}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;color:${r.short?"#c00":"#999"}">${r.onHand==null?"—":r.onHand}${r.short?" (short "+r.short+")":""}</td><td style="padding:6px 10px;border-bottom:1px solid #eee;width:40px"></td></tr>`).join(""); w.document.write(`<html><head><title>Pick list</title></head><body style="font-family:system-ui;padding:24px"><h2>Pick list · ${built.orders} order(s) · ${new Date().toLocaleString()}</h2><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:#666;font-size:11px;text-transform:uppercase"><th style="padding:6px 10px">Bin</th><th style="padding:6px 10px">Item</th><th style="padding:6px 10px;text-align:right">Pick</th><th style="padding:6px 10px;text-align:right">On hand</th><th style="padding:6px 10px">✓</th></tr></thead><tbody>${rows}</tbody></table></body></html>`); w.document.close(); w.focus(); setTimeout(()=>{try{w.print();}catch(e){}},250); }catch(e){} };
   return (<div className="space-y-4">
     <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><ClipboardList className="w-5 h-5 text-[#0086E0]"/>Pick lists</h2><p className="text-sm text-stone-500 mt-0.5">Select open orders and build a bin-sorted pick sheet for the warehouse.</p></div>
-    {open.length===0?<div className="border border-stone-200 rounded-xl bg-white p-6 text-sm text-stone-500">No open orders with SKUs to pick. Orders need line items with SKUs (from a connected store or your catalog).</div>:<>
-      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+    {open.length===0?<div className="border border-stone-400 rounded-xl bg-white p-6 text-sm text-stone-500">No open orders with SKUs to pick. Orders need line items with SKUs (from a connected store or your catalog).</div>:<>
+      <div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
         <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 flex items-center justify-between"><label className="flex items-center gap-2 cursor-pointer normal-case tracking-normal text-xs text-stone-600"><input type="checkbox" checked={chosen.length===open.length&&open.length>0} onChange={e=>{const all={};if(e.target.checked)open.forEach(o=>all[o.id]=true);setSel(all);}} className="accent-[#0086E0]"/>Select all</label><span>{chosen.length} selected</span></div>
         <div className="divide-y divide-stone-100 max-h-72 overflow-y-auto">
           {open.map(o=>(<label key={o.id} className="px-4 py-2.5 flex items-center gap-3 cursor-pointer hover:bg-stone-50">
@@ -12811,7 +12811,7 @@ function PickList({orders,items,seedIds=null}){
       </div>
       <button onClick={build} disabled={!chosen.length} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5"><ClipboardList className="w-4 h-4"/>Build pick list ({chosen.length})</button>
     </>}
-    {built&&(()=>{ const allPicked=pickTotals.need>0&&pickTotals.done>=pickTotals.need; const pct=pickTotals.need>0?Math.round(pickTotals.done/pickTotals.need*100):0; return (<div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+    {built&&(()=>{ const allPicked=pickTotals.need>0&&pickTotals.done>=pickTotals.need; const pct=pickTotals.need>0?Math.round(pickTotals.done/pickTotals.need*100):0; return (<div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
       <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 flex items-center justify-between gap-2 flex-wrap"><span>Pick sheet · {built.orders} order(s) · {built.rows.reduce((s,r)=>s+r.qty,0)} units</span>
         <div className="flex items-center gap-2 normal-case tracking-normal">
           <button onClick={()=>setSession(s=>!s)} className={`text-xs rounded px-2 py-1 flex items-center gap-1 border ${session?"bg-[#0086E0] text-white border-[#0086E0]":"bg-white border-stone-200 hover:bg-stone-100"}`}><ScanLine className="w-3.5 h-3.5"/>{session?"Picking…":"Start pick session"}</button>
@@ -12859,7 +12859,7 @@ function InventoryOverview({list,pos,log,suppliers,orders,showMoney,committedByS
     return null;
   })();
   const nextTone={sky:"from-[#f2f8fd] to-white border-[#0086E0]/20 text-[#0086E0]",emerald:"from-emerald-50 to-white border-emerald-200 text-emerald-700",amber:"from-amber-50 to-white border-amber-200 text-amber-700",rose:"from-rose-50 to-white border-rose-200 text-rose-700"};
-  const Tile=({label,value,tone,onClick})=>(<button onClick={onClick} disabled={!onClick} className={`text-left border border-stone-200 rounded-xl bg-white px-4 py-3 ${onClick?"hover:border-[#0086E0]/40 transition":""}`}><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></button>);
+  const Tile=({label,value,tone,onClick})=>(<button onClick={onClick} disabled={!onClick} className={`text-left border border-stone-400 rounded-xl bg-white px-4 py-3 ${onClick?"hover:border-[#0086E0]/40 transition":""}`}><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div></button>);
   const mvLabel={receipt:"Received",ship:"Shipped",adjust:"Adjusted",count:"Counted",transfer:"Moved",build:"Built",consume:"Used in build",new:"Added",removed:"Removed"};
   return (<div className="space-y-4">
     <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Boxes className="w-5 h-5 text-[#0086E0]"/>Warehouse overview</h2><p className="text-sm text-stone-500 mt-0.5">Everything at a glance — what needs attention and what's happening.</p></div>
@@ -12874,7 +12874,7 @@ function InventoryOverview({list,pos,log,suppliers,orders,showMoney,committedByS
       <Tile label="Low stock" value={low.length} tone={low.length?"text-amber-600":"text-stone-900"} onClick={()=>goView("stock")}/>
     </div>
     {/* Needs attention */}
-    {(low.length||out.length||oversold.length||openPos.length||expSoon.length)?<div className="border border-stone-200 rounded-xl bg-white p-4 space-y-2">
+    {(low.length||out.length||oversold.length||openPos.length||expSoon.length)?<div className="border border-stone-400 rounded-xl bg-white p-4 space-y-2">
       <div className="text-sm font-semibold text-stone-800">Needs attention</div>
       {out.length>0&&<div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-rose-500"/><span className="text-stone-700"><b>{out.length}</b> out of stock</span><button onClick={()=>goView("stock")} className="text-[11px] text-[#0086E0] hover:underline">view →</button></div>}
       {low.length>0&&<div className="flex items-center gap-2 text-sm"><span className="w-2 h-2 rounded-full bg-amber-500"/><span className="text-stone-700"><b>{low.length}</b> below reorder point</span><button onClick={()=>goView("replenish")} className="text-[11px] text-[#0086E0] hover:underline">reorder →</button></div>}
@@ -12891,7 +12891,7 @@ function InventoryOverview({list,pos,log,suppliers,orders,showMoney,committedByS
       <button onClick={()=>goView("pack")} className="text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-3.5 py-2 font-medium hover:bg-stone-200 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>Pack verify</button>
     </div>
     {/* Recent activity */}
-    <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+    <div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
       <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500">Recent activity</div>
       <div className="divide-y divide-stone-100">
         {recent.length===0&&<div className="p-4 text-sm text-stone-400">No activity yet.</div>}
@@ -12922,7 +12922,7 @@ function WarehousesView({warehouses,setWarehouses,items}){
       <button onClick={()=>setEf({name:"",code:"",type:"warehouse",address:"",notes:""})} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>New location</button>
     </div>
     {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
-    <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+    <div className="border border-stone-400 rounded-xl bg-white divide-y divide-stone-100">
       {(warehouses||[]).length===0&&<div className="p-8 text-center text-sm text-stone-400">No locations yet. Add your first warehouse or bin.</div>}
       {(warehouses||[]).map(w=>(<div key={w.id} className="p-3 flex items-center gap-3">
         <div className="flex-1 min-w-0"><div className="font-medium text-stone-900 flex items-center gap-2">{w.name}{w.code?<span className="text-[11px] text-stone-400 font-mono">{w.code}</span>:null}<Badge tone={typeTone[w.type]||"stone"}>{w.type}</Badge></div><div className="text-[11px] text-stone-400 truncate">{[w.address,w.notes].filter(Boolean).join(" · ")||"—"}</div></div>
@@ -12930,7 +12930,7 @@ function WarehousesView({warehouses,setWarehouses,items}){
         <button onClick={()=>del(w)} className="text-xs bg-stone-100 text-stone-400 rounded-lg px-2 py-1.5 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="w-3.5 h-3.5"/></button>
       </div>))}
     </div>
-    {Object.keys(contents).length>0&&<div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+    {Object.keys(contents).length>0&&<div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
       <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500">Bin contents — what's stored where</div>
       <div className="divide-y divide-stone-100">
         {Object.keys(contents).sort((a,b)=>contents[b].units-contents[a].units).map(loc=>(<div key={loc}>
@@ -12972,14 +12972,14 @@ function WListManager({kind,title,subtitle,Icon,fields,addLabel,statuses,default
   const del=async(id)=>{ if(!await uiConfirm("Delete this entry?"))return; await persist(items.filter(x=>x.id!==id)); };
   const cycle=async(it)=>{ if(!statuses)return; const i=statuses.indexOf(it.status); const nextStatus=statuses[(i+1)%statuses.length]; await persist(items.map(x=>x.id===it.id?{...x,status:nextStatus}:x)); };
   const stTone=(s)=>{ const i=statuses?statuses.indexOf(s):-1; return i<=0?"bg-amber-100 text-amber-700":i===statuses.length-1?"bg-emerald-100 text-emerald-700":"bg-sky-100 text-sky-700"; };
-  if(items===null)return <div className="border border-stone-200 rounded-xl bg-white p-8 text-center text-sm text-stone-400 flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>Loading…</div>;
+  if(items===null)return <div className="border border-stone-400 rounded-xl bg-white p-8 text-center text-sm text-stone-400 flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>Loading…</div>;
   return (<div className="space-y-4 max-w-3xl">
     <div className="flex items-center justify-between flex-wrap gap-2">
       <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><Icon className="w-5 h-5 text-[#0086E0]"/>{title}</h2><p className="text-sm text-stone-500 mt-0.5">{subtitle}</p></div>
       <button onClick={()=>setEf(blank())} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>{addLabel||"New"}</button>
     </div>
     {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
-    <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+    <div className="border border-stone-400 rounded-xl bg-white divide-y divide-stone-100">
       {items.length===0&&<div className="p-8 text-center text-sm text-stone-400">Nothing here yet.</div>}
       {items.map(it=>(<div key={it.id} className="p-3 flex items-center gap-3 flex-wrap">
         <div className="flex-1 min-w-0"><div className="font-medium text-stone-900 flex items-center gap-2">{renderPrimary?renderPrimary(it):(it.name||it.title||"—")}{statuses&&<button onClick={()=>cycle(it)} className={`text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 ${stTone(it.status)}`} title="Click to advance status">{it.status}</button>}</div><div className="text-[11px] text-stone-400 truncate">{renderSecondary?renderSecondary(it):""}</div></div>
@@ -13078,12 +13078,12 @@ function PointOfSale({items,onReload}){
     <div className="grid md:grid-cols-2 gap-4">
       <div className="space-y-2">
         <form onSubmit={scanAdd}><input ref={scanRef} autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="Scan barcode or search name / SKU…" className="w-full border border-stone-300 rounded-xl px-4 py-3 text-base outline-none focus:border-[#0086E0]"/></form>
-        <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100 max-h-80 overflow-y-auto">
+        <div className="border border-stone-400 rounded-xl bg-white divide-y divide-stone-100 max-h-80 overflow-y-auto">
           {(q.trim()?suggest:stock.slice(0,20)).map(it=>(<button key={it.sku} onClick={()=>{add(it);setQ("");}} className="w-full text-left px-3 py-2 hover:bg-stone-50 flex items-center gap-3"><div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{it.name||it.sku}</div><div className="text-[11px] text-stone-400">{it.sku} · {+it.onHand||0} in stock</div></div><div className="text-sm font-medium text-stone-700">${priceOf(it).toFixed(2)}</div></button>))}
           {stock.length===0&&<div className="p-6 text-center text-sm text-stone-400">No items to sell yet.</div>}
         </div>
       </div>
-      <div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
+      <div className="border border-stone-400 rounded-xl bg-white p-4 space-y-3">
         <div className="text-sm font-semibold text-stone-700">Cart</div>
         <div className="space-y-2 max-h-64 overflow-y-auto">
           {cart.length===0&&<div className="text-sm text-stone-400 py-6 text-center">Cart is empty — add items to sell.</div>}
@@ -13155,7 +13155,7 @@ function Billing3PL({orders=[]}){
     const html=`<!doctype html><html><head><meta charset="utf-8"><title>Invoice — ${esc(client)}</title><style>body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:40px;color:#1c1917;font-size:13px}h1{font-size:22px;margin:0}table{width:100%;border-collapse:collapse;margin-top:16px}th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#78716c;border-bottom:2px solid #e7e5e4;padding:8px 6px}td{padding:8px 6px;border-bottom:1px solid #f0efed}.r{text-align:right}tfoot td{border:0;font-weight:700;padding-top:12px}@media print{body{margin:0}}</style></head><body><h1>Invoice</h1><div style="color:#78716c">${esc(client)} · ${new Date().toISOString().slice(0,10)}</div><table><thead><tr><th>Date</th><th>Service</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amount</th></tr></thead><tbody>${tr||'<tr><td colspan=5>No charges.</td></tr>'}</tbody><tfoot><tr><td colspan="4" class="r">Total due</td><td class="r">${money(total)}</td></tr></tfoot></table><script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script></body></html>`;
     const w=window.open("","_blank"); if(!w){flash("Allow pop-ups to print.",true);return;} w.document.open(); w.document.write(html); w.document.close();
   };
-  if(items===null)return <div className="border border-stone-200 rounded-xl bg-white p-8 text-center text-sm text-stone-400 flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>Loading billing…</div>;
+  if(items===null)return <div className="border border-stone-400 rounded-xl bg-white p-8 text-center text-sm text-stone-400 flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin"/>Loading billing…</div>;
   return (<div className="space-y-4">
     <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><DollarSign className="w-5 h-5 text-[#0086E0]"/>3PL Billing</h2><p className="text-sm text-stone-500 mt-0.5">Bill your clients for warehouse work — set a rate card, log charges as you fulfill, and print per-client invoices.</p></div>
     {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
@@ -13164,7 +13164,7 @@ function Billing3PL({orders=[]}){
     </div>
     {tab==="rates"&&<div className="space-y-3">
       <div className="flex items-center justify-between"><div className="text-sm text-stone-500">Services you charge for and their rates.</div><div className="flex gap-2">{items.length===0&&<button onClick={seedRates} disabled={busy} className="text-xs bg-stone-100 text-stone-600 rounded-lg px-3 py-2 font-medium hover:bg-stone-200">Add starter services</button>}<button onClick={()=>setEf({name:"",unit:"each",rate:""})} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>New service</button></div></div>
-      <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+      <div className="border border-stone-400 rounded-xl bg-white divide-y divide-stone-100">
         {items.length===0&&<div className="p-8 text-center text-sm text-stone-400">No billable services yet.</div>}
         {items.map(it=>(<div key={it.id} className="p-3 flex items-center gap-3"><div className="flex-1 min-w-0"><div className="font-medium text-stone-900">{it.name}</div><div className="text-[11px] text-stone-400">per {it.unit}</div></div><div className="text-sm font-semibold text-stone-800">${(+it.rate||0).toFixed(2)}</div><button onClick={()=>setEf(it)} className="text-xs bg-stone-100 text-stone-600 rounded-lg px-2.5 py-1.5 hover:bg-stone-200">Edit</button><button onClick={()=>delRate(it.id)} className="text-xs bg-stone-100 text-stone-400 rounded-lg px-2 py-1.5 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="w-3.5 h-3.5"/></button></div>))}
       </div>
@@ -13180,7 +13180,7 @@ function Billing3PL({orders=[]}){
           <button onClick={autoGenerate} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center justify-center gap-1.5">{busy&&<Loader2 className="w-4 h-4 animate-spin"/>}Generate</button>
         </div>
       </div>}
-      <div className="border border-stone-200 rounded-xl bg-white p-4">
+      <div className="border border-stone-400 rounded-xl bg-white p-4">
         <div className="text-sm font-semibold text-stone-700 mb-2">Log a charge by hand</div>
         {items.length===0?<div className="text-sm text-stone-400">Add services on the Rate card tab first.</div>:
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 items-end">
@@ -13191,7 +13191,7 @@ function Billing3PL({orders=[]}){
           <button onClick={addCharge} disabled={busy} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center justify-center gap-1.5">{busy&&<Loader2 className="w-4 h-4 animate-spin"/>}Add</button>
         </div>}
       </div>
-      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
         <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500">Charges ({charges.length})</div>
         <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-[10px] uppercase tracking-widest text-stone-400"><th className="px-3 py-2">Date</th><th className="px-3 py-2">Client</th><th className="px-3 py-2">Service</th><th className="px-3 py-2 text-right">Qty</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2"></th><th className="px-3 py-2"></th></tr></thead>
           <tbody className="divide-y divide-stone-100">{charges.length===0&&<tr><td colSpan={7} className="px-3 py-8 text-center text-stone-400">No charges logged yet.</td></tr>}
@@ -13199,7 +13199,7 @@ function Billing3PL({orders=[]}){
           </tbody></table></div>
       </div>
     </div>}
-    {tab==="invoices"&&<div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+    {tab==="invoices"&&<div className="border border-stone-400 rounded-xl bg-white divide-y divide-stone-100">
       {clientKeys.length===0&&<div className="p-8 text-center text-sm text-stone-400">No charges yet — log some on the Charges tab.</div>}
       {clientKeys.map(k=>(<div key={k} className="p-3 flex items-center gap-3 flex-wrap">
         <div className="flex-1 min-w-0"><div className="font-medium text-stone-900">{k}</div><div className="text-[11px] text-stone-400">{byClient[k].count} charge{byClient[k].count===1?"":"s"} · ${byClient[k].total.toFixed(2)} total</div></div>
@@ -13248,7 +13248,7 @@ function RunnerReceive({byCode,onReceived,onReload}){
   const [code,setCode]=useState(""); const [qty,setQty]=useState(1); const [busy,setBusy]=useState(false); const [feed,setFeed]=useState([]); const [msg,setMsg]=useState(null);
   const ref=useRef(null);
   const go=async()=>{ const it=byCode[code.trim().toLowerCase()]; if(!it){ setMsg({err:"Not found: "+code+" — add it in Stock first."}); return; } const q=Math.max(1,Math.round(+qty||1)); setBusy(true); const r=await cloudCall({action:"invReceive",token:CLOUD.token,lines:[{sku:it.sku,qty:q}],ref:"runner"}); setBusy(false); if(r&&r.ok&&r.items&&r.items[0]){ onReceived&&onReceived(r.items[0]); setFeed(f=>[{sku:it.sku,name:it.name||it.sku,qty:q,onHand:r.items[0].onHand,loc:it.loc||""},...f].slice(0,40)); setCode(""); setMsg(null); onReload&&onReload(); try{ref.current&&ref.current.focus();}catch(e){} } else setMsg({err:(r&&r.error)||"Receive failed."}); };
-  return (<div className="border border-stone-200 rounded-2xl bg-white p-4 space-y-3">
+  return (<div className="border border-stone-400 rounded-2xl bg-white p-4 space-y-3">
     <input ref={ref} autoFocus value={code} onChange={e=>setCode(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();go();}}} placeholder="Scan or type SKU / barcode…" className="w-full border border-stone-300 rounded-xl px-4 py-3 text-base outline-none focus:border-[#0086E0]"/>
     <div className="flex items-center gap-3"><span className="text-sm text-stone-500">Qty</span><button onClick={()=>setQty(q=>Math.max(1,(+q||1)-1))} className="w-11 h-11 rounded-xl bg-stone-100 text-xl font-semibold text-stone-600">−</button><span className="w-12 text-center text-xl font-semibold">{qty}</span><button onClick={()=>setQty(q=>(+q||1)+1)} className="w-11 h-11 rounded-xl bg-[#0086E0]/10 text-xl font-semibold text-[#0086E0]">+</button>
       <button onClick={go} disabled={busy||!code.trim()} className="ml-auto bg-emerald-600 text-white rounded-xl px-6 py-3 font-semibold hover:bg-emerald-700 disabled:opacity-40 flex items-center gap-1.5">{busy?<Loader2 className="w-5 h-5 animate-spin"/>:<Plus className="w-5 h-5"/>}Receive</button></div>
@@ -13263,7 +13263,7 @@ function RunnerCount({byCode,onReload}){
   const lookup=()=>{ const found=byCode[code.trim().toLowerCase()]; if(!found){ setMsg({err:"Not found: "+code}); setIt(null); return; } if(found.trackSerial||found.trackLot){ setMsg({err:"Serial/lot items are counted by scanning each unit, not here."}); setIt(null); return; } setIt(found); setActual(String(+found.onHand||0)); setMsg(null); };
   const apply=async()=>{ if(!it)return; const delta=Math.round(+actual||0)-(+it.onHand||0); if(!delta){ setMsg({ok:"Already matches — no change."}); return; } setBusy(true); const r=await cloudCall({action:"invAdjust",token:CLOUD.token,sku:it.sku,delta,reason:"runner count"}); setBusy(false); if(r&&r.ok){ setMsg({ok:"Corrected "+it.sku+" to "+(r.item?r.item.onHand:actual)+"."}); setIt(null); setCode(""); setActual(""); onReload&&onReload(); try{ref.current&&ref.current.focus();}catch(e){} } else setMsg({err:(r&&r.error)||"Couldn't adjust."}); };
   const variance=it?Math.round(+actual||0)-(+it.onHand||0):0;
-  return (<div className="border border-stone-200 rounded-2xl bg-white p-4 space-y-3">
+  return (<div className="border border-stone-400 rounded-2xl bg-white p-4 space-y-3">
     <div className="flex gap-2"><input ref={ref} autoFocus value={code} onChange={e=>setCode(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();lookup();}}} placeholder="Scan or type SKU / barcode…" className="flex-1 border border-stone-300 rounded-xl px-4 py-3 text-base outline-none focus:border-[#0086E0]"/><button onClick={lookup} className="bg-stone-100 text-stone-700 rounded-xl px-4 font-medium">Find</button></div>
     {it&&<div className="rounded-xl bg-stone-50 p-3 space-y-2">
       <div className="font-medium text-stone-900">{it.name||it.sku}<span className="text-[11px] text-stone-400 ml-2">{it.sku}</span></div>
@@ -13279,7 +13279,7 @@ function RunnerPut({byCode,locOptions,onReload}){
   const ref=useRef(null);
   const lookup=()=>{ const found=byCode[code.trim().toLowerCase()]; if(!found){ setMsg({err:"Not found: "+code}); setIt(null); return; } setIt(found); setFrom((found.byLoc&&Object.keys(found.byLoc)[0])||found.loc||"Main"); setTo(""); setMsg(null); };
   const go=async()=>{ if(!it){setMsg({err:"Scan an item first."});return;} if(!to.trim()){setMsg({err:"Enter a destination bin."});return;} setBusy(true); const r=await cloudCall({action:"invTransfer",token:CLOUD.token,sku:it.sku,from:from.trim()||"Main",to:to.trim(),qty:Math.max(1,Math.round(+qty||1))}); setBusy(false); if(r&&r.ok){ setMsg({ok:"Put "+qty+"× "+it.sku+" into "+to+"."}); setIt(null); setCode(""); onReload&&onReload(); try{ref.current&&ref.current.focus();}catch(e){} } else setMsg({err:(r&&r.error)||"Couldn't move."}); };
-  return (<div className="border border-stone-200 rounded-2xl bg-white p-4 space-y-3">
+  return (<div className="border border-stone-400 rounded-2xl bg-white p-4 space-y-3">
     <div className="flex gap-2"><input ref={ref} autoFocus value={code} onChange={e=>setCode(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();lookup();}}} placeholder="Scan or type SKU / barcode…" className="flex-1 border border-stone-300 rounded-xl px-4 py-3 text-base outline-none focus:border-[#0086E0]"/><button onClick={lookup} className="bg-stone-100 text-stone-700 rounded-xl px-4 font-medium">Find</button></div>
     {it&&<div className="rounded-xl bg-stone-50 p-3 space-y-2">
       <div className="font-medium text-stone-900">{it.name||it.sku}<span className="text-[11px] text-stone-400 ml-2">on hand {+it.onHand||0}</span></div>
@@ -13298,9 +13298,9 @@ function RunnerPull({orders,items}){
   const [picked,setPicked]=useState({}); const [scan,setScan]=useState(""); const [msg,setMsg]=useState(null);
   const need=rows.reduce((s,r)=>s+r.qty,0); const done=rows.reduce((s,r)=>s+Math.min(r.qty,+picked[r.sku.toLowerCase()]||0),0);
   const doScan=(e)=>{ e.preventDefault(); const v=scan.trim().toLowerCase(); if(!v)return; const it=bySku[v]; const key=it?String(it.sku).toLowerCase():v; const row=rows.find(r=>r.sku.toLowerCase()===key); if(!row){ setMsg({err:"Not on the pull list: "+scan}); } else if((+picked[key]||0)>=row.qty){ setMsg({err:row.sku+" already pulled."}); } else { setPicked(p=>({...p,[key]:Math.min(row.qty,(+p[key]||0)+1)})); setMsg(null); } setScan(""); };
-  if(!rows.length)return <div className="border border-stone-200 rounded-2xl bg-white p-8 text-center text-sm text-stone-400">Nothing to pull — no open orders with SKUs.</div>;
+  if(!rows.length)return <div className="border border-stone-400 rounded-2xl bg-white p-8 text-center text-sm text-stone-400">Nothing to pull — no open orders with SKUs.</div>;
   const allDone=need>0&&done>=need;
-  return (<div className="border border-stone-200 rounded-2xl bg-white p-4 space-y-3">
+  return (<div className="border border-stone-400 rounded-2xl bg-white p-4 space-y-3">
     <div className="flex items-center gap-3"><div className="flex-1 h-2.5 bg-stone-200 rounded-full overflow-hidden"><div className={`h-full ${allDone?"bg-emerald-500":"bg-[#0086E0]"}`} style={{width:(need>0?Math.round(done/need*100):0)+"%"}}/></div><span className="text-xs font-medium text-stone-600">{done}/{need}</span></div>
     {allDone?<div className="text-sm text-emerald-700 font-medium flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4"/>All pulled — take them to pack.</div>:<form onSubmit={doScan} className="flex gap-2"><input autoFocus value={scan} onChange={e=>setScan(e.target.value)} placeholder="Scan to pull…" className="flex-1 border border-stone-300 rounded-xl px-4 py-3 text-base outline-none focus:border-[#0086E0]"/><button className="bg-[#0086E0] text-white rounded-xl px-5 font-semibold">Pull</button></form>}
     {msg&&<div className="text-sm rounded-lg px-3 py-2 bg-rose-50 text-rose-600">{msg.err}</div>}
@@ -13328,7 +13328,7 @@ function ContainerTypes({settings,setSettings,showMoney}){
       <button onClick={()=>setEf({name:"",kind:"box",L:"",W:"",H:"",maxWt:"",empty:"",cost:"",notes:""})} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] flex items-center gap-1.5"><Plus className="w-4 h-4"/>New box</button>
     </div>
     {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
-    <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+    <div className="border border-stone-400 rounded-xl bg-white divide-y divide-stone-100">
       {boxes.length===0&&<div className="p-8 text-center text-sm text-stone-400">No boxes yet. Add the boxes and mailers you ship in.</div>}
       {boxes.map(c=>(<div key={c.id} className="p-3 flex items-center gap-3">
         <div className="flex-1 min-w-0"><div className="font-medium text-stone-900 flex items-center gap-2">{c.name}{c.kind?<Badge tone="stone">{c.kind}</Badge>:null}</div><div className="text-[11px] text-stone-400 truncate">{[dims(c),+c.maxWt>0?"max "+c.maxWt+" lb":"",showMoney&&+c.cost>0?"$"+(+c.cost).toFixed(2)+" ea":"",c.notes].filter(Boolean).join(" · ")||"—"}</div></div>
@@ -13375,8 +13375,8 @@ function ProductionOrders({production,setProduction,items,onReload}){
       <button onClick={()=>setEf({sku:assemblies[0]?assemblies[0].sku:"",qty:1,notes:""})} disabled={!assemblies.length} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5"><Plus className="w-4 h-4"/>New order</button>
     </div>
     {msg&&<div className={`text-xs rounded px-3 py-2 border ${msg.err?"bg-rose-50 text-rose-600 border-rose-200":"bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{msg.err||msg.ok}</div>}
-    {!assemblies.length&&<div className="border border-stone-200 rounded-xl bg-white p-6 text-sm text-stone-500">No assemblies yet. Edit an item and add a kit / bill of materials (components), then you can build it here.</div>}
-    <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+    {!assemblies.length&&<div className="border border-stone-400 rounded-xl bg-white p-6 text-sm text-stone-500">No assemblies yet. Edit an item and add a kit / bill of materials (components), then you can build it here.</div>}
+    <div className="border border-stone-400 rounded-xl bg-white divide-y divide-stone-100">
       {sorted.length===0&&assemblies.length>0&&<div className="p-8 text-center text-sm text-stone-400">No production orders yet.</div>}
       {sorted.map(o=>(<div key={o.id} className="p-3 flex items-center gap-3 flex-wrap">
         <div className="flex-1 min-w-0"><div className="font-medium text-stone-900 flex items-center gap-2">{o.number}<span className={`text-[10px] uppercase tracking-wide rounded px-1.5 py-0.5 ${stTone[o.status]||stTone.draft}`}>{o.status}</span></div><div className="text-[11px] text-stone-400 truncate">{o.qty}× {o.name||o.sku} <span className="text-stone-300">·</span> {o.sku}{o.completedAt?" · built "+String(o.completedAt).slice(0,10):""}</div></div>
@@ -13943,12 +13943,12 @@ function WmsGuide({goView,onReplay,selfOn=false,onDisable}){
       <p className="text-[13px] text-stone-500 mt-3">Every tool below is just a helper for one of those six steps.</p>
     </div>
     {/* Words to know */}
-    <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+    <div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
       <button onClick={()=>setWords(w=>!w)} className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-stone-50"><span className="text-sm font-semibold text-stone-900 flex-1">A few words to know</span><ChevronRight className={`w-4 h-4 text-stone-400 transition ${words?"rotate-90":""}`}/></button>
       {words&&<div className="px-4 pb-4 space-y-2">{WMS_WORDS.map(([w,d])=>(<div key={w} className="text-[13px]"><b className="text-stone-800">{w}</b> <span className="text-stone-500">— {d}</span></div>))}</div>}
     </div>
     {/* Tool sections */}
-    {FEATURE_GUIDE.map(([title,blurb,tools],i)=>{ const isOpen=open===i; return (<div key={title} className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+    {FEATURE_GUIDE.map(([title,blurb,tools],i)=>{ const isOpen=open===i; return (<div key={title} className="border border-stone-400 rounded-xl bg-white overflow-hidden">
       <button onClick={()=>setOpen(isOpen?-1:i)} className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-stone-50">
         <span className="text-sm font-semibold text-stone-900 flex-1">{title}</span>
         <ChevronRight className={`w-4 h-4 text-stone-400 transition ${isOpen?"rotate-90":""}`}/>
@@ -14007,7 +14007,7 @@ function StockHealth({list,committedBySku,goView,showMoney=true}){
     <div className={`rounded-xl border px-4 py-3 text-sm ${needN>0?"bg-amber-50/60 border-amber-200 text-amber-800":"bg-emerald-50/50 border-emerald-200 text-emerald-800"}`}>{summary}</div>
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{["out","low","ok","over"].map(k=><Tile key={k} k={k}/>)}</div>
     {/* Distribution bar */}
-    <div className="border border-stone-200 rounded-xl bg-white p-4">
+    <div className="border border-stone-400 rounded-xl bg-white p-4">
       <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2 flex items-center justify-between"><span>Mix across {rows.length} SKU{rows.length!==1?"s":""}{money?" — by value":""}</span>{showMoney&&<span className="normal-case tracking-normal text-stone-500">Total stock value {fmtMoney(totalValue)}</span>}</div>
       <div className="flex h-3 rounded-full overflow-hidden bg-stone-100 gap-[2px]">
         {["out","low","ok","over"].map(k=>metricOf(k)>0?<div key={k} className={HEALTH_STAT[k].bar} style={{width:(metricOf(k)/total*100)+"%"}} title={`${HEALTH_STAT[k].label}: ${money?fmtMoney(metricOf(k)):metricOf(k)}`}/>:null)}
@@ -14018,7 +14018,7 @@ function StockHealth({list,committedBySku,goView,showMoney=true}){
       {filter!=="all"&&<button onClick={()=>setFilter("all")} className="text-xs text-stone-500 hover:underline">Clear filter</button>}
       <button onClick={()=>goView("replenish")} className="text-xs rounded-lg px-3 py-2 bg-[#0086E0] text-white font-medium hover:bg-[#006db8] ml-auto">Reorder low stock →</button>
     </div>
-    <div className="border border-stone-200 rounded-xl bg-white divide-y divide-stone-100">
+    <div className="border border-stone-400 rounded-xl bg-white divide-y divide-stone-100">
       {shown.length===0&&<div className="p-8 text-center text-sm text-stone-400">{rows.length?"No items match.":"No stock yet — add items on the Stock tab."}</div>}
       {shown.map(r=>{ const s=HEALTH_STAT[r.status]; return (<div key={r.sku} className="p-3">
         <div className="flex items-center gap-2 mb-1.5">
@@ -14071,7 +14071,7 @@ function InventoryAnalytics({list,log,showMoney=true}){
   const fifoSkus=stock.filter(it=>it.fifo||Array.isArray(it.layers)).length;
   const top=stock.map(it=>({sku:it.sku,name:it.name,val:(+it.onHand||0)*(+it.cost||0),units:+it.onHand||0})).filter(x=>x.val>0).sort((a,b)=>b.val-a.val).slice(0,10);
   const daysCover=ship30>0?Math.round(totUnits/(ship30/30)):null;
-  const Tile=({label,value,tone,sub})=>(<div className="border border-stone-200 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div>{sub?<div className="text-[11px] text-stone-400 mt-0.5">{sub}</div>:null}</div>);
+  const Tile=({label,value,tone,sub})=>(<div className="border border-stone-400 rounded-xl bg-white px-4 py-3"><div className="text-[11px] uppercase tracking-wide text-stone-400">{label}</div><div className={`text-xl font-semibold ${tone||"text-stone-900"}`}>{value}</div>{sub?<div className="text-[11px] text-stone-400 mt-0.5">{sub}</div>:null}</div>);
   return (<div className="space-y-4">
     <div><h2 className="text-lg font-semibold text-stone-900 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-[#0086E0]"/>Inventory analytics</h2><p className="text-sm text-stone-500 mt-0.5">Valuation, movement, and dead stock — based on your current stock and recent movements.</p></div>
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -14087,7 +14087,7 @@ function InventoryAnalytics({list,log,showMoney=true}){
       {showMoney&&<Tile label="Inventory turns" value={turnover!=null?turnover+"×":"—"} sub="annualized (COGS ÷ value)"/>}
       {showMoney&&<Tile label="COGS (30d)" value={money(cogs30)} sub="cost of goods shipped"/>}
     </div>
-    {showMoney&&abcTotal>0&&<div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+    {showMoney&&abcTotal>0&&<div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
       <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 flex items-center justify-between"><span>ABC analysis — SKUs by usage value</span><span className="normal-case tracking-normal">A {abcCounts.A} · B {abcCounts.B} · C {abcCounts.C}</span></div>
       <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-[10px] uppercase tracking-widest text-stone-400"><th className="px-3 py-2">Class</th><th className="px-3 py-2">Item</th><th className="px-3 py-2 text-right">Annual usage value</th></tr></thead>
         <tbody className="divide-y divide-stone-100">{abcAll.filter(x=>x.annual>0).slice(0,12).map(x=>(<tr key={x.sku}>
@@ -14096,7 +14096,7 @@ function InventoryAnalytics({list,log,showMoney=true}){
           <td className="px-3 py-2 text-right text-stone-700">{money(x.annual)}</td>
         </tr>))}</tbody></table></div>
     </div>}
-    {showMoney&&kitMargins.length>0&&<div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+    {showMoney&&kitMargins.length>0&&<div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
       <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500">Kit &amp; bundle margins — sell price vs component cost</div>
       <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="text-left text-[10px] uppercase tracking-widest text-stone-400"><th className="px-3 py-2">Bundle</th><th className="px-3 py-2 text-right">Sell price</th><th className="px-3 py-2 text-right">Component cost</th><th className="px-3 py-2 text-right">Margin</th><th className="px-3 py-2 text-right">Margin %</th></tr></thead>
         <tbody className="divide-y divide-stone-100">{kitMargins.map(k=>(<tr key={k.sku}>
@@ -14129,7 +14129,7 @@ function InventoryAnalytics({list,log,showMoney=true}){
           <td className="px-3 py-2 text-right text-[#0086E0] font-medium">+{x.suggest}</td>
         </tr>))}</tbody></table></div>
     </div>}
-    {showMoney&&<div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+    {showMoney&&<div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
       <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500">Value by location</div>
       <div className="divide-y divide-stone-100">
         {locs.length===0&&<div className="p-4 text-sm text-stone-400">No stock yet.</div>}
@@ -14141,7 +14141,7 @@ function InventoryAnalytics({list,log,showMoney=true}){
         </div>);})}
       </div>
     </div>}
-    {showMoney&&cats.length>0&&<div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+    {showMoney&&cats.length>0&&<div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
       <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 flex items-center justify-between"><span>Valuation by category</span><span className="normal-case tracking-normal text-stone-400">{fifoSkus>0?fifoSkus+" SKU"+(fifoSkus===1?"":"s")+" FIFO · rest at average cost":"at average cost"}</span></div>
       <div className="divide-y divide-stone-100">
         {cats.map(c=>{ const pct=totValue>0?Math.round(byCat[c].value/totValue*100):0; return (<div key={c} className="px-4 py-2.5 flex items-center gap-3">
@@ -14154,14 +14154,14 @@ function InventoryAnalytics({list,log,showMoney=true}){
       </div>
     </div>}
     <div className="grid md:grid-cols-2 gap-4">
-      {showMoney&&<div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      {showMoney&&<div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
         <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500">Top items by value</div>
         <div className="divide-y divide-stone-100">
           {top.length===0&&<div className="p-4 text-sm text-stone-400">Add unit costs to see valuation.</div>}
           {top.map(t=>(<div key={t.sku} className="px-4 py-2 flex items-center gap-3"><div className="flex-1 min-w-0"><div className="text-sm text-stone-800 truncate">{t.name||t.sku}</div><div className="text-[11px] text-stone-400">{t.sku} · {t.units} u</div></div><div className="text-sm font-medium text-stone-800">{money(t.val)}</div></div>))}
         </div>
       </div>}
-      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
         <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500">Dead stock — no sale in {DEAD_DAYS} days</div>
         <div className="divide-y divide-stone-100 max-h-80 overflow-y-auto">
           {dead.length===0&&<div className="p-4 text-sm text-stone-400">Nothing stale — every stocked item has sold recently.</div>}
@@ -14278,7 +14278,7 @@ function Pickups({pickups,setPickups,settings,client=null,showCosts=true,isAdmin
       <div className="space-y-2">
         <div className="text-xs font-semibold uppercase tracking-widest text-stone-500">Scheduled</div>
         {pickups.length===0?<Empty icon={Calendar} title="No pickups" body="Schedule one and it shows here with FedEx's confirmation code."/>:pickups.map(p=>(
-          <div key={p.id} className="border border-stone-200 rounded-lg bg-white p-3 flex items-center gap-3">
+          <div key={p.id} className="border border-stone-400 rounded-lg bg-white p-3 flex items-center gap-3">
             <div className={`text-xs font-bold ${CARRIER_TINT[p.carrier]||"text-[#0086E0]"}`}>{p.carrier}</div>
             <div className="flex-1"><div className="text-sm text-stone-800">{p.date} · {p.count} pkg{p.carrierCode==="FDXG"?" · Ground":" · Express"}</div><div className="text-[11px] text-stone-400">{p.ready}–{p.close} · {p.location}</div></div>
             <div className="text-right"><div className=" text-[11px] font-semibold text-stone-700">{confFull(p)}</div>{p.canceled?<div className="text-[10px] uppercase tracking-wide text-stone-400">canceled</div>:p.live?<div className="text-[10px] uppercase tracking-wide text-emerald-600">confirmed</div>:null}{showCosts&&p.fee!=null&&!p.canceled&&<div className="text-[10px] text-stone-400">{money(p.fee)}</div>}</div>
@@ -14535,7 +14535,7 @@ function Scan({orders,goShip,goTab,settings,setSettings,isAdmin}){
       </div>}
 
       <div className="text-[11px] text-stone-400">Keep this box focused and scan.{mode==="verify"?" Don't have a barcode scanner? You can type each item's SKU and press Enter.":""}</div>
-      {log.length>0&&<div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+      {log.length>0&&<div className="border border-stone-400 rounded-lg bg-white overflow-hidden">
         <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400">Recent scans</div>
         <div className="divide-y divide-stone-100">{log.map((e,i)=>(
           <div key={i} className="flex items-center gap-3 px-4 py-2 text-sm">
@@ -14584,7 +14584,7 @@ function Dashboard({shipments,orders,returns,goTab,showMoney=true}){
       <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={pct>=95?"#10B981":pct>=85?"#F59E0B":"#F43F5E"} strokeWidth="7" strokeDasharray={`${c*pct/100} ${c}`} strokeLinecap="round" transform={`rotate(-90 ${size/2} ${size/2})`}/>
       <text x="50%" y="50%" dominantBaseline="central" textAnchor="middle" className="fill-stone-800" fontSize="15" fontWeight="700">{pct}%</text>
     </svg>);};
-  const Tile=({label,value,tone,Icon,onClick,sub})=>(<button onClick={onClick} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition group">
+  const Tile=({label,value,tone,Icon,onClick,sub})=>(<button onClick={onClick} className="border border-stone-400 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition group">
     <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-stone-400">{Icon&&<Icon className="w-3.5 h-3.5 group-hover:text-[#0086E0] transition"/>}{label}</div>
     <div className={`text-3xl font-bold mt-1 tracking-tight ${tone||"text-stone-900"}`}>{value}</div>
     {sub&&<div className="text-[11px] text-stone-400 mt-0.5">{sub}</div>}
@@ -14601,8 +14601,8 @@ function Dashboard({shipments,orders,returns,goTab,showMoney=true}){
   return (
     <div className="space-y-5">
       {inv&&invStock.length>0&&<div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <button onClick={()=>goTab&&goTab("inventory")} className="text-left border border-stone-200 rounded-xl bg-white px-4 py-3 hover:border-[#0086E0]/40 transition"><div className="text-[11px] uppercase tracking-wide text-stone-400 flex items-center gap-1"><Boxes className="w-3.5 h-3.5"/>SKUs tracked</div><div className="text-xl font-semibold text-stone-900">{invStock.length}</div></button>
-        {showMoney&&<button onClick={()=>goTab&&goTab("inventory")} className="text-left border border-stone-200 rounded-xl bg-white px-4 py-3 hover:border-[#0086E0]/40 transition"><div className="text-[11px] uppercase tracking-wide text-stone-400">Stock value</div><div className="text-xl font-semibold text-stone-900">{money(invValue)}</div></button>}
+        <button onClick={()=>goTab&&goTab("inventory")} className="text-left border border-stone-400 rounded-xl bg-white px-4 py-3 hover:border-[#0086E0]/40 transition"><div className="text-[11px] uppercase tracking-wide text-stone-400 flex items-center gap-1"><Boxes className="w-3.5 h-3.5"/>SKUs tracked</div><div className="text-xl font-semibold text-stone-900">{invStock.length}</div></button>
+        {showMoney&&<button onClick={()=>goTab&&goTab("inventory")} className="text-left border border-stone-400 rounded-xl bg-white px-4 py-3 hover:border-[#0086E0]/40 transition"><div className="text-[11px] uppercase tracking-wide text-stone-400">Stock value</div><div className="text-xl font-semibold text-stone-900">{money(invValue)}</div></button>}
         <button onClick={()=>goTab&&goTab("inventory")} className={`text-left border rounded-xl bg-white px-4 py-3 transition ${invLow?"border-amber-300 hover:border-amber-400":"border-stone-200 hover:border-[#0086E0]/40"}`}><div className="text-[11px] uppercase tracking-wide text-stone-400">Low stock</div><div className={`text-xl font-semibold ${invLow?"text-amber-600":"text-stone-900"}`}>{invLow}{invLow>0?" ⚠":""}</div></button>
       </div>}
       {/* morning digest — yesterday at a glance, read-only */}
@@ -14666,7 +14666,7 @@ function Dashboard({shipments,orders,returns,goTab,showMoney=true}){
           <Tile label="To ship" value={unful} tone={unful?"text-amber-600":"text-stone-900"} Icon={Package} onClick={()=>goTab("orders")} sub={unful?"waiting in the queue":"queue is clear"}/>
           <Tile label="Fulfilled" value={fulfilled} tone="text-emerald-700" Icon={CheckCircle2} onClick={()=>goTab("orders")}/>
           <Tile label="Open returns" value={returns.length} tone={returns.length?"text-stone-900":"text-stone-900"} Icon={Undo2} onClick={()=>goTab("returns")}/>
-          <div className="border border-stone-200 rounded-2xl bg-white p-4">
+          <div className="border border-stone-400 rounded-2xl bg-white p-4">
             <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Order sources</div>
             {bySource.length===0?<div className="text-sm text-stone-400">No orders yet.</div>:<MixBar rows={bySource} total={orders.length}/>}
           </div>
@@ -14681,7 +14681,7 @@ function Dashboard({shipments,orders,returns,goTab,showMoney=true}){
           <Tile label="In transit" value={inTransit} Icon={Truck} onClick={()=>goTab("shipments")}/>
           <Tile label="Out for delivery" value={outForDel} tone="text-amber-600" Icon={MapPin} onClick={()=>goTab("shipments")}/>
           <Tile label="Exceptions" value={exceptions} tone={exceptions?"text-rose-600":"text-stone-900"} Icon={AlertTriangle} onClick={()=>goTab("shipments")}/>
-          <div className="border border-stone-200 rounded-2xl bg-white p-4 flex items-center gap-3">
+          <div className="border border-stone-400 rounded-2xl bg-white p-4 flex items-center gap-3">
             <Ring pct={onTimePct}/>
             <div><div className="text-[10px] uppercase tracking-widest text-stone-400">On-time</div><div className="text-xs text-stone-500 mt-0.5">{onTime} of {delivCount} delivered on time</div></div>
           </div>
@@ -14689,7 +14689,7 @@ function Dashboard({shipments,orders,returns,goTab,showMoney=true}){
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 border border-stone-200 rounded-2xl bg-white overflow-hidden">
+        <div className="lg:col-span-2 border border-stone-400 rounded-2xl bg-white overflow-hidden">
           <div className="px-4 py-2.5 border-b border-stone-100 flex items-center justify-between flex-wrap gap-2">
             <h3 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Truck className="w-4 h-4 text-[#0086E0]"/>Live tracking</h3>
             <span className="text-[11px] text-stone-400 flex items-center gap-1.5">{_lastSync?<><Wifi className="w-3 h-3 text-emerald-500"/>Synced from FedEx {_ago(_lastSync)}</>:<>{active.length} moving</>}</span>
@@ -14732,11 +14732,11 @@ function Dashboard({shipments,orders,returns,goTab,showMoney=true}){
           </div>);})()}
         </div>
         <div className="space-y-4">
-          <div className="border border-stone-200 rounded-2xl bg-white p-4">
+          <div className="border border-stone-400 rounded-2xl bg-white p-4">
             <h3 className="text-sm font-semibold text-stone-700 mb-3">Top services</h3>
             {svcMix.length===0?<div className="text-sm text-stone-400">No shipments yet.</div>:<MixBar rows={svcMix} total={live.length}/>}
           </div>
-          <div className="border border-stone-200 rounded-2xl bg-white p-4">
+          <div className="border border-stone-400 rounded-2xl bg-white p-4">
             <h3 className="text-sm font-semibold text-stone-700 mb-3">Top destinations</h3>
             {destMix.length===0?<div className="text-sm text-stone-400">No shipments yet.</div>:<MixBar rows={destMix} total={live.length}/>}
           </div>
@@ -14744,9 +14744,9 @@ function Dashboard({shipments,orders,returns,goTab,showMoney=true}){
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <button onClick={()=>goTab("orders")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><ShoppingBag className="w-4 h-4"/><span className="font-semibold">{unful} orders to ship</span></div></button>
-        <button onClick={()=>goTab("rules")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><Zap className="w-4 h-4"/><span className="font-semibold">Run Autopilot</span></div></button>
-        <button onClick={()=>goTab("returns")} className="border border-stone-200 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><Undo2 className="w-4 h-4"/><span className="font-semibold">{returns.length} open returns</span></div></button>
+        <button onClick={()=>goTab("orders")} className="border border-stone-400 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><ShoppingBag className="w-4 h-4"/><span className="font-semibold">{unful} orders to ship</span></div></button>
+        <button onClick={()=>goTab("rules")} className="border border-stone-400 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><Zap className="w-4 h-4"/><span className="font-semibold">Run Autopilot</span></div></button>
+        <button onClick={()=>goTab("returns")} className="border border-stone-400 rounded-2xl bg-white p-4 text-left hover:border-[#99D6FF] hover:shadow-sm transition"><div className="flex items-center gap-2 text-[#0086E0]"><Undo2 className="w-4 h-4"/><span className="font-semibold">{returns.length} open returns</span></div></button>
       </div>
     </div>
   );
@@ -15141,7 +15141,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
       {!originZip&&<div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No ship-from ZIP — set your default sender in Settings → Company so batch rates and zone rules use the right origin.</div>}
 
       {/* command bar */}
-      <div className="border border-stone-200 rounded-lg bg-white p-3 space-y-3">
+      <div className="border border-stone-400 rounded-lg bg-white p-3 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[180px]"><Search className="w-4 h-4 absolute left-2.5 top-2 text-stone-400"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search orders — name, address, SKU, item, email…" className="w-full bg-stone-50 border border-stone-200 rounded-lg pl-8 pr-3 py-1.5 text-sm outline-none focus:border-[#0086E0] focus:bg-white"/></div>
           <select value={sortBy} onChange={e=>setSortBy(e.target.value)} className="bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#0086E0]">
@@ -15230,7 +15230,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
       {apMsg&&<div className="bg-violet-50 border border-violet-200 text-violet-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><Zap className="w-4 h-4"/>Autopilot routed {apMsg.routed} order{apMsg.routed!==1?"s":""}{apMsg.held?` and held ${apMsg.held} for review (unchecked below)`:""}. Service picks are marked with a ⚡ — override any of them with the dropdowns.</div>}
 
       {/* selection summary */}
-      <div className="border border-stone-200 rounded-lg bg-white px-3 sm:px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
+      <div className="border border-stone-400 rounded-lg bg-white px-3 sm:px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
         <button onClick={all} className="text-xs font-medium text-[#006FBF] hover:underline">{visible.filter(o=>!holds[o.id]).every(o=>sel.has(o.id))&&visible.length>0?"Deselect all":"Select all"} ({visible.length})</button>
         <button onClick={invert} className="text-xs text-stone-500 hover:underline">Invert</button>
         <button onClick={()=>setSel(new Set())} className="text-xs text-stone-500 hover:underline">Clear</button>
@@ -15246,7 +15246,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
         <button onClick={run} disabled={running||rows.length===0} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-semibold hover:bg-[#006db8] disabled:opacity-40 flex items-center gap-1.5">{running?<Loader2 className="w-4 h-4 animate-spin"/>:<Printer className="w-4 h-4"/>}{running?`Booking ${progress.n}/${progress.total}…`:`Create & print ${rows.length} label${rows.length!==1?"s":""}`}</button>
       </div>
       {done>0&&<div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{done} shipment{done!==1?"s":""} recorded — see the Shipments tab. Connect your carrier account for live labels.</div>}
-      {results.length>0&&<div className="border border-stone-200 rounded-lg bg-white p-4 space-y-2">
+      {results.length>0&&<div className="border border-stone-400 rounded-lg bg-white p-4 space-y-2">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-semibold text-sm text-stone-800">Batch complete</span>
           <Badge tone="green">{results.filter(r=>r.ok).length} labeled</Badge>
@@ -15269,7 +15269,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
       </div>}
 
       {/* order list */}
-      <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+      <div className="border border-stone-400 rounded-lg bg-white overflow-hidden">
         {visible.length===0&&<div className="p-10 text-center text-sm text-stone-400">{pool.length===0?"No open orders — sync your store or import a CSV.":"Nothing matches these filters."}</div>}
         {groupBy==="none"
           ?<div className="divide-y divide-stone-100">{visible.map(OrderRow)}</div>
@@ -15286,7 +15286,7 @@ function Batch({orders,setOrders,shipments=[],client,ruleset,setRuleset,settings
       </div>
 
       {/* recent batches */}
-      {(batches||[]).length>0&&<div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+      {(batches||[]).length>0&&<div className="border border-stone-400 rounded-lg bg-white overflow-hidden">
         <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 flex items-center gap-2"><Clock className="w-3.5 h-3.5"/>Recent batches</div>
         <div className="divide-y divide-stone-50">
           {(batches||[]).slice(0,5).map(b=>(<div key={b.id} className="px-4 py-2 flex items-center gap-3 text-[13px]">
@@ -15378,13 +15378,13 @@ function Returns({returns,setReturns,orders,settings,setSettings,logEmail}){
       <div className="flex items-center justify-between"><h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Undo2 className="w-4 h-4"/>Returns &amp; RMAs</h2><button onClick={()=>setCreating(v=>!v)} className="flex items-center gap-1 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8]"><Plus className="w-4 h-4"/>Create Return</button></div>
       {reqs&&reqs.length>0&&(()=>{ const byReason={}; reqs.forEach(r=>{ const k=r.reason||"Other"; byReason[k]=(byReason[k]||0)+1; }); const topReasons=Object.keys(byReason).sort((a,b)=>byReason[b]-byReason[a]).slice(0,4); const stTone2={new:"blue",approved:"green",denied:"rose",received:"amber",refunded:"stone",credited:"stone",exchanged:"stone",closed:"stone"}; return (<>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <div className="border border-stone-200 rounded-xl bg-white px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-stone-400">Requests</div><div className="text-lg font-semibold text-stone-900">{reqs.length}</div></div>
-          <div className="border border-stone-200 rounded-xl bg-white px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-stone-400">New</div><div className="text-lg font-semibold text-[#0086E0]">{reqs.filter(r=>r.status==="new").length}</div></div>
-          <div className="border border-stone-200 rounded-xl bg-white px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-stone-400">In progress</div><div className="text-lg font-semibold text-amber-600">{reqs.filter(r=>["approved","received"].indexOf(r.status)>=0).length}</div></div>
-          <div className="border border-stone-200 rounded-xl bg-white px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-stone-400">Resolved</div><div className="text-lg font-semibold text-stone-700">{reqs.filter(r=>["refunded","credited","exchanged","closed","denied"].indexOf(r.status)>=0).length}</div></div>
+          <div className="border border-stone-400 rounded-xl bg-white px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-stone-400">Requests</div><div className="text-lg font-semibold text-stone-900">{reqs.length}</div></div>
+          <div className="border border-stone-400 rounded-xl bg-white px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-stone-400">New</div><div className="text-lg font-semibold text-[#0086E0]">{reqs.filter(r=>r.status==="new").length}</div></div>
+          <div className="border border-stone-400 rounded-xl bg-white px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-stone-400">In progress</div><div className="text-lg font-semibold text-amber-600">{reqs.filter(r=>["approved","received"].indexOf(r.status)>=0).length}</div></div>
+          <div className="border border-stone-400 rounded-xl bg-white px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-stone-400">Resolved</div><div className="text-lg font-semibold text-stone-700">{reqs.filter(r=>["refunded","credited","exchanged","closed","denied"].indexOf(r.status)>=0).length}</div></div>
         </div>
-        {topReasons.length>0&&<div className="border border-stone-200 rounded-xl bg-white px-4 py-2.5"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Top return reasons</div><div className="flex flex-wrap gap-2">{topReasons.map(r=><span key={r} className="text-xs bg-stone-100 rounded-full px-2.5 py-1 text-stone-600">{r} <b className="text-stone-800">{byReason[r]}</b></span>)}</div></div>}
-        <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+        {topReasons.length>0&&<div className="border border-stone-400 rounded-xl bg-white px-4 py-2.5"><div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1.5">Top return reasons</div><div className="flex flex-wrap gap-2">{topReasons.map(r=><span key={r} className="text-xs bg-stone-100 rounded-full px-2.5 py-1 text-stone-600">{r} <b className="text-stone-800">{byReason[r]}</b></span>)}</div></div>}
+        <div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
         <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-500 flex items-center justify-between"><span>Customer return requests</span><span>{reqs.filter(r=>r.status==="new").length} new</span></div>
         <div className="divide-y divide-stone-100 max-h-96 overflow-y-auto">
           {reqs.slice(0,80).map(rq=>(<div key={rq.id} className="px-4 py-3 flex items-start gap-3 flex-wrap">
@@ -15440,7 +15440,7 @@ function Returns({returns,setReturns,orders,settings,setSettings,logEmail}){
       </div>
 
       {/* Return-label settings: your return address + optional QR/email returns */}
-      <div className="border border-stone-200 rounded-xl bg-white overflow-hidden">
+      <div className="border border-stone-400 rounded-xl bg-white overflow-hidden">
         <button onClick={()=>setRetOpen(v=>!v)} className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-stone-50">
           <span className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Cog className="w-4 h-4"/>Return label settings</span>
           <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${retOpen?"rotate-180":""}`}/>
@@ -15507,7 +15507,7 @@ function Manifests({shipments,setShipments,manifests,setManifests,settings}){
   const closeAll=()=>{const created=Object.entries(byCarrier).map(([c,n])=>({id:Date.now()+Math.random(),carrier:c,count:n,date:new Date().toLocaleString(),manifest:"MAN"+rnd(8),trackings:open.filter(s=>s.carrier===c).map(s=>({tracking:s.tracking||"",recipient:(s.recipient&&(s.recipient.name||s.recipient.company))||"",city:(s.recipient&&s.recipient.city)||"",state:(s.recipient&&s.recipient.state)||"",zip:s.toZip||(s.recipient&&s.recipient.zip)||"",sender:(s.sender&&(s.sender.company||s.sender.name))||"",senderCity:(s.sender&&s.sender.city)||"",senderState:(s.sender&&s.sender.state)||"",service:s.service||"",weight:s.weight||""}))}));if(!created.length)return;setManifests(m=>[...created,...m]);setShipments(ss=>ss.map(s=>s.status==="Label created"?{...s,status:"In transit"}:s));};
   return (
     <div className="space-y-4 max-w-3xl">
-      <div className="border border-stone-200 rounded-lg bg-white p-4">
+      <div className="border border-stone-400 rounded-lg bg-white p-4">
         <div className="flex items-center justify-between mb-3"><h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><FileText className="w-4 h-4"/>End-of-Day Manifests</h2><button onClick={closeAll} disabled={!open.length} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium hover:bg-[#006db8] disabled:opacity-40">Close Manifests</button></div>
         {open.length===0?<p className="text-sm text-stone-400">No open labels. Today's labels are all manifested.</p>:
           <div className="grid sm:grid-cols-3 gap-3">{Object.entries(byCarrier).map(([c,n])=>(<div key={c} className="border border-stone-200 rounded-lg p-3"><div className={`text-xs font-bold ${CARRIER_TINT[c]}`}>{c}</div><div className="text-2xl font-bold mt-1">{n}</div><div className="text-[11px] text-stone-400">open labels</div></div>))}</div>}
@@ -15515,7 +15515,7 @@ function Manifests({shipments,setShipments,manifests,setManifests,settings}){
       <div className="space-y-2">
         <div className="text-xs font-semibold uppercase tracking-widest text-stone-500">Closed manifests</div>
         {manifests.length===0?<Empty icon={FileText} title="No manifests closed" body="Close end-of-day to hand carriers a single scan sheet."/>:manifests.map(m=>(
-          <div key={m.id} className="border border-stone-200 rounded-lg bg-white p-3 flex items-center gap-3">
+          <div key={m.id} className="border border-stone-400 rounded-lg bg-white p-3 flex items-center gap-3">
             <div className={`text-xs font-bold ${CARRIER_TINT[m.carrier]}`}>{m.carrier}</div>
             <div className="flex-1"><div className="text-sm">{m.count} packages</div><div className="text-[11px] text-stone-400">{m.date}</div></div>
             <div className=" text-[11px] text-stone-400">{m.manifest}</div>
@@ -15554,8 +15554,8 @@ function Reports({shipments,showMoney=true}){
     </div>
   );
 }
-function Stat2({label,v,tone}){return <div className="border border-stone-200 rounded-xl bg-white p-4"><div className="text-[10px] uppercase tracking-widest text-stone-400">{label}</div><div className={`text-xl font-bold mt-1 ${tone||"text-stone-900"}`}>{v}</div></div>;}
-function ReportTable({title,head,rows}){return (<div className="border border-stone-200 rounded-lg bg-white overflow-hidden"><div className="px-4 py-2.5 text-sm font-semibold text-stone-700 border-b border-stone-100">{title}</div><div className="overflow-x-auto"><table className="w-full text-sm min-w-[480px]"><thead><tr className="text-[10px] uppercase tracking-widest text-stone-400">{head.map(h=><th key={h} className="text-left font-normal px-4 py-2">{h}</th>)}</tr></thead><tbody>{rows.length===0?<tr><td colSpan={head.length} className="px-4 py-4 text-stone-400">No data.</td></tr>:rows.map((r,i)=><tr key={i} className="border-t border-stone-50">{r.map((c,j)=><td key={j} className="px-4 py-2 text-stone-700">{c}</td>)}</tr>)}</tbody></table></div></div>);}
+function Stat2({label,v,tone}){return <div className="border border-stone-400 rounded-xl bg-white p-4"><div className="text-[10px] uppercase tracking-widest text-stone-400">{label}</div><div className={`text-xl font-bold mt-1 ${tone||"text-stone-900"}`}>{v}</div></div>;}
+function ReportTable({title,head,rows}){return (<div className="border border-stone-400 rounded-lg bg-white overflow-hidden"><div className="px-4 py-2.5 text-sm font-semibold text-stone-700 border-b border-stone-100">{title}</div><div className="overflow-x-auto"><table className="w-full text-sm min-w-[480px]"><thead><tr className="text-[10px] uppercase tracking-widest text-stone-400">{head.map(h=><th key={h} className="text-left font-normal px-4 py-2">{h}</th>)}</tr></thead><tbody>{rows.length===0?<tr><td colSpan={head.length} className="px-4 py-4 text-stone-400">No data.</td></tr>:rows.map((r,i)=><tr key={i} className="border-t border-stone-50">{r.map((c,j)=><td key={j} className="px-4 py-2 text-stone-700">{c}</td>)}</tr>)}</tbody></table></div></div>);}
 
 
 /* ════════ CHECKOUT RATES (Shopify) ════════ */
@@ -15604,7 +15604,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
           <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2 mb-1"><ShoppingBag className="w-4 h-4"/>Live Checkout Rates</h2>
           <p className="text-sm text-stone-500">Show live, calculated shipping rates inside your Shopify checkout. {BRAND.product} answers Shopify's CarrierService callback in real time, so buyers always see an accurate rate.</p>
         </div>
-        <div className="border border-stone-200 rounded-lg bg-white p-4">
+        <div className="border border-stone-400 rounded-lg bg-white p-4">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded bg-stone-100 flex items-center justify-center"><ShoppingBag className="w-4 h-4 text-stone-600"/></div>
             <div className="flex-1"><div className="font-medium">Shopify · CarrierService</div><div className="text-[11px] text-stone-400 break-all">{endpoint}</div></div>
@@ -15651,7 +15651,7 @@ function CheckoutRates({settings,setSettings,client,uid}){
       </div>
       {/* PREVIEW */}
       <div className="space-y-4">
-        <div className="border border-stone-200 rounded-lg bg-white p-4">
+        <div className="border border-stone-400 rounded-lg bg-white p-4">
           <div className="flex items-center justify-between mb-3"><h3 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Calculator className="w-4 h-4"/>Test cart</h3><div className="flex items-center gap-1.5 text-sm"><span className="text-stone-400">Ship To</span><input value={zip} onChange={e=>setZip(e.target.value)} className="w-20 bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0]"/></div></div>
           <div className="space-y-1.5">{CART_ITEMS.map((it,i)=>(
             <div key={i} className="flex items-center gap-3 text-sm">
@@ -15770,7 +15770,7 @@ function FedexLocations({settings}){
       <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><MapPin className="w-4 h-4 text-[#0086E0]"/>Find FedEx Locations</h2>
       <p className="text-sm text-stone-500 mt-1">Nearest FedEx drop-off and pickup spots — search by ZIP or use your current location.</p>
     </div>
-    <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
+    <div className="border border-stone-400 rounded-lg bg-white p-4 space-y-3">
       <div className="flex flex-wrap items-end gap-2">
         <Field label="ZIP code"><Input value={zip} onChange={e=>setZip(e.target.value.replace(/[^0-9]/g,"").slice(0,5))} onKeyDown={e=>{if(e.key==="Enter")byZip();}} placeholder="e.g. 84101" className="w-32"/></Field>
         <Field label="Within"><Select value={radius} onChange={e=>setRadius(+e.target.value)} className="w-24">{[10,25,50,100].map(m=><option key={m} value={m}>{m} mi</option>)}</Select></Field>
@@ -15792,7 +15792,7 @@ function FedexLocations({settings}){
       {err&&<div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded px-3 py-2">{err}</div>}
     </div>
     {locs&&(locs.length?<div className="space-y-2">
-      {locs.map((L,i)=>(<div key={i} className="border border-stone-200 rounded-lg bg-white p-3 flex items-start gap-3">
+      {locs.map((L,i)=>(<div key={i} className="border border-stone-400 rounded-lg bg-white p-3 flex items-start gap-3">
         <div className="w-9 h-9 rounded-lg bg-[#E6F4FF] flex items-center justify-center shrink-0"><MapPin className="w-4 h-4 text-[#0086E0]"/></div>
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold text-stone-800">{L.name}{L.type?<span className="text-[11px] font-normal text-stone-400"> · {L.type}</span>:""}</div>
@@ -15914,7 +15914,7 @@ function FedexLocationFinder({settings}){
     }catch(e){setErr("Network error — try again.");}
     setBusy(false);
   };
-  return (<div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
+  return (<div className="border border-stone-400 rounded-xl bg-white p-4 space-y-3">
     <div className="flex items-center gap-2"><MapPin className="w-4 h-4 text-[#0086E0]"/><h3 className="text-sm font-semibold text-stone-700">Find a FedEx location</h3></div>
     <p className="text-[12px] text-stone-500">Look up nearby FedEx drop-off points, Office / Ship Centers, and staffed hold-for-pickup locations near any ZIP.</p>
     <div className="flex flex-wrap items-center gap-2">
@@ -16205,7 +16205,7 @@ function ProductCatalog({settings,setSettings}){
       <div className="flex items-center gap-2 mt-2"><button onClick={addProduct} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-1.5 font-medium hover:bg-[#006db8]">Save Product</button><button onClick={()=>setAdding(false)} className="text-sm text-stone-500 px-2 py-1.5">Cancel</button></div>
     </div>}
 
-    <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+    <div className="border border-stone-400 rounded-lg bg-white overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400">
         <div className="w-4"/><div className="flex-1">Product</div><div className="w-24 hidden sm:block">SKU</div><div className="w-28 text-center">L×W×H (in)</div><div className="w-16 text-center">Weight</div><div className="w-16 text-center hidden sm:block">Value</div><div className="w-6"/>
       </div>
@@ -16254,7 +16254,7 @@ function BoxesSettings({settings,setSettings}){
   return (<div className="max-w-2xl space-y-3">
     <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Package className="w-4 h-4"/>Package Sizes</h2>
     <p className="text-sm text-stone-500">Your box catalog. {BRAND.product}'s box logic auto-picks the smallest box that fits each order — used on the Ship tab and for live Shopify checkout rates.</p>
-    <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+    <div className="border border-stone-400 rounded-lg bg-white overflow-hidden">
       <div className="flex items-center gap-3 px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="flex-1">Box</div><div className="w-28">Dimensions</div><div className="w-16 text-right">Max wt</div><div className="w-16 text-right">Empty</div><div className="w-6"/></div>
       <div className="divide-y divide-stone-100">{boxes.map(b=>(
         <div key={b.id} className="flex items-center gap-3 px-4 py-2.5">
@@ -16876,12 +16876,12 @@ function Notifications({settings,setSettings,emails}){
   return (<div className="space-y-4 max-w-2xl">
     <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Mail className="w-4 h-4"/>Email Automation</h2>
     <p className="text-sm text-stone-500">Automated emails fire on shipping events. Toggle what sends — the log below records every send.</p>
-    <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
+    <div className="border border-stone-400 rounded-lg bg-white divide-y divide-stone-100">
       {items.map(([k,l,d,live])=>(<div key={k} className="flex items-center gap-3 px-4 py-3"><div className="flex-1"><div className="text-sm font-medium flex items-center gap-2">{l}{!live&&<span className="text-[9px] uppercase tracking-wide text-stone-400 bg-stone-100 rounded px-1.5 py-0.5">Soon</span>}</div><div className="text-[11px] text-stone-400">{d}</div></div><button disabled={!live} onClick={()=>toggle(k)} className={live?"":"opacity-40 cursor-not-allowed"}><span className={`w-9 h-5 rounded-full flex items-center px-0.5 transition-colors ${live&&N[k]?"bg-[#0086E0] justify-end":"bg-stone-300 justify-start"}`}><span className="w-4 h-4 bg-white rounded-full"/></span></button></div>))}
     </div>
     <div>
       <div className="text-xs font-semibold uppercase tracking-widest text-stone-500 mb-2 flex items-center gap-1.5"><Mail className="w-3.5 h-3.5"/>Email log</div>
-      <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
+      <div className="border border-stone-400 rounded-lg bg-white divide-y divide-stone-100">
         {(!emails||emails.length===0)?<div className="p-6 text-center text-sm text-stone-400">No emails sent yet.</div>:emails.map(e=>(
           <div key={e.id} className="flex items-center gap-3 px-4 py-2.5"><Mail className="w-4 h-4 text-stone-300"/><div className="flex-1 min-w-0"><div className="text-sm truncate">{e.subject}</div><div className="text-[11px] text-stone-400">to {e.to} · {e.date}</div></div><Badge tone="green">{e.type}</Badge></div>
         ))}
@@ -17263,7 +17263,7 @@ function RuleTesterPanel({rules,orders,originZip}){
       return {ov,rows,fires:(r0&&r0.fires)||[],view:(r0&&r0.view)||null};
     }catch(e){ return {error:(e&&e.message)||"rule engine error"}; }
   },[order,rules,originZip]);
-  return (<div className="border border-stone-200 rounded-lg bg-white">
+  return (<div className="border border-stone-400 rounded-lg bg-white">
     <button onClick={()=>setOpenT(v=>!v)} className="w-full flex items-center gap-2 px-4 py-3 text-left">
       <Zap className="w-4 h-4 text-[#0086E0]"/>
       <span className="text-sm font-semibold text-stone-800">Rule Tester</span>
@@ -17469,13 +17469,13 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
       </div>
     </div>
 
-    <div className="border border-stone-200 rounded-lg bg-white px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-[13px] text-stone-600">
+    <div className="border border-stone-400 rounded-lg bg-white px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-[13px] text-stone-600">
       <span className="flex items-center gap-2"><span className="w-5 h-5 rounded-full bg-[#E6F4FF] text-[#006FBF] text-[11px] font-bold flex items-center justify-center">1</span>Set simple rules — "if this, do that"</span>
       <span className="flex items-center gap-2"><span className="w-5 h-5 rounded-full bg-[#E6F4FF] text-[#006FBF] text-[11px] font-bold flex items-center justify-center">2</span>The preview below shows exactly what will happen — live, on your real orders</span>
       <span className="flex items-center gap-2"><span className="w-5 h-5 rounded-full bg-[#E6F4FF] text-[#006FBF] text-[11px] font-bold flex items-center justify-center">3</span>Hit <b>Run Autopilot</b> — every open order gets its label; anything held waits for you</span>
     </div>
     <RuleTesterPanel rules={rules} orders={ords} originZip={originZip}/>
-    {fbOpen&&<div className="border border-stone-200 rounded-lg bg-white p-4 space-y-2.5">
+    {fbOpen&&<div className="border border-stone-400 rounded-lg bg-white p-4 space-y-2.5">
       <div className="flex flex-wrap items-center gap-2"><ClipboardList className="w-4 h-4 text-[#0086E0]"/><span className="text-sm font-semibold text-stone-800">Filter &amp; Batch</span><span className="text-[11px] text-stone-400">— the same criteria as the Batch tab. Build a selection here, then send it to Batch in one click.</span></div>
       {[["state","State"],["zone","Zone"],["source","Source"],["sku","SKU"]].map(([d,label])=>{ const vals=fbVals(d); if(!vals.length)return null; const key={state:"states",zone:"zones",source:"sources",sku:"skus"}[d]; return (
         <div key={d} className="flex flex-wrap items-center gap-1.5">
@@ -17500,7 +17500,7 @@ function RulesTab({rules,setRules,orders,setOrders,settings,setSettings,client,o
     </div>}
     {applied&&<div className="text-xs rounded px-3 py-2 flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200"><CheckCircle2 className="w-3.5 h-3.5"/>{applied.n?`Applied to ${applied.n} order${applied.n!==1?"s":""} — service preference, tags, holds and shipping options written onto those orders.`:"No matching orders to apply right now."}</div>}
     {apProg&&<div className="border border-emerald-200 bg-emerald-50 rounded-lg px-4 py-3 flex items-center gap-3 text-sm text-emerald-800"><Loader2 className="w-4 h-4 animate-spin"/>Autopilot is working… order {apProg.n} of {apProg.total}<div className="flex-1 h-1.5 bg-emerald-100 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 transition-all" style={{width:(apProg.n/apProg.total*100)+"%"}}/></div></div>}
-    {apResults&&!apProg&&<div className="border border-stone-200 rounded-lg bg-white p-4 space-y-2">
+    {apResults&&!apProg&&<div className="border border-stone-400 rounded-lg bg-white p-4 space-y-2">
       <div className="flex items-center gap-2 flex-wrap">
         <span className="font-semibold text-sm text-stone-800 flex items-center gap-1.5"><Zap className="w-4 h-4 text-emerald-600"/>Autopilot run complete</span>
         <Badge tone="green">{apResults.rows.filter(r=>r.ok).length} labeled</Badge>
@@ -17807,7 +17807,7 @@ function Packaging({settings,setSettings,isAdmin=false,currentUser=null}){
   const Thumb=({p})=>(<div className="h-24 bg-stone-50 border-b border-stone-100 flex items-center justify-center">
     {p.img?<img src={p.img} alt="" className="max-h-full max-w-full object-contain"/>:(p.cat==="fedex"?<Package className="w-9 h-9 text-[#4D148C]/40"/>:<Boxes className="w-9 h-9 text-stone-300"/>)}
   </div>);
-  const Prod=({p})=>(<div className="border border-stone-200 rounded-xl bg-white overflow-hidden flex flex-col">
+  const Prod=({p})=>(<div className="border border-stone-400 rounded-xl bg-white overflow-hidden flex flex-col">
     <Thumb p={p}/>
     <div className="p-2.5 flex-1 flex flex-col">
       <div className="text-[13px] font-medium text-stone-800 leading-tight">{p.name}</div>
@@ -17934,7 +17934,7 @@ function AddressBook({settings,setSettings}){
       </div>
       <button onClick={add} className="text-sm bg-[#0086E0] text-white rounded-lg px-4 py-2 font-medium">Save Address</button>
     </Panel>
-    <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
+    <div className="border border-stone-400 rounded-lg bg-white divide-y divide-stone-100">
       <div className="px-4 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400 flex items-center justify-between"><span>{filtered.length} address{filtered.length===1?"":"es"}</span></div>
       {filtered.length===0&&<div className="p-6 text-center text-sm text-stone-400">No addresses{q?" match your search":" yet"}.</div>}
       {filtered.map(adr=>(<div key={adr.id}>
@@ -18081,7 +18081,7 @@ function Integrations({settings,setSettings,orders,setOrders,shipments=[],client
     <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Layers className="w-4 h-4"/>Integrations</h2>
     <p className="text-sm text-stone-500">Connect one or more stores so orders flow into Orders automatically, and tracking pushes back to the right store when you print a label. Click any tile for exact setup steps.</p>
     {/* Shopify (live) — supports multiple stores */}
-    <div className="border border-stone-200 rounded-lg bg-white p-4">
+    <div className="border border-stone-400 rounded-lg bg-white p-4">
       <div className="flex items-center gap-3">
         <div className="w-9 h-9 rounded bg-[#95BF47]/15 flex items-center justify-center"><ShoppingBag className="w-4 h-4 text-[#5E8E3E]"/></div>
         <div className="flex-1 min-w-0"><div className="font-medium">Shopify</div><div className="text-[11px] text-stone-400 truncate">{connected?`${conns.length} store${conns.length===1?"":"s"} connected`:"Not connected"}</div></div>
@@ -18119,7 +18119,7 @@ function Integrations({settings,setSettings,orders,setOrders,shipments=[],client
     {/* All other connectors */}
     <div className="grid sm:grid-cols-2 gap-2">
       {CONNECTORS.map(c=>{ const isOn=connConnected(settings,c); return (
-        <button key={c.id} onClick={()=>setActive(c.id)} className="text-left border border-stone-200 rounded-lg bg-white p-3 flex items-center gap-3 hover:border-stone-300 hover:shadow-sm transition">
+        <button key={c.id} onClick={()=>setActive(c.id)} className="text-left border border-stone-400 rounded-lg bg-white p-3 flex items-center gap-3 hover:border-stone-300 hover:shadow-sm transition">
           <div className={`w-9 h-9 rounded flex items-center justify-center ${c.tint}`}><Plug className="w-4 h-4"/></div>
           <div className="flex-1 min-w-0"><div className="font-medium text-stone-700 text-sm truncate">{c.name}</div><div className="text-[10px] text-stone-400">{isOn?"Connected":(c.orders?"Orders + tracking":"Records")}</div></div>
           {isOn?<Badge tone="green">on</Badge>:<span className="text-[11px] text-[#0086E0] font-medium flex items-center gap-1">Connect<ChevronRight className="w-3.5 h-3.5"/></span>}
@@ -18127,7 +18127,7 @@ function Integrations({settings,setSettings,orders,setOrders,shipments=[],client
       );})}
     </div>
     {/* ── ERP / back-office: Aptean Full Circle ── */}
-    <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+    <div className="border border-stone-400 rounded-lg bg-white overflow-hidden">
       <button onClick={()=>setFcOpen(v=>!v)} className="w-full flex items-center gap-3 p-4 text-left hover:bg-stone-50">
         <div className="w-9 h-9 rounded bg-[#0086E0]/12 flex items-center justify-center"><ArrowLeftRight className="w-4 h-4 text-[#0086E0]"/></div>
         <div className="flex-1 min-w-0"><div className="font-medium text-stone-700 text-sm">Aptean Full Circle <span className="text-[10px] uppercase tracking-wide bg-stone-100 text-stone-500 rounded px-1.5 py-0.5 ml-1">ERP</span></div><div className="text-[10px] text-stone-400">Ship-confirmation file for Full Circle's watched folder — build, map services, deliver via SFTP or email</div></div>
@@ -18412,7 +18412,7 @@ function SlipSettings({settings,setSettings}){
     </div>
 
     {/* ── Packing slip: simple fields + live preview ── */}
-    <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
+    <div className="border border-stone-400 rounded-lg bg-white p-4 space-y-3">
       <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><FileText className="w-4 h-4"/>Packing slip designer</div>
       <div className="grid sm:grid-cols-2 gap-3">
         <Field label="Title"><Input value={settings.slipTitle||""} placeholder="PACKING SLIP" onChange={e=>set("slipTitle",e.target.value)}/></Field>
@@ -18444,7 +18444,7 @@ function SlipSettings({settings,setSettings}){
     </div>
 
     {/* ── Pick list: simple fields + live preview ── */}
-    <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
+    <div className="border border-stone-400 rounded-lg bg-white p-4 space-y-3">
       <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><ClipboardList className="w-4 h-4"/>Pick List</div>
       <p className="text-[11px] text-stone-500">Aggregates every item across a batch with a check box to tick off as you pull — your logo is added automatically.</p>
       <div className="grid sm:grid-cols-2 gap-3">
@@ -18713,7 +18713,7 @@ function CompanyDefaultsDeploy({companyUsers,companyFlags,setCompanyFlags,adminS
     setBusy(false);
     setMsg(fail?{err:`${ok} updated, ${fail} failed — try again.`}:{ok:clear?`Cleared for ${ok} login${ok!==1?"s":""}.`:`Deployed to ${ok} login${ok!==1?"s":""} — visible on their next load.`});
   };
-  return (<div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
+  return (<div className="border border-stone-400 rounded-xl bg-white p-4 space-y-3">
     <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><Package className="w-4 h-4 text-[#0086E0]"/>Package sizes &amp; dropdown values</div>
     <div className="text-xs text-stone-500">Push your own <b>package sizes</b> and <b>dropdown values</b> (Departments, Ref #, PO #) to everyone or selected logins. Lock either to make it the enforced company set members can't remove.</div>
     <DeployTargets users={users} mode={mode} setMode={setMode} picked={picked} setPicked={setPicked}/>
@@ -18754,7 +18754,7 @@ function CompanyRulesDeploy({companyUsers,companyFlags,setCompanyFlags}){
     setBusy(false);
     setMsg(fail?{err:`${ok} updated, ${fail} failed — try again.`}:{ok:clear?`Cleared for ${ok} login${ok!==1?"s":""}.`:`Deployed ${enabledCount} rule${enabledCount!==1?"s":""} to ${ok} login${ok!==1?"s":""} — active on their next load.`});
   };
-  return (<div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
+  return (<div className="border border-stone-400 rounded-xl bg-white p-4 space-y-3">
     <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><Zap className="w-4 h-4 text-violet-600"/>Autopilot rules</div>
     <div className="text-xs text-stone-500">Push <b>your</b> Autopilot rules (Autopilot tab) to the team — they run on everyone's orders alongside each person's own rules. Lock to run <b>only</b> the company rules (members can't override). You have <b>{enabledCount}</b> enabled rule{enabledCount!==1?"s":""}.</div>
     <DeployTargets users={users} mode={mode} setMode={setMode} picked={picked} setPicked={setPicked}/>
@@ -18794,7 +18794,7 @@ function CompanyMarkupDeploy({companyUsers,companyFlags,setCompanyFlags}){
     setBusy(false);
     setMsg(fail?{err:`${ok} updated, ${fail} failed — try again.`}:{ok:clear?`Markup removed for ${ok} login${ok!==1?"s":""}.`:`Applied ${pctN}%${minN>0?` (min $${minN})`:""} to ${ok} login${ok!==1?"s":""} — live on their next quote.`});
   };
-  return (<div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
+  return (<div className="border border-stone-400 rounded-xl bg-white p-4 space-y-3">
     <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><DollarSign className="w-4 h-4 text-emerald-600"/>Rate markup</div>
     <div className="text-xs text-stone-500">Add <b>your own margin</b> on top of the rates your team sees at ship time. Every quote — Ship, Batch, Orders, Quick Quote — shows the marked-up price. Leave it off for anyone you don't deploy to.</div>
     <div className="flex flex-wrap items-end gap-3">
@@ -18848,7 +18848,7 @@ function CompanyDocsDeploy({companyUsers,companyFlags,setCompanyFlags,adminSetti
     setBusy(false);
     setMsg(fail?{err:`${ok} updated, ${fail} failed — try again.`}:{ok:clear?`Cleared for ${ok} login${ok!==1?"s":""}.`:`Deployed to ${ok} login${ok!==1?"s":""} — visible on their next load.`});
   };
-  return (<div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
+  return (<div className="border border-stone-400 rounded-xl bg-white p-4 space-y-3">
     <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><FileText className="w-4 h-4 text-[#0086E0]"/>Document template (packing slip &amp; commercial invoice)</div>
     <div className="text-xs text-stone-500">Deploys <b>your</b> packing-slip text, commercial-invoice letterhead &amp; signature, and Tax ID/EIN as the default for everyone or selected logins. Set them up under <b>Settings → Packing Slip / Commercial Invoice / Other Documents</b>, then deploy. Lock to make them the enforced company template members can't change.</div>
     <DeployTargets users={users} mode={mode} setMode={setMode} picked={picked} setPicked={setPicked}/>
@@ -18895,7 +18895,7 @@ function CompanyLogoDeploy({companyUsers,companyFlags,setCompanyFlags}){
     if(clear)setLogo("");
     setMsg(fail?{err:`${ok} updated, ${fail} failed — try again.`}:{ok:clear?`Logo cleared for ${ok} login${ok!==1?"s":""}.`:`Deployed to ${ok} login${ok!==1?"s":""}${lock?" · locked":""} — they'll see it on next page load.`});
   };
-  return (<div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
+  return (<div className="border border-stone-400 rounded-xl bg-white p-4 space-y-3">
     <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><Sparkles className="w-4 h-4 text-[#0086E0]"/>Company header logo</div>
     <div className="text-xs text-stone-500">Push one logo to everyone or selected logins — it shows in the header (top-right) and on their documents. Lock it to stop individuals swapping in their own.</div>
     <DeployTargets users={users} mode={mode} setMode={setMode} picked={picked} setPicked={setPicked}/>
@@ -18934,7 +18934,7 @@ function CompanyCustomDeploy({companyUsers,companyFlags,setCompanyFlags,adminSet
     setBusy(false);
     setMsg(fail?{err:`${ok} updated, ${fail} failed — try again.`}:{ok:clear?`Cleared for ${ok} login${ok!==1?"s":""}.`:`Deployed to ${ok} login${ok!==1?"s":""}. They'll see it on their next page load.`});
   };
-  return (<div className="border border-stone-200 rounded-xl bg-white p-4 space-y-3">
+  return (<div className="border border-stone-400 rounded-xl bg-white p-4 space-y-3">
     <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><Sliders className="w-4 h-4 text-[#0086E0]"/>Customizations for your team</div>
     <div className="text-xs text-stone-500">Set any options below, choose who gets them, and deploy. Deployed values become the team's defaults — each person can still adjust their own on top unless you redeploy.</div>
     <div className="flex flex-wrap items-center gap-3 text-sm">
@@ -19147,7 +19147,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
     {!deployMode&&<Panel title="Company logo">
       <div className="flex items-center gap-4">
         {settings.companyLogo
-          ?<img src={settings.companyLogo} alt="Company logo" style={{height:Math.round(28*((c.companyLogoScale||100)/100))+"px"}} className="w-auto max-w-[200px] object-contain border border-stone-200 rounded-lg bg-white px-2 py-1"/>
+          ?<img src={settings.companyLogo} alt="Company logo" style={{height:Math.round(28*((c.companyLogoScale||100)/100))+"px"}} className="w-auto max-w-[200px] object-contain border border-stone-400 rounded-lg bg-white px-2 py-1"/>
           :<span className="text-[11px] text-stone-300 border border-dashed border-stone-300 rounded-lg px-3 py-2">No logo yet</span>}
         <label className="text-xs bg-stone-100 border border-stone-200 text-stone-600 rounded-lg px-2.5 py-1.5 font-medium hover:bg-stone-200 cursor-pointer">Upload logo
           <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={e=>{
@@ -19320,7 +19320,7 @@ function CarrierAccounts({accounts,setAccounts,settings,setSettings,clients,byoC
     <div>
       <h2 className="text-sm font-semibold text-stone-700 mb-1 flex items-center gap-2"><Wifi className="w-4 h-4 text-emerald-600"/>{SHOW_ENGLAND&&isAdmin?"England Logistics — Live Rates":"Live FedEx Rates"}</h2>
       <p className="text-sm text-stone-500 mb-3">Turn this on to pull your real negotiated rates on the Ship tab and Quick quote. Until it's on, the app shows estimates.</p>
-      <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3">
+      <div className="border border-stone-400 rounded-lg bg-white p-4 space-y-3">
         <label className="flex items-center justify-between gap-3">
           <span className="text-sm font-medium flex items-center gap-2">Use live {SHOW_ENGLAND&&isAdmin?"England":"FedEx"} rates {eng.enabled&&<Badge tone="green">on</Badge>}</span>
           <button onClick={()=>setEng({enabled:!eng.enabled})}><span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${eng.enabled?"bg-emerald-600 justify-end":"bg-stone-300 justify-start"}`}><span className="w-5 h-5 bg-white rounded-full"/></span></button>
@@ -19383,7 +19383,7 @@ function Drafts({drafts,setDrafts,goShip}){
   const load=(d)=>goShip({draft:d.snap});
   return (<div className="max-w-3xl space-y-2">
     <p className="text-sm text-stone-500">Half-finished shipments you saved. Open one to pick up right where you left off.</p>
-    <div className="border border-stone-200 rounded-lg bg-white divide-y divide-stone-100">
+    <div className="border border-stone-400 rounded-lg bg-white divide-y divide-stone-100">
       {drafts.map(d=>(<div key={d.id} className="flex items-center gap-3 px-4 py-3 hover:bg-stone-50">
         <FileText className="w-4 h-4 text-stone-300 shrink-0"/>
         <div className="flex-1 min-w-0"><div className="text-sm font-medium text-stone-800 truncate">{d.label}</div><div className="text-[11px] text-stone-400">{d.to?`to ${d.to} · `:""}saved {d.when}</div></div>
@@ -19436,7 +19436,7 @@ function TransitAudit({shipments}){
     const moving=matched.filter(sh=>["Label created","In transit","Out for delivery"].includes(sh.status));
     return {matched,unmatched,delivered,onTime,late,exceptions,moving,pct:delivered.length?Math.round(onTime.length/delivered.length*100):null};
   },[trks,shipments]);
-  const Stat=({label,v,tone})=>(<div className="border border-stone-200 rounded-xl bg-white p-3"><div className="text-[10px] uppercase tracking-widest text-stone-400">{label}</div><div className={`text-2xl font-bold mt-0.5 ${tone||"text-stone-900"}`}>{v}</div></div>);
+  const Stat=({label,v,tone})=>(<div className="border border-stone-400 rounded-xl bg-white p-3"><div className="text-[10px] uppercase tracking-widest text-stone-400">{label}</div><div className={`text-2xl font-bold mt-0.5 ${tone||"text-stone-900"}`}>{v}</div></div>);
   return (<div className="space-y-4">
     <div>
       <h2 className="text-sm font-semibold text-stone-700 flex items-center gap-2"><Clock className="w-4 h-4"/>Transit audit</h2>
@@ -19458,7 +19458,7 @@ function TransitAudit({shipments}){
         <div className="divide-y divide-stone-50">{rep.late.map(sh=>(<div key={sh.id} className="px-4 py-2 flex items-center gap-3 text-sm"><span className=" text-xs text-stone-500 w-44 truncate">{sh.tracking}</span><span className="flex-1 truncate">{sh.recipient?.name} · {sh.recipient?.city}, {sh.recipient?.state}</span><span className="text-[11px] text-stone-400">{sh.service}</span></div>))}</div>
       </div>}
       {rep.moving.length>0&&<div className="text-xs text-stone-500">{rep.moving.length} still in motion — not graded yet.</div>}
-      {rep.unmatched.length>0&&<div className="border border-stone-200 rounded-lg bg-white p-3 text-xs text-stone-500">{rep.unmatched.length} tracking number{rep.unmatched.length===1?"":"s"} on the invoice {rep.unmatched.length===1?"doesn’t":"don’t"} match any shipment here (other accounts, or older than your history): <span className=" text-stone-400">{rep.unmatched.slice(0,6).join(", ")}{rep.unmatched.length>6?"…":""}</span></div>}
+      {rep.unmatched.length>0&&<div className="border border-stone-400 rounded-lg bg-white p-3 text-xs text-stone-500">{rep.unmatched.length} tracking number{rep.unmatched.length===1?"":"s"} on the invoice {rep.unmatched.length===1?"doesn’t":"don’t"} match any shipment here (other accounts, or older than your history): <span className=" text-stone-400">{rep.unmatched.slice(0,6).join(", ")}{rep.unmatched.length>6?"…":""}</span></div>}
     </>}
     {!rep&&!err&&!busy&&<div className="border border-dashed border-stone-300 rounded-lg bg-white p-8 text-center text-sm text-stone-400">Upload an invoice to see on-time %, late deliveries, and exceptions at a glance.</div>}
   </div>);
@@ -19672,7 +19672,7 @@ function CarrierAudit({shipments}){
         <div className="flex-1"/>
         <button onClick={exportReport} className="flex items-center gap-1.5 text-sm bg-[#0086E0] text-white rounded-lg px-3 py-1.5 font-medium hover:bg-[#006db8]"><Download className="w-4 h-4"/>Export Report</button>
       </div>
-      <div className="border border-stone-200 rounded-lg bg-white overflow-hidden">
+      <div className="border border-stone-400 rounded-lg bg-white overflow-hidden">
         <div className="flex items-center gap-3 px-3 py-2 bg-stone-50 text-[10px] uppercase tracking-widest text-stone-400"><div className="w-4"/><div className="flex-1">Tracking / shipment</div><div className="w-24 text-right">Weight</div><div className="w-24 text-right">You paid</div><div className="w-24 text-right">Billed</div><div className="w-24 text-right">Difference</div></div>
         {recon.entries.map(e=>{ const isO=open===e.key; return (
           <div key={e.key} className={`border-t border-stone-100 ${e.status==="disputed"?"bg-amber-50/40":e.status==="accepted"?"bg-emerald-50/30":""}`}>
@@ -19900,15 +19900,15 @@ function AddressCard({title,data,set,required,residential,setResidential,address
     {/* side (Address Check) is its OWN bordered box with a 12px gap — flex default stretch keeps
         both boxes' tops AND bottoms flush with the fields grid */}
     <div className={side?"flex flex-col lg:flex-row gap-4":""}>
-    <div className={side?"flex-1 min-w-0 grid grid-cols-6 gap-px bg-stone-200 border border-stone-300 shadow-sm rounded-xl":"grid grid-cols-6 gap-px bg-stone-200 border border-stone-300 shadow-sm rounded-xl"}>
+    <div className={side?"flex-1 min-w-0 grid grid-cols-6 gap-px bg-stone-200 border border-stone-400 shadow-sm rounded-xl overflow-hidden":"grid grid-cols-6 gap-px bg-stone-200 border border-stone-400 shadow-sm rounded-xl overflow-hidden"}>
       {cell("Country","country","col-span-6")}{cell("Name","name","col-span-6 sm:col-span-3",required)}{cell("Company","company","col-span-6 sm:col-span-3",reqOverrides.company===true)}{cell("Address 1","address1","col-span-6",required)}{cell(_fmt.zip,"zip","col-span-3 sm:col-span-2",required&&!_fmt.zipOpt)}{cell(_fmt.state,"state","col-span-3 sm:col-span-2",required&&!_fmt.stateOpt)}{cell("City","city","col-span-6 sm:col-span-2",required)}{!hideAddr23&&<>{cell("Address 2","address2","col-span-6 sm:col-span-3")}{cell("Address 3","address3","col-span-6 sm:col-span-3")}</>}{cell("Phone","phone","col-span-6 sm:col-span-3",required&&reqOverrides.phone!==false)}{cell("Email","email","col-span-6 sm:col-span-3",required&&reqOverrides.email!==false)}
     </div>
-    {side&&<div className="lg:w-[280px] xl:w-[330px] shrink-0 bg-stone-50 border border-stone-300 shadow-sm rounded-xl p-3">{side}</div>}
+    {side&&<div className="lg:w-[280px] xl:w-[330px] shrink-0 bg-stone-50 border border-stone-400 shadow-sm rounded-xl p-3">{side}</div>}
     </div>
   </div>);
 }
 function PkgInput({label,w,req,...p}){const ww=w||"w-14";const on=req&&!String(p.value??"").trim();return <div className={ww}><div className={`text-[10px] uppercase tracking-widest text-center ${on?"text-[#0086E0]":"text-stone-500"}`}>{label}</div><input placeholder="0" {...p} type="number" className={`w-full border rounded px-2 py-1 text-sm text-stone-900 outline-none focus:border-[#0086E0] placeholder-stone-300 text-center ${on?"bg-white border-[#42a7ef]":"bg-white border-stone-300"}`}/></div>;}
-function Panel({title,children}){return <div className="border border-stone-200 rounded-lg bg-white p-4 space-y-3"><div className="text-[10px] uppercase tracking-widest text-stone-400">{title}</div>{children}</div>;}
+function Panel({title,children}){return <div className="border border-stone-400 rounded-lg bg-white p-4 space-y-3"><div className="text-[10px] uppercase tracking-widest text-stone-400">{title}</div>{children}</div>;}
 function Field({label,children}){return <label className="block space-y-1"><span className="text-[11px] text-stone-500">{label}</span>{children}</label>;}
 function Input({className="",...p}){return <input {...p} className={`w-full bg-white border border-stone-200 rounded px-2.5 py-2 text-sm text-stone-900 focus:border-[#0086E0] outline-none ${className}`}/>;}
 /* Freely-typeable numeric box: type any number, it commits raw as you go and only clamps to

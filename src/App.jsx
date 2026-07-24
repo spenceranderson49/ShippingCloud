@@ -3007,6 +3007,11 @@ const CUSTOM_DEFAULTS={
   confetti:"page",seasonal:false,hideShipSteps:false,hideLabeledOrders:true,
 };
 const cz=(settings)=>({...CUSTOM_DEFAULTS,...((settings&&settings.custom)||{})});
+/* Ship-screen right-column cards the user can reorder (drag-to-reorder in Settings → Ship Screen).
+   Rendered with CSS `order`, so reordering never touches the DOM/logic. */
+const SHIP_CARDS=[["status","This Shipment"],["billing","Billing & Third-Party"],["notify","Send Label & Notify"],["packing","Packing Instructions"],["actions","Action buttons"]];
+const SHIP_CARD_IDS=SHIP_CARDS.map(x=>x[0]);
+const shipCardOrderFrom=(custom)=>{ const saved=Array.isArray(custom&&custom.shipCards)?custom.shipCards.filter(x=>SHIP_CARD_IDS.includes(x)):[]; return saved.concat(SHIP_CARD_IDS.filter(x=>!saved.includes(x))); };
 const ALL_TABS=[["ship","Ship",Package],["orders","Orders",ShoppingBag],["shipments","Shipments",Truck],["drafts","Drafts",FileText],["returns","Returns",Undo2],["pickups","Pickups",Calendar],["batch","Batch",Layers],["inventory","Warehouse",Boxes],["packaging","Packaging",ShoppingCart],["invoices","Invoices",Receipt],["rules","Autopilot",Zap],["addresses","Address Book",BookUser],["scan","Scan",ScanLine],["dashboard","Dashboard",BarChart3],["settings","Settings",Cog],["admin","Admin",ShieldCheck]];
 const SLIP_OPTS={thanks:"",footer:"",logo:"",company:"",template:"",pickTitle:"",pickNote:"",title:"",accent:"",showSku:false,showPrice:false};   // synced from settings by AppInner; read by packingSlipHTML/printPickList
 const CI_OPTS={taxId:"",logo:""};                 // Tax ID / EIN printed on commercial invoices, from Settings → General
@@ -8912,6 +8917,9 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   const weatherOff=!!(settings&&settings.weatherOff);
   const perishOnServices=perishOn&&_perish.onServices!==false&&!weatherOff;
   const perishPlace=_perish.place||"banner";
+  /* Right-column card order (Settings → Ship Screen → Layout). CSS `order` reorders visually. */
+  const _shipCardOrder=shipCardOrderFrom(custom);
+  const cardOrd=(id)=>{ const i=_shipCardOrder.indexOf(id); return i<0?9:i; };
   /* Packing instructions that print on the packing slip (and can be pushed to a reference field).
      Starts from the account default (Settings → Packing Slips) and is editable per shipment. */
   const [packInstr,setPackInstr]=useState(settings.slipInstructions||"");
@@ -9693,7 +9701,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               </div>
             )}
           </div>
-          <div className="w-full space-y-3">
+          <div className="w-full flex flex-col gap-3">
             {/* ── Card 1: THIS SHIPMENT — read-only status, one card, one row per fact. State lives
                    in the icon color (green = good), not in three different tinted strips. ── */}
             {(()=>{
@@ -9703,7 +9711,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               const showRates=!custom.hideRateSrcBar;
               if(!showOrder&&!showAp&&!showRates&&!handsFree)return null;
               const apFired=liveRuleStatus&&liveRuleStatus.state==="fired";
-              return <div className="border border-stone-300 shadow-sm rounded-xl bg-white p-3 space-y-2">
+              return <div style={{order:cardOrd("status")}} className="border border-stone-300 shadow-sm rounded-xl bg-white p-3 space-y-2">
                 <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold">This Shipment</div>
                 {!custom.hideServiceAlerts&&<ServiceAlerts zip={receiver.zip} date={shipDate} isAdmin={!!(currentUser&&currentUser.role==="admin")}/>}
                 {showOrder&&<div className="flex items-start gap-2 text-xs text-stone-600">
@@ -9740,7 +9748,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
                 </div>}
               </div>;
             })()}
-            {!custom.hideBillingBox&&<div className="border border-stone-300 shadow-sm rounded-xl bg-white p-3 space-y-2">
+            {!custom.hideBillingBox&&<div style={{order:cardOrd("billing")}} className="border border-stone-300 shadow-sm rounded-xl bg-white p-3 space-y-2">
               <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5"/>Billing &amp; Third-Party</div>
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-stone-500">Bill to</span>
@@ -9748,7 +9756,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               </div>
               {(billTo==="third"||billTo==="receiver")&&<input value={thirdAcct} onChange={e=>setThirdAcct(e.target.value)} placeholder={billTo==="receiver"?"Receiver's FedEx account #":"3rd-party account #"} className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-sm outline-none focus:border-[#0086E0] placeholder-stone-300"/>}
             </div>}
-            {!custom.hideNotifyBox&&<div className="border border-stone-300 shadow-sm rounded-xl bg-white p-3 space-y-2">
+            {!custom.hideNotifyBox&&<div style={{order:cardOrd("notify")}} className="border border-stone-300 shadow-sm rounded-xl bg-white p-3 space-y-2">
               <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><Send className="w-3.5 h-3.5"/>Send Label &amp; Notify</div>
               <div>
                 <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-1">Send to email</div>
@@ -9767,7 +9775,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               </div>
               <p className="text-[11px] text-stone-400">Emailed to the buyer once the label is booked.</p>
             </div>}
-            {!custom.hidePackInstr&&<div className="border border-stone-300 shadow-sm rounded-xl bg-white p-3 space-y-2">
+            {!custom.hidePackInstr&&<div style={{order:cardOrd("packing")}} className="border border-stone-300 shadow-sm rounded-xl bg-white p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="text-[10px] uppercase tracking-widest text-stone-600 font-semibold flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5 text-[#0086E0]"/>Packing Instructions</div>
                 {weatherPackLine&&<button onClick={addWeatherToInstr} title={weatherPackLine} className="text-[11px] font-medium text-[#006FBF] hover:text-[#0086E0] inline-flex items-center gap-1"><Snowflake className="w-3 h-3"/>Add weather advice</button>}
@@ -9782,7 +9790,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
               </div>
             </div>}
             {/* form actions: an even 3-across grid so the column bottom lines up flush with the cards */}
-            <div className="grid grid-cols-3 gap-2">
+            <div style={{order:cardOrd("actions")}} className="grid grid-cols-3 gap-2">
               <button onClick={()=>{const so=selectedOrder&&orders.find(x=>x.id===selectedOrder);window.dispatchEvent(new CustomEvent("sc-slip-compose",{detail:{slips:[{company:(settings.sender&&(settings.sender.company||settings.sender.name))||BRAND.product+" shipper",orderName:reference||(so&&so.name)||"",date:new Date().toLocaleDateString(),to:{name:receiver.name,company:receiver.company,address1:receiver.address1,city:receiver.city,state:receiver.state,zip:receiver.zip},items:parseItemsList(so||{}),tracking:(shipStatus&&shipStatus.tracking)||"",service:"",packing:packInstr}]}}));}} className="w-full flex items-center justify-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2 py-2 font-medium hover:bg-stone-200 whitespace-nowrap"><FileText className="w-4 h-4"/>Packing Slip</button>
               <button onClick={newShipment} className="w-full flex items-center justify-center gap-1.5 text-sm bg-stone-100 border border-stone-200 text-stone-700 rounded-lg px-2 py-2 font-medium hover:bg-stone-300 whitespace-nowrap"><Plus className="w-4 h-4"/>New Shipment</button>
               <button onClick={saveDraft} className={`w-full flex items-center justify-center gap-1.5 text-sm rounded px-2 py-2 font-medium whitespace-nowrap ${saved?"bg-emerald-600 text-white":"bg-[#0086E0] text-white hover:bg-[#006db8]"}`}>{saved?<><Check className="w-4 h-4"/>Saved</>:<><FileText className="w-4 h-4"/>Save Draft</>}</button>
@@ -19241,6 +19249,39 @@ function FieldLists({settings,setSettings}){
     <FieldListEd fl={fl} setList={setList} k="po" title="PO # values" ph="e.g. PO-GILLETTE-…" extra={<FieldListOpts c={c} setC={setC} req="poRequired" lock="poLocked"/>}/>
   </div>);
 }
+/* Drag-to-reorder the Ship screen's right-column boxes, with a live preview. Saves immediately to
+   custom.shipCards; the Ship screen renders those cards with CSS `order`. */
+function ShipLayoutEditor({settings,setSettings}){
+  const custom=(settings&&settings.custom)||{};
+  const order=shipCardOrderFrom(custom);
+  const [drag,setDrag]=useState(-1);
+  const save=(arr)=>setSettings(p=>({...p,custom:{...(p.custom||{}),shipCards:arr}}));
+  const move=(from,to)=>{ if(from<0||to<0||from===to||to>=order.length)return; const a=[...order]; const [x]=a.splice(from,1); a.splice(to,0,x); save(a); };
+  const label=(id)=>{ const f=SHIP_CARDS.find(c=>c[0]===id); return f?f[1]:id; };
+  return (<div className="rounded-xl border border-[#99D6FF] bg-[#E6F4FF]/40 p-4 mb-4">
+    <div className="flex items-center justify-between mb-1">
+      <div className="text-[10px] uppercase tracking-widest text-[#006FBF] font-semibold">Layout — reorder the right-column boxes</div>
+      <button onClick={()=>save(SHIP_CARD_IDS)} className="text-[11px] text-stone-400 hover:text-[#0086E0]">Reset order</button>
+    </div>
+    <p className="text-[12px] text-stone-500 mb-3">Drag a box (or use the arrows) to reorder the panels on the right side of the Ship screen. Saves and updates live.</p>
+    <div className="grid sm:grid-cols-2 gap-4">
+      <div className="space-y-1.5">
+        {order.map((id,i)=><div key={id} draggable onDragStart={()=>setDrag(i)} onDragEnd={()=>setDrag(-1)} onDragOver={e=>e.preventDefault()} onDrop={()=>{move(drag,i);setDrag(-1);}} className={"flex items-center gap-2 px-3 py-2 rounded-lg border bg-white cursor-grab active:cursor-grabbing select-none "+(drag===i?"border-[#0086E0] opacity-50":"border-stone-200 hover:border-[#99D6FF]")}>
+          <Move className="w-3.5 h-3.5 text-stone-300 shrink-0"/>
+          <span className="text-sm text-stone-700 flex-1">{label(id)}</span>
+          <span className="flex flex-col -my-1 shrink-0">
+            <button onClick={()=>move(i,i-1)} disabled={i===0} title="Move up" className="text-stone-300 hover:text-[#0086E0] disabled:opacity-25"><ChevronDown className="w-3.5 h-3.5 rotate-180"/></button>
+            <button onClick={()=>move(i,i+1)} disabled={i===order.length-1} title="Move down" className="text-stone-300 hover:text-[#0086E0] disabled:opacity-25"><ChevronDown className="w-3.5 h-3.5"/></button>
+          </span>
+        </div>)}
+      </div>
+      <div className="rounded-xl border border-stone-200 bg-[#f2f8fd] p-3">
+        <div className="text-[10px] uppercase tracking-widest text-stone-400 mb-2">Preview</div>
+        <div className="space-y-2">{order.map(id=><div key={id} className="rounded-lg border border-stone-300 bg-white shadow-sm px-3 py-2.5 text-[12px] font-medium text-stone-500">{label(id)}</div>)}</div>
+      </div>
+    </div>
+  </div>);
+}
 function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,only,allowedTabs=null}){
   const locked=blockedKeys||new Set();
   const committedCustom=cz(settings);
@@ -19314,6 +19355,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
     </div>}
 
     {cs==="ship"&&<Panel title="Ship screen">
+      <ShipLayoutEditor settings={settings} setSettings={setSettings}/>
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
         {Tog({k:"hideShipSteps",label:"Hide the numbered 1-2-3 step headers",hint:"Removes the ‘1 Ship from & to · 2 Package details · 3 Service & rate’ headers from the Ship screen. Hidden by default — uncheck to show them."})}
         {Tog({k:"hideAssistant",label:"Hide the AI assistant button",hint:"Removes the floating assistant button in the bottom-right corner everywhere in the app."})}

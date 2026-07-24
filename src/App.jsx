@@ -6160,8 +6160,9 @@ function AdminPortal({clients,setClients,users,setUsers,shipments,orders,ledger,
           </div>);})}
       </div>}
       <div className="min-w-0">
-        {cur.kind==="section"?sectionBody(cur.key)
-          :<CustomerDetail cid={cur.id} ships={platform.ships||[]} clients={clients} setClients={setClients} users={users} setUsers={setUsers} currentUser={currentUser} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} settings={settings} onClose={()=>closeTab(active)} openSection={openSection}/>}
+        {cur.kind==="section"
+          ? <div className="border border-stone-200 rounded-2xl bg-white shadow-sm p-4 sm:p-6">{sectionBody(cur.key)}</div>
+          : <CustomerDetail cid={cur.id} ships={platform.ships||[]} clients={clients} setClients={setClients} users={users} setUsers={setUsers} currentUser={currentUser} featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} customFeatures={customFeatures} settings={settings} onClose={()=>closeTab(active)} openSection={openSection}/>}
       </div>
       </div>
     </div>

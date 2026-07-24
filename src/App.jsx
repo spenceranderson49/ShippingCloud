@@ -9531,6 +9531,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       {/* steps hidden = no numbered headers breaking up the page, so give the sections a touch
           more breathing room (16px vs 12px); with steps on, the headers carry the rhythm */}
       <div className={"relative flex-1 min-w-0 "+(custom.hideShipSteps?"space-y-4":"space-y-3")}>
+        <ServiceAlerts zip={receiver.zip} date={shipDate} isAdmin={!!(currentUser&&currentUser.role==="admin")}/>
         {/* Steps ON: actions share the step-1 header row. Steps OFF: that row disappears and the
             actions float beside the Sender/Receiver headings so the cards start at the very top. */}
         {!custom.hideShipSteps&&<div className="flex flex-wrap items-center justify-between gap-2">
@@ -17814,6 +17815,43 @@ function matchPerish(rules,temp){ if(temp==null)return null; const rs=(Array.isA
 
 /* Compact one-liner (This Shipment box) OR a fuller perishable card (now + delivery-day +
    a recommended-ice line from the account's temperature rules). US destinations only. */
+/* Service Alerts strip (Ship screen): NWS weather at the destination + the Memphis World Hub,
+   FedEx holidays near the ship date, and any admin-posted alerts. Amber = possible delay. */
+function ServiceAlerts({zip,date,isAdmin}){
+  const [alerts,setAlerts]=useState([]);
+  const [busy,setBusy]=useState(false);
+  const load=React.useCallback(async()=>{
+    try{ const r=await fetch("/.netlify/functions/alerts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:CLOUD.token,action:"check",zip:String(zip||"").replace(/\D/g,"").slice(0,5),date:date||""})});
+      const j=await r.json(); if(j&&j.ok)setAlerts(Array.isArray(j.alerts)?j.alerts:[]);
+    }catch(e){}
+  },[zip,date]);
+  useEffect(()=>{ let dead=false; const t=setTimeout(()=>{ if(!dead)load(); },500); return ()=>{dead=true;clearTimeout(t);}; },[load]);
+  const post=async()=>{
+    const title=window.prompt("Service alert title (e.g. “Memphis storm — expect 1-day delays”):"); if(!title||!title.trim())return;
+    const detail=window.prompt("Details (optional):")||"";
+    const until=window.prompt("Show until this date (YYYY-MM-DD, optional):")||"";
+    setBusy(true);
+    try{ await fetch("/.netlify/functions/alerts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:CLOUD.token,action:"post",title:title.trim(),detail:detail.trim(),until:until.trim()})}); }catch(e){}
+    setBusy(false); load();
+  };
+  const clear=async(id)=>{ if(!window.confirm("Remove this posted alert for everyone?"))return;
+    try{ await fetch("/.netlify/functions/alerts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:CLOUD.token,action:"clear",id})}); }catch(e){}
+    load();
+  };
+  if(!alerts.length) return isAdmin?<div className="flex justify-end -mb-1"><button onClick={post} disabled={busy} className="text-[11px] text-stone-400 hover:text-[#0086E0] inline-flex items-center gap-1"><Plus className="w-3 h-3"/>Post a service alert</button></div>:null;
+  const icon=(k)=>k==="hub"?<Building2 className="w-4 h-4"/>:k==="holiday"?<Calendar className="w-4 h-4"/>:k==="posted"?<AlertTriangle className="w-4 h-4"/>:<CloudSun className="w-4 h-4"/>;
+  return (<div className="rounded-xl border border-amber-300 bg-amber-50 shadow-sm px-3 py-2.5 space-y-1.5">
+    <div className="flex items-center justify-between">
+      <div className="text-[11px] uppercase tracking-widest font-semibold text-amber-700 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/>Service Alerts · possible delays</div>
+      {isAdmin&&<button onClick={post} disabled={busy} className="text-[11px] font-medium text-amber-700 hover:text-amber-900 inline-flex items-center gap-1"><Plus className="w-3 h-3"/>Post</button>}
+    </div>
+    {alerts.slice(0,6).map((a,i)=><div key={a.id||i} className="flex items-start gap-2 text-[13px] text-amber-900">
+      <span className={"shrink-0 mt-0.5 "+(a.severity==="high"?"text-amber-700":"text-amber-500")}>{icon(a.kind)}</span>
+      <div className="flex-1 min-w-0"><span className="font-semibold">{a.title}</span>{a.area?<span className="text-amber-700"> · {a.area}</span>:null}{a.detail?<div className="text-[12px] text-amber-800 leading-snug">{a.detail}</div>:null}</div>
+      {isAdmin&&a.kind==="posted"&&<button onClick={()=>clear(a.id)} title="Remove" className="text-amber-500 hover:text-amber-800 shrink-0"><X className="w-3.5 h-3.5"/></button>}
+    </div>)}
+  </div>);
+}
 function WeatherAdvisor({zip,country,date,perishable=false,rules=null,bare=false}){
   const wx=useWeather(zip,country);
   if(!wx)return null;

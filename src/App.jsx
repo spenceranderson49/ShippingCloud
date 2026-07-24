@@ -2102,12 +2102,24 @@ const FEDEX_ONERATE=[
   {code:"fedex_tube",fedexCode:"FEDEX_TUBE",name:"FedEx One Rate® Tube",maxVol:2200,maxLbs:50,kind:"tube"},
 ];
 const ONERATE_BOXES=FEDEX_ONERATE.filter(b=>b.kind==="box").sort((a,b)=>a.maxVol-b.maxVol);
-// pick the smallest One Rate box the item's dims + weight qualify for; null if it exceeds One Rate limits
+/* Pick the smallest One Rate box the item qualifies for; null if it doesn't fit One Rate at all.
+   Per the 2026 FedEx Service Guide (p.46): FedEx One Rate requires FedEx packaging and a U.S. Express
+   service; paks/boxes/tubes must weigh 50 lb or less. Crucially, the item must PHYSICALLY FIT the box —
+   a package whose longest (or any) side exceeds the box can't use it, so volume alone isn't enough
+   (a 40x3x3 item has small volume but fits no One Rate box). We compare sorted dimensions with a small
+   packing tolerance; if nothing fits, the shipment isn't One Rate-eligible. */
+const OR_TOL=0.5;   // inches of give for compression/packing
 function oneRateBoxFor(L,W,H,lbs){
-  const vol=(+L||0)*(+W||0)*(+H||0); const w=+lbs||0;
-  if(!vol) return null;
-  for(const b of ONERATE_BOXES){ if(vol<=b.maxVol && w<=b.maxLbs) return b; }
-  return null;
+  const id=[+L||0,+W||0,+H||0].sort((a,b)=>a-b);   // [shortest, mid, longest]
+  const w=+lbs||0;
+  if(!id[0]||!id[1]||!id[2]) return null;          // need all three dimensions
+  if(w>50) return null;                            // One Rate box/pak/tube weight cap
+  for(const b of ONERATE_BOXES){
+    if(w>b.maxLbs) continue;
+    const bd=[b.dims.L,b.dims.W,b.dims.H].sort((a,b)=>a-b);
+    if(id[0]<=bd[0]+OR_TOL && id[1]<=bd[1]+OR_TOL && id[2]<=bd[2]+OR_TOL) return b;   // physically fits
+  }
+  return null;   // too big for every One Rate box (e.g. longest side too long) → not eligible
 }
 /* Show the One Rate box the shipment qualifies for, but with NO price. England's rate call doesn't return
    One Rate pricing, so the price stays blank unless England itself returns a One Rate service for this shipment.
@@ -7042,8 +7054,8 @@ function NavFooter({isAdmin}){
     <button onClick={e=>{e.currentTarget.blur();setNews(true);}} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] text-stone-500 hover:bg-[#E6F4FF]/60 hover:text-[#006FBF] transition-colors"><Sparkles className="w-3.5 h-3.5 shrink-0"/>What's New</button>
     <button onClick={e=>{e.currentTarget.blur();setHelp(true);}} className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13px] font-medium text-[#006FBF] bg-white border border-stone-200 hover:bg-[#E6F4FF] hover:border-[#99D6FF] transition-colors"><MessageCircle className="w-4 h-4 shrink-0"/>Help &amp; Support</button>
     <div className="flex items-center justify-center gap-1.5 pt-2">
-      <BrandCloud color="#0086E0" className="h-4 w-auto" style={{opacity:0.85}}/>
-      {BRAND.fw&&<span className="text-[10px] text-stone-400 font-medium tracking-tight">by Freightwire</span>}
+      <ShipCloudLogo size={14} accent="#0086E0"/>
+      {BRAND.fw&&<span className="text-[10px] text-stone-400 font-medium tracking-tight">· by Freightwire</span>}
     </div>
     {news&&createPortal(<div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={()=>setNews(false)}>
       <div className="absolute inset-0 bg-stone-900/40"/>
@@ -9332,8 +9344,10 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
   /* Fallback service label for orders that match NO rule (mirrors the loaded-order fallback):
      a specific service shows verbatim; a strategy ("cheapest"/"ground"/"fastest") shows friendly. */
   const fbLabel=(()=>{ const fb=(custom.fallbackService||"").trim(); if(!fb)return ""; return ({cheapest:"Cheapest",ground:"Cheapest Ground",fastest:"Fastest"})[fb]||fb; })();
+  /* The order-card service badge is purely INFORMATIONAL, so it is NOT gated on the autopilot
+     toggle — every order shows the service it will ship with: a matching rule's service (violet),
+     else the configured fallback, else the buyer-requested service. This way the badge always shows. */
   const apPreview=useMemo(()=>{ const m={};
-    if(custom.autoRulesOnShip===false)return m;
     const enabled=(rules||[]).filter(r=>r&&r.enabled);
     const fired={};
     if(enabled.length){ try{ const run=runRuleEngine(enabled,ordersFiltered,originZip);
@@ -9345,7 +9359,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
       else if(o.shippingService)m[o.id]={service:o.shippingService,src:"requested"};   // else what the buyer asked for
     });
     return m;
-  },[custom.autoRulesOnShip,ordersFiltered,rules,originZip,fbLabel]);
+  },[ordersFiltered,rules,originZip,fbLabel]);
   const [naming,setNaming]=useState(false);
   const [draftName,setDraftName]=useState("");
   const commitDraft=(title)=>{const d={id:Date.now(),label:title||reference||receiver.name||receiver.city||"Untitled",when:new Date().toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}),to:`${receiver.city||""}${receiver.state?", "+receiver.state:""}`,snap:{sender,receiver,reference,invoiceNo,poNo,department,pieces,residential,signature,sigOption,billTo,thirdAcct,insurance,selectedOrder,customs}};setDrafts(p=>[d,...p]);setNaming(false);setDraftName("");setSaved(true);setTimeout(()=>setSaved(false),1600);};

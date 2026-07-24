@@ -7042,17 +7042,17 @@ function NavFooter({isAdmin}){
     <button onClick={()=>setNews(true)} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[12px] text-stone-500 hover:bg-white hover:text-[#006FBF]"><Sparkles className="w-3.5 h-3.5 shrink-0"/>What's New</button>
     <button onClick={()=>setHelp(true)} className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13px] font-medium text-[#006FBF] bg-[#E6F4FF] border border-[#99D6FF] hover:bg-[#d3ecff]"><MessageCircle className="w-4 h-4 shrink-0"/>Help &amp; Support</button>
     <div className="flex items-center justify-center gap-1.5 pt-2">
-      <ShipCloudLogo size={13} accent="#0086E0"/>
-      <span className="text-[10px] text-stone-400 font-medium tracking-tight">ShippingCloud{BRAND.fw?" · by Freightwire":""}</span>
+      <ShipCloudLogo size={17} accent="#0086E0"/>
+      {BRAND.fw&&<span className="text-[10px] text-stone-400 font-medium tracking-tight">by Freightwire</span>}
     </div>
-    {news&&<div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={()=>setNews(false)}>
+    {news&&createPortal(<div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={()=>setNews(false)}>
       <div className="absolute inset-0 bg-stone-900/40"/>
       <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] overflow-auto" onClick={e=>e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200 sticky top-0 bg-white"><div className="font-semibold text-stone-900 flex items-center gap-2"><Sparkles className="w-4 h-4 text-[#0086E0]"/>What's New</div><button onClick={()=>setNews(false)} className="p-1 rounded hover:bg-stone-100"><X className="w-4 h-4 text-stone-500"/></button></div>
         <div className="p-5 space-y-4">{WHATS_NEW.map((w,i)=><div key={i} className="flex gap-3"><div className="w-1.5 h-1.5 rounded-full bg-[#0086E0] mt-2 shrink-0"/><div><div className="text-sm font-medium text-stone-800">{w.title} <span className="text-[11px] text-stone-400 font-normal">· {w.date}</span></div><div className="text-[13px] text-stone-500 leading-relaxed">{w.body}</div></div></div>)}</div>
       </div>
-    </div>}
-    {help&&<div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={()=>setHelp(false)}>
+    </div>,document.body)}
+    {help&&createPortal(<div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={()=>setHelp(false)}>
       <div className="absolute inset-0 bg-stone-900/40"/>
       <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm" onClick={e=>e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200"><div className="font-semibold text-stone-900 flex items-center gap-2"><MessageCircle className="w-4 h-4 text-[#0086E0]"/>Help &amp; Support</div><button onClick={()=>setHelp(false)} className="p-1 rounded hover:bg-stone-100"><X className="w-4 h-4 text-stone-500"/></button></div>
@@ -7063,7 +7063,7 @@ function NavFooter({isAdmin}){
           <p className="text-[12px] text-stone-400">Tip: the in-app assistant (blue bubble, bottom-right) answers most questions instantly.</p>
         </div>
       </div>
-    </div>}
+    </div>,document.body)}
   </div>);
 }
 
@@ -9572,7 +9572,7 @@ function Ship({client,accounts,orders,shipments=[],settings,setSettings,rules,dr
             {(()=>{
               const so=selectedOrder&&orders.find(o=>o.id===selectedOrder);
               const showOrder=!custom.hideFromOrderBox&&(handsFree||selectedOrder)&&(handsFree||(so&&(so.shippingService||so.source)));
-              const showAp=!handsFree&&liveRuleStatus&&!custom.hideAutopilotBox;
+              const showAp=liveRuleStatus&&!custom.hideAutopilotBox;   // show the Autopilot status even in Hands-Free, so it's never a black box
               const showRates=!custom.hideRateSrcBar;
               if(!showOrder&&!showAp&&!showRates&&!handsFree)return null;
               const apFired=liveRuleStatus&&liveRuleStatus.state==="fired";

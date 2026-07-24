@@ -299,7 +299,7 @@ async function sendOtpCode(event, to, code) {
   const product = BRANDS[reqOrigin] || "ShippingCloud";
   const appUrl = BRANDS[reqOrigin] ? reqOrigin : (process.env.APP_URL || "").replace(/\/+$/, "");
   const isFw = product !== "ShippingCloud";
-  const brandName = isFw ? "Freightwire ShippingHub" : "ShippingCloud";
+  const brandName = isFw ? "Freightwire ShippingCloud" : "ShippingCloud";
   const header = isFw ? ('<img src="' + appUrl + '/fw-logo.png" alt="Freightwire" style="height:30px;vertical-align:middle;border:0;"> <span style="font-size:16px;font-weight:800;vertical-align:middle;color:#1F1B18;">SHIPPING<span style="color:#0086E0;">HUB</span></span>') : 'Shipping<span style="color:#0086E0;">Cloud</span>';
   const baseFrom = (process.env.EMAIL_FROM || "ShippingCloud <notify@shippingcloud.net>").trim();
   const fromAddr = (baseFrom.match(/<([^>]+)>/) || [null, baseFrom])[1];
@@ -521,7 +521,7 @@ exports.handler = async (event) => {
       const clients = (curC.ok && Array.isArray(curC.value)) ? curC.value : [];
       const newClientId = "c" + Date.now() + Math.floor(Math.random() * 1000);
       /* Record which brand/portal this customer signed up on (from the request origin) so an admin's
-         "Log In As" can mirror exactly what they see — ShippingCloud vs Freightwire ShippingHub. */
+         "Log In As" can mirror exactly what they see — ShippingCloud vs Freightwire ShippingCloud. */
       const _signupOrigin = String((event.headers && (event.headers.origin || event.headers.Origin)) || "").toLowerCase();
       const _signupBrand = /freightwireship\.com/.test(_signupOrigin) ? "freightwire" : /shippingcloud\.net/.test(_signupOrigin) ? "shippingcloud" : "";
       const newClient = { id: newClientId, name: company || name, contact: name, email, phone: "", origin: "", markup: "", status: "active", since: new Date().toISOString().slice(0, 7), plan: "Standard", selfSignup: true, brand: _signupBrand, createdAt: new Date().toISOString(), blockedServices: [...DEFAULT_BLOCKED_SERVICES] };
@@ -602,7 +602,7 @@ exports.handler = async (event) => {
       const appUrl = ORIGIN_BRANDS[reqOrigin] ? reqOrigin : (process.env.APP_URL || "").replace(/\/+$/, "");
       const product = ORIGIN_BRANDS[reqOrigin] || "ShippingCloud";
       const isFw = product !== "ShippingCloud";
-      const brandName = isFw ? "Freightwire ShippingHub" : "ShippingCloud";
+      const brandName = isFw ? "Freightwire ShippingCloud" : "ShippingCloud";
       const wordmark = isFw
         ? ('<img src="' + appUrl + '/fw-logo.png" alt="Freightwire" style="height:34px;vertical-align:middle;border:0;"> <span style="font-size:17px;font-weight:800;letter-spacing:.04em;vertical-align:middle;color:#1F1B18;">SHIPPING<span style="color:#0086E0;">HUB</span></span>' + (product === "Freightwire Admin" ? ' <span style="font-weight:600;color:#78716c;font-size:13px;">Admin</span>' : ''))
         : 'Shipping<span style="color:#0086E0;">Cloud</span>';

@@ -49,7 +49,7 @@ function tintLogoDataUrl(src,accent,cb){
     img.src=src;
   }catch(e){cb(src);}
 }
-function FreightwireShipHub({logoH=44,sub=true,subText="Customer Portal",accent="",name1="Shipping",name2="Hub"}){
+function FreightwireShipHub({logoH=44,sub=true,subText="Customer Portal",accent="",name1="Shipping",name2="Cloud"}){
   const nameSize=Math.round(logoH*0.5);
   const [logoSrc,setLogoSrc]=useState(FW_LOGO);
   useEffect(()=>{ let dead=false; tintLogoDataUrl(FW_LOGO,String(accent||"").trim(),u=>{ if(!dead)setLogoSrc(u); }); return ()=>{dead=true;}; },[accent]);
@@ -62,8 +62,8 @@ function FreightwireShipHub({logoH=44,sub=true,subText="Customer Portal",accent=
     </span>
   </span>);
 }
-/* Admin-HQ lockup: the ShippingHub wordmark, then "Admin Portal" set to the RIGHT and larger —
-   reads as one line: "ShippingHub · Admin Portal". */
+/* Admin-HQ lockup: the ShippingCloud wordmark, then "Admin Portal" set to the RIGHT and larger —
+   reads as one line: "ShippingCloud · Admin Portal". */
 const AdminPortalLockup=({logoH=44,...props})=>{
   const portalSize=Math.round(logoH*0.48);
   return (<span className="inline-flex items-center" style={{gap:Math.round(logoH*0.28)}}>
@@ -178,21 +178,21 @@ class TabBoundary extends React.Component {
 const IS_STAGING=(()=>{ try{ return String((import.meta.env&&import.meta.env.VITE_STAGING)||"").toLowerCase()==="true"; }catch(e){ return false; } })();
 const SHOW_ENGLAND=(()=>{ try{ return String((import.meta.env&&import.meta.env.VITE_CARRIER_BACKEND)||"").toLowerCase()==="england"; }catch(e){ return false; } })();
 const BRAND=(()=>{ let k="shippingcloud"; try{ k=(import.meta.env&&import.meta.env.VITE_BRAND)||"shippingcloud"; }catch(e){}
-  if(k==="admin")return {key:"admin",fw:true,admin:true,name:"ShippingHub Admin",short:"Admin HQ",product:"ShippingHub",accent:"#1e3a5f",accent2:"#2d5a8e"};
+  if(k==="admin")return {key:"admin",fw:true,admin:true,name:"ShippingCloud Admin",short:"Admin HQ",product:"ShippingCloud",accent:"#1e3a5f",accent2:"#2d5a8e"};
   /* "shiphub" accepted as an alias for "freightwire" — the Netlify sites and the build checks
      have used both spellings, and an unrecognized key silently rendered the RETAIL brand on
      freightwireship.com. product = the name used inside shared app copy. */
   return (k==="freightwire"||k==="shiphub")
-    ?{key:"freightwire",fw:true,name:"ShippingHub",short:"ShippingHub",product:"ShippingHub",accent:"#1e3a5f",accent2:"#2d5a8e"}
+    ?{key:"freightwire",fw:true,name:"ShippingCloud",short:"ShippingCloud",product:"ShippingCloud",accent:"#1e3a5f",accent2:"#2d5a8e"}
     :{key:"shippingcloud",fw:false,name:"ShippingCloud",short:"ShippingCloud",product:"ShippingCloud",accent:"#0086E0",accent2:"#0072BE"}; })();
 /* IMPERSONATION BRAND MIRROR — when an admin uses "Log In As", they should see EXACTLY the brand the
    customer sees (a ShippingCloud customer in the ShippingCloud skin, a Freightwire customer in the
-   ShippingHub skin), even though this is the admin build. On boot, if we're impersonating (an
+   ShippingCloud skin), even though this is the admin build. On boot, if we're impersonating (an
    `adminReturn` is stashed) AND a target brand was recorded, overwrite BRAND's fields IN PLACE — here,
    before the favicon/title logic and every downstream BRAND read. Cleared on "Return to Admin". */
 const BRAND_SKINS={
   shippingcloud:{key:"shippingcloud",fw:false,admin:false,name:"ShippingCloud",short:"ShippingCloud",product:"ShippingCloud",accent:"#0086E0",accent2:"#0072BE"},
-  freightwire:{key:"freightwire",fw:true,admin:false,name:"ShippingHub",short:"ShippingHub",product:"ShippingHub",accent:"#1e3a5f",accent2:"#2d5a8e"},
+  freightwire:{key:"freightwire",fw:true,admin:false,name:"ShippingCloud",short:"ShippingCloud",product:"ShippingCloud",accent:"#1e3a5f",accent2:"#2d5a8e"},
 };
 try{
   if(typeof window!=="undefined"){
@@ -209,7 +209,7 @@ const APP_ORIGIN=(()=>{ try{ return (typeof window!=="undefined"&&window.locatio
    by scanning for the transparent gap before the wordmark) instead of the ShippingCloud cloud, plus
    the FreightwireShip tab title. Crop bounds verified against the shipped asset: mark = 78x78 at x5,y2. */
 if(typeof window!=="undefined"&&BRAND.fw){
-  try{ document.title=BRAND.admin?"Admin Portal":"ShippingHub — Freightwire"; }catch(e){}
+  try{ document.title=BRAND.admin?"Admin Portal":"ShippingCloud — Freightwire"; }catch(e){}
   try{
     const setIcon=(href)=>{ try{
       document.querySelectorAll('link[rel*="icon"]').forEach(l=>l.parentNode&&l.parentNode.removeChild(l));
@@ -488,7 +488,7 @@ async function shipCall(payload){
     return data||{ok:false,error:"Empty response"};
   }catch(e){clearTimeout(t);return {ok:false,error:(e&&e.message)||"Network error"};}
 }
-/* Talk to the on-prem Full Circle connector via ShippingHub's /connector endpoint (session-gated). */
+/* Talk to the on-prem Full Circle connector via ShippingCloud's /connector endpoint (session-gated). */
 async function connCall(action,extra){
   try{
     const r=await fetch("/.netlify/functions/connector",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,token:CLOUD.token||undefined,...(extra||{})})});
@@ -3904,7 +3904,7 @@ function CustomerDetail({cid,clients,setClients,users,setUsers,currentUser,featu
       <Field label="Account number (yours)"><Input value={c.acctNo||""} onChange={e=>upClient({acctNo:e.target.value})} placeholder="Internal Ref"/></Field>
       <Field label="Website"><Input value={c.website||""} onChange={e=>upClient({website:e.target.value})} placeholder="acme.com"/></Field>
       <Field label="Sales rep"><Input value={c.salesRep||""} onChange={e=>upClient({salesRep:e.target.value})} placeholder="sanderson"/></Field>
-      <Field label="Brand / portal"><Select value={c.brand||""} onChange={e=>upClient({brand:e.target.value})}><option value="">Auto (where they signed up)</option><option value="shippingcloud">ShippingCloud</option><option value="freightwire">Freightwire ShippingHub</option></Select></Field>
+      <Field label="Brand / portal"><Select value={c.brand||""} onChange={e=>upClient({brand:e.target.value})}><option value="">Auto (where they signed up)</option><option value="shippingcloud">ShippingCloud</option><option value="freightwire">ShippingCloud by Freightwire</option></Select></Field>
       <Field label="Customer since"><Input value={c.since||""} onChange={e=>upClient({since:e.target.value})} placeholder="2025-06"/></Field>
       <Field label="Monthly volume (est.)"><Input value={c.volume||""} onChange={e=>upClient({volume:e.target.value})} placeholder="e.g. 400 pkgs"/></Field>
     </div>}
@@ -4687,7 +4687,7 @@ function RatesAdmin({clients=[],brand}){
   const [shAccs,setShAccs]=useState({});
   const _sheetStyles="body{font-family:system-ui,Segoe UI,Arial;padding:28px;color:#1c1917}table{border-collapse:collapse;width:100%;font-size:12px;margin:10px 0 22px}th,td{border:1px solid #e5e5e5;padding:6px 8px;text-align:right}th{background:#f5f5f4}h1{font-size:16px;margin:18px 0 2px}.sub{color:#78716c;font-size:12px}td:first-child,th:first-child{text-align:left}";
   const escS=(s)=>String(s==null?"":s).replace(/[&<>"]/g,(ch)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));   /* names on printable sheets are markup-inert */
-  /* FW sheets carry the full ShippingHub lockup (same as the sign-in emails), not the bare Freightwire mark */
+  /* FW sheets carry the full ShippingCloud lockup (same as the sign-in emails), not the bare Freightwire mark */
   const _sheetLogo=()=>BRAND.fw?('<span style="display:inline-flex;align-items:center;gap:10px"><img src="'+FW_LOGO+'" style="height:42px"/><span style="font:800 21px system-ui;letter-spacing:.06em;color:#1F1B18">SHIPPING<span style="color:#0086E0">HUB</span></span></span>'):('<div style="font:800 22px system-ui;letter-spacing:.02em">'+escS(brandWordmark())+'</div>');
   const printSheetsMulti=()=>{
     const keys=RATE_SERVICES.fedex.filter(sv=>!sv.or&&shSvcs[sv.k]).map(sv=>sv.k);
@@ -5441,7 +5441,7 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
   const [cfg,setCfg]=usePersist("fcExport",{ssccMode:"tracking",gs1Prefix:"",warehouseCode:"10",includeCharge:false,serviceMap:{}});
   const up=(patch)=>setCfg(c=>({...c,...patch}));
   const upMap=(svc,code)=>setCfg(c=>({...c,serviceMap:{...(c.serviceMap||{}),[svc]:code}}));
-  /* E-comm isolation (per the Full Circle call): tag ShippingHub's e-comm orders with a customer
+  /* E-comm isolation (per the Full Circle call): tag ShippingCloud's e-comm orders with a customer
      code (e.g. LA20/ECOM) so Full Circle only processes ours and never touches wholesale/routing-guide
      orders in the shared FedEx drop. Aptean picks how they key on it — a trailing column or a filename
      prefix — so we support both. */
@@ -5552,18 +5552,18 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
     <div className="rounded-xl border border-[#99D6FF] bg-[#E6F4FF]/40 p-4">
       <div className="flex items-center gap-2 text-sm font-semibold text-stone-800"><ArrowLeftRight className="w-4 h-4 text-[#0086E0]"/>Aptean Full Circle — two-way integration</div>
       <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] font-medium">
-        {["Shopify","Full Circle","ShippingHub","Full Circle","Shopify"].map((n,i)=>(<React.Fragment key={i}>{i>0&&<span className="text-stone-400">→</span>}<span className={`rounded-full px-2.5 py-1 ${n==="ShippingHub"?"bg-[#0086E0] text-white":"bg-white border border-stone-200 text-stone-600"}`}>{n}</span></React.Fragment>))}
+        {["Shopify","Full Circle","ShippingCloud","Full Circle","Shopify"].map((n,i)=>(<React.Fragment key={i}>{i>0&&<span className="text-stone-400">→</span>}<span className={`rounded-full px-2.5 py-1 ${n==="ShippingCloud"?"bg-[#0086E0] text-white":"bg-white border border-stone-200 text-stone-600"}`}>{n}</span></React.Fragment>))}
       </div>
-      <p className="text-[12px] text-stone-600 mt-3">ShippingHub takes FedEx Ship Manager's place: it reads orders out of Full Circle, prints the FedEx label with live rates, and writes the ship confirmation back into <b>fedxucc.csv</b> — the exact file your Ship Manager profile uses today. No changes on Full Circle's side.</p>
+      <p className="text-[12px] text-stone-600 mt-3">ShippingCloud takes FedEx Ship Manager's place: it reads orders out of Full Circle, prints the FedEx label with live rates, and writes the ship confirmation back into <b>fedxucc.csv</b> — the exact file your Ship Manager profile uses today. No changes on Full Circle's side.</p>
     </div>
 
     {/* ── How it works ── */}
     <div className="rounded-xl border border-stone-200 p-4">
       <div className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold mb-2">How it works</div>
       <ol className="text-[13px] text-stone-700 space-y-1.5 list-decimal ml-4">
-        <li><b>Orders in.</b> Full Circle stages orders in its <span className="font-mono text-[12px]">asups_UPS_Interface</span> table; ShippingHub reads them (same ODBC link Ship Manager uses) into the Orders screen.</li>
+        <li><b>Orders in.</b> Full Circle stages orders in its <span className="font-mono text-[12px]">asups_UPS_Interface</span> table; ShippingCloud reads them (same ODBC link Ship Manager uses) into the Orders screen.</li>
         <li><b>Ship.</b> Print the FedEx label right here — live FedEx rates, Autopilot service selection, no Ship Manager.</li>
-        <li><b>Confirmation out.</b> ShippingHub writes <span className="font-mono text-[12px]">fedxucc.csv</span> to the watched folder (<span className="font-mono text-[12px]">Z:\ups\</span>); Full Circle reads it, marks the order shipped, and pushes tracking to Shopify.</li>
+        <li><b>Confirmation out.</b> ShippingCloud writes <span className="font-mono text-[12px]">fedxucc.csv</span> to the watched folder (<span className="font-mono text-[12px]">Z:\ups\</span>); Full Circle reads it, marks the order shipped, and pushes tracking to Shopify.</li>
         <li><b>Voids.</b> Void a label and the row goes out with <span className="font-mono">void</span>=Y so Full Circle backs it out too.</li>
       </ol>
     </div>
@@ -5597,7 +5597,7 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
         <div className="text-sm font-semibold text-stone-800 flex items-center gap-2"><span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#0086E0] text-white text-[11px] font-bold shrink-0">1</span>Orders in — from Full Circle</div>
         <span className="text-[11px] bg-stone-100 text-stone-500 rounded-full px-2 py-0.5 font-mono">ODBC · asups_UPS_Interface</span>
       </div>
-      <p className="text-[12px] text-stone-500 mt-1">Full Circle columns that map into each ShippingHub order:</p>
+      <p className="text-[12px] text-stone-500 mt-1">Full Circle columns that map into each ShippingCloud order:</p>
       <div className="mt-3 grid sm:grid-cols-2 gap-2">
         {ORDERS_IN.map(([a,b,note])=>(
           <div key={a} className="flex items-center gap-2.5 bg-stone-50 border border-stone-100 rounded-lg px-2.5 py-1.5">
@@ -5662,7 +5662,7 @@ function FullCircleExport({ships=[],clients=[],settings={},setSettings,isAdmin=f
       <div className="grid sm:grid-cols-2 gap-3">
         <Field label="Freight column"><Select value={freightMode} onChange={e=>up({freightCol:e.target.value,includeCharge:e.target.value!=="blank"})}><option value="blank">Leave blank (matches current file)</option><option value="charges">Shipping charges (actual FedEx charge)</option><option value="list">FedEx list rate (published)</option></Select></Field>
       </div>
-      {/* E-comm isolation — customer code so Full Circle only picks up ShippingHub's e-comm orders */}
+      {/* E-comm isolation — customer code so Full Circle only picks up ShippingCloud's e-comm orders */}
       <div className="mt-3 rounded-lg bg-[#E6F4FF]/40 border border-[#99D6FF] p-3">
         <div className="text-[12px] font-semibold text-stone-700">E-commerce isolation</div>
         <p className="text-[11px] text-stone-500 mt-0.5 mb-2">So Full Circle processes <b>only</b> these e-comm orders and never touches wholesale/routing-guide shipments in the shared drop. Aptean confirms which they key on.</p>
@@ -5849,7 +5849,7 @@ function ApiReports(){
   </div>))}</div>);
 }
 function ApiAdmin({clients=[],platform={},openCustomer}){
-  const apiName=BRAND.fw?"ShippingHub API":"ShippingCloud API";
+  const apiName=BRAND.fw?"ShippingCloud API":"ShippingCloud API";
   const base=(typeof window!=="undefined"?window.location.origin:"")+"/api/v1";
   const [keys,setKeys]=useState(null);
   const [kBusy,setKBusy]=useState(false);
@@ -7694,7 +7694,7 @@ function TrackingPage({num,brandId}){
       {brand&&(brand.supportEmail||brand.supportPhone||brand.site)&&<div className="mt-4 text-center text-xs text-stone-500">
         Questions about your order? {brand.supportEmail?<a href={"mailto:"+brand.supportEmail} className="underline" style={{color:accent}}>{brand.supportEmail}</a>:null}{brand.supportPhone?<> · {brand.supportPhone}</>:null}{brand.site?<> · <a href={brand.site.startsWith("http")?brand.site:("https://"+brand.site)} target="_blank" rel="noreferrer" className="underline" style={{color:accent}}>Visit store</a></>:null}
       </div>}
-      <div className="mt-6 text-center text-[11px] text-stone-400">Powered by {BRAND.fw?"Freightwire ShippingHub":"ShippingCloud"}</div>
+      <div className="mt-6 text-center text-[11px] text-stone-400">Powered by {BRAND.fw?"Freightwire ShippingCloud":"ShippingCloud"}</div>
     </div>
   </div>);
 }
@@ -7744,7 +7744,7 @@ function ReturnsPortal({brandId}){
         </>)}
       </div>
       {brand&&brand.supportEmail&&<div className="mt-4 text-center text-xs text-stone-500">Need help? <a href={"mailto:"+brand.supportEmail} className="underline" style={{color:accent}}>{brand.supportEmail}</a></div>}
-      <div className="mt-6 text-center text-[11px] text-stone-400">Powered by {BRAND.fw?"Freightwire ShippingHub":"ShippingCloud"}</div>
+      <div className="mt-6 text-center text-[11px] text-stone-400">Powered by {BRAND.fw?"Freightwire ShippingCloud":"ShippingCloud"}</div>
     </div>
   </div>);
 }
@@ -14452,7 +14452,7 @@ function Scan({orders,goShip,goTab,settings,setSettings,isAdmin}){
       setLog(l=>[{code,when:stamp(),ok:true,order:ref},...l].slice(0,12));
       goShip({receiver:{name:order.customer,company:order.company,zip:order.zip,state:order.state,city:order.city,address1:order.address1,address2:order.address2,phone:order.phone,email:order.email,country:order.country||"United States"},weight:order.weight,reference:ref});
     }else{
-      setErr(`No order found for “${code}” — not in ShippingHub or Full Circle.`);
+      setErr(`No order found for “${code}” — not in ShippingCloud or Full Circle.`);
       setLog(l=>[{code,when:stamp(),ok:false},...l].slice(0,12));
       setTimeout(()=>setErr(""),3000);
     }
@@ -19180,7 +19180,7 @@ function Customize({settings,setSettings,deployMode,blockedKeys,isAdmin=false,on
       </div>
       <label className="block text-sm text-stone-700 mt-1">Company logo size <span className="text-[11px] text-stone-400">· {c.companyLogoScale||100}% — your uploaded logo, shown top-right in the header</span>
         <input type="range" min="50" max="250" step="5" value={c.companyLogoScale||100} onChange={e=>set("companyLogoScale",+e.target.value)} className="mt-1 w-full"/></label>
-      <label className="block text-sm text-stone-700 mt-1">Brand logo size <span className="text-[11px] text-stone-400">· {c.logoScale||100}% — the {BRAND.fw?"Freightwire ShippingHub":"ShippingCloud"} mark on the left</span>
+      <label className="block text-sm text-stone-700 mt-1">Brand logo size <span className="text-[11px] text-stone-400">· {c.logoScale||100}% — the {BRAND.fw?"Freightwire ShippingCloud":"ShippingCloud"} mark on the left</span>
         <input type="range" min="50" max="250" step="5" value={c.logoScale||100} onChange={e=>set("logoScale",+e.target.value)} className="mt-1 w-full"/></label>
       <div className="text-[11px] text-stone-400">Shows in the header next to the brand — the live preview above is exactly the size it will render.</div>
     </Panel>}

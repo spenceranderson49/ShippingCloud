@@ -1,5 +1,5 @@
 /* ════════════════════════════════════════════════════════════════════════
-   POST /.netlify/functions/connector — the ShippingHub side of the on-prem
+   POST /.netlify/functions/connector — the ShippingCloud side of the on-prem
    Full Circle ODBC connector (see the Lagence-Rust-Connector repo).
 
    Two callers, two auth models:

@@ -68,7 +68,7 @@ async function sendEmail(cfg, filename, content) {
   if (!key) return { ok: false, error: "Email isn't set up on this server yet (RESEND_API_KEY)." };
   const to = String(cfg.to || "").trim();
   if (!to || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return { ok: false, error: "Enter a valid destination email." };
-  const from = String(cfg.from || "").trim() || "ShippingHub <noreply@freightwireship.com>";
+  const from = String(cfg.from || "").trim() || "ShippingCloud <noreply@freightwireship.com>";
   const body = {
     from, to: [to],
     subject: "Full Circle ship confirmation — " + safeName(filename),

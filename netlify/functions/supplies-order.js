@@ -62,14 +62,14 @@ exports.handler = async (event) => {
       ${total > 0 ? `<tfoot><tr><td colspan="3" style="padding:6px 10px;text-align:right;font-weight:600">Estimated total</td><td style="padding:6px 10px;text-align:right;font-weight:600">${money(total)}</td></tr></tfoot>` : ""}
     </table>
     ${note ? `<p style="margin-top:14px"><b>Note:</b> ${esc(note)}</p>` : ""}
-    <p style="color:#999;font-size:12px;margin-top:16px">Sent from the ShippingHub Packaging tab.</p>
+    <p style="color:#999;font-size:12px;margin-top:16px">Sent from the ShippingCloud Packaging tab.</p>
   </div>`;
 
   try {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
-      body: JSON.stringify({ from: "ShippingHub <noreply@freightwireship.com>", to: [to], reply_to: auth.email || undefined, subject: "Packaging order — " + orderer + (company ? " (" + company + ")" : ""), html }),
+      body: JSON.stringify({ from: "ShippingCloud <noreply@freightwireship.com>", to: [to], reply_to: auth.email || undefined, subject: "Packaging order — " + orderer + (company ? " (" + company + ")" : ""), html }),
     });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) return respond(200, { ok: false, error: "Couldn't send the order: " + ((d && d.message) || ("HTTP " + r.status)) });
